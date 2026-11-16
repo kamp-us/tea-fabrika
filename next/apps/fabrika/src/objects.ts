@@ -20,6 +20,7 @@ export const Objects = Brain.make(
       return isolateTail(event.input);
     });
     yield* Effect.logDebug("isolate.tail listener registered");
+
     return {};
   }).pipe(Effect.provide([RecordPartLive, connectionObject, processObject])),
 );

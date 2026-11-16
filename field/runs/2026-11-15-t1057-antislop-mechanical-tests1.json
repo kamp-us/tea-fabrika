@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1057-antislop-mechanical-tests1",
+  "ticket": "1057",
+  "pr": "kamp-us/tea-fabrika#1507",
+  "started": "2026-11-15T21:28:16-08:00",
+  "ended": "2026-11-15T22:16:56-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The anti-slop mechanical sweep, one job on fabrikalfa/antislop-mechanical from origin/main at 9186e6c, in next/ and our tooling. Of the ten taken anti-slop rules only anti-slop/require-readable-spacing has an autofix (vendor/anti-slop/src/rules/require-readable-spacing.ts wraps the vendored padding-line-between-statements, the only file under vendor/anti-slop/src with a fixer), so it is the one rule swept. Met: 15,791 hits in 928 files over the scope, counted by a scratch run of the rule alone, matched against the zero lock's folders and the config's ignore list. The rule was turned on over the four whole-scope globs and pnpm format run twice; the diff was then 15,795 added lines and 0 removed in the swept files, every added line blank, so the fixer added blank lines and nothing else (no import moved, no comment lost). The 26 files of pull request 1366's diff that it touched were reverted by name, leaving 1,074 hits, all in those 26 files. 902 files keep 14,717 added blank lines. The first pnpm format run's lint --fix pass pruned 82 entries from agents-ledger.json and 10 from next-ledger.json and reported 92 blocking findings; a plain lint.ts run over the same tree then reported 0 blocking with every entry still matched, so the two ledgers were restored from git and the second pnpm format left them alone. The rule's first block lists the 27 folders at zero, last in overrides; the eight folders left hold 1366's files: libfabrika cloudflare, gateway, ledger, processes, runtime, settings, telemetry, and next/apps/fabrika. libfabrika node holds 1366 files too but had no hit in them, so it is at zero and on the block, as the zero lock asks. Three tests that lint planted files in a now-locked folder through the real config failed and were changed on the test side only: oxlint-plugins/plants.test.ts T930 L6 (its planted tried.ts is now spaced), next/apps/fabrika/src/exam/one-store-hook.integration.test.ts's crash case (its other-calls.ts plant is now spaced, same calls), and oxlint-plugins/padding-line-between-statements.test.ts's two properties, whose CLI fix pass now runs our rule alone with a temp config, since in oxlint-plugins/ the real config also runs anti-slop's fixer; the firing check still runs the repo's own config. Decision 0021 gains its dated amendment and oxlint-plugins/README.md its text and count.",
+  "plants": [
+    {
+      "law": "pnpm lint (oxlint-plugins/lint.ts): anti-slop/require-readable-spacing is an error in each folder its block lists",
+      "plant": "the blank line above `return next.count === expected && cmds.length === 0;` removed in next/programs/counter/src/program.laws.test.ts, a locked folder; key line: next/programs/counter/src/program.laws.test.ts:78:9 anti-slop(require-readable-spacing) Expected blank line before this statement.",
+      "result": "red"
+    },
+    {
+      "law": "pnpm lint (oxlint-plugins/anti-slop.ts, the zero lock): a folder at zero is on the rule's block",
+      "plant": "next/programs/counter/** dropped from the require-readable-spacing block in .oxlintrc.json; key line: .oxlintrc.json: anti-slop/require-readable-spacing has no hit left in next/programs/counter/**: add the folder to its block (0563)",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/padding-line-between-statements.test.ts: fires before each piece with no blank line above it, unless both sides are one line or imports, and its fix adds just that line (and its inside-a-block sibling)",
+      "plant": "our rule's fix inserts two newlines instead of one (oxlint-plugins/padding-line-between-statements.ts line 158), after its fix pass moved to a config of our rule alone",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 49,
+  "note": "Each plant ran once on a saved copy and was restored by copy. Ran at the uncommitted tree on 9186e6c: NODE_OPTIONS=--max-old-space-size=6144 pnpm lint green (17 parts), the list ratchet exit 0, one pnpm typecheck green before the three test edits. vitest --changed origin/main is refused locally (.oxlintrc.json is a force-rerun trigger), so narrow paths ran instead, nice -n 15 --maxWorkers=3: every changed plain test file plus every test that names .oxlintrc, then the exam lint integration files. All green but files that fail the same way on origin/main in this box, checked in a worktree there: .agents/skills/lead/scripts/box.test.ts (40), packages/pipeline lane.*.test.ts (today's version), packages/fabrika/src/agents/claude/rules.test.ts (1) and .agents/skills/mutation/scripts/run.test.ts (2, T300 signal cases). The first narrow run was stopped at its background time limit while the slow lane tests ran, and the rest was run again without them. 135 changed .integration. files that lint nothing were not run.",
+  "step": "tests"
+}

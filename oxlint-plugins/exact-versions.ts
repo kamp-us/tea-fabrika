@@ -15,11 +15,14 @@ import { parse } from "yaml";
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
  * sibling in this repo, written as its exact version in a pack. `workspace:^` would be a range. */
 const POINTERS = new Set(["catalog:", "workspace:*"]);
+
 /** `catalog:<name>` is exact as well: its version sits in `catalogs.<name>`, checked below. */
 const NAMED = /^catalog:[a-z][a-z0-9-]*$/;
+
 const EXACT = /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$/;
 
 const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+
 // A package.json can name a version in these too, and pnpm reads `pnpm.overrides` there as well.
 const OVERRIDES = ["overrides", "resolutions"];
 
@@ -45,6 +48,7 @@ const inPackage = (file: string, text: string): readonly string[] => {
   }
 
   const { pnpm } = manifest;
+
   return [
     ...[...FIELDS, ...OVERRIDES].flatMap((field) => refused(file, field, manifest[field])),
     ...(isMap(pnpm) ? refused(file, "pnpm.overrides", pnpm["overrides"]) : []),
@@ -59,6 +63,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
   }
 
   const { catalog, catalogs, overrides } = workspace;
+
   return [
     ...refused(file, "catalog", catalog),
     ...(isMap(catalogs)
@@ -113,6 +118,7 @@ const attempt = (file: string): { readonly lines: readonly string[]; readonly br
 };
 
 const results = files.map(attempt);
+
 const lines = results.flatMap((result) => result.lines);
 
 for (const line of lines) {

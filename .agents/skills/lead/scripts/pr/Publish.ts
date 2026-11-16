@@ -19,7 +19,9 @@ export const DRAFT_BODY =
   "0134). It is marked ready when its steps have passed.";
 
 /** A branch no commit step pushes to: main, or none (a detached head). */
-export class NoBranch extends Schema.TaggedError<NoBranch>()("NoBranch", { reason: Schema.String }) {}
+export class NoBranch extends Schema.TaggedError<NoBranch, { readonly brand: unique symbol }>()("NoBranch", {
+  reason: Schema.String,
+}) {}
 
 /** What one publish did: the branch's pull request, whether this publish opened it, and if a draft. */
 export type Published = { readonly pr: number; readonly opened: boolean; readonly draft: boolean };
@@ -36,9 +38,9 @@ export type Ask = {
 
 const checked = (branch: string) =>
   branch === "" || branch === "HEAD"
-    ? Effect.fail(new NoBranch({ reason: "HEAD is detached, so there is no branch to push" }))
+    ? Effect.fail(NoBranch.make({ reason: "HEAD is detached, so there is no branch to push" }))
     : branch === "main" || branch === "refs/heads/main"
-      ? Effect.fail(new NoBranch({ reason: "a commit step never pushes to main" }))
+      ? Effect.fail(NoBranch.make({ reason: "a commit step never pushes to main" }))
       : Effect.succeed(branch);
 
 export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
@@ -54,6 +56,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   }
 
   const pr = yield* prs.draft(branch, a.text);
+
   return { pr, opened: true, draft: true } satisfies Published;
 });
 

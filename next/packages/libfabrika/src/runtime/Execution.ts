@@ -2,8 +2,6 @@
  * How the runner runs a program's pure steps: in this process, or over RPC to the box the program
  * runs in on a Worker. Both give the runner the same `Execution`, and a program failure crosses
  * the RPC as checked data.
- *
- * @stability unstable
  */
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Effect, Option, Result, Schema } from "effect";
@@ -42,7 +40,6 @@ const Failure = {
  * Schema for a program failure as it crosses the RPC from a program's box: the `ProgramDown`
  * reason, the class of what was thrown, and its printed content, at most 1,000,000 characters.
  *
- * @stability unstable
  * @category schemas
  */
 export const ExecutionFailure = Schema.TaggedStruct("ProgramDown", Failure);
@@ -64,7 +61,6 @@ const shown = (error: ProgramDown): unknown =>
  * A program's own throw is printed into `content`. A cause the runtime kept only for diagnosis,
  * which may hold the input that failed, is left out: only its reason and class cross.
  *
- * @stability unstable
  * @category constructors
  */
 export const executionFailure = (error: ProgramDown) =>
@@ -78,6 +74,7 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
   // Restore only checked text, never an arbitrary remote object or prototype.
   const cause = new Error(failure.content);
   cause.stack = failure.content;
+
   return new ProgramDown({ reason: failure.reason, error: failure.error, cause });
 };
 
@@ -85,7 +82,6 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
  * Schema for a checked step reply: an `ok` value, or a `ProgramDown` failure. A checked reply
  * failure crosses RPC as data; a rejected call remains an RPC failure.
  *
- * @stability unstable
  * @category schemas
  */
 export const Reply = Schema.TaggedUnion({
@@ -98,7 +94,6 @@ export const Reply = Schema.TaggedUnion({
  * saved-state version, its delivery limit and restart policy when it declares them, the events it
  * may write, its input ports, and its Cmd types.
  *
- * @stability unstable
  * @category schemas
  */
 export const Declaration = Schema.Struct({
@@ -111,10 +106,10 @@ export const Declaration = Schema.Struct({
   inputs: Schema.Record(Schema.String, Schema.Struct({ write: Schema.Boolean, personOnly: Schema.Boolean })),
   cmds: Schema.Array(Schema.String),
 });
+
 /**
  * A loaded program's checked declaration, as `Declaration` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Declaration = typeof Declaration.Type;
@@ -122,7 +117,6 @@ export type Declaration = typeof Declaration.Type;
 /**
  * One program's compiled source and the hash of it, as the build hands it to the Worker's loader.
  *
- * @stability unstable
  * @category models
  */
 export type ProgramSource = { readonly hash: string; readonly source: string };
@@ -137,7 +131,6 @@ export type ProgramSource = { readonly hash: string; readonly source: string };
  * current version. `reply` turns a Cmd's outcome into the settled Msg the program is told. `check`
  * says whether an event passes the schema of the write the program declared under `kind`.
  *
- * @stability unstable
  * @category models
  */
 export type Execution = {
@@ -158,7 +151,6 @@ export type Execution = {
  * The RPC methods a program's box offers: the platform's side of `Execution`, as Promises. `check`
  * and `admit` are optional, and a box without one fails that call with `ProgramDown` `load`.
  *
- * @stability unstable
  * @category models
  */
 export type ExecutionCalls = {
@@ -200,6 +192,7 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
   }
 
   const port = inputs[typed.value.type];
+
   return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
 };
 
@@ -246,15 +239,16 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
  * `init`, `saved_letter` for `fold`, `saved_state` for `upgrade`, and `step` for the rest. `build`
  * is stamped on a model that `upgrade` saves.
  *
- * @stability unstable
  * @category constructors
  */
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const pure = Effect.fromResult(stepper(declared)).pipe(
     Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
   );
+
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
+
   return {
     init: Effect.fn("execution.init")((saved) => run("load", (pure) => pure.init(saved))),
     step: Effect.fn("execution.step")((model, msg) => run("step", (pure) => pure.step(model, msg))),
@@ -281,6 +275,7 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
     check: Effect.fn("execution.check")((kind, event) =>
       run("step", (pure) => {
         const policy = pure.program.writes[kind];
+
         return policy !== undefined && Result.isSuccess(Schema.decodeUnknownResult(policy.schema)(event));
       }),
     ),
@@ -300,6 +295,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
   }
 
   const rejected = (cause: unknown) => new RpcError({ method: key, cause });
+
   // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader RPC enters Effect
   return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: rejected });
 };
@@ -317,12 +313,12 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
  * A rejected call fails with `source: "rpc"`, and a reply that does not decode with
  * `source: "decode"`. Neither decided anything about the input, so the call must be tried again.
  *
- * @stability unstable
  * @category constructors
  */
 export const workerExecution = (binding: ExecutionCalls): Execution => {
   const call = (method: keyof ExecutionCalls, args: ReadonlyArray<unknown>, reason: ProgramDown["reason"]) =>
     invoke(binding, method, args).pipe(Effect.mapError((cause) => new ProgramDown({ reason, source: "rpc", cause })));
+
   const ask = <A>(
     schema: Schema.Decoder<A>,
     work: Effect.Effect<unknown, ProgramDown>,
@@ -337,11 +333,13 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
         }
 
         const decoded = Schema.decodeUnknownResult(schema)(raw);
+
         return Result.isSuccess(decoded)
           ? Effect.succeed(decoded.success)
           : Effect.fail(new ProgramDown({ reason, source: "decode", cause: decoded.failure }));
       }),
     );
+
   return {
     fresh: Effect.fn("execution.fresh")((model, msg) => ask(Admission, call("fresh", [model, msg], "step"), "step")),
     update: Effect.fn("execution.update")((model, msg) =>

@@ -5,11 +5,14 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** A git call failed, so the check cannot tell; it never reads a failure as "nothing there". */
-export class BranchesError extends Schema.TaggedError<BranchesError>()("BranchesError", {
-  /** The git subcommand, such as `merge-tree`. */
-  command: Schema.String,
-  reason: Schema.String,
-}) {}
+export class BranchesError extends Schema.TaggedError<BranchesError, { readonly brand: unique symbol }>()(
+  "BranchesError",
+  {
+    /** The git subcommand, such as `merge-tree`. */
+    command: Schema.String,
+    reason: Schema.String,
+  },
+) {}
 
 /** One branch: on the laptop (`refs/heads/`) or pushed (`refs/remotes/origin/`), and its tip. */
 export type Branch = {

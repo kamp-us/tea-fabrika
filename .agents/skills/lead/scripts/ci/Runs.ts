@@ -18,6 +18,7 @@ export const Run = Schema.Struct({
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
 });
+
 export type Run = typeof Run.Type;
 
 /** One step of a job, as the run's jobs list gives it. */
@@ -26,6 +27,7 @@ export const Step = Schema.Struct({
   status: Schema.String,
   conclusion: Schema.NullOr(Schema.String),
 });
+
 export type Step = typeof Step.Type;
 
 /** One job of a run, latest attempt: its id (its log's id too), its name and its steps. */
@@ -36,6 +38,7 @@ export const Job = Schema.Struct({
   conclusion: Schema.NullOr(Schema.String),
   steps: Schema.Array(Step),
 });
+
 export type Job = typeof Job.Type;
 
 export class Runs extends Context.Service<

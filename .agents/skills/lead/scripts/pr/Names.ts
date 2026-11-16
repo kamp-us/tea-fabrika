@@ -10,7 +10,9 @@ import type { Patch } from "./PullRequests.ts";
  * fixture is a toy project's code, data to the tests that read it (AGENTS.md).
  */
 const CODE = /\.(?:[cm]?ts|tsx|[cm]?js)$/;
+
 const TEST = /\.test\.[cm]?[jt]sx?$/;
+
 const FIXTURE = /(?:^|\/)fixtures\//;
 
 export const isCode = (path: string): boolean => CODE.test(path) && !TEST.test(path) && !FIXTURE.test(path);
@@ -64,6 +66,7 @@ const side = (patch: string, mark: "+" | "-"): ReadonlyArray<string> =>
 export const added = (patches: ReadonlyArray<Patch>): ReadonlyArray<string> => {
   const code = patches.filter((p) => isCode(p.path));
   const gone = new Set(code.flatMap((p) => (p.patch === null ? [] : side(p.patch, "-"))));
+
   return [...new Set(code.flatMap((p) => (p.patch === null ? [] : side(p.patch, "+"))))].filter((n) => !gone.has(n));
 };
 
@@ -81,6 +84,7 @@ export const section = (body: string): string | null => {
   }
 
   const end = lines.findIndex((line, i) => i > start && /^#{1,2}\s/.test(line));
+
   return lines.slice(start + 1, end === -1 ? undefined : end).join("\n");
 };
 
@@ -104,6 +108,7 @@ export const refusal = (body: string, patches: ReadonlyArray<Patch>): string | n
   }
 
   const missing = names.filter((name) => said === null || !says(said, name));
+
   return missing.length === 0
     ? null
     : `its diff exports new names its ## New names section does not name: ${missing.join(", ")}; add one line each, what the industry calls it, with the source (0587, the pr skill)`;

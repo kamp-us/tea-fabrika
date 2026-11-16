@@ -17,17 +17,20 @@ export const world = (): World => ({ runs: new Map(), jobs: new Map(), asked: []
 /** `failing`, when given, is the reason every read fails with. */
 export const layer = (w: World, failing?: string): Layer.Layer<Runs> => {
   const fails = failing === undefined ? Effect.void : Effect.fail(new RunsError({ reason: failing }));
+
   return Layer.succeed(
     Runs,
     Runs.of({
       on: (workflow, branch) =>
         Effect.map(fails, () => {
           w.asked.push(`runs ${workflow} ${branch}`);
+
           return w.runs.get(branch) ?? [];
         }),
       jobs: (id) =>
         Effect.map(fails, () => {
           w.asked.push(`jobs ${id}`);
+
           return w.jobs.get(id) ?? [];
         }),
     }),

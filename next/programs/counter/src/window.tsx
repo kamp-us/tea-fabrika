@@ -21,6 +21,7 @@ export const CounterWindow = ({ data, press, hint }: Props) => (
     <div className="counter-actions">
       {ACTIONS.map(({ m, command, label }) => {
         const key = hint?.(command) ?? null;
+
         return (
           <Button
             key={command}

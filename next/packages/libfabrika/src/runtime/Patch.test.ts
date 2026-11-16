@@ -21,6 +21,7 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       .slice(1)
       .split("/")
       .map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
+
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -127,6 +128,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
   if (Array.isArray(value)) {
     const copy = [...value];
     copy[Number(key)] = change(copy[Number(key)], rest, f);
+
     return copy;
   }
 
@@ -267,6 +269,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
   it("vector: RFC 6901 section 5, each pointer names the value the RFC says, read through a replace", async () => {
     const { apply } = await import("./Patch.ts");
     const { Result } = await import("effect");
+
     const vectors: ReadonlyArray<readonly [string, ReadonlyArray<string | number>]> = [
       ["/foo", ["foo"]],
       ["/foo/0", ["foo", 0]],
@@ -305,6 +308,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
   it("vector: RFC 6902 appendix A, the add, remove and replace examples and their errors", async () => {
     const { apply } = await import("./Patch.ts");
     const { Result } = await import("effect");
+
     const ok: ReadonlyArray<readonly [string, Json, ReadonlyArray<unknown>, Json]> = [
       [
         "A.1 adding an object member",

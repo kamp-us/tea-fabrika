@@ -33,7 +33,7 @@
 // else, an `export { a }` list or a plain statement included, one block above it is the statement's
 // own, as TypeScript attaches it and Effect's checker reads it, and with two the first is the
 // module's. So a file that opens with no import puts two blocks above its first statement. It needs
-// `@stability` and takes no `@category`; its prose is not judged, as in Effect.
+// no `@category` (and no `@stability`, 0574); its prose is not judged, as in Effect.
 //
 // A block on a member of an interface, a class or a type literal is optional. When there is one, it
 // is judged with Effect's member tags (no `@category`; `@default` allowed). As in Effect, members are
@@ -72,6 +72,7 @@ const isDoc = (comment: Comment): boolean => comment.type === "Block" && comment
 
 const sinceOf = (options: ReadonlyArray<unknown>): Since => {
   const [given] = options;
+
   return typeof given === "object" && given !== null && "since" in given && given.since === "required"
     ? "required"
     : "absent";
@@ -81,12 +82,7 @@ const sinceOf = (options: ReadonlyArray<unknown>): Since => {
  * Effect's verdict on one block, with the one change `since: absent` makes: a `@since` tag fires, and
  * Effect's ask for one is dropped. `null` when the block holds `@internal`.
  */
-const judge = (
-  block: JSDocBlock,
-  scope: DocScope,
-  requireStability: boolean,
-  since: Since,
-): ReadonlyArray<string> | null => {
+const judge = (block: JSDocBlock, scope: DocScope, since: Since): ReadonlyArray<string> | null => {
   if (block.internal) {
     return null;
   }
@@ -94,7 +90,7 @@ const judge = (
   const found: Array<JSDocDiagnostic> = [...block.diagnostics];
 
   if (block.parsed !== undefined) {
-    const tags = buildTags(scope, block.parsed.tags, requireStability);
+    const tags = buildTags(scope, block.parsed.tags);
 
     if (tags._tag === "Failure") {
       found.push(...tags.error.diagnostics);
@@ -109,6 +105,7 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
     since === "required"
       ? found
       : found.filter((d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")));
+
   const messages = kept.map((d) => d.message);
 
   if (since === "absent" && block.tags.some((tag) => tag.name === "since")) {
@@ -300,7 +297,7 @@ export const jsdocs: CreateRule = {
             return [];
           }
 
-          const problems = judge(parseJSDocBlock(raw(doc), [0, raw(doc).length]), "member", false, since);
+          const problems = judge(parseJSDocBlock(raw(doc), [0, raw(doc).length]), "member", since);
 
           if (problems === null) {
             return [];
@@ -321,19 +318,20 @@ export const jsdocs: CreateRule = {
       node: Node,
       name: string,
       scope: DocScope,
-      options: { readonly stability: boolean; readonly tagsAlone: boolean; readonly declaration?: Node },
+      options: { readonly tagsAlone: boolean; readonly declaration?: Node },
     ): Verdict => {
       const doc = docBefore(node);
 
       if (doc === undefined) {
         context.report({
           node,
-          message: `\`${name}\` has no doc block. A public export of a next/ library takes one, in Effect's shape: one description paragraph, then @stability and @category (E6, 0023).`,
+          message: `\`${name}\` has no doc block. A public export of a next/ library takes one, in Effect's shape: one description paragraph, then @category (E6, 0023).`,
         });
+
         return "reported";
       }
 
-      const problems = judge(blockOf(raw(doc), options.tagsAlone), scope, options.stability, since);
+      const problems = judge(blockOf(raw(doc), options.tagsAlone), scope, since);
 
       if (problems === null) {
         return "internal";
@@ -349,6 +347,7 @@ export const jsdocs: CreateRule = {
           node,
           message: `\`${name}\`'s doc block is out of Effect's shape (E6, 0023): ${all.join("; ")}.`,
         });
+
         return "reported";
       }
 
@@ -359,10 +358,9 @@ export const jsdocs: CreateRule = {
     const checkNamespace = (
       statement: Node,
       declaration: ESTree.TSModuleDeclaration | ESTree.TSGlobalDeclaration,
-      top: boolean,
     ): Verdict => {
       const name = declarationName(declaration, source);
-      const verdict = check(statement, name, "namespace", { stability: top, tagsAlone: false });
+      const verdict = check(statement, name, "namespace", { tagsAlone: false });
 
       if (verdict !== "passed" || declaration.body === null) {
         return verdict;
@@ -376,10 +374,9 @@ export const jsdocs: CreateRule = {
         const own = inner.declaration;
 
         if (own.type === "TSModuleDeclaration") {
-          checkNamespace(inner, own, false);
+          checkNamespace(inner, own);
         } else if (own.type !== "TSEnumDeclaration") {
           check(inner, `${name}.${declarationName(own, source)}`, "namespace-declaration", {
-            stability: false,
             tagsAlone: false,
             declaration: own,
           });
@@ -398,9 +395,9 @@ export const jsdocs: CreateRule = {
           if (statement.type === "ExportAllDeclaration") {
             if (statement.exported !== null) {
               const named = check(statement, exportedName(statement.exported), "namespace", {
-                stability: true,
                 tagsAlone: true,
               });
+
               checked += named === "internal" ? 0 : 1;
             }
 
@@ -416,9 +413,9 @@ export const jsdocs: CreateRule = {
           if (declaration === null) {
             for (const specifier of statement.specifiers) {
               const named = check(specifier, exportedName(specifier.exported), "declaration", {
-                stability: true,
                 tagsAlone: true,
               });
+
               checked += named === "internal" ? 0 : 1;
             }
 
@@ -431,7 +428,7 @@ export const jsdocs: CreateRule = {
 
           if (declaration.type === "TSModuleDeclaration") {
             if (declaration.id.type === "Identifier") {
-              checked += checkNamespace(statement, declaration, true) === "internal" ? 0 : 1;
+              checked += checkNamespace(statement, declaration) === "internal" ? 0 : 1;
             }
 
             return;
@@ -453,10 +450,11 @@ export const jsdocs: CreateRule = {
             consts(program.body[index - 1]).has(name)
           ) {
             checked++;
+
             return;
           }
 
-          const verdict = check(statement, name, "declaration", { stability: true, tagsAlone: false, declaration });
+          const verdict = check(statement, name, "declaration", { tagsAlone: false, declaration });
           checked += verdict === "internal" ? 0 : 1;
         });
 
@@ -479,8 +477,9 @@ export const jsdocs: CreateRule = {
         context.report({
           loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
           message:
-            "This file has no module block. A public file of a next/ library opens with one: a `/** */` with a description and @stability, above the imports (E6, 0023).",
+            "This file has no module block. A public file of a next/ library opens with one: a `/** */` with a description, above the imports (E6, 0023).",
         });
+
         return;
       }
 
@@ -490,11 +489,13 @@ export const jsdocs: CreateRule = {
         return;
       }
 
-      const tags = buildTags("module", loose.tags, true);
+      const tags = buildTags("module", loose.tags);
+
       const found = [
         ...(tags._tag === "Failure" ? tags.error.diagnostics : []),
         ...parseModuleExamples(loose).diagnostics,
       ];
+
       const problems = withSince(found, loose, since);
 
       if (problems.length > 0) {

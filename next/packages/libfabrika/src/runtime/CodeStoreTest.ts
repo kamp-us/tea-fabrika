@@ -17,6 +17,7 @@ import { CodeStore } from "./CodeStore.ts";
 import * as CodeStoreSql from "./CodeStoreSql.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
 
 /** A real SQLite database: each run of the inner Effect is a new connection to the same file,
@@ -25,10 +26,15 @@ export type Database = Effect.Effect<Effect.Effect<Sql, never, Scope.Scope>, nev
 
 // The service speaks runtime types and its own error, never a lower module's (0091).
 type Service = CodeStore["Service"];
+
 expectTypeOf<Effect.Error<ReturnType<Service["put"]>>>().toEqualTypeOf<CodeStoreError>();
+
 expectTypeOf<Effect.Error<ReturnType<Service["get"]>>>().toEqualTypeOf<CodeStoreError>();
+
 expectTypeOf<Effect.Success<ReturnType<Service["get"]>>>().toEqualTypeOf<Option.Option<BuiltProgram>>();
+
 expectTypeOf<CodeStoreError["reason"]["_tag"]>().toEqualTypeOf<"Storage" | "BadRow">();
+
 expectTypeOf<Effect.Services<ReturnType<Service["get"]>>>().toEqualTypeOf<never>();
 
 const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
@@ -50,8 +56,11 @@ const source = Arbitrary.array(
 ).pipe(Arbitrary.map((parts) => parts.join("")));
 
 const pick = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })));
+
 const Cell = Arbitrary.all({ move: pick, pick, text: source, junk: source });
+
 const Tape = Arbitrary.array(Cell, { minLength: 1, maxLength: 40 });
+
 type Cell = typeof Cell extends Arbitrary.Arbitrary<infer A> ? A : never;
 
 /** A checked bundle: its bytes and their own hash, decoded through the shape `put` takes. */
@@ -84,11 +93,13 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
 
     for (const cell of tape) {
       const hashes = [...kept.keys()];
+
       const options = [
         "put_new",
         "get_unknown",
         ...(hashes.length > 0 ? ["put_again", "get", "get", "corrupt", "reopen"] : []),
       ];
+
       const move = nth(options, cell.move);
       seen.add(move);
 
@@ -103,18 +114,21 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
 
           break;
         }
+
         case "put_again": {
           // The same hash again: the first row stays as it is, broken or not.
           const digest = nth(hashes, cell.pick);
           yield* codes.put({ hash: digest, source: text(digest) });
           break;
         }
+
         case "get_unknown": {
           const code = yield* built(`${cell.junk}\0unstored`);
           const got = yield* codes.get(code.hash);
           expect(got).toEqual(kept.has(code.hash) ? Option.some(code) : Option.none());
           break;
         }
+
         case "get": {
           const digest = nth(hashes, cell.pick);
           const got = yield* Effect.exit(codes.get(digest));
@@ -126,6 +140,7 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
           seen.add(broken.has(digest) ? "bad_row" : "same_bytes");
           break;
         }
+
         case "corrupt": {
           // The disk changes under the store: the row keeps its key, not its bytes.
           const digest = nth(hashes, cell.pick);
@@ -137,6 +152,7 @@ const walk = (database: Database, tape: ReadonlyArray<Cell>) =>
 
           break;
         }
+
         case "reopen": {
           yield* Scope.close(scope, Exit.void);
           scope = yield* Scope.fork(parent);

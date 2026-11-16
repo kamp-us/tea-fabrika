@@ -7,6 +7,7 @@ import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 
 const ROOT = process.cwd();
+
 const configFile = join(ROOT, "stylelint.config.ts");
 
 const tracked = spawnSync("git", ["ls-files", "-z", "--", "apps", "packages", "programs", "next"], {

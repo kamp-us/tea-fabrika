@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-ledger-sql)";
+
 const FILE = "next/packages/libfabrika/src/cloudflare/runtime.ts";
 
 describe("ledger SQL stays behind its service", () => {
@@ -15,6 +16,7 @@ describe("ledger SQL stays behind its service", () => {
         fc.boolean(),
         async (table, space, upper) => {
           const word = upper ? table.toUpperCase() : table;
+
           const queries = [
             `SELECT * FROM${space}${word} AS e`,
             `SELECT e.* FROM dev_clients c JOIN${space}"${word}" e ON 1=1`,
@@ -23,9 +25,11 @@ describe("ledger SQL stays behind its service", () => {
             `INSERT INTO${space}${word} VALUES (?)`,
             `UPDATE${space}${word} SET stream=?`,
           ];
+
           const body = `${queries
             .map((query) => `sql.exec(${JSON.stringify(query)});`)
             .join("\n")}\nsql.exec(\`SELECT * FROM entries WHERE stream=\${stream}\`);`;
+
           const findings = await plant({
             [FILE]: body,
             "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts": body,
@@ -34,6 +38,7 @@ describe("ledger SQL stays behind its service", () => {
             "packages/today/runtime.ts": body,
             "next/allowed.ts": 'sql.exec("SELECT * FROM dev_descriptors"); sql.exec("SELECT entries FROM directory");',
           });
+
           expect(findings(CODE, FILE)).toEqual([1, 2, 3, 4, 5, 6, 7]);
 
           for (const file of [

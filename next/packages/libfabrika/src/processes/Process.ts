@@ -4,8 +4,6 @@
  * Nothing about a process is kept outside the ledger. `ProcessTable` folds the brain's own lines
  * into the current picture, and a call on it only decides: the caller writes what the answer
  * allows, in the same ledger turn.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
@@ -37,7 +35,6 @@ export {
    * Schema for who registered a name: the `brain`, or a `process`. A caller may act only on the
    * names its owner registered.
    *
-   * @stability unstable
    * @category schemas
    */
   Owner,
@@ -45,14 +42,12 @@ export {
    * Schema for every lifecycle event the brain writes: `registered`, `started`, `exited`,
    * `restarted`, `down`, `monitored` and `demonitored`.
    *
-   * @stability unstable
    * @category schemas
    */
   ProcessEvent,
   /**
    * Schema for who a watch delivers to: a `process`, or a `client` session.
    *
-   * @stability unstable
    * @category schemas
    */
   Recipient,
@@ -60,7 +55,6 @@ export {
    * Returns the one id a `DOWN` letter is written under, for a recipient, a watch reference and
    * the watch's round.
    *
-   * @stability unstable
    * @category getters
    */
   signalId,
@@ -68,7 +62,6 @@ export {
    * Schema for one start request: `first` for a name's first process, or `again` to restart the
    * name after the process its `after` field gives.
    *
-   * @stability unstable
    * @category schemas
    */
   Start,
@@ -76,14 +69,15 @@ export {
    * Schema for the state of one life: `live`, `ended` with its exit reason, or `down` with its
    * crash count and the time it is down until.
    *
-   * @stability unstable
    * @category schemas
    */
   State,
 };
 
 const PROCESSES = "processes";
+
 const CLIENTS = "client:";
+
 /** Names that lead streams this layer or the gateway already owns. */
 const RESERVED = `(?!(?:${PROCESSES}|gateway)$)`;
 
@@ -91,7 +85,6 @@ const RESERVED = `(?!(?:${PROCESSES}|gateway)$)`;
  * A process name is a stream name: no `/`, so `<name>` and `<name>/inbox` never meet another's,
  * no `client:` lead, so it never meets a client's inbox, and never `processes` or `gateway`.
  *
- * @stability unstable
  * @category schemas
  */
 export const ProcessName = Text.check(Schema.isPattern(new RegExp(`^${RESERVED}(?!${CLIENTS})[a-z0-9][a-z0-9._:-]*$`)));
@@ -104,7 +97,6 @@ const ClientId = Text.check(Schema.isPattern(new RegExp(`^(?!${PROCESSES}$)[a-z0
  * the `recipient` its watches deliver to. Trusted wiring sets both; neither is decoded from a
  * public request.
  *
- * @stability unstable
  * @category models
  */
 export type Caller = { readonly owner: typeof Owner.Type; readonly recipient: typeof Recipient.Type };
@@ -121,7 +113,6 @@ const eventStream = (name: string): string => `${PROCESSES}/${name}`;
  * any `<process>/dead` stream or `dead` entry, any `ProcessEvent` case, or any signal, runner or
  * notice id. The answer is true when the write is any of these.
  *
- * @stability unstable
  * @category guards
  */
 export const brainOnly = (write: { readonly stream: string; readonly id: string; readonly tag: string }): boolean =>
@@ -139,7 +130,6 @@ export const brainOnly = (write: { readonly stream: string; readonly id: string;
  * `process_<id>/<n>/<n>/answer` for an answer. These belong to the brain, and `Mailbox` lifts the
  * rule only for a runner's own. Cmd write ids remain available to the signer.
  *
- * @stability unstable
  * @category guards
  */
 export const inRunnerSpace = (id: string): boolean =>
@@ -149,7 +139,6 @@ export const inRunnerSpace = (id: string): boolean =>
  * Schema for what a monitor answers for a target that is not live when the watch is made, whether
  * it ended or never started. A monitor result, never an exit reason.
  *
- * @stability unstable
  * @category schemas
  */
 export const NoProc = Schema.TaggedStruct("noproc", {});
@@ -168,7 +157,6 @@ export const NoProc = Schema.TaggedStruct("noproc", {});
  * The shape alone is not a signal. A letter tagged `DOWN` counts as one only under its signal id,
  * written by the brain, for a watch that exists. Anything else is plain mail.
  *
- * @stability unstable
  * @category schemas
  */
 export const Down = Schema.TaggedStruct("DOWN", {
@@ -196,7 +184,6 @@ const oneErrorPerTry = Schema.makeFilter(
  * the `limit`, the letter's id `m`, the `build`, and one error class per try, at most 32.
  * `ProcessManager.dead` adds the process, its program and its name to make a `Dead`.
  *
- * @stability unstable
  * @category schemas
  */
 export const DeadInput = Schema.Struct(deadFields).check(oneErrorPerTry);
@@ -206,7 +193,6 @@ export const DeadInput = Schema.Struct(deadFields).check(oneErrorPerTry);
  * delivery limit: the fields of `DeadInput`, plus the process, its program and its name, which the
  * brain reads from its own table and never takes from the reporter.
  *
- * @stability unstable
  * @category schemas
  */
 export const Dead = Schema.TaggedStruct("dead", {
@@ -225,7 +211,6 @@ export const Dead = Schema.TaggedStruct("dead", {
  * The runner saves `stepping` before a step and `idle` after it. A process that wakes and finds
  * `stepping` knows a step was cut short, and `recoverActivity` reads that as `interrupted`.
  *
- * @stability unstable
  * @category schemas
  */
 export const Activity = Schema.TaggedUnion({
@@ -237,7 +222,6 @@ export const Activity = Schema.TaggedUnion({
  * Schema for what `recoverActivity` answers after a wake: `idle`, or `interrupted` with the
  * process, letter and build of the step that was cut short.
  *
- * @stability unstable
  * @category schemas
  */
 export const Recovered = Schema.TaggedUnion({
@@ -259,7 +243,6 @@ export const Recovered = Schema.TaggedUnion({
  * process, letter and build: the step it names did not finish. Anything else fails with a
  * `LedgerError` whose reason is `bad_row`.
  *
- * @stability unstable
  * @category decoding
  */
 export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Type, LedgerError> => {
@@ -274,6 +257,7 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
   }
 
   const value = saved.success;
+
   return Result.succeed(
     value._tag === "idle"
       ? value
@@ -295,7 +279,6 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
  * being asked for, and answers true while the total is at most `intensity`. The order of `times`
  * does not matter.
  *
- * @stability unstable
  * @category guards
  */
 export const canRestart = (times: ReadonlyArray<number>, now: number, period: number, intensity: number): boolean =>
@@ -320,7 +303,6 @@ export const canRestart = (times: ReadonlyArray<number>, now: number, period: nu
  * - `forbidden`: a start's guard said no in the turn that would write it, such as a permission
  *   whose relation was removed after the start was checked.
  *
- * @stability unstable
  * @category errors
  */
 export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessError", {
@@ -358,7 +340,6 @@ const shown = ({ _tag, round, ...watch }: Held): Watch => ({
 /**
  * What a start answers: the new process's id, and the log rev of its `started` line.
  *
- * @stability unstable
  * @category models
  */
 export type StartAnswer = { readonly process: string; readonly rev: number };
@@ -367,7 +348,6 @@ export type StartAnswer = { readonly process: string; readonly rev: number };
  * One live process as `ProcessTable.info` lists it: its id, its registered name, its program, the
  * hash of its build, and how many times its name has been restarted.
  *
- * @stability unstable
  * @category models
  */
 export type ProcessInfo = {
@@ -379,14 +359,15 @@ export type ProcessInfo = {
 };
 
 const decodeDown = Schema.decodeUnknownOption(Down);
+
 const denied = (reason: ProcessError["reason"]) => Result.fail(new ProcessError({ reason }));
+
 const isText = Schema.is(Text);
 
 /**
  * Returns a client's own inbox stream, `client:<id>/inbox`, where its `DOWN` letters land. It is
  * never a process's inbox, since a process name cannot lead with `client:`.
  *
- * @stability unstable
  * @category getters
  */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
@@ -396,7 +377,6 @@ export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbo
  * `processes/<name>/acked`. Its prefix makes it brain-only, so no program write and no mail
  * forges an ack.
  *
- * @stability unstable
  * @category getters
  */
 export const acked = (name: string): string => `${eventStream(name)}/acked`;
@@ -405,7 +385,6 @@ export const acked = (name: string): string => `${eventStream(name)}/acked`;
  * Schema for one ack: the reader's live process, and the inbox pos its saved checkpoint reached.
  * An inbox's unread letters are its newest pos minus the newest ack's.
  *
- * @stability unstable
  * @category schemas
  */
 export const Acked = Schema.TaggedStruct("acked", { process: ProcessId, pos: Rev });
@@ -420,12 +399,12 @@ const decodeAcked = Schema.decodeUnknownOption(Acked);
  * It reads only the acked stream's newest entry, by an index, so it costs the same however many
  * acks the stream holds. Only a line `by` wrote counts.
  *
- * @stability unstable
  * @category getters
  */
 export const ackedPos = (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev => {
   const stream = acked(name);
   const newest = [...turn.read(stream, Math.max(0, turn.head(stream) - 1))].at(-1);
+
   return newest === undefined || newest.by !== by
     ? 0
     : Option.match(decodeAcked(valueFor(newest)), { onNone: () => 0, onSome: (ack) => ack.pos });
@@ -435,6 +414,7 @@ const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Ar
 
 const led = (word: string) => {
   const lead = JSON.stringify([word]).slice(0, -1);
+
   return (id: string): boolean => id.startsWith(lead) || Option.exists(decodeIdParts(id), (parts) => parts[0] === word);
 };
 
@@ -442,7 +422,6 @@ const led = (word: string) => {
  * Checks whether an id is in the signal id space, a JSON array led by `"DOWN"`. Only the brain
  * writes one.
  *
- * @stability unstable
  * @category guards
  */
 export const inSignalSpace = led("DOWN");
@@ -451,15 +430,14 @@ export const inSignalSpace = led("DOWN");
  * Checks whether an id is in the notice id space, a JSON array led by `"notice"`: the ids for what
  * the brain tells a program. Only the brain writes one.
  *
- * @stability unstable
  * @category guards
  */
 export const inNoticeSpace = led("notice");
+
 /**
  * Makes the letter id of a notice: the JSON array `["notice", key]`, which is in the notice id
  * space, so only the brain may write under it.
  *
- * @stability unstable
  * @category constructors
  */
 export const noticeId = (key: string): string => JSON.stringify(["notice", key]);
@@ -484,7 +462,6 @@ const registered = (control: ReadonlyArray<Entry>, by: string): ReadonlyArray<st
  * is a `ProcessError` and an allowed call returns what the caller then writes in its own ledger
  * turn. `ProcessTable.read` builds one from a ledger read.
  *
- * @stability unstable
  * @category models
  */
 export class ProcessTable {
@@ -515,6 +492,7 @@ export class ProcessTable {
   /** Every entry `read` folds from rev 0, oldest first. */
   static entries(read: (stream: string, after: number) => Iterable<Entry>, by: string): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, 0)];
+
     return [...control, ...registered(control, by).flatMap((name) => [...read(eventStream(name), 0)])].sort(
       (a, b) => a.rev - b.rev,
     );
@@ -533,6 +511,7 @@ export class ProcessTable {
   after(read: (stream: string, after: number) => Iterable<Entry>, rev: number): ReadonlyArray<Entry> {
     const control = [...read(ProcessTable.stream, rev)];
     const names = new Set([...this.#model.names.keys(), ...registered(control, this.#by)]);
+
     return [...control, ...[...names].flatMap((name) => [...read(eventStream(name), rev)])].sort(
       (a, b) => a.rev - b.rev,
     );
@@ -560,6 +539,7 @@ export class ProcessTable {
       }
 
       const parent = this.parent(saved.state.process, caller.owner);
+
       return Result.isFailure(parent)
         ? Result.fail(parent.failure)
         : Result.succeed(Option.some({ process: saved.state.process, rev: saved.rev }));
@@ -604,6 +584,7 @@ export class ProcessTable {
   whereis(name: string): Option.Option<{ readonly program: string; readonly state: typeof State.Type }> {
     const registered = this.#model.names.get(name);
     const life = this.#model.lives.get(this.#model.current.get(name) ?? "");
+
     return registered === undefined || life === undefined
       ? Option.none()
       : Option.some({ program: registered.program, state: life.state });
@@ -613,6 +594,7 @@ export class ProcessTable {
   starter(name: string): Option.Option<string> {
     const first = [...this.#model.lives.values()].find((life) => life.name === name);
     const requester = first?.request._tag === "first" ? first.request.requester : undefined;
+
     return requester?._tag === "process"
       ? Option.map(this.life(requester.process), (life) => life.name)
       : Option.none();
@@ -645,6 +627,7 @@ export class ProcessTable {
 
     const life = this.parent(process, owner);
     const restarts = this.#model.restarts.get(name) ?? [];
+
     return Result.isFailure(life)
       ? Result.fail(life.failure)
       : Result.succeed({ name, state: life.success.state, restarts });
@@ -662,6 +645,7 @@ export class ProcessTable {
     }
 
     const reserved = this.#model.names.get(life.name);
+
     return Equal.equals(reserved?.owner, owner) ? Result.succeed(life) : denied("not_parent");
   }
 
@@ -674,6 +658,7 @@ export class ProcessTable {
     }
 
     const { state, exited } = parent.success;
+
     return state._tag !== "live" && (exited === undefined || !sameReason(exited, reason)) ? denied("ended") : parent;
   }
 
@@ -786,6 +771,7 @@ export class ProcessTable {
 
     // An earlier round's signal belongs to a watch already canceled.
     const current = round === watch.round && watch._tag === "live";
+
     return current && to._tag === "process" && to.process === process ? "signal" : "drop";
   }
 

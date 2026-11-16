@@ -47,13 +47,16 @@ it("U2 a usage span lasts its CPU time and keeps wall time separately, including
           Effect.scoped(
             Effect.gen(function* () {
               const spans: Array<Tracer.NativeSpan> = [];
+
               const tracer = Tracer.make({
                 span: (options) => {
                   const span = new Tracer.NativeSpan(options);
                   spans.push(span);
+
                   return span;
                 },
               });
+
               const usage = Schema.decodeUnknownSync(IsolateUsage.Usage)({
                 process: PROCESS,
                 method,
@@ -61,6 +64,7 @@ it("U2 a usage span lasts its CPU time and keeps wall time separately, including
                 wallMs,
                 outcome,
               });
+
               yield* IsolateUsage.record([usage]).pipe(Effect.withTracer(tracer));
               expect(spans).toHaveLength(1);
               const span = spans[0];

@@ -298,7 +298,7 @@ describe("K1, a second app reads only its own", () => {
 /** The message of a failed effect, or the empty string. */
 const message = (exit: Exit.Exit<unknown, unknown>) => {
   const error = failure(exit);
-  return error instanceof Files.SettingsError ? error.message : "";
+  return Schema.is(Files.SettingsError)(error) ? error.message : "";
 };
 
 const parse = (text: string) =>
@@ -569,7 +569,7 @@ describe("K4, each app checks its own minimum version", () => {
         reached.add(`${theirs ? "theirs" : "own"}-${newer ? "newer" : "older"}`);
 
         const want = theirs ? "unknown" : newer ? "version" : undefined;
-        expect(error instanceof Files.SettingsError ? error.reason : error).toBe(want);
+        expect(Schema.is(Files.SettingsError)(error) ? error.reason : error).toBe(want);
         // A version refusal names this app, never the other, and never fabrika for another app.
         const said = message(exit);
         expect(want !== "version" || said.includes(a.name)).toBe(true);

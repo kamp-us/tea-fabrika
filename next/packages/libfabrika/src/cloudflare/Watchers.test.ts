@@ -13,6 +13,7 @@ const Step = Arbitrary.all({
 });
 
 const Walk = Arbitrary.array(Step, { minLength: 6, maxLength: 30 });
+
 const patch = { type: "patch", base: 4, rev: 5, patch: [] } as const;
 
 describe("watcher delivery evidence, next/", () => {
@@ -25,15 +26,18 @@ describe("watcher delivery evidence, next/", () => {
           const routes = new Map<string, string>();
           const delivered: Array<{ connection: string; client: string; news: unknown }> = [];
           let failSend = false;
+
           // Typed synchronous route port. No platform or Connection implementation is replaced here.
           const sql: Sql = {
             exec: (_query, client) => {
               const connection = routes.get(String(client));
+
               return connection === undefined ? [] : [{ connection }];
             },
             transaction: (f) => f(),
             size: () => 0,
           };
+
           const publish = Publish.make(sql, (connection: string, client: string, news: unknown) =>
             Effect.suspend(() => {
               if (failSend) {
@@ -41,11 +45,14 @@ describe("watcher delivery evidence, next/", () => {
               }
 
               delivered.push({ connection, client, news });
+
               // Deliberately no socket: Connection.notify's unchanged normal return is still sent.
               return Effect.void;
             }),
           );
+
           let rpc: "ok" | "throw" | "malformed" = "ok";
+
           const context = yield* Layer.build(
             WatcherManagerRemote.layer((client, update) =>
               Effect.suspend((): Effect.Effect<unknown, Error> => {
@@ -61,7 +68,9 @@ describe("watcher delivery evidence, next/", () => {
               }),
             ),
           );
+
           const remote = Context.get(context, WatcherManager);
+
           const reason = Effect.fnUntraced(function* (client: string) {
             const exit = yield* Effect.exit(remote.publish(client, patch));
             expect(Exit.isFailure(exit)).toBe(true);
@@ -74,6 +83,7 @@ describe("watcher delivery evidence, next/", () => {
             const error = Schema.decodeUnknownSync(Schema.toType(WatcherManagerError))(Cause.squash(exit.cause));
             expect(error._tag).toBe("WatcherManagerError");
             expect(error.reason.cause).toBeDefined();
+
             return error.reason._tag;
           });
 

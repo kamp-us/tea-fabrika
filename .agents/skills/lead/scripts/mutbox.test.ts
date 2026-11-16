@@ -43,7 +43,9 @@ import {
 // stand-in `docker` on PATH, so no test here needs Docker; the one real run is the labeled
 // scenario at the end, which only runs when MUTBOX_DOCKER=1 says a Docker box is free.
 const options = { seed: 483, numRuns: 100 };
+
 const script = join(import.meta.dirname, "mutbox.ts");
+
 const made: string[] = [];
 
 afterAll(() => {
@@ -170,12 +172,14 @@ describe("mutbox, the pure parts", () => {
       (m: string, q: string) => `const x = require(${q}${m}${q});\n`,
       (m: string, q: string) => `export * from ${q}${m}${q};\n`,
     );
+
     const inert = fc.constantFrom(
       (m: string, q: string) => `import type {X} from ${q}${m}${q};\n`,
       (m: string, q: string) => `const plant = \`import {app} from ${q}${m}${q}; app.quit();\`;\n`,
       (m: string) => `const plant = 'import {app} from "${m}"';\n`,
       (m: string, q: string) => `// import {app} from ${q}${m}${q};\n`,
     );
+
     fc.assert(
       fc.property(
         fc.constantFrom("electron", "playwright", "@playwright/test"),
@@ -237,8 +241,10 @@ describe("mutbox, the pure parts", () => {
           expect(arm.tested).toBe(b.filter((r) => ["Killed", "Survived", "Timeout"].includes(r.status)).length);
           expect(arm.survivors).toEqual(b.filter((r) => r.status === "Survived"));
           expect(arm.unreached).toBe(Math.max(0, selected - b.length));
+
           const same = (x: object, y: object) =>
             JSON.stringify({ ...x, status: "" }) === JSON.stringify({ ...y, status: "" });
+
           const list = narrowed(a, b);
 
           for (const r of b) {
@@ -305,43 +311,54 @@ describe("mutbox, the pure parts", () => {
       }),
       { maxLength: 4 },
     );
+
     const owner = fc.constantFrom("build", "tests", "lead");
+
     const owners = fc.option(
       fc.record({ "src/a.ts": owner, "src/b.cjs": owner, "lib/": owner, "lib/x/": owner }, { requiredKeys: [] }),
       { nil: null },
     );
+
     const arm = fc.option(
       fc.constantFrom(0, 1, 124).map((exit) => tally(exit, "report", [], 2)),
       { nil: null },
     );
+
     const base = fc.option(
       fc
         .record({ a: arm, has: fc.nat({ max: 2 }), drop: fc.nat({ max: 2 }) })
         .map(({ a, has, drop }) => ({ a, has, kept: Math.max(0, has - drop) })),
       { nil: null },
     );
+
     fc.assert(
       fc.property(fc.option(reach, { nil: undefined }), base, owners, (files, base, owners) => {
         const sample = { seed: 119120, ranges: ["src/a.ts:1:0-1:5"], total: 2, selected: 2, left: 0, files };
         const b = tally(0, "report", [{ ...killedRow }], 2);
         const got = judge({ exit: 0, sample, b, failed: [], base, owners });
+
         const owns = (file: string) => {
           const map: Record<string, string> = owners ?? {};
+
           const key =
             file in map
               ? file
               : Object.keys(map)
                   .filter((k) => k.endsWith("/") && file.startsWith(k))
                   .sort((x, y) => y.length - x.length)[0];
+
           return key !== undefined && map[key] === "build";
         };
+
         const owned = (files ?? []).filter((f) => f.total > 0 && owns(f.file));
+
         const stuck =
           base !== null && base.kept > 0 && (base.a === null || ![0, 124].includes(base.a.exit))
             ? "arm_a_failed"
             : owned.length > 0 && owned.every((f) => f.selected === 0)
               ? "no_build_reach"
               : null;
+
         const gaps = [
           ...(files === undefined ? ["no_reach:old_sampler"] : []),
           ...(base !== null && base.kept === 0
@@ -390,12 +407,14 @@ describe("mutbox, the pure parts", () => {
         fc.string({ minLength: 1, maxLength: 8 }),
         (onBase, passes, name) => {
           const kept = onBase.filter((p) => passes(p));
+
           const baseline = {
             testResults: onBase.map((p) => ({
               name: `/repo/${p}`,
               assertionResults: [{ fullName: `${name} ${p}`, status: kept.includes(p) ? "passed" : "failed" }],
             })),
           };
+
           const dropped = droppedFromArmA(paths, onBase, kept, baseline);
           expect(dropped.map((d) => d.path)).toEqual(paths.filter((p) => !kept.includes(p)));
 
@@ -520,6 +539,7 @@ const run = (setup: Setup = {}) => {
   // A folder with a space in its name: every path the script handles has one.
   const dir = join(realpathSync(mkdtempSync(join(tmpdir(), "mutbox-"))), "with space");
   made.push(join(dir, ".."));
+
   const repo = join(dir, "repo"),
     fake = join(dir, "fake"),
     bin = join(dir, "bin"),
@@ -536,9 +556,12 @@ const run = (setup: Setup = {}) => {
       ["-C", repo, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", ...args],
       { encoding: "utf8" },
     );
+
     expect(ran.status, ran.stderr).toBe(0);
+
     return ran.stdout.trim();
   };
+
   git("init", "-q");
   writeFileSync(
     join(repo, "package.json"),
@@ -586,6 +609,7 @@ const run = (setup: Setup = {}) => {
   }
 
   const started = Date.now();
+
   const ran = spawnSync(
     process.execPath,
     [
@@ -618,10 +642,13 @@ const run = (setup: Setup = {}) => {
       },
     },
   );
+
   const calls = existsSync(join(fake, "calls.log"))
     ? readFileSync(join(fake, "calls.log"), "utf8").trim().split("\n")
     : [];
+
   const line = ran.stdout.trim().split("\n").at(-1) ?? "";
+
   return {
     code: ran.status,
     text: ran.stdout + ran.stderr,
@@ -721,8 +748,10 @@ describe("mutbox, the run against a stand-in docker", () => {
       "./pnpm-lock.yaml",
       "./pnpm-workspace.yaml",
     ]);
+
     const tag = (calls: string[]) =>
       /--tag (fabrika-mutbox:[0-9a-f]{16})/.exec(calls.find((c) => c.startsWith("build "))!)?.[1];
+
     const again = run({ image: false });
     const other = run({ image: false, lockfile: "lockfileVersion: '9.0'\n# changed\n" });
     expect(tag(again.calls)).toBe(tag(first.calls));
@@ -812,10 +841,12 @@ describe("mutbox, the run against a stand-in docker", () => {
   // narrowing null or armA out; drop the arm_a_failed check.
   it("scenario: a build file with no mutant is stuck, no passing base test is a done with narrowing unknown", () => {
     const plan = (file: string) => `# Plan\n\n| File | Owner step |\n| --- | --- |\n| \`${file}\` | build |\n`;
+
     const missed = run({
       files: { "plan.md": plan("src/b.cjs") },
       args: ({ dir }) => ["--plan", join(dir, "plan.md")],
     });
+
     expect(missed.code, missed.text).toBe(30);
     expect(missed.summary).toMatchObject({ outcome: "stuck", reason: "no_build_reach" });
     expect(missed.summary.detail).toContain("src/b.cjs");
@@ -825,6 +856,7 @@ describe("mutbox, the run against a stand-in docker", () => {
       files: { "plan.md": plan("src/a.ts") },
       args: ({ dir }) => ["--plan", join(dir, "plan.md")],
     });
+
     expect(reached.code, reached.text).toBe(0);
     expect(reached.summary).toMatchObject({ outcome: "done", reason: "" });
 
@@ -836,10 +868,12 @@ describe("mutbox, the run against a stand-in docker", () => {
     const failing = JSON.stringify({
       testResults: [{ name: "/repo/src/a.test.ts", assertionResults: [{ fullName: "adds", status: "failed" }] }],
     });
+
     const none = run({
       run: `${DONE}\necho '${failing}' > "$OUT/a-baseline.json"\necho > "$OUT/a-kept"\n`,
       args: ({ build }) => ["--base", `${build}^`],
     });
+
     expect(none.code, none.text).toBe(0);
     expect(none.summary).toMatchObject({
       outcome: "done",
@@ -855,6 +889,7 @@ describe("mutbox, the run against a stand-in docker", () => {
       run: `${DONE}\necho src/a.test.ts > "$OUT/a-kept"\n`,
       args: ({ build }) => ["--base", `${build}^`],
     });
+
     expect(lost.code, lost.text).toBe(30);
     expect(lost.summary).toMatchObject({ outcome: "stuck", reason: "arm_a_failed", armA: { dropped: [] } });
   });
@@ -864,6 +899,7 @@ describe("mutbox, the run against a stand-in docker", () => {
     const got = run({
       run: `mkdir -p "$OUT/b"\necho 0 > "$OUT/b/exit"\necho 'PLANTED-SECRET' > "$FAKE/outside.json"\nln -s "$FAKE/outside.json" "$OUT/b/sample.json"\n`,
     });
+
     expect(got.code, got.text).toBe(30);
     expect(got.summary).toMatchObject({ outcome: "stuck", reason: "bad_output" });
     expect(got.text).not.toContain("PLANTED-SECRET");
@@ -873,24 +909,29 @@ describe("mutbox, the run against a stand-in docker", () => {
   it("no range is a skip, and a failed baseline, a dry run or no report is stuck", () => {
     const sample = (ranges: string[]) =>
       JSON.stringify({ seed: 119120, ranges, total: 0, selected: ranges.length, left: 0 });
+
     const skip = run({
       run: `mkdir -p "$OUT/b"\necho 1 > "$OUT/b/exit"\necho '${sample([])}' > "$OUT/b/sample.json"\nexit 1\n`,
     });
+
     expect(skip.code, skip.text).toBe(40);
     expect(skip.summary).toMatchObject({ outcome: "skip", reason: "no_ranges" });
 
     const baseline = JSON.stringify({
       testResults: [{ name: "/repo/src/a.test.ts", assertionResults: [{ fullName: "adds", status: "failed" }] }],
     });
+
     const failed = run({ run: `echo '${baseline}' > "$OUT/baseline.json"\nexit 71\n` });
     expect(failed.code, failed.text).toBe(30);
     expect(failed.summary).toMatchObject({ outcome: "stuck", reason: "baseline_failed" });
     expect(failed.summary.detail).toContain("src/a.test.ts: adds");
 
     const report = JSON.stringify({ files: { "src/a.ts": { mutants: [mutant("NoCoverage", 1)] } } });
+
     const dry = run({
       run: `mkdir -p "$OUT/b"\necho 0 > "$OUT/b/exit"\necho '${sample(["src/a.ts:1:0-1:4"])}' > "$OUT/b/sample.json"\necho '${report}' > "$OUT/b/report.json"\n`,
     });
+
     expect(dry.code, dry.text).toBe(30);
     expect(dry.summary).toMatchObject({ outcome: "stuck", reason: "no_tested_mutant" });
 
@@ -905,10 +946,12 @@ describe("mutbox, the run against a stand-in docker", () => {
   // Plants: call any untested sample a skip; call a mix, an empty report or a capped run static.
   it("scenario: a sample of only static mutants, which ignoreStatic leaves Ignored, is a skip", () => {
     const sample = JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-1:4"], total: 2, selected: 2, left: 0 });
+
     const ran = (statuses: string[], exit = 0) => {
       const report = JSON.stringify({
         files: { "src/a.ts": { mutants: statuses.map((status, n) => mutant(status, n + 1)) } },
       });
+
       return run({
         run: `mkdir -p "$OUT/b"\necho ${exit} > "$OUT/b/exit"\necho '${sample}' > "$OUT/b/sample.json"\necho '${report}' > "$OUT/b/report.json"\nexit ${exit}\n`,
       });
@@ -933,9 +976,11 @@ describe("mutbox, the run against a stand-in docker", () => {
   // Plant: drop the events fallback, so a capped run reports nothing.
   it("when the five minutes ran out, what Stryker kept in its events is the report", () => {
     const tested = (n: number, status: string) => JSON.stringify({ ...mutant(status, n), fileName: "/repo/src/a.ts" });
+
     const got = run({
       run: `mkdir -p "$OUT/b/events"\necho 124 > "$OUT/b/exit"\necho '${JSON.stringify({ seed: 119120, ranges: ["src/a.ts:1:0-9:4"], total: 5, selected: 5, left: 0, files: [{ file: "src/a.ts", total: 5, selected: 5 }] })}' > "$OUT/b/sample.json"\necho '${tested(1, "Killed")}' > "$OUT/b/events/00002-onMutantTested.json"\necho '${tested(2, "Survived")}' > "$OUT/b/events/00003-onMutantTested.json"\necho '{}' > "$OUT/b/events/00000-onDryRunCompleted.json"\nexit 124\n`,
     });
+
     expect(got.code, got.text).toBe(0);
     expect(got.summary).toMatchObject({
       outcome: "done",
@@ -971,7 +1016,9 @@ describe("mutbox gc against a stand-in docker", () => {
         ...(setup.down ? { DOWN: "1" } : {}),
       },
     });
+
     const log = join(dir, "calls.log");
+
     return {
       code: ran.status,
       text: ran.stdout + ran.stderr,
@@ -1008,8 +1055,10 @@ describe("a call past its bound is stopped, and its child with it", () => {
   const seconds = DOCKER_SECONDS.call;
   const limit = seconds * 1000;
   const alive = (pid: number) => spawnSync("kill", ["-0", String(pid)]).status === 0;
+
   const readPid = (file: string) =>
     Effect.sync(() => (existsSync(file) ? Number(readFileSync(file, "utf8").trim()) || 0 : 0));
+
   /** The line on stdin, at `delay` ms on the test clock, however late the child asked for it. */
   const lineAt = (delay: number) =>
     Stream.fromEffect(
@@ -1023,21 +1072,26 @@ describe("a call past its bound is stopped, and its child with it", () => {
         return new TextEncoder().encode("go\n");
       }),
     );
+
   const called = (delay: number, script: string) =>
     Effect.gen(function* () {
       const dir = realpathSync(mkdtempSync(join(tmpdir(), "mutbox-bound-")));
       made.push(dir);
       const file = join(dir, "pid");
       const fiber = yield* bounded("sh", ["-c", script, "sh", file], seconds, lineAt(delay)).pipe(Effect.forkChild);
+
       // On the live clock: wait until the child is up and reading, then move the test clock.
       const pid = yield* readPid(file).pipe(
         Effect.repeat({ until: (p) => p > 0, schedule: Schedule.spaced("5 millis") }),
         TestClock.withLive,
       );
+
       yield* TestClock.adjust(delay);
       const exit = yield* Effect.exit(Fiber.join(fiber));
+
       return { exit, pid };
     }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, TestClock.layer())));
+
   // At end of input with no line it hangs, as `exec sleep`, keeping its pid: only a kill ends it.
   const waits = 'echo $$ > "$1"; read line || exec sleep 600; echo "got $line"';
 
@@ -1052,7 +1106,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
                 expect(exit).toStrictEqual(
                   delay < limit
                     ? Exit.succeed({ out: "got go\n", err: "", code: 0 })
-                    : Exit.fail(new CallTimeout({ command: `sh -c ${waits}`, seconds })),
+                    : Exit.fail(CallTimeout.make({ command: `sh -c ${waits}`, seconds })),
                 );
                 expect(alive(pid)).toBe(false);
               }),
@@ -1068,6 +1122,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
   // `sleep` inherits the ignored TERM. This one waits the grace on the real clock.
   it("scenario: a child that ignores SIGTERM is killed after the grace", () => {
     const started = Date.now();
+
     return called(2 * limit, `trap '' TERM; ${waits}`).pipe(
       Effect.tap(({ exit, pid }) =>
         Effect.sync(() => {
@@ -1082,7 +1137,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
 
   // format: the line gc prints, after "mutbox gc: ", before it exits 0 and the chain goes on.
   it("format: the line a timed-out call leaves", () => {
-    expect(timeoutLine(new CallTimeout({ command: "docker ps -aq", seconds: 30 }))).toBe(
+    expect(timeoutLine(CallTimeout.make({ command: "docker ps -aq", seconds: 30 }))).toBe(
       "docker ps -aq passed its 30 s limit and was stopped",
     );
   });
@@ -1105,6 +1160,7 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
     });
   });
 });`;
+
     const args = runArgs({
       name: `fabrika-mutbox-probe-${process.pid}`,
       image: "",
@@ -1115,17 +1171,22 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
       related: [],
       lock: "probe",
     });
+
     const from = /^FROM (\S+)$/m.exec(dockerfile)?.[1] ?? "";
+
     // The same fence, on the pinned base image alone, with the probe in place of the entry.
     const fenced = [...args.slice(0, args.indexOf("")), from, "node", "-e", probe].filter(
       (a, i, all) => !(a === "--mount" || all[i - 1] === "--mount"),
     );
+
     const ran = spawnSync("docker", fenced, { encoding: "utf8", timeout: 120_000 });
     expect(ran.stdout, ran.stderr).toContain("loopback:hello");
     expect(ran.stdout, ran.stderr).toContain("outside:refused");
+
     const left = spawnSync("docker", ["ps", "-aq", "--filter", `name=fabrika-mutbox-probe-${process.pid}`], {
       encoding: "utf8",
     });
+
     expect(left.stdout.trim()).toBe("");
   });
 });

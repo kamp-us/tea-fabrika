@@ -16,11 +16,15 @@ import * as Files from "./Files.ts";
 import type { TomlDocument } from "./Toml.ts";
 
 const KIB = 1_024;
+
 const MIB = 1_024 * KIB;
+
 /** The cap's bounds: at least one letter, and no more than experiment 295 measured. */
 const UNREAD = { least: 1, most: 16_384 };
+
 /** The chunk's bounds: room for a part's own fields, and half the ledger's 2,000,000-byte row. */
 const CHUNK = { least: KIB, most: MIB };
+
 /** `catchUp` holds every unread letter at once: a full inbox of full chunks fits one eighth of 128 MB. */
 const HELD = 16 * MIB;
 
@@ -60,6 +64,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
     () =>
       Effect.gen(function* () {
         const reached = new Set<string>();
+
         const check = Effect.fnUntraced(function* (unread: number, chunk: number, source: Source, unit: boolean) {
           const unreadOk = Number.isInteger(unread) && unread >= UNREAD.least && unread <= UNREAD.most;
           const chunkOk = chunk >= CHUNK.least && chunk <= CHUNK.most;
@@ -73,6 +78,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
             const answer = yield* Sources.resolve(Declarations.all, slots(source, setting, value, text)).pipe(
               Effect.exit,
             );
+
             const read = key === "mailUnread" ? unread : chunk;
 
             if (source === "default") {
@@ -138,6 +144,7 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
             ).toBe(true);
           }
         });
+
         yield* property(
           fc.tuple(around(UNREAD.least, UNREAD.most), around(CHUNK.least, CHUNK.most), Source, fc.boolean()),
           ([unread, chunk, source, unit]) => check(unread, chunk, source, unit),

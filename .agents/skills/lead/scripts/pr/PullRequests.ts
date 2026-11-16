@@ -9,19 +9,23 @@ import { Context, Schema } from "effect";
 import type { Effect, Option } from "effect";
 
 /** GitHub could not be asked, refused, or answered in a shape we do not read. */
-export class PullRequestsError extends Schema.TaggedError<PullRequestsError>()("PullRequestsError", {
-  reason: Schema.String,
-}) {}
+export class PullRequestsError extends Schema.TaggedError<PullRequestsError, { readonly brand: unique symbol }>()(
+  "PullRequestsError",
+  {
+    reason: Schema.String,
+  },
+) {}
 
 /** One pull request as GitHub lists it: its branch, the head it holds, and how it stands. */
 export const PullRequest = Schema.Struct({
-  number: Schema.Number,
+  number: Schema.Finite,
   head: Schema.String,
   /** The commit the branch pointed at when GitHub last read it; for a merged one, the merged head. */
   oid: Schema.String,
   state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
   draft: Schema.Boolean,
 });
+
 export type PullRequest = typeof PullRequest.Type;
 
 /** One pull request read alone, with the words a squash puts on main and where it merged. */
@@ -34,6 +38,7 @@ export const Detail = Schema.Struct({
   /** The commit its base holds for it once merged; `null` until then. */
   mergeCommit: Schema.NullOr(Schema.String),
 });
+
 export type Detail = typeof Detail.Type;
 
 /**
@@ -41,6 +46,7 @@ export type Detail = typeof Detail.Type;
  * hunks, `null` where GitHub shows none (a binary file, or one too big to show).
  */
 export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(Schema.String) });
+
 export type Patch = typeof Patch.Type;
 
 /** What a new or edited pull request says: its title and its description. */

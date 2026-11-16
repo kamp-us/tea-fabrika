@@ -48,9 +48,9 @@ describe("what the landing scripts' exit codes mean", () => {
     expect(leakOutcome(r(0))._tag).toBe("done");
     expect(leakOutcome(r(1))._tag).toBe("ask");
     expect(leakOutcome(r(2))._tag).toBe("stuck");
-    expect(queueRefused(new LeakGrepRefused({ reason: "private_word" }))._tag).toBe("ask");
-    expect(queueRefused(new NotQueued({ reason: "pr 9: draft" }))._tag).toBe("stuck");
-    expect(queueRefused(new PullRequestsError({ reason: "gh: offline" }))._tag).toBe("stuck");
+    expect(queueRefused(LeakGrepRefused.make({ reason: "private_word" }))._tag).toBe("ask");
+    expect(queueRefused(NotQueued.make({ reason: "pr 9: draft" }))._tag).toBe("stuck");
+    expect(queueRefused(PullRequestsError.make({ reason: "gh: offline" }))._tag).toBe("stuck");
     expect(listedPr(r(0, "812\n"))).toBe(812);
     expect(listedPr(r(0, "\n"))).toBeNull();
     expect(listedPr(r(1, "812"))).toBeNull();
@@ -63,9 +63,11 @@ describe("what the landing scripts' exit codes mean", () => {
       Effect.gen(function* () {
         const format = landing.format;
         expect(format).toBeDefined();
+
         const failed = yield* (format ?? (() => Effect.die("no format")))(Step.act("format", { folder: "x" })).pipe(
           Effect.flip,
         );
+
         expect(failed.reason).toContain("args do not parse");
       }),
     ));

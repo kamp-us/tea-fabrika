@@ -25,8 +25,11 @@ import * as Reference from "./Reference.ts";
 import * as Snapshot from "./Snapshot.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const PERSON = "~/.fabrika/fabrika.toml";
+
 const REPO = ".fabrika/fabrika.toml";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
@@ -48,15 +51,19 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
           since: "1.2.3",
           format: "text",
         });
+
         const group = Setting.group({ record: d });
+
         const origins = {
           [d.path]: v.explicit
             ? Sources.Origin.cases.file.make({ file: REPO, line: 2 })
             : Sources.Origin.cases.default.make({}),
         };
+
         const snapshot = await Effect.runPromise(
           Snapshot.make(group, { values: { record: d.default }, origins }).pipe(Effect.provide(Digest.layerWebCrypto)),
         );
+
         const rows = Reference.rows(group, snapshot);
         expect(rows[0]).toMatchObject({
           path: d.path,
@@ -82,9 +89,11 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
 
 // Release triples near 9 and 10, where text order and number order part.
 const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
+
 const release = fc.tuple(part, part, part).map((t) => t.join("."));
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+
 const scopes = fc.constantFrom<Setting.Scope>(["person"], ["repo"], ["person", "repo"], ["repo", "person"]);
 
 // Words with Markdown punctuation and line breaks.
@@ -157,6 +166,7 @@ const loaded = async (ds: Declared) => {
       person[d.table] = { ...person[d.table], [d.key]: d.value };
     }
   });
+
   const snapshot = await Effect.runPromise(
     Sources.resolve(group, {
       flags: Sources.flags(flags),
@@ -168,6 +178,7 @@ const loaded = async (ds: Declared) => {
       Effect.provide(Digest.layerWebCrypto),
     ),
   );
+
   return { group, snapshot };
 };
 
@@ -177,6 +188,7 @@ const triple = (version: string) => version.split(".").map(Number);
 const newer = (a: string, b: string) => {
   const [x, y] = [triple(a), triple(b)];
   const n = x.findIndex((p, i) => p !== y[i]);
+
   return n >= 0 && x[n]! > y[n]!;
 };
 
@@ -187,6 +199,7 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
         const { group, snapshot } = await loaded(ds);
         // Keys no declaration names, such as a field a later release dropped, stay out of the rows.
         const extra = Object.fromEntries(Object.entries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
+
         const widened: Snapshot.Snapshot = {
           ...snapshot,
           values: { ...snapshot.values, ...extra },
@@ -195,6 +208,7 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
             ...Object.fromEntries(Object.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
           },
         };
+
         const rows = Reference.rows(group, widened);
         const paths = group.declarations.map((d) => d.path).sort();
         expect(rows.map((r) => r.path)).toEqual(paths);
@@ -223,14 +237,17 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
       fc.asyncProperty(declared, release, async (ds, minimum) => {
         const { group, snapshot } = await loaded(ds);
         const rows = Reference.rows(group, snapshot);
+
         const want = rows
           .filter((r) => r.origin._tag !== "default" && newer(r.since, minimum))
           .map((r) => ({ path: r.path, since: r.since, minimum }));
+
         const got = Reference.warnings(rows, minimum).map((w) => ({
           path: w.path,
           since: w.since,
           minimum: w.minimum,
         }));
+
         expect([...got].sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual(want);
       }),
       {

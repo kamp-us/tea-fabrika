@@ -33,7 +33,8 @@
 // commands land. Each step answers only what really waits: the calls in flight and the Cmds handed out.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -43,8 +44,11 @@ import { Prefix } from "./Prefix.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
+
 const PREFIX = "ctrl+b";
+
 const SMALLEST = { width: 220, height: 120 } as const;
+
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 const typeId = (prefix: string, n: number): string => {
@@ -60,8 +64,11 @@ const typeId = (prefix: string, n: number): string => {
 };
 
 const PERSON = typeId("person", 41);
+
 const TEZGAH_PID = "process_of_tezgah";
+
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: PERSON, as: "window" } };
+
 const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
 
 /** tezgah's default rows for this slice, as `next/programs/tezgah/src/commands.ts` ships them. The
@@ -73,7 +80,9 @@ const ROWS: ReadonlyArray<Binding> = [
 ];
 
 const BACKEND = Keys.backend("browser", "linux");
+
 const loadedTable = Keys.load(Keys.ship(ROWS, BACKEND), BACKEND);
+
 const TABLE = Result.isSuccess(loadedTable) ? loadedTable.success : null;
 
 const SPLITS: Readonly<Record<string, { readonly does: string; readonly dir: Dir }>> = {
@@ -91,6 +100,7 @@ const machine = windowMachineFor({
 });
 
 type Cmd = { readonly type: string; readonly [key: string]: unknown };
+
 type Call = { readonly _tag: string; readonly [key: string]: unknown };
 
 type Did = {
@@ -231,6 +241,7 @@ const drain = (world: World, i: number) => {
             : cmd.type === "persist"
               ? true
               : null;
+
       step(world, i, { type: `${cmd.type}_ok`, cmd, value } as WindowMsg);
       continue;
     }
@@ -287,13 +298,15 @@ const online = (world: World, i: number) => {
  *  boot list's `checklist:1`, every other tile a process tezgah started. */
 const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,
     focus: first,
     recent: [first],
   });
+
   const tiles: Array<Tile> = [tileRow(first, 1, false)];
 
   for (const [k, cut] of cuts.entries()) {
@@ -304,6 +317,7 @@ const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean 
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+
   return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
 };
 
@@ -319,6 +333,7 @@ const world = (view: TezgahView, count: number, size = { width: 1440, height: 86
       tab: `tab_${i + 1}`,
       tezgah: { workspace: 1 },
     } as never) as readonly [WindowModel, ReadonlyArray<Cmd>];
+
     out.wins.push({ s, waiting: [...cmds], subscribed: false, answered: new Set() });
     step(out, i, { type: "size", ...size } as WindowMsg);
     online(out, i);
@@ -341,12 +356,16 @@ const press = (w: World, i: number, key: string) => {
   const before = w.sent.length;
   const cmds = step(w, i, { type: "key", key, at: (clock += 10) } as WindowMsg);
   drain(w, i);
+
   return { cmds, sent: w.sent.slice(before) };
 };
 
-const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: typeof Prefix.Type }).prefix;
+const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: Prefix }).prefix;
+
 const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknown }).polite;
+
 const focused = (w: World) => w.view.workspaces[0]!.focus;
+
 const dids = (sent: World["sent"]) => sent.map((x) => x.m as Did);
 
 /** The gap the frame draws between two parts, and its padding: 0492's 4px divider (plan amendment 7). */
@@ -369,9 +388,11 @@ const tilesIn = (node: Workspace["layout"]): ReadonlyArray<string> =>
 /** Each open tile's drawn size under amendment 13 when `strips` are strips. */
 const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): ReadonlyMap<string, Size> => {
   const out = new Map<string, Size>();
+
   const walk = (node: Workspace["layout"], box: Size): void => {
     if (typeof node === "string") {
       out.set(node, box);
+
       return;
     }
 
@@ -397,7 +418,9 @@ const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): Reado
       }
     }
   };
+
   walk(w.layout, size);
+
   return out;
 };
 
@@ -431,6 +454,7 @@ const splitRoom = (view: TezgahView, at: TileId, dir: Dir, size: Size) => {
   const space = Layout.focus(view.workspaces[0]!, at);
   const before = foldedAt(space, size);
   const after = foldedAt(Layout.split(space, at, dir, FRESH), size);
+
   return { fits: [...after.strips].every((t) => before.strips.has(t)), close: before.close || after.close };
 };
 
@@ -644,6 +668,7 @@ describe("L18: a split with no room is refused in the window", () => {
             expect(dids(sent), `L18: a split with room at ${width}x${height} is sent`).toMatchObject([
               { type: "did", does: split.does, from: at },
             ]);
+
             return;
           }
 
@@ -668,6 +693,7 @@ describe("L18: a split with no room is refused in the window", () => {
 
   it("L18: at the floor's edge, one tile's split is taken exactly when its drawn halves, one gap between them, reach 220x120", () => {
     const seen = { refused: 0, taken: 0 };
+
     /** One tile, its area a few pixels either side of two floors and a gap on the split's own side. */
     const Edge = fc.oneof(
       fc.record({
@@ -681,6 +707,7 @@ describe("L18: a split with no room is refused in the window", () => {
         height: fc.integer({ min: 2 * SMALLEST.height + GAP - 12, max: 2 * SMALLEST.height + GAP + 12 }),
       }),
     );
+
     fc.assert(
       fc.property(Edge, (c) => {
         const view = desk([], 0);
@@ -731,6 +758,7 @@ describe("L18: a split with no room is refused in the window", () => {
 // shape") and nothing that names a fold or a strip, whatever the window folds when it sends it.
 /** The keys of tezgah's `did`: what a letter from a window may carry. */
 const DID_KEYS = new Set(["type", "does", "from", "via", "tile", "to", "cursor"]);
+
 const FOLDED = /fold|strip/i;
 
 /** Every key in a value, at any depth. */
@@ -743,9 +771,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
 
 /** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
  *  but the focused one drawn under 220x120. */
-const stripCount = (view: TezgahView, size: Size) => {
-  return foldedAt(view.workspaces[0]!, size).strips.size;
-};
+const stripCount = (view: TezgahView, size: Size) => foldedAt(view.workspaces[0]!, size).strips.size;
 
 describe("Desk S4 L32: a split's letter never carries a fold", () => {
   it("L32 (the split path): in a window whose size folds some of its tiles, every letter its keys send tezgah, a split or a close, carries only did's keys and nothing about folds or strips", () => {

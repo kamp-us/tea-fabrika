@@ -63,6 +63,7 @@ it("L7: module reports keep every id on its own line below 4096 characters", () 
 // This wrapper calls the actual Rolldown API. The only clean-build option change is the observer.
 vi.mock("rolldown", async (original) => {
   const real = await original<typeof import("rolldown")>();
+
   return {
     ...real,
     rolldown: (options: Parameters<typeof real.rolldown>[0]) => {
@@ -70,6 +71,7 @@ vi.mock("rolldown", async (original) => {
         name: "p8-passive-observer",
         generateBundle(_options, output) {
           const ids = new Set(this.getModuleIds());
+
           const modules = [...ids].map((id) => {
             const info = this.getModuleInfo(id);
 
@@ -85,6 +87,7 @@ vi.mock("rolldown", async (original) => {
               code: info.code ?? "",
             };
           });
+
           const chunks = Object.values(output).flatMap((o) =>
             o.type === "chunk"
               ? [
@@ -113,10 +116,13 @@ vi.mock("rolldown", async (original) => {
           const assets = Object.values(output).flatMap((o) =>
             o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
           );
+
           observations.builds.push({ input: options.input, modules, chunks, assets });
         },
       };
+
       const plugins: Array<RolldownPluginOption> = Array.isArray(options.plugins) ? options.plugins : [options.plugins];
+
       return real.rolldown({ ...options, plugins: [...plugins, observer] });
     },
   };
@@ -148,7 +154,9 @@ const clean = (graph: Observed, forbidden: (id: string) => boolean) => {
 // libfabrika's one-file build: the brain imports its tables from this module, and each carried body
 // is one text module. Rolldown keeps a text module's code as the JSON string of its text.
 const TABLES = "\0virtual:fabrika-built";
+
 const TEXT = "\0fabrika-text:";
+
 const joined = (graph: Observed) => graph.chunks.map((c) => c.code).join("\n");
 
 const realBrain = (all: ReadonlyArray<Observed>) => {
@@ -160,21 +168,26 @@ const realBrain = (all: ReadonlyArray<Observed>) => {
 
   expect(found.modules.some((m) => m.id.endsWith("/src/brain.ts"))).toBe(true);
   expect(found.modules.some((m) => m.id === TABLES)).toBe(true);
+
   return found;
 };
 
 const carried = (brain: Observed) =>
   brain.modules
     .filter((m) => m.id.startsWith(TEXT))
-    .map((m) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.String))(m.code));
+    .map((m) => Schema.decodeSync(Schema.fromJsonString(Schema.String))(m.code));
 
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
 const emitted = (graph: Observed) => [joined(graph), ...graph.chunks.map((c) => c.code), ...graph.assets];
+
 const isProgram = (graph: Observed) => graph.input === "fabrika:program";
+
 // P14 slice 1: a tab's own call, the one whose input is exactly the tab entry the build was given.
 const tabCall = (entry: string | undefined) => (graph: Observed) => entry !== undefined && graph.input === entry;
+
 // P14 slice 2: the entry the app's own build.ts passes as its tab.
 const APP_TAB = new URL("../entry/browser.tsx", import.meta.url).pathname;
+
 // The two routes a tab's call makes: its script, and the page it emits as an asset.
 const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 
@@ -195,6 +208,7 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
 
   const texts = carried(brain),
     others = all.filter((g) => g !== brain);
+
   expect(texts).toHaveLength(Object.keys(built.programs).length + Object.keys(built.assets).length);
 
   for (const text of texts) {
@@ -232,13 +246,16 @@ it.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
+
       const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p8-bytes-" });
       const start = observations.builds.length;
       const built = yield* build({ out: path.join(folder, "out") });
+
       // P14 slice 2 (ticket 828): the app's build selects its tab, `src/entry/browser.tsx`, so its build
       // carries the page and the tab's script, each from the tab's own observed call.
       const observed = observations.builds.slice(start),
         brain = checkBuild(observed, built, APP_TAB);
+
       expect(Object.keys(built.assets)).toContain("/index.html");
       expect(Object.keys(built.assets)).toContain("/window.js");
       process.stdout.write(
@@ -259,6 +276,7 @@ it.effect(
           observed.flatMap((g) => g.modules.map((m) => (path.isAbsolute(m.id) ? path.relative(root, m.id) : m.id))),
         ),
       );
+
       // Plant against the graph of this actual build, never against a substitute entry.
       const planted: Observed = {
         ...brain,
@@ -273,6 +291,7 @@ it.effect(
           },
         ],
       };
+
       expect(() => checkBuild([...observed.filter((g) => g !== brain), planted], built)).toThrow();
       expect(() => realBrain(observed.filter((g) => g !== brain))).toThrow("no actual P12 brain");
       // A carried program whose own call went unobserved fails: its graph was never checked.
@@ -291,10 +310,13 @@ it.effect(
 const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "p8-win-" });
   const app = path.resolve(import.meta.dirname, "../..");
+
   const pkg = path.join(home, "programs/win"),
     sdk = path.join(home, "node_modules/@modelcontextprotocol/sdk");
+
   yield* fs.writeFileString(path.join(home, "package.json"), '{"type":"module"}');
   yield* fs.makeDirectory(path.join(home, "node_modules/@p8"), { recursive: true });
   yield* fs.makeDirectory(pkg, { recursive: true });
@@ -321,6 +343,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   );
   yield* fs.writeFileString(path.join(sdk, "client.js"), `export const client = "p8-mcp-marker";`);
   yield* fs.copy(path.join(app, "src"), path.join(home, "src"));
+
   // P14 slice 1: an optional tab, its entry and one stylesheet, built by the same call.
   const entry = path.join(home, "tab/entry.ts"),
     style = path.join(home, "tab/tab.css");
@@ -332,6 +355,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   }
 
   const start = observations.builds.length;
+
   const built = yield* buildOne({
     out: path.join(home, "dist"),
     root: home,
@@ -342,6 +366,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
     chaos: false,
     ...(tab === undefined ? {} : { tab: { entry, styles: [style] } }),
   });
+
   return { built, observed: observations.builds.slice(start), entry };
 });
 
@@ -360,6 +385,7 @@ it.effect(
       const planted = yield* windowBuild(
         `import {client} from "@modelcontextprotocol/sdk/client"; export const view = () => client;`,
       );
+
       const plantedBrain = realBrain(planted.observed);
       expect(carried(plantedBrain).some((t) => t.includes("p8-mcp-marker"))).toBe(true);
       expect(() => clean(plantedBrain, mcp)).not.toThrow();
@@ -387,6 +413,7 @@ it.effect.prop(
         `export const view = () => "p8-tab-window";`,
         `import {Effect} from "effect"; export const tab = Effect.succeed(${JSON.stringify(label)});`,
       );
+
       checkBuild(tab.observed, tab.built, tab.entry);
       const page = tab.built.assets["/index.html"];
       expect(page?.type).toBe("text/html; charset=utf-8");
@@ -422,6 +449,7 @@ const graphShape = (g: BundleGraph) => {
 
   const depth = Math.max(least, Math.min(g.depth, g.modules - 1));
   const fan = [g.imports, 1, 2].find((f) => capacity(depth, f) >= g.modules) ?? 2;
+
   const level = [0],
     children: Array<Array<number>> = [[]];
 
@@ -464,10 +492,12 @@ it.effect.prop(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
+
       const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p8-graph-" });
 
       for (const style of ["static", "dynamic", "external"] as const) {
         const start = observations.builds.length;
+
         const shape = graphShape(g),
           modules = g.modules;
 
@@ -479,6 +509,7 @@ it.effect.prop(
                 : `export {text as next${child}} from "./m${child}.ts";`,
             )
             .join("\n");
+
           yield* fs.writeFileString(
             path.join(folder, `m${i}.ts`),
             `export const text = ${JSON.stringify(g.text)}; ${next}`,

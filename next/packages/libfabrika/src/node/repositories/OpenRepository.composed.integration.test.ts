@@ -8,22 +8,20 @@ import { inspect } from "node:util"; // edge: JSON omits Error's non-enumerable 
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import {
-  Arbitrary,
-  Effect,
-  Exit,
-  FileSystem,
-  Layer,
-  Logger,
-  Path,
-  Redacted,
-  Schema,
-  Sink,
-  Stream,
-  Tracer,
-} from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcessSpawner } from "effect/process";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as Path from "effect/Path";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -51,14 +49,19 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0]!);
 
 const ids = generated(Id.InputId);
+
 const people = generated(Id.make("person"));
+
 const document = ".fabrika/fabrika.toml";
+
 const personName = "~/.fabrika/fabrika.toml";
+
 const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
+
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const repoSnapshot = (text: string | null) =>
-  Schema.decodeUnknownSync(RepoSnapshot)({
+  Schema.decodeSync(RepoSnapshot)({
     key: "a".repeat(64),
     branch: "release",
     commit: "b".repeat(40),
@@ -74,12 +77,14 @@ const reader = (text: string | null, touches: Array<string>) =>
         snapshot: repoSnapshot(text),
         read: (path: string) => {
           touches.push(path);
+
           return Effect.succeed(null);
         },
         resolve: () => {
           touches.push("outside source");
+
           return Effect.fail(
-            new RepositoriesError({ reason: new ReadFailed({ cause: Redacted.make("must not resolve code") }) }),
+            RepositoriesError.make({ reason: ReadFailed.make({ cause: Redacted.make("must not resolve code") }) }),
           );
         },
       }),
@@ -95,29 +100,36 @@ describe("T878 composed repository opening", () => {
               const parser = yield* Toml;
               let personReads = 0;
               let invalidPerson = false;
+
               const parsed: Array<string> = [],
                 touches: Array<string> = [];
+
               const fs = FileSystem.layerNoop({
                 readFileString: () => {
                   personReads++;
+
                   return Effect.succeed(
                     `# person\n\n[instance]\nport = ${invalidPerson ? '"invalid"' : personReads === 1 ? port : (port % 65535) + 1}\n`,
                   );
                 },
               });
+
               const counted = Layer.succeed(Toml, {
                 ...parser,
                 parse: (text: string) => {
                   parsed.push(text);
+
                   return parser.parse(text);
                 },
               });
+
               const options = {
                 person: { path: "person-file", name: personName },
                 flags: {},
                 env: {},
                 version: "0.0.0",
               };
+
               const docs = [
                 null,
                 "",
@@ -129,6 +141,7 @@ describe("T878 composed repository opening", () => {
                 '[review]\ngoverned = ["src/"]\n',
                 'fabrika-version = "bad"\n',
               ];
+
               const reasons = [null, null, null, "version", "scope", "unknown", "syntax", "unknown", "invalid"];
               const lines = [null, null, 3, 1, 2, 2, 2, 2, 1];
               const keys = [null, null, null, "fabrika-version", "instance.port", null, null, null, "fabrika-version"];
@@ -140,10 +153,12 @@ describe("T878 composed repository opening", () => {
                 invalidPerson = c.move % 2 !== 0 && reasons[index] === null;
                 const padding = c.move % 6;
                 const body = docs[index] === null ? null : "\n".repeat(padding) + docs[index]!;
+
                 const result = yield* OpenRepository.prepare("selected-repo", options).pipe(
                   Effect.provide([reader(body, touches), fs, counted]),
                   Effect.exit,
                 );
+
                 expect(Exit.isSuccess(result)).toBe(reasons[index] === null && !invalidPerson);
                 expect(personReads).toBe(index === 3 || index === 6 || index === 8 ? 0 : 1);
                 expect(parsed.filter((value) => value === body)).toHaveLength(body === null ? 0 : 1);
@@ -209,6 +224,7 @@ describe("T878 composed repository opening", () => {
                       Effect.map((saved) => (c % 2 === 0 ? { ...saved, hash: "wrong" } : { ...saved, values: {} })),
                     ),
                   );
+
                   const result = yield* OpenRepository.prepare("selected-repo", {
                     person: { path: "person-file", name: personName },
                     flags: {},
@@ -221,6 +237,7 @@ describe("T878 composed repository opening", () => {
                     ]),
                     Effect.exit,
                   );
+
                   expect(Exit.isFailure(result)).toBe(true);
                 }
               }),
@@ -275,10 +292,12 @@ it.effect.prop(
             scripts: { build: "node build.mjs", start: "node start.mjs" },
           }),
         );
+
         const db = yield* Effect.acquireRelease(
           Effect.sync(() => new DatabaseSync(":memory:")),
           (value) => Effect.sync(() => value.close()),
         );
+
         const trust = RepositoryTrustLedger.layer.pipe(
           Layer.provide(LedgerSql.layer(nodeSql(db), { reader: "brain" })),
           Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
@@ -291,6 +310,7 @@ it.effect.prop(
             env: {},
             version: "0.0.0",
           }).pipe(Effect.provide(reader('fabrika-version = "0.0.0"\n', touches)));
+
           const result = yield* OpenRepository.open(prepared, {
             selection,
             request,
@@ -300,6 +320,7 @@ it.effect.prop(
             interactive: cell.move % 3 !== 0,
             confirm: () => Effect.succeed(cell.move % 2 === 0),
           }).pipe(Effect.provide(trust), Effect.exit);
+
           expect(Exit.isSuccess(result)).toBe(true);
           expect(touches).toEqual([]);
           expect(yield* fs.exists(marker)).toBe(false);
@@ -320,6 +341,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
         const secret = `sentinel-${word}/+ &"`;
         const folder = `/private/fixture-${word}`;
         const url = `https://fixture:${encodeURIComponent(secret)}@example.invalid/repo.git`;
+
         const outputs = {
           report: new Array<unknown>(),
           pending: new Array<unknown>(),
@@ -330,19 +352,24 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           settings: new Array<unknown>(),
           state: new Array<unknown>(),
         };
+
         const spans: Array<Tracer.NativeSpan> = [];
+
         const tracer = Tracer.make({
           span: (options) => {
             const span = new Tracer.NativeSpan(options);
             spans.push(span);
+
             return span;
           },
         });
+
         const logger = Logger.layer([
           Logger.make((options) => {
             outputs.report.push(options.message);
           }),
         ]);
+
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
@@ -350,19 +377,24 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 Effect.sync(() => new DatabaseSync(":memory:")),
                 (value) => Effect.sync(() => value.close()),
               );
+
               const real = yield* Ledger.pipe(
                 Effect.provide(LedgerSql.layer(nodeSql(db), { reader: "brain" })),
                 Effect.provideService(Doorbell, { ring: () => Effect.void }),
               );
+
               const captured = {
                 ...real,
                 append: (stream: string, id: string, line: Line) => {
                   outputs.ledger.push({ stream, id, line });
+
                   return real.append(stream, id, line);
                 },
               };
+
               const path = yield* Path.Path;
               const digest = yield* Digest.Digest;
+
               // Require pending, acknowledged consent, document refusal, storage and prompt failures in every flow.
               const flow = [
                 ...cells,
@@ -378,6 +410,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const selection = requests[index * 2]!;
                 const request = requests[index * 2 + 1]!;
                 const source = c.pick % 9;
+
                 const body =
                   source === 0
                     ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
@@ -388,6 +421,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                         : source === 5
                           ? `fabrika-version = ${JSON.stringify(secret)} [\n`
                           : 'fabrika-version = "0.0.0"\n';
+
                 const fs = FileSystem.layerNoop({
                   realPath: (location) => Effect.succeed(location),
                   makeTempDirectoryScoped: () => Effect.succeed(`${folder}/temporary`),
@@ -396,6 +430,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   readFileString: () =>
                     Effect.succeed(source === 6 ? `[instance]\nport = ${JSON.stringify(secret)}\n` : ""),
                 });
+
                 const spawner = ChildProcessSpawner.make((command) => {
                   if (command._tag !== "StandardCommand") {
                     return Effect.die("unexpected pipeline");
@@ -427,6 +462,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   const failed = source === 2 && args.includes(["fetch", "ls-tree", "cat-file"][c.move % 3]!);
                   const bytes = new TextEncoder().encode(output);
                   const errors = new TextEncoder().encode(`${url} ${folder} ${secret}`);
+
                   return Effect.succeed(
                     ChildProcessSpawner.makeHandle({
                       pid: ChildProcessSpawner.ProcessId(1),
@@ -443,6 +479,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     }),
                   );
                 });
+
                 const selected = RepositoriesGit.layer({ person: folder }).pipe(
                   Layer.provide(
                     Layer.mergeAll(
@@ -453,12 +490,14 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     ),
                   ),
                 );
+
                 const checked = yield* OpenRepository.prepare(folder, {
                   person: { path: `${folder}/person.toml`, name: personName },
                   flags: {},
                   env: { UNRELATED_TOKEN: secret },
                   version: "0.0.0",
                 }).pipe(Effect.provide([selected, fs]), Effect.exit);
+
                 expect(Exit.isSuccess(checked)).toBe(source === 1 || source === 7 || source === 8);
 
                 if (Exit.isFailure(checked)) {
@@ -466,6 +505,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                   outputs.errorJson.push(JSON.stringify(checked.cause));
                 } else {
                   outputs.settings.push(checked.value.settings);
+
                   const opened = yield* OpenRepository.open(checked.value, {
                     selection,
                     request,
@@ -475,6 +515,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     interactive: c.move % 3 !== 0,
                     confirm: (snapshot) => {
                       outputs.pending.push(snapshot);
+
                       return source === 8
                         ? Effect.fail(new Error(`${url} ${folder} ${secret}`))
                         : Effect.succeed(c.move % 2 === 0);
@@ -488,7 +529,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                             ...captured,
                             append: () =>
                               Effect.fail(
-                                new LedgerError({ reason: "storage", message: `${url} ${folder} ${secret}` }),
+                                LedgerError.make({ reason: "storage", message: `${url} ${folder} ${secret}` }),
                               ),
                           }
                         : captured,
@@ -529,6 +570,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
         for (const [name, values] of Object.entries(outputs)) {
           expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
+
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
               typeof value === "bigint" ? value.toString() : value,

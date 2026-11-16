@@ -4,11 +4,12 @@
 // `realOnly` and runs on the schedule alone.
 import { NodeServices } from "@effect/platform-node";
 import { depth } from "@kampus/vitest";
-import { Layer } from "effect";
-import { Digest } from "effect/crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as Layer from "effect/Layer";
 import * as Git from "./Git.ts";
 
 const platform = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
+
 // The memory spawner sits over the platform's, which still runs every command that is not git.
 const memory = Layer.merge(platform, Git.layerMemory.pipe(Layer.provide(platform)));
 

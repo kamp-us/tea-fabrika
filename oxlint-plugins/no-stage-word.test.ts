@@ -5,18 +5,26 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStageWord } from "./no-stage-word.ts";
 
 const CODE = "fabrika(no-stage-word)";
+
 const runs = { seed: 681080, numRuns: 12 };
+
 const DISABLE = "// oxlint-disable-next-line fabrika/no-stage-word --";
 
 // Source text has no domain Schema. A name is word parts joined in one spelling; the retired word
 // is one part.
 const part = fc.constantFrom("local", "error", "driver", "wire", "records", "one", "file", "p34", "dev");
+
 const retired = fc.constantFrom("stage", "stages");
+
 // One fused lowercase word that holds the letters but is not the word, like backstage.
 const letters = fc.stringMatching(/^[a-z]{1,6}$/);
+
 const fused = fc.tuple(letters, letters).map(([before, after]) => `${before}stage${after}`);
+
 const neighbor = fc.oneof(fc.constantFrom("backstage", "stagecoach", "instance", "startDev"), fused);
+
 const style = fc.constantFrom("camel", "pascal", "snake", "upper", "kebab", "path", "dot", "space");
+
 const IDENTIFIER_STYLES = new Set(["camel", "pascal", "snake", "upper"]);
 
 const upper = (word: string) => word[0]!.toUpperCase() + word.slice(1);
@@ -76,9 +84,11 @@ it("rejects the word in generated names, spellings and placements, and passes th
       async ({ before, after, word, allowed, spelling, bare }) => {
         const named = (middle: string) => {
           const words = [before, middle, after].filter((w) => w !== undefined);
+
           // An identifier spelling for a placement that needs one, so every run has identifiers.
           return [join(words, spelling), join(words, IDENTIFIER_STYLES.has(spelling) ? spelling : "camel")];
         };
+
         const files: Record<string, string> = {};
         const expected: Record<string, number[]> = {};
 
@@ -86,6 +96,7 @@ it("rejects the word in generated names, spellings and placements, and passes th
           const path = `next/apps/fabrika/src/words.${tsx ? "tsx" : "ts"}`;
           const lines: string[] = [];
           const fires: number[] = [];
+
           // Every run holds both sides: retired spellings fire, their neighbors in the same places pass.
           const cases: Array<[string, boolean]> = [
             ...named(word).map((name): [string, boolean] => [name, true]),
@@ -154,6 +165,7 @@ it("real config holds generated next/ paths and leaves today's version, .agents/
       async ([name, extension, kind]) => {
         const file = `${name}${kind}.${extension}`;
         const inside = [`next/${file}`, `next/apps/fabrika/src/${file}`, `next/apps/fabrika/src/exam/${file}`];
+
         const outside = [
           `packages/pipeline/src/stages/${file}`,
           `apps/fabrika/src/${file}`,
@@ -163,6 +175,7 @@ it("real config holds generated next/ paths and leaves today's version, .agents/
           `.agents/skills/lead/scripts/${file}`,
           `nextish/${file}`,
         ];
+
         const source = "const localStage = 1;\n// a stage\n";
         const result = await plant(Object.fromEntries([...inside, ...outside].map((path) => [path, source])));
 
@@ -208,6 +221,7 @@ it("absolute, relative and Windows spellings of a path get the same next/-only s
 // format: escapes decode to the word, in literals, keys, identifiers and template text.
 it("format: escaped literal and identifier spellings fire by their decoded word", async () => {
   const path = "next/apps/fabrika/src/escaped.ts";
+
   const result = await plant({
     [path]: [
       'const a = "\\u0073tage";',
@@ -218,12 +232,14 @@ it("format: escaped literal and identifier spellings fire by their decoded word"
       'const e = "\\u0062ackstage";',
     ].join("\n"),
   });
+
   expect(result(CODE, path)).toEqual([1, 2, 3, 4, 5]);
 });
 
 // format: each comment and text form, with one report per line that holds the word.
 it("format: line, block and multi-line comments, template lines and TSX text", async () => {
   const path = "next/apps/fabrika/src/view.tsx";
+
   const result = await plant({
     [path]: [
       "// the stage starts",
@@ -239,12 +255,14 @@ it("format: line, block and multi-line comments, template lines and TSX text", a
       'const w = <p title="backstage">stagecoach</p>;',
     ].join("\n"),
   });
+
   expect(result(CODE, path)).toEqual([1, 2, 5, 8, 10]);
 });
 
 // scenario: Alchemy's own stage key passes only on its annotated line; the same key beside it fails.
 it("scenario: the annotated Alchemy key passes and an adjacent domain use fails", async () => {
   const path = "next/apps/fabrika/src/brain.ts";
+
   const result = await plant({
     [path]: [
       "const stack = {",
@@ -256,12 +274,14 @@ it("scenario: the annotated Alchemy key passes and an adjacent domain use fails"
       "const localStage = stack;",
     ].join("\n"),
   });
+
   expect(result(CODE, path)).toEqual([5, 7]);
 });
 
 // pinned: experiment 238's saved driver name and today's app's capture stages keep their bytes.
 it("pinned: the saved driver and today's quote pass on annotated lines, new text beside them fails", async () => {
   const path = "next/apps/fabrika/src/instance-one-file.integration.test.ts";
+
   const result = await plant({
     [path]: [
       `${DISABLE} saved speed-bar results name experiment 238's driver exactly`,
@@ -275,12 +295,14 @@ it("pinned: the saved driver and today's quote pass on annotated lines, new text
       "const after = `capture stages`;",
     ].join("\n"),
   });
+
   expect(result(CODE, path)).toEqual([3, 9]);
 });
 
 // format: a directive that names this rule is not itself a use; its reason after `--` is read.
 it("format: an ignore directive's rule names are not read, its reason and the next violation are", async () => {
   const path = "next/apps/fabrika/src/directive.ts";
+
   const result = await plant({
     [path]: [
       `${DISABLE} a kept key`,
@@ -294,6 +316,7 @@ it("format: an ignore directive's rule names are not read, its reason and the ne
       "// eslint-disable-line fabrika/no-stage-word",
     ].join("\n"),
   });
+
   expect(result(CODE, path)).toEqual([4, 7, 8]);
 });
 
@@ -307,6 +330,7 @@ it("format: an empty file or folder named for the word is refused by its path", 
     "next/apps/fabrika/src/backstage.ts": "",
     "next/apps/fabrika/src/instance.ts": "",
   };
+
   const result = await plant(files);
   expect(Object.keys(files).map((path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
 });

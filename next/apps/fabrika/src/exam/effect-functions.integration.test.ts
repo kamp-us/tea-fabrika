@@ -6,6 +6,7 @@ import { asks } from "./edges.ts";
 import { plant } from "./plant.ts";
 
 const CODE = "fabrika(effect-functions)";
+
 const FILE = "next/packages/libfabrika/src/data/tracing.ts";
 
 const source = [
@@ -67,13 +68,16 @@ describe("effect-functions", async () => {
     fc.assert(
       fc.property(fc.array(fc.boolean(), { minLength: 1, maxLength: 12 }), (old) => {
         const spans: Array<Tracer.NativeSpan> = [];
+
         const tracer = Tracer.make({
           span(options) {
             const span = new Tracer.NativeSpan(options);
             spans.push(span);
+
             return span;
           },
         });
+
         const before = new Map<string, string>();
         const after = new Map<string, string>();
 

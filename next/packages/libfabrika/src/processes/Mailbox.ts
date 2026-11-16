@@ -4,8 +4,6 @@
  * A letter goes into an inbox once per id, and comes back out as a `Letter`, in order. Delivery is
  * at least once, made safe by the id: a resend is one line. An inbox is the stream `<name>/inbox`
  * on the ledger.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -23,7 +21,6 @@ import { brainOnly, inRunnerSpace } from "./Process.ts";
  * brain-only check on a runner id space id, when the id starts with `<process>/` and the letter
  * goes to that same `name`.
  *
- * @stability unstable
  * @category services
  */
 export class RunnerMail extends Context.Service<RunnerMail, { readonly process: string; readonly name: string }>()(
@@ -34,15 +31,14 @@ export class RunnerMail extends Context.Service<RunnerMail, { readonly process: 
  * Schema for what a writer says about itself, shared by every write in this layer: the ledger's
  * `Line` without its case and body, so a writer can leave no key out.
  *
- * @stability unstable
  * @category schemas
  */
 export const From = Line.mapFields(({ _tag, body: _body, ...fields }) => fields);
+
 /**
  * What a writer says about itself on a write: `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`
  * and `build`. The same value the `From` schema decodes.
  *
- * @stability unstable
  * @category models
  */
 export type From = Omit<Line, "_tag" | "body">;
@@ -50,7 +46,6 @@ export type From = Omit<Line, "_tag" | "body">;
 /**
  * A letter as it comes out of an inbox: what was asked, by whom, for whom, and where it sits.
  *
- * @stability unstable
  * @category models
  */
 export type Letter = {
@@ -69,7 +64,6 @@ export type Letter = {
  * A letter with what its entry also kept: the writer's build, the rev it had seen, and the
  * referee's clock. The runner reads these to catch a process up; `Letter` stays as it is.
  *
- * @stability unstable
  * @category models
  */
 export type History = Letter & {
@@ -80,21 +74,27 @@ export type History = Letter & {
 
 /** Span tag keys: OpenTelemetry's messaging names where they fit, `fab.<thing>.*` for the rest. */
 const STREAM = "messaging.destination.name";
+
 const ID = "messaging.message.id";
+
 const OPERATION = "messaging.operation.type";
+
 const tag = (word: string): string => `fab.mailbox.${word}`;
 
 /** A letter's line: its case, and its body `{m}`. */
 const SEND = "send";
+
 const Sent = Schema.Struct({ m: Schema.Json });
+
 const Send = Schema.TaggedStruct(SEND, Sent.fields);
+
 const decodeJson = Schema.decodeUnknownOption(Schema.Json);
+
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
 /**
  * Returns the ledger stream that holds a name's inbox, `<name>/inbox`.
  *
- * @stability unstable
  * @category getters
  */
 export const inbox = (name: string): string => `${name}/inbox`;
@@ -103,7 +103,6 @@ export const inbox = (name: string): string => `${name}/inbox`;
  * Makes a letter's ledger line, as `send` writes it, for a writer that appends it inside its own
  * ledger turn.
  *
- * @stability unstable
  * @category constructors
  */
 export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.make({ m }));
@@ -111,7 +110,6 @@ export const letterLine = (from: From, m: Schema.Json) => lineFor(from, Send.mak
 /**
  * Decodes a message as a letter's JSON, and answers none when it is not JSON.
  *
- * @stability unstable
  * @category decoding
  */
 export const letterBody = decodeJson;
@@ -151,7 +149,6 @@ const letter = ({ build: _build, seen: _seen, arrivedAt: _arrivedAt, ...plain }:
  * Tags an answer on the current span: placed with its `rev` and `pos`, or refused with its reason.
  * `word` builds each tag key from a short name.
  *
- * @stability unstable
  * @category tracing
  */
 export const answered = Effect.fnUntraced(function* (word: (name: string) => string, answer: Appended) {
@@ -171,7 +168,6 @@ export const answered = Effect.fnUntraced(function* (word: (name: string) => str
  * Makes a handler that tags a ledger failure's reason on the current span. `word` builds the tag
  * key from a short name.
  *
- * @stability unstable
  * @category tracing
  */
 export const failed = (word: (name: string) => string) =>
@@ -194,7 +190,6 @@ export const failed = (word: (name: string) => string) =>
  * may write: a letter to a stream under `processes`, or an id in the signal, notice or runner id
  * space. `RunnerMail` lifts the last one for a runner that writes its own letters to its own name.
  *
- * @stability unstable
  * @category services
  */
 export class Mailbox extends Context.Service<
@@ -213,11 +208,13 @@ export class Mailbox extends Context.Service<
     Mailbox,
     Effect.gen(function* () {
       const ledger = yield* Ledger;
+
       /** The one reader under both reads: each `send` entry past `after`, counted on its span. */
       const reader = (name: string, after: Rev, span: string) =>
         Stream.unwrap(
           Effect.sync(() => {
             const count = { letters: 0, skipped: 0 };
+
             return ledger.read(inbox(name), after).pipe(
               Stream.mapEffect((entry) =>
                 Effect.map(history(entry), (found) => {
@@ -248,6 +245,7 @@ export class Mailbox extends Context.Service<
             },
           }),
         );
+
       return {
         send: Effect.fn("mailbox.send")(
           function* (to: string, id: string, m: unknown, from: From) {
@@ -257,6 +255,7 @@ export class Mailbox extends Context.Service<
             });
             // Mail never takes a stream or an id only the brain writes.
             const runner = yield* Effect.serviceOption(RunnerMail);
+
             const own = Option.exists(
               runner,
               (r) => r.name === to && id.startsWith(`${r.process}/`) && inRunnerSpace(id),

@@ -57,6 +57,7 @@ const end: fc.Arbitrary<End> = fc.oneof(
 
 /** Whether a chain's end is a starter: for the integration walk, and alone, for the advice. */
 const reaches = (e: End) => e._tag === "opens" || e._tag === "needs_layer";
+
 const alone = (e: End) => e._tag === "opens";
 
 /** An edge kind as code-graph answers it; only a type-only edge reaches nothing. */
@@ -77,9 +78,11 @@ it("K3: in memory, an .integration. file fails exactly when no chain of value im
       ({ integration, hops, end: last, side }) => {
         const test = `next/apps/x/src/t.${integration ? "integration." : ""}test.ts`;
         const chain = [test, ...hops.map((_, k) => `next/apps/x/src/m${k + 1}.ts`)];
+
         const modules = new Map<string, Module>(
           chain.map((file, k) => {
             const hop = hops[k];
+
             const imports = [
               ...(hop === undefined ? [] : [{ target: chain[k + 1] ?? null, typeOnly: hop === "type-only" }]),
               ...(side
@@ -89,9 +92,11 @@ it("K3: in memory, an .integration. file fails exactly when no chain of value im
                   ]
                 : []),
             ];
+
             return [file, { source: k === chain.length - 1 ? sourceOf(last) : "export {};\n", imports }];
           }),
         );
+
         modules.set("next/apps/x/src/side.ts", { source: "export const side = 1;\n", imports: [] });
 
         const open = hops.every((hop) => hop !== "type-only");
@@ -128,15 +133,18 @@ const chain: fc.Arbitrary<Chain> = fc.record({
 });
 
 const APP = "next/apps/app";
+
 const LIB = "next/packages/lib";
 
 /** A planted repo: the chains in an app and a library package, linked as pnpm links them. */
 const plant = (chains: ReadonlyArray<Chain>) => {
   const root = mkdtempSync(join(tmpdir(), "t1073-kind-"));
+
   const write = (path: string, text: string) => {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), text);
   };
+
   const exports: Record<string, string> = { "./p/*": "./src/*.ts" };
   const tests: Array<{ readonly file: string; readonly chain: Chain }> = [];
 
@@ -196,9 +204,11 @@ it("K3 and K4: through the real command and code-graph, every hop kind is follow
       try {
         const run = spawnSync(process.execPath, [COMMAND, root], { encoding: "utf8" });
         const fails = tests.filter(({ chain: c }) => c.integration && !reaches(c.end)).map(({ file }) => file);
+
         const advised = tests
           .filter(({ chain: c }) => !c.integration && c.hops.length > 0 && alone(c.end))
           .map(({ file }) => file);
+
         const named = (out: string, prefix: string) =>
           tests.map(({ file }) => file).filter((file) => out.split("\n").some((l) => l.startsWith(`${prefix}${file}`)));
 

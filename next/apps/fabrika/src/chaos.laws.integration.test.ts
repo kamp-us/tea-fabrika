@@ -11,6 +11,7 @@ import { Arbitrary, Schema } from "effect";
 import * as RevokeHold from "../e2e/chaos-revoke.test-support.ts";
 
 RunnerTest.suite(ChaosTest.open, checklist);
+
 TargetsTest.suite(ChaosTest.open, checklist);
 
 it.prop(
@@ -42,6 +43,7 @@ it.prop(
                 ? { type: "release" }
                 : { type: "arrive", process: model.process }
               : { type: "arm", process: `later-${pick}` };
+
       const previous = model;
       [model] = applyCell(RevokeHold.controller, model, msg);
       msgs.push(msg);

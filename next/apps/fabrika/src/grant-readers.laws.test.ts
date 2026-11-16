@@ -14,6 +14,7 @@ const cli = vi.hoisted(() => ({
 
 vi.mock("@effect/platform-node", async (original) => {
   const actual = await original<typeof import("@effect/platform-node")>();
+
   return {
     ...actual,
     NodeServices: {
@@ -57,6 +58,7 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
     fc.string().map((s) => `relative-${encodeURIComponent(s)}`),
     fc.constantFrom("http://[", "http://%", "http://[::1", "https://"),
   );
+
   await fc.assert(
     fc.asyncProperty(invalid, async (url) => {
       const argv = process.argv;
@@ -182,6 +184,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
 
               signed.push(yield* Stream.mkString(Stream.decodeText(command.options.stdin)));
               const stdout = Stream.make(new TextEncoder().encode(data.armored));
+
               return ChildProcessSpawner.makeHandle({
                 pid: ChildProcessSpawner.ProcessId(27000),
                 exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(mode === "sign" ? data.exit : 0)),
@@ -199,6 +202,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
           ),
         );
         const calls: Array<[string, RequestInit | undefined]> = [];
+
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
           calls.push([String(url), options]);
 
@@ -230,6 +234,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
 
           return Response.json(mode === "target" ? data.badTarget : mode === "waiting" ? null : data.target);
         });
+
         const argv = process.argv;
         const log = vi.spyOn(console, "log").mockImplementation(() => {});
         process.argv = [

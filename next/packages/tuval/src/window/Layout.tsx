@@ -40,6 +40,7 @@ export const tileWords = (tile: Pick<Tile, "program" | "n">) => ({
  */
 export const tileName = (tile: Pick<Tile, "program" | "n">): string => {
   const { program, handle } = tileWords(tile);
+
   return `${program}, ${handle}`;
 };
 
@@ -81,6 +82,7 @@ export const landing = (region: HTMLElement, cursor: string | null): HTMLElement
     cursor === null
       ? undefined
       : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
+
   return (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
 };
 
@@ -184,13 +186,17 @@ export const Layout = ({
   open,
 }: Props) => {
   const byId = new Map(tiles.map((t) => [t.id, t]));
+
   const divider = (i: number) => (
     <div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />
   );
+
   const strip = (id: TileId, dir: Dir) => {
     const tile = byId.get(id);
+
     return tile === undefined ? [] : [<Strip key={tile.id} tile={tile} dir={dir} open={open} />];
   };
+
   /** Draws `node` in a box of `box` (null before the page knows its size), inside a container of
    *  direction `dir`. */
   const draw = (
@@ -221,30 +227,37 @@ export const Layout = ({
 
     const row = node.dir === "row";
     const shares = box === null ? null : lengths(node, row ? box.width : box.height, strips, workspace.focus);
+
     return node.parts.flatMap((part, i) => {
       const share = shares?.[i];
+
       const inner =
         box === null || share === undefined
           ? null
           : row
             ? { width: share, height: box.height }
             : { width: box.width, height: share };
+
       const folded = shut(part.inner, strips);
+
       const style =
         share !== undefined
           ? { flexGrow: 0, flexShrink: 1, flexBasis: share }
           : folded
             ? { flexGrow: 0, flexShrink: 0, flexBasis: STRIP[node.dir] }
             : { flexGrow: part.percent };
+
       // A band: every tile of a folded container lies along it, one strip each, sharing its length.
       const body =
         folded && typeof part.inner !== "string"
           ? order(part.inner).flatMap((t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
           : draw(part.inner, node.dir, inner);
+
       const flows =
         folded && typeof part.inner !== "string"
           ? `part band flow-${row ? "column" : "row"}`
           : flow("part", part.inner);
+
       return [
         ...(i === 0 ? [] : [divider(i)]),
         <div key={`part-${i}`} className={flows} style={style}>
@@ -253,6 +266,7 @@ export const Layout = ({
       ];
     });
   };
+
   // The padding and the dividers are libfabrika's one gap, the number the room check measures with.
   return (
     <main className={flow("desk", workspace.layout)} style={{ padding: GAP }}>

@@ -41,6 +41,7 @@ export const evaluate = (
   }
 
   const visited = new Set<string>();
+
   const reaches = (name: string): boolean => {
     if (declared.relations.has(name)) {
       return holds(tuples, tupleKey(subject, name, object));
@@ -51,7 +52,9 @@ export const evaluate = (
     }
 
     visited.add(name);
+
     return (declared.permissions.get(name) ?? []).some(reaches);
   };
+
   return reaches(permission);
 };

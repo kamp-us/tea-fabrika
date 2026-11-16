@@ -19,10 +19,14 @@ import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
 import { pathIn } from "./match.ts";
 
 const START = { line: 1, column: 0 };
+
 const MESSAGE = "Say instance for a running copy of fabrika in next/; stage was renamed (0080).";
+
 const RUN = /\p{L}+/gu;
+
 // `STAGEError` splits as `STAGE` and `Error`, `localStage` as `local` and `Stage`.
 const PART = /\p{Lu}+(?!\p{Ll})|\p{Lu}?\p{Ll}+|[^\p{Lu}\p{Ll}]+/gu;
+
 // An ignore comment, up to its reason.
 const DIRECTIVE = /^\s*(?:oxlint|eslint)-(?:disable|enable)[^]*?(?:--|$)/;
 
@@ -47,6 +51,7 @@ const stageWords = (text: string): ReadonlyArray<{ readonly index: number; reado
 const relative = (context: Context): string => {
   const file = pathIn(context).replaceAll("\\", "/");
   const from = context.cwd.replaceAll("\\", "/").replace(/\/?$/, "/");
+
   return file.startsWith(from) ? file.slice(from.length) : file;
 };
 
@@ -59,11 +64,13 @@ export const noStageWord: CreateRule = {
     }
 
     const source = context.sourceCode;
+
     const named = (node: ESTree.Node, text: string) => {
       if (stageWords(text).length > 0) {
         context.report({ node, message: MESSAGE });
       }
     };
+
     // Raw text at a source offset: one report per line that holds the word.
     const lines = (node: ESTree.Node, decoded: string, raw: string, offset: number) => {
       if (stageWords(decoded).length === 0) {
@@ -75,6 +82,7 @@ export const noStageWord: CreateRule = {
       if (words.length === 0) {
         // Only an escape spells it, so the raw text cannot place it.
         context.report({ node, message: MESSAGE });
+
         return;
       }
 

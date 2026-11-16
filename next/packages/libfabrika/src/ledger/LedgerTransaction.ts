@@ -1,7 +1,5 @@
 /**
  * Several ledger reads and appends as one atomic turn. This file is the contract only (0095).
- *
- * @stability unstable
  */
 import { Context } from "effect";
 import type { Effect, Option } from "effect";
@@ -20,7 +18,6 @@ import type { Entry, Line } from "./Log.ts";
  * grows with the stream. `append` returns the entry's place, a resend's first place included. When the referee refuses the line, `append`
  * throws a `LedgerError` with `reason: "refused"`, which rolls the whole turn back.
  *
- * @stability unstable
  * @category models
  */
 export interface LedgerTurn {
@@ -53,7 +50,6 @@ export interface LedgerTurn {
  * throw fails as `storage`, or as `bad_row` for a schema error. So a step that wants to say no
  * returns that as a value before it appends.
  *
- * @stability unstable
  * @category services
  */
 export class LedgerTransaction extends Context.Service<

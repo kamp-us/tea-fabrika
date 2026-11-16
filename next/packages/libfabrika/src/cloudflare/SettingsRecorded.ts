@@ -1,7 +1,5 @@
 /**
  * The layer that puts an instance start on record and hands it on as `RecordedStart`.
- *
- * @stability unstable
  */
 import { Effect, Layer } from "effect";
 import { Digest } from "effect/crypto";
@@ -23,7 +21,6 @@ import * as SettingsInput from "./SettingsInput.ts";
  * Recording the same start again answers the first receipt, so every object of one instance can
  * build this layer for the same input.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (input: Start.Input) =>
@@ -33,8 +30,10 @@ export const layer = (input: Start.Input) =>
       const checked = yield* SettingsInput.check(input).pipe(
         Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
       );
+
       const starts = yield* Starts;
       const receipt = yield* starts.record(checked.input);
+
       const saved = yield* SettingsInput.receipt(receipt, { ...checked.input, settings: checked.snapshot }).pipe(
         Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
       );

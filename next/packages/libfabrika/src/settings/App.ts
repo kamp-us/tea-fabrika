@@ -4,8 +4,6 @@
  * **Details**
  *
  * `make({ name: "kalfa", list: "kalfa config get" })` gives the app's prefix `KALFA`, its home variable `KALFA_HOME`, its repo file `.kalfa/kalfa.toml`, its person's file `~/.kalfa/kalfa.toml` and its version setting `kalfa-version`. Its `Setting` and `Sources` declare and read under that name only, so one app never reads another's files or variables.
- *
- * @stability unstable
  */
 import { Schema } from "effect";
 import * as Setting from "./Setting.ts";
@@ -23,7 +21,6 @@ const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)).annota
 /**
  * One app's names, and the engine's `Setting.make`, `Setting.group` and `Sources.env` bound to it.
  *
- * @stability unstable
  * @category models
  */
 export interface App {
@@ -62,7 +59,6 @@ export interface App {
  *
  * Throws an `Error` for a name that is not one lowercase word, so a bad app stops at module load and never runs. Two names such as `kal_fa` and `kal` could otherwise make one environment name.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = (options: { readonly name: string; readonly list: string }): App => {

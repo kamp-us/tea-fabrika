@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 // own added lines, its headers, and every other file keep every check. Each case runs as a diff git
 // wrote, as a pushed commit and as a whole draft. The private word is made up.
 const script = process.env.TEST_LEAKGREP ?? join(import.meta.dirname, "leakgrep.sh");
+
 const word = "private_zzqxjv";
+
 const dash = String.fromCodePoint(0x2014);
 
 // One pnpm patch file, with `line` put in at one place.
@@ -38,20 +40,25 @@ const read = (path: string, lines: ReadonlyArray<string>): Record<"diff" | "comm
     const words = join(dir, "words");
     mkdirSync(repo);
     writeFileSync(words, `${word}\n`);
+
     const git = (...args: string[]) => {
       const ran = spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.invalid", ...args], {
         cwd: repo,
         encoding: "utf8",
       });
+
       expect(ran.status, ran.stderr).toBe(0);
+
       return ran.stdout;
     };
+
     git("init", "-q");
     const file = join(repo, path);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, lines.map((line) => `${line}\n`).join(""));
     git("add", "-A");
     git("commit", "-q", "-m", "a patch");
+
     const run = (args: ReadonlyArray<string>, input?: string): Read => {
       const ran = spawnSync("sh", [script, ...args], {
         cwd: repo,
@@ -59,10 +66,13 @@ const read = (path: string, lines: ReadonlyArray<string>): Record<"diff" | "comm
         encoding: "utf8",
         env: { ...process.env, FABRIKA_LEAK_WORDS: words, TYPESAFE_API_KEY: undefined },
       });
+
       expect(ran.stdout + ran.stderr).not.toContain(word);
       expect(ran.stdout + ran.stderr).not.toContain(dir);
+
       return { status: ran.status, stderr: ran.stderr };
     };
+
     return {
       diff: run([], git("show", "HEAD")),
       commits: run(["--commits", "HEAD"]),

@@ -1,10 +1,9 @@
 /**
  * One client's repository opening, held as the state of the opening machine.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Effect, Ref } from "effect";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
 import { machine } from "./internal/open.ts";
 
 /**
@@ -12,11 +11,12 @@ import { machine } from "./internal/open.ts";
  * commit and document hash, whether the document is there, its settings snapshot, and the person
  * opening it.
  *
- * @stability unstable
  * @category models
  */
 export type CheckedSelection = import("./internal/open.ts").CheckedSelection;
+
 type Msg = typeof machine.msg.Type;
+
 type State = typeof machine.model.Type;
 
 /**
@@ -29,15 +29,16 @@ type State = typeof machine.model.Type;
  * out of turn, or for another selection, leaves the state as it is; `select` and `close` always
  * apply.
  *
- * @stability unstable
  * @category constructors
  */
 export const session = Effect.fn("repositoryOpen.session")(function* () {
   const state = yield* Ref.make(machine.init(null, undefined)[0]);
+
   return {
     send: Effect.fn("repositoryOpen.send")(function* (msg: Msg): Effect.fn.Return<State> {
       return yield* Ref.modify(state, (current) => {
         const [next] = applyCell(machine, current, msg);
+
         return [next, next];
       });
     }),

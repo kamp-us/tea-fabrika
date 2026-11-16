@@ -22,8 +22,11 @@ import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: 100 };
+
 const REPO = ".fabrika/fabrika.toml";
+
 const PERSON = "~/.fabrika/fabrika.toml";
 
 for (const kind of StartsTest.originKinds) {
@@ -49,9 +52,11 @@ StartsTest.law(
     Effect.gen(function* () {
       const input = yield* StartsTest.input(recipe);
       const files = [`${word}/fabrika.toml`, `~/${word}/fabrika.toml`, `$FABRIKA_HOME/${word}/fabrika.toml`];
+
       const origins = Object.fromEntries(
         Declarations.all.declarations.map((declaration, index) => {
           const source = (choice + index) % 4;
+
           return [
             declaration.path,
             source === 0
@@ -64,6 +69,7 @@ StartsTest.law(
           ];
         }),
       );
+
       const settings = { ...input.settings, origins };
       const checked = yield* Snapshot.read(Declarations.all, settings);
       expect(checked.snapshot).toEqual(settings);
@@ -76,6 +82,7 @@ const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 const parse = (text: string) =>
   Effect.gen(function* () {
     const toml = yield* Toml;
+
     return yield* toml.parse(text);
   });
 
@@ -105,6 +112,7 @@ type SavedFlow = typeof savedFlow extends fc.Arbitrary<infer A> ? A : never;
 
 const save = (v: SavedFlow) => {
   const meta = { doc: "A saved setting.", scope: ["repo"] as const, reload: "restart" as const, since: "1.2.3" };
+
   const settings = {
     record: Setting.make("limits.record", {
       ...meta,
@@ -115,8 +123,10 @@ const save = (v: SavedFlow) => {
     port: Setting.make("instance.port", { ...meta, schema: Port, default: 1 }),
     word: Setting.make("app.word", { ...meta, schema: Schema.String, default: "a" }),
   };
+
   const group = Setting.group(settings);
   const values = { record: ByteSize.bytes(v.count), port: v.port, word: v.word };
+
   const origins = Object.fromEntries(
     group.declarations.map((d) => [
       d.path,
@@ -127,6 +137,7 @@ const save = (v: SavedFlow) => {
           : Sources.Origin.cases.default.make({}),
     ]),
   );
+
   return { settings, group, values, origins };
 };
 
@@ -189,6 +200,7 @@ describe("T753 complete checked snapshots", () => {
       fc.asyncProperty(
         savedFlow.chain((v) => {
           const { group } = save(v);
+
           return fc.tuple(
             fc.constant(v),
             fc.constantFrom(...group.declarations.map((d) => d.path)),
@@ -199,6 +211,7 @@ describe("T753 complete checked snapshots", () => {
         }),
         async ([v, key, field, move, atDefaults]) => {
           const flow = save(v);
+
           const values = atDefaults
             ? {
                 record: flow.settings.record.default,
@@ -206,6 +219,7 @@ describe("T753 complete checked snapshots", () => {
                 word: flow.settings.word.default,
               }
             : flow.values;
+
           const made = await digest(Snapshot.make(flow.group, { ...flow, values }));
           const bad = structuredClone(made);
 
@@ -219,11 +233,13 @@ describe("T753 complete checked snapshots", () => {
 
           const exit = await digest(Snapshot.read(flow.group, bad).pipe(Effect.exit));
           expect(Exit.isFailure(exit)).toBe(true);
+
           // Missing origins cannot be filled from current files or a default either.
           const invalidOrigin = {
             ...made,
             origins: { ...made.origins, [key]: { _tag: "file", file: REPO, line: "two" } },
           };
+
           expect(Exit.isFailure(await digest(Snapshot.read(flow.group, invalidOrigin).pipe(Effect.exit)))).toBe(true);
         },
       ),
@@ -236,20 +252,25 @@ describe("T753 complete checked snapshots", () => {
       fc.asyncProperty(fc.record({ scalar: savedFlow, object: objectFlow }), async ({ scalar: v, object }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
+
         const reversed = Setting.group(
           Object.fromEntries(v.order.map((name) => [name, flow.settings[name as keyof typeof flow.settings]])),
         );
+
         const origins = Object.fromEntries(
           flow.group.declarations.map((d) => [d.path, Sources.Origin.cases.flag.make({ name: `--${d.path}` })]),
         );
+
         const other = await digest(Snapshot.make(reversed, { values: flow.values, origins }));
         expect(other.hash).toBe(made.hash);
         expect(other.origins).toEqual(origins);
+
         const reordered = {
           ...made,
           values: Object.fromEntries(Object.entries(made.values).reverse()),
           origins: Object.fromEntries(Object.entries(origins).reverse()),
         };
+
         const checked = await digest(Snapshot.read(flow.group, reordered));
         expect(checked.snapshot.hash).toBe(made.hash);
         expect(checked.snapshot.origins).toEqual(origins);
@@ -265,6 +286,7 @@ describe("T753 complete checked snapshots", () => {
               values: { ...made.values, "limits.record": alternate },
             }),
           );
+
           expect(normalized.values.record).toBe(ByteSize.bytes(v.count));
           expect(normalized.snapshot).toEqual(made);
         }
@@ -272,6 +294,7 @@ describe("T753 complete checked snapshots", () => {
         const different = await digest(
           Snapshot.make(flow.group, { ...flow, values: { ...flow.values, port: (v.port % 65535) + 1 } }),
         );
+
         expect(different.hash).not.toBe(made.hash);
 
         for (const corrupted of [
@@ -293,19 +316,24 @@ describe("T753 complete checked snapshots", () => {
             since: "1.2.3",
           }),
         });
+
         const objectOrigins = { ...flow.origins, "app.object": Sources.Origin.cases.default.make({}) };
+
         const original = await digest(
           Snapshot.make(group, { values: { ...flow.values, object: object.value }, origins: objectOrigins }),
         );
+
         const permuted = await digest(
           Snapshot.make(group, { values: { ...flow.values, object: object.reordered }, origins: objectOrigins }),
         );
+
         const reread = await digest(
           Snapshot.read(group, {
             ...original,
             values: { ...original.values, "app.object": object.reordered },
           }).pipe(Effect.exit),
         );
+
         expect({ hash: permuted.hash, readable: Exit.isSuccess(reread) }).toEqual({
           hash: original.hash,
           readable: true,
@@ -360,9 +388,11 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
     await fc.assert(
       fc.asyncProperty(declared, fc.integer({ min: 0, max: 2 }), async ([paths, values], changed) => {
         const flags = Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
+
         const env = Object.fromEntries(
           paths.map(([a, b], n) => [`FABRIKA_${a.toUpperCase()}_${b.toUpperCase()}`, String(values[n])]),
         );
+
         const fromFlags = await snapshot(portGroup(paths), sources({ flags: Sources.flags(flags) }));
         const fromEnv = await snapshot(portGroup([...paths].reverse()), sources({ env: Sources.env(env) }));
         expect(fromFlags.values).toEqual(Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, values[n]])));
@@ -400,19 +430,23 @@ const printed = (value: unknown) =>
 
 const spans = () => {
   const ended: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       ended.push(span);
+
       return span;
     },
   });
+
   const text = () =>
     ended
       .map((span) =>
         printed({ name: span.name, attributes: [...span.attributes], events: span.events, status: span.status }),
       )
       .join("\n");
+
   return { tracer, text };
 };
 
@@ -423,6 +457,7 @@ const spans = () => {
  */
 const placed = (key: string, word: string) => {
   const s = JSON.stringify(word);
+
   return fc.constantFrom(
     { person: "[instance]\nport = 18800\n", repo: "", named: undefined },
     { person: `[instance]\n${key} = ${s}\n`, repo: "", named: `instance.${key}` },
@@ -449,21 +484,26 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
         async ([word, _key, place], field, port) => {
           const env = { [field]: word, FABRIKA_INSTANCE_PORT: String(port) };
           const { tracer, text } = spans();
+
           const exit = await Effect.runPromiseExit(
             Effect.gen(function* () {
               const repo = { file: REPO, document: yield* parse(place.repo) };
               const own = { file: PERSON, document: yield* parse(place.person) };
               yield* Files.validate(Declarations.all, { repo, person: own }, { version: "0.0.0" });
+
               const resolved = yield* Sources.resolve(Declarations.all, {
                 flags: Sources.flags({}),
                 env: Sources.env(env),
                 repo: Sources.file(repo.file, repo.document),
                 person: Sources.file(own.file, own.document),
               });
+
               const made = yield* Snapshot.make(Declarations.all, resolved);
+
               return { resolved, made };
             }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]), Effect.withTracer(tracer)),
           );
+
           const outputs: Array<string> = [text()];
 
           if (Exit.isSuccess(exit)) {
@@ -478,7 +518,7 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
             outputs.push(String(exit.cause), printed(error?._tag === "Fail" ? error.error : null));
             // The key is named; the value found there is not.
             expect(
-              error?._tag === "Fail" && error.error instanceof Files.SettingsError ? error.error.message : "",
+              error?._tag === "Fail" && Schema.is(Files.SettingsError)(error.error) ? error.error.message : "",
             ).toContain(place.named);
           }
 
@@ -501,6 +541,7 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
       async ({ flow: v, word, field }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
+
         const input =
           field === "value"
             ? { ...made, values: { ...made.values, "limits.record": word } }
@@ -509,8 +550,10 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
               : field === "origin"
                 ? { ...made, origins: { ...made.origins, "limits.record": { _tag: word } } }
                 : { ...made, hash: word };
+
         const traced = spans();
         const entries: Array<string> = [];
+
         const logger = Logger.make((options) =>
           entries.push(
             JSON.stringify({
@@ -525,6 +568,7 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
             }),
           ),
         );
+
         const ran = await Effect.runPromise(
           Effect.gen(function* () {
             const exit = yield* Snapshot.read(flow.group, input).pipe(
@@ -532,14 +576,17 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
               Effect.withTracer(traced.tracer),
               Effect.exit,
             );
+
             return { exit, stdout: yield* TestConsole.logLines, stderr: yield* TestConsole.errorLines };
           }).pipe(
             Effect.provideService(References.MinimumLogLevel, "All"),
             Effect.provide(Layer.mergeAll(Digest.layerWebCrypto, TestConsole.layer, Logger.layer([logger]))),
           ),
         );
+
         expect(Exit.isFailure(ran.exit)).toBe(true);
         expect(traced.text()).not.toBe("");
+
         const outputs = [
           ...ran.stdout.flatMap((value) => [String(value), Formatter.formatJson(value)]),
           ...ran.stderr.flatMap((value) => [String(value), Formatter.formatJson(value)]),

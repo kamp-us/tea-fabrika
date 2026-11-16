@@ -55,6 +55,7 @@ describe("copies: a pull request's new clones as advice (0587)", () => {
       tokens: 70,
       ...(isNew === undefined ? {} : { isNew }),
     });
+
     expect(advice([clone(false), clone()])).toEqual([]);
     expect(advice([clone(true)])).toHaveLength(1);
   });
@@ -64,6 +65,7 @@ describe("copies: a pull request's new clones as advice (0587)", () => {
     const [line] = advice([
       { firstFile: side("x.ts", 1, 2), secondFile: side("odd,name:x.ts", 4, 5), lines: 2, tokens: 60, isNew: true },
     ]);
+
     expect(line).toContain("file=odd%2Cname%3Ax.ts,line=4,endLine=5");
   });
 

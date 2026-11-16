@@ -3,7 +3,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
@@ -16,6 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Predicate, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
@@ -24,9 +25,12 @@ const PROCESS: string = Effect.runSync(
 );
 
 const NAME = "counter:1";
+
 // P40: the counter's program identity in the core pack (0083). Its registered name stays NAME.
 const PROGRAM = "fabrika/counter";
+
 const LIBRARY = "@kampus/libfabrika"; // Missing P11 exports must not prevent collecting the laws.
+
 const SEED = 119120;
 
 type Update =
@@ -60,6 +64,7 @@ const reconstruct = (before: unknown, change: Update): unknown => {
       .slice(1)
       .split("/")
       .map((k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
+
     let target: unknown = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -86,6 +91,7 @@ describe("p22 real counter in the runner", () => {
   it("loads a constructed counter and returns typed load failures for broken modules", async () => {
     const { counter } = await import("./program.ts");
     const { ProgramDown, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+
     const malformed = fc.option(
       fc.oneof(
         fc
@@ -93,6 +99,7 @@ describe("p22 real counter in the runner", () => {
           .map((field) => {
             const raw: Record<string, unknown> = { ...counter };
             delete raw[field];
+
             return raw;
           }),
         fc.jsonValue().map((bad) => ({ ...counter, msg: bad })),
@@ -102,6 +109,7 @@ describe("p22 real counter in the runner", () => {
       ),
       { nil: null },
     );
+
     await fc.assert(
       fc.asyncProperty(
         fc.record({
@@ -142,15 +150,18 @@ describe("p22 real counter in the runner", () => {
       let managerDb = yield* scopedDb(join(folder, "manager.db"));
       const seen = new Map<string, { rev: number; view: unknown }>();
       const expected = Schema.Struct({ count: Schema.Int });
+
       const data = () =>
         LedgerSql.layer(nodeSql(ledgerDb), { reader: "counter-law" }).pipe(
           Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
         );
+
       const layer = () => {
         const checked = Layer.effect(
           A.CheckedWriter,
           Effect.gen(function* () {
             const mailbox = yield* Mailbox;
+
             return {
               append: (i: { id: string; envelope: { input: unknown }; sentAt: string; seen: number }) =>
                 mailbox.send(NAME, i.id, i.envelope.input, {
@@ -167,6 +178,7 @@ describe("p22 real counter in the runner", () => {
             };
           }),
         );
+
         // Ticket 402: every runner is supervised. The real manager's first start names PROCESS; a
         // wake finds it already live. Receipts live in the same Sql as ProcessStore.
         const from = {
@@ -178,6 +190,7 @@ describe("p22 real counter in the runner", () => {
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
           build: "counter-build",
         };
+
         const manager = Layer.effectDiscard(
           ProcessManager.use((m) =>
             m.status(NAME).pipe(
@@ -210,6 +223,7 @@ describe("p22 real counter in the runner", () => {
             ),
           ),
         );
+
         return A.ProgramRunner.layer(
           {
             id: PROCESS,
@@ -240,6 +254,7 @@ describe("p22 real counter in the runner", () => {
           ),
         );
       };
+
       yield* Effect.gen(function* () {
         const r: Runner = yield* A.ProgramRunner;
         yield* r.open("a");
@@ -315,11 +330,7 @@ const scopedFolder = Effect.acquireRelease(
   (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
 );
 
-const scopedDb = (file: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(file)),
-    (db) => Effect.sync(() => db.isOpen && db.close()),
-  );
+const scopedDb = (file: string) => TestDatabase.make(file);
 
 const brainFrom = {
   by: "SHA256:brain",
@@ -355,6 +366,7 @@ describe("P40 the counter under its qualified identity", () => {
     const { counter } = await import("./program.ts");
     const A: typeof import("@kampus/libfabrika") = await import(LIBRARY);
     const C = await import("@kampus/libfabrika/runtime/ProcessStore");
+
     // One session of the runner over the folder's saved files: the declared identity is what the
     // loader serves and what the process is started with, as the brain's bootstrap does.
     const session = (folder: string) =>
@@ -362,10 +374,12 @@ describe("P40 the counter under its qualified identity", () => {
         const ledgerDb = yield* scopedDb(join(folder, "ledger.db"));
         const storeDb = yield* scopedDb(join(folder, "process.db"));
         const managerDb = yield* scopedDb(join(folder, "manager.db"));
+
         const checked = Layer.effect(
           A.CheckedWriter,
           Effect.gen(function* () {
             const mailbox = yield* Mailbox;
+
             return {
               append: (i: { id: string; envelope: { input: unknown }; sentAt: string; seen: number }) =>
                 mailbox.send(NAME, i.id, i.envelope.input, {
@@ -380,6 +394,7 @@ describe("P40 the counter under its qualified identity", () => {
             };
           }),
         );
+
         const manager = Layer.effectDiscard(
           ProcessManager.use((m) =>
             m.status(NAME).pipe(
@@ -396,10 +411,13 @@ describe("P40 the counter under its qualified identity", () => {
             ),
           ).pipe(Effect.orDie),
         ).pipe(Layer.provideMerge(managerLayer(managerDb)));
+
         const process = yield* Effect.gen(function* () {
           const m = yield* ProcessManager;
+
           return (yield* m.status(NAME)).state.process;
         }).pipe(Effect.provide(manager), Effect.orDie);
+
         return A.ProgramRunner.layer(
           {
             id: process,
@@ -433,6 +451,7 @@ describe("P40 the counter under its qualified identity", () => {
           ),
         );
       });
+
     const inputs = ["inc", "dec", "reset"] as const;
     // The walk: each step sends an input the counter declares, or, once a process has started,
     // reopens it from its saved files. The count the person expects is the counter's own rule.
@@ -442,6 +461,7 @@ describe("P40 the counter under its qualified identity", () => {
           Effect.scoped(
             Effect.gen(function* () {
               const folder = yield* scopedFolder;
+
               let count = 0,
                 sent = 0,
                 reopened = 0,
@@ -518,6 +538,7 @@ describe("P40 the counter under its qualified identity", () => {
   });
   it("L8: a registered name stays a process name, whatever the program identity", async () => {
     const { counter } = await import("./program.ts");
+
     // Ways to bend a current registered name toward a program identity. Each holds a slash.
     const bends: ReadonlyArray<(name: string) => string> = [
       () => counter.name,
@@ -527,6 +548,7 @@ describe("P40 the counter under its qualified identity", () => {
       (name) => name.replace(/[:.]/, "/"),
       () => `${counter.name}:1`,
     ];
+
     // The walk: each step starts the counter's code under a fresh valid registered name, or tries
     // a current name bent into a slashed one. A bent start is refused and records nothing.
     await fc.assert(
@@ -548,6 +570,7 @@ describe("P40 the counter under its qualified identity", () => {
                   names.push(name);
                 } else {
                   const bent = bends[n % bends.length]!(names[Math.floor(n / bends.length) % names.length]!);
+
                   const result = yield* Effect.result(
                     m.start(
                       Start.cases.first.make({
@@ -558,6 +581,7 @@ describe("P40 the counter under its qualified identity", () => {
                       brainFrom,
                     ),
                   );
+
                   expect(result, `${bent} is refused`).toMatchObject({
                     _tag: "Failure",
                     failure: { _tag: "ProcessError", reason: "bad_name" },

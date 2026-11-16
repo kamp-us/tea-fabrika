@@ -2,29 +2,26 @@
  * The local brain's driver on Node: it starts the local runtime through a deploy the caller
  * gives, follows its starts, exits and restarts, and hands back stand-ins for its bindings that
  * call it over a private control socket.
- *
- * @stability unstable
  */
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { SystemError } from "@alchemy.run/cloudflare-runtime/core/RuntimeError";
-import {
-  Clock,
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Option,
-  Queue,
-  Redacted,
-  Schema,
-  Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect";
-import { SecureRandom } from "effect/crypto";
-import { Base64Url } from "effect/encoding";
-import { HttpClient, HttpClientRequest } from "effect/http";
-import { ChildProcess } from "effect/process";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Exit from "effect/Exit";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Option from "effect/Option";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Queue from "effect/Queue";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as SubscriptionRef from "effect/SubscriptionRef";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";
@@ -39,17 +36,21 @@ import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-d
  * Error for a call on the local runtime that failed: its `reason` names how, such as `offline`,
  * `unreachable`, `bad_row`, `start_timeout` or `install`.
  *
- * @stability unstable
  * @category errors
  */
-export class ControlError extends Schema.TaggedError<ControlError>()("ControlError", {
-  reason: Schema.String,
-  /** The failure this error translates, kept in memory for diagnosis. */
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class ControlError extends Schema.TaggedError<ControlError, { readonly brand: unique symbol }>()(
+  "ControlError",
+  {
+    reason: Schema.String,
+    /** The failure this error translates, kept in memory for diagnosis. */
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 type Target = "project" | "process" | "record" | "loader" | "bucket";
+
 type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+
 type Life = typeof devLife.model.Type;
 
 const isPid = Schema.is(Pid);
@@ -62,6 +63,7 @@ type Cause = {
 // The token a move consumed, so its replacement is settled once.
 const consumed = (prev: Life, next: Life) => {
   const id = pending(prev);
+
   return id !== null && pending(next) !== id ? id : null;
 };
 
@@ -77,17 +79,18 @@ const sample = (pid: number) =>
   Effect.scoped(
     Effect.gen(function* () {
       const child = yield* ChildProcess.make("ps", ["-o", "rss=", "-p", String(pid)]);
+
       const [text, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(child.stdout)), child.exitCode], {
         concurrency: 2,
       });
 
       if (code !== 0) {
-        return yield* new ControlError({ reason: "sample" });
+        return yield* ControlError.make({ reason: "sample" });
       }
 
       return Number(text.trim()) * 1024;
     }),
-  ).pipe(Effect.mapError((cause) => new ControlError({ reason: "sample", cause })));
+  ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "sample", cause })));
 
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
   const raw = yield* work;
@@ -97,6 +100,7 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   }
 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
+
   return {
     checksums: {
       sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16))).buffer,
@@ -134,7 +138,6 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
  * The brain's own flushes never wait: they fail as `offline` at once and retry on their schedule.
  * A call made while no port is known fails as `offline`.
  *
- * @stability unstable
  * @category constructors
  */
 export const startDev = Effect.fn("brain.instance")(function* <E, R>(
@@ -154,6 +157,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     scope = yield* Effect.scope,
     ids = yield* ProcessIdGenerator,
     client = yield* HttpClient.HttpClient;
+
   const outbox = yield* brainOutbox(options.home),
     runtimeScope = yield* Scope.make(),
     events = yield* Queue.unbounded<{ readonly event: RuntimeEvent; readonly cause: Cause }>(),
@@ -162,9 +166,11 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     listening = yield* Deferred.make<void>(),
     // The first start, or `bad_pid` when it reported no process's pid.
     started = yield* Deferred.make<void, ControlError>();
+
   const token = Redacted.make(
     Base64Url.encode(yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32))),
   );
+
   // The life state, which a call can follow to the state a replacement brings. Each move folds one
   // Msg atomically and hands back the state before and after it.
   const cell = yield* lifeCell(yield* outbox.last);
@@ -174,6 +180,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   const replacements = new Map<string, Deferred.Deferred<void, ControlError>>();
   // What the callback saw last, kept for the next event's row.
   let cause: Cause = { reason: "open", bytes: undefined };
+
   // The first state with no replacement that may still come up, or null once the wait runs out.
   const settled = Effect.fnUntraced(function* () {
     // The runtime's callback only queues what it reports, and the event fiber it wakes folds it.
@@ -193,8 +200,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       Stream.runHead,
       Effect.timeoutOption(options.grace + START_BOUND),
     );
+
     return Option.getOrNull(Option.flatten(next));
   });
+
   // One control request to one port, or `offline` when there is none to dial.
   const dial = Effect.fnUntraced(function* (
     port: number | null,
@@ -205,15 +214,17 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     args: ReadonlyArray<unknown>,
   ) {
     if (port === null) {
-      return yield* new ControlError({ reason: "offline" });
+      return yield* ControlError.make({ reason: "offline" });
     }
 
     const url = `http://127.0.0.1:${port}`;
-    const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
+    const fail = (cause: unknown) => ControlError.make({ reason: "unreachable", cause });
+
     const body = yield* Effect.try({
       try: () => JSON.stringify({ target, project, name, method, args }),
       catch: fail,
     });
+
     const response = yield* HttpClientRequest.post(url).pipe(
       // oxlint-disable-next-line fabrika/no-redacted-value -- the private HTTP header sends the control bearer
       HttpClientRequest.setHeader("authorization", `Bearer ${Redacted.value(token)}`),
@@ -223,17 +234,20 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
       Effect.mapError(fail),
     );
-    const raw = yield* response.json.pipe(Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })));
+
+    const raw = yield* response.json.pipe(Effect.mapError((cause) => ControlError.make({ reason: "bad_row", cause })));
+
     const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
-      Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })),
+      Effect.mapError((cause) => ControlError.make({ reason: "bad_row", cause })),
     );
 
     if (answer.error !== undefined) {
-      return yield* new ControlError(answer.error);
+      return yield* ControlError.make(answer.error);
     }
 
     return answer.value;
   });
+
   // A binding's call, from outside the brain: it waits for a pending replacement's listener.
   const call = Effect.fnUntraced(function* (
     target: Target,
@@ -243,8 +257,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     args: ReadonlyArray<unknown>,
   ) {
     const s = yield* settled();
+
     return yield* dial(s === null ? null : reachable(s), target, project, name, method, args);
   });
+
   // The brain's own call, from a flush that holds its lock: it never waits, so the lock is never
   // held across a replace. While a replacement is pending it fails as `offline` at once, and the
   // flush's own schedule sends the rows again.
@@ -257,12 +273,16 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
   ) {
     return yield* dial(reachable(yield* SubscriptionRef.get(life)), target, project, name, method, args);
   });
+
   const flush = outbox.flush((event) => callNow("project", config.name, "", "brain", [event]));
+
   const recording = yield* devRecording(options.home, `brain:${config.name}`, (target, name, method, args) =>
     callNow(target, config.name, name, method, args),
   );
+
   const sink = Context.get(recording, SpanSink);
   const flushRecords = sink.flush.pipe(Effect.provideContext(recording));
+
   const recorded = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     work.pipe(
       Effect.exit,
@@ -278,6 +298,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       ),
       Effect.provideContext(recording),
     );
+
   const local = Context.empty().pipe(
     Context.add(RuntimeLifecycle, (event) => {
       const observed = { event, cause };
@@ -305,15 +326,15 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       ],
       start: Effect.fnUntraced(function* (ports) {
         const port = yield* Schema.decodeUnknownEffect(Schema.Int)(ports["fabrika-control"]).pipe(
-          Effect.mapError(
-            (cause) =>
-              new SystemError({
-                subtag: "control_port",
-                message: "The local runtime returned an invalid control port",
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            SystemError.make({
+              subtag: "control_port",
+              message: "The local runtime returned an invalid control port",
+              cause,
+            }),
           ),
         );
+
         const [prev, next] = yield* send({ type: "listened", port });
         yield* Deferred.succeed(listening, undefined);
         const id = consumed(prev, next);
@@ -326,6 +347,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }),
     }),
   );
+
   const stopRuntime = Effect.fn("brain.stop")(function* () {
     const [, stopping] = yield* send({ type: "stop" });
     yield* Scope.close(runtimeScope, Exit.void);
@@ -342,16 +364,20 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     // The stop discards any replacement still waiting; its restart ends with the scope.
     replacements.clear();
   });
+
   yield* Effect.addFinalizer(() => recorded(stopRuntime()).pipe(Effect.orDie));
+
   const restartRuntime = Effect.fn("brain.restart")(function* (ready: Deferred.Deferred<void, ControlError>) {
     yield* Deferred.await(ready);
   });
+
   const recordEvents = Effect.forever(
     Effect.gen(function* () {
       const {
         event,
         cause: { reason, bytes: rss },
       } = yield* Queue.take(events);
+
       const now = yield* SubscriptionRef.get(life);
 
       if (now._tag === "stopping" || now._tag === "stopped") {
@@ -396,7 +422,8 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         // or below reaches a whole process group. A first start that brings one fails the start.
         if (!isPid(pid)) {
           yield* Effect.logError("The local runtime reported a start with no process id", { pid });
-          yield* Deferred.fail(started, new ControlError({ reason: "bad_pid" }));
+          yield* Deferred.fail(started, ControlError.make({ reason: "bad_pid" }));
+
           return;
         }
 
@@ -419,6 +446,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           at,
           ...(rss === undefined ? {} : { bytes: rss }),
         });
+
         yield* outbox.add(startedEvent);
         yield* Deferred.succeed(started, undefined);
       } else if (event.type === "restart") {
@@ -444,7 +472,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
         if (id !== null && ready !== undefined) {
           replacements.delete(id);
-          yield* Deferred.fail(ready, new ControlError({ reason: event.reason }));
+          yield* Deferred.fail(ready, ControlError.make({ reason: event.reason }));
         }
 
         const at = yield* Clock.currentTimeMillis;
@@ -461,20 +489,24 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }
     }),
   );
+
   yield* Effect.forkScoped(recordEvents);
+
   const startRuntime = Effect.fn("brain.start")(function* () {
     yield* deploy(local, runtimeScope);
     yield* Deferred.await(listening).pipe(
       Effect.timeoutOrElse({
         duration: START_BOUND,
-        orElse: () => Effect.fail(new ControlError({ reason: "start_timeout" })),
+        orElse: () => Effect.fail(ControlError.make({ reason: "start_timeout" })),
       }),
     );
     yield* Deferred.await(started);
     yield* call("project", config.name, "", "info", []);
     yield* flush;
   });
+
   yield* recorded(startRuntime());
+
   // A replace's facts, each written in the step that moved the state and before its signal, so the
   // outbox reads in the order things happened. A full disk must not keep a runtime alive that is
   // past its limit, so a failed write is logged.
@@ -486,6 +518,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       yield* outbox
         .add(BrainEvent.cases.killed.make({ id: `${start}/killed`, start, at, pid: next.pid }))
         .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a kill" }));
+
       return;
     }
 
@@ -512,6 +545,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       )
       .pipe(Effect.ignore({ log: "Error", message: "The brain could not record a replace" }));
   });
+
   // One replace per start: the fold moves only the running process the sample read to
   // `replacing`, and `target` is null from then on, so the sampler cannot ask again until a new
   // process starts. The bounded stop runs in the brain's scope.
@@ -521,6 +555,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     const sample = { pid: value.pid, bytes: value.bytes, at, replacement };
     yield* Effect.forkIn(terminate({ life: cell, sample, grace: options.grace, signal, record }), scope);
   });
+
   yield* Effect.forkScoped(
     Effect.forever(
       Effect.gen(function* () {
@@ -544,6 +579,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }),
     ),
   );
+
   const proxy = <Members extends object>(
     invoke: (method: string, args: ReadonlyArray<unknown>) => Effect.Effect<unknown, ControlError>,
     members: Members,
@@ -559,12 +595,15 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         }
 
         const work = (args: ReadonlyArray<unknown>) => invoke(String(method), args);
+
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the local binding proxy matches Durable Object's Promise API
         return (...args: ReadonlyArray<unknown>) => Effect.runPromise(work(args));
       },
     });
+
   const binding = (target: Target, project: string, name = "") =>
     proxy((method, args) => call(target, project, name, method, args), {});
+
   return {
     recording,
     install: (code: Install): Effect.Effect<Installed, ControlError> =>
@@ -572,10 +611,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         call("project", config.name, "", "codeInstall", [code]).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
         ),
-      ).pipe(Effect.mapError((cause) => new ControlError({ reason: "install", cause }))),
+      ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "install", cause }))),
     failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
       recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)).pipe(
-        Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+        Effect.mapError((cause) => ControlError.make({ reason: "install", cause })),
       ),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>

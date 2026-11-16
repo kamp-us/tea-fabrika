@@ -4,6 +4,7 @@ import type { Letter } from "../Mailbox.ts";
 import type { ProcessTable } from "../Process.ts";
 
 const Sent = Schema.Struct({ m: Schema.Json });
+
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
 /**

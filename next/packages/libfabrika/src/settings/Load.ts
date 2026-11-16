@@ -4,8 +4,6 @@
  * **Details**
  *
  * Every name comes from the group's app: the repo's file is `<repo>/.<app>/<app>.toml`, and the person's is `$<APP>_HOME/<app>.toml` when the environment holds `<APP>_HOME`, else `<home>/.<app>/<app>.toml`. Another app's files and variables are never read. Files are read through Effect's `FileSystem` service, so any platform that gives one can load.
- *
- * @stability unstable
  */
 import { Effect, FileSystem, Path } from "effect";
 import * as Files from "./Files.ts";
@@ -29,7 +27,6 @@ interface Place {
  *
  * A file that cannot be read for any other reason fails as `read`, and a TOML error fails as `syntax` with its line. Both messages name the file as a person reads it, never its contents.
  *
- * @stability unstable
  * @category constructors
  */
 export const file = Effect.fnUntraced(function* (place: Place) {
@@ -68,7 +65,6 @@ export const file = Effect.fnUntraced(function* (place: Place) {
  *
  * The files are checked against the group with `Files.validate`, the environment is read under the group's app only, and the snapshot is read back once with `Snapshot.read`, so a value that would not survive saving fails here as `invalid`.
  *
- * @stability unstable
  * @category combinators
  */
 export const resolve = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
@@ -109,7 +105,6 @@ export const resolve = Effect.fnUntraced(function* <A, R extends Record<string, 
  *
  * `repo` is the repo's folder and `home` the person's home folder. A repo that needs a newer release of the app is refused before the person's file is read. Fails with one `SettingsError`.
  *
- * @stability unstable
  * @category constructors
  */
 export const load = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(

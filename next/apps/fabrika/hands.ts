@@ -29,10 +29,11 @@ const VERSION = "0.0.0";
 /** What the launcher prints, one line per change: the protocol between it and its parent. */
 const Line = Schema.TaggedUnion({
   /** The key is not granted yet: a person approves `code` before `until`. */
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });
+
 type Line = typeof Line.Type;
 
 const encodeLine = Schema.encodeEffect(Schema.fromJsonString(Line));
@@ -59,7 +60,9 @@ const lineFor = (link: Link, fingerprint: string): Line =>
 const hands = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const home = process.env.FABRIKA_HOME ?? path.join(yield* Config.String("HOME"), ".fabrika");
+
   const loaded = yield* Load.load({
     person: {
       path: path.join(home, "fabrika.toml"),
@@ -69,9 +72,11 @@ const hands = Effect.gen(function* () {
     env: present(Declarations.all.declarations.map((d) => [d.env, process.env[d.env]])),
     version: VERSION,
   }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto]));
+
   const folder = path.join(home, "hands");
   // The journal opens its file as its layer is built, so the folder is made first, private.
   yield* fs.makeDirectory(folder, { recursive: true, mode: 0o700 });
+
   const layers = Layer.mergeAll(
     KeyFile.layer({ file: path.join(folder, "key.json") }),
     JournalStore.layer.pipe(Layer.provide(JournalSqlite.layer({ file: path.join(folder, "journal.sqlite") }))),
@@ -82,12 +87,14 @@ const hands = Effect.gen(function* () {
 
   return yield* Effect.gen(function* () {
     const { fingerprint } = yield* ClientKey.use((keys) => keys.current(null));
+
     const booting = yield* start({
       origin: `http://127.0.0.1:${loaded.values.port}`,
       build: VERSION,
       label: "hands",
       os: OS[process.platform] ?? "unknown",
     });
+
     const runtime = yield* booting.ready;
     // Every state the run reaches, from the first, as the line a parent reads; a line is printed
     // only when it changes.
@@ -96,6 +103,7 @@ const hands = Effect.gen(function* () {
         Effect.sync(() => {
           const push = () => Queue.offerUnsafe(queue, lineFor(runtime.getState().link, fingerprint));
           push();
+
           return runtime.subscribe(push);
         }),
         (unsubscribe) => Effect.sync(unsubscribe),
