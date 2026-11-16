@@ -3,7 +3,20 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A generator never returns an Effect: `Effect.map` from the setup to the inner Effect says it.
+        // On for the folders at zero, their tests too. The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["src/cloudflare/**/*.ts", "src/node/**/*.ts"],
+            "options": { "diagnosticSeverity": { "returnEffectInGen": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

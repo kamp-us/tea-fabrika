@@ -10,12 +10,23 @@
   "role": "step",
   "model": "claude-sonnet-5-5",
   "effort": null,
-  "outcome": "blocked",
-  "why": "Tests step for slice E15 of the Effect-check sweep (returnEffectInGen). Recount matched the plan: 7 hits, none in a file of pull request 1366 (lib:cloudflare 3: ConnectionObject.ts, ProcessObject.ts, record.ts; lib:node 2: CodeStore.integration.test.ts, Nemesis.laws.integration.test.ts; app:src 2: sibling-objects.test-support.ts). The check's fix, return yield*, changes the value each generator returns, so no hit was fixed and no lock was written (a lock on a folder with hits is a red typecheck with nothing to build). Tried it on sibling-objects.test-support.ts: tsc fails with TS2379, because Cloudflare's DurableObject make wants an Effect of an Effect of the shape (setup, then the running object), and the fixed form gives it the shape itself. The cloudflare hits are the same shape of call. The two node test hits return a database Effect on purpose: each run of the suite opens its database again, and yield* would open it once inside the generator. The edit was reverted. Needs a design call: write each as a non-generator form (Effect.map to the inner Effect) with the same value, or turn the check off for these call sites.",
+  "outcome": "pass",
+  "why": "Tests step for slice E15 (returnEffectInGen), second round after the design call: write each hit in a non-generator form with the same value. Wrote the lock (overrides in next/packages/libfabrika/tsconfig.json for src/cloudflare and src/node, and in next/apps/fabrika/tsconfig.json for src/*.ts). Fixed the 4 exam-path hits by hand with Edit (Effect.map from the setup to the inner Effect): 2 in sibling-objects.test-support.ts, CodeStore.integration.test.ts and Nemesis.laws.integration.test.ts (each still opens its database once per run). The 3 product hits in libfabrika src/cloudflare (ConnectionObject.ts, ProcessObject.ts, record.ts) are left for the build step, so libfabrika's tsc is red on those 3 only and the app is clean. The first round found that the checker's own return yield* breaks Alchemy's DurableObject.make (TS2379) and changes the node test databases; it was not used. Narrow tests pass: CodeStore and Nemesis integration (12 tests) and sibling.laws.integration (1). pnpm lint passed 16 of 17 parts; lint:dead died with SIGABRT in this box, not run to a result.",
   "tokens": null,
   "tools": null,
   "minutes": 40,
-  "note": "Counts from effect-tsgo diagnostics per tsconfig (libfabrika, app; the other 11 tsconfigs hold none per the plan). The caller check used tsc in next/apps/fabrika. checkerfix.mjs was not run (the coordinator's rule: edits are by hand).",
-  "plants": [],
+  "note": "Counts from tsc per package. No script edited a file; every fix was an Edit.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "next/packages/libfabrika/src/node/plant.ts, a generator returning Effect.succeed(1): libfabrika tsc goes from 3 to 4 effect(returnEffectInGen) errors",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node/**/*.ts dropped from libfabrika's override with the plant file in place: errors fall from 4 to 3, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
   "step": "tests"
 }
