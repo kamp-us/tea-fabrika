@@ -8,8 +8,6 @@
  * member writes only under that check's proof, and its write turn checks the proof again on the
  * rows of that turn. Whatever that turn answers, the start reads again once. A stop is checked in
  * one turn and ended in `ProcessManager.exit`'s own.
- *
- * @stability unstable
  */
 import { Cause, Data, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -321,7 +319,6 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
  * the permission step's ids, never the cause, and a defect inside a start is replaced by a plain
  * one with no detail. A key removed after `Senders` answered is not seen by that start.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {

@@ -1,7 +1,5 @@
 /**
  * The two plain helpers an object's Layer uses to hand calls to its service.
- *
- * @stability unstable
  */
 import { Context, Effect, type Layer } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
@@ -21,7 +19,6 @@ import * as SettingsRuntime from "./SettingsRuntime.ts";
  * The build is owned by a runtime of its own and not by the scope `make` is called in: Alchemy
  * closes an object's construction scope before the first call reaches it.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = <I, S, E>(service: Context.Key<I, S>, ready: Layer.Layer<I, E>) =>
@@ -38,7 +35,6 @@ export const make = <I, S, E>(service: Context.Key<I, S>, ready: Layer.Layer<I, 
  * handler's own `Response`: a copy of a socket upgrade's answer would lose its socket. A failed
  * handler dies, so Alchemy answers a 5xx that carries none of the failure's text.
  *
- * @stability unstable
  * @category constructors
  */
 export const fromWebHandler = <E>(handler: (request: Request) => Effect.Effect<Response, E>) =>

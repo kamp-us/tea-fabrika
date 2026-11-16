@@ -7,13 +7,13 @@ when: "Adding or changing a public export of a library, or its module file"
 
 ```mermaid
 flowchart TD
-  file["a library module file, such as Deferred.ts"] --> moduleBlock["module block: prose, @stability, @since"]
+  file["a library module file, such as Deferred.ts"] --> moduleBlock["module block: prose, @since"]
   file --> exports["each public export"]
   exports --> pair["a type right under its same-name schema: shares that block"]
   exports --> desc["one description paragraph"]
   desc --> sections["optional, in order: When to use, Details, Gotchas"]
   sections --> example["optional: Example (title), one ts fence"]
-  example --> tags["tags, in order: @deprecated, @default, @see, @stability, @category, @since"]
+  example --> tags["tags, in order: @deprecated, @default, @see, @category, @since"]
   file --> internal["internal/ file: /** @internal */, no public doc"]
   barrel["index.ts"] --> reexport["export * as Deferred, with a tag-only block"]
 ```
@@ -41,7 +41,6 @@ flowchart TD
  * await Effect.runPromise(program) // => 42
  * ```
  *
- * @stability stable
  * @category constructors
  * @since 2.0.0
  */
@@ -55,7 +54,7 @@ Effect's own doc skill at the tag (`.agents/skills/jsdocs/declarations.md`, `cat
 and each one is visible in the installed source:
 
 - **The module block comes first, above the imports.** Prose about the whole module, then
-  `@stability` and `@since`, no `@category` (`node_modules/effect/src/Deferred.ts:1-10`).
+  `@since`, no `@category` (`node_modules/effect/src/Deferred.ts:1-10`).
   When a file's first statement is not an import (an `export { a }` list, a `const`), one block
   above it is that statement's own, as Effect's checker reads it, so such a file puts two blocks
   there and the first is the module's (`oxlint-plugins/jsdocs.ts:29-35`).
@@ -70,18 +69,19 @@ and each one is visible in the installed source:
   a title unique in the block (`node_modules/effect/src/Deferred.ts:160`). A runnable fence says
   `ts import.meta.vitest` and asserts with `// =>`. An example is kept only when the signature does
   not already say it.
-- **Tags close the block, in this order:** `@deprecated`, `@default`, `@see`, `@stability`,
+- **Tags close the block, in this order:** `@deprecated`, `@default`, `@see`,
   `@category`, `@since`. `@see {@link name}` only for a real neighbour API, with a reason
   (`node_modules/effect/src/Deferred.ts:224-229`).
-- **`@stability` is `stable`, `unstable` or `experimental`.** `unstable` may break in a minor
-  release, `experimental` in a patch. An export that exposes a third-party type is `unstable`.
+- **There is no `@stability` tag here.** Effect's own checker tags it, but the Effect language
+  service reads `@stability unstable` as a use of an unstable API, so `fabrika/no-stability-tag`
+  deletes it.
 - **`@category` is a lowercase plural or gerund** reused from nearby: `constructors`, `models`,
   `guards`, `getters`, `services`, `layers`, `errors`, `error handling`, `combinators`
   (`node_modules/effect/src/Deferred.ts:57`, `:74`, `:175`).
 - **Exactly one blank line** between the description, each section, each example and the tag group.
 - **Internal code gets `/** @internal */` and no public doc.** It lives in `src/internal/`
   (`node_modules/effect/src/internal/core.ts:18`), and the checker skips it.
-- **A barrel re-export gets a tag-only block:** `@stability` and `@since` above
+- **A barrel re-export gets a tag-only block:** `@since` above
   `export * as Duration from "./Duration.ts"` (`node_modules/effect/src/index.ts:190-195`).
 - **A member's doc is optional.** When present it takes `@since` and `@default`, never
   `@category`.
@@ -95,7 +95,6 @@ and each one is visible in the installed source:
   /**
    * Schema for ...
    *
-   * @stability unstable
    * @category schemas
    */
   export const Sent = Schema.Struct({ /* ... */ });

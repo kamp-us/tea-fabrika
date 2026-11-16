@@ -4,8 +4,10 @@
 // commands to Node's real one (`real.spawn`), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Effect from "effect/Effect";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
