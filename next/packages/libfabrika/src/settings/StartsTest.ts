@@ -1,6 +1,6 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { type Config, DateTime, Effect, Exit, Option, Predicate, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -245,7 +245,7 @@ export const exclude = (output: unknown, secret: string) => {
   const forms = [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
   const seen = new WeakSet<object>();
   const visit = (value: unknown): void => {
-    if (typeof value === "string") {
+    if (Predicate.isString(value)) {
       for (const form of forms) {
         // A walk visits every string of every output after each move. One assertion per string
         // took two thirds of an entry flow law's time, so only a string that holds the form
@@ -254,7 +254,7 @@ export const exclude = (output: unknown, secret: string) => {
           expect(value).not.toContain(form);
         }
       }
-    } else if (typeof value === "object" && value !== null && !seen.has(value)) {
+    } else if (Predicate.isObjectOrArray(value) && !seen.has(value)) {
       seen.add(value);
 
       if (value instanceof ArrayBuffer) {

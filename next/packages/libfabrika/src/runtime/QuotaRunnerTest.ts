@@ -1,7 +1,7 @@
 // P34c, next/. Node and live-object fixtures supply real runners and real stores to these laws.
 // The fixture may supply transport and an archive double. It must not implement quota decisions.
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { Appended } from "../coordination/index.ts";
@@ -299,7 +299,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                   e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
               ),
             ).toBe(true);
-            expect(entries.some((e) => typeof e.stream === "string" && e.stream.endsWith("/dead"))).toBe(true);
+            expect(entries.some((e) => Predicate.isString(e.stream) && e.stream.endsWith("/dead"))).toBe(true);
             expect(yield* w.checkpoint(name)).not.toBeNull();
             expect(yield* w.input("beta:1", "other", { type: "inc" })).toHaveProperty("_tag", "placed");
             yield* w.drain("beta:1");

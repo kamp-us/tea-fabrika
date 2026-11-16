@@ -133,7 +133,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           const keys = refused.cause.reasons.flatMap((reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
                 )
               : [],
           );
@@ -156,7 +156,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 it("L11: every declared numeric setting refuses zero, negatives and fractions at its own path", () => {
   fc.assert(
     fc.property(invalid, fc.nat(), (bad, pick) => {
-      const declarations = Settings.all.declarations.filter((d) => typeof d.default === "number");
+      const declarations = Settings.all.declarations.filter((d) => Predicate.isNumber(d.default));
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = declaration.path.split(".") as [string, string];
@@ -171,7 +171,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
           const paths = refused.cause.reasons.flatMap((reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
                 )
               : [],
           );
