@@ -43,6 +43,9 @@ const files = fc.uniqueArray(
   { minLength: 1, maxLength: 3, selector: (f) => f.name },
 );
 
+/** A file outside the diff that a row's record names: none, one on the package's `it`, or one on another. */
+const outsides = fc.constantFrom<"none" | "ours" | "other">("none", "ours", "other");
+
 const importOf = (ours: boolean) =>
   ours ? 'import { it } from "@kampus/vitest";' : 'import { it } from "@effect/vitest";';
 
@@ -80,9 +83,10 @@ const named = (r: Refusal) =>
 
 // Plant: compare a row's plant to the law's by prefix, so a record of a longer plant counts.
 // Plant: refuse a record whose file is absent from head as unclaimed.
+// Plant: skip a record whose file the pull request does not change.
 it("property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none", () => {
   fc.assert(
-    fc.property(files, fc.boolean(), fc.boolean(), (generated, ghost, gone) => {
+    fc.property(files, fc.boolean(), fc.boolean(), outsides, (generated, ghost, gone, outside) => {
       const row = "field/runs/2026-11-16-a-row.json";
       const base: LawFile[] = [];
       const head: LawFile[] = [];
@@ -156,7 +160,24 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
         });
       }
 
-      const outcome = check({ base, head }, rows);
+      // A record of a law in a file the pull request leaves alone, present at head: on the package's
+      // `it` no changed law names it, so it is unclaimed; on another `it` it is not read.
+      const untouched: LawFile[] = [];
+
+      if (outside !== "none") {
+        const file = "next/packages/libfabrika/src/Untouched.test.ts";
+        const kept = sources(outside === "ours", [
+          { move: "untouched", label: null, plant: null, record: "none", n: 0 },
+        ]);
+        untouched.push(lawsOf(file, kept.head));
+        rows.push({ row, file, law: titleOf(0), plant: PLANTS[0], result: "red" });
+
+        if (outside === "ours") {
+          expected.push(`unclaimed ${file} ${titleOf(0)}`);
+        }
+      }
+
+      const outcome = check({ base, head, untouched }, rows);
       expect(outcome.refusals.map(named).toSorted()).toEqual(expected.filter((e) => e !== "").toSorted());
       expect(outcome.notices).toEqual(notices);
     }),
@@ -180,6 +201,7 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
           ],
           true,
           true,
+          "ours",
         ],
       ],
     },
@@ -188,7 +210,7 @@ it("property: the check's refusals equal a model's: no plant, not recorded, gree
   // alone reaches all four); this pins the empty one.
   const quiet = sources(true, [{ move: "moved", label: "pinned", plant: PLANTS[0], record: "none", n: 1 }]);
   const file = "next/a.test.ts";
-  expect(check({ base: [lawsOf(file, quiet.base)], head: [lawsOf(file, quiet.head)] }, [])).toEqual({
+  expect(check({ base: [lawsOf(file, quiet.base)], head: [lawsOf(file, quiet.head)], untouched: [] }, [])).toEqual({
     refusals: [],
     notices: [],
   });
@@ -214,7 +236,7 @@ it("property: a file still on @effect/vitest or vitest gets one notice and no re
           const laws = Array.from({ length: count }, (_, i) => `it("${titleOf(i)}", ${bodyOf(i)});`);
           return lawsOf(`next/a/F${at}.test.ts`, [line, ...laws].join("\n"));
         });
-        const outcome = check({ base: [], head }, []);
+        const outcome = check({ base: [], head, untouched: [] }, []);
         const ours = picked.filter((at) => (imports[at] ?? imports[0])[1]);
         expect(outcome.notices).toEqual(
           picked.filter((at) => !(imports[at] ?? imports[0])[1]).map((at) => `next/a/F${at}.test.ts`),
@@ -259,7 +281,7 @@ it("property: a law whose body changes only in formatting or comments is no chan
         const after = lawsOf("next/a.test.ts", `import { it } from "@kampus/vitest";\n// moved\n\n${laid}`);
         expect(after.laws).toHaveLength(1);
         expect(after.laws[0]?.body === before.laws[0]?.body).toBe(edit === null);
-        const outcome = check({ base: [before], head: [after] }, []);
+        const outcome = check({ base: [before], head: [after], untouched: [] }, []);
         expect(outcome.refusals.map(named)).toEqual(edit === null ? [] : ["no_plant next/a.test.ts a law"]);
       },
     ),
@@ -349,6 +371,45 @@ it("scenario: a law file moved with git mv keeps its laws, and its unchanged bod
     const inputs = readInputs(base, head, "push", git);
     expect(inputs.head.map((f) => [f.file, f.laws.length])).toEqual([[moved, 3]]);
     expect(check(inputs, inputs.rows)).toEqual({ refusals: [], notices: [] });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// scenario: one history through git, since what is read at head outside the diff is git's answer: a
+// row's record of a file the pull request leaves alone is read there, and its `it` decides it.
+// Plant: read no record's file outside the diff (readInputs gives untouched: []).
+it("scenario: a row's record of a law file the pull request does not change is read at head: on the package's it it is unclaimed, on another it or gone from head it is not read", () => {
+  const dir = mkdtempSync(join(tmpdir(), "plant-check-"));
+
+  try {
+    const git = gitIn(dir);
+    const write = (path: string, text: string) => {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    };
+    const law = (ours: boolean) => `${importOf(ours)}\nit("${titleOf(0)}", ${bodyOf(0)}, { plant: "${PLANTS[0]}" });\n`;
+    git(["init", "-q", "-b", "main"]);
+    write("next/a/Untouched.test.ts", law(true));
+    write("next/a/Other.test.ts", law(false));
+    git(["add", "."]);
+    git(["commit", "-q", "-m", "base"]);
+    const base = git(["rev-parse", "HEAD"]).stdout.trim();
+    const plants = ["next/a/Untouched.test.ts", "next/a/Other.test.ts", "next/a/Gone.test.ts"].map((file) => ({
+      file,
+      law: titleOf(0),
+      plant: PLANTS[0],
+      result: "red",
+    }));
+    write("field/runs/2026-11-16-a-row.json", JSON.stringify({ plants }));
+    git(["add", "."]);
+    git(["commit", "-q", "-m", "row"]);
+    const head = git(["rev-parse", "HEAD"]).stdout.trim();
+    const inputs = readInputs(base, head, "push", git);
+    expect(inputs.head).toEqual([]);
+    expect(check(inputs, inputs.rows).refusals.map(named)).toEqual([
+      `unclaimed next/a/Untouched.test.ts ${titleOf(0)}`,
+    ]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

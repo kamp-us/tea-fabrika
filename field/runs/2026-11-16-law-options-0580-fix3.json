@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-fix3",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:24:02-08:00",
+  "ended": "2026-11-16T00:35:03-08:00",
+  "parent": "2026-11-16-law-options-0580-review3",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The last fix round (0564, 0177) for slice 1 of docs/plan/quests/law-options-0580-PLAN.md, tooling, for the one fault the second recheck named: .github/ci/plant-check.ts held a row's record only when its file was in the head files the pull request changes, so a record for a law in a file on the package's it that the head has and the pull request leaves alone was skipped, where the plan refuses it as unclaimed. readInputs now also reads, at head, each record's law file outside the diff (git ls-tree says whether the head has it, git show gives its source), and returns them as untouched. check() takes untouched beside base and head and holds a record against every head file on the package's it, changed or not; a record of a file gone from head or on another it is still not read. The model law generates a fourth input, a record for an unchanged head file on the package's it (expects unclaimed), on another it (expects none), or none; its example holds the first. A new git scenario holds readInputs: one history with an unchanged file on the package's it, one on @effect/vitest, and a record of a file the head never had; only the first is unclaimed.",
+  "plants": [
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "skip a record whose file the pull request does not change",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "scenario: a row's record of a law file the pull request does not change is read at head: on the package's it it is unclaimed, on another it or gone from head it is not read",
+      "plant": "skip a record whose file the pull request does not change",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "scenario: a row's record of a law file the pull request does not change is read at head: on the package's it it is unclaimed, on another it or gone from head it is not read",
+      "plant": "read no record's file outside the diff (readInputs gives untouched: [])",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Plant records written by hand: plant-check.test.ts is on vitest's it, so plant.ts cannot read a plant option there. Each plant ran once on a saved copy of plant-check.ts, restored by copy and checked with cmp. Red reasons: under the first plant the model law's counterexample was an unchanged file on the package's it with a record (expected one unclaimed, got none), and the new scenario likewise; under the second only the new scenario failed, the same way, while the model law, which builds its own inputs, stayed green. A scratch script outside the repo called check() on a changed file on the package's it plus a record for next/a/Untouched.test.ts, present at head on the package's it and outside the diff: [\"unclaimed\"]; the same with a record of a file absent from head: []. Ran on Node 26.13.0: .github/ci/plant-check.test.ts (6 passed); plant-check.ts with BASE origin/main 5c94f12f4, HEAD 949487d90, EVENT pull_request (exit 0, notices only), run again at the new head; pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed); the list ratchet (exit 0); pnpm typecheck (exit 0), run twice, since a last guard (only a record's law file, as changes.mjs's lawFile names it, is read outside the diff) went in after the first.",
+  "step": "tests"
+}

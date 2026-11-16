@@ -11,9 +11,9 @@
 // comment to an option or a label from the title to an option changes no law. A file moved with
 // `git mv` is paired with its old self by git's rename detection. Only files whose `it` comes from
 // the package are held; a file still on `@effect/vitest` cannot take the option, so its changed laws
-// get one notice and no refusal, until the sweep moves it. A row's record is unclaimed only when its
-// file is a head law file on the package's `it` and no changed law there names it; a record of a file
-// the head no longer has is not read, since run rows are never edited after a rename.
+// get one notice and no refusal, until the sweep moves it. A row's record is unclaimed when its file
+// is on the package's `it` at head, changed or not, and no changed law there names it; a record of a
+// file the head no longer has is not read, since run rows are never edited after a rename.
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Effect, Exit, Option, Predicate, Schema } from "effect";
@@ -232,9 +232,16 @@ const changedLaws = (base: readonly LawFile[], head: LawFile): readonly Law[] =>
   });
 };
 
-/** What the check says of a pull request: its files on both sides, the base ones under their head paths. */
+/**
+ * What the check says of a pull request: its changed files on both sides, the base ones under their
+ * head paths, and `untouched`, the head files outside the diff that an added row's record names.
+ */
 export const check = (
-  input: { readonly base: readonly LawFile[]; readonly head: readonly LawFile[] },
+  input: {
+    readonly base: readonly LawFile[];
+    readonly head: readonly LawFile[];
+    readonly untouched: readonly LawFile[];
+  },
   rows: readonly Recorded[],
 ): Outcome => {
   const refusals: Refusal[] = [];
@@ -266,9 +273,10 @@ export const check = (
     }
   }
 
-  // A record is held only against a head law file on the package's `it`: a file still on another
-  // `it`, or one the head no longer has (renamed or deleted after the row was written), is not read.
-  const owned = new Set(input.head.filter((file) => file.ours).map((file) => file.file));
+  // A record is held against every head file on the package's `it`, changed or not: a record of an
+  // untouched file is unclaimed, since no changed law is there. A file still on another `it`, or one
+  // the head no longer has (renamed or deleted after the row was written), is not read.
+  const owned = new Set([...input.head, ...input.untouched].filter((file) => file.ours).map((file) => file.file));
 
   for (const { row, ...plant } of rows) {
     if (plant.file === undefined || !owned.has(plant.file)) {
@@ -329,7 +337,8 @@ const decodePlants = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Str
 
 /**
  * The check's inputs from git: the changed law files on both sides, a renamed one's base read at its
- * old path, and the plant records of the run rows the change adds. A pull request starts at its merge
+ * old path, the plant records of the run rows the change adds, and each record's file outside the
+ * diff that the head still has. A pull request starts at its merge
  * base, as field-check.ts reads it. Unreadable history is an error, never an empty input.
  */
 export const readInputs = (base: string, head: string, event: string, run: Runner = git) => {
@@ -371,15 +380,27 @@ export const readInputs = (base: string, head: string, event: string, run: Runne
   const live = changes.filter((c) => c.status !== "D");
   const laws = live.filter((c) => lawFile(c.path));
   const rows = live.filter((c) => c.status === "A" && /^field\/runs\/[^/]+\.json$/.test(c.path));
+  const recorded = rows.flatMap((c) =>
+    Option.match(decodePlants(read(["show", `${head}:${c.path}`])), {
+      onNone: (): Recorded[] => [],
+      onSome: ({ plants }) => plants.map((plant) => ({ ...plant, row: c.path })),
+    }),
+  );
+  // A record's law file outside the diff is read at head when the head has it, so its `it` is known.
+  const outside = new Set(
+    recorded.flatMap((r) =>
+      r.file === undefined || !lawFile(r.file) || laws.some((c) => c.path === r.file) ? [] : [r.file],
+    ),
+  );
   return {
     base: laws.flatMap((c) => (c.status === "A" ? [] : [lawsOf(c.path, read(["show", `${from}:${c.old ?? c.path}`]))])),
     head: laws.map((c) => lawsOf(c.path, read(["show", `${head}:${c.path}`]))),
-    rows: rows.flatMap((c) =>
-      Option.match(decodePlants(read(["show", `${head}:${c.path}`])), {
-        onNone: (): Recorded[] => [],
-        onSome: ({ plants }) => plants.map((plant) => ({ ...plant, row: c.path })),
-      }),
+    untouched: [...outside].flatMap((file) =>
+      read(["ls-tree", "--name-only", head, "--", file]).split("\n").includes(file)
+        ? [lawsOf(file, read(["show", `${head}:${file}`]))]
+        : [],
     ),
+    rows: recorded,
   };
 };
 
