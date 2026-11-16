@@ -1,11 +1,12 @@
 /**
  * The client hello: the text a client signs, version negotiation, the origin check and the full
  * check of a hello message.
- *
- * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
 import type { Admission } from "./Wire.ts";
@@ -15,7 +16,6 @@ import { Hello, Who } from "./Wire.ts";
  * Builds the text a client signs in its hello: `fabrika-hello`, the url, the tab and the nonce,
  * one per line, with no trailing newline.
  *
- * @stability unstable
  * @category constructors
  */
 export const helloText = (a: { readonly url: string; readonly tab: string; readonly nonce: string }): string =>
@@ -24,7 +24,6 @@ export const helloText = (a: { readonly url: string; readonly tab: string; reado
 /**
  * Picks the highest protocol version that both sides list, or `null` when they share none.
  *
- * @stability unstable
  * @category combinators
  */
 export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
@@ -46,7 +45,6 @@ const decodeUrl = Schema.decodeUnknownResult(Schema.URLFromString);
  * slash), and must be listed in `origins`. `forwardedHost` is accepted but this function does not
  * read it.
  *
- * @stability unstable
  * @category guards
  */
 export const sameOrigin = (a: {
@@ -121,7 +119,6 @@ const pingMs = (text: string, min: number, max: number): number => {
  * milliseconds and held between `ping.min` and `ping.max`. Text that does not read as a number
  * with a unit of `ms`, `s`, `m` or `h` gives `ping.min`.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkHello = Effect.fn("transport.checkHello")(function* <E, R>(a: {

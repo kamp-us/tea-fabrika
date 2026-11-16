@@ -20,7 +20,11 @@
 // toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";

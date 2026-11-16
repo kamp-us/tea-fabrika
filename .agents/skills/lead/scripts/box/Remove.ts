@@ -44,9 +44,9 @@ class Unsupported extends Schema.TaggedError<Unsupported>()("Unsupported", { rea
 /** The disk could not be read or changed as asked. */
 class Unreadable extends Schema.TaggedError<Unreadable>()("Unreadable", { cause: Schema.optional(Schema.Defect()) }) {}
 
-const keep = (reason: string) => new Keep({ reason, code: 1 });
+const keep = (reason: string) => Keep.make({ reason, code: 1 });
 
-const unsupported = (reason: string) => new Unsupported({ reason });
+const unsupported = (reason: string) => Unsupported.make({ reason });
 
 // Paths, as pathlib reads an absolute one.
 const normal = (path: string) =>
@@ -204,7 +204,7 @@ const disk = (fs: FileSystem.FileSystem) => {
     );
 
   const failed = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.mapError(effect, (cause) => new Unreadable({ cause }));
+    Effect.mapError(effect, (cause) => Unreadable.make({ cause }));
 
   return {
     isDir,
@@ -292,7 +292,7 @@ const protectMain = Effect.fnUntraced(function* (d: Disk, main: string, roots: R
       }
 
       if (hops > HOPS) {
-        return yield* new Unreadable({});
+        return yield* Unreadable.make({});
       }
 
       const parent = yield* follow(above(path), hops + 1);

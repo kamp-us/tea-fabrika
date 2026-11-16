@@ -50,7 +50,7 @@ const setup = Effect.gen(function* () {
     : PullRequestsGh.repoFromUrl((yield* run("git", ["-C", dir, "remote", "get-url", "origin"], dir)).out);
 
   if (repo === null) {
-    return yield* new Refused({ reason: "no GH_REPO, and an origin that is not a GitHub repo" });
+    return yield* Refused.make({ reason: "no GH_REPO, and an origin that is not a GitHub repo" });
   }
 
   const every = Duration.seconds(yield* SECONDS);

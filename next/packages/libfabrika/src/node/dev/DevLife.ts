@@ -1,11 +1,9 @@
 /**
  * The local runtime's life as one tea machine. The driver in `dev.ts` sends it what the runtime
  * reports and reads the state back; nothing here does input or output.
- *
- * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 // Zero is how the local runtime says it has no control socket, so a known port is never zero.
 const Port = Schema.Int.check(Schema.makeFilter((port: number) => port !== 0));
@@ -43,7 +41,6 @@ const Signal = Schema.Literals(["SIGTERM", "SIGKILL"]);
  * The state holds only this, and a start that reports anything else is refused, so no signal can
  * reach a group.
  *
- * @stability unstable
  * @category schemas
  */
 export const Pid = Schema.Int.check(Schema.isGreaterThan(0));
@@ -63,7 +60,6 @@ const isPid = Schema.is(Pid);
  * listener is heard again; in `replacing` it can only be pending. `replacing` also holds the bytes
  * the memory sampler saw, when it saw them, and the last signal sent.
  *
- * @stability unstable
  * @category schemas
  */
 export const DevState = Schema.TaggedUnion({
@@ -139,7 +135,6 @@ const heard = (port: number | null): Listener => {
 /**
  * Returns the control socket's port, or null when none is known. The port is kept after an exit.
  *
- * @stability unstable
  * @category getters
  */
 export const address = (s: DevState): number | null => {
@@ -157,7 +152,6 @@ export const address = (s: DevState): number | null => {
 /**
  * Returns the pid of the live process the memory sampler may read, or null when none runs.
  *
- * @stability unstable
  * @category getters
  */
 export const target = (s: DevState): number | null => {
@@ -183,7 +177,6 @@ const replacement = (s: DevState): Replacement => {
 /**
  * Returns the id of the replacement still waiting for its listener, or null when none waits.
  *
- * @stability unstable
  * @category getters
  */
 export const pending = (s: DevState): string | null => {
@@ -202,7 +195,6 @@ export const pending = (s: DevState): string | null => {
  * replaced, or a replacement that started before its listener, keeps its old port in `address`, and
  * that port is never dialed.
  *
- * @stability unstable
  * @category getters
  */
 export const reachable = (s: DevState): number | null =>
@@ -212,7 +204,6 @@ export const reachable = (s: DevState): number | null =>
  * Returns true while a replacement is pending and may still come up: from a replace or an exit
  * until its listener, a brake or a stop.
  *
- * @stability unstable
  * @category getters
  */
 export const recovering = (s: DevState): boolean => pending(s) !== null && s._tag !== "stopping";
@@ -221,7 +212,6 @@ export const recovering = (s: DevState): boolean => pending(s) !== null && s._ta
  * Returns the latest start of this runtime, the one its exit, restart, brake and stop events name.
  * Null before the first start and after the stop.
  *
- * @stability unstable
  * @category getters
  */
 export const latest = (s: DevState): string | null => {
@@ -255,7 +245,6 @@ const active = (s: DevState) => {
  * running process whose pid is the one its Msg names, and `killed` only moves a replace of that pid
  * from SIGTERM to SIGKILL; the replaced process leaves `replacing` by its exit, like any other.
  *
- * @stability unstable
  * @category machines
  */
 export const devLife = Machine.make({

@@ -30,7 +30,7 @@
 // decide the law, and so is a run whose strips and gaps alone overflow a container (an open point the
 // amendment does not settle; the law counts them).
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { drawn, fold, STRIP } from "./Fold.ts";
 import * as Layout from "./Layout.ts";

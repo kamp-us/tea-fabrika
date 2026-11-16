@@ -1,8 +1,6 @@
 /**
  * Signed, single-use challenge nonces for the gateway. SYN cookies keep an unproved connection out
  * of storage (RFC 4987, section 3.6).
- *
- * @stability unstable
  */
 import { Effect, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -22,7 +20,6 @@ import type { gatewayStore } from "./GatewayStore.ts";
  * `GatewayError` with reason `Storage` when `cap` live receipts are held. A WebCrypto failure is
  * reason `Crypto`.
  *
- * @stability unstable
  * @category constructors
  */
 export const gatewayNonce = Effect.fn("gateway.nonce")(function* (

@@ -7,7 +7,13 @@
 // `SessionManagerTest.suite(open)`: the module that owns the driver runs it, so this file names no
 // driver and no ledger file (0043 rule 11, 0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Brand, Effect, Option, Result, Schema, type Scope } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Brand from "effect/Brand";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
@@ -145,7 +151,7 @@ const setup = ({
     SessionManager.layer(
       sql,
       (key: string) =>
-        live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(new NotGranted({})),
+        live() ? Effect.succeed(writer(key === "agent" ? "agent" : "person")) : Effect.fail(NotGranted.make({})),
       policy,
     );
 

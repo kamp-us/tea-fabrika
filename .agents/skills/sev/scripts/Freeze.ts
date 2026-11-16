@@ -114,7 +114,7 @@ const rest = Effect.fn("Freeze.rest")(function* (home: string, every: Duration.D
 /** Cancels every run the verdict cancels, a beat at a time, until the sev0 closes. */
 export const loop = Effect.fn("Freeze.loop")(function* (home: string, every: Duration.Duration, pid: number) {
   if ((yield* allowed(home)) === null) {
-    return yield* new Level.Refused({ reason: "no sev0 is open" });
+    return yield* Level.Refused.make({ reason: "no sev0 is open" });
   }
 
   yield* note(home, Level.Entry.cases.looping.make({ at: yield* Level.now, pid }));

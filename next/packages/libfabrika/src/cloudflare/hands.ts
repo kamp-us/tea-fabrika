@@ -1,7 +1,5 @@
 /**
  * The Process side of a hands Cmd: `HandsTasks` over the Project's `hands` RPC.
- *
- * @stability unstable
  */
 import { Effect, Layer, Schema } from "effect";
 import { HandsTasks, HandsTasksError, Reply } from "../runtime/HandsTasks.ts";
@@ -22,7 +20,6 @@ const unavailable = (cause: unknown) => new HandsTasksError({ reason: "unavailab
  * that does not decode, is `unavailable`: it leaves the Cmd dispatched for its retry, and is never
  * an answer the program reads.
  *
- * @stability unstable
  * @category layers
  */
 export const handsLayer = (env: Env, project: string): Layer.Layer<HandsTasks> =>

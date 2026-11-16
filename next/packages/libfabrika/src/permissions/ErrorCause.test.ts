@@ -9,7 +9,9 @@
 // encoded Error stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Exit, Match, Schema } from "effect";
+import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
 
@@ -58,7 +60,7 @@ const encoded = fc
   })
   .map(({ reason, form, json, error }) => ({
     form,
-    value: { ...Schema.encodeUnknownSync(before)(new SendersError({ reason })), ...causeKey(form, json, error) },
+    value: { ...Schema.encodeUnknownSync(before)(SendersError.make({ reason })), ...causeKey(form, json, error) },
   }));
 
 /**

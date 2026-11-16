@@ -2,7 +2,8 @@
 // imports this file, and `mint` is the one way to make a proof. It is not a Schema, so nothing
 // decodes one. What a proof needs again, the key it is provided under and its own check, is kept
 // in a registry no other file can reach, so it never widens the proof's type.
-import { type Context, Option } from "effect";
+import type * as Context from "effect/Context";
+import * as Option from "effect/Option";
 import type { Tuples } from "../Relation.ts";
 import type { Sender } from "../Senders.ts";
 

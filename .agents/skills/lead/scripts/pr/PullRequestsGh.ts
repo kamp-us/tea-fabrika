@@ -4,7 +4,7 @@
 import { Effect, Layer, Option, Schema } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "./command.ts";
-import { type Detail, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
+import { type Detail, Patch, type PullRequest, PullRequests, PullRequestsError, type Text } from "./PullRequests.ts";
 
 /** The most pull requests one `all` read takes; a repo with this many fails it, never cuts it. */
 export const LIMIT = 5000;
@@ -38,6 +38,9 @@ const Viewed = Schema.fromJsonString(
 );
 
 const VIEW_FIELDS = `${FIELDS},baseRefName,title,body,mergeCommit`;
+
+/** One line of the files list as `patches` asks jq to print it. */
+const PatchRow = Schema.fromJsonString(Patch);
 
 /**
  * The merge call that adds a pull request to the queue: a squash, pinned to the head that was
@@ -92,7 +95,7 @@ export const layer = (
           const ran = yield* run("gh", args, cwd);
 
           if (ran.code !== 0) {
-            return yield* new PullRequestsError({
+            return yield* PullRequestsError.make({
               reason: `gh ${args.slice(0, 2).join(" ")} exited ${ran.code}: ${lastLine(ran)}`,
             });
           }
@@ -101,7 +104,7 @@ export const layer = (
         },
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new PullRequestsError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(PullRequestsError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 
@@ -109,7 +112,7 @@ export const layer = (
         const out = yield* gh(["pr", "list", "-R", repo, "--json", FIELDS, ...args]);
 
         const rows = yield* Schema.decodeUnknownEffect(Listed)(out.trim() || "[]").pipe(
-          Effect.mapError(() => new PullRequestsError({ reason: "gh pr list answered a shape we do not read" })),
+          Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
         );
 
         return rows.map((r): PullRequest => ({
@@ -128,7 +131,7 @@ export const layer = (
 
       const all = Effect.flatMap(list(["--state", "all", "--limit", String(LIMIT)]), (prs) =>
         prs.length >= LIMIT
-          ? Effect.fail(new PullRequestsError({ reason: `${LIMIT} or more pull requests: one read cannot hold all` }))
+          ? Effect.fail(PullRequestsError.make({ reason: `${LIMIT} or more pull requests: one read cannot hold all` }))
           : Effect.succeed(prs),
       );
 
@@ -138,7 +141,7 @@ export const layer = (
         const number = Number(/\/pull\/(\d+)/.exec(out)?.[1]);
 
         if (!Number.isInteger(number)) {
-          return yield* new PullRequestsError({ reason: `gh pr create named no pull request: ${out.trim()}` });
+          return yield* PullRequestsError.make({ reason: `gh pr create named no pull request: ${out.trim()}` });
         }
 
         return number;
@@ -164,7 +167,7 @@ export const layer = (
         const out = yield* gh(["pr", "view", String(number), "-R", repo, "--json", VIEW_FIELDS]);
 
         const v = yield* Schema.decodeUnknownEffect(Viewed)(out).pipe(
-          Effect.mapError(() => new PullRequestsError({ reason: "gh pr view answered a shape we do not read" })),
+          Effect.mapError(() => PullRequestsError.make({ reason: "gh pr view answered a shape we do not read" })),
         );
 
         return {
@@ -189,11 +192,33 @@ export const layer = (
         return out.split("\n").filter((path) => path !== "");
       });
 
+      // The same paged list, one JSON line per file. GitHub leaves `patch` out for a file it will not show.
+      const patches = Effect.fn("PullRequestsGh.patches")(function* (number: number) {
+        const out = yield* gh([
+          "api",
+          "--paginate",
+          `repos/${repo}/pulls/${number}/files`,
+          "--jq",
+          ".[] | {path: .filename, patch: (.patch // null)}",
+        ]);
+
+        return yield* Effect.forEach(
+          out.split("\n").filter((row) => row !== ""),
+          (row) =>
+            Schema.decodeUnknownEffect(PatchRow)(row).pipe(
+              Effect.mapError(() =>
+                PullRequestsError.make({ reason: "gh api pulls/files answered a shape we do not read" }),
+              ),
+            ),
+          { concurrency: "unbounded" },
+        );
+      });
+
       const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {
         const id = (yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"])).trim();
 
         if (id === "") {
-          return yield* new PullRequestsError({ reason: `gh pr view named no node id for pull request ${number}` });
+          return yield* PullRequestsError.make({ reason: `gh pr view named no node id for pull request ${number}` });
         }
 
         yield* gh(["api", "graphql", "-f", `query=${ARM}`, "-f", `id=${id}`, "-f", `oid=${oid}`]);
@@ -201,6 +226,6 @@ export const layer = (
 
       const admin = (number: number, oid: string) => Effect.asVoid(gh(adminArgs(repo, number, oid)));
 
-      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, arm, admin });
+      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, patches, arm, admin });
     }),
   );

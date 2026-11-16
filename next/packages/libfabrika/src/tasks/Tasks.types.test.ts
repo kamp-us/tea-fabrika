@@ -7,7 +7,10 @@
 // the `target:` stream's last rev, in the tasks module's own types and error; `targetStream` names
 // that stream from a key. Plant (after build): give `forTarget` a `LedgerError` in its error channel.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect, Layer, Stream } from "effect";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import type * as Stream from "effect/Stream";
 import type { ProcessId } from "../ProcessId.ts";
 import type { Rev } from "../Rev.ts";
 import type { Collection, Executor, Task, Recorded, Request, Result } from "./Task.ts";

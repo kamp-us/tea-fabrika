@@ -1,6 +1,10 @@
 // L3, next/. launchctl print is deliberately decoded narrowly; unknown text never means absent.
 import { expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Redacted, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 

@@ -12,8 +12,13 @@
 // A law about the whole file (a folder nobody listed, a file name) may report on any line, so those
 // cases ask only whether the rule fired. A law about one statement names its line. Line 1 of every
 // planted file is a comment, so no statement shares a line with a whole-file report.
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+import * as fc from "fast-check";
+import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { modules as modulesRule } from "./modules.ts";
 
 const SRC = "next/packages/libfabrika/src";
 
@@ -477,4 +482,65 @@ describe("runtime/, access/ and gateway/ never import ledger/", async () => {
       expect(linted(restricted, path), path).toEqual([7, 8]);
     }
   });
+});
+
+// L5 of the trusted-rules swap (0573): `fabrika/one-id-module` is gone, and `modules` (rule 2) holds its
+// one path, since `data` is no folder the config lists. The retired rule's generated bodies run in
+// process through RuleTester with the config's own options, and the first run's four bodies, one of
+// each kind, then go through one oxlint run each with the repo's config.
+// Plant: add `"data"` to the `folders` list of the `modules` block, and the retired path is taken.
+it("refuses the retired Id module at data/id.ts for generated contents, and takes Id.ts and transport/id.ts", async () => {
+  const root = join(import.meta.dirname, "..");
+  const retired = `${SRC}/data/id.ts`;
+  const taken = [`${SRC}/Id.ts`, `${SRC}/transport/id.ts`];
+
+  const printed = spawnSync(join(root, "node_modules", ".bin", "oxlint"), ["--print-config"], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 2 ** 28,
+  });
+
+  const config: { overrides: ReadonlyArray<{ rules: Record<string, unknown> }> } = JSON.parse(printed.stdout);
+  // `--print-config` prints a setting as `[level, options]`.
+  const setting = config.overrides.map(({ rules }) => rules["fabrika/modules"]).findLast(Array.isArray);
+  const given: unknown = setting?.[1];
+  expect(Array.isArray(given), "the config sets fabrika/modules with its lists").toBe(true);
+  const options = Array.isArray(given) ? given : [];
+  // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
+  RuleTester.describe = (_name, fn) => fn();
+  RuleTester.it = (_name, fn) => fn();
+  const tester = new RuleTester({ cwd: root });
+  let kinds: ReadonlyArray<string> = [];
+  fc.assert(
+    fc.property(fc.string(), fc.integer(), (text, count) => {
+      const bodies = [
+        "",
+        `export const value = ${JSON.stringify(text)};`,
+        `export const value = ${count};`,
+        'export * from "../Id.ts";',
+      ];
+
+      if (kinds.length === 0) {
+        kinds = bodies;
+      }
+
+      for (const code of bodies) {
+        tester.run("modules", modulesRule, {
+          valid: taken.map((filename) => ({ code, filename, options })),
+          invalid: [{ code, filename: retired, options, errors: [{ line: 1, message: /\S/ }] }],
+        });
+      }
+    }),
+    { seed: 119120, numRuns: 10 },
+  );
+  expect(kinds).toHaveLength(4);
+
+  for (const body of kinds) {
+    const linted = await plant(Object.fromEntries([retired, ...taken].map((path) => [path, body])));
+    expect(linted(modules, retired), body).toEqual([1]);
+
+    for (const path of taken) {
+      expect(linted(modules, path), `${path}: ${body}`).toEqual([]);
+    }
+  }
 });

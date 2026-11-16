@@ -4,8 +4,10 @@
 // join({key, client, gateway, session, at}), leave(client, session), online(key).
 // Join values are already checked by P10/P12; probe timestamps come from the gateway.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Fiber, Tracer } from "effect";
-import { TestClock } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as TestClock from "effect/testing/TestClock";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { A, B, W, storage } from "../processes/Process.test-support.ts";
@@ -36,7 +38,7 @@ const setup = (now: number) => {
           asked.push({ gateway, session });
 
           return failed.has(session)
-            ? Effect.fail(new LedgerError({ reason: "unreachable" }))
+            ? Effect.fail(LedgerError.make({ reason: "unreachable" }))
             : Effect.succeed(pings.get(session) ?? null);
         }),
     });

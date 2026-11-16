@@ -15,7 +15,15 @@
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";

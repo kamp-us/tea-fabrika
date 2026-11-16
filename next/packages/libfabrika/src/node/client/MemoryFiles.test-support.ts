@@ -1,11 +1,15 @@
+import * as ByteSize from "effect/ByteSize";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 // P39 slice 4b, next/: a file system in memory for the node client's merge-line laws (C1 to C3, K1,
 // K2), over Effect's own `FileSystem.layerNoop`. It keeps POSIX's facts the laws lean on: a mode
 // set only when a file is made, `wx` and `link` refuse a name that exists, a hard link shares its
 // file, `rename` replaces, and `stat` reports the type bits with the permission bits, as Node does.
 // Nothing here touches the disk. A call it does not model fails, as `layerNoop` makes it.
-import type { Layer, Scope } from "effect";
-import { Effect, FileSystem, Option, PlatformError } from "effect";
-import { ByteSize } from "effect";
+import type * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as PlatformError from "effect/PlatformError";
+import type * as Scope from "effect/Scope";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
 

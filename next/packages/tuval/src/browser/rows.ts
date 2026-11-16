@@ -1,5 +1,6 @@
 import { ClientRows, ClientRowsError } from "@kampus/libfabrika/transport/ClientRows";
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { errorClass } from "./index.ts";
 
 /** Each row names its tab. Nothing is delivered or removed in this slice. */
@@ -14,13 +15,13 @@ export const browserRows = Layer.succeed(ClientRows, {
               request.onupgradeneeded = () => request.result.createObjectStore("rows", { keyPath: "id" });
               request.onsuccess = () => resume(Effect.succeed(request.result));
               request.onerror = () =>
-                resume(Effect.fail(new ClientRowsError({ op: "open", error: errorClass(request.error) })));
+                resume(Effect.fail(ClientRowsError.make({ op: "open", error: errorClass(request.error) })));
               request.onblocked = () => {
                 request.onsuccess = () => request.result.close();
-                resume(Effect.fail(new ClientRowsError({ op: "open", error: "InvalidStateError" })));
+                resume(Effect.fail(ClientRowsError.make({ op: "open", error: "InvalidStateError" })));
               };
             } catch (cause) {
-              resume(Effect.fail(new ClientRowsError({ op: "open", error: errorClass(cause) })));
+              resume(Effect.fail(ClientRowsError.make({ op: "open", error: errorClass(cause) })));
             }
           }),
           (db) => Effect.sync(() => db.close()),
@@ -32,7 +33,7 @@ export const browserRows = Layer.succeed(ClientRows, {
             tx.objectStore("rows").put(row);
             tx.oncomplete = () => resume(Effect.void);
             tx.onerror = tx.onabort = () =>
-              resume(Effect.fail(new ClientRowsError({ op: "write", error: errorClass(tx.error) })));
+              resume(Effect.fail(ClientRowsError.make({ op: "write", error: errorClass(tx.error) })));
 
             return Effect.sync(() => {
               try {
@@ -42,7 +43,7 @@ export const browserRows = Layer.succeed(ClientRows, {
               }
             });
           } catch (cause) {
-            resume(Effect.fail(new ClientRowsError({ op: "write", error: errorClass(cause) })));
+            resume(Effect.fail(ClientRowsError.make({ op: "write", error: errorClass(cause) })));
           }
         });
       }),

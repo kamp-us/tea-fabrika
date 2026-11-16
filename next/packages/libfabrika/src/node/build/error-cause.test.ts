@@ -5,7 +5,11 @@
 // `css.ts:24`, `:28`, `:32` and `:35`, the four branches of the stylesheet refusal, through both of
 // its callers; `bundle.ts:47`, a Rolldown build that rejects.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";

@@ -1,7 +1,8 @@
 // next/, P17b. Pure laws for the test controller, independent of the not-yet-built hook.
 import { applyCell } from "@demlik/tea";
 import { expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Schema from "effect/Schema";
 import { syncTest } from "../Testing.ts";
 import * as StepFaultTest from "./stepFault.test-support.ts";
 

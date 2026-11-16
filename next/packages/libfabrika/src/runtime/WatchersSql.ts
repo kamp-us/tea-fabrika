@@ -1,8 +1,6 @@
 /**
  * The `Watchers` layer that keeps view membership in the process's own SQL: one row per registered
  * name in the `process_watchers` table, read and written through the watchers machine.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Clock, Effect, Layer, Result, Schema } from "effect";
@@ -56,7 +54,6 @@ const load = (sql: Sql, name: string) => {
  * before the next delivery starts, so no transaction stays open across a delivery. Each span and
  * saved row reads `descriptor.build` when it is written, so it names the code the process runs then.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (

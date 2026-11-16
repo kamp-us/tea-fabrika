@@ -1,7 +1,11 @@
 // P15 slice 1, next/. Runtime's reload suite on scoped node:sqlite stores (0062).
 import { DatabaseSync } from "node:sqlite"; // edge: the runtime store requires a synchronous SQLite handle
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";

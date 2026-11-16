@@ -5,7 +5,11 @@
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Stream from "effect/Stream";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";

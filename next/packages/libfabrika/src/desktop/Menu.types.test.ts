@@ -1,6 +1,8 @@
 // next/, P21 L11. CI compiles the uncalled bad lines; Vitest never proves a type refusal.
 import { expectTypeOf, it } from "@effect/vitest";
-import { type Effect, type Layer, Schema } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import type * as Access from "../access/Access.ts";
 import * as Menu from "./Menu.ts";
 import * as Contract from "./PersonCheck.ts";

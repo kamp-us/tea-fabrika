@@ -160,7 +160,7 @@ const parallel = Effect.fnUntraced(function* (commands: ReadonlyArray<string>) {
     `\nparallel: ${failed.length} of ${ran.length} parts failed in ${seconds(took)}:\n${failed.map(named).join("\n")}`,
   );
 
-  return yield* new Failed({ parts: failed.map((part) => part.command) });
+  return yield* Failed.make({ parts: failed.map((part) => part.command) });
 });
 
 if (import.meta.main) {

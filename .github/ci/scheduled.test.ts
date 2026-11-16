@@ -13,7 +13,9 @@ const options = { seed: 119120, numRuns: 100 };
 
 const result = fc.constantFrom("success", "failure", "cancelled", "skipped", "", undefined);
 
-const jobName = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
+// Any job but `select`, whose result and outputs say which jobs a run skips on purpose (0590): the
+// laws on `skippable` below give it its own shapes.
+const jobName = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/).filter((name) => name !== "select");
 
 const needs = fc.dictionary(
   jobName,
@@ -287,6 +289,85 @@ it("property: when every leg passed or was skipped and every need passed, the ru
     fc.property(allPassed, passed, (given, jobs) => {
       expect(scheduled.verdict({ needs: given, jobs, failed: [], limits: LIMITS })).toBe("green");
       expect(scheduled.causes(jobs, LIMITS)).toEqual([]);
+    }),
+    options,
+  );
+});
+
+// 0590: a branch's proof run starts `select`, then `tests` for the full set or `changed` for a
+// changed set; main's runs skip `select` and run `tests`. `needs` as the report gets it, with the
+// select's outputs, for each shape a run can end in.
+const ended = (select: unknown, tests: string, changed: string) => ({
+  gate: { result: "success", outputs: { start: "true" } },
+  ...(select === undefined ? {} : { select }),
+  tests: { result: tests, outputs: {} },
+  ...(select === undefined ? {} : { changed: { result: changed, outputs: {} } }),
+});
+
+const chose = (scope: string, legs: string) => ({
+  result: "success",
+  outputs: { scope, legs, files: legs === "[]" ? "{}" : '{"1":"a.test.ts"}' },
+});
+
+const SKIPPED = { result: "skipped", outputs: {} };
+
+it("pinned: each way a run with select ends is judged by what select chose, and a zero-file set is green with no leg", () => {
+  // Plants, each run once on scheduled.mjs and restored: `skippable` gives nothing (red: main's run,
+  // a full branch run, a changed run and a zero-file run all read stopped); it lets `tests` skip
+  // whatever select did (red: main with tests skipped reads green); it lets `changed` skip on a
+  // changed set with legs (red: that run reads green).
+  const shapes: [string, ReturnType<typeof ended>, string][] = [
+    ["main: select skipped, every test on tests", ended(SKIPPED, "success", "skipped"), "green"],
+    ["main: select skipped and tests skipped too, so no test ran", ended(SKIPPED, "skipped", "skipped"), "stopped"],
+    ["main: select skipped, a red tests leg", ended(SKIPPED, "failure", "skipped"), "red"],
+    ["branch, a trigger: select said full, tests green", ended(chose("full", "[]"), "success", "skipped"), "green"],
+    ["branch, a trigger: select said full, tests skipped", ended(chose("full", "[]"), "skipped", "skipped"), "stopped"],
+    ["branch: select said changed, its legs green", ended(chose("changed", '["1"]'), "skipped", "success"), "green"],
+    [
+      "branch: select said changed, its legs skipped",
+      ended(chose("changed", '["1"]'), "skipped", "skipped"),
+      "stopped",
+    ],
+    ["branch: select said changed, a red leg", ended(chose("changed", '["1"]'), "skipped", "failure"), "red"],
+    ["branch: select said changed, and tests ran too", ended(chose("changed", '["1"]'), "success", "success"), "green"],
+    ["branch: a changed set of zero files, no leg", ended(chose("changed", "[]"), "skipped", "skipped"), "green"],
+    ["branch: select failed", ended({ result: "failure", outputs: {} }, "skipped", "skipped"), "red"],
+    ["branch: select said nothing", ended({ result: "success", outputs: {} }, "skipped", "skipped"), "stopped"],
+    ["branch: select said another word", ended(chose("some", "[]"), "skipped", "skipped"), "stopped"],
+    ["the shape before 0590: no select, tests green", ended(undefined, "success", ""), "green"],
+    ["the shape before 0590: no select, tests skipped", ended(undefined, "skipped", ""), "stopped"],
+  ];
+
+  for (const [shape, given, expected] of shapes) {
+    expect(scheduled.verdict({ needs: given, jobs: [], failed: [], limits: LIMITS }), shape).toBe(expected);
+  }
+});
+
+it("property: a run is green only when the test job select chose passed, whatever the other jobs did", () => {
+  // The rule at the heart of 0590's report: main's run (select skipped) and a full branch run need
+  // `tests`, a changed run with legs needs `changed`, and only a zero-file set needs neither.
+  // Plant, run once on scheduled.mjs and restored: `skippable` returns every job (red: a run whose
+  // chosen job was skipped reads green).
+  const outcome = fc.constantFrom("success", "skipped", "cancelled", "");
+
+  const select = fc.oneof(
+    fc.constant(SKIPPED),
+    fc
+      .constantFrom("full", "changed")
+      .chain((scope) => fc.constantFrom("[]", '["1"]', '["1","2"]').map((legs) => chose(scope, legs))),
+  );
+
+  fc.assert(
+    fc.property(select, outcome, outcome, (chosen, tests, changed) => {
+      const given = ended(chosen, tests, changed);
+      const scope = "scope" in chosen.outputs ? chosen.outputs.scope : "full";
+      const zero = scope === "changed" && "legs" in chosen.outputs && chosen.outputs.legs === "[]";
+      const needed = zero ? [] : scope === "full" ? [tests] : [changed];
+      const others = zero ? [tests, changed] : scope === "full" ? [changed] : [tests];
+      const green = needed.every((r) => r === "success") && others.every((r) => r === "success" || r === "skipped");
+      expect(scheduled.verdict({ needs: given, jobs: [], failed: [], limits: LIMITS })).toBe(
+        green ? "green" : "stopped",
+      );
     }),
     options,
   );

@@ -1,6 +1,5 @@
 /**
  * Bounded ledger reads with a caller-supplied trusted fault operation.
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -47,7 +46,6 @@ const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"])
 /**
  * Compose history checking with an explicitly supplied fault operation.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (operation: Nemesis["Service"]["fire"]): Layer.Layer<Nemesis, never, ProcessHistory> =>

@@ -1,7 +1,5 @@
 /**
  * The brain lifecycle's saved control state and commands.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
@@ -42,7 +40,6 @@ const Command = Schema.Struct({
 /**
  * Commands emitted by the lifecycle.
  *
- * @stability unstable
  * @category models
  */
 export type Command = ReturnType<(typeof commands)[keyof typeof commands]>;
@@ -73,7 +70,6 @@ const Down = { ...Flow, action: Schema.Literal("stop") };
 /**
  * Saved control state, with checked failure classes and command identities.
  *
- * @stability unstable
  * @category schemas
  */
 export const Model = Schema.TaggedUnion({
@@ -135,7 +131,6 @@ const Msg = Schema.Union([
 /**
  * Requests, clock observations and settled replies accepted by the lifecycle.
  *
- * @stability unstable
  * @category models
  */
 export type Msg = typeof Msg.Type;
@@ -197,7 +192,6 @@ const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell =>
 /**
  * Creates the machine for startup, ownership, deadlines and confirmed shutdown.
  *
- * @stability unstable
  * @category machines
  */
 export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly settings: Snapshot.Snapshot }) => {

@@ -2,7 +2,11 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Result, Schema, Tracer } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";

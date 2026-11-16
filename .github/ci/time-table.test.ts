@@ -306,9 +306,11 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
 
         const timings = await timingsOf(partial, {
           job: () =>
-            apiThrows ? Effect.fail(new Unread({ cause: new Error("socket hang up") })) : Effect.succeed(answer),
+            apiThrows ? Effect.fail(Unread.make({ cause: new Error("socket hang up") })) : Effect.succeed(answer),
           read: () =>
-            readThrows ? Effect.fail(new Unread({ cause: new Error("ENOENT: no such file") })) : Effect.succeed(report),
+            readThrows
+              ? Effect.fail(Unread.make({ cause: new Error("ENOENT: no such file") }))
+              : Effect.succeed(report),
         });
 
         expect(["read", "unavailable"]).toContain(timings.steps._tag);

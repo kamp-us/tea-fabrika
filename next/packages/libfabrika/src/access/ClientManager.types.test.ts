@@ -1,7 +1,9 @@
 // T731, next/. C1: the ClientManager contract and its ledger layer keep their exact types. Compile the
 // exact bad lines; never execute them. The lead and CI run the compiler; Vitest does not typecheck.
 import { expect, expectTypeOf, it } from "@effect/vitest";
-import { type Effect, type Layer, Schema } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import type { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import type { From } from "../processes/Mailbox.ts";

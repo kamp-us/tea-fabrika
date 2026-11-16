@@ -1,10 +1,12 @@
 /**
  * The local brain driver's span recording on Node: a durable span queue in its own SQLite file.
- *
- * @stability unstable
  */
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for P37's durable span queue
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../../telemetry/Archive.ts";
 import { RecordManager } from "../../telemetry/Records.ts";
@@ -20,7 +22,6 @@ import { SpanSink } from "../../telemetry/Sink.ts";
  * it until a flush delivers them, and delivery makes no spans. The database is opened in the
  * caller's scope and closed with it. `object` names the driver in each span row's resource.
  *
- * @stability unstable
  * @category constructors
  */
 export const devRecording = Effect.fn("brain.devRecording")(function* <E>(

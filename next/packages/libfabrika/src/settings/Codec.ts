@@ -1,7 +1,5 @@
 /**
  * File and recorded encodings derived from settings declarations.
- *
- * @stability experimental
  */
 import { Schema, Struct } from "effect";
 import type * as Setting from "./Setting.ts";
@@ -13,7 +11,6 @@ import type * as Setting from "./Setting.ts";
  *
  * A `text` declaration decodes through Effect's string-tree codec, so a file holds its text spelling. Any other declaration decodes through the JSON codec. The result carries the declaration's `doc` as the encoded description and its default, encoded, as the encoded default, so the editor's JSON Schema can show both.
  *
- * @stability unstable
  * @category constructors
  */
 export const file = <A>(declaration: Setting.Setting<A>) => {
@@ -46,7 +43,6 @@ const json = Struct.lambda<Json>((declaration) => Schema.toCodecJson(declaration
  *
  * Every setting is required. A missing one is a decode failure, and this schema never fills in a default.
  *
- * @stability unstable
  * @category constructors
  */
 export const values = <A, R extends Record<string, Setting.Setting<any>>>(group: Setting.Group<A, R>) =>

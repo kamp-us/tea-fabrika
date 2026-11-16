@@ -1,7 +1,5 @@
 /**
  * Instance starts recorded and read through RPC calls to the object that keeps them.
- *
- * @stability unstable
  */
 import { Effect, Layer, Schema } from "effect";
 import * as Start from "../settings/Start.ts";
@@ -20,7 +18,6 @@ import * as SettingsInput from "./SettingsInput.ts";
 /**
  * The two RPC calls the layer makes. The Project object's binding has this shape.
  *
- * @stability unstable
  * @category models
  */
 export interface Calls {
@@ -39,7 +36,6 @@ const unreachable = (cause: unknown) => new StartsError({ reason: new Unreachabl
  * for the asked start, and on `record` must match the input. A call that throws fails with
  * `Unreachable`. A failed reply fails with the same reason here.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (calls: Calls) =>

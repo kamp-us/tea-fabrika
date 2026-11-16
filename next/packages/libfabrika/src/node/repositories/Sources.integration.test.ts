@@ -3,8 +3,14 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";

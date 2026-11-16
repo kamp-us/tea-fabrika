@@ -162,7 +162,7 @@ export interface Transcript {
   readonly last: string | null;
 }
 
-const refuse = (reason: string) => Result.fail(new Refused({ reason }));
+const refuse = (reason: string) => Result.fail(Refused.make({ reason }));
 
 /** A usage's tokens by price. */
 const split = (usage: Usage): Tokens => {
@@ -394,7 +394,7 @@ const load = Effect.fn("clauderow.load")(function* (path: string) {
 
   const text = yield* fs
     .readFileString(path)
-    .pipe(Effect.mapError(() => new Refused({ reason: `${path} could not be read` })));
+    .pipe(Effect.mapError(() => Refused.make({ reason: `${path} could not be read` })));
 
   return yield* Effect.fromResult(read(text));
 });
@@ -403,7 +403,7 @@ const load = Effect.fn("clauderow.load")(function* (path: string) {
 const beside = Effect.fn("clauderow.beside")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const meta = `${path.slice(0, -".jsonl".length)}.meta.json`;
-  const unreadable = Effect.mapError(() => new Refused({ reason: `${meta} could not be read` }));
+  const unreadable = Effect.mapError(() => Refused.make({ reason: `${meta} could not be read` }));
 
   if (!path.endsWith(".jsonl") || !(yield* fs.exists(meta).pipe(unreadable))) {
     return {};
@@ -419,7 +419,7 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
   const final = calls.at(-1);
 
   if (final === undefined) {
-    return yield* new Refused({ reason: `no model calls in ${path}` });
+    return yield* Refused.make({ reason: `no model calls in ${path}` });
   }
 
   const meta = yield* beside(path);
@@ -549,7 +549,7 @@ const clauderow = Command.make(
       }
 
       if (run === null) {
-        return yield* new Refused({
+        return yield* Refused.make({
           reason: "--run is required: a row needs its id so parent and corrects can name it",
         });
       }

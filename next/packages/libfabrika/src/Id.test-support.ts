@@ -1,4 +1,6 @@
-import { Arbitrary, Effect, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 

@@ -209,7 +209,7 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
     const still = yield* missing;
 
     if (still.length > 0) {
-      return yield* new AdaptersMissing({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
+      return yield* AdaptersMissing.make({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
     }
   }).pipe(Effect.provide(nodeServices));
 

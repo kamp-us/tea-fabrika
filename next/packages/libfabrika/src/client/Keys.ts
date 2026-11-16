@@ -11,10 +11,9 @@
  * so Shift is already in it; a named key is lower case, as `escape`, `enter`, `space` or `f6`. A
  * row writes `mod` for the backend's command key (Cmd on a Mac, Ctrl elsewhere) and `<prefix>` for
  * a key pressed after the prefix.
- *
- * @stability unstable
  */
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -23,7 +22,6 @@ import type { Prefix } from "./Prefix.ts";
  * The backend a window runs on, from the hello's own words: its command key, and the keys it can
  * never have, spelled as a press is.
  *
- * @stability unstable
  * @category models
  */
 export type Backend = {
@@ -37,7 +35,6 @@ export type Backend = {
  * A loaded key table: the backend it was loaded for, its rows, the prefix key, the commands bound
  * after the prefix and the commands bound to a key alone.
  *
- * @stability unstable
  * @category models
  */
 export type Table = {
@@ -51,7 +48,6 @@ export type Table = {
 /**
  * Schema for why a table does not load: a row binds a key its backend can never have.
  *
- * @stability unstable
  * @category schemas
  */
 export const LoadError = Schema.TaggedUnion({
@@ -61,7 +57,6 @@ export const LoadError = Schema.TaggedUnion({
 /**
  * Why a table does not load, as `LoadError` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type LoadError = typeof LoadError.Type;
@@ -71,7 +66,6 @@ export type LoadError = typeof LoadError.Type;
  * goes to the focused tile's content; it ends the prefix and goes nowhere; or it answers a close's
  * y/n.
  *
- * @stability unstable
  * @category schemas
  */
 export const Routed = Schema.TaggedUnion({
@@ -86,7 +80,6 @@ export const Routed = Schema.TaggedUnion({
 /**
  * Where one press goes, as `Routed` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Routed = typeof Routed.Type;
@@ -107,7 +100,6 @@ const resolved = (key: string, mod: Backend["mod"]): string => key.replace(/(^|\
  * Windows and Linux Chrome keeps F6; an OS the window does not know keeps both command keys.
  * Electron on a Mac keeps Cmd-Q and Cmd-H. A headless client keeps none.
  *
- * @stability unstable
  * @category constructors
  */
 export const backend = (platform: Backend["platform"], os: Backend["os"]): Backend => {
@@ -131,7 +123,6 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
  * Returns what a backend is shipped of the default rows: every row, in order, with each key that
  * backend can never have dropped. A command keeps its word and its label, so it keeps a way in.
  *
- * @stability unstable
  * @category constructors
  */
 export const ship = <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend): ReadonlyArray<B> =>
@@ -141,7 +132,6 @@ export const ship = <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend)
  * Loads rows into a window's table, or fails on the first row bound to a key its backend can never
  * have: a person's binding there fails loudly, never with a warning (0278).
  *
- * @stability unstable
  * @category constructors
  */
 export const load = (bindings: ReadonlyArray<Binding>, on: Backend): Result.Result<Table, LoadError> => {
@@ -176,7 +166,6 @@ const R = Routed.cases;
  * tile (tmux's send-prefix), and Escape or an unbound key is dropped. While a close asks, `y` says
  * yes and any other key says no. `mode` is the focused program's mode; none has one yet.
  *
- * @stability unstable
  * @category getters
  */
 export const route = (table: Table, prefix: Prefix, _mode: null, press: { readonly key: string }): Routed => {
@@ -216,7 +205,6 @@ const NAMED: Readonly<Record<string, string>> = { " ": "space", Esc: "escape" };
  * Returns a press spelled as the table spells it, from a key event's own fields (a DOM
  * `KeyboardEvent` has them), or null for a modifier pressed alone.
  *
- * @stability unstable
  * @category getters
  */
 export const spell = (e: {

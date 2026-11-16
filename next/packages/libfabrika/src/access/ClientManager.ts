@@ -1,9 +1,9 @@
 /**
  * The service that reads who belongs and writes membership events to the ledger.
- *
- * @stability unstable
  */
-import { Context, Schema, type Effect } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { Appended } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";
@@ -19,7 +19,6 @@ import { Reason, type Access, type MemberEvent } from "./Access.ts";
  * `window` is null when no window key comes with the founding. When it is present and there is at
  * least one person key, it hangs under the first person key; with no person keys it is dropped.
  *
- * @stability unstable
  * @category models
  */
 export const Founder = Schema.Struct({
@@ -31,7 +30,6 @@ export const Founder = Schema.Struct({
 /**
  * The decoded type of `Founder`.
  *
- * @stability unstable
  * @category models
  */
 export type Founder = typeof Founder.Type;
@@ -45,7 +43,6 @@ export type Founder = typeof Founder.Type;
  * reason, because an earlier event won the race and the fold skips this one. `refused` means
  * nothing was written, and its reason is the rule's or the ledger's own.
  *
- * @stability unstable
  * @category models
  */
 export const Written = Schema.TaggedUnion({
@@ -60,7 +57,6 @@ export const Written = Schema.TaggedUnion({
 /**
  * The decoded type of `Written`.
  *
- * @stability unstable
  * @category models
  */
 export type Written = typeof Written.Type;
@@ -73,7 +69,6 @@ export type Written = typeof Written.Type;
  * `members` answers the `Access` view folded from the log. `write` takes an event and who is
  * writing it, and answers with a `Written`.
  *
- * @stability unstable
  * @category services
  */
 export class ClientManager extends Context.Service<

@@ -228,6 +228,25 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
       return true;
     },
   );
+  // Plants: skip the names check, read it after the merge is asked, or read the title for the section.
+  it.effect.prop(
+    "property: a diff that exports a new name is queued only when its description names it under ## New names; else it is refused with the name and the merge is never asked (0587)",
+    { named: Schema.Boolean, name: Schema.Literals(["Names", "refusal", "PatchRow"]) },
+    ({ named, name }) =>
+      Effect.gen(function* () {
+        const lines = named ? `\n\n## New names\n\n- \`${name}\`: the industry's word, with its source.` : "";
+        const m = memory({ more: { body: `What it does.${lines}` } });
+        m.github.patches.set(900, [{ path: "src/a.ts", patch: `@@ -0,0 +1 @@\n+export const ${name} = 1;` }]);
+        const answer = yield* Effect.result(add(m));
+        expect(m.github.calls).toEqual(named ? [{ _tag: "enqueue", number: 900, oid }] : []);
+
+        if (!named) {
+          expect(answer).toMatchObject({ _tag: "Failure", failure: { _tag: "NotQueued" } });
+          expect(answer._tag === "Failure" && answer.failure.reason).toContain(`pr 900: its diff exports new names`);
+          expect(answer._tag === "Failure" && answer.failure.reason).toContain(name);
+        }
+      }),
+  );
 });
 
 describe("settle: a merged pull request closes the tickets it names (0015, T410)", () => {

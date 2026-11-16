@@ -1,8 +1,6 @@
 /**
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
- *
- * @stability unstable
  */
 import { Effect, Equal, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -140,7 +138,6 @@ const dispatch = Effect.fnUntraced(function* (
  * reason `unknown_method`, and a Project `commit` that names its own `process` with reason
  * `reserved`. A success answers `{ value }`, and a failure a 500 with `{ error: { reason } }`.
  *
- * @stability unstable
  * @category combinators
  */
 export const control = Effect.fn("runtime.control")(function* (

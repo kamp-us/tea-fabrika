@@ -652,7 +652,7 @@ export const bounded = (
   sh(cmd, args, stdin).pipe(
     Effect.timeoutOrElse({
       duration: `${seconds} seconds`,
-      orElse: () => Effect.fail(new CallTimeout({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
+      orElse: () => Effect.fail(CallTimeout.make({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
     }),
   );
 
@@ -692,14 +692,14 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
           const owner = yield* heldBy(lock);
 
           if (owner !== null) {
-            return yield* new Stuck({
+            return yield* Stuck.make({
               reason: "docker_busy",
               detail: `another Docker box is running (pid ${owner}); one at a time`,
             });
           }
 
           return yield* write.pipe(
-            Effect.mapError(() => new Stuck({ reason: "docker_busy", detail: "the lock could not be taken" })),
+            Effect.mapError(() => Stuck.make({ reason: "docker_busy", detail: "the lock could not be taken" })),
           );
         }),
       ),
@@ -724,14 +724,14 @@ const dockerReady = Effect.fnUntraced(function* () {
   const server = yield* docker(["version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"]);
 
   if (server.code !== 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "docker_down",
       detail: "Docker is not installed or not running; the sample is never run on the host",
     });
   }
 
   if (server.out.trim() !== PLATFORM) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "not_arm64",
       detail: `the Docker server is ${server.out.trim()}; only ${PLATFORM} was measured`,
     });
@@ -751,7 +751,7 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
   const real = yield* fs.realPath(file).pipe(Effect.catch(() => Effect.succeed("")));
 
   if (real !== file) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_output",
       detail: `the output holds a link at ${name}; nothing was read through it`,
     });
@@ -857,7 +857,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const all = parseRelated(ask.related);
 
   if (all === null || !/^\d+$/.test(ask.ticket)) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_related",
       detail: "--related takes test file paths inside the repo, separated by commas, and --ticket a number",
     });
@@ -877,7 +877,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
         );
 
   if (ask.plan !== undefined && owners === null) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_plan",
       detail: "plancheck.sh --owners-json could not read the plan's files table",
     });
@@ -889,7 +889,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const input = path.join(out, "in");
 
   if (!mountable(out)) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_path",
       detail: "the output folder's path holds a comma, a quote or a newline, which docker --mount cannot take",
     });
@@ -925,7 +925,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const base = ask.base === undefined ? null : yield* resolve(ask.base);
 
   if (build === null || (ask.base !== undefined && base === null)) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_commit",
       detail: "--build or --base is not a commit in the checkout",
     });
@@ -950,7 +950,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const fetchedBase = base === null ? fetched : yield* fetch(base, "base", 1);
 
   if (fetched.code !== 0 || fetchedBase.code !== 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_commit",
       detail: `git fetch failed: ${tail(fetched.err + fetchedBase.err)}`,
     });
@@ -987,7 +987,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   if (related.length === 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "no_tests",
       detail: `every related test was left out: ${excluded.map((e) => `${e.path} (${e.reason})`).join("; ")}`,
     });
@@ -1001,14 +1001,14 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const node = baseNode(dockerfile);
 
   if (manifest === null || pnpm === null || node === null) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_manifest",
       detail: "the commit's package.json names no exact pnpm and Node, or the Dockerfile's base has no digest",
     });
   }
 
   if (manifest.engines.node !== node) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "node_mismatch",
       detail: `the commit runs Node ${manifest.engines.node} and the image's base is ${node}; change mutbox.Dockerfile`,
     });
@@ -1018,7 +1018,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const hash = yield* sh("git", ["hash-object", "--stdin"], [PLATFORM, pnpm, ids.out, dockerfile, entry].join("\n"));
 
   if (ids.code !== 0 || hash.code !== 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_manifest",
       detail: "the commit has no pnpm-lock.yaml, pnpm-workspace.yaml or patches folder",
     });
@@ -1045,7 +1045,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     );
 
     if (built.code !== 0) {
-      return yield* new Stuck({ reason: "image_build_failed", detail: tail(built.err) });
+      return yield* Stuck.make({ reason: "image_build_failed", detail: tail(built.err) });
     }
   }
 
@@ -1072,14 +1072,14 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     // The time limit is the answer; a hung kill is stopped at its bound, and the rm finalizer follows.
     yield* docker(["kill", name]).pipe(Effect.ignore);
 
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "time_limit",
       detail: `the container passed ${limit} s and was killed; no report was read`,
     });
   }
 
   if (ran.value.code === 125 || ran.value.code === 127) {
-    return yield* new Stuck({ reason: "docker_run_failed", detail: tail(ran.value.err) });
+    return yield* Stuck.make({ reason: "docker_run_failed", detail: tail(ran.value.err) });
   }
 
   const sample = yield* decoded(Sample, yield* readOut(box, "b/sample.json"));

@@ -13,11 +13,11 @@
  *
  * The code is pure but for WebCrypto, so a browser tab runs it as Node does. Base64 goes through
  * Effect's encoding, never Node's `Buffer`.
- *
- * @stability unstable
  */
-import { Effect, Option, Schema } from "effect";
-import { Base64 } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 
@@ -57,7 +57,6 @@ const keyBlob = (line: string): Option.Option<Uint8Array> => {
  * Use to decode a line once, where it comes in, so `writeSshsig` never meets a line it cannot sign
  * for. A line that is not an Ed25519 key line fails with "an ssh-ed25519 key line".
  *
- * @stability unstable
  * @category models
  */
 export const KeyLine = Schema.String.pipe(
@@ -70,7 +69,6 @@ export const KeyLine = Schema.String.pipe(
 /**
  * The type of a decoded `KeyLine`: a string branded as an Ed25519 key line.
  *
- * @stability unstable
  * @category models
  */
 export type KeyLine = typeof KeyLine.Type;
@@ -143,7 +141,6 @@ const refused: Answer = { reason: "bad_signature" };
  * backup state) and the signature `counter`. `refused` always has the reason `bad_signature`,
  * whatever the cause.
  *
- * @stability unstable
  * @category models
  */
 export const Checked = Schema.TaggedUnion({
@@ -177,7 +174,6 @@ const bad = Checked.cases.refused.make({ reason: "bad_signature" });
  * Any refusal, of any cause, is the one answer `{ _tag: "refused", reason: "bad_signature" }`. It
  * never fails and never dies: a WebCrypto error also becomes that answer.
  *
- * @stability unstable
  * @category combinators
  */
 export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
@@ -245,7 +241,6 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
  * Ed25519 signature can pass. The answer is `{ signer }` with the matching line, or
  * `{ reason: "bad_signature" }`. It never fails and never dies. Use `verifySshsig` to accept passkeys.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
@@ -272,7 +267,6 @@ export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
  * holder: WebCrypto in a tab, or the person key in the app. This function fails only with
  * `sign`'s error. Hashing bytes cannot fail, so a rejection there is a defect.
  *
- * @stability unstable
  * @category constructors
  */
 export const writeSshsig = Effect.fn("transport.writeSshsig")(function* <E>(a: {

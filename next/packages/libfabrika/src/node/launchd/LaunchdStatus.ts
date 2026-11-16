@@ -1,7 +1,5 @@
 /**
  * Narrow decoding of launchctl's non-API print output.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -18,7 +16,6 @@ const Response = Schema.Struct({
 /**
  * A job value that print can represent without ambiguous quoting or whitespace.
  *
- * @stability unstable
  * @category schemas
  */
 export const Scalar = Schema.NonEmptyString.check(Schema.isPattern(/^[^"\\{}\p{Cc}]+$/u), Schema.isTrimmed());
@@ -28,12 +25,11 @@ const scalar = Schema.is(Scalar);
 /**
  * Accepts exact absence or a complete, unambiguous job description.
  *
- * @stability unstable
  * @category decoding
  */
 export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) {
   const failed = (cause: unknown) =>
-    new BrainControlError({ reason: new Unsupported({ cause: Redacted.make(cause) }) });
+    BrainControlError.make({ reason: Unsupported.make({ cause: Redacted.make(cause) }) });
 
   const response = yield* Schema.decodeUnknownEffect(Response)(input).pipe(Effect.mapError(failed));
   // oxlint-disable-next-line fabrika/no-redacted-value -- edge: parse protected native output; return checked job fields and keep failures protected
@@ -50,8 +46,8 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
       return Status.cases.absent.make({});
     }
 
-    return yield* new BrainControlError({
-      reason: new Command({ code: response.code, cause: Redacted.make(response) }),
+    return yield* BrainControlError.make({
+      reason: Command.make({ code: response.code, cause: Redacted.make(response) }),
     });
   }
 

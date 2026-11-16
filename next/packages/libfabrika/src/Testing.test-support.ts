@@ -1,6 +1,8 @@
 // Shared by libfabrika's own laws: a fast-check property whose check is a scoped Effect, run as one
 // Effect from the shared seed, so a law file does not paste its own runner and failure type.
-import { Effect, Schema, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 import * as fc from "fast-check";
 
 /** The shared fixed seed every law runs from. */
@@ -52,5 +54,5 @@ export const property = <A>(
   const assert = (signal: AbortSignal) => fc.assert(checked(signal), options);
 
   // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
-  return Effect.tryPromise({ try: assert, catch: (cause) => new PropertyFailed({ cause }) });
+  return Effect.tryPromise({ try: assert, catch: (cause) => PropertyFailed.make({ cause }) });
 };

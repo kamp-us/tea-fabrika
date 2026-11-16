@@ -1,7 +1,9 @@
 // p23/p82: answerFrame(text, attachment, admit, route). A failed route stays retryable; a parked
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
 import { Answer, Attached, type Who } from "./Wire.ts";
@@ -189,7 +191,7 @@ describe("P10 JSON-RPC", () => {
     it.effect(`p23: ${mode} sends nothing and permits a real retry`, () =>
       Effect.gen(function* () {
         const attached = online();
-        const first = mode === "failure" ? Effect.fail(new Offline({})) : Effect.die("route crashed");
+        const first = mode === "failure" ? Effect.fail(Offline.make({})) : Effect.die("route crashed");
 
         const route = vi
           .fn<Route>()

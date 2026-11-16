@@ -1,7 +1,5 @@
 /**
  * Menu bar extra state and items. Checks and signatures are commands, never I/O here.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
@@ -13,7 +11,6 @@ const Kind = Access.Grant.fields.as;
 /**
  * Words for every admitted client kind. A new kind must have words before it can be drawn.
  *
- * @stability unstable
  * @category models
  */
 export const words: Record<typeof Kind.Type, string> = { window: "window", agent: "agent", hands: "hands" };
@@ -21,7 +18,6 @@ export const words: Record<typeof Kind.Type, string> = { window: "window", agent
 /**
  * Schema for one waiting key, shared by its tabs. A pass is a digest only.
  *
- * @stability unstable
  * @category schemas
  */
 export const Row = Schema.Struct({
@@ -42,7 +38,6 @@ const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
 /**
  * Schema for an admitted client, with its current tab count or an unknown probe result.
  *
- * @stability unstable
  * @category schemas
  */
 export const Client = Schema.Struct({
@@ -135,7 +130,6 @@ const quit = Cmd.make("quit", { input: Schema.Struct({}), ok: Schema.Null, err: 
  * Schema for one item a popover draws, with its words: the status, an empty note, a waiting key, an admitted
  * client or an action.
  *
- * @stability unstable
  * @category schemas
  */
 export const Item = Schema.TaggedUnion({
@@ -194,7 +188,6 @@ const unique = <A extends { readonly key: string }>(rows: ReadonlyArray<A>): Rea
  * Creates the menu's one machine from a browser link's lifetime and whether that link is offered. Its model is
  * never loaded: every start is idle and connecting, with no rows, no clients and no check in flight.
  *
- * @stability unstable
  * @category constructors
  */
 export const machine = (options: { readonly linkTtl: number; readonly browserLink: boolean }) =>
@@ -360,7 +353,6 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
  * keys, the admitted clients, then the actions. Every item has words, also for an unknown tab count and while a
  * check runs.
  *
- * @stability unstable
  * @category getters
  */
 export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {

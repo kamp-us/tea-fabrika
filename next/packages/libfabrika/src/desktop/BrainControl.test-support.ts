@@ -1,7 +1,10 @@
 // P19 next/. Only outside facts live here. Every policy decision stays in BrainServiceManaged.
 import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Deferred, Effect, Layer, Schema } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { BrainControl, BrainControlError, Command, Status } from "./BrainControl.ts";
 import { BrainProbe, BrainProbeError, Unreachable, Foreign, Readiness, Children, Cleanup } from "./BrainProbe.ts";
 import { BrainSpec } from "./BrainSpec.ts";
@@ -74,7 +77,7 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
         action,
         release: Deferred.succeed(gate, undefined).pipe(Effect.asVoid),
         fail: (secret: string) =>
-          Deferred.fail(gate, new BrainControlError({ reason: new Command({ cause: secret }) })).pipe(Effect.asVoid),
+          Deferred.fail(gate, BrainControlError.make({ reason: Command.make({ cause: secret }) })).pipe(Effect.asVoid),
       });
     });
     yield* Deferred.await(gate);
@@ -90,10 +93,10 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
 
   const probe = Layer.succeed(BrainProbe, {
     ready: invoke("ready").pipe(
-      Effect.mapError((cause) => new BrainProbeError({ reason: new Unreachable({ cause }) })),
+      Effect.mapError((cause) => BrainProbeError.make({ reason: Unreachable.make({ cause }) })),
       Effect.andThen(() =>
         world.listener === "foreign"
-          ? Effect.fail(new BrainProbeError({ reason: new Foreign({ cause: "foreign-listener" }) }))
+          ? Effect.fail(BrainProbeError.make({ reason: Foreign.make({ cause: "foreign-listener" }) }))
           : Effect.void,
       ),
       Effect.map(() =>
@@ -101,7 +104,7 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
       ),
     ),
     cleanup: invoke("cleanup").pipe(
-      Effect.mapError((cause) => new BrainProbeError({ reason: new Cleanup({ cause }) })),
+      Effect.mapError((cause) => BrainProbeError.make({ reason: Cleanup.make({ cause }) })),
       Effect.map(() =>
         world.children === "gone" && world.listener === "waiting"
           ? Children.cases.gone.make({})

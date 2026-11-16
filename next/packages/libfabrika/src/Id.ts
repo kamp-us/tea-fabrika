@@ -1,5 +1,12 @@
 // next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
-import { type Brand, Clock, Context, Effect, Layer, Order as Ordering, Result, Schema as S } from "effect";
+import type * as Brand from "effect/Brand";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ordering from "effect/Order";
+import * as Result from "effect/Result";
+import * as S from "effect/Schema";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -77,7 +84,7 @@ type Specific<P extends string> = ReturnType<typeof specific<P>>;
 /** A schema branded for one trusted prefix. An invalid prefix throws, as Schema.make does. */
 export const make = <const P extends string>(prefix: P): Specific<P> => {
   if (!validPrefix(prefix)) {
-    throw new IdError({ reason: "prefix" });
+    throw IdError.make({ reason: "prefix" });
   }
 
   return specific(prefix);
@@ -86,7 +93,7 @@ export const make = <const P extends string>(prefix: P): Specific<P> => {
 /** The factory for a supplied prefix: invalid prefixes fail with a typed IdError. */
 export const makeEffect = Effect.fn("id.makeEffect")(function* <const P extends string>(prefix: P) {
   if (!validPrefix(prefix)) {
-    return yield* new IdError({ reason: "prefix" });
+    return yield* IdError.make({ reason: "prefix" });
   }
 
   return specific(prefix);
@@ -187,7 +194,7 @@ export class Generator extends Context.Service<
       // Keep allocation and validation synchronous so fibers observe IDs in allocation order.
       const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
         if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
-          throw new IdError({ reason: "clock" });
+          throw IdError.make({ reason: "clock" });
         }
 
         let nextAt = at,
@@ -198,7 +205,7 @@ export class Generator extends Context.Service<
           nextRandom = entropy();
         } else if (random === maxRandom) {
           if (at === maxTime) {
-            throw new IdError({ reason: "exhausted" });
+            throw IdError.make({ reason: "exhausted" });
           }
 
           nextAt++;
@@ -210,9 +217,8 @@ export class Generator extends Context.Service<
         at = nextAt;
         random = nextRandom;
 
-        return Result.getOrThrowWith(
-          S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
-          (cause) => new IdError({ reason: "prefix", cause }),
+        return Result.getOrThrowWith(S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`), (cause) =>
+          IdError.make({ reason: "prefix", cause }),
         );
       };
 
@@ -221,7 +227,7 @@ export class Generator extends Context.Service<
           const prefix = prefixes.get(schema);
 
           if (prefix === undefined) {
-            return yield* new IdError({ reason: "prefix" });
+            return yield* IdError.make({ reason: "prefix" });
           }
 
           yield* Effect.annotateCurrentSpan({ type: prefix });
@@ -229,7 +235,7 @@ export class Generator extends Context.Service<
 
           return yield* Effect.try({
             try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
+            catch: (error) => (error instanceof IdError ? error : IdError.make({ reason: "entropy", cause: error })),
           });
         }),
       };

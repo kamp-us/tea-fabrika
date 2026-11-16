@@ -16,7 +16,13 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -702,9 +708,9 @@ describe("p97, the tags hold the right names and numbers", () => {
       const { tracer, ended } = capture();
 
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason: "storage" })),
-        read: () => Stream.fail(new LedgerError({ reason: "storage" })),
-        wait: () => Effect.fail(new LedgerError({ reason: "storage" })),
+        append: () => Effect.fail(LedgerError.make({ reason: "storage" })),
+        read: () => Stream.fail(LedgerError.make({ reason: "storage" })),
+        wait: () => Effect.fail(LedgerError.make({ reason: "storage" })),
       });
 
       return Effect.gen(function* () {
@@ -729,9 +735,9 @@ describe("p97, the tags hold the right names and numbers", () => {
       const { tracer, ended } = capture();
 
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason })),
-        read: () => Stream.fail(new LedgerError({ reason })),
-        wait: () => Effect.fail(new LedgerError({ reason })),
+        append: () => Effect.fail(LedgerError.make({ reason })),
+        read: () => Stream.fail(LedgerError.make({ reason })),
+        wait: () => Effect.fail(LedgerError.make({ reason })),
       });
 
       return Effect.gen(function* () {

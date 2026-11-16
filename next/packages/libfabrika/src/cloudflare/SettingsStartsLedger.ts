@@ -1,7 +1,5 @@
 /**
  * Instance starts kept in the ledger, one entry per start.
- *
- * @stability unstable
  */
 import { DateTime, Effect, Equal, Layer, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -66,7 +64,6 @@ const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
  *
  * The layer asks for a `Referee` and builds none: the caller picks the storage and the doorbell.
  *
- * @stability unstable
  * @category layers
  */
 export const fromLedger = () =>
@@ -166,7 +163,6 @@ export const fromLedger = () =>
  *
  * It is `fromLedger` over `RefereeSql`. The doorbell it gives that referee does nothing.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql) =>

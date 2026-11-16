@@ -25,17 +25,17 @@ describe("L12: handlers map faults", () => {
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
 
-          const hostFault = new CodeHost.CodeHostError({
+          const hostFault = CodeHost.CodeHostError.make({
             reason:
               reason === "refused"
-                ? new CodeHost.Refused({ cause })
+                ? CodeHost.Refused.make({ cause })
                 : reason === "rate_limited"
-                  ? new CodeHost.RateLimited({ cause })
-                  : new CodeHost.Unavailable({ cause }),
+                  ? CodeHost.RateLimited.make({ cause })
+                  : CodeHost.Unavailable.make({ cause }),
           });
 
-          const ciFault = new Ci.CiError({
-            reason: reason === "rate_limited" ? new Ci.RateLimited({ cause }) : new Ci.Unavailable({ cause }),
+          const ciFault = Ci.CiError.make({
+            reason: reason === "rate_limited" ? Ci.RateLimited.make({ cause }) : Ci.Unavailable.make({ cause }),
           });
 
           const fail = <E>(fault: E): Effect.Effect<never, E> =>

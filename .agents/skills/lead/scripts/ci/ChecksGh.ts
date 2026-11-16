@@ -82,7 +82,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
         Effect.scoped,
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new ChecksError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(ChecksError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 
@@ -91,7 +91,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
         const last = ran.err.trim().split("\n").at(-1) ?? "";
         const path = args.find((a) => !a.startsWith("-")) ?? "";
 
-        return new ChecksError({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
+        return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
       };
 
       const job = Effect.fn("ChecksGh.job")(function* (head: string, name: string) {
@@ -114,7 +114,7 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
         }
 
         const found = yield* latestIn(response.body).pipe(
-          Effect.mapError(() => new ChecksError({ reason: `GitHub's check runs at ${head} did not parse` })),
+          Effect.mapError(() => ChecksError.make({ reason: `GitHub's check runs at ${head} did not parse` })),
         );
 
         if (response.etag === null) {

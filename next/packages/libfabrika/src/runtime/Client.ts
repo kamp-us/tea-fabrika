@@ -13,8 +13,6 @@
  * for that process and the ledger revision last read. Its time and letter id come later, from a
  * Cmd the window runs, and fill that same slot. A letter keeps its id and body on every resend, and
  * only its own terminal answer removes it.
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Option, Result, Schema } from "effect";
@@ -29,7 +27,6 @@ import { Sent } from "./Runner.ts";
  * then `ready`. `n` is the local queue position, never another letter id. `pid` is the tile's
  * process: its id, or the registered name the client resolves on each dial.
  *
- * @stability unstable
  * @category schemas
  */
 export const Pending = Schema.TaggedUnion({
@@ -57,7 +54,6 @@ export type Pending = typeof Pending.Type;
 /**
  * Schema for a checked view as installed: the revision it was made at, and the value.
  *
- * @stability unstable
  * @category schemas
  */
 export const Shown = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
@@ -68,7 +64,6 @@ export type Shown = typeof Shown.Type;
  * Schema for everything a program client keeps between messages: what it promised (`pending`), and
  * what it shows (`views`, by process).
  *
- * @stability unstable
  * @category schemas
  */
 export const Client = Schema.Struct({
@@ -117,7 +112,6 @@ const Msg = Schema.Union([
 /**
  * A Msg the client machine takes: `press`, `dated`, `reply`, `read` or `notice`.
  *
- * @stability unstable
  * @category models
  */
 export type ClientMsg = typeof Msg.Type;
@@ -130,7 +124,6 @@ const ask = Cmd.make("ask", { input: Schema.Struct({ pid: Schema.String }), ok: 
  * What a client checks a view with: each program's own decoder, by pid. The factory captures it, so
  * it is never in the Model, a Msg or a Cmd's input.
  *
- * @stability unstable
  * @category models
  */
 export type ClientChecks = { readonly decode?: (pid: string) => (view: unknown) => unknown };
@@ -268,7 +261,6 @@ const anyView = (view: unknown): unknown => view;
  * Makes the client machine, checking each view with `checks`: the program's own decoder for its pid,
  * else any JSON view.
  *
- * @stability unstable
  * @category machines
  */
 export const clientMachineFor = (checks: ClientChecks) =>
@@ -299,7 +291,6 @@ const isReady = (p: Pending): p is Ready => p._tag === "ready";
  * Returns the letters that may go now: ready ones ahead of the first slot still waiting for its
  * time.
  *
- * @stability unstable
  * @category getters
  */
 export const sendable = (c: Client): ReadonlyArray<Ready> => {
@@ -340,7 +331,6 @@ const decodeRev = Schema.decodeUnknownOption(Schema.Struct({ rev: Schema.Int }))
  * entries: `after`, the last rev folded; `live`, the newest start or restart, unless a later exit
  * ended it; and `ended`, the newest exit with its reason.
  *
- * @stability unstable
  * @category schemas
  */
 export const NameFold = Schema.Struct({
@@ -354,7 +344,6 @@ export type NameFold = typeof NameFold.Type;
 /**
  * The fold of a name before any entry is read.
  *
- * @stability unstable
  * @category constructors
  */
 export const emptyFold: NameFold = { after: 0, live: null, ended: null };
@@ -389,7 +378,6 @@ const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: stri
  * `by` says whether a writer is the brain's own, the one the client trusts for process facts. A
  * fold over the pages in order is the fold over the whole list.
  *
- * @stability unstable
  * @category getters
  */
 export const foldName = (
@@ -404,7 +392,6 @@ export const foldName = (
  * the newest start or restart by the brain's own writer, unless a later exit ended it. It returns
  * `null` when no such process is live.
  *
- * @stability unstable
  * @category getters
  */
 export const resolveName = (

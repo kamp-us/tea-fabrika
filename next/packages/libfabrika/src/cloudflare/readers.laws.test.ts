@@ -8,9 +8,9 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { runsFor } from "@kampus/vitest";
+import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -19,7 +19,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
-import { ConnectionService, connectionRuntime } from "./connection.ts";
+import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
 import { fetch } from "./fetch.ts";
 import type { RecordShape } from "./objects.ts";
@@ -30,6 +30,8 @@ import {
   processDescriptor,
   processRuntime,
   projectRuntime,
+  recordedLayer,
+  SettingsRuntime,
   type Env,
 } from "./runtime.ts";
 
@@ -448,20 +450,28 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
-        runtime = connectionRuntime(w.ctx, w.env, config);
-
-      const original = Effect.result;
-      const attempts: Array<Exit.Exit<unknown, unknown>> = [];
-
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                attempts.push(exit);
-              }),
-            ),
-          ),
+        attempts: Array<Exit.Exit<unknown, unknown>> = [];
+      // The real waits, watched: each run is recorded, and its exit is kept to read its error.
+      const waits = Layer.unwrap(
+        Effect.gen(function* () {
+          const real = yield* GatewayWaits;
+          return Recorder.layer(GatewayWaits, {
+            wait: (...args) =>
+              real.wait(...args).pipe(
+                Effect.onExit((exit) =>
+                  Effect.sync(() => {
+                    attempts.push(exit);
+                  }),
+                ),
+              ),
+          });
+        }),
+      ).pipe(Layer.provide(GatewayWaits.layer));
+      const runtime = SettingsRuntime.runtime(
+        gatewayLayer(w.ctx, w.env).pipe(
+          Layer.provideMerge(waits),
+          Layer.provide(gatewayProject(w.env)),
+          Layer.provide(recordedLayer(w.env)),
         ),
       );
 
@@ -481,6 +491,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
             )
             .pipe(Effect.exit),
         );
+        expect(await runtime.runPromise(Recorder.calls(GatewayWaits, "wait"))).toHaveLength(1);
         expect(attempts).toHaveLength(1);
         typed(attempts[0]!);
         expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
@@ -490,7 +501,6 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
           }),
         );
       } finally {
-        inspect.mockRestore();
         await runtime.dispose();
         w.db.close();
       }

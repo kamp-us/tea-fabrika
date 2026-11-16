@@ -1,7 +1,9 @@
 // node:sqlite is the edge: Effect has no synchronous SQLite database handle.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import * as RateLimitTest from "../../gateway/RateLimitTest.ts";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";

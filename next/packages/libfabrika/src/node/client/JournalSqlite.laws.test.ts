@@ -16,7 +16,10 @@
 // Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
 // so an overwrite adds a second row.
 import { describe, expect, it } from "@effect/vitest";
-import { Context, Effect, Exit, Layer } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";

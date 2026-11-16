@@ -3,11 +3,15 @@
  * folder of mode 0700, and reused on every start. A file that others can read, or that does not
  * decode, is a typed error and is never used or replaced; only the key the door removed is
  * replaced.
- *
- * @stability unstable
  */
-import { Effect, FileSystem, Layer, Option, Path, PlatformError, Schema } from "effect";
-import { Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as PlatformError from "effect/PlatformError";
+import * as Schema from "effect/Schema";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
 import * as PublicKey from "../../transport/PublicKey.ts";
@@ -52,9 +56,9 @@ const errorClass = (cause: unknown): ErrorClass => {
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";
 };
 
-const failure = (op: Op) => (cause: unknown) => new ClientKeyError({ op, error: errorClass(cause) });
+const failure = (op: Op) => (cause: unknown) => ClientKeyError.make({ op, error: errorClass(cause) });
 
-const damaged = (op: Op) => () => new ClientKeyError({ op, error: "DataError" });
+const damaged = (op: Op) => () => ClientKeyError.make({ op, error: "DataError" });
 
 /** The stored key, imported to sign only, with its public names. A key that does not import is damaged. */
 const load = Effect.fnUntraced(function* (stored: Stored, op: Op) {
@@ -80,7 +84,7 @@ const make = Effect.gen(function* () {
   const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ED, true, ["sign", "verify"]), catch: bad });
 
   if (!("privateKey" in pair)) {
-    return yield* new ClientKeyError({ op: "make", error: "TypeError" });
+    return yield* ClientKeyError.make({ op: "make", error: "TypeError" });
   }
 
   const key = pair.privateKey;
@@ -125,7 +129,6 @@ const tempName = (file: string) => `${file}.${Base64Url.encode(crypto.getRandomV
  * the stored key's fingerprint, writes a new pair the same way and renames it over `file`:
  * `replaced`. `claimPersist` answers `false` and `persist` `true`: a file is already kept.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly file: string }) =>
@@ -151,7 +154,7 @@ export const layer = (options: { readonly file: string }) =>
 
         // As OpenSSH does: a key file others may read is refused, never used.
         if ((info.value.mode & 0o077) !== 0) {
-          return yield* new ClientKeyError({ op: "read", error: "NotAllowedError" });
+          return yield* ClientKeyError.make({ op: "read", error: "NotAllowedError" });
         }
 
         const text = yield* fs.readFileString(file).pipe(Effect.mapError(failure("read")));
@@ -217,7 +220,7 @@ export const layer = (options: { readonly file: string }) =>
         const theirs = yield* read;
 
         if (Option.isNone(theirs)) {
-          return yield* new ClientKeyError({ op: "read", error: "NotFoundError" });
+          return yield* ClientKeyError.make({ op: "read", error: "NotFoundError" });
         }
 
         return identity(theirs.value, "reused");

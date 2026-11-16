@@ -4,12 +4,13 @@
  * client and each tile's own machine by sending each its own Msgs, and it decodes every frame the
  * door sends. It reads no socket and no clock: the start turns socket events into Msgs and its Cmds
  * into writes.
- *
- * @stability unstable
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Predicate, Result, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -154,7 +155,6 @@ const Size = Schema.Struct({ width: Pixels, height: Pixels });
  * `presses` counts the key presses the window has read, so a page can tell which of the presses it
  * handed over are still waiting in the run's line (`handle`).
  *
- * @stability unstable
  * @category models
  */
 export const WindowModel = Schema.Struct({
@@ -207,7 +207,6 @@ export const WindowModel = Schema.Struct({
 /**
  * The type of a window's whole state.
  *
- * @stability unstable
  * @category models
  */
 export type WindowModel = typeof WindowModel.Type;
@@ -223,7 +222,6 @@ export type WindowModel = typeof WindowModel.Type;
  * box, so the tile lands at its top and never on the row the view still keeps. Every landing in a
  * tile reads this one answer: focus coming back to it, and a click on its own title bar.
  *
- * @stability unstable
  * @category getters
  */
 export const lastCursor = (
@@ -336,7 +334,6 @@ const now = Cmd.make("now", {
  * It settles when the frame is handed to the socket, never when the brain answers: the answer
  * arrives later as a frame. It fails `unreachable` at once when the dial has no open socket.
  *
- * @stability unstable
  * @category constructors
  */
 export const write = Cmd.make("write", {
@@ -1584,7 +1581,6 @@ const loadedInto = (loaded: WindowModel, tab: string): WindowModel =>
  * Model. The machine's `socket` Sub asks for one socket per dial the Link has; its `ctx` names the
  * tiles.
  *
- * @stability unstable
  * @category constructors
  */
 export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: WindowChecks<P>) => {
@@ -2118,7 +2114,6 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 /**
  * The type of every Msg a window parent takes.
  *
- * @stability unstable
  * @category models
  */
 export type WindowMsg =
@@ -2127,7 +2122,6 @@ export type WindowMsg =
 /**
  * One key press a page hands its window, as the window's `key` Msg says it.
  *
- * @stability unstable
  * @category models
  */
 export type KeyPress = Extract<WindowMsg, { readonly type: "key" }>;
@@ -2137,7 +2131,6 @@ export type KeyPress = Extract<WindowMsg, { readonly type: "key" }>;
  * were pressed. `from` is how many presses the window had read when the first of `keys` was handed
  * over, so the window's `presses` says how many of them it has read since.
  *
- * @stability unstable
  * @category models
  */
 export type Unread = { readonly from: number; readonly keys: ReadonlyArray<KeyPress> };
@@ -2147,7 +2140,6 @@ export type Unread = { readonly from: number; readonly keys: ReadonlyArray<KeyPr
  * `pass` it to the window and keep its default, as the prefix again reaches the tile (tmux's
  * send-prefix); or `take` it, for the window alone.
  *
- * @stability unstable
  * @category models
  */
 export type Handling = "leave" | "pass" | "take";
@@ -2163,7 +2155,6 @@ export type Handling = "leave" | "pass" | "take";
  * them is not seen here, so a press right behind one is judged against the older focus and tiles
  * (finding 2026-11-15-handle-skips-non-press-msgs).
  *
- * @stability unstable
  * @category getters
  */
 export const handle = (

@@ -42,12 +42,12 @@
 //     the lead session, the one way merge when ready is turned on (0530, 0544; pr/Arm.ts): refuses
 //     one that is not open, not into main, or titled `Plan:`; runs the leak gate (pr/Leaks.ts) on its
 //     net change, each of its commits and its title and description, and refuses on any hit or on a
-//     grep that could not run; reads the full run (scheduled.yaml) on
-//     its branch at its head, and refuses one that is red or not ended, printing each job that is
-//     not green, its failed steps and its failing test lines. With no full run at the head it arms,
-//     as 0544 allows, and says so in one line, unless the branch's newest run at an older head is
-//     not green. Then marks a draft ready and turns on merge when ready, a squash pinned to the head
-//     that was read.
+//     grep that could not run; reads the proof run (scheduled.yaml) on its branch at its head, the
+//     full set or, since 0590, the changed set, and refuses one that is red or not ended, printing
+//     each job that is not green, its failed steps and its failing test lines. With no run at the
+//     head it arms, as 0544 allows, and says so in one line, unless the branch's newest run at an
+//     older head is not green or is a changed-set run, which proves only that head's change. Then
+//     marks a draft ready and turns on merge when ready, a squash pinned to the head that was read.
 //
 //   land.ts merge <pr> [--admin]
 //     the lead session, the only way it merges a pull request by hand (pr/Merge.ts); never a bare

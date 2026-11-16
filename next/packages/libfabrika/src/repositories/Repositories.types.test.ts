@@ -1,6 +1,7 @@
 // T878, next/, L13. The compiler checks the contract; the lead runs typecheck after build.
 import { expectTypeOf, it } from "@effect/vitest";
-import type { Context, Effect } from "effect";
+import type * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
 import type { Repositories, RepositoriesError, Repository, Source, SourceMetadata } from "./Repositories.ts";
 
 const contract = (reader: Repository, source: Source, service: Context.Service.Shape<typeof Repositories>) => {

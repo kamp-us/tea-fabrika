@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 const Inputs = { failedInputs: Schema.optionalKey(Schema.NullOr(Schema.String)) };
 

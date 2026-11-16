@@ -4,7 +4,8 @@
 // slot keeps the reason (0502). The page draws `bodyWord` in place of the view whenever it is not null.
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
-import { Arbitrary, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Schema from "effect/Schema";
 import { bodyWord, stateWord } from "./words.ts";
 
 const SEED = 119120;

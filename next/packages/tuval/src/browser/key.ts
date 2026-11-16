@@ -11,8 +11,11 @@
 // It provides transport's `ClientKey` contract; the window consumes it.
 import { ClientKey, ClientKeyError as StoreError, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Layer, Schema } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
+import * as Effect from "effect/Effect";
+import * as Base64 from "effect/encoding/Base64";
+import * as Base64Url from "effect/encoding/Base64Url";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { errorClass } from "./index.ts";
 
 const DB = "fabrika";
@@ -31,7 +34,7 @@ const USES: Array<KeyUsage> = ["sign", "verify"];
  *  `TypeError`, else `other`. Never its message. */
 const platformName = errorClass;
 
-const storeFailure = (op: StoreError["op"]) => (error: unknown) => new StoreError({ op, error: platformName(error) });
+const storeFailure = (op: StoreError["op"]) => (error: unknown) => StoreError.make({ op, error: platformName(error) });
 
 type Stored = {
   readonly pair: CryptoKeyPair;
@@ -59,7 +62,7 @@ const request = Effect.fnUntraced(function* <A>(op: StoreError["op"], make: () =
       if (req instanceof IDBOpenDBRequest) {
         req.onblocked = () => {
           req.onsuccess = () => req.result.close();
-          resume(Effect.fail(new StoreError({ op, error: "InvalidStateError" })));
+          resume(Effect.fail(StoreError.make({ op, error: "InvalidStateError" })));
         };
       }
 
@@ -182,14 +185,14 @@ const lineFor = Effect.fnUntraced(function* (raw: string): Effect.fn.Return<KeyL
   const bytes = Base64Url.decode(raw);
 
   if (bytes._tag === "Failure") {
-    return yield* new StoreError({ op: "read", error: "DataError" });
+    return yield* StoreError.make({ op: "read", error: "DataError" });
   }
 
   const type = new TextEncoder().encode("ssh-ed25519");
   const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
 
   return yield* Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
-    Effect.mapError(() => new StoreError({ op: "read", error: "DataError" })),
+    Effect.mapError(() => StoreError.make({ op: "read", error: "DataError" })),
   );
 });
 
@@ -220,7 +223,7 @@ export const browserKey = Layer.sync(ClientKey, () => {
     }
 
     if (stored !== undefined && !isStored(stored)) {
-      return yield* new StoreError({ op: "read", error: "DataError" });
+      return yield* StoreError.make({ op: "read", error: "DataError" });
     }
 
     const candidate = yield* makeKey;

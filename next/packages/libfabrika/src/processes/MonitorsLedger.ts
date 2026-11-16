@@ -5,8 +5,6 @@
  * rows, and written in `ProcessManager.monitor`'s own turn: the `monitored` row, the watcher's
  * answer letter and, for a life that already ended, its `noproc` DOWN. A saved ref answers again
  * and writes nothing, so a retried Cmd is one watch.
- *
- * @stability unstable
  */
 import { Clock, Data, Effect, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -139,7 +137,6 @@ const answered = (watch: Watch, watched: typeof Watched.Type, at: number) => ({
  * The permission step reads the rows of the look turn, and the write turn does not check them
  * again, as a start's does: a relation removed between the two turns does not stop that watch.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {

@@ -10,8 +10,11 @@
 // newline in `version`. C5, answer `output_limit` without closing the child's scope.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Config, Effect, Layer, Schedule } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schedule from "effect/Schedule";
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
 import * as CommandsNode from "./CommandsNode.ts";

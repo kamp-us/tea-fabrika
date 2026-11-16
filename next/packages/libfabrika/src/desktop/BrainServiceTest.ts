@@ -1,3 +1,4 @@
+import * as Digest from "effect/crypto/Digest";
 // After build, review runs each temporary plant and restores by copy:
 // L1 bootstrap a loaded job; accept mismatched argv. L2 return at bootout; remove before absence.
 // L3 accept any nonzero print; erase causes. L4 remove semaphore; accept a stale Cmd id.
@@ -11,8 +12,8 @@
 // Lead runs L13 and its disposable host plants: no KeepAlive, stop on controller release,
 // leave a detached child, and return at bootout. Observe each over three declared throttle intervals.
 // P19 next/. No duplicate lifecycle: controlled OS services feed the real driver.
-import { Effect, Layer } from "effect";
-import { Digest } from "effect/crypto";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
 import * as Sources from "../settings/Sources.ts";

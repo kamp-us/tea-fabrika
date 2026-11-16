@@ -19,7 +19,7 @@ export { default } from "../src/brain.ts";
 
 const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<typeof projectRuntime>[1]) =>
   projectRuntime(ctx, env, {
-    input: settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
+    input: settings(env).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause }))),
     programs,
     bootstrap: [
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
@@ -101,7 +101,7 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
               if (method === "p90.arm") {
                 const { process } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(
                   params,
-                ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+                ).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })));
 
                 yield* move({ type: "arm", process });
               } else if (method === "p90.release") {

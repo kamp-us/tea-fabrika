@@ -3,7 +3,10 @@
 // folder is acquired in a scope that gives it back.
 import { DatabaseSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 

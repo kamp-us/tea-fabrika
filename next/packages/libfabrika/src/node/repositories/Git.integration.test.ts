@@ -3,8 +3,12 @@
 // `.integration.` and runs on main's full run only (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";

@@ -44,10 +44,10 @@ const boxes = Effect.fn("flow.boxes")(
       concurrency: 2,
     });
 
-    return Number(code) === 0 && out !== "" ? out : yield* new Usage({ reason: "env.sh gave no BOXES" });
+    return Number(code) === 0 && out !== "" ? out : yield* Usage.make({ reason: "env.sh gave no BOXES" });
   },
   Effect.scoped,
-  Effect.catchTag("PlatformError", () => Effect.fail(new Usage({ reason: "env.sh could not run" }))),
+  Effect.catchTag("PlatformError", () => Effect.fail(Usage.make({ reason: "env.sh could not run" }))),
 );
 
 /** The flow file's default export, read as a Flow. */
@@ -56,14 +56,14 @@ const load = Effect.fn("flow.load")(function* (file: string) {
 
   const url = yield* path
     .toFileUrl(path.resolve(file))
-    .pipe(Effect.mapError(() => new Usage({ reason: `${file} is no path` })));
+    .pipe(Effect.mapError(() => Usage.make({ reason: `${file} is no path` })));
 
-  const unloadable = (e: unknown) => new Usage({ reason: `${file} does not load: ${String(e)}` });
+  const unloadable = (e: unknown) => Usage.make({ reason: `${file} does not load: ${String(e)}` });
   // oxlint-disable-next-line fabrika/no-promises -- edge: Node loads a module by its path only through import()
   const module = yield* Effect.tryPromise({ try: () => import(url.href), catch: unloadable });
 
   return yield* Schema.decodeUnknownEffect(Flow.Flow)(module.default).pipe(
-    Effect.mapError((e) => new Usage({ reason: `${file}'s default export is no Flow: ${e.message}` })),
+    Effect.mapError((e) => Usage.make({ reason: `${file}'s default export is no Flow: ${e.message}` })),
   );
 });
 
@@ -83,7 +83,7 @@ const flowCommand = Command.make(
 
       const model = yield* runFlow(flow, { state: saved, resume, lead }).pipe(
         Effect.catchTag(["StoreFailed", "SubFailed"], (e) =>
-          Effect.fail(new Stuck({ reason: `${e._tag}: ${String(e.cause)}` })),
+          Effect.fail(Stuck.make({ reason: `${e._tag}: ${String(e.cause)}` })),
         ),
       );
 
@@ -94,11 +94,11 @@ const flowCommand = Command.make(
       );
 
       if (end.outcome === "ask") {
-        return yield* new Parked({ reason: end.reason });
+        return yield* Parked.make({ reason: end.reason });
       }
 
       if (end.outcome === "stuck") {
-        return yield* new Stuck({ reason: end.reason });
+        return yield* Stuck.make({ reason: end.reason });
       }
     }).pipe(
       Effect.tapError((e) =>

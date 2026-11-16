@@ -1,7 +1,7 @@
 // A WebCrypto Promise that rejects reaches the Effect error channel as the module's own error,
 // never as a defect or a bare undefined error.
 import { assert, describe, it } from "@effect/vitest";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import { subtle } from "./binary.ts";
 
 describe("a rejected WebCrypto Promise", () => {

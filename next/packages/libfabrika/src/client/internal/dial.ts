@@ -5,8 +5,15 @@
  *
  * @internal
  */
-import { Clock, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
-import { Socket } from "effect/socket";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Queue from "effect/Queue";
+import * as Random from "effect/Random";
+import * as Schema from "effect/Schema";
+import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import type { Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
 import { backoff, CAP } from "../../transport/Link.ts";
@@ -59,7 +66,7 @@ const acquire = (make: Socket.WebSocketConstructor["Service"], url: string) =>
   Effect.acquireRelease(
     Effect.try({
       try: () => make(url),
-      catch: (cause) => new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: "Unknown", cause }) }),
+      catch: (cause) => Socket.SocketError.make({ reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }) }),
     }),
     (ws) => Effect.sync(() => ws.close(1000)),
   );

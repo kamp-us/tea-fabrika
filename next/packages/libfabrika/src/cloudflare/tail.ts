@@ -1,7 +1,5 @@
 /**
  * Worker Loader tail delivery. Only call metadata crosses into the Process object.
- *
- * @stability unstable
  */
 import {
   getLoopbackEntrypoint,
@@ -18,7 +16,6 @@ import { processStub, type Env } from "./runtime.ts";
 /**
  * Schema for attribution fixed when a program isolate is loaded.
  *
- * @stability stable
  * @category schemas
  */
 export const Props = Schema.Struct({ project: Schema.String, name: Schema.String, process: Schema.String });
@@ -26,7 +23,6 @@ export const Props = Schema.Struct({ project: Schema.String, name: Schema.String
 /**
  * Binds the tail to the name and process being loaded, including a successor.
  *
- * @stability unstable
  * @category constructors
  */
 export const bind = Effect.fnUntraced(function* (
@@ -42,7 +38,6 @@ export const bind = Effect.fnUntraced(function* (
 /**
  * Sends one batch to its name's object. A failed delivery logs only the error class and is dropped.
  *
- * @stability unstable
  * @category combinators
  */
 export const tail = Effect.fnUntraced(function* (
@@ -62,7 +57,6 @@ export const tail = Effect.fnUntraced(function* (
 /**
  * Runs the platform tail callback using its load-bound props.
  *
- * @stability unstable
  * @category combinators
  */
 export const receive = (env: Pick<Env, "PROCESS">, props: unknown, items: Parameters<typeof tail>[2]) =>
@@ -71,7 +65,6 @@ export const receive = (env: Pick<Env, "PROCESS">, props: unknown, items: Parame
 /**
  * Reads each tail invocation's props and bindings from Alchemy's live services.
  *
- * @stability unstable
  * @category combinators
  */
 export const callback = Effect.fnUntraced(

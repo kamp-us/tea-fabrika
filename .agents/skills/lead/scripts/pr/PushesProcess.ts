@@ -27,11 +27,11 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--commits", `origin/main..${head}`], dir);
 
           if (grep.code !== 0) {
-            return yield* new LeakGrepRefused({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
+            return yield* LeakGrepRefused.make({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
           }
         },
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new LeakGrepRefused({ reason: `leakgrep.sh could not start: ${e.message}` })),
+          Effect.fail(LeakGrepRefused.make({ reason: `leakgrep.sh could not start: ${e.message}` })),
         ),
       );
 
@@ -40,7 +40,7 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           const fetched = yield* ran("git", ["-C", dir, "fetch", "-q", "origin", "main", head], dir);
 
           if (fetched.code !== 0) {
-            return yield* new LeakGrepRefused({
+            return yield* LeakGrepRefused.make({
               reason: `main and ${head} could not be fetched: ${lastLine(fetched)}`,
             });
           }
@@ -55,17 +55,17 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           );
 
           if (diff.code !== 0) {
-            return yield* new LeakGrepRefused({ reason: `the diff ${range} does not read: ${lastLine(diff)}` });
+            return yield* LeakGrepRefused.make({ reason: `the diff ${range} does not read: ${lastLine(diff)}` });
           }
 
           const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`], dir, `${diff.out}\n`);
 
           if (grep.code !== 0) {
-            return yield* new LeakGrepRefused({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
+            return yield* LeakGrepRefused.make({ reason: `leakgrep.sh exited ${grep.code}: ${lastLine(grep)}` });
           }
         },
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new LeakGrepRefused({ reason: `the leak grep could not start: ${e.message}` })),
+          Effect.fail(LeakGrepRefused.make({ reason: `the leak grep could not start: ${e.message}` })),
         ),
       );
 
@@ -76,13 +76,13 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           const grep = yield* ran("sh", [`${scripts}/leakgrep.sh`, "--text", "-"], dir, text);
 
           if (grep.code !== 0) {
-            return yield* new LeakGrepRefused({
+            return yield* LeakGrepRefused.make({
               reason: `leakgrep.sh --text exited ${grep.code}: ${lastLine(grep)}`,
             });
           }
         },
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new LeakGrepRefused({ reason: `the leak grep could not start: ${e.message}` })),
+          Effect.fail(LeakGrepRefused.make({ reason: `the leak grep could not start: ${e.message}` })),
         ),
       );
 
@@ -90,7 +90,7 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
         const pushed = yield* ran(cmd, args, dir);
 
         if (pushed.code !== 0) {
-          return yield* new PushRefused({ reason: `${cmd} exited ${pushed.code}: ${lastLine(pushed)}` });
+          return yield* PushRefused.make({ reason: `${cmd} exited ${pushed.code}: ${lastLine(pushed)}` });
         }
       });
 
@@ -106,7 +106,7 @@ export const layer = (scripts: string): Layer.Layer<Pushes, never, ChildProcessS
           yield* step("git", ["-C", dir, "push", "-q", "origin", `${head}:refs/heads/${branch}`], dir);
         },
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new PushRefused({ reason: `the push could not start: ${e.message}` })),
+          Effect.fail(PushRefused.make({ reason: `the push could not start: ${e.message}` })),
         ),
       );
 

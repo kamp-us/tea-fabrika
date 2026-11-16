@@ -2,11 +2,13 @@
  * Tasks on the ledger (0095): each task is its own stream, named from its command id. One call is one
  * transaction: read the stream, fold it through the task machine, step the call, and append it only
  * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Effect, Layer, Result as R, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
@@ -100,7 +102,7 @@ const OPEN: ReadonlySet<Task["state"]["_tag"]> = new Set(["requested", "assigned
 
 /** A ledger failure as the tasks module's: a line the referee refused is the caller's input. */
 const translated = (cause: LedgerError) =>
-  new TasksError({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
+  TasksError.make({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
 
 /** One task as its stream holds it, read inside a turn: its state and its events. */
 const saved = (turn: LedgerTurn, id: string): Task => {
@@ -118,7 +120,6 @@ const saved = (turn: LedgerTurn, id: string): Task => {
  * A ledger refusal of a line becomes a `bad_input` error and any other ledger failure becomes
  * `storage`, each keeping its cause.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.effect(
@@ -132,7 +133,7 @@ export const layer = Layer.effect(
       const found = yield* ledger.transact((turn) => saved(turn, id)).pipe(Effect.mapError(translated));
 
       if (found.state._tag === "absent") {
-        return yield* new TasksError({ reason: "not_found" });
+        return yield* TasksError.make({ reason: "not_found" });
       }
 
       return found satisfies Task;
@@ -143,7 +144,7 @@ export const layer = Layer.effect(
       const decoded = decodeCall({ msg: input, recorded: said });
 
       if (R.isFailure(decoded)) {
-        return yield* new TasksError({ reason: "bad_input", cause: decoded.failure });
+        return yield* TasksError.make({ reason: "bad_input", cause: decoded.failure });
       }
 
       const { msg, recorded } = decoded.success;
@@ -181,7 +182,7 @@ export const layer = Layer.effect(
         .pipe(Effect.mapError(translated));
 
       if (R.isFailure(answer)) {
-        return yield* new TasksError({ reason: answer.failure });
+        return yield* TasksError.make({ reason: answer.failure });
       }
 
       return answer.success;
@@ -194,7 +195,7 @@ export const layer = Layer.effect(
       take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
         const proposed = yield* ids
           .next(Execution)
-          .pipe(Effect.mapError((cause) => new TasksError({ reason: "storage", cause })));
+          .pipe(Effect.mapError((cause) => TasksError.make({ reason: "storage", cause })));
 
         const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
         // An accepted or repeated take leaves the task owned, so the saved assignment is there.
@@ -231,7 +232,7 @@ export const layer = Layer.effect(
       }),
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list(PREFIX).pipe(
-          Stream.mapError((cause) => new TasksError({ reason: "storage", cause })),
+          Stream.mapError((cause) => TasksError.make({ reason: "storage", cause })),
           Stream.mapEffect((name) => read(name.slice(PREFIX.length))),
           Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),

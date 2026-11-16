@@ -18,8 +18,13 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
-import { ChildProcess } from "effect/process";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import { Journal } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";

@@ -1,7 +1,5 @@
 /**
  * Task methods over an authenticated connection, called inside the shared write turn.
- *
- * @stability unstable
  */
 import { Effect, Result, Schema, Stream } from "effect";
 import { ProcessId } from "../ProcessId.ts";
@@ -55,7 +53,6 @@ const refusal = (attached: typeof Attached.cases.online.Type): string | null =>
  * refused. The stream comes from the authenticated key, never from the params, which hold `after`
  * and nothing else. The gateway parks it outside the write turn, on the path `ledger.wait` takes.
  *
- * @stability unstable
  * @category routing
  */
 export const waitOn = (
@@ -84,7 +81,6 @@ const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
  * Routes one task call after fresh authentication inside the Project's shared write turn. A taken
  * finish names its requester to wake; the caller wakes it after the turn and before it answers.
  *
- * @stability unstable
  * @category routing
  */
 export const route = Effect.fn("gateway.tasks")(

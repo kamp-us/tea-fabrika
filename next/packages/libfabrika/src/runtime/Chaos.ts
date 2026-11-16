@@ -1,6 +1,5 @@
 /**
  * Fault requests and bounded history checks, without outside effects.
- * @stability unstable
  */
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -17,7 +16,6 @@ const Text = Schema.NonEmptyString;
 /**
  * An experiment's identity, shared by its requests and answers.
  *
- * @stability unstable
  * @category schemas
  */
 export const ExperimentId = Id.make("chaos");
@@ -25,7 +23,6 @@ export const ExperimentId = Id.make("chaos");
 /**
  * A checked checklist binding at the time the experiment starts.
  *
- * @stability unstable
  * @category schemas
  */
 export const Target = Schema.Struct({
@@ -39,7 +36,6 @@ export const Target = Schema.Struct({
 /**
  * The decoded Target value.
  *
- * @stability unstable
  * @category models
  */
 export type Target = typeof Target.Type;
@@ -47,7 +43,6 @@ export type Target = typeof Target.Type;
 /**
  * The faults a trusted adapter may perform. Keys here are public identities.
  *
- * @stability unstable
  * @category schemas
  */
 export const Fault = Schema.TaggedUnion({
@@ -63,7 +58,6 @@ export const Fault = Schema.TaggedUnion({
 /**
  * The decoded Fault value.
  *
- * @stability unstable
  * @category models
  */
 export type Fault = typeof Fault.Type;
@@ -71,7 +65,6 @@ export type Fault = typeof Fault.Type;
 /**
  * Required experiment inputs. No rate or cap is supplied implicitly.
  *
- * @stability unstable
  * @category schemas
  */
 export const Start = Schema.Struct({
@@ -85,7 +78,6 @@ export const Start = Schema.Struct({
 /**
  * One fault request, identified within its experiment.
  *
- * @stability unstable
  * @category schemas
  */
 export const Fire = Schema.Struct({ id: ExperimentId, ordinal: Positive, target: Target, fault: Fault });
@@ -93,7 +85,6 @@ export const Fire = Schema.Struct({ id: ExperimentId, ordinal: Positive, target:
 /**
  * The decoded Fire value.
  *
- * @stability unstable
  * @category models
  */
 export type Fire = typeof Fire.Type;
@@ -101,7 +92,6 @@ export type Fire = typeof Fire.Type;
 /**
  * The actual process hit, with the ledger revision preceding the fault.
  *
- * @stability unstable
  * @category schemas
  */
 export const Hit = Schema.Struct({ name: Text, process: ProcessId, after: Count });
@@ -109,7 +99,6 @@ export const Hit = Schema.Struct({ name: Text, process: ProcessId, after: Count 
 /**
  * The decoded Hit value.
  *
- * @stability unstable
  * @category models
  */
 export type Hit = typeof Hit.Type;
@@ -117,7 +106,6 @@ export type Hit = typeof Hit.Type;
 /**
  * A refusal is data. An unknown hit supplies no process recovery claim.
  *
- * @stability unstable
  * @category schemas
  */
 export const Fired = Schema.TaggedUnion({
@@ -128,7 +116,6 @@ export const Fired = Schema.TaggedUnion({
 /**
  * The decoded Fired value.
  *
- * @stability unstable
  * @category models
  */
 export type Fired = typeof Fired.Type;
@@ -136,7 +123,6 @@ export type Fired = typeof Fired.Type;
 /**
  * Counts over the observed inbox interval, without an inferred prefix or suffix.
  *
- * @stability unstable
  * @category schemas
  */
 export const Counts = Schema.Struct({ letters: Count, doubled: Count, gaps: Count });
@@ -144,7 +130,6 @@ export const Counts = Schema.Struct({ letters: Count, doubled: Count, gaps: Coun
 /**
  * A public restart fact, with its ledger reference and arrival clock.
  *
- * @stability unstable
  * @category schemas
  */
 export const Restart = Schema.Struct({
@@ -159,7 +144,6 @@ export const Restart = Schema.Struct({
 /**
  * A bounded check. Its two stream boundaries are separate snapshots.
  *
- * @stability unstable
  * @category schemas
  */
 export const Report = Schema.Struct({
@@ -174,7 +158,6 @@ export const Report = Schema.Struct({
 /**
  * The decoded Report value.
  *
- * @stability unstable
  * @category models
  */
 export type Report = typeof Report.Type;
@@ -182,7 +165,6 @@ export type Report = typeof Report.Type;
 /**
  * Evidence for the first replacement of an actual hit.
  *
- * @stability unstable
  * @category schemas
  */
 export const Recovery = Schema.Struct({ ref: Text, rev: Positive, arrivedAt: Schema.Int, process: ProcessId });
@@ -190,7 +172,6 @@ export const Recovery = Schema.Struct({ ref: Text, rev: Positive, arrivedAt: Sch
 /**
  * Count IDs and distinct positions; bodies and global revisions do not decide.
  *
- * @stability unstable
  * @category checking
  */
 export const checkHistory = (
@@ -238,7 +219,6 @@ const decodeRestart = Schema.decodeUnknownOption(RecordedRestart);
 /**
  * Project only public restart facts from their registered name's stream.
  *
- * @stability unstable
  * @category checking
  */
 export const restarts = (entries: ReadonlyArray<RestartEntry>): ReadonlyArray<typeof Restart.Type> =>
@@ -264,7 +244,6 @@ export const restarts = (entries: ReadonlyArray<RestartEntry>): ReadonlyArray<ty
 /**
  * A fire answer alone proves no recovery. Revision order breaks equal-clock ties.
  *
- * @stability unstable
  * @category checking
  */
 export const recovery = (hit: Hit | null, entries: ReadonlyArray<RestartEntry>): typeof Recovery.Type | null => {

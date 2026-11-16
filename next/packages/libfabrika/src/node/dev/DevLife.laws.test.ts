@@ -3,7 +3,8 @@
 // written from the plan's transition table checks each step. The memory restart plan
 // (docs/plan/quests/memory-restart-PLAN.md) adds `replacing` and its laws L1 to L4.
 import { applyCell } from "@demlik/tea";
-import { Predicate, Schema } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { DevState } from "./DevLife.ts";

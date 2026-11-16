@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import { Branch, Hash, ObjectId } from "../../repositories/Repositories.ts";
 import { Snapshot } from "../../settings/Snapshot.ts";

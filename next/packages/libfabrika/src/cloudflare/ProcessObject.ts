@@ -1,7 +1,5 @@
 /**
  * The Process object's Layer: Alchemy's Effect object around `ProcessService`.
- *
- * @stability unstable
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
@@ -47,7 +45,6 @@ const called = <A, E>(call: Effect.Effect<A, E>): Effect.Effect<A, LedgerError> 
  * and any other failure of a call dies too. `abort` resets the instance, as the platform's own
  * abort does.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: {
