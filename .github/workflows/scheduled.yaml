@@ -93,7 +93,7 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # check.yaml's next limit, for the same legs with the same split, on the test step itself: a step
+      # check.yaml's next limit, for the same legs, on the test step itself: a step
       # that runs into it ends `failure`, and so does the run. The report reads it through the alias,
       # to name a leg that ran into it as a time-out.
       - name: vitest
