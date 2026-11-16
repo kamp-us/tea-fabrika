@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:15:52-08:00",
+  "ended": "2026-11-15T22:17:18-08:00",
+  "parent": "2026-11-15-t1075-e47-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_tests",
+  "why": "Recheck of record of slice E47 of the Effect-checker sweep (ticket 1075) at 9426ffa5, after the fix rounds c1cef822 (tests) and 9cfe81bf / 9426ffa5 (build): changes 1, findings 0. The review's bug is fixed: lintWorkflow in .github/ci/workflow-lint.ts parses with Result.try(() => parse(text)) and answers check.yaml: invalid YAML on any failure, as main's try did, and the new property law in .github/ci/workflow-lint.test.ts reaches the case on every run (it first asserts parseDocument finds no syntax error and parse throws ReferenceError); with b0cae406's parseDocument(text).toJS() it goes red, since that form throws Excessive alias count on such a text, as review1 ran. The tooling files (.agents, .github/ci, oxlint-plugins) moved to subpath imports, which the merge-session ruling sets for tooling. Blocking class 1, broken decision 0577 (and 0023's table row, apps keep the barrel): three files in next/apps/fabrika, an app, moved from the effect barrel to subpaths: src/exam/promise-types.ts, src/instance-one-file.integration.test.ts and src/worker-mail.integration.test.ts. 0577 has next/apps/* import from the barrel, held by preferBarrelImport at error in the package's tsconfig, and the ruling as relayed covers tooling only. Proof: effect-tsgo diagnostics on next/apps/fabrika/tsconfig.json with preferBarrelImport at error and barrelImportPackages effect finds 21 hits at this head, 4 in each of those three files, where the plan's E13 row counts 9 for the whole app; so this slice adds 12 hits to the slice that locks it. Fix: the tests step puts those three files back on one import from \"effect\" (Console included), as at b0cae406, and leaves their effect/crypto imports. Hits for E47 stay: 99 met, 92 fixed by hand, 0 by quick fix, 7 left for the owner, 0 waiting on 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 2,
+  "note": "Read-only on the branch apart from this row. Read every line of b0cae406..9426ffa5: import lines in 18 files, the lintWorkflow parse, the new law and two run rows. Ran at 9426ffa5, one file at a time under nice -n 19 --maxWorkers=1: workflow-lint 3, field-check 22, exact-versions 56 (12.1 s, against 22 s with the barrel), flow/walk 6, gc 15, all green. loosening.sh b0cae406 HEAD: 15 unrecognized-change hits, each an import line or the new test's yaml import; no law is loosened. By hand: chain.ts and drive.ts with no arguments exit 2. effect-tsgo diagnostics on .agents/tsconfig.json with preferBarrelImport at error finds 29 hits in chain.ts, drive.ts, gc.ts and flow/walk.ts: the tooling ruling clashes with origin/fabrikalfa/effect-e0's .agents/tsconfig.json, which sets preferBarrelImport at error for tooling (plan call 2), and the ruling has no decision file yet. Not run: pnpm typecheck and pnpm lint, which the build ran on this head; the two next/ integration tests that start real instances.",
+  "step": "review"
+}
