@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body 8c24524dad77
+
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
@@ -536,16 +536,16 @@ step owns most of this quest. A slice with no build row has two steps: tests, th
 | next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts | tests | tests | slice 9: kind 6, 1 fire, at :380 |
 | next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | slice 9: kind 9, 1 fire, at :69; a wrapper becomes a plain object |
 | next/packages/libfabrika/src/node/launchd/Launchd.test-support.ts | tests | tests | slice 9: kind 9, 1 fire, at :319; the handle wrapper becomes a plain object |
-| next/packages/libfabrika/src/cloudflare/control.ts | build | 60 | slice 10: kind 5, the typed table, 1 fire |
+| next/packages/libfabrika/src/cloudflare/control.ts | build | 60 | slice 10: kind 5, the typed table, 1 fire, at :124 (point 7) |
 | next/packages/libfabrika/src/cloudflare/control.laws.test.ts | tests | tests | slice 10: L8 |
-| next/packages/libfabrika/src/cloudflare/platform.test.ts | tests | tests | slice 10: kinds 3, 5 and 9, 19 fires; `rejecting` and `answeringProcess` become `Stub.make` |
-| next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 10: kind 9, 5 fires |
-| next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 10: kind 3, 2 fires; its two guards become `Stub.make` |
-| next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 10: kind 9, 1 fire; its stubs become `Stub.make` |
-| next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 10: no fire; its 4 hand-written guards become `Stub.make` |
-| next/packages/libfabrika/src/cloudflare/index.test.ts | tests | tests | slice 10: no fire; its guard becomes `Stub.make` |
-| next/packages/libfabrika/src/cloudflare/p14.test.ts | tests | tests | slice 10: no fire; its stub becomes `Stub.make` |
-| next/packages/libfabrika/src/telemetry/Records.integration.test.ts | tests | tests | slice 10: no fire; its stub becomes `Stub.make` |
+| next/packages/libfabrika/src/cloudflare/platform.test.ts | tests | tests | slice 10: kinds 3, 5 and 9, 19 fires; `rejecting` (:27), `answeringProcess` (:82) and `answering` (:138) become `Stub.make`, in point 7's shape |
+| next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 10: kind 9, 5 fires, at :147, :151, :169, :171, :705; wrappers over real objects, not stubs |
+| next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 10: kind 3, 2 fires, at :208 and :370; its two guards (:323, :347) become `Stub.make`; edited by pull request 1366, now merged (point 7) |
+| next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 10: kind 9, 1 fire, at :209; its stubs (`rejecting` at :47, the wrapper at :205) become `Stub.make` |
+| next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 10: no fire; its 4 hand-written guards (:168, :169, :378, :379) become `Stub.make`; edited by pull request 1366, now merged |
+| next/packages/libfabrika/src/cloudflare/index.test.ts | tests | tests | slice 10: no fire; its guard (:102) becomes `Stub.make` |
+| next/packages/libfabrika/src/cloudflare/p14.test.ts | tests | tests | slice 10: no fire; its stub (:45) becomes `Stub.make` |
+| next/packages/libfabrika/src/telemetry/Records.integration.test.ts | tests | tests | slice 10: no fire; its stub (:499) becomes `Stub.make` |
 | next/packages/libfabrika/src/runtime/Program.test.ts | tests | tests | slice 11: kinds 9, 10 and 11, 10 fires; 2 lines stay in the hostile input |
 | next/packages/libfabrika/src/runtime/Patch.test.ts | tests | tests | slice 11: kinds 8 and 12, 5 fires |
 | next/packages/libfabrika/src/runtime/Client.laws.test.ts | tests | tests | slice 11: kinds 1 and 2, 3 fires |
@@ -563,18 +563,20 @@ step owns most of this quest. A slice with no build row has two steps: tests, th
 | next/apps/fabrika/e2e/page-runtime.laws.visual.test.ts | tests | tests | slice 13: kind 7, 3 fires |
 | next/apps/fabrika/e2e/tezgah-focus.visual.test.ts | tests | tests | slice 13: kind 7, 2 fires |
 | next/apps/fabrika/e2e/one-file.visual.test.ts | tests | tests | no change: the model for kind 7 |
-| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 14: kinds 2 and 5, 3 fires; its 2 stubs become `Stub.make` |
-| next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 14: kind 1, 2 fires, now at :5812 and :5835 |
-| next/apps/fabrika/src/hands-launcher.integration.test.ts | tests | tests | slice 14: new on main since the count; kind 6, 2 fires (:114, a method picked by a name the type names, becomes `project[name]`; :233, a `start`) |
-| next/apps/fabrika/src/worker-monitor.integration.test.ts | tests | tests | slice 14: new on main since the count; kind 6 at :335 and kind 2 at :362, 2 fires |
-| next/apps/fabrika/src/input-recording.integration.test.ts | tests | tests | slice 14: kind 5, 1 fire |
-| next/apps/fabrika/src/instance-records.integration.test.ts | tests | tests | slice 14: kind 6, 1 fire; kind 11, the generated text |
-| next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts | tests | tests | slice 14: kinds 1 and 5, 9 fires; its 2 stubs become `Stub.make` |
-| next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 14: 5 fires; kind 2, 3 fires; kind 9, 2 lines stay in the hostile input |
-| next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts | tests | tests | slice 14: kind 6, 6 fires |
-| next/apps/fabrika/src/tasks-wire.integration.test.ts | tests | tests | slice 14: kind 6, 1 fire |
-| next/apps/fabrika/src/worker-mail.integration.test.ts | tests | tests | slice 14: kind 6, 3 fires |
-| next/apps/fabrika/src/worker-supervision.integration.test.ts | tests | tests | slice 14: kind 6, 2 fires |
+| next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 14: kinds 2 and 5, 3 fires, at :186, :247, :687; its 2 stubs (:269, :315) become `Stub.make` |
+| next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 14: kind 1, 2 fires, at :5812 and :5835 |
+| next/apps/fabrika/src/hands-launcher.integration.test.ts | tests | tests | slice 14: kind 6, 2 fires (:114, a method picked by a name the type names, becomes `project[name]`; :233, a `start`) |
+| next/apps/fabrika/src/worker-monitor.integration.test.ts | tests | tests | slice 14: kind 6 at :335 and kind 2 at :362, 2 fires |
+| next/apps/fabrika/src/input-recording.integration.test.ts | tests | tests | slice 14: kind 5, 1 fire, at :40 |
+| next/apps/fabrika/src/instance-records.integration.test.ts | tests | tests | slice 14: kind 6, 1 fire, at :232; kind 11, the generated text at :288 |
+| next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts | tests | tests | slice 14: kinds 1 and 5, 9 fires, at :565, :730, :866, :1502, :1521, :1647, :1648, :1826, :1828; its 2 stubs (:613, :689) become `Stub.make` |
+| next/apps/fabrika/src/runtime-quotas.laws.test.ts | tests | tests | slice 14: new with pull request 1366 (point 7); 5 fires: kind 5 at :320 and :371, kind 1 at :488 and :491, a `Reflect.set` at :660; its 2 stubs (:305, :353) become `Stub.make` |
+| next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 14: 5 fires, at :72, :83, :84, :165, :176; kind 2, 3 fires; kind 9, 2 lines stay in the hostile input |
+| next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts | tests | tests | slice 14: kind 6, 6 fires, at :135, :143, :159, :182, :184, :186 |
+| next/apps/fabrika/src/tasks-wire.integration.test.ts | tests | tests | slice 14: kind 6, 1 fire, at :228 |
+| next/apps/fabrika/src/worker-mail.integration.test.ts | tests | tests | slice 14: kind 6, 3 fires, at :356, :749, :952 |
+| next/apps/fabrika/src/worker-quotas.integration.test.ts | tests | tests | slice 14: new with pull request 1366 (point 7); kind 6, 1 fire, at :189; its `rpc` helper takes a thunk, as point 6's `invoke` does |
+| next/apps/fabrika/src/worker-supervision.integration.test.ts | tests | tests | slice 14: kind 6, 2 fires, at :141 and :359 |
 | next/apps/fabrika/src/exam/twin.integration.test.ts | tests | tests | no change: kind 11, read by hand, the text stays |
 
 Slice 15 changes only `.oxlintrc.json`, `oxlint-plugins/builtin-plants.ts` and
@@ -666,11 +668,11 @@ moved.
 9. `node`, with the typed dev client: 115 product lines, about 140 test lines (amendment of
    2026-11-15: the new `runtime/ObjectCalls.ts` and the edit of `cloudflare/bindings.ts`; point 6
    adds about 60 test lines in five app tests).
-10. `cloudflare`, with the control table: 60 product lines, about 250 test lines.
+10. `cloudflare`, with the control table: 60 product lines, about 250 test lines (point 7: unchanged).
 11. `runtime`: about 80 test lines. 0 product lines.
 12. `client`: about 300 test lines. 0 product lines.
 13. The app's `e2e`: about 60 test lines. 0 product lines.
-14. The app's `src`: about 170 test lines. 0 product lines (two more files since the count).
+14. The app's `src`: about 210 test lines. 0 product lines (two more files since the count, and two more from pull request 1366, point 7).
 15. The fold: about 40 lines of configuration. 0 product lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15, at list price: a tests step
@@ -1093,6 +1095,120 @@ holds the client's type, and these files only follow it. All five are `.integrat
 `.test-support.` files; `tsc` proves the fix, and the tests step lists which laws ran in the box
 under the 0178 guard.
 
+#### 7. Slices 10 and 14 recounted after main came in, 2026-11-16 (lead)
+
+**The answer first.** Slice 10 is unchanged: 28 fires in 5 files. Slice 14 grows from 37 fires in
+12 files to 43 in 14: pull request 1366 added `runtime-quotas.laws.test.ts` (5) and
+`worker-quotas.integration.test.ts` (1). Those 6 are the only fires that came with 1366, and they
+are now slice 14's like any other. `Stub.make` on main is stricter than this plan's sketch in one
+way: `rest` must answer a value of one of the stubbed type's members. No row asks for what the real
+shape cannot do, so this point records counts, the tests' shape and the order, and makes no new
+design call.
+
+Read on `fabrikalfa/reflect-rest` at `a6a37add0`, which merged `origin/main` with
+https://github.com/kamp-us/tea-fabrika/pull/1366 and https://github.com/kamp-us/tea-fabrika/pull/1481.
+Counted as point 3 did: oxlint 1.90.0, a throwaway config outside the repo with only the four
+entries of "The hold", only `eslint(no-restricted-properties)` fires counted.
+
+| Slice | Folder | Point 3 | Now | Per file now |
+|---|---|---|---|---|
+| 10 | `libfabrika/src/cloudflare` | 28 in 5 | 28 in 5 | `platform.test.ts` 19, `readers.laws.test.ts` 5, `ObjectService.test.ts` 2, `error-cause.test.ts` 1, `control.ts` 1 |
+| 14 | `apps/fabrika/src` | 37 in 12 | 43 in 14 | `runtime-recovery.laws.integration.test.ts` 9, `scheduled-job-alarm.integration.test.ts` 6, `runtime.decode.test.ts` 5, `runtime-quotas.laws.test.ts` 5, `checklist-instance.laws.integration.test.ts` 3, `worker-mail.integration.test.ts` 3, `door.integration.test.ts` 2, `hands-launcher.integration.test.ts` 2, `worker-monitor.integration.test.ts` 2, `worker-supervision.integration.test.ts` 2, `input-recording.integration.test.ts` 1, `instance-records.integration.test.ts` 1, `tasks-wire.integration.test.ts` 1, `worker-quotas.integration.test.ts` 1 |
+
+- Slice 10 is 27 `get` and 1 `has` (`platform.test.ts:30`). Slice 14 is 41 `get`, 1 `has`
+  (`runtime.decode.test.ts:165`) and 1 `set` (`runtime-quotas.laws.test.ts:660`). Each row in
+  "Files" now gives its fires' lines.
+- Slice 13 was counted too, as a check: still 15 in 5. The `runtime` and `node` folders have 0
+  fires on this branch, so 1366's edits there added none.
+- No row is dropped: no file lost its fires or moved. The text matches lint cannot see are where
+  point 3 put them: `exam/twin.integration.test.ts:93` and `:95`, and the generated text at
+  `instance-records.integration.test.ts:288`.
+
+**The fires that waited on 1366.** The signed order made slices 9, 10 and 11 wait for the quotas
+slice, branch `fabrikalfa/p34c-s4`, which landed as pull request 1366. No row named a single fire as
+waiting on it. In slice 10's folder it edited `ObjectService.test.ts` (its 2 fires, at :208 and
+:370, are as point 3 counted them) and `alarm.laws.test.ts` (no fire, its 4 guards still there). It
+added these 6 fires to slice 14, each part of the slice now:
+
+- `next/apps/fabrika/src/runtime-quotas.laws.test.ts:320` and `:371`: kind 5, a method picked by a
+  name inside the file's Project and Process stand-ins, as `runtime-recovery.laws.integration.test.ts`
+  has them. The two `new Proxy` stand-ins (:305, :353) become `Stub.make`.
+- `next/apps/fabrika/src/runtime-quotas.laws.test.ts:488` and `:491`: kind 1, the `name` and `id` of a
+  saved descriptor, decoded once by one schema of two optional fields.
+- `next/apps/fabrika/src/runtime-quotas.laws.test.ts:660`: `Reflect.set(env, "INSTANCE", ...)`, which
+  writes past `Env`'s `readonly INSTANCE`. The lean (85%), "Assign through the type" as the entry's
+  message says: the start's input is a local `let`, and `env` reads it through a getter. The object
+  `processRuntime` holds stays the same one, as today.
+
+```ts
+// next/apps/fabrika/src/runtime-quotas.laws.test.ts, a sketch, not compiled
+let start = instance(limits);
+const env = {
+  get INSTANCE() {
+    return start;
+  },
+  // PROJECT, PROCESS and the rest as today
+} as unknown as Env; // the cast on main, unchanged
+// :660, before
+Reflect.set(env, "INSTANCE", instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened"));
+// after
+start = instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened");
+```
+
+- `next/apps/fabrika/src/worker-quotas.integration.test.ts:189`: kind 6. Its `rpc` helper takes a
+  binding and a method name. It takes a thunk instead, as point 6's `invoke` does, and its six callers
+  (:263, :272, :385, :399, :404, :416) call `DevProject` and `DevProcess` plainly: `start`, `read`,
+  `info`, `abort` and `restart` are all names those types have.
+
+**`Stub.make` as built, against the sketch.** On main, `next/packages/vitest/src/Stub.ts`:
+
+```ts
+// the sketch in "The shared stub"
+export const make: <A extends object>(rest: (method: string) => (...args: ReadonlyArray<unknown>) => unknown, own?: Partial<A>) => A;
+// as built (pull request 1481)
+export const make = <A extends object>(rest: (method: string) => A[keyof A], own: Partial<A> = {}): A => ...
+```
+
+The shape slice 10's and slice 14's tests must use:
+
+- **`rest` answers a member of `A`.** `async () => { throw fault; }` is `() => Promise<never>` and fits
+  any member that answers a Promise; a guard that throws, such as `unexpected`, answers `never` and
+  fits every member. So the rejecting stubs and the guards move as they are.
+- **No generic wrapper.** Inside `const rejecting = <A extends object>(...) => Stub.make<A>(...)`,
+  TypeScript cannot show that `() => Promise<never>` is an `A[keyof A]`. Each use names its type,
+  `Stub.make<ProjectBinding>(...)` as the plan's sketch already writes it, or a helper is written for
+  one concrete type.
+- **An answer the type refuses on purpose is kind 10.** `answeringProcess(envelope)` and
+  `answering(...)` in `platform.test.ts` answer the bridge's error envelope, which no member's type
+  names: the law feeds it in on purpose. That `rest` line carries one `@ts-expect-error` with its
+  reason, the plan's call on kind 10, never a cast. The same holds for any other stub whose canned
+  answer no member type takes (`p14.test.ts:45`'s `{ _tag: "ok" }`, the `RecordCalls` stub in
+  `telemetry/Records.integration.test.ts:499`), unless the tests step types the answer as a member's.
+- **A stub stands for calls only.** Its `Proxy` wraps an empty null-prototype object, so `Object.keys`,
+  `in` and a spread see nothing. No row spreads or lists a stub: the `Object.keys` calls in
+  `platform.test.ts` (:79, :135) list a client made over a stub, not the stub.
+
+Every "becomes `Stub.make`" note names a stub that is on this branch, with its line now in its row.
+`platform.test.ts:138`'s `answering`, a third stub of the same shape in that file, is named in its
+row too.
+
+**Slice 10's neighbor.** The mock sweep's cloudflare slice 2, branch `fabrikalfa/mock-cloudflare-s2`,
+edits the same cloudflare test files and was to go first. It is not on origin: `git ls-remote` finds
+only `fabrikalfa/mock-cloudflare`. Slice 10 starts without it. Whichever of the two lands later
+carries the other's lines in its merge, and its tests step counts the folder again.
+
+**The order now.**
+
+- Slices 10 and 14 start. `Stub.make` is on main (1481), slice 9's types are on this branch, and
+  1366 has merged. Slice 14's kind 6 calls use slice 9's `DevProject` and `DevProcess`.
+- Slice 13 still waits for https://github.com/kamp-us/tea-fabrika/pull/1099 and
+  https://github.com/kamp-us/tea-fabrika/pull/1312, both still open on 2026-11-16 (read with the
+  GitHub tool).
+- Slice 15 folds the blocks and comes last.
+
+**Size.** Slice 14 grows by about 40 test lines, to about 210, for the two new files. The estimate
+stays 38 steps and $163: the growth sits inside slice 14's one tests step, priced at $14.
+
 #### What this amendment cannot tell us
 
 - Whether `ObjectCalls.ts` and `DevProject` compile as sketched. Nothing was compiled; slice 9's
@@ -1102,6 +1218,10 @@ under the 0178 guard.
   step's `tsc --noEmit -p next/apps/fabrika` tells; a refusal there is a test edit in the same files.
 - The counts move again if a branch lands in these folders before a slice's tests step. Pull
   requests 1099, 1232 and 1312 edit files of slices 11, 12 and 13.
+- Whether `Stub.make`'s real signature fits every stub point 7 names without more `@ts-expect-error`
+  lines than it lists. Nothing was compiled; slice 10's and slice 14's typecheck tells.
+- Whether the mock sweep's cloudflare slice 2 clashes with slice 10 by more than lines. Its branch
+  is not on origin, so it was not read.
 
 ## Open questions
 
