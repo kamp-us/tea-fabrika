@@ -16,6 +16,7 @@
 // The home is `/t730`, a made-up folder that exists only in the counted FileSystem below.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import {
   Cause,
   ConfigProvider,
@@ -27,7 +28,6 @@ import {
   PlatformError,
   References,
   Sink,
-  Stream,
   Tracer,
 } from "effect";
 import { Command as Cli } from "effect/cli";
@@ -52,99 +52,89 @@ type Person =
   | { readonly _tag: "text"; readonly text: string }
   | { readonly _tag: "unreadable" };
 
+/** What one run asked of the FileSystem, read from the Recorder that watched it. */
 interface Counts {
-  /** Every path a read-side operation was asked for, in order. */
-  readonly touched: Array<string>;
+  /** The first argument of every call that reads, in order: a path, or a glob's pattern. */
+  readonly touched: ReadonlyArray<unknown>;
   /** Reads of the person's file. */
-  reads: number;
-  /** Every write-side operation called, by name. */
-  readonly writes: Array<string>;
+  readonly reads: number;
+  /** Every member called that writes or makes something, by name. */
+  readonly writes: ReadonlyArray<string>;
 }
+
+/** `FileSystem`'s members that write or make something. A name it does not have does not compile. */
+const WRITES: ReadonlySet<Recorder.Method<FileSystem.FileSystem>> = new Set([
+  "writeFile",
+  "writeFileString",
+  "makeDirectory",
+  "makeTempDirectory",
+  "makeTempDirectoryScoped",
+  "makeTempFile",
+  "makeTempFileScoped",
+  "remove",
+  "rename",
+  "copy",
+  "copyFile",
+  "symlink",
+  "link",
+  "truncate",
+  "chmod",
+  "chown",
+  "utimes",
+  "open",
+]);
 
 const missing = (method: string, path: string) =>
   PlatformError.systemError({ _tag: "NotFound", module: "FileSystem", method, pathOrDescriptor: path });
 
 /**
- * A FileSystem that holds only the person's file at `at`, counts every read and refuses every
- * write. A repo's file anywhere, the current folder's included, would hold a key no setting has.
+ * A FileSystem that holds only the person's file at `at`, with every call recorded. Each member it
+ * does not give answers as `FileSystem.makeNoop` does: `NotFound`, `exists` false. A repo's file
+ * anywhere, the current folder's included, would hold a key no setting has. A Sink is no member the
+ * Recorder watches, so each `sink` opened is written into `sunk`, and it dies.
  */
-const files = (at: string, person: Person, counts: Counts) => {
-  const look = (method: string) => (path: string) => {
-    counts.touched.push(path);
-    return Effect.fail(missing(method, path));
-  };
-  const wrote = (method: string) => () => {
-    counts.writes.push(method);
-    return Effect.die(new Error(`the settings command wrote with ${method}`));
-  };
-  return FileSystem.layerNoop({
-    readFileString: (path) => {
-      counts.touched.push(path);
+const files = (at: string, person: Person, sunk: Array<string>) =>
+  Recorder.layer(
+    FileSystem.FileSystem,
+    FileSystem.makeNoop({
+      readFileString: (path) => {
+        if (path === at) {
+          return person._tag === "text"
+            ? Effect.succeed(person.text)
+            : person._tag === "unreadable"
+              ? Effect.fail(
+                  PlatformError.systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "readFileString",
+                    pathOrDescriptor: path,
+                  }),
+                )
+              : Effect.fail(missing("readFileString", path));
+        }
 
-      if (path === at) {
-        counts.reads++;
-        return person._tag === "text"
-          ? Effect.succeed(person.text)
-          : person._tag === "unreadable"
-            ? Effect.fail(
-                PlatformError.systemError({
-                  _tag: "PermissionDenied",
-                  module: "FileSystem",
-                  method: "readFileString",
-                  pathOrDescriptor: path,
-                }),
-              )
-            : Effect.fail(missing("readFileString", path));
-      }
+        return path.endsWith(".fabrika/fabrika.toml")
+          ? Effect.succeed("[nope]\nkey = 1\n")
+          : Effect.fail(missing("readFileString", path));
+      },
+      sink: (path) => {
+        sunk.push(path);
+        return Sink.die(new Error("the settings command wrote with sink"));
+      },
+    }),
+  );
 
-      return path.endsWith(".fabrika/fabrika.toml")
-        ? Effect.succeed("[nope]\nkey = 1\n")
-        : Effect.fail(missing("readFileString", path));
-    },
-    readFile: look("readFile"),
-    exists: (path) => {
-      counts.touched.push(path);
-      return Effect.succeed(false);
-    },
-    stat: look("stat"),
-    lstat: look("lstat"),
-    access: look("access"),
-    readDirectory: look("readDirectory"),
-    readDirectoryEntries: look("readDirectoryEntries"),
-    readLink: look("readLink"),
-    realPath: look("realPath"),
-    stream: (path) => {
-      counts.touched.push(path);
-      return Stream.fail(missing("stream", path));
-    },
-    watch: (path) => {
-      counts.touched.push(path);
-      return Stream.fail(missing("watch", path));
-    },
-    writeFile: wrote("writeFile"),
-    writeFileString: wrote("writeFileString"),
-    makeDirectory: wrote("makeDirectory"),
-    makeTempDirectory: wrote("makeTempDirectory"),
-    makeTempDirectoryScoped: wrote("makeTempDirectoryScoped"),
-    makeTempFile: wrote("makeTempFile"),
-    makeTempFileScoped: wrote("makeTempFileScoped"),
-    remove: wrote("remove"),
-    rename: wrote("rename"),
-    copy: wrote("copy"),
-    copyFile: wrote("copyFile"),
-    symlink: wrote("symlink"),
-    link: wrote("link"),
-    truncate: wrote("truncate"),
-    chmod: wrote("chmod"),
-    chown: wrote("chown"),
-    utimes: wrote("utimes"),
-    open: wrote("open"),
-    sink: () => {
-      counts.writes.push("sink");
-      return Sink.die(new Error("the settings command wrote with sink"));
-    },
+/** Every call the run made on the FileSystem, as the law counts them. */
+const counted = (at: string, sunk: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const all = yield* Recorder.calls(FileSystem.FileSystem);
+    const reads = yield* Recorder.calls(FileSystem.FileSystem, "readFileString");
+    return {
+      touched: all.filter((call) => !WRITES.has(call.method)).map((call) => call.args[0]),
+      reads: reads.filter(([path]) => path === at).length,
+      writes: [...all.filter((call) => WRITES.has(call.method)).map((call) => call.method), ...sunk.map(() => "sink")],
+    } satisfies Counts;
   });
-};
 
 /** Spans, as their names, attributes, events and status. */
 const spans = () => {
@@ -198,7 +188,8 @@ const place = (env: Readonly<Record<string, string>>) =>
 
 /** One run of `settings` with these arguments, environment and person's file, everything it said. */
 const run = (input: Input) => {
-  const counts: Counts = { touched: [], reads: 0, writes: [] };
+  const at = place(input.env).path;
+  const sunk: Array<string> = [];
   const traced = spans();
   const logged = logs();
   return Effect.gen(function* () {
@@ -208,12 +199,13 @@ const run = (input: Input) => {
     );
     const stdout = (yield* TestConsole.logLines).map(String);
     const stderr = (yield* TestConsole.errorLines).map(String);
+    const counts = yield* counted(at, sunk);
     return { exit, stdout, stderr, counts, spans: traced.text(), logs: logged.entries };
   }).pipe(
     Effect.provideService(References.MinimumLogLevel, "All"),
     Effect.provide(
       Layer.mergeAll(
-        files(place(input.env).path, input.person, counts),
+        files(at, input.person, sunk),
         TestConsole.layer,
         TomlParser.layer,
         Digest.layerWebCrypto,
@@ -228,7 +220,6 @@ const run = (input: Input) => {
 
 /** The oracle: the library's own load and report for the same inputs. */
 const expected = (input: Input, flags: Readonly<Record<string, string>>, all: boolean) => {
-  const counts: Counts = { touched: [], reads: 0, writes: [] };
   const at = place(input.env);
   const env = Object.fromEntries(
     Declarations.all.declarations.flatMap((d) => (input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]])),
@@ -236,7 +227,7 @@ const expected = (input: Input, flags: Readonly<Record<string, string>>, all: bo
   return Load.load({ person: at, flags, env, version: VERSION }).pipe(
     Effect.map((loaded) => Print.report(Reference.rows(Declarations.all, loaded.snapshot), { all })),
     Effect.exit,
-    Effect.provide(Layer.mergeAll(files(at.path, input.person, counts), TomlParser.layer, Digest.layerWebCrypto)),
+    Effect.provide(Layer.mergeAll(files(at.path, input.person, []), TomlParser.layer, Digest.layerWebCrypto)),
     Effect.provide(NodeServices.layer),
     Effect.runPromise,
   );
