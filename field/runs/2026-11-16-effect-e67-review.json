@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e67-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:33:17-08:00",
+  "ended": "2026-11-16T01:50:30-08:00",
+  "parent": "2026-11-16-effect-e67-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of slice E67 (unnecessaryTypeofType, mechanical) at 82d0af8d0, the one commit on 891075e7a, in next/: merge-ready, findings 0. All 10 edits replace typeof X.Type with a type alias that is defined as exactly that type: Install (runtime/Code.ts:55, type Install = typeof Install.Type), Schema.Json (effect 4.1.3 Schema.d.ts: Json is Codec<Json>, so Json.Type is the Json alias), CheckpointSchema (an import alias of Checkpoint, runtime/ProcessStore.ts:42, type Checkpoint = typeof Checkpoint.Type) and Writer (access/SessionManager.ts:35, type Writer = typeof Writer.Type, the module RuntimeCauseTest.ts imports it from, not ledger/WritePolicy.ts). No type is widened or changed. Recount: at the base, in a scratch copy of libfabrika with the four base files, effect-tsgo diagnostics with only this check at error reads 10 hits (cloudflare/runtime.ts 1614 and 1664, gateway/Gateway.ts 99 and 1478, runtime/ProcessStore.integration.test.ts 110, 136, 174, 231, 266, runtime/RuntimeCauseTest.ts 327), so the tests row's folder list (cloudflare 2, gateway 2, runtime 6) is right; at the head all 13 plugin tsconfigs read 0, the CI tooling folder included. The lspconfig was proved honored by a control run (another check set to error read error, one set off vanished). No lock, no plant, no ignore or disable line, no tsconfig change, by design.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Read-only on the branch apart from this row. Ran at 82d0af8d0: one pnpm typecheck (exit 0, no override); loosening.sh 891075e7a HEAD gives two unrecognized-change hits, ProcessStore.integration.test.ts:110 (the fixture's type annotation) and RuntimeCauseTest.ts:327 (the membership parameter's return type), both type-only renames to the identical type, so no law is loosened. Tests, one file at a time, all passed: runtime/ProcessStore.integration (7), node/ErrorCause (29, runs the RuntimeCauseTest suite), gateway/Gateway.types (2), gateway/GatewayRevocation.integration (16), node/RunnerAdmission.integration (11), node/gateway/Tasks.integration (11), cloudflare/error-cause (12), cloudflare/mail (8); none refused by the 0178 guard, no 60 s timeouts. The E7 override in libfabrika/tsconfig.json still excludes the two runtime files and lacks src/cloudflare and src/gateway; that is the integrator's job, as the tests row says.",
+  "step": "review"
+}
