@@ -272,9 +272,7 @@ const layer = (sql: Sql, next: Effect.Effect<string>, gate?: Gate, seen?: Seen) 
 const noSenders = Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) });
 
 /** A raw value under `tag`, never made by a schema, so it can hold a shape its schema refuses. */
-const raw = (tag: string, fields: object): unknown =>
-  // oxlint-disable-next-line fabrika/no-hand-tag -- invalid on purpose: no schema maker writes a shape its schema refuses
-  ({ ...fields, _tag: tag });
+const raw = (tag: string, fields: object): unknown => ({ ...fields, ...Schema.TaggedStruct(tag, {}).make({}) });
 
 /** The item a number picks; never called on an empty list. */
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {

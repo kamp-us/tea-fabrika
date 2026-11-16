@@ -13,6 +13,7 @@ import {
   ExitReason as Fixture,
   PHASES,
 } from "./Process.test-support.ts";
+import { NoProc } from "./Process.ts";
 import type { ProcessCalls, ProcessManager } from "./ProcessManager.ts";
 
 const decode = Schema.decodeUnknownResult(ExitReason);
@@ -25,7 +26,7 @@ describe("P34c slice 1: the exit reason schema", () => {
         fcExitReason.chain((reason) => fc.tuple(fc.constant(reason), fcBadReason(reason))),
         ([reason, bad]) => {
           const decoded = decode(copied(reason));
-          expect(decoded, "a valid reason decodes").toMatchObject({ _tag: "Success" });
+          expect(Result.isSuccess(decoded), "a valid reason decodes").toBe(true);
           expect(Result.getOrThrow(decoded)).toEqual(reason);
           expect(Schema.encodeSync(ExitReason)(Result.getOrThrow(decoded))).toEqual(reason);
           expect(fixture(bad), "the mutation is invalid by the fixture's own schema").toBe(false);
@@ -44,26 +45,26 @@ describe("P34c slice 1: the exit reason schema", () => {
         fc.string({ minLength: 1, maxLength: 20 }),
         (phase, length, word) => {
           const error = "E".repeat(length);
-          const answer = decode({ _tag: "crashed", phase, error });
+          // A crash made whole, then given a class of any length, inside the bound or past it.
+          const answer = decode({ ...Fixture.cases.crashed.make({ phase }), error });
 
           if (length >= 1 && length <= ERROR_CLASS_MAX) {
-            expect(Result.getOrThrow(answer), "a class inside the bound is kept whole").toEqual({
-              _tag: "crashed",
-              phase,
-              error,
-            });
+            expect(Result.getOrThrow(answer), "a class inside the bound is kept whole").toEqual(
+              ExitReason.cases.crashed.make({ phase, error }),
+            );
           } else {
             expect(Result.isFailure(answer), `a class of ${length} characters is refused`).toBe(true);
           }
 
-          expect(Result.getOrThrow(decode({ _tag: "crashed", phase })), "the class is optional").toEqual({
-            _tag: "crashed",
-            phase,
-          });
-          expect(Result.isFailure(decode({ _tag: "crashed", error: "Error" })), "the phase is required").toBe(true);
+          expect(Result.getOrThrow(decode(Fixture.cases.crashed.make({ phase }))), "the class is optional").toEqual(
+            ExitReason.cases.crashed.make({ phase }),
+          );
+          const { phase: _phase, ...phaseless } = Fixture.cases.crashed.make({ phase, error: "Error" });
+          expect(Result.isFailure(decode(phaseless)), "the phase is required").toBe(true);
           const unknown = (PHASES as ReadonlyArray<string>).includes(word) ? `${word}_` : word;
-          expect(Result.isFailure(decode({ _tag: "crashed", phase: unknown })), "an unknown phase").toBe(true);
-          expect(Result.isFailure(decode({ _tag: "noproc" })), "noproc is a monitor result, never an exit").toBe(true);
+          const unknownPhase = { ...Fixture.cases.crashed.make({ phase }), phase: unknown };
+          expect(Result.isFailure(decode(unknownPhase)), "an unknown phase").toBe(true);
+          expect(Result.isFailure(decode(NoProc.make({}))), "noproc is a monitor result, never an exit").toBe(true);
         },
       ),
       {
@@ -87,19 +88,20 @@ function exitTypeErrors(
 ) {
   const crash = manager.exit(
     "process_0000000000e008000000000000",
-    { _tag: "crashed", phase: "step", error: "TypeError" },
+    ExitReason.cases.crashed.make({ phase: "step", error: "TypeError" }),
     from,
   );
   // @ts-expect-error An exit reason is the closed union, not text.
   const crashText = manager.exit("process_0000000000e008000000000000", "crashed", from);
-  const shutdown = calls.exit("process_0000000000e008000000000000", { _tag: "shutdown" }, from);
+  const shutdown = calls.exit("process_0000000000e008000000000000", ExitReason.cases.shutdown.make({}), from);
   // @ts-expect-error The remote calls keep the same closed union.
   const shutdownText = calls.exit("process_0000000000e008000000000000", "shutdown", from);
+  const { phase: _phase, ...phaseless } = ExitReason.cases.crashed.make({ phase: "step" });
   // @ts-expect-error A crash names its phase.
-  const noPhase = manager.exit("process_0000000000e008000000000000", { _tag: "crashed" }, from);
+  const noPhase = manager.exit("process_0000000000e008000000000000", phaseless, from);
   // @ts-expect-error noproc is a monitor result, not an exit reason.
-  const noproc = manager.exit("process_0000000000e008000000000000", { _tag: "noproc" }, from);
-  const reason: typeof ExitReason.Type = { _tag: "normal" };
+  const noproc = manager.exit("process_0000000000e008000000000000", NoProc.make({}), from);
+  const reason: typeof ExitReason.Type = ExitReason.cases.normal.make({});
   // @ts-expect-error The exported type is the union too.
   const text: typeof ExitReason.Type = "normal";
   return [crash, crashText, shutdown, shutdownText, noPhase, noproc, reason, text];

@@ -1,11 +1,12 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
+import { letterLine } from "./Mailbox.ts";
 import {
   A,
   B,
@@ -30,7 +31,7 @@ import {
   type Storage,
   watcher,
 } from "./Process.test-support.ts";
-import { Activity, Dead, Owner, ProcessEvent, ProcessTable, Recipient, recoverActivity } from "./Process.ts";
+import { Activity, Dead, Owner, ProcessEvent, ProcessTable, Recipient, recoverActivity, State } from "./Process.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
@@ -51,16 +52,17 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
   });
 
 const hash = fc.string({ minLength: 1, maxLength: 256 });
+/** A fact of a kind a later brain may write, which this one does not know. */
+const FutureFact = Schema.TaggedStruct("future_process_fact", {});
 
 describe("P33, saved state and process authority", () => {
   it("a process owner requires its valid process id", () => {
     fc.assert(
       fc.property(fcProcessIds, (process) => {
-        expect(Schema.is(Owner)({ _tag: "process" }), "missing process owner id").toBe(false);
-        expect(Schema.decodeUnknownSync(Owner)({ _tag: "process", process })).toEqual({
-          _tag: "process",
-          process,
-        });
+        const owner = Owner.cases.process.make({ process });
+        const { process: _process, ...unnamed } = owner;
+        expect(Schema.is(Owner)(unnamed), "missing process owner id").toBe(false);
+        expect(Schema.decodeUnknownSync(Owner)(Schema.encodeSync(Owner)(owner))).toEqual(owner);
       }),
       { seed: 119120, numRuns: 100 },
     );
@@ -77,15 +79,7 @@ describe("P33, saved state and process authority", () => {
           name: fc.stringMatching(/^p:[a-z0-9._:-]{1,254}$/),
         }),
         (errors, m, build, identity) => {
-          const dead = {
-            ...identity,
-            _tag: "dead",
-            tries: errors.length,
-            limit: 32,
-            m,
-            build,
-            errors,
-          };
+          const dead = Dead.make({ ...identity, tries: errors.length, limit: 32, m, build, errors });
           expect(Schema.is(Dead)(dead), "one error class per try is accepted").toBe(true);
           expect(Schema.is(Dead)({ ...dead, errors: errors.slice(1) })).toBe(false);
           expect(Schema.is(Dead)({ ...dead, tries: errors.length + 1 })).toBe(false);
@@ -127,21 +121,19 @@ describe("P33, saved state and process authority", () => {
           yield* processes.exit(A, exit, from());
           const table = new ProcessTable(store.rows(), BRAIN);
           expect(() => table.down(B, policy.reason, brain().owner), "missing child is a typed refusal").not.toThrow();
-          expect(table.down(B, policy.reason, brain().owner)).toMatchObject({
-            _tag: "Failure",
-            failure: { reason: "ended" },
-          });
-          expect(table.down(A, policy.reason, watcher(W).owner)).toMatchObject({
-            _tag: "Failure",
-            failure: { reason: "not_parent" },
-          });
+          const missing = table.down(B, policy.reason, brain().owner);
+          expect(Result.isFailure(missing)).toBe(true);
+          expect(missing).toMatchObject({ failure: { reason: "ended" } });
+          const foreign = table.down(A, policy.reason, watcher(W).owner);
+          expect(Result.isFailure(foreign)).toBe(true);
+          expect(foreign).toMatchObject({ failure: { reason: "not_parent" } });
           yield* processes.down(A, policy, from());
           store.reopen();
           expect(() => new ProcessTable(store.rows(), BRAIN), "down state still decodes").not.toThrow();
           const life = new ProcessTable(store.rows(), BRAIN).life(A);
+          expect(Option.isSome(life)).toBe(true);
           expect(life).toMatchObject({
-            _tag: "Some",
-            value: { state: { _tag: "down", process: A, code: { ...CODE, hash: build }, ...policy } },
+            value: { state: State.cases.down.make({ process: A, code: { ...CODE, hash: build }, ...policy }) },
           });
         }).pipe(Effect.provide(manager(store)));
       },
@@ -165,7 +157,8 @@ describe("P33, saved state and process authority", () => {
           );
           expect(retried._tag, "ended exit is a no-op even with fresh caller metadata").toBe("Success");
           const changed = yield* Effect.result(processes.exit(A, other, from()));
-          expect(changed).toMatchObject({ _tag: "Failure", failure: { reason: "ended" } });
+          expect(Result.isFailure(changed)).toBe(true);
+          expect(changed).toMatchObject({ failure: { reason: "ended" } });
           expect(store.rows()).toEqual(before);
         }).pipe(Effect.provide(manager(store)));
       },
@@ -467,8 +460,7 @@ describe("p79, names, parents and replay", () => {
         const stream = before.find((row) => row._tag === "registered")!.stream;
         yield* Ledger.use((ledger) =>
           ledger.append(stream, "future", {
-            ...from(),
-            _tag: "future_process_fact",
+            ...lineFor(from(), FutureFact.make({})),
             body: Schema.decodeUnknownSync(Schema.Json)(body),
           }),
         ).pipe(Effect.provide(manager(store)));
@@ -508,12 +500,14 @@ const lawsFor = (
   const { forge, live, downs } = forger(store, by, stream);
   return {
     registered: Effect.gen(function* () {
-      yield* forge("processes", {
-        _tag: "registered",
-        name: "counter:2",
-        program: "counter",
-        owner: Owner.cases.process.make({ process: W }),
-      });
+      yield* forge(
+        "processes",
+        ProcessEvent.cases.registered.make({
+          name: "counter:2",
+          program: "counter",
+          owner: Owner.cases.process.make({ process: W }),
+        }),
+      );
       const answer = yield* Effect.exit(
         ProcessManager.use((p) => p.start(first("start:counter:2", "counter:2"), from())).pipe(
           Effect.provide(manager(store, brain(), ids(B).next)),
@@ -522,37 +516,33 @@ const lawsFor = (
       expect(Exit.isSuccess(answer)).toBe(true);
     }),
     started: Effect.gen(function* () {
-      yield* forge("counter:1", { _tag: "started", process: B, name: "counter:1", ...CODE });
+      yield* forge("counter:1", ProcessEvent.cases.started.make({ process: B, name: "counter:1", ...CODE }));
       expect(yield* live(B)).toBe(false);
     }),
     exited: Effect.gen(function* () {
-      yield* forge("counter:1", { _tag: "exited", process: A, reason: CRASHED });
+      yield* forge("counter:1", ProcessEvent.cases.exited.make({ process: A, reason: CRASHED }));
       expect(yield* live(A)).toBe(true);
     }),
     restarted: Effect.gen(function* () {
-      yield* forge("counter:1", {
-        _tag: "restarted",
-        process: A,
-        after: B,
-        name: "counter:1",
-        reason: "crashed",
-        build: CODE.hash,
-      });
+      yield* forge(
+        "counter:1",
+        ProcessEvent.cases.restarted.make({
+          process: A,
+          after: B,
+          name: "counter:1",
+          reason: "crashed",
+          build: CODE.hash,
+        }),
+      );
       const info = yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(manager(store)));
       expect(info.find((row) => row.process === A)?.restarts).toBe(0);
     }),
     down: Effect.gen(function* () {
-      yield* forge("counter:1", {
-        _tag: "down",
-        process: A,
-        reason: "crashed",
-        crashes: 1,
-        until: 0,
-      });
+      yield* forge("counter:1", ProcessEvent.cases.down.make({ process: A, reason: "crashed", crashes: 1, until: 0 }));
       expect(yield* live(A)).toBe(true);
     }),
     monitored: Effect.gen(function* () {
-      yield* forge("processes", { _tag: "monitored", ref: "watch:1", process: A, to: toW });
+      yield* forge("processes", ProcessEvent.cases.monitored.make({ ref: "watch:1", process: A, to: toW }));
       yield* ProcessManager.use((p) => p.exit(A, CRASHED, from())).pipe(Effect.provide(manager(store)));
       expect(downs()).toEqual([]);
     }),
@@ -560,7 +550,7 @@ const lawsFor = (
       yield* ProcessManager.use((p) => p.monitor("watch:1", A, from())).pipe(
         Effect.provide(manager(store, watcher(W))),
       );
-      yield* forge("processes", { _tag: "demonitored", ref: "watch:1", to: toW, reason: "canceled" });
+      yield* forge("processes", ProcessEvent.cases.demonitored.make({ ref: "watch:1", to: toW, reason: "canceled" }));
       yield* ProcessManager.use((p) => p.exit(A, CRASHED, from())).pipe(Effect.provide(manager(store)));
       expect(downs()).toHaveLength(1);
     }),
@@ -657,11 +647,7 @@ describe("P33, the brain writes process events and `parent` keeps who asked", ()
       const asked = `in-${W}-7`;
       return Effect.gen(function* () {
         yield* Ledger.use((ledger) =>
-          ledger.append(
-            "caller-x/inbox",
-            asked,
-            lineFor(from({ by: X_KEY }), { _tag: "send", m: { start: "counter:1" } }),
-          ),
+          ledger.append("caller-x/inbox", asked, letterLine(from({ by: X_KEY }), { start: "counter:1" })),
         );
         yield* ProcessManager.use((p) => p.start(first(), from({ by: X_KEY, parent: asked })));
         const written = store.rows().filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));

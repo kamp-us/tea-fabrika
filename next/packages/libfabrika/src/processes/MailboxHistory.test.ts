@@ -11,6 +11,9 @@ import { lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox, type From } from "./Mailbox.ts";
 
+// A line of some other stream's own kind, which no inbox reads.
+const Noise = Schema.TaggedStruct("noise", {});
+
 // Each world's own scope closes its database (0061).
 const memory = Effect.acquireRelease(
   Effect.sync(() => new DatabaseSync(":memory:")),
@@ -90,7 +93,7 @@ describe("P11 richer mailbox history", () => {
         const mailbox = yield* Mailbox;
         const ledger = yield* Ledger;
         yield* mailbox.send("counter:1", "a", { type: "add", n: 1 }, original);
-        yield* ledger.append("elsewhere", "noise", lineFor(from, { _tag: "noise" }));
+        yield* ledger.append("elsewhere", "noise", lineFor(from, Noise.make({})));
         yield* mailbox.send("counter:1", "b", { type: "add", n: 2 }, { ...original, seen: 2, build: "build-later" });
         const entries = yield* Stream.runCollect(ledger.read("counter:1/inbox", 0));
         const rich = yield* Stream.runCollect(mailbox.read("counter:1", 0));

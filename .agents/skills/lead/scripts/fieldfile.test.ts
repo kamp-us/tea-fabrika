@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Result } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plan, saved } from "./fieldfile.ts";
@@ -12,6 +12,14 @@ import { plan, saved } from "./fieldfile.ts";
 // name, a counter id let through, two rows of one name both planned, and a clash that writes
 // the rows before it.
 const options = { seed: 119120, numRuns: 100 };
+
+// The two kinds of findings row as a row file holds them (decision 0035, field/README.md "A
+// finding"), restated here so each row below is made by its schema and not written by hand.
+const Finding = Schema.TaggedUnion({
+  finding: { id: Schema.String, date: Schema.String },
+  rated: { finding: Schema.String, date: Schema.optionalKey(Schema.String) },
+});
+
 const word = fc.stringMatching(/^[a-z0-9]{1,8}$/);
 const slug = fc.array(word, { minLength: 1, maxLength: 4 }).map((words) => words.join("-"));
 
@@ -25,10 +33,10 @@ describe("fieldfile, today's lead tooling", () => {
       fc.property(day, slug, (date, name) => {
         const id = `${date}-${name}`;
         const note = saved("notes", { id, date });
-        const finding = saved("findings", { _tag: "finding", id, date });
+        const finding = saved("findings", Finding.cases.finding.make({ id, date }));
         const dated = saved("runs", { run: id, date });
         const quest = saved("runs", { run: name, date, role: "hand" });
-        const rating = saved("findings", { _tag: "rated", finding: id, date });
+        const rating = saved("findings", Finding.cases.rated.make({ finding: id, date }));
         expect([note, finding, dated].map((exit) => Result.isSuccess(exit) && exit.success.name)).toEqual([id, id, id]);
         // A quest's run id such as `t562-tests1` is also the slug of the file the row lands in.
         expect(quest).toEqual(Result.succeed({ name: id, row: { run: id, date, role: "hand" } }));
@@ -45,9 +53,15 @@ describe("fieldfile, today's lead tooling", () => {
           saved("notes", { id: name, date }),
           saved("notes", { id: `${date}-${name}X`, date }),
           saved("notes", { date }),
-          saved("findings", { _tag: "finding", id: `${date}_${name}`, date }),
-          saved("findings", { _tag: odd === "finding" || odd === "rated" ? `${odd}x` : odd, id: `${date}-${name}` }),
-          saved("findings", { _tag: "rated", finding: `${date}-${name}` }),
+          saved("findings", Finding.cases.finding.make({ id: `${date}_${name}`, date })),
+          // A row whose tag is no kind of row, made by a schema of that one tag.
+          saved(
+            "findings",
+            Schema.TaggedStruct(odd === "finding" || odd === "rated" ? `${odd}x` : odd, { id: Schema.String }).make({
+              id: `${date}-${name}`,
+            }),
+          ),
+          saved("findings", Finding.cases.rated.make({ finding: `${date}-${name}` })),
           saved("runs", { run: name }),
           saved("runs", { date, run: `${name} ${name}` }),
         ];

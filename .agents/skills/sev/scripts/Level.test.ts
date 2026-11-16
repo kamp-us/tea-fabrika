@@ -94,9 +94,11 @@ describe("fold", () => {
   });
 
   it("format: an opened line whose caller is not the owner does not decode, since only the owner calls a sev0", () => {
-    const line = { _tag: "opened", at: AT, by: "lead", reason: "slow", allow: [], issues: null };
-    expect(Result.isFailure(Schema.decodeUnknownResult(Level.Entry)(line))).toBe(true);
-    expect(Result.isSuccess(Schema.decodeUnknownResult(Level.Entry)({ ...line, by: "owner" }))).toBe(true);
+    const line = Schema.encodeSync(Level.Entry)(
+      Level.Entry.cases.opened.make({ at: AT, by: "owner", reason: "slow", allow: [], issues: null }),
+    );
+    expect(Result.isFailure(Schema.decodeUnknownResult(Level.Entry)({ ...line, by: "lead" }))).toBe(true);
+    expect(Result.isSuccess(Schema.decodeUnknownResult(Level.Entry)(line))).toBe(true);
   });
 });
 
@@ -130,10 +132,9 @@ describe("the log file", () => {
       yield* Level.write(dir, opened);
       const before = yield* fs.readFileString((yield* Path.Path).join(dir, "log.jsonl"));
 
-      expect(yield* Effect.flip(Level.write(dir, opened))).toMatchObject({
-        _tag: "Refused",
-        reason: `a sev0 is open already, since ${AT}`,
-      });
+      const refused = yield* Effect.flip(Level.write(dir, opened));
+      expect(refused).toBeInstanceOf(Level.Refused);
+      expect(refused).toMatchObject({ reason: `a sev0 is open already, since ${AT}` });
       expect(yield* fs.readFileString((yield* Path.Path).join(dir, "log.jsonl"))).toBe(before);
       expect((yield* Level.read(dir)).sev0._tag).toBe("open");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

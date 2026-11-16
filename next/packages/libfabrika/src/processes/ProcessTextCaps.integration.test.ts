@@ -6,6 +6,7 @@ import { Arbitrary, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import {
   A,
+  again,
   B,
   brain,
   CODE,
@@ -89,6 +90,11 @@ const refusedWritingNothing = <A, E>(store: Storage, call: Effect.Effect<A, E>) 
 
 describe("P33 rule 1, the text caps live in the schema", () => {
   const code = { program: "counter", hash: "build-a" };
+  // Each value is made whole by its schema, then the field under test is set to the text, which may
+  // be past the cap: the raw value the schema must take or refuse.
+  const start = Start.cases.first.make({ id: "i", name: "n", code });
+  const down = Down.make({ ref: "r", process: A, reason: CRASHED, to: toW });
+  const crashed = ExitReason.cases.crashed.make({ phase: "step" });
   const cases: ReadonlyArray<{
     readonly name: string;
     readonly schema: Schema.Top;
@@ -97,78 +103,81 @@ describe("P33 rule 1, the text caps live in the schema", () => {
     {
       name: "Start first id",
       schema: Start,
-      value: (t) => ({ _tag: "first", id: t, name: "n", code }),
+      value: (t) => ({ ...start, id: t }),
     },
     {
       name: "Start first name",
       schema: Start,
-      value: (t) => ({ _tag: "first", id: "i", name: t, code }),
+      value: (t) => ({ ...start, name: t }),
     },
     {
       name: "Start code program",
       schema: Start,
-      value: (t) => ({ _tag: "first", id: "i", name: "n", code: { program: t, hash: "h" } }),
+      value: (t) => ({ ...start, code: { program: t, hash: "h" } }),
     },
     {
       name: "Start code hash",
       schema: Start,
-      value: (t) => ({ _tag: "first", id: "i", name: "n", code: { program: "p", hash: t } }),
+      value: (t) => ({ ...start, code: { program: "p", hash: t } }),
     },
     {
       name: "Start again reason",
       schema: Start,
-      value: (t) => ({ _tag: "again", id: "i", name: "n", code, after: A, reason: t }),
+      value: (t) => ({ ...Start.cases.again.make({ id: "i", name: "n", code, after: A, reason: "r" }), reason: t }),
     },
     {
       name: "a client id",
       schema: Recipient,
-      value: (t) => ({ _tag: "client", client: t, session: X }),
+      value: (t) => ({ ...Recipient.cases.client.make({ client: "c", session: X }), client: t }),
     },
     {
       name: "a DOWN's ref",
       schema: Down,
-      value: (t) => ({ _tag: "DOWN", ref: t, process: A, reason: CRASHED, to: toW }),
+      value: (t) => ({ ...down, ref: t }),
     },
     {
       name: "a DOWN's error class",
       schema: Down,
-      value: (t) => ({
-        _tag: "DOWN",
-        ref: "r",
-        process: A,
-        reason: { _tag: "crashed", phase: "step", error: t },
-        to: toW,
-      }),
+      value: (t) => ({ ...down, reason: { ...crashed, error: t } }),
     },
     {
       name: "a monitored event's ref",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "monitored", ref: t, process: A, to: toW }),
+      value: (t) => ({ ...ProcessEvent.cases.monitored.make({ ref: "r", process: A, to: toW }), ref: t }),
     },
     {
       name: "a demonitored event's ref",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "demonitored", ref: t, to: toW, reason: "canceled" }),
+      value: (t) => ({ ...ProcessEvent.cases.demonitored.make({ ref: "r", to: toW, reason: "canceled" }), ref: t }),
     },
     {
       name: "an exited event's error class",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "exited", process: A, reason: { _tag: "crashed", phase: "step", error: t } }),
+      value: (t) => ({
+        ...ProcessEvent.cases.exited.make({ process: A, reason: crashed }),
+        reason: { ...crashed, error: t },
+      }),
     },
     {
       name: "a down event's reason",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "down", process: A, reason: t, crashes: 1, until: 0 }),
+      value: (t) => ({ ...ProcessEvent.cases.down.make({ process: A, reason: "r", crashes: 1, until: 0 }), reason: t }),
     },
     {
       name: "a registered event's name",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "registered", name: t, program: "p", owner: { _tag: "brain" } }),
+      value: (t) => ({
+        ...ProcessEvent.cases.registered.make({ name: "n", program: "p", owner: Owner.cases.brain.make({}) }),
+        name: t,
+      }),
     },
     {
       name: "a started event's name",
       schema: ProcessEvent,
-      value: (t) => ({ _tag: "started", process: A, name: t, program: "p", hash: "h" }),
+      value: (t) => ({
+        ...ProcessEvent.cases.started.make({ process: A, name: "n", program: "p", hash: "h" }),
+        name: t,
+      }),
     },
   ];
 
@@ -188,14 +197,18 @@ describe("P33 rule 1, the text caps live in the schema", () => {
 
   // A dead letter keeps one error class per try, so its list is capped too: 32 entries at most.
   const dead = (errors: ReadonlyArray<string>) => ({
-    _tag: "dead",
-    process: A,
-    program: "counter",
-    name: "counter:1",
+    ...Dead.make({
+      process: A,
+      program: "counter",
+      name: "counter:1",
+      tries: 1,
+      limit: 1,
+      m: "letter-17",
+      build: "build-a",
+      errors: ["TypeError"],
+    }),
     tries: errors.length,
     limit: errors.length,
-    m: "letter-17",
-    build: "build-a",
     errors,
   });
   const classes = (count: number) => Array.from({ length: count }, () => "TypeError");
@@ -286,7 +299,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
         yield* seed(store);
         const client = {
           owner: Owner.cases.brain.make({}),
-          recipient: { _tag: "client", client: over, session: X } as typeof Recipient.Type,
+          recipient: { ...Recipient.cases.client.make({ client: "c", session: X }), client: over },
         };
         yield* refusedWritingNothing(
           store,
@@ -305,7 +318,10 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
         yield* seed(store);
         yield* monitor(store, "watch:1");
         // A raw client value: refused at the boundary, never truncated to fit.
-        yield* refusedWritingNothing(store, exit(store, { _tag: "crashed", phase: "step", error: over }));
+        yield* refusedWritingNothing(
+          store,
+          exit(store, { ...ExitReason.cases.crashed.make({ phase: "step" }), error: over }),
+        );
       });
     }),
     options,
@@ -329,10 +345,10 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
     options,
   );
   const starts: ReadonlyArray<readonly [string, Start]> = [
-    ["id", raw({ _tag: "first", id: over, name: "counter:2", code: CODE })],
-    ["name", raw({ _tag: "first", id: "start:long", name: over, code: CODE })],
-    ["program", raw({ _tag: "first", id: "start:long", name: "counter:2", code: { ...CODE, program: over } })],
-    ["hash", raw({ _tag: "first", id: "start:long", name: "counter:2", code: { ...CODE, hash: over } })],
+    ["id", raw({ ...first("start:long", "counter:2"), id: over })],
+    ["name", raw({ ...first("start:long", "counter:2"), name: over })],
+    ["program", raw({ ...first("start:long", "counter:2"), code: { ...CODE, program: over } })],
+    ["hash", raw({ ...first("start:long", "counter:2"), code: { ...CODE, hash: over } })],
   ];
 
   for (const [field, original] of starts) {
@@ -368,14 +384,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
       return Effect.gen(function* () {
         yield* seed(store);
         yield* exit(store);
-        const request = raw({
-          _tag: "again",
-          id: "restart:long",
-          name: "counter:1",
-          code: CODE,
-          after: A,
-          reason: over,
-        });
+        const request = raw({ ...again(A, "restart:long"), reason: over });
         yield* refusedWritingNothing(
           store,
           ProcessManager.use((p) => p.start(request, from())).pipe(

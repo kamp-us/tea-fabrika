@@ -17,6 +17,7 @@ import { Effect, Exit, Schema, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
+import { CommitsAnswer } from "./commits.test-support.ts";
 import {
   AGENT_CAP,
   agentCapFull,
@@ -523,6 +524,13 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   const check = fc.constantFrom(...checks);
   const detail = fc.stringMatching(/^[a-z0-9](?:[a-z0-9 /|.-]{0,40}[a-z0-9])?$/);
   const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), { maxLength: 3 });
+  // What box.sh new did, restated from drive.ts's own `Started` (0135), so each answer below is
+  // made by a schema and not written by hand.
+  const Started = Schema.TaggedUnion({
+    made: {},
+    refused: { check: Schema.Literals(checks), detail: Schema.String },
+    failed: { detail: Schema.String },
+  });
   const boxNewOk = (value: ReturnType<typeof startedOf>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
       type: "box_new_ok",
@@ -538,9 +546,9 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
         const got = startedOf(code, err);
 
         if (code === 0) {
-          expect(got).toEqual({ _tag: "made" });
+          expect(got).toEqual(Started.cases.made.make({}));
         } else if (code === 3) {
-          expect(got).toEqual({ _tag: "refused", check: c, detail: d });
+          expect(got).toEqual(Started.cases.refused.make({ check: c, detail: d }));
         } else {
           expect(got._tag).toBe("failed");
         }
@@ -558,7 +566,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   it("a refusal ends at once as refused:<check>, exit 3, nothing kept, and never reads as stuck", () => {
     fc.assert(
       fc.property(check, detail, (c, d) => {
-        const [state, cmds] = boxNewOk({ _tag: "refused", check: c, detail: d });
+        const [state, cmds] = boxNewOk(Started.cases.refused.make({ check: c, detail: d }));
         expect(state.phase).toBe("recording");
         const cmd = cmds[0] as {
           outcome: string;
@@ -581,7 +589,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   it("a box that failed to start is still stuck:box_failed and kept for the lead", () => {
     fc.assert(
       fc.property(detail, (d) => {
-        const [, cmds] = boxNewOk({ _tag: "failed", detail: d });
+        const [, cmds] = boxNewOk(Started.cases.failed.make({ detail: d }));
         const cmd = cmds[0] as { outcome: string; exit: number; keep: boolean };
         expect(cmd.outcome).toBe("stuck:box_failed");
         expect(cmd.exit).toBe(30);
@@ -702,7 +710,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
   it("each held answer is named as rule, commit and step, and a waived stale link or a missing signature is not", () => {
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) => {
-        const out = answers.map((a) => JSON.stringify({ _tag: "stuck", ...a })).join("\n");
+        const out = answers.map((a) => JSON.stringify(CommitsAnswer.cases.stuck.make(a))).join("\n");
         const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
         const named = answers
           .filter(held)
@@ -731,7 +739,9 @@ describe("0161 a missing signature never holds a step, and the kept checks still
     // The commits check's own answer for a quest of plain commits: one stuck line each, and exit 1.
     check: {
       code: 1,
-      out: shas.map((s) => JSON.stringify({ _tag: "stuck", reason: "unsigned_commit", sha: s })).join("\n"),
+      out: shas
+        .map((s) => JSON.stringify(CommitsAnswer.cases.stuck.make({ reason: "unsigned_commit", sha: s })))
+        .join("\n"),
       err: "",
     },
   }));
@@ -774,7 +784,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
   it("property: a rule the check still gives holds the step beside any plain commits, and names itself", () => {
     fc.assert(
       fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), quest, ({ commits, check }, rules, steps) => {
-        const out = [check.out, ...rules.map((r) => JSON.stringify({ _tag: "stuck", ...r }))].join("\n");
+        const out = [check.out, ...rules.map((r) => JSON.stringify(CommitsAnswer.cases.stuck.make(r)))].join("\n");
         const unsigned = heldBy({ ...check, out }, steps);
         const named = rules.map((r) => `${r.reason} ${r.sha.slice(0, 8)}`);
         expect(unsigned).toEqual([`commits check: ${named.join("; ")}`]);

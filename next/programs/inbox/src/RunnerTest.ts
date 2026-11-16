@@ -1,6 +1,6 @@
 // Ticket 884, next/: the app supplies real runner wiring so this program imports only the library's front (0062).
 import { describe, expect, it } from "@effect/vitest";
-import type { ProgramRunner } from "@kampus/libfabrika";
+import { type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import { inbox, Row } from "./program.ts";
 
@@ -51,7 +51,7 @@ export const suite = (open: Open) =>
                 seen: 0,
                 span: TRACE,
               });
-              expect(answer).toEqual({ _tag: "refused", reason: "bad_msg" });
+              expect(answer).toEqual(Sent.cases.refused.make({ reason: "bad_msg" }));
             }
 
             expect((yield* runner.open("after")).view).toEqual(before);

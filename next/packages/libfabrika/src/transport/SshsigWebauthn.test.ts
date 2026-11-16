@@ -8,7 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import { checkSshsig, verifySshsig } from "./Sshsig.ts";
+import { Checked, checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
 
@@ -186,7 +186,7 @@ const check = (armored: string, signer: string = line, body: string = text, over
     policy: { ...policy, ...over },
   });
 
-const refused = { _tag: "refused", reason: "bad_signature" };
+const refused = Checked.cases.refused.make({ reason: "bad_signature" });
 
 const blob = (armored = realArmor) => Buffer.from(armored.trim().split("\n").slice(1, -1).join(""), "base64");
 
@@ -257,7 +257,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         Effect.runPromise(
           Effect.gen(function* () {
             expect(
-              yield* Effect.flip(
+              (yield* Effect.flip(
                 writeWebauthnSshsig({
                   text,
                   line: Schema.decodeUnknownSync(PasskeyLine)(line),
@@ -267,8 +267,8 @@ describe("P10 WebAuthn SSHSIG", () => {
                     signature,
                   },
                 }),
-              ),
-            ).toMatchObject({ _tag: "BadAssertion" });
+              ))._tag,
+            ).toBe("BadAssertion");
           }),
         ),
       ),
@@ -362,15 +362,16 @@ describe("P10 WebAuthn SSHSIG", () => {
   );
   it.effect("vector: p27: the exact real assertion passes, with signed backup flags and counter zero", () =>
     Effect.gen(function* () {
-      expect(yield* check(realArmor)).toEqual({
-        _tag: "passkey",
-        signer: line,
-        origin: "https://fabrika.test",
-        rp: "fabrika.test",
-        be: true,
-        bs: true,
-        counter: 0,
-      });
+      expect(yield* check(realArmor)).toEqual(
+        Checked.cases.passkey.make({
+          signer: line,
+          origin: "https://fabrika.test",
+          rp: "fabrika.test",
+          be: true,
+          bs: true,
+          counter: 0,
+        }),
+      );
     }),
   );
   it.effect("format: writer: wraps the real DER assertion byte for byte, without re-signing", () =>
@@ -440,8 +441,9 @@ describe("P10 WebAuthn SSHSIG", () => {
           Effect.gen(function* () {
             const k = yield* passkey();
             const value = yield* k.sign(body, { flags, counter });
-            expect(yield* check(value.armored, k.line, body)).toMatchObject({
-              _tag: "passkey",
+            const checked = yield* check(value.armored, k.line, body);
+            expect(checked._tag).toBe("passkey");
+            expect(checked).toMatchObject({
               be: (flags & 8) !== 0,
               bs: (flags & 16) !== 0,
               counter,
@@ -624,7 +626,7 @@ describe("P10 WebAuthn SSHSIG", () => {
               signers: [supplied],
               policy,
             });
-            expect(yield* checked).toEqual({ _tag: "key", signer: supplied });
+            expect(yield* checked).toEqual(Checked.cases.key.make({ signer: supplied }));
           }),
         ),
       ),

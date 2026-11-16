@@ -1,11 +1,11 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
-import { type Entry, lineFor } from "../ledger/Log.ts";
-import { Mailbox } from "./Mailbox.ts";
+import type { Entry } from "../ledger/Log.ts";
+import { letterLine, Mailbox } from "./Mailbox.ts";
 import {
   A,
   B,
@@ -108,10 +108,7 @@ describe("P33, signal ids, ownership and delivery", () => {
             ledger.append(
               "watcher:1/inbox",
               id,
-              lineFor(from({ by: own ? from().by : CLIENT, parent: null }), {
-                _tag: "send",
-                m: { saved: ref },
-              }),
+              letterLine(from({ by: own ? from().by : CLIENT, parent: null }), { saved: ref }),
             ),
           ).pipe(Effect.provide(manager(store)));
           const before = store.rows();
@@ -121,7 +118,8 @@ describe("P33, signal ids, ownership and delivery", () => {
           if (own) {
             expect(store.rows().filter((row) => row.id === id)).toEqual(before.filter((row) => row.id === id));
           } else {
-            expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "refused" } });
+            expect(Result.isFailure(result)).toBe(true);
+            expect(result).toMatchObject({ failure: { reason: "refused" } });
             expect(store.rows()).toEqual(before);
           }
         }
@@ -136,10 +134,9 @@ describe("P33, signal ids, ownership and delivery", () => {
         const table = new ProcessTable(store.rows(), from().by);
 
         for (const ref of ["", long]) {
-          expect(table.monitor(ref, A, Recipient.cases.process.make({ process: W }))).toMatchObject({
-            _tag: "Failure",
-            failure: { reason: "bad_text" },
-          });
+          const watched = table.monitor(ref, A, Recipient.cases.process.make({ process: W }));
+          expect(Result.isFailure(watched)).toBe(true);
+          expect(watched).toMatchObject({ failure: { reason: "bad_text" } });
         }
       });
     }),
@@ -154,7 +151,7 @@ describe("P33, signal ids, ownership and delivery", () => {
         const to = Recipient.cases.process.make({ process: W });
         const down = Down.make({ ref, process: A, to, reason: CRASHED });
         const entry: Entry = {
-          ...lineFor(from(), { _tag: "send", m: down }),
+          ...letterLine(from(), down),
           id: signalId(to, ref, 1),
           stream: "watcher:1/inbox",
           rev: 100,
@@ -516,9 +513,9 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
           // take a signal id, so only another writer's raw row could, and it is plain mail.
           const id = JSON.stringify(["DOWN", toW, ref, 1]);
           const m = Down.make({ ref, process: B, reason: CRASHED, to: toW });
-          yield* Ledger.use((ledger) =>
-            ledger.append("watcher:1/inbox", id, lineFor(from({ by: CLIENT }), { _tag: "send", m })),
-          ).pipe(Effect.provide(manager(store)));
+          yield* Ledger.use((ledger) => ledger.append("watcher:1/inbox", id, letterLine(from({ by: CLIENT }), m))).pipe(
+            Effect.provide(manager(store)),
+          );
           expect((yield* fresh(store)).map((letter) => letter.id)).toEqual([...real, id]);
         });
       },
@@ -529,7 +526,8 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
       const store = storage();
       return Effect.gen(function* () {
         yield* seed(store);
-        yield* send(store, "bad", { _tag: "DOWN", ref: badRef });
+        // A letter shaped like a DOWN whose ref is no text, made by a schema of that wrong shape.
+        yield* send(store, "bad", Schema.TaggedStruct("DOWN", { ref: Schema.Json }).make({ ref: badRef }));
         yield* send(store, "good", { hello: 1 });
         expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["bad", "good"]);
         const last = (yield* fresh(store)).at(-1)!;

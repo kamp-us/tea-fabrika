@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Pinned, pinLine, pinnedScript, pinState, pinText } from "./pin.ts";
+import { Pinned, pinLine, pinnedScript, PinState, pinState, pinText } from "./pin.ts";
 
 const commit = fc.stringMatching(/^[0-9a-f]{40}$/);
 const folder = fc.string({ minLength: 1 });
@@ -10,12 +10,12 @@ describe("pinState", () => {
   it("a pin read back from its own text is the same pin", () =>
     fc.assert(
       fc.property(pinned, (pin) => {
-        expect(pinState(pinText(pin))).toEqual({ _tag: "pinned", pin });
+        expect(pinState(pinText(pin))).toEqual(PinState.cases.pinned.make({ pin }));
       }),
     ));
 
   it("no value is unpinned, and only no value", () => {
-    expect(pinState(undefined)).toEqual({ _tag: "unpinned" });
+    expect(pinState(undefined)).toEqual(PinState.cases.unpinned.make({}));
     fc.assert(
       fc.property(fc.string(), (value) => {
         expect(pinState(value)._tag).not.toBe("unpinned");
@@ -29,7 +29,7 @@ describe("pinState", () => {
         const state = pinState(value);
         // A string is a pin only when it is a pin's own text.
         fc.pre(state._tag !== "pinned");
-        expect(state).toEqual({ _tag: "malformed", value });
+        expect(state).toEqual(PinState.cases.malformed.make({ value }));
       }),
     ));
 

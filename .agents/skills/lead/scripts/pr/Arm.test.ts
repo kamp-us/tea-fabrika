@@ -147,7 +147,7 @@ const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
         ? { leakGrep: hit }
         : { leakText: hit };
 
-const armedAt = [{ _tag: "arm", number: 1092, oid }];
+const armedAt = [PullRequestsTest.Call.cases.arm.make({ number: 1092, oid })];
 
 describe("arm: merge when ready goes on over a green full run, or none at the head as 0544 allows", () => {
   // scenario: the run that was read as "the queue canceled it" twice on 2026-11-15.
@@ -236,7 +236,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const red = yield* fixture;
         const m = memory({ stands: "green", draft: true }, red);
         const armed = yield* arm(m);
-        expect(m.github.calls).toEqual([{ _tag: "ready", number: 1092 }, ...armedAt]);
+        expect(m.github.calls).toEqual([PullRequestsTest.Call.cases.ready.make({ number: 1092 }), ...armedAt]);
         expect(Arm.line(armed)).toBe(
           `pr 1092: full run ${RED} green on every job at ${oid.slice(0, 12)}; marked ready; merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
         );
@@ -398,7 +398,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const red = yield* fixture;
         const m = memory({ stands: "green", draft: true, leak: leaking(leak) }, red);
         const { answer, leaks } = yield* armed(m);
-        expect(m.github.calls).toEqual(leak === "clean" ? [{ _tag: "ready", number: 1092 }, ...armedAt] : []);
+        expect(m.github.calls).toEqual(
+          leak === "clean" ? [PullRequestsTest.Call.cases.ready.make({ number: 1092 }), ...armedAt] : [],
+        );
         expect(answer._tag === "Failure" && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
         const ran = [
           { method: "leakChange", args: [".", oid] },

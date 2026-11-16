@@ -16,6 +16,7 @@ import {
   type Seen,
   type SeenWorktree,
   STUCK,
+  Verdict,
   worktreePrs,
 } from "./gc.ts";
 import { PgrepAnswer } from "./pgrep.ts";
@@ -260,8 +261,8 @@ describe("worktree gc, today's tooling", () => {
       new Map(),
     );
     const byCommit = worktreePrs({ branch: "person/t378-node-kinds", head, tips: [] }, new Map(), byHead);
-    expect(decideWorktree({ ...base, prs: renamed })).toEqual({ _tag: "remove", reason: "merged" });
-    expect(decideWorktree({ ...base, prs: byCommit })).toEqual({ _tag: "remove", reason: "merged" });
+    expect(decideWorktree({ ...base, prs: renamed })).toEqual(Verdict.cases.remove.make({ reason: "merged" }));
+    expect(decideWorktree({ ...base, prs: byCommit })).toEqual(Verdict.cases.remove.make({ reason: "merged" }));
   });
 });
 

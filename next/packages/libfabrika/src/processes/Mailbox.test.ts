@@ -20,10 +20,10 @@ import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
-import type { Line } from "../ledger/Log.ts";
+import { Appended, type Line, lineFor } from "../ledger/Log.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type { Sql } from "../Sql.ts";
-import { type From, type Letter, Mailbox, RunnerMail } from "./Mailbox.ts";
+import { type From, type Letter, letterLine, Mailbox, RunnerMail } from "./Mailbox.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -73,22 +73,23 @@ const receive = (name: string, after = 0) => Mailbox.use((mailbox) => Stream.run
 
 const inbox = (name: string) => Ledger.use((ledger) => Stream.runCollect(ledger.read(`${name}/inbox`, 0)));
 
-/** A line straight into the log, as another writer would put it. */
-const raw = (stream: string, id: string, over: Partial<Line>) =>
-  Ledger.use((ledger) =>
-    ledger.append(stream, id, {
-      by: "SHA256:other",
-      for: P,
-      sentAt: SENT,
-      seen: 0,
-      parent: null,
-      traceId: TRACE,
-      build: "b-7c1d073",
-      _tag: "send",
-      body: { m: null },
-      ...over,
-    }),
-  );
+/** Another writer, as it says who it is on a line. */
+const other: From = {
+  by: "SHA256:other",
+  for: P,
+  sentAt: SENT,
+  seen: 0,
+  parent: null,
+  traceId: TRACE,
+  build: "b-7c1d073",
+};
+
+/** A line straight into the log, as another writer would put it: a letter of null unless one is given. */
+const raw = (stream: string, id: string, line: Line = letterLine(other, null)) =>
+  Ledger.use((ledger) => ledger.append(stream, id, line));
+
+/** A line of another stream's own kind, which no inbox reads. */
+const Saved = Schema.TaggedStruct("saved", {});
 
 const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A) => Effect.Effect<void, E, R>) =>
   Effect.gen(function* () {
@@ -121,11 +122,11 @@ describe("P33, only the owning runner writes its answers", () => {
           '["notice"',
         ]) {
           expect(brainOnly({ stream: "notes:1/inbox", id, tag: "send" })).toBe(true);
-          expect(yield* send("notes:1", id, m)).toEqual({ _tag: "refused", reason: "forbidden" });
+          expect(yield* send("notes:1", id, m)).toEqual(Appended.cases.refused.make({ reason: "forbidden" }));
         }
 
         expect(yield* inbox("notes:1")).toEqual([]);
-        expect(yield* send("notes:1", `plain:${key}`, m)).toMatchObject({ _tag: "placed" });
+        expect((yield* send("notes:1", `plain:${key}`, m))._tag).toBe("placed");
       }).pipe(Effect.provide(mail())),
     { arbitrary: { seed: SEED } },
   );
@@ -150,7 +151,7 @@ describe("P33, only the owning runner writes its answers", () => {
             expect(answer._tag, "runner writes only its own inbox and process").toBe(allowed ? "placed" : "refused");
 
             if (!allowed) {
-              expect(answer).toEqual({ _tag: "refused", reason: "forbidden" });
+              expect(answer).toEqual(Appended.cases.refused.make({ reason: "forbidden" }));
             }
           }
         }
@@ -194,10 +195,7 @@ describe("p21, send", () => {
       [undefined, () => null, 1n, { value: undefined }],
       (m) =>
         Effect.gen(function* () {
-          expect(yield* send("notes:1", LETTER, m)).toEqual({
-            _tag: "refused",
-            reason: "bad_line",
-          });
+          expect(yield* send("notes:1", LETTER, m)).toEqual(Appended.cases.refused.make({ reason: "bad_line" }));
           expect(yield* inbox("notes:1")).toEqual([]);
         }).pipe(Effect.provide(mail())),
     ),
@@ -206,15 +204,15 @@ describe("p21, send", () => {
     check(json, [{ type: "save", value: { text: "hello", n: 3 } }], (m) =>
       Effect.gen(function* () {
         const answer = yield* send("notes:1", LETTER, m);
-        expect(answer).toEqual({ _tag: "placed", rev: 1, pos: 1 });
+        expect(answer).toEqual(Appended.cases.placed.make({ rev: 1, pos: 1 }));
         const [entry, ...rest] = yield* inbox("notes:1");
         expect(rest).toEqual([]);
+        expect(entry?._tag).toBe("send");
         expect(entry).toMatchObject({
           id: LETTER,
           stream: "notes:1/inbox",
           rev: 1,
           pos: 1,
-          _tag: "send",
           body: { m },
           by: "SHA256:t2",
           for: P,
@@ -233,15 +231,15 @@ describe("p21, send", () => {
       Effect.gen(function* () {
         const answers = [];
         answers.push(yield* send("notes:1", "letter_a", a));
-        yield* raw("other", "x-1", { _tag: "saved" });
+        yield* raw("other", "x-1", lineFor(other, Saved.make({})));
         answers.push(yield* send("notes:2", "letter_b", b));
         answers.push(yield* send("notes:1", "letter_c", c, { seen: 3 }));
         answers.push(yield* send("notes:2", "letter_d", d));
         expect(answers).toEqual([
-          { _tag: "placed", rev: 1, pos: 1 },
-          { _tag: "placed", rev: 3, pos: 1 },
-          { _tag: "placed", rev: 4, pos: 2 },
-          { _tag: "placed", rev: 5, pos: 2 },
+          Appended.cases.placed.make({ rev: 1, pos: 1 }),
+          Appended.cases.placed.make({ rev: 3, pos: 1 }),
+          Appended.cases.placed.make({ rev: 4, pos: 2 }),
+          Appended.cases.placed.make({ rev: 5, pos: 2 }),
         ]);
         const one = yield* inbox("notes:1");
         expect(one.map((e) => [e.id, e.rev, e.pos])).toEqual([
@@ -261,10 +259,7 @@ describe("p21, send", () => {
           const first = yield* send("notes:1", LETTER, saved);
           yield* send("notes:1", "letter_other", saved);
           expect(yield* send("notes:1", LETTER, saved, { sentAt: "later", seen: 2 })).toEqual(first);
-          expect(yield* send("notes:1", LETTER, changed)).toEqual({
-            _tag: "refused",
-            reason: "id_reused",
-          });
+          expect(yield* send("notes:1", LETTER, changed)).toEqual(Appended.cases.refused.make({ reason: "id_reused" }));
           expect((yield* inbox("notes:1")).length).toBe(2);
         }).pipe(Effect.provide(mail())),
     ),
@@ -273,18 +268,15 @@ describe("p21, send", () => {
   it.effect("passes the ledger's refusals up as they are", () =>
     check(json, [1], (m) =>
       Effect.gen(function* () {
-        expect(yield* send("notes:1", LETTER, m, { seen: 9 })).toEqual({
-          _tag: "refused",
-          reason: "seen_ahead",
-        });
-        expect(yield* send("notes:1", LETTER, m, { parent: "not-a-parent" })).toEqual({
-          _tag: "refused",
-          reason: "bad_parent",
-        });
-        expect(yield* send("notes:1", LETTER, m, { traceId: "0".repeat(32) })).toEqual({
-          _tag: "refused",
-          reason: "bad_trace",
-        });
+        expect(yield* send("notes:1", LETTER, m, { seen: 9 })).toEqual(
+          Appended.cases.refused.make({ reason: "seen_ahead" }),
+        );
+        expect(yield* send("notes:1", LETTER, m, { parent: "not-a-parent" })).toEqual(
+          Appended.cases.refused.make({ reason: "bad_parent" }),
+        );
+        expect(yield* send("notes:1", LETTER, m, { traceId: "0".repeat(32) })).toEqual(
+          Appended.cases.refused.make({ reason: "bad_trace" }),
+        );
         expect(yield* inbox("notes:1")).toEqual([]);
       }).pipe(Effect.provide(mail())),
     ),
@@ -296,7 +288,7 @@ describe("p21, receive", () => {
     check(fc.tuple(json, json), [[{ type: "save", value: 1 }, [1, "two", null]]], ([a, b]) =>
       Effect.gen(function* () {
         yield* send("notes:1", "letter_a", a);
-        yield* raw("other", "x-1", { _tag: "saved" });
+        yield* raw("other", "x-1", lineFor(other, Saved.make({})));
         yield* send("notes:1", "letter_b", b, {
           by: "SHA256:g1",
           for: P,
@@ -353,7 +345,7 @@ describe("p21, receive", () => {
       Effect.gen(function* () {
         yield* send("notes:1", "letter_a", a);
         yield* send("notes:2", "letter_b", b);
-        yield* raw("notes:1", "x-1", { _tag: "send" }); // the name's own stream, not its inbox
+        yield* raw("notes:1", "x-1"); // the name's own stream, not its inbox
         expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a"]);
         expect((yield* receive("notes:2")).map((l) => l.id)).toEqual(["letter_b"]);
         expect(yield* receive("notes:3")).toEqual([]);
@@ -368,7 +360,12 @@ describe("p21, receive", () => {
       (tag) =>
         Effect.gen(function* () {
           yield* send("notes:1", "letter_a", 1);
-          yield* raw("notes:1/inbox", "x-1", { _tag: tag, body: { reason: "normal" } });
+          // A line of the kind `tag` names, made by a schema of that one tag.
+          yield* raw(
+            "notes:1/inbox",
+            "x-1",
+            lineFor(other, Schema.TaggedStruct(tag, { reason: Schema.String }).make({ reason: "normal" })),
+          );
           yield* send("notes:1", "letter_b", 2);
           expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a", "letter_b"]);
           expect((yield* inbox("notes:1")).map((e) => e._tag)).toEqual(["send", tag, "send"]);
@@ -387,7 +384,7 @@ describe("p21, receive", () => {
         Effect.gen(function* () {
           yield* send("notes:1", "letter_a", 1);
           yield* raw("notes:1/inbox", "x-1", {
-            _tag: "send",
+            ...letterLine(other, null),
             body: Schema.decodeUnknownSync(Schema.Json)(body),
           });
           const failed = yield* Effect.flip(receive("notes:1"));

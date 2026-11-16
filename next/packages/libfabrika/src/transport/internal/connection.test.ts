@@ -30,19 +30,27 @@ type Msg =
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const same = (a: W, b: W) => a.id === b.id && a.stream === b.stream && a.after === b.after;
 
+// The machine's named states, restated from connection.ts's own Model (0135): an online state holds
+// the attachment's online fields but busy, which lives only in the tag.
+const { _tag: _onlineTag, busy: _busy, ...Online } = Attached.cases.online.fields;
+
+const Expected = Schema.TaggedUnion({
+  unloaded: {},
+  new: { attached: Attached.cases.new },
+  waiting: { attached: Attached.cases.waiting },
+  idle: Online,
+  busy: Online,
+});
+
 /** The named state an attachment stands for: busy lives only in the tag. */
-const expected = (saved: Saved | null): unknown => {
-  if (saved === null) {
-    return { _tag: "unloaded" };
-  }
-
-  if (saved._tag !== "online") {
-    return { _tag: saved._tag, attached: saved };
-  }
-
-  const { client, identity, version, watching, waits, busy, has, build } = saved;
-  return { _tag: busy ? "busy" : "idle", client, identity, version, watching, waits, has, build };
-};
+const expected = (saved: Saved | null): typeof Expected.Type =>
+  saved === null
+    ? Expected.cases.unloaded.make({})
+    : Attached.match(saved, {
+        new: (attached) => Expected.cases.new.make({ attached }),
+        waiting: (attached) => Expected.cases.waiting.make({ attached }),
+        online: ({ _tag: _online, busy, ...online }) => (busy ? Expected.cases.busy : Expected.cases.idle).make(online),
+      });
 
 /** The attachment a loaded state saves, read from the Model alone. */
 const projected = (model: Exclude<Model, { readonly _tag: "unloaded" }>): Saved => {
@@ -267,7 +275,7 @@ const walk = (
   }) => void = () => {},
 ) => {
   let [model] = connection.init(null, {});
-  expect(model).toEqual({ _tag: "unloaded" });
+  expect(model).toEqual(Expected.cases.unloaded.make({}));
   let fold: Fold = { saved: null, completed: [] };
 
   for (const choice of choices) {

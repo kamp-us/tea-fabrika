@@ -1,6 +1,6 @@
 // Today's lead tooling. ChecksGh's polls are conditional requests; no test here reaches GitHub: a
 // spawner in memory stands in for `gh`.
-import { Effect, Layer, Option, type Result, Sink, Stream } from "effect";
+import { Effect, Layer, Option, Result, Sink, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -167,25 +167,27 @@ describe("a poll of a job is a conditional request, today's tooling", () => {
       [{ out: "", err: "gh: HTTP 502", code: 1 }, ok('W/"a"', [run(9, "queued", null)])],
       [head, head],
       ({ found, calls }) => {
+        expect(found[0] !== undefined && Result.isFailure(found[0])).toBe(true);
         expect(found[0]).toMatchObject({
-          _tag: "Failure",
           failure: { reason: `gh api repos/example/repo/commits/${head}/check-runs exited 1: gh: HTTP 502` },
         });
-        expect(found[1]).toMatchObject({ _tag: "Success" });
+        expect(found[1] !== undefined && Result.isSuccess(found[1])).toBe(true);
         expect(sent(calls)).toEqual([null, null]);
       },
     ));
 
   it("scenario: a 304 nobody asked for is a failure, never an answer", () =>
-    polled([unchanged], [head], ({ found }) => expect(found[0]).toMatchObject({ _tag: "Failure" })));
+    polled([unchanged], [head], ({ found }) =>
+      expect(found[0] !== undefined && Result.isFailure(found[0])).toBe(true),
+    ));
 
   it("scenario: a body that is not check runs fails the poll and keeps no ETag", () =>
     polled(
       [{ out: 'HTTP/2.0 200 OK\nEtag: W/"x"\r\n\r\n{"message":"odd"}', code: 0 }, ok('W/"a"', [])],
       [head, head],
       ({ found, calls }) => {
+        expect(found[0] !== undefined && Result.isFailure(found[0])).toBe(true);
         expect(found[0]).toMatchObject({
-          _tag: "Failure",
           failure: { reason: `GitHub's check runs at ${head} did not parse` },
         });
         expect(sent(calls)).toEqual([null, null]);

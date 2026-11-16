@@ -133,10 +133,11 @@ describe("P10 JSON-RPC", () => {
           fc.constantFrom(Number.NaN, Infinity, -Infinity, Number.MAX_SAFE_INTEGER + 1),
         ),
         (bad) => {
-          expect(Schema.is(Wire.RateRefusal)({ _tag: "refused", reason: "rate_limited" })).toBe(false);
-          expect(Schema.is(Wire.RateRefusal)({ _tag: "refused", reason: "rate_limited", retryAfter: bad })).toBe(false);
-          expect(Schema.is(Wire.RateRefusal)({ _tag: "refused", reason: "rate_limited", retryAfter: 1 })).toBe(true);
-          expect(Schema.is(Answer)({ _tag: "refused", reason: "ordinary" })).toBe(true);
+          const limited = Answer.cases.refused.make({ reason: "rate_limited" });
+          expect(Schema.is(Wire.RateRefusal)(limited)).toBe(false);
+          expect(Schema.is(Wire.RateRefusal)({ ...limited, retryAfter: bad })).toBe(false);
+          expect(Schema.is(Wire.RateRefusal)(Answer.cases.refused.make({ ...limited, retryAfter: 1 }))).toBe(true);
+          expect(Schema.is(Answer)(Answer.cases.refused.make({ reason: "ordinary" }))).toBe(true);
         },
       ),
       { seed: SEED, numRuns: 50 },

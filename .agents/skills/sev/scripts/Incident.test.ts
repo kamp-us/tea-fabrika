@@ -6,6 +6,7 @@ import { Duration, Effect, FileSystem, Layer, Schema, type Scope } from "effect"
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";
+import { AlertsError } from "./Alerts.ts";
 import * as AlertsTest from "./AlertsTest.ts";
 import * as Incident from "./Incident.ts";
 import * as Level from "./Level.ts";
@@ -136,7 +137,9 @@ describe("close", () => {
             `sev: start the full run by hand, since the freeze canceled it: ${Incident.FULL_RUN}`,
           ]);
           expect(closed.level).toEqual(Level.Level.cases.sev1.make({ issues: [red] }));
-          expect((yield* Level.log(dir)).at(-1)).toMatchObject({ _tag: "closed", by: "owner" });
+          const last = (yield* Level.log(dir)).at(-1);
+          expect(last?._tag).toBe("closed");
+          expect(last).toMatchObject({ by: "owner" });
         }),
       ),
   );
@@ -190,12 +193,13 @@ describe("open, next, allow and status", () => {
           const again = yield* Effect.flip(
             Incident.open({ home: dir, reason: "again", allow: [] }).pipe(Effect.provide(layer)),
           );
-          expect(again).toMatchObject({ _tag: "Refused" });
+          expect(again).toBeInstanceOf(Level.Refused);
 
           yield* Incident.next(dir, "fabrikalfa/y");
           yield* Incident.allow(dir, "fabrikalfa/z");
-          expect((yield* Level.log(dir))[1]).toMatchObject({
-            _tag: "next",
+          const moved = (yield* Level.log(dir))[1];
+          expect(moved?._tag).toBe("next");
+          expect(moved).toMatchObject({
             branch: "fabrikalfa/y",
             before: ["fabrikalfa/x"],
           });
@@ -228,12 +232,12 @@ describe("open, next, allow and status", () => {
       law(
         Effect.gen(function* () {
           const dir = yield* home;
-          const none = { _tag: "Refused", reason: "no sev0 is open" };
-          expect(yield* Effect.flip(Incident.next(dir, "fabrikalfa/y"))).toMatchObject(none);
-          expect(yield* Effect.flip(Incident.allow(dir, "fabrikalfa/y"))).toMatchObject(none);
+          const none = Level.Refused.make({ reason: "no sev0 is open" });
+          expect(yield* Effect.flip(Incident.next(dir, "fabrikalfa/y"))).toEqual(none);
+          expect(yield* Effect.flip(Incident.allow(dir, "fabrikalfa/y"))).toEqual(none);
           expect(
             yield* Effect.flip(Incident.close(dir, "lead", Duration.zero).pipe(Effect.provide(services({})))),
-          ).toMatchObject(none);
+          ).toEqual(none);
           expect(yield* Level.log(dir)).toEqual([]);
 
           expect(yield* Incident.status(dir).pipe(Effect.provide(services({ issues: [slow] })))).toEqual(
@@ -242,7 +246,7 @@ describe("open, next, allow and status", () => {
           expect((yield* Incident.status(dir).pipe(Effect.provide(services({}))))._tag).toBe("none");
           expect(
             yield* Effect.flip(Incident.status(dir).pipe(Effect.provide(services({ issues: { failing: "offline" } })))),
-          ).toMatchObject({ _tag: "AlertsError", reason: "offline" });
+          ).toEqual(AlertsError.make({ reason: "offline" }));
         }),
       ),
   );

@@ -8,6 +8,7 @@ import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
+import { letterLine } from "./Mailbox.ts";
 import {
   BRAIN,
   brain,
@@ -287,7 +288,7 @@ describe("T753 L16 quest: a long-lived ProcessManager answers as a fresh one", (
                   ledger.append(
                     clientInbox(to.client),
                     signalId(to, "ref-b", 1),
-                    lineFor(from({ by: CLIENT, parent: null }), { _tag: "send", m: { held: true } }),
+                    letterLine(from({ by: CLIENT, parent: null }), { held: true }),
                   ),
                 );
                 return yield* answer(processes.exit(process, KILL, from()));

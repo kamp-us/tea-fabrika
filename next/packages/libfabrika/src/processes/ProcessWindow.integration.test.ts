@@ -5,7 +5,7 @@ import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
 import { A, BRAIN, brain, first, from, INTERRUPTED, manager, storage, watcher, W } from "./Process.test-support.ts";
-import { Activity, canRestart, Dead, ProcessEvent, recoverActivity, State } from "./Process.ts";
+import { Activity, canRestart, Dead, ProcessEvent, Recovered, recoverActivity, State } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
 // fast-check 4.10.2's default JSON has no hard depth bound. Effect 4.1.1's
@@ -123,18 +123,21 @@ describe("p79, saved activity is not a crash detector", () => {
         [process, letter, build],
       ] as const) {
         const saved = Activity.cases.stepping.make({ process: p, letter: l, build: b });
-        expect(Result.getOrThrow(recoverActivity(saved))).toEqual({
-          _tag: "interrupted",
-          process: p,
-          letter: l,
-          build: b,
-          reason: "interrupted",
-        });
+        expect(Result.getOrThrow(recoverActivity(saved))).toEqual(
+          Recovered.cases.interrupted.make({ process: p, letter: l, build: b, reason: "interrupted" }),
+        );
       }
     },
     options,
   );
-  const corrupt = [null, {}, { _tag: "idle", process: "counter:1" }, { _tag: "stepping", process: A }];
+  // Corrupt saved activity on purpose, each made by a schema of its one wrong shape: an idle whose
+  // process is a name, not an id, and a stepping with no letter or build.
+  const corrupt = [
+    null,
+    {},
+    Schema.TaggedStruct("idle", { process: Schema.String }).make({ process: "counter:1" }),
+    Schema.TaggedStruct("stepping", { process: Schema.String }).make({ process: A }),
+  ];
   it.prop(
     "plant, reset corrupt saved state: corrupt activity fails closed",
     [unboundedJson.pipe(Arbitrary.filter((value) => !Schema.is(Activity)(value)))],
@@ -197,19 +200,14 @@ describe("p80, supplied policy events", () => {
         [A, { reason: "intensity", crashes: 3, until: 50_000 }],
         [process, supplied],
       ] as const) {
-        const down = { process: p, ...s };
-        expect(Schema.is(ProcessEvent)({ _tag: "down", ...down })).toBe(true);
-        expect(Schema.is(ProcessEvent)({ _tag: "down", process: p, reason: s.reason, crashes: s.crashes })).toBe(false);
-        expect(Schema.is(State)({ _tag: "down", ...down, code: { program: "counter", hash: "build-a" } })).toBe(true);
-        expect(
-          Schema.is(State)({
-            _tag: "down",
-            process: p,
-            reason: s.reason,
-            crashes: s.crashes,
-            code: { program: "counter", hash: "build-a" },
-          }),
-        ).toBe(false);
+        const down = ProcessEvent.cases.down.make({ process: p, ...s });
+        const { until: _until, ...noRetry } = down;
+        expect(Schema.is(ProcessEvent)(down)).toBe(true);
+        expect(Schema.is(ProcessEvent)(noRetry)).toBe(false);
+        const state = State.cases.down.make({ process: p, ...s, code: { program: "counter", hash: "build-a" } });
+        const { until: _stateUntil, ...stateNoRetry } = state;
+        expect(Schema.is(State)(state)).toBe(true);
+        expect(Schema.is(State)(stateNoRetry)).toBe(false);
       }
     },
     options,
@@ -331,17 +329,13 @@ describe("T319, next/ complete dead values", () => {
       build: text,
       errors: fc.array(text, { minLength: 1, maxLength: 32 }),
     })
-    .map((value) => ({
-      ...value,
-      _tag: "dead" as const,
-      tries: value.errors.length,
-      limit: value.errors.length,
-    }));
+    .map((value) => ({ ...value, tries: value.errors.length, limit: value.errors.length }));
 
   for (const field of ["process", "program", "name"] as const) {
     it(`plant, make ${field} optional or default it: complete dead values decode, removing ${field} fails`, () => {
       fc.assert(
-        fc.property(complete, (value) => {
+        fc.property(complete, (fields) => {
+          const value = Dead.make(fields);
           expect(Result.isSuccess(Schema.decodeUnknownResult(Dead)(value))).toBe(true);
           const { [field]: _removed, ...missing } = value;
           expect(Result.isFailure(Schema.decodeUnknownResult(Dead)(missing))).toBe(true);

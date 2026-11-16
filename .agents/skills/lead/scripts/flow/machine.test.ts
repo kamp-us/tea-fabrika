@@ -8,6 +8,9 @@ import * as FlowMachine from "./machine.ts";
 import * as Outcome from "./Outcome.ts";
 import * as Step from "./Step.ts";
 
+// The runner's StepFailed as tea carries it on the step's `err`: a plain tagged value (Runners.ts).
+const StepFailed = Schema.TaggedStruct("StepFailed", { reason: Schema.String });
+
 type Verb = "done" | "skip" | "ask" | "stuck";
 type Machine = ReturnType<typeof FlowMachine.make>;
 type Cmd = ReturnType<typeof FlowMachine.stepRun>;
@@ -221,7 +224,7 @@ describe("the flow machine", () => {
     const [model, next] = step(
       asLead,
       running,
-      FlowMachine.stepRun.err(cmd, { _tag: "StepFailed", reason: "no gh" }, 2_000),
+      FlowMachine.stepRun.err(cmd, StepFailed.make({ reason: "no gh" }), 2_000),
       ctx,
     );
     expect(next).toEqual([]);

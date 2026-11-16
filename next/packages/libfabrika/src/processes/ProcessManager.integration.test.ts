@@ -20,6 +20,7 @@ import {
   manager,
   storage,
 } from "./Process.test-support.ts";
+import { ProcessError } from "./Process.ts";
 import { CoordinationLayer, ProcessManager } from "./ProcessManager.ts";
 
 const hash = fc.string({ minLength: 1, maxLength: 80 });
@@ -80,10 +81,8 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
           expect(result._tag, "fresh receive refuses a life that is not live").toBe("Failure");
 
           if (result._tag === "Failure") {
-            expect(Cause.squash(result.cause)).toMatchObject({
-              _tag: "ProcessError",
-              reason: "ended",
-            });
+            expect(Cause.squash(result.cause)).toBeInstanceOf(ProcessError);
+            expect(Cause.squash(result.cause)).toMatchObject({ reason: "ended" });
           }
         }
       }).pipe(Effect.provide(manager(store)));
@@ -101,8 +100,8 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         expect(b.process).toBe(B);
         const started = (yield* events("counter:1")).filter((row) => row._tag === "started");
         expect(started).toHaveLength(1);
+        expect(started[0]?._tag).toBe("started");
         expect(started[0]).toMatchObject({
-          _tag: "started",
           stream: "processes/counter:1",
           body: { process: A, name: "counter:1", ...CODE },
           ...from(),
@@ -150,10 +149,9 @@ describe("p21, CoordinationLayer", () => {
         const mailbox = yield* Mailbox;
         const processes = yield* ProcessManager;
         const a = yield* processes.start(first(), from());
-        expect(yield* mailbox.send("counter:1", "letter-a", m, from({ seen: a.rev }))).toMatchObject({
-          _tag: "placed",
-          pos: 1,
-        });
+        const placed = yield* mailbox.send("counter:1", "letter-a", m, from({ seen: a.rev }));
+        expect(placed._tag).toBe("placed");
+        expect(placed).toMatchObject({ pos: 1 });
         expect((yield* Stream.runCollect(mailbox.receive("counter:1", 0))).map((letter) => letter.id)).toEqual([
           "letter-a",
         ]);

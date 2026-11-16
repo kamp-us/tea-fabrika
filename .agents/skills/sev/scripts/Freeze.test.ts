@@ -209,7 +209,8 @@ describe("the cancel loop", () => {
             Effect.provide(WorkflowRunsTest.layer(WorkflowRunsTest.world())),
           ),
         );
-        expect(refused).toMatchObject({ _tag: "Refused", reason: "no sev0 is open" });
+        expect(refused).toBeInstanceOf(Level.Refused);
+        expect(refused).toMatchObject({ reason: "no sev0 is open" });
       }),
     ),
   );
@@ -222,7 +223,9 @@ describe("the cancel loop", () => {
         yield* Fiber.interrupt(yield* started(dir, WorkflowRunsTest.world([])));
 
         expect(yield* ending(dir)).toBe("unanswered");
-        expect((yield* Level.log(dir)).at(-1)).toMatchObject({ _tag: "ended", by: "close" });
+        const last = (yield* Level.log(dir)).at(-1);
+        expect(last?._tag).toBe("ended");
+        expect(last).toMatchObject({ by: "close" });
         expect(Freeze.running(yield* Level.log(dir))).toBe(0);
       }),
     ),

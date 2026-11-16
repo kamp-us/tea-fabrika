@@ -3,8 +3,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
 import { Ledger } from "../ledger/Ledger.ts";
-import { type Entry, lineFor } from "../ledger/Log.ts";
-import { Mailbox } from "./Mailbox.ts";
+import { type Entry, type Line, lineFor } from "../ledger/Log.ts";
+import { letterLine, Mailbox } from "./Mailbox.ts";
 import {
   A,
   B,
@@ -25,7 +25,7 @@ import {
   watcher,
   X,
 } from "./Process.test-support.ts";
-import { brainOnly, Down, ProcessEvent, Recipient, Start } from "./Process.ts";
+import { brainOnly, Down, Owner, ProcessEvent, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
 // Match fc.jsonValue({maxDepth: depth}): finite numbers, strings/keys of
@@ -86,11 +86,16 @@ const exit = (store: Storage, process = A, by = BRAIN) =>
 
 const fresh = (store: Storage, after = 0) => receive(W, after).pipe(Effect.provide(manager(store, watcher(W))));
 
-/** Another writer's raw row: what a client could hold on a stream it may write. */
+/** Another writer's raw line: what a client could hold on a stream it may write. */
+const plantLine = (store: Storage, stream: string, id: string, line: Line) =>
+  Ledger.use((ledger) => ledger.append(stream, id, line)).pipe(Effect.provide(manager(store)));
+
+/** Another writer's raw row, made from a value a schema made. */
 const plant = (store: Storage, stream: string, id: string, event: { readonly _tag: string } & Schema.JsonObject) =>
-  Ledger.use((ledger) => ledger.append(stream, id, lineFor(from({ by: CLIENT }), event))).pipe(
-    Effect.provide(manager(store)),
-  );
+  plantLine(store, stream, id, lineFor(from({ by: CLIENT }), event));
+
+/** A row of a kind no reader here knows. */
+const Note = Schema.TaggedStruct("note", { n: Schema.Number });
 
 const downs = (letters: ReadonlyArray<{ readonly m: unknown; readonly by: string }>) =>
   letters.flatMap((letter) => {
@@ -155,7 +160,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
           yield* monitor(store);
 
           for (const { stream, id } of planted) {
-            expect((yield* plant(store, stream, id, { _tag: "note", n: 1 }))._tag).toBe("placed");
+            expect((yield* plant(store, stream, id, Note.make({ n: 1 })))._tag).toBe("placed");
           }
 
           yield* exit(store);
@@ -294,7 +299,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         const store = storage();
         yield* seed(store);
         yield* monitor(store, ref);
-        yield* plant(store, "watcher:1/inbox", signal.id, { _tag: "send", m: "taken" });
+        yield* plantLine(store, "watcher:1/inbox", signal.id, letterLine(from({ by: CLIENT }), "taken"));
         const exited = yield* Effect.result(exit(store));
         const owed = downs(yield* fresh(store));
 
@@ -336,11 +341,12 @@ describe("P33, an inbox read is total", () => {
     Schema.Struct({
       m: Schema.optionalKey(json(2)),
       n: Schema.optionalKey(json(2)),
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- a junk body may hold a `_tag` key of any JSON, the raw input this law reads
       _tag: Schema.optionalKey(json(2)),
       ref: Schema.optionalKey(json(2)),
       to: Schema.optionalKey(json(2)),
     }),
-    Schema.Struct({ m: Schema.Struct({ _tag: Schema.Literal("DOWN"), ref: json(1) }) }),
+    Schema.Struct({ m: Schema.TaggedStruct("DOWN", { ref: json(1) }) }),
   ]);
   const hasM = (body: unknown): body is { readonly m: unknown } =>
     typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
@@ -357,8 +363,7 @@ describe("P33, an inbox read is total", () => {
         for (const [n, body] of bodies.entries()) {
           const placed = yield* Ledger.use((ledger) =>
             ledger.append("watcher:1/inbox", `junk:${n}`, {
-              ...from({ by: CLIENT }),
-              _tag: "send",
+              ...letterLine(from({ by: CLIENT }), null),
               body: body as Schema.Json,
             }),
           ).pipe(Effect.provide(manager(store)));
@@ -432,10 +437,7 @@ describe("P33, every brain-written line records who asked", () => {
       const store = storage();
       return Effect.gen(function* () {
         yield* plant(store, "processes", "forged:registered", {
-          _tag: "registered",
-          name,
-          program: "counter",
-          owner: { _tag: "brain" },
+          ...ProcessEvent.cases.registered.make({ name, program: "counter", owner: Owner.cases.brain.make({}) }),
           asked: BRAIN,
         });
         const started = yield* Effect.result(

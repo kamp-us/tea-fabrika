@@ -26,6 +26,7 @@ import {
   judgedMove,
   lacks,
   QUEST_STEPS,
+  Move,
   moveFrom,
   moveOf,
   providers,
@@ -34,10 +35,12 @@ import {
   slotRefusal,
   slotSchedule,
   STEPS,
+  Stop,
   stepAgent,
   type StepName,
   stepsTable,
 } from "./chain.ts";
+import { Verdict } from "./ci/typecheck.ts";
 import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
 
 // Today's tooling. The quest machine is pure and stepped by hand here; nothing runs an agent.
@@ -80,6 +83,26 @@ const limits = (maxSteps: number, backstop: Budget | null = null, maxStucks = 3)
 
 type Stepped = ReturnType<ReturnType<typeof makeMachine>["update"]["start"]>;
 
+/** The stop an ended quest asked with, if it ended with one. */
+const endStop = (m: Stepped[0]) => (m.phase === "over" ? m.end.stop : undefined);
+
+/** A Cmd's `unknown` failure, the one tag its `err` list declares (tea's tagged error shape). */
+const Unknown = Schema.TaggedStruct("unknown", {});
+
+// What a harness says while it runs, restated from today's `Agent.Raw`, a hand-written type with no
+// maker, on its own field schemas (0135), so each raw below is made by a schema.
+const Raw = Schema.TaggedUnion({
+  tool: { id: Schema.String, title: Schema.String, status: Agent.ToolStatus },
+  said: { text: Schema.String },
+  tokens: { tokens: Agent.Tokens, whole: Schema.Boolean },
+  ended: {
+    stop: Agent.Stop,
+    structured: Schema.Unknown,
+    usd: Schema.NullOr(Schema.Number),
+    requests: Schema.NullOr(Schema.Number),
+  },
+});
+
 /** A host step answered skip, as for a quest brief with no `## host`; any other state stays. */
 const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "hosting"
@@ -92,7 +115,7 @@ const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
 /** CI's typecheck job answered green; any other state stays. */
 const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "typechecking"
-    ? machine.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value: { _tag: "green" } } as never)
+    ? machine.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value: Verdict.cases.green.make({}) } as never)
     : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
@@ -124,7 +147,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
       fc.property(step, questStep, word, (from, to, reason) => {
         fc.pre(from !== to);
         const m = moveOf(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
-        expect(m).toMatchObject({ _tag: "step", step: to });
+        expect(m._tag).toBe("step");
+        expect(m).toMatchObject({ step: to });
 
         if (m._tag === "step") {
           expect(m.note).toContain(reason);
@@ -148,7 +172,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
     fc.assert(
       fc.property(questStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
         const m = moveOf(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
-        expect(m).toEqual({ _tag: "judge" });
+        expect(m).toEqual(Move.cases.judge.make({}));
       }),
       options,
     );
@@ -159,7 +183,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
       fc.property(step, word, (s, reason) => {
         expect(moveOf(s, line("ask:lead:question", "h", reason), 0, 3)._tag).toBe("judge");
         const m = moveOf(s, line("ask:lead:lockfile", "h", reason), 0, 3);
-        expect(m).toEqual({ _tag: "park", reason });
+        expect(m).toEqual(Move.cases.park.make({ reason }));
       }),
       options,
     );
@@ -222,16 +246,16 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
     fc.assert(
       fc.property(questStep, word, word, (s, note, chatter) => {
         const sent = judgedOf(`${chatter}\n\nanswer: send ${s} ${note}\n`);
-        expect(sent).toMatchObject({ _tag: "step", step: s });
+        expect(sent._tag).toBe("step");
+        expect(sent).toMatchObject({ step: s });
 
         if (sent._tag === "step") {
           expect(sent.note).toContain(note);
         }
 
-        expect(judgedOf(`answer: send ${s} old\n${chatter}\nanswer: park ${note}`)).toEqual({
-          _tag: "park",
-          reason: note,
-        });
+        expect(judgedOf(`answer: send ${s} old\n${chatter}\nanswer: park ${note}`)).toEqual(
+          Move.cases.park.make({ reason: note }),
+        );
       }),
       options,
     );
@@ -242,7 +266,7 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
     expect(judgedOf("answer: send plan fix it")._tag).toBe("park");
     expect(judgedOf("")._tag).toBe("park");
     // pinned: 0066, a quest has no mutation step, so an older answer that names one parks.
-    expect(judgedOf("answer: send mutation rerun it")).toEqual({ _tag: "park", reason: "rerun it" });
+    expect(judgedOf("answer: send mutation rerun it")).toEqual(Move.cases.park.make({ reason: "rerun it" }));
   });
 });
 
@@ -464,16 +488,19 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
   // 0066. Plants: route build's done to mutation; let a judgment or a send start mutation.
   it("property: no path from a quest started at tests, build or review ever runs mutation", () => {
+    // What each turn of the walk hands the machine: a step's outcome line, or the judge's text.
+    const Given = Schema.TaggedUnion({ line: { o: Schema.String }, judged: { text: Schema.String } });
     const answer = fc.oneof(
-      outcome.map((o) => ({ _tag: "line" as const, o })),
+      outcome.map((o) => Given.cases.line.make({ o })),
       fc
         .constantFrom(
           "answer: send mutation rerun",
-          JSON.stringify({ _tag: "step", step: "mutation", note: "rerun" }),
+          // A step move that names mutation, a step no quest has: the judge's raw text this law reads.
+          JSON.stringify({ ...Move.cases.step.make({ step: "tests", note: "rerun" }), step: "mutation" }),
           "answer: send build fix",
           "answer: send review again",
         )
-        .map((text) => ({ _tag: "judged" as const, text })),
+        .map((text) => Given.cases.judged.make({ text })),
     );
     fc.assert(
       fc.property(questStep, fc.array(answer, { maxLength: 20 }), (first, answers) => {
@@ -600,12 +627,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
         const [m] = start();
         const [over] = machine.update.step_run_err(m, {
           type: "step_run_err",
-          error: {
-            _tag: "RetriesExhausted",
-            schedule: "slotSchedule(5 minutes)",
-            times,
-            reason,
-          },
+          error: RetriesExhausted.make({ schedule: "slotSchedule(5 minutes)", times, reason }),
         } as never);
         expect(over).toMatchObject({ phase: "over", end: { kind: "stuck" } });
 
@@ -718,7 +740,8 @@ describe("the host step runs before every review of a new head, today's tooling"
 
     // The window is now send, pass, send, pass: a third host send trips 3 in 5.
     const [sent] = hosted(m, "send", "", "e2e red");
-    expect(sent).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+    expect(sent).toMatchObject({ phase: "over", end: { kind: "ask" } });
+    expect(endStop(sent)?._tag).toBe("intensity");
     expect(sent.quest.window).toEqual(["send", "pass", "send", "pass", "send"]);
     // A host stuck is the tool's: marked, never counted, and the quest ends stuck.
     const [stuck] = hosted(m, "stuck", "", "botpush failed");
@@ -736,7 +759,8 @@ describe("the host step runs before every review of a new head, today's tooling"
       value: { outcome: "skip", head: "", reason: "no section" },
     } as never);
     expect(cmds).toEqual([]);
-    expect(b).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "backstop", passed: "steps" } } });
+    expect(b).toMatchObject({ phase: "over", end: { kind: "ask", stop: { passed: "steps" } } });
+    expect(endStop(b)?._tag).toBe("backstop");
   });
 
   it("scenario: a host stuck ends the quest stuck (exit 30), and a quest started at review hosts first", () => {
@@ -806,15 +830,15 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
       fc.property(sha, pr, word, (head, n, reason) => {
         const [m] = reviewed(head, 0, machine, n);
         const loosens = [expect.objectContaining({ type: "loosen", pr: n, head })];
-        const [green, next] = answered(m, { _tag: "green" });
+        const [green, next] = answered(m, Verdict.cases.green.make({}));
         expect(green).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: null } });
         expect(next).toEqual(loosens);
-        const [skipped, also] = answered(m, { _tag: "skipped", reason });
+        const [skipped, also] = answered(m, Verdict.cases.skipped.make({ reason }));
         expect(skipped).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: reason } });
         expect(also).toEqual(loosens);
         const [threw, again] = machine.update.typecheck_read_err(m, {
           type: "typecheck_read_err",
-          error: { _tag: "unknown" },
+          error: Unknown.make({}),
         } as never);
         expect(threw).toMatchObject({ phase: "loosening", quest: { unchecked: "reading CI's typecheck job threw" } });
         expect(again).toEqual(loosens);
@@ -828,7 +852,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     fc.assert(
       fc.property(sha, to, lines, (head, step, ls) => {
         const [m] = reviewed(head);
-        const [sent, cmds] = answered(m, { _tag: "red", to: step, lines: ls });
+        const [sent, cmds] = answered(m, Verdict.cases.red.make({ to: step, lines: ls }));
         expect(sent).toMatchObject({ phase: "stepping", step, quest: { unchecked: null } });
         expect(sent.quest.window.at(-1)).toBe("send");
         expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step })]);
@@ -848,17 +872,18 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     const tight = makeMachine({ ...limits(16), intensity: { count: 2, within: 5 } });
     const [m] = reviewed("a".repeat(40), 1, tight);
     expect(m.phase).toBe("typechecking");
-    const red = { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] };
+    const red = Verdict.cases.red.make({ to: "build", lines: ["a.ts(1,1): error TS1: x"] });
     const [stopped, cmds] = answered(m, red, tight);
     expect(cmds).toEqual([]);
-    expect(stopped).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+    expect(stopped).toMatchObject({ phase: "over", end: { kind: "ask" } });
+    expect(endStop(stopped)?._tag).toBe("intensity");
   });
 
   it("scenario: after a red one, the next merge-ready review pushes again and reads CI at the new head", () => {
     const first = "a".repeat(40);
     const second = "b".repeat(40);
     const [m] = reviewed(first);
-    let [back] = answered(m, { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] });
+    let [back] = answered(m, Verdict.cases.red.make({ to: "build", lines: ["a.ts(1,1): error TS1: x"] }));
     expect(back).toMatchObject({ phase: "stepping", step: "build" });
     [back] = machine.update.step_run_ok(back, { type: "step_run_ok", value: line("done", second) } as never);
     [back] = hostSkipped(machine, [back, []]);
@@ -877,7 +902,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
 
   it("scenario: a typecheck answer outside the typecheck phase changes nothing", () => {
     const [idle] = machine.init(null, undefined);
-    const [same, cmds] = answered(idle, { _tag: "green" });
+    const [same, cmds] = answered(idle, Verdict.cases.green.make({}));
     expect(same).toBe(idle);
     expect(cmds).toEqual([]);
   });
@@ -952,7 +977,7 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
         expect(nothing).toEqual([]);
         expect(broke).toMatchObject({ phase: "over", end: { kind: "stuck" } });
         expect(looseningEnd(n, { code: other, text: "x" })?.kind).toBe("stuck");
-        const [threw] = machine.update.loosen_err(m, { type: "loosen_err", error: { _tag: "unknown" } } as never);
+        const [threw] = machine.update.loosen_err(m, { type: "loosen_err", error: Unknown.make({}) } as never);
         expect(threw).toMatchObject({ phase: "over", end: { kind: "stuck" } });
       }),
       options,
@@ -1071,30 +1096,25 @@ describe("T341 the chain record is a Schema value, today's tooling", () => {
 
 describe("T341 the judgment agent's typed answer is a move, today's tooling", () => {
   it("send with a step runs that step again with the note; park, or a send with no step, parks", () => {
-    expect(judgedMove({ answer: "send", step: "build", note: "fix the law" })).toEqual({
-      _tag: "step",
-      step: "build",
-      note: "the lead's judgment: fix the law",
-    });
-    expect(judgedMove({ answer: "park", step: null, note: "a decision is needed" })).toEqual({
-      _tag: "park",
-      reason: "a decision is needed",
-    });
-    expect(judgedMove({ answer: "send", step: null, note: "" })).toEqual({
-      _tag: "park",
-      reason: "the judgment agent parked the quest with no why",
-    });
+    expect(judgedMove({ answer: "send", step: "build", note: "fix the law" })).toEqual(
+      Move.cases.step.make({ step: "build", note: "the lead's judgment: fix the law" }),
+    );
+    expect(judgedMove({ answer: "park", step: null, note: "a decision is needed" })).toEqual(
+      Move.cases.park.make({ reason: "a decision is needed" }),
+    );
+    expect(judgedMove({ answer: "send", step: null, note: "" })).toEqual(
+      Move.cases.park.make({ reason: "the judgment agent parked the quest with no why" }),
+    );
   });
 
   it("the judge Cmd's answer reads back as the move it chose, and an older text by its answer line", () => {
     fc.assert(
       fc.property(questStep, word, (s, note) => {
-        const move = { _tag: "step" as const, step: s, note };
+        const move = Move.cases.step.make({ step: s, note });
         expect(moveFrom(JSON.stringify(move))).toEqual(move);
-        expect(moveFrom(JSON.stringify({ _tag: "park", reason: note }))).toEqual({
-          _tag: "park",
-          reason: note,
-        });
+        expect(moveFrom(JSON.stringify(Move.cases.park.make({ reason: note })))).toEqual(
+          Move.cases.park.make({ reason: note }),
+        );
         expect(moveFrom(`answer: send ${s} ${note}`)).toEqual(judgedOf(`answer: send ${s} ${note}`));
       }),
       options,
@@ -1181,11 +1201,11 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
         const said = `The laws are green.\n${JSON.stringify({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
         const { turned, fake, events, report } = yield* turn({
           raws: [
-            { _tag: "tool", id: "t1", title: "pnpm test", status: "in_progress" },
-            { _tag: "tool", id: "t1", title: "pnpm test", status: "completed" },
-            { _tag: "said", text: said },
-            { _tag: "tokens", tokens: { input: 100, cached: 40, output: 10 }, whole: true },
-            { _tag: "ended", stop: "end_turn", structured: undefined, usd: 0.5, requests: 2 },
+            Raw.cases.tool.make({ id: "t1", title: "pnpm test", status: "in_progress" }),
+            Raw.cases.tool.make({ id: "t1", title: "pnpm test", status: "completed" }),
+            Raw.cases.said.make({ text: said }),
+            Raw.cases.tokens.make({ tokens: { input: 100, cached: 40, output: 10 }, whole: true }),
+            Raw.cases.ended.make({ stop: "end_turn", structured: undefined, usd: 0.5, requests: 2 }),
           ],
         });
         expect(report).toBe(said);
@@ -1212,14 +1232,14 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
         expect(lines.map((l) => l._tag)).toEqual(["started", "tool", "tool", "said", "tokens", "ended"]);
         // The prompt reached the adapter with the schema's form appended, and the system prompt named.
         expect(fake.seen.started[0]?.prompt).toContain("do the step");
-        expect(fake.seen.started[0]?.system).toEqual({ _tag: "append", text: "you are the step" });
+        expect(fake.seen.started[0]?.system).toEqual(Agent.SystemPrompt.members[0].make({ text: "you are the step" }));
       }),
     ));
 
   it("a harness that breaks is a failed turn with its reason, never a thrown error", () =>
     ran(
       Effect.gen(function* () {
-        const { turned } = yield* turn({ raws: [{ _tag: "said", text: "half" }] });
+        const { turned } = yield* turn({ raws: [Raw.cases.said.make({ text: "half" })] });
         expect(turned._tag).toBe("failed");
 
         if (turned._tag === "failed") {
@@ -1340,7 +1360,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
     const [idle] = machine.init(null, undefined);
     return { machine, first: machine.update.start(idle, { type: "start", step: "tests" }) };
   };
-  const again = JSON.stringify({ _tag: "step", step: "tests", note: "again" });
+  const again = JSON.stringify(Move.cases.step.make({ step: "tests", note: "again" }));
 
   // vector: the sort, reason by reason, read from the stuck rows in the boxes folder on 2026-11-11.
   it("vector: each stuck reason drive writes gets its fault, and an agent's own stuck reads its reason", () => {
@@ -1459,7 +1479,8 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
           [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line(s.o, "", s.reason) } as never);
 
           if (i === expected) {
-            expect(m).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
+            expect(m).toMatchObject({ phase: "over", end: { kind: "ask" } });
+            expect(endStop(m)?._tag).toBe("intensity");
             return;
           }
 
@@ -1499,14 +1520,15 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
 
     if (m.phase === "over") {
       expect(exitOf(m.end)).toBe(20);
-      expect(m.end.stop).toEqual({
-        _tag: "intensity",
-        count: 3,
-        within: 5,
-        window: ["send", "tool", "send", "work"],
-        steps: 4,
-        dollars: 5.25,
-      });
+      expect(m.end.stop).toEqual(
+        Stop.cases.intensity.make({
+          count: 3,
+          within: 5,
+          window: ["send", "tool", "send", "work"],
+          steps: 4,
+          dollars: 5.25,
+        }),
+      );
       expect(m.end.reason).toBe(
         "intensity: 3 of the last 4 steps were sent back or stuck on the work (2 sent back, 1 stuck on the work; 1 stuck on a tool, not counted; the limit is 3 in 5). Spent so far: 4 steps, $5.25. Answer redo, cut scope or drop (0076).",
       );
@@ -1539,8 +1561,9 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
             if (round >= steps || spent >= dollars) {
               expect(m).toMatchObject({
                 phase: "over",
-                end: { kind: "ask", stop: { _tag: "backstop", passed: round >= steps ? "steps" : "dollars" } },
+                end: { kind: "ask", stop: { passed: round >= steps ? "steps" : "dollars" } },
               });
+              expect(endStop(m)?._tag).toBe("backstop");
               return;
             }
 
@@ -1623,13 +1646,14 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
 
   it("scenario: a backstop's question names the limit it passed and what was spent", () => {
     expect(
-      stopReason({
-        _tag: "backstop",
-        passed: "dollars",
-        backstop: { steps: 24, dollars: 30 },
-        steps: 9,
-        dollars: 31.4,
-      }),
+      stopReason(
+        Stop.cases.backstop.make({
+          passed: "dollars",
+          backstop: { steps: 24, dollars: 30 },
+          steps: 9,
+          dollars: 31.4,
+        }),
+      ),
     ).toBe(
       "backstop: the quest reached $30.00, its backstop (24 steps, $30.00). Spent so far: 9 steps, $31.40. Answer redo, cut scope or drop (0076).",
     );

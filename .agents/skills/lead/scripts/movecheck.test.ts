@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.ts";
@@ -18,6 +19,16 @@ import { moveFaults, partFaults, renameFaults, splitFaults } from "./movecheck.t
 const options = { seed: 119120, numRuns: 300 };
 
 type Change = Parameters<typeof moveFaults>[0][number];
+
+// One file of a diff, restated from movecheck.ts's own `Change` (0135) and pinned to it by the type
+// above, so each change below is made by its schema and not written by hand.
+const Change = Schema.TaggedUnion({
+  renamed: { from: Schema.String, to: Schema.String, before: Schema.String, after: Schema.String },
+  modified: { path: Schema.String, before: Schema.String, after: Schema.String },
+  added: { path: Schema.String, after: Schema.String },
+  deleted: { path: Schema.String, before: Schema.String },
+});
+
 type Move = Parameters<typeof moveFaults>[1]["moves"][number];
 type Row = Parameters<typeof partFaults>[1]["base"][number];
 
@@ -151,12 +162,8 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
       fc.property(
         before.chain(([old, moved]) => fc.tuple(fc.constant(old), fc.constant(moved), edited(moved))),
         ([old, moved, broken]) => {
-          const renamed = (after: Text): Change => ({
-            _tag: "renamed",
-            ...move,
-            before: written(old),
-            after: written(after),
-          });
+          const renamed = (after: Text): Change =>
+            Change.cases.renamed.make({ ...move, before: written(old), after: written(after) });
           expect(moveFaults([renamed(moved)], { moves: [move], named: [] })).toEqual([]);
           expect(paths(moveFaults([renamed(broken)], { moves: [move], named: [] }))).toEqual([move.to]);
         },
@@ -191,13 +198,13 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
 
             switch (fates[n]) {
               case "moved":
-                return [{ _tag: "renamed", ...move, ...texts }];
+                return [Change.cases.renamed.make({ ...move, ...texts })];
               case "wrong-source":
-                return [{ _tag: "renamed", ...move, from: `${move.from}.wrong.ts`, ...texts }];
+                return [Change.cases.renamed.make({ ...move, from: `${move.from}.wrong.ts`, ...texts })];
               case "elsewhere":
-                return [{ _tag: "renamed", from: move.from, to: `${move.to}.elsewhere.ts`, ...texts }];
+                return [Change.cases.renamed.make({ from: move.from, to: `${move.to}.elsewhere.ts`, ...texts })];
               default:
-                return [{ _tag: "deleted", path: move.from, before: texts.before }];
+                return [Change.cases.deleted.make({ path: move.from, before: texts.before })];
             }
           });
           const wrong = moves.flatMap((move, n) =>
@@ -216,36 +223,31 @@ describe("movecheck, a move PR: only the table's renames, and only specifiers ch
 
             switch (mutation) {
               case "added":
-                return { _tag: "added", path, after: written(old) };
+                return Change.cases.added.make({ path, after: written(old) });
               case "deleted":
-                return { _tag: "deleted", path, before: written(old) };
+                return Change.cases.deleted.make({ path, before: written(old) });
               case "renamed":
-                return {
-                  _tag: "renamed",
+                return Change.cases.renamed.make({
                   from: `${SRC}/app/stray${n}.ts`,
                   to: path,
                   before: written(old),
                   after: written(old),
-                };
+                });
               default:
-                return { _tag: "modified", path, before: written(config), after: written(changed) };
+                return Change.cases.modified.make({ path, before: written(config), after: written(changed) });
             }
           });
           // Clean, whatever else the PR holds: a file that imports a moved one and only follows
           // it, and the configs and docs the plan names, which may change in any way.
           const clean: ReadonlyArray<Change> = [
-            {
-              _tag: "modified",
+            Change.cases.modified.make({
               path: `${SRC}/workers/runtime.ts`,
               before: written(old),
               after: written(moved),
-            },
-            ...NAMED.map((path): Change => ({
-              _tag: "modified",
-              path,
-              before: written(config),
-              after: written(changed),
-            })),
+            }),
+            ...NAMED.map((path): Change =>
+              Change.cases.modified.make({ path, before: written(config), after: written(changed) }),
+            ),
           ];
           const faults = moveFaults([...clean, ...fromTable, ...outside], { moves, named: NAMED });
           expect(paths(faults)).toEqual([...wrong, ...strays.map((_, n) => `${SRC}/node/stray${n}.ts`)].sort());
@@ -265,13 +267,8 @@ describe("movecheck, a move PR: one @internal tag line above an export, in an in
   const body = fc.array(line, { minLength: 1, maxLength: 8 });
   const tagged = (lines: ReadonlyArray<string>, pick: ReadonlyArray<boolean>): string =>
     lines.flatMap((l, n) => (pick[n] === true && l.startsWith("export") ? ["/** @internal */", l] : [l])).join("\n");
-  const moved = (to: string, before: string, after: string): Change => ({
-    _tag: "renamed",
-    from: `${SRC}/data/old.ts`,
-    to,
-    before,
-    after,
-  });
+  const moved = (to: string, before: string, after: string): Change =>
+    Change.cases.renamed.make({ from: `${SRC}/data/old.ts`, to, before, after });
   const faults = (to: string, before: string, after: string) =>
     paths(moveFaults([moved(to, before, after)], { moves: [{ from: `${SRC}/data/old.ts`, to }], named: [] }));
   const INTERNAL = `${SRC}/runtime/internal/supervisor.ts`;
@@ -669,7 +666,7 @@ describe("movecheck: each moved file keeps its row of the rule file", () => {
 // line and a readable excerpt, not a frozen sentence describing the kind of fault.
 describe("movecheck: fault locations and excerpts", () => {
   const reason = (before: string, after: string): string | undefined =>
-    moveFaults([{ _tag: "modified", path: "a.ts", before, after }], { moves: [], named: [] })[0]?.reason;
+    moveFaults([Change.cases.modified.make({ path: "a.ts", before, after })], { moves: [], named: [] })[0]?.reason;
 
   // Plants: at + 1 -> at - 1; remove trim(); > 80 -> >= 80; slice(0, 77) -> slice(0, 78).
   // Also planted report IDs 6-13, 25, 27-32, 34-35, 38-40 and 49: empty helpers/messages,

@@ -89,7 +89,10 @@ const put = <K, V>(map: ReadonlyMap<K, V>, key: K, value: V): ReadonlyMap<K, V> 
 
 /** The canonical recipient key, byte for byte as main writes it. */
 const keyFor = (to: To, ref: string): string =>
-  JSON.stringify([to._tag === "process" ? { _tag: "process", process: to.process } : { ...CLIENT_TO, ...to }, ref]);
+  JSON.stringify([
+    to._tag === "process" ? Recipient.cases.process.make({ process: to.process }) : { ...CLIENT_TO, ...to },
+    ref,
+  ]);
 
 const sameOwner = (a: Owned | undefined, b: Owned): boolean =>
   a !== undefined && a._tag === b._tag && (a._tag === "brain" || (b._tag === "process" && a.process === b.process));

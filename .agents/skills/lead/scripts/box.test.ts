@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { CommitsAnswer } from "./commits.test-support.ts";
 import { boxTree, oldBoxTree } from "./quest.ts";
 
 // Today's tooling. Real Git and the installed signer, local paths only. The only keys are
@@ -24,6 +25,7 @@ const root = resolve(import.meta.dirname, "../../../..");
 const program = join(import.meta.dirname, "box.sh");
 const signer = join(root, "next/apps/fabrika/src/exam/commits.ts");
 const options = { seed: 321, numRuns: 3, endOnFailure: true };
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{1,8}$/);
 type Call = { cmd: string; args: string[]; cwd: string; head?: string };
 type Operation = { path: string; text?: string; to?: string };
@@ -1340,8 +1342,8 @@ describe("T321 review round 1 fixes, today's tooling", () => {
   it("K1 scenario: a stale link only for a step the quest has not signed does not stop the fetch", () => {
     each(["lead", "tests"] as const, (step) =>
       fixture((b) => {
-        const stale = JSON.stringify({ _tag: "stuck", reason: "stale_link", sha: "head", step });
-        const ask = JSON.stringify({ _tag: "ask", to: "owner", for: "exam_read", paths: [] });
+        const stale = JSON.stringify(CommitsAnswer.cases.stuck.make({ reason: "stale_link", sha: "head", step }));
+        const ask = JSON.stringify(CommitsAnswer.cases.ask.make({ to: "owner", for: "exam_read", paths: [] }));
         b.setup({
           operations: [{ path: "src/a.ts", text: "run\n" }],
           check: { status: 1, text: `${stale}\n${ask}\n` },
@@ -1463,7 +1465,7 @@ describe("T321 review round 1 fixes, today's tooling", () => {
     fc.assert(
       fc.property(fc.array(answer, { minLength: 1, maxLength: 7 }), (answers) =>
         fixture((b) => {
-          const lines = answers.map((a) => JSON.stringify({ _tag: "stuck", ...a }));
+          const lines = answers.map((a) => JSON.stringify(CommitsAnswer.cases.stuck.make(a)));
           b.setup({
             operations: [{ path: "src/a.ts", text: "run\n" }],
             check: { status: 1, text: `${lines.join("\n")}\n` },

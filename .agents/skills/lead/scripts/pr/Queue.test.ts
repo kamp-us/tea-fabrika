@@ -3,7 +3,7 @@
 // a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
-import { Effect, Fiber, Layer, Option, Schema } from "effect";
+import { Effect, Fiber, Layer, Option, Result, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { ChecksError, type Job } from "../ci/Checks.ts";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -111,7 +111,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         });
         const { answer, leaks } = yield* added(m);
         const enters = state === "OPEN" && !draft && base === "main" && leak === "clean" && required === "success";
-        expect(m.github.calls).toEqual(enters ? [{ _tag: "enqueue", number: 900, oid }] : []);
+        expect(m.github.calls).toEqual(enters ? [PullRequestsTest.Call.cases.enqueue.make({ number: 900, oid })] : []);
         expect(answer._tag === "Success" && answer.success._tag === "queued").toBe(enters);
 
         if (enters) {
@@ -136,7 +136,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
       const done = yield* add(memory({ state: "MERGED", more: { mergeCommit: merged } }));
       expect(Queue.line(done)).toBe(`pr 900: already merged at ${merged}`);
       const closed = yield* Effect.flip(add(memory({ state: "CLOSED" })));
-      expect(closed).toMatchObject({ _tag: "NotQueued", reason: "pr 900: closed, not merged" });
+      expect(closed).toEqual(Queue.NotQueued.make({ reason: "pr 900: closed, not merged" }));
       const draft = yield* Effect.flip(add(memory({ draft: true })));
       expect(draft).toMatchObject({ reason: "pr 900: draft, not merged; refused until it is ready for review" });
       const stacked = yield* Effect.flip(add(memory({ more: { base: "fabrikalfa/parent" } })));
@@ -147,7 +147,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
   it.effect("scenario: a queued answer says queued, never merged, and names the head", () =>
     Effect.gen(function* () {
       const answer = yield* add(memory());
-      expect(answer).toEqual({ _tag: "queued", pr: 900, oid });
+      expect(answer).toEqual(Queue.Added.cases.queued.make({ pr: 900, oid }));
       expect(Queue.line(answer)).toBe(`pr 900: queued at ${oid}; GitHub tests it on newest main and merges it`);
     }),
   );
@@ -157,7 +157,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
     () =>
       Effect.gen(function* () {
         const red = yield* Effect.flip(add(memory({ required: "failure" })));
-        expect(red).toMatchObject({ _tag: "NotQueued" });
+        expect(red).toBeInstanceOf(Queue.NotQueued);
         expect(red._tag === "NotQueued" ? red.reason : "").toContain(`ci-required is failure at ${oid}`);
         const none = yield* Effect.flip(add(memory({ required: "none" })));
         expect(none._tag === "NotQueued" ? none.reason : "").toContain("ci-required is missing");
@@ -189,7 +189,7 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         const unreachable = new ChecksError({ reason: "gh: offline" });
         const green = yield* waited([job("none"), unreachable, job("in_progress"), job("success")]);
         expect(green.answer._tag).toBe("Success");
-        expect(green.calls).toEqual([{ _tag: "enqueue", number: 900, oid }]);
+        expect(green.calls).toEqual([PullRequestsTest.Call.cases.enqueue.make({ number: 900, oid })]);
         const red = yield* waited([job("queued"), job("failure")]);
         expect(red.answer._tag).toBe("Failure");
         expect(red.calls).toEqual([]);
@@ -224,10 +224,11 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         const m = memory({ more: { body: `What it does.${lines}` } });
         m.github.patches.set(900, [{ path: "src/a.ts", patch: `@@ -0,0 +1 @@\n+export const ${name} = 1;` }]);
         const answer = yield* Effect.result(add(m));
-        expect(m.github.calls).toEqual(named ? [{ _tag: "enqueue", number: 900, oid }] : []);
+        expect(m.github.calls).toEqual(named ? [PullRequestsTest.Call.cases.enqueue.make({ number: 900, oid })] : []);
 
         if (!named) {
-          expect(answer).toMatchObject({ _tag: "Failure", failure: { _tag: "NotQueued" } });
+          expect(Result.isFailure(answer)).toBe(true);
+          expect(answer._tag === "Failure" && answer.failure).toBeInstanceOf(Queue.NotQueued);
           expect(answer._tag === "Failure" && answer.failure.reason).toContain(`pr 900: its diff exports new names`);
           expect(answer._tag === "Failure" && answer.failure.reason).toContain(name);
         }
@@ -308,13 +309,13 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
         ];
         const m = landed(rows.join(crlf ? "\r\n" : "\n"), { open: named.filter(isOpen) });
         const done = yield* settle(m);
-        expect(m.tracker.posts[0]).toEqual({ _tag: "list" });
+        expect(m.tracker.posts[0]).toEqual(TicketsTest.Post.cases.list.make({}));
         expect(closes(m)).toEqual(
           named.flatMap((n) =>
             isOpen(n)
               ? [
-                  { _tag: "comment", ticket: n, body: note },
-                  { _tag: "close", ticket: n },
+                  TicketsTest.Post.cases.comment.make({ ticket: n, body: note }),
+                  TicketsTest.Post.cases.close.make({ ticket: n }),
                 ]
               : [],
           ),
@@ -343,7 +344,8 @@ describe("settle: a merged pull request closes the tickets it names (0015, T410)
         ["comment", 411],
         ["close", 411],
       ]);
-      expect(done).toMatchObject({ _tag: "merged", commit: merged });
+      expect(done._tag).toBe("merged");
+      expect(done).toMatchObject({ commit: merged });
       expect(done.lines).toEqual([
         `pr 900: merged at ${merged}`,
         "pr 900: closed ticket 410",

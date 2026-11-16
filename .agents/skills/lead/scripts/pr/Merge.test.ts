@@ -106,8 +106,11 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
         const docs = files === "docs";
         const merges =
           route === "queue" ? clean && required === "success" : clean && (docs || (sev0 && required === "success"));
-        const asked = route === "queue" ? "enqueue" : "admin";
-        expect(m.github.calls).toEqual(merges ? [{ _tag: asked, number: 1415, oid }] : []);
+        const asked =
+          route === "queue"
+            ? PullRequestsTest.Call.cases.enqueue.make({ number: 1415, oid })
+            : PullRequestsTest.Call.cases.admin.make({ number: 1415, oid });
+        expect(m.github.calls).toEqual(merges ? [asked] : []);
         expect(answer._tag).toBe(merges ? "Success" : "Failure");
 
         if (merges) {
@@ -128,7 +131,7 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
       Effect.gen(function* () {
         const m = memory({ leak: "leakText" });
         const { answer, leaks } = yield* merged(m, admin());
-        expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
+        expect(answer._tag === "Failure" && answer.failure).toBeInstanceOf(LeakGrepRefused);
         expect(leaks).toEqual(gate);
         expect(m.github.calls).toEqual([]);
       }),
@@ -139,7 +142,7 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
       for (const route of [queue, admin()]) {
         const m = memory({ leak: "leakGrep" });
         const { answer, leaks } = yield* merged(m, route);
-        expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
+        expect(answer._tag === "Failure" && answer.failure).toBeInstanceOf(LeakGrepRefused);
         expect(leaks).toEqual(gate.slice(0, 2));
         expect(m.github.calls).toEqual([]);
       }
@@ -150,7 +153,7 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
     Effect.gen(function* () {
       const m = memory();
       const done = yield* merge(m, admin());
-      expect(m.github.calls).toEqual([{ _tag: "admin", number: 1415, oid }]);
+      expect(m.github.calls).toEqual([PullRequestsTest.Call.cases.admin.make({ number: 1415, oid })]);
       expect(Merge.line(done)).toBe(
         `pr 1415: admin-merged at ${oid}, docs only (0183); read the push run on main next`,
       );
@@ -162,8 +165,8 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
     () =>
       Effect.gen(function* () {
         const code = yield* Effect.flip(merge(memory({ files: "code" }), admin()));
+        expect(code).toBeInstanceOf(Merge.NotMerged);
         expect(code).toMatchObject({
-          _tag: "NotMerged",
           reason: `pr 1415: not docs only (0183), and no open sev0 allows ${branch} (0532); --admin refused: docs/tutorials/one/package.json`,
         });
         const none = yield* Effect.flip(merge(memory({ files: "none" }), admin()));

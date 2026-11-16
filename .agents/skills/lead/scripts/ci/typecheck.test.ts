@@ -5,7 +5,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ChecksError } from "./Checks.ts";
 import * as ChecksTest from "./ChecksTest.ts";
-import { errorsIn, type Found, LINES, logText, summary, type Verdict, verdict, wait, WIDTH } from "./typecheck.ts";
+import { errorsIn, type Found, LINES, logText, summary, Verdict, verdict, wait, WIDTH } from "./typecheck.ts";
 
 const options = { seed: 119120, numRuns: 300 };
 const part = fc.stringMatching(/^[a-z][a-z0-9-]{0,8}$/);
@@ -111,17 +111,19 @@ describe("CI's typecheck job's result, today's tooling", () => {
     const other = fc.constantFrom("cancelled", "skipped", "timed_out", "neutral", "action_required", "stale");
     fc.assert(
       fc.property(other, paths, (conclusion, ps) => {
-        expect(verdict({ conclusion, output: "x" }, found(ps), new Set())).toEqual({
-          _tag: "skipped",
-          reason: `CI's typecheck job ended ${conclusion}`,
-        });
+        expect(verdict({ conclusion, output: "x" }, found(ps), new Set())).toEqual(
+          Verdict.cases.skipped.make({
+            reason: `CI's typecheck job ended ${conclusion}`,
+          }),
+        );
       }),
       options,
     );
-    expect(verdict({ conclusion: null, output: "" }, [], new Set())).toEqual({
-      _tag: "skipped",
-      reason: "CI's typecheck job ended with no conclusion",
-    });
+    expect(verdict({ conclusion: null, output: "" }, [], new Set())).toEqual(
+      Verdict.cases.skipped.make({
+        reason: "CI's typecheck job ended with no conclusion",
+      }),
+    );
   });
 
   it("property: a failure goes to tests only when every error is in an exam path, else to build", () => {
@@ -129,7 +131,8 @@ describe("CI's typecheck job's result, today's tooling", () => {
       fc.property(paths, fc.array(fc.boolean(), { minLength: 40, maxLength: 40 }), (ps, picks) => {
         const exam = new Set(ps.filter((_, i) => picks[i]));
         const v = verdict(failed(), found(ps), exam);
-        expect(v).toMatchObject({ _tag: "red", to: ps.every((p) => exam.has(p)) ? "tests" : "build" });
+        expect(v._tag).toBe("red");
+        expect(v).toMatchObject({ to: ps.every((p) => exam.has(p)) ? "tests" : "build" });
       }),
       options,
     );
@@ -183,7 +186,9 @@ describe("CI's typecheck job's result, today's tooling", () => {
     fc.assert(
       fc.property(message, (last) => {
         const v = verdict(failed(`ERR_PNPM_X\n${last}\n`), [], new Set());
-        expect(v).toEqual({ _tag: "skipped", reason: `CI's typecheck job failed with no error line: ${last}` });
+        expect(v).toEqual(
+          Verdict.cases.skipped.make({ reason: `CI's typecheck job failed with no error line: ${last}` }),
+        );
       }),
       options,
     );
@@ -256,51 +261,62 @@ describe("the wait for CI's typecheck job, today's tooling", () => {
 
   it("scenario: no job yet, then queued, then running, then success: green the moment it ends", () =>
     waited([Option.none(), job("queued", null), job("in_progress", null), job("completed", "success")], (v) =>
-      expect(v).toEqual({ _tag: "green" }),
+      expect(v).toEqual(Verdict.cases.green.make({})),
     ));
 
   it("scenario: GitHub failing on a poll is tried again within the limit", () =>
     waited([new ChecksError({ reason: "gh api exited 1" }), job("completed", "success")], (v) =>
-      expect(v).toEqual({ _tag: "green" }),
+      expect(v).toEqual(Verdict.cases.green.make({})),
     ));
 
   it("scenario: a failed job with a type error in today's code sends the work to build with its lines", () =>
     waited(
       [job("completed", "failure")],
-      (v) => expect(v).toEqual({ _tag: "red", to: "build", lines: ["packages/p/src/a.ts(1,2): error TS2322: bad"] }),
+      (v) =>
+        expect(v).toEqual(
+          Verdict.cases.red.make({ to: "build", lines: ["packages/p/src/a.ts(1,2): error TS2322: bad"] }),
+        ),
       { log: "2026-11-11T18:11:03.7908273Z ##[error]packages/p typecheck: src/a.ts(1,2): error TS2322: bad" },
     ));
 
   it("scenario: a failed job whose every error is in an exam path sends the work to tests", () =>
-    waited([job("completed", "failure")], (v) => expect(v).toMatchObject({ _tag: "red", to: "tests" }), {
-      log: "2026-11-11T18:11:03.7908273Z ##[error]next/apps/fabrika typecheck: src/exam/a.ts(1,2): error TS1: bad",
-    }));
+    waited(
+      [job("completed", "failure")],
+      (v) => {
+        expect(v._tag).toBe("red");
+        expect(v).toMatchObject({ to: "tests" });
+      },
+      {
+        log: "2026-11-11T18:11:03.7908273Z ##[error]next/apps/fabrika typecheck: src/exam/a.ts(1,2): error TS1: bad",
+      },
+    ));
 
   it("scenario: a job that never ends within the limit is no answer, with the last state seen", () =>
     waited(
       [job("in_progress", null)],
       (v) =>
-        expect(v).toEqual({
-          _tag: "skipped",
-          reason: `CI's typecheck job at ${head.slice(0, 8)} did not end within 0.002 minutes (the typecheck job was in_progress)`,
-        }),
+        expect(v).toEqual(
+          Verdict.cases.skipped.make({
+            reason: `CI's typecheck job at ${head.slice(0, 8)} did not end within 0.002 minutes (the typecheck job was in_progress)`,
+          }),
+        ),
       { minutes: 0.002 },
     ));
 
   it("scenario: a quest with no head reads nothing", () =>
     waited(
       [job("completed", "success")],
-      (v) => expect(v).toEqual({ _tag: "skipped", reason: "the quest has no head to read CI at (none)" }),
+      (v) => expect(v).toEqual(Verdict.cases.skipped.make({ reason: "the quest has no head to read CI at (none)" })),
       { at: "" },
     ));
 });
 
 describe("CI's typecheck in the quest's log, today's tooling", () => {
   it("format: green, red with its step and first line, or why it gave no answer", () => {
-    expect(summary({ _tag: "green" })).toBe("green");
-    expect(summary({ _tag: "red", to: "tests", lines: ["a.ts(1,1): error TS1: x", "b"] })).toBe(
+    expect(summary(Verdict.cases.green.make({}))).toBe("green");
+    expect(summary(Verdict.cases.red.make({ to: "tests", lines: ["a.ts(1,1): error TS1: x", "b"] }))).toBe(
       "red, to tests: a.ts(1,1): error TS1: x",
     );
-    expect(summary({ _tag: "skipped", reason: "no job" })).toBe("no answer: no job");
+    expect(summary(Verdict.cases.skipped.make({ reason: "no job" }))).toBe("no answer: no job");
   });
 });

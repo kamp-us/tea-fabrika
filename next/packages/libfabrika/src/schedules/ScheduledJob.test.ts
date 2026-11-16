@@ -17,6 +17,8 @@ const make = (period: number) =>
   ScheduledJob.make({ period, cmd: write, work: (due, ms) => write({ due, period: ms }) });
 
 const ctx = stubCtxThrowingProxy<unknown>();
+// The write's `spent` failure, one tag its `err` list declares, as tea carries it.
+const Spent = Schema.TaggedStruct("spent", {});
 const period = fc.integer({ min: 1, max: 1_000_000_000 });
 
 // Fast-check supplies boundary times and invalid durations; there is no domain schema for them.
@@ -36,7 +38,7 @@ const walks = period.chain((ms) => {
         write_err: fc.nat().map((at) => ({
           type: "write_err" as const,
           cmd: write({ due: 0, period: ms }),
-          error: { _tag: "spent" as const },
+          error: Spent.make({}),
           at,
         })),
       },
@@ -46,7 +48,7 @@ const walks = period.chain((ms) => {
           make: (cmd, answer) =>
             answer.ok
               ? { type: "write_ok" as const, cmd, value: null, at: answer.at }
-              : { type: "write_err" as const, cmd, error: { _tag: "spent" as const }, at: answer.at },
+              : { type: "write_err" as const, cmd, error: Spent.make({}), at: answer.at },
         },
       },
     },
@@ -78,7 +80,7 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
 
             if (msg.type === "timer" && prev._tag === "idle" && msg.at >= prev.next) {
               expect(cmds).toEqual([write({ due: msg.at, period: prev.period })]);
-              expect(next).toEqual({ _tag: "running", due: msg.at, period: prev.period });
+              expect(next).toEqual(ScheduledJob.Model.cases.running.make({ due: msg.at, period: prev.period }));
             } else {
               expect(cmds).toEqual([]);
             }
@@ -89,7 +91,7 @@ it("L1: only a due idle scheduled job emits work; answers while idle do nothing"
                 prev,
                 { type: "timer", at: prev.next },
               );
-              expect(due).toEqual({ _tag: "running", due: prev.next, period: prev.period });
+              expect(due).toEqual(ScheduledJob.Model.cases.running.make({ due: prev.next, period: prev.period }));
               expect(jobs).toEqual([write({ due: prev.next, period: prev.period })]);
             }
 
@@ -112,7 +114,7 @@ it("L2: wake is next while idle, null while running, and answers re-arm from the
     fc.property(walks, ({ ms, messages }) => {
       const { machine } = Result.getOrThrow(make(ms));
       const [initial] = machine.init(null, ctx);
-      expect(initial).toEqual({ _tag: "idle", next: 0, period: ms });
+      expect(initial).toEqual(ScheduledJob.Model.cases.idle.make({ next: 0, period: ms }));
       expect(ScheduledJob.wake(initial)).toBe(0);
       propertyTrace(
         machine,
@@ -124,7 +126,9 @@ it("L2: wake is next while idle, null while running, and answers re-arm from the
             expect(next.period).toBe(ms);
 
             if (prev._tag === "running" && msg.type !== "timer") {
-              expect(next).toEqual({ _tag: "idle", next: msg.at + prev.period, period: prev.period });
+              expect(next).toEqual(
+                ScheduledJob.Model.cases.idle.make({ next: msg.at + prev.period, period: prev.period }),
+              );
             }
           }
 
@@ -183,7 +187,7 @@ it("L4: only positive whole millisecond periods succeed", () => {
       expect(Result.isFailure(rejected)).toBe(true);
 
       if (Result.isFailure(rejected)) {
-        expect(rejected.failure).toMatchObject({ _tag: "ScheduledJobError", reason: "bad_period" });
+        expect(rejected.failure).toEqual(ScheduledJob.ScheduledJobError.make({ reason: "bad_period" }));
       }
 
       expect(Result.isSuccess(make(good))).toBe(true);

@@ -120,6 +120,7 @@ const on = (zone: string, files: Readonly<Record<string, string>> = FILES) =>
             ? Effect.succeed(files[path] ?? "")
             : Effect.fail(
                 PlatformError.systemError({
+                  // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- Effect's systemError takes the error's kind as `_tag` and has no maker of its own
                   _tag: "NotFound",
                   module: "FileSystem",
                   method: "readFileString",

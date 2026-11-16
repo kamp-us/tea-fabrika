@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Schema, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import { processClocks } from "../Id.test-support.ts";
+import { IdError } from "../Id.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
 
 const maxClock = 2 ** 48 - 1;
@@ -94,7 +95,8 @@ describe("P10 shared process ids", () => {
             expect(Cause.isDieReason(reason)).toBe(true);
 
             if (Cause.isDieReason(reason)) {
-              expect(reason.defect).toMatchObject({ _tag: "IdError", reason: "clock" });
+              expect(reason.defect).toBeInstanceOf(IdError);
+              expect(reason.defect).toMatchObject({ reason: "clock" });
             }
           }
         }
@@ -162,7 +164,8 @@ describe("P10 shared process ids", () => {
               expect(Cause.isDieReason(reason)).toBe(true);
 
               if (Cause.isDieReason(reason)) {
-                expect(reason.defect).toMatchObject({ _tag: "IdError", reason: exitReason });
+                expect(reason.defect).toBeInstanceOf(IdError);
+                expect(reason.defect).toMatchObject({ reason: exitReason });
               }
             }
 

@@ -7,13 +7,12 @@
 //   internal/programMail.ts: `mailId(command)` and `granted(grants, source, to)`.
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { PIDS } from "../Process.test-support.ts";
 import { brainOnly, inRunnerSpace, inSignalSpace } from "../Process.ts";
-import type { MailFailure } from "../ProgramMail.ts";
-import { type Grants, MailRefusal, ProgramMailError } from "../ProgramMail.ts";
+import { type Grants, MailFailure, MailRefusal, ProgramMailError } from "../ProgramMail.ts";
 import { full, granted, mailId, unread } from "./programMail.ts";
 
 const SEED = 119120;
@@ -95,9 +94,9 @@ describe("P41 slice 1: program mail rules", () => {
                 ? ProgramMailError.storage()
                 : ProgramMailError.refused(reason);
           const encoded = Schema.encodeUnknownSync(ProgramMailError)(error);
+          expect(Predicate.isTagged(encoded, "ProgramMailError")).toBe(true);
           expect(encoded).toMatchObject({
-            _tag: "ProgramMailError",
-            reason: reason === "full" ? { _tag: reason, unread } : { _tag: reason },
+            reason: reason === "full" ? MailFailure.cases.full.make({ unread }) : MailFailure.cases[reason].make({}),
           });
           expect(Object.keys(encoded as object)).not.toContain("kind");
           expect(Schema.decodeUnknownSync(ProgramMailError)(encoded), "it decodes back to the same error").toEqual(

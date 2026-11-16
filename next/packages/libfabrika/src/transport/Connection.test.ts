@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
@@ -19,26 +20,34 @@ const PING = 42;
 
 type Saved = typeof Attached.Type;
 type W = typeof Wait.Type;
-type Waited = { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" };
+// A wait's answer, restated from Connection.ts's own `Waited` (0135).
+const Waited = Schema.TaggedUnion({ ready: { rev: Schema.Number }, parked: {} });
+type Waited = typeof Waited.Type;
 
 type Frame = {
+  readonly jsonrpc?: string;
   readonly id: string | number;
   readonly result?: unknown;
-  readonly error?: { readonly message: string; readonly data?: { readonly reason: string } };
+  readonly error?: {
+    readonly code?: number;
+    readonly message: string;
+    readonly data?: { readonly reason: string };
+  };
 };
 
-type Event =
-  | { readonly _tag: "save"; readonly saved: Saved }
-  | { readonly _tag: "send"; readonly frame: Frame }
-  | { readonly _tag: "close"; readonly code: number }
-  | {
-      readonly _tag: "wait";
-      readonly stream: string;
-      readonly after: number;
-      readonly reader: string;
-      readonly saved: Saved;
-    }
-  | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
+// A sent frame is logged whole, as the connection wrote it: a declared schema keeps every key, where
+// a struct would drop the ones it does not name.
+const SentFrame = Schema.declare((u: unknown): u is Frame => Predicate.isObject(u));
+
+/** What the callbacks saw, in order. */
+const Event = Schema.TaggedUnion({
+  save: { saved: Attached },
+  send: { frame: SentFrame },
+  close: { code: Schema.Number },
+  wait: { stream: Schema.String, after: Schema.Number, reader: Schema.String, saved: Attached },
+  call: { method: Schema.String, params: Schema.Unknown, saved: Attached },
+});
+type Event = typeof Event.Type;
 
 const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
@@ -86,23 +95,23 @@ const harness = (first: Saved) => {
     read: () => saved,
     save: (a) => {
       saved = a;
-      log.push({ _tag: "save", saved: a });
+      log.push(Event.cases.save.make({ saved: a }));
     },
     send: (text) => {
-      log.push({ _tag: "send", frame: JSON.parse(text) });
+      log.push(Event.cases.send.make({ frame: JSON.parse(text) }));
     },
     close: (code) => {
-      log.push({ _tag: "close", code });
+      log.push(Event.cases.close.make({ code }));
     },
     wait: (stream, after, reader) =>
       Effect.gen(function* () {
-        log.push({ _tag: "wait", stream, after, reader, saved });
+        log.push(Event.cases.wait.make({ stream, after, reader, saved }));
         const key = `${stream}|${after}`;
 
         if (reentrant.delete(key)) {
           // A ring that arrives over RPC before registration returns.
           yield* ring(stream, after + 1);
-          return { _tag: "parked" } as const;
+          return Waited.cases.parked.make({});
         }
 
         const reply = yield* Deferred.make<Waited, unknown>();
@@ -111,7 +120,7 @@ const harness = (first: Saved) => {
       }),
     call: (method, params) =>
       Effect.gen(function* () {
-        log.push({ _tag: "call", method, params, saved });
+        log.push(Event.cases.call.make({ method, params, saved }));
         calling += 1;
         most = Math.max(most, calling);
         const reply = yield* Deferred.make<typeof Answer.Type, unknown>();
@@ -283,8 +292,8 @@ describe("T703 connection driver laws", () => {
                 if (ok) {
                   seen.add("admitted");
                   // Saved before registration: the callback already reads the new wait.
+                  expect(registered?._tag).toBe("wait");
                   expect(registered).toMatchObject({
-                    _tag: "wait",
                     reader: READER,
                     stream: wait.stream,
                     after: wait.after,
@@ -320,10 +329,10 @@ describe("T703 connection driver laws", () => {
                   yield* Deferred.fail(wait!.reply, choice.reason === undefined ? {} : { reason: choice.reason });
                   seen.add("failed");
                 } else if (move < 71) {
-                  yield* Deferred.succeed(wait!.reply, { _tag: "ready", rev: wait!.after + choice.rev });
+                  yield* Deferred.succeed(wait!.reply, Waited.cases.ready.make({ rev: wait!.after + choice.rev }));
                   seen.add("ready");
                 } else {
-                  yield* Deferred.succeed(wait!.reply, { _tag: "parked" });
+                  yield* Deferred.succeed(wait!.reply, Waited.cases.parked.make({}));
                 }
 
                 yield* settle;
@@ -344,14 +353,15 @@ describe("T703 connection driver laws", () => {
 
               for (const e of h.log.slice(from)) {
                 if (e._tag === "call") {
-                  expect(e.saved).toMatchObject({ _tag: "online", busy: true });
+                  expect(e.saved._tag).toBe("online");
+                  expect(e.saved).toMatchObject({ busy: true });
                 }
               }
             }
 
             // Park every registration left, then check that no admitted wait was lost or answered twice.
             for (const wait of h.waits.splice(0)) {
-              yield* Deferred.succeed(wait.reply, { _tag: "parked" });
+              yield* Deferred.succeed(wait.reply, Waited.cases.parked.make({}));
             }
 
             while (h.calls.length > 0) {
@@ -442,7 +452,9 @@ describe("T703 connection driver laws", () => {
               } else if (move < 35) {
                 yield* h.c.wake();
                 const closed = h.log.slice(from).filter((e) => e._tag === "close");
-                expect(closed).toEqual(now._tag === "online" && now.busy ? [{ _tag: "close", code: 1012 }] : []);
+                expect(closed).toEqual(
+                  now._tag === "online" && now.busy ? [Event.cases.close.make({ code: 1012 })] : [],
+                );
                 seen.add(`wake:${closed.length}`);
               } else if (move < 50) {
                 const session = move % 2 === 0 ? SESSION : other;
@@ -467,8 +479,8 @@ describe("T703 connection driver laws", () => {
                 } else if (handshake) {
                   // Before hello only the handshake reaches the call, and nothing is saved.
                   expect(after).toEqual([
-                    { _tag: "call", method, params: {}, saved: now },
-                    { _tag: "send", frame: { jsonrpc: "2.0", id, result: { method } } },
+                    Event.cases.call.make({ method, params: {}, saved: now }),
+                    Event.cases.send.make({ frame: { jsonrpc: "2.0", id, result: { method } } }),
                   ]);
                 } else {
                   expect(after).toEqual([no(id, "no_hello")]);
@@ -486,7 +498,7 @@ describe("T703 connection driver laws", () => {
                 }
 
                 for (const wait of h.waits.splice(0)) {
-                  yield* Deferred.succeed(wait.reply, { _tag: "parked" });
+                  yield* Deferred.succeed(wait.reply, Waited.cases.parked.make({}));
                 }
 
                 yield* settle;
@@ -529,10 +541,8 @@ describe("T703 connection driver laws", () => {
 
 const isRev = (result: unknown) => typeof result === "object" && result !== null && "rev" in result;
 
-const no = (id: string | number, reason: string) => ({
-  _tag: "send",
-  frame: { jsonrpc: "2.0", id, error: { code: -32000, message: reason, data: { reason } } },
-});
+const no = (id: string | number, reason: string) =>
+  Event.cases.send.make({ frame: { jsonrpc: "2.0", id, error: { code: -32000, message: reason, data: { reason } } } });
 
 /** Admitted waits per id: each save that grew the waits by one added that wait. */
 const admittedTotals = (log: ReadonlyArray<Event>) => {
@@ -833,8 +843,9 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                     const wait = Wait.make({ id: request.id, ...read.success });
 
                     if (admits(now, wait)) {
-                      expect(after[0]).toMatchObject({ _tag: "save" });
-                      expect(after[1]).toMatchObject({ _tag: "wait", stream: wait.stream, after: wait.after });
+                      expect(after[0]?._tag).toBe("save");
+                      expect(after[1]?._tag).toBe("wait");
+                      expect(after[1]).toMatchObject({ stream: wait.stream, after: wait.after });
                       seen.add("wait:admitted");
                     } else {
                       expect(after).toEqual([no(request.id, "too_many_waits")]);
@@ -878,7 +889,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                 }
               } else if (h.waits.length > 0) {
                 const [pending] = h.waits.splice(pick % h.waits.length, 1);
-                yield* Deferred.succeed(pending!.reply, { _tag: "ready", rev: pending!.after + rev });
+                yield* Deferred.succeed(pending!.reply, Waited.cases.ready.make({ rev: pending!.after + rev }));
                 yield* settle;
               }
 
@@ -886,7 +897,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
             }
 
             for (const wait of h.waits.splice(0)) {
-              yield* Deferred.succeed(wait.reply, { _tag: "parked" });
+              yield* Deferred.succeed(wait.reply, Waited.cases.parked.make({}));
             }
 
             while (h.calls.length > 0) {
@@ -954,7 +965,7 @@ it.effect.prop(
         },
         send: () => {},
         close: () => {},
-        wait: () => Effect.succeed({ _tag: "parked" as const }),
+        wait: () => Effect.succeed(Waited.cases.parked.make({})),
         call: () => Effect.succeed(Answer.cases.ok.make({ result: null })),
       });
       yield* c.frame(callFrame("take", "tasks.take"));

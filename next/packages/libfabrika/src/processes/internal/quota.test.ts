@@ -6,6 +6,7 @@ import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+import { RecoveryReserveExhausted } from "../Quotas.ts";
 import * as Quota from "./quota.ts";
 
 const limits = { writes: 5, bytes: 31, message: { writes: 3, bytes: 23 } };
@@ -148,10 +149,8 @@ describe("P34c quota machine", () => {
               throw new Error("recovery beyond its allowance must fault");
             }
 
-            expect(proposed.fault).toMatchObject({
-              _tag: "RecoveryReserveExhausted",
-              resource: byteFault ? "storage" : "writes",
-            });
+            expect(proposed.fault).toBeInstanceOf(RecoveryReserveExhausted);
+            expect(proposed.fault).toMatchObject({ resource: byteFault ? "storage" : "writes" });
             expect(proposed.operation).toBe(`recovery:${n}`);
           }
 

@@ -52,7 +52,9 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
         ]);
         expect(m.remote.branches.get(b)).toBe(head);
         expect(m.github.prs.filter((pr) => pr.head === b && pr.state === "OPEN")).toHaveLength(1);
-        expect(m.github.calls).toEqual(already === null ? [{ _tag: "draft", branch: b, title: text.title }] : []);
+        expect(m.github.calls).toEqual(
+          already === null ? [PullRequestsTest.Call.cases.draft.make({ branch: b, title: text.title })] : [],
+        );
       }).pipe(Effect.provide(m.layer));
     },
   );
@@ -139,9 +141,14 @@ describe("ready: a quest's steps passed, so its pull request takes the brief's w
         const m = memory(already === null ? [] : [open(7, b, already)]);
         yield* Publish.ready(ask(b, head)).pipe(Effect.provide(m.layer));
         const pr = already === null ? 1 : 7;
-        const readied = already === false ? [] : [{ _tag: "ready", number: pr }];
-        const opened = already === null ? [{ _tag: "draft", branch: b, title: text.title }] : [];
-        expect(m.github.calls).toEqual([...opened, { _tag: "edit", number: pr, ...text }, ...readied]);
+        const readied = already === false ? [] : [PullRequestsTest.Call.cases.ready.make({ number: pr })];
+        const opened =
+          already === null ? [PullRequestsTest.Call.cases.draft.make({ branch: b, title: text.title })] : [];
+        expect(m.github.calls).toEqual([
+          ...opened,
+          PullRequestsTest.Call.cases.edit.make({ number: pr, ...text }),
+          ...readied,
+        ]);
         expect(m.github.prs.find((p) => p.number === pr)?.draft).toBe(false);
       }),
   );

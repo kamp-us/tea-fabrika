@@ -7,7 +7,7 @@ import { assert, describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
+import { CheckedHello, checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -160,11 +160,9 @@ describe("P10 hello", () => {
               admit,
             });
             expect(admit.mock.calls).toEqual([[k.fingerprint]]);
-            expect(result).toEqual({
-              _tag: "refused",
-              reason: "not_granted",
-              fingerprint: k.fingerprint,
-            });
+            expect(result).toEqual(
+              CheckedHello.cases.refused.make({ reason: "not_granted", fingerprint: k.fingerprint }),
+            );
             expect(consume).not.toHaveBeenCalled();
           }),
         ),
@@ -191,7 +189,7 @@ describe("P10 hello", () => {
                   },
                   ...x.trusted,
                 }),
-              ).toMatchObject({ _tag: "refused", reason: "bad_signature" });
+              ).toEqual(CheckedHello.cases.refused.make({ reason: "bad_signature" }));
               expect(x.admit).not.toHaveBeenCalled();
               expect(x.consume).not.toHaveBeenCalled();
             }),
@@ -204,10 +202,9 @@ describe("P10 hello", () => {
   it.effect("p82: a client with an unknown OS can still initialize", () =>
     Effect.gen(function* () {
       const x = yield* setup();
-      expect(yield* checkHello({ hello: { ...x.hello, os: "unknown" }, ...x.trusted })).toMatchObject({
-        _tag: "online",
-        hello: { os: "unknown" },
-      });
+      const result = yield* checkHello({ hello: { ...x.hello, os: "unknown" }, ...x.trusted });
+      expect(result._tag).toBe("online");
+      expect(result).toMatchObject({ hello: { os: "unknown" } });
     }),
   );
   it.effect("p26: a checked window goes online with the fold's identity and chosen version", () =>
@@ -215,8 +212,8 @@ describe("P10 hello", () => {
       const x = yield* setup();
       const checked = checkHello({ hello: x.hello, ...x.trusted });
       const result = yield* checked;
+      expect(result._tag).toBe("online");
       expect(result).toMatchObject({
-        _tag: "online",
         identity: x.identity,
         version: 2,
         ping: 30_000,
@@ -290,8 +287,8 @@ describe("P10 hello", () => {
               const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
               const checked = checkHello({ hello, ...x.trusted, admit });
               const result = yield* checked;
+              expect(result._tag).toBe("refused");
               expect(result).toMatchObject({
-                _tag: "refused",
                 ...(kind === "version" ? { reason: "no_version" } : kind === "unknown" ? { reason: value.reason } : {}),
               });
               expect(x.consume).not.toHaveBeenCalled();
@@ -311,7 +308,8 @@ describe("P10 hello", () => {
         hello: { ...x.hello, future: { rank: "person" }, ping: "1ms" },
       });
       const result = yield* checked;
-      expect(result).toMatchObject({ _tag: "online", identity: x.identity, version: 2, ping: 10_000 });
+      expect(result._tag).toBe("online");
+      expect(result).toMatchObject({ identity: x.identity, version: 2, ping: 10_000 });
       assert(result._tag === "online");
       expect(result.hello).toMatchObject({ os: "ios", has: ["verify", "seal"] });
     }),
@@ -451,13 +449,12 @@ it.effect.prop(
         hello: { ...x.hello, has, build },
         admit: () => Effect.succeed(Admission.cases.admitted.make({ identity })),
       });
-      expect(result).toMatchObject({ _tag: "online", identity, hello: { has, build } });
+      expect(result._tag).toBe("online");
+      expect(result).toMatchObject({ identity, hello: { has, build } });
       const old = yield* setup();
-      expect(yield* checkHello({ ...old.trusted, hello: old.hello })).toMatchObject({ _tag: "online" });
+      expect((yield* checkHello({ ...old.trusted, hello: old.hello }))._tag).toBe("online");
       const bad = yield* setup();
-      expect(yield* checkHello({ ...bad.trusted, hello: { ...bad.hello, build: 42 } })).toMatchObject({
-        _tag: "refused",
-      });
+      expect((yield* checkHello({ ...bad.trusted, hello: { ...bad.hello, build: 42 } }))._tag).toBe("refused");
     }),
   { arbitrary: { seed: 119120, runs: 100 } },
 );

@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-4-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:51:32-08:00",
+  "ended": "2026-11-16T00:47:03-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-no-manual-tagged-construction-4 (ticket 1057, decisions 0562 and 0563 with its amendment), on branch fabrikalfa/antislop-no-manual-tagged-construction-4, made from origin/main and then brought up to main at 5c94f12 (PR 1366 and PR 1508 both on it). Counted with anti-slop-effect/no-manual-tagged-construction forced to error in a scratch config outside the repo (an extends of .oxlintrc.json with one last block for **/*), over .agents, next/packages/libfabrika/src/processes, transport and schedules, and next/programs/inbox: 313 hits at 5c94f12 (.agents 147, processes 111, transport 47, schedules 7, inbox 1). The brief's 300 left out PR 1366's files and three hits main added since (internal/quota.test.ts:152, pr/Queue.test.ts:227 and :230); all are in this slice. Waiting on 1366: none, it has merged. 310 hits are in exam paths and 3 in product files. Of the 310, 308 are fixed by hand edits (the Edit tool and small scratchpad scripts, never committed; the checker's quick fix was not used, since this is a lint rule with no fix) and 2 take an inline ignore with its reason, as 0562 allows for a raw frame. Left for the build step: the 3 product hits, .agents/skills/lead/scripts/chain.ts:1345 and .agents/skills/lead/scripts/codexexec.ts:125 and :129. How the 308 were fixed: an expected value or an input of a known union is made by its own maker (X.cases.y.make, a TaggedStruct's make, or a Schema.TaggedError's make); a partial toMatchObject that named a tag reads the tag apart (expect(x._tag).toBe(...), toBeInstanceOf for an error class, Result.isFailure, Option.isSome) and keeps every other field it checked; a shape a laws file restates for an unexported product schema is a test-local Schema.TaggedUnion (0135): drive.ts's Started, movecheck.ts's Change, connection.ts's Model, Connection.ts's Waited, today's Agent.Raw, the findings rows, and the commits check's answer lines, now shared by box.test, drive.test and quest.test in the new .agents/skills/lead/scripts/commits.test-support.ts so box.test.ts does not import effect (which would turn on fabrika/no-raw-try-catch there); a tea Cmd failure of a declared tag (unknown, spent, key, closed, StepFailed) is a TaggedStruct of that tag; a hand-written send line is Mailbox's letterLine; a raw input that must break a schema on purpose is a value the schema made, then one field set or taken away with a spread or a destructure (over-cap text, a missing phase, a missing until), or, where the tag itself is the wrong part, a TaggedStruct of that one tag built in the test (a findings row of no kind, a line of another kind, corrupt saved activity, a DOWN with a ref that is no text, and the two raw() helpers of Process.test-support.ts and ChildrenTest.ts, whose fabrika/no-hand-tag ignore lines went with the hand-written tag). The 2 ignore lines, each with its own reason: .agents/skills/lead/scripts/clauderow.test.ts:123, inside PlatformError.systemError, whose own API takes the error's kind as _tag and has no maker; next/packages/libfabrika/src/processes/ProcessStreams.integration.test.ts:344, the junk-body schema of P33 whose bodies may hold a _tag key of any JSON, which no TaggedStruct can say. No assertion was deleted or narrowed, no law loosened, no .oxlintrc.json change and no lock line (owner ruling for judgment slices). Five plants each ran once and were restored by copy; git status showed no product file after.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/schedules/ScheduledJob.test.ts: L2: wake is next while idle, null while running, and answers re-arm from their own time",
+      "plant": "ScheduledJob.ts re-arms an answered job one millisecond late",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Hello.test.ts: d2: any refused signed hello names its own checked fingerprint",
+      "plant": "Hello.ts drops the fingerprint from the door's refusal",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/processes/ExitReason.test.ts: L7: a crash needs a known phase, and its class is refused past the bound, never truncated",
+      "plant": "ExitReason.ts drops the 256-character bound on the error class",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/ci/typecheck.test.ts: property: a failure goes to tests only when every error is in an exam path, else to build",
+      "plant": "typecheck.ts sends a failure to tests when any error is in an exam path",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/chain.test.ts: reads the last answer line: a send names a quest step and carries its note; park carries its why",
+      "plant": "chain.ts parks with its reason changed",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 56,
+  "note": "Tests ran at the final tree on top of 5c94f12: every touched plain test file one at a time (all green), then vitest --changed origin/main (69 files, 957 passed, 1 skipped); the touched .integration. files run here with no override, since PR 1508's guard allows a cloud box: processes/ProcessTextCaps, ProcessLifecycle, ProcessWindow, ProcessStreams, ProcessMonitors, ProcessManager and ProcessManagerMemo, and the ones that reach the changed support files: node/Children, node/ExitReason, apps/fabrika runtime-recovery.laws and inbox-runner.laws, all green; none was refused by the 0178 guard. No .visual. file is touched. Typechecks: next/packages/libfabrika and next/programs/inbox (tsc --noEmit -p .) and .agents/tsconfig.json exit 0; the touched .agents test files outside that tsconfig were checked with a scratch tsconfig and add no error of their own (their older errors in pr/Queue.test.ts and others are unchanged). The newSchemaClass check main turned on is why errors are made with .make, not new. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes 17 of its 18 parts. The red part is oxlint-plugins/lint.ts, for two reasons that both wait on the later lock pull request: it asks that processes, schedules, transport and programs/inbox, now at zero, join the rule's block in .oxlintrc.json, and it calls the two ignore lines above unused, since the rule is not on in those folders yet; each becomes used when its folder joins. The list ratchet exits 0. pnpm format's lint --fix step once mis-pruned agents-ledger.json when its fix moved lines in box.test.ts; that change was undone and the ledger is untouched.",
+  "step": "tests"
+}

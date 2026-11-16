@@ -13,8 +13,10 @@ import {
   TITLE,
   busyMinutes,
   markdown,
+  Move,
   moveFor,
   percentile,
+  QueueEvent,
   report,
   stageFor,
   type Job,
@@ -56,9 +58,9 @@ const pull = (o: Partial<Pull> & { readonly merged: string }): Pull => ({
 });
 
 /** The PR entered the queue at minute `m`. */
-const added = (m: number) => ({ _tag: "added", at: t(m) }) as const;
+const added = (m: number) => QueueEvent.cases.added.make({ at: t(m) });
 /** The queue let the PR go at minute `m`, for `reason` (GitHub's words). */
-const removed = (m: number, reason: string) => ({ _tag: "removed", at: t(m), reason }) as const;
+const removed = (m: number, reason: string) => QueueEvent.cases.removed.make({ at: t(m), reason });
 
 /** A report over the 24 hours that end at minute 1440. */
 const day = (pulls: ReadonlyArray<Pull>, runs: ReadonlyArray<Run>, jobs: ReadonlyArray<Job>) =>
@@ -207,8 +209,8 @@ describe("the day's issue, today's tooling", () => {
   it("vector: over goal opens one or adds to the open one; within goal closes the open one or does nothing", () => {
     expect(moveFor(over, [])._tag).toBe("open");
     expect(moveFor(over, [other])._tag).toBe("open");
-    expect(moveFor(over, [other, ours])).toEqual({ _tag: "comment", number: 41 });
-    expect(moveFor(within, [ours])).toEqual({ _tag: "close", number: 41 });
+    expect(moveFor(over, [other, ours])).toEqual(Move.cases.comment.make({ number: 41 }));
+    expect(moveFor(within, [ours])).toEqual(Move.cases.close.make({ number: 41 }));
     expect(moveFor(within, [other])._tag).toBe("none");
   });
 
@@ -245,7 +247,9 @@ describe("the day's issue, today's tooling", () => {
           { ...other, label: LABEL_NAME },
           { ...ours, label: "bug" },
         ]);
-        expect(writes).toEqual([{ _tag: "create", title: TITLE, body: markdown(over), label: LABEL_NAME }]);
+        expect(writes).toEqual([
+          HistoryTest.Write.cases.create.make({ title: TITLE, body: markdown(over), label: LABEL_NAME }),
+        ]);
       }),
   );
 
@@ -254,7 +258,9 @@ describe("the day's issue, today's tooling", () => {
     () =>
       Effect.gen(function* () {
         const open = [{ ...ours, label: LABEL_NAME }];
-        expect((yield* synced(over, open)).writes).toEqual([{ _tag: "comment", number: 41, body: markdown(over) }]);
+        expect((yield* synced(over, open)).writes).toEqual([
+          HistoryTest.Write.cases.comment.make({ number: 41, body: markdown(over) }),
+        ]);
         const closed = yield* synced(within, open);
         expect(closed.writes.map((w) => w._tag)).toEqual(["comment", "close"]);
         expect((yield* synced(within, [])).writes).toEqual([]);

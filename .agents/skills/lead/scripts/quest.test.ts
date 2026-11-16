@@ -1,5 +1,6 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { CommitsAnswer } from "./commits.test-support.ts";
 import {
   checkHolds,
   questRoot,
@@ -102,16 +103,13 @@ describe("quest rules, today's tooling", () => {
   // p34cs4, 2026-11-13: ten plain commits read as unsigned_commit and stopped the quest after 0161.
   it("holds every stuck answer except a missing signature and a stale link of a step the quest has not signed", () => {
     const answer = fc.oneof(
-      fc.record({ _tag: fc.constant("stuck"), reason: fc.constant("stale_link"), step }),
-      fc.record({
-        _tag: fc.constant("stuck"),
-        reason: fc.constantFrom("unsigned_commit", "broken_chain", "build_touched_exam", "no_exam_list"),
-      }),
-      fc.record({
-        _tag: fc.constant("ask"),
-        to: fc.constant("owner"),
-        for: fc.constant("exam_read"),
-      }),
+      fc.record({ reason: fc.constant("stale_link"), step }).map((a) => CommitsAnswer.cases.stuck.make(a)),
+      fc
+        .record({ reason: fc.constantFrom("unsigned_commit", "broken_chain", "build_touched_exam", "no_exam_list") })
+        .map((a) => CommitsAnswer.cases.stuck.make(a)),
+      fc
+        .record({ to: fc.constant("owner"), for: fc.constant("exam_read") })
+        .map((a) => CommitsAnswer.cases.ask.make(a)),
     );
     fc.assert(
       fc.property(fc.array(answer), fc.uniqueArray(step), (answers, signed) => {
@@ -122,7 +120,7 @@ describe("quest rules, today's tooling", () => {
           (a) =>
             a._tag === "stuck" &&
             a.reason !== "unsigned_commit" &&
-            !(a.reason === "stale_link" && "step" in a && !quest.has(a.step)),
+            !(a.reason === "stale_link" && a.step !== undefined && !quest.has(a.step)),
         );
         expect(held).toEqual(want);
         const stuck = answers.some((a) => a._tag === "stuck");

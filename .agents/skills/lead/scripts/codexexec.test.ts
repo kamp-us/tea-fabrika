@@ -181,7 +181,8 @@ describe("codex-exec: capacity", () => {
             const w = yield* world([failing(message), answered(JSON.stringify(ANSWER))]);
             const t = yield* w.turn();
             expect(yield* w.calls).toHaveLength(1);
-            expect(t).toMatchObject({ _tag: "failed", reason: "broke" });
+            expect(t._tag).toBe("failed");
+            expect(t).toMatchObject({ reason: "broke" });
           }),
         ),
       ),
@@ -297,7 +298,8 @@ describe("codex-exec: the typed answer", () => {
               const w = yield* world([answered(words), answered(words), answered(JSON.stringify(ANSWER))]);
               const t = yield* w.turn();
               expect(yield* w.calls).toHaveLength(2);
-              expect(t).toMatchObject({ _tag: "failed", reason: "no_answer" });
+              expect(t._tag).toBe("failed");
+              expect(t).toMatchObject({ reason: "no_answer" });
             }),
           ),
       ),
@@ -318,7 +320,8 @@ describe("codex-exec: the typed answer", () => {
         ]);
         const t = yield* w.turn();
         expect(yield* w.calls).toHaveLength(1);
-        expect(t).toMatchObject({ _tag: "failed", reason: "broke" });
+        expect(t._tag).toBe("failed");
+        expect(t).toMatchObject({ reason: "broke" });
       }),
     ));
 });
@@ -380,7 +383,8 @@ describe("codex-exec: the box's Node", () => {
             const w = yield* world([answered(JSON.stringify(ANSWER))], { pin, said });
             const t = yield* w.turn();
             expect(yield* w.calls).toHaveLength(0);
-            expect(t).toMatchObject({ _tag: "failed", reason: "start" });
+            expect(t._tag).toBe("failed");
+            expect(t).toMatchObject({ reason: "start" });
             expect(t._tag === "failed" ? t.message : "").toContain(`no Node ${pin}`);
           }),
         ),

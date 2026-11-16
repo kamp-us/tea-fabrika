@@ -28,6 +28,10 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
 
+// The hello's and knock's failures, the tags their `err` lists declare, as tea carries them.
+const KeyFailed = Schema.TaggedStruct("key", {});
+const Closed = Schema.TaggedStruct("closed", {});
+
 const SEED = 119120;
 
 type Msg = { readonly type: string; readonly [key: string]: unknown };
@@ -134,8 +138,8 @@ const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
       () => ({ type: `${cmd.type}_ok`, cmd, value: null }),
       () =>
         cmd.type === "hello" && c.aux % 2 === 0
-          ? { type: "hello_err", cmd, error: { _tag: "key" } }
-          : { type: `${cmd.type}_err`, cmd, error: { _tag: "closed" } },
+          ? { type: "hello_err", cmd, error: KeyFailed.make({}) }
+          : { type: `${cmd.type}_err`, cmd, error: Closed.make({}) },
     );
   }
 
@@ -239,8 +243,8 @@ describe("P18 L2: the handshake answers only its own request", () => {
         const admitted = m["result"];
 
         if (matched && prev._tag === "initializing" && m["reason"] === undefined && isAdmission(admitted)) {
+          expect(next._tag, "Desk S2a: the door's admission admits").toBe("admitted");
           expect(next, "Desk S2a: admitted keeps the door's person").toMatchObject({
-            _tag: "admitted",
             dial: prev.dial,
             ping: admitted.ping,
             person: admitted.identity.person,
@@ -259,8 +263,9 @@ describe("P18 L2: the handshake answers only its own request", () => {
         const refusedNow = matched && prev._tag === "initializing" && typeof refusal === "string";
 
         if (refusedNow && refusal !== "not_granted") {
+          expect(next._tag, `${label}: the door refused for ${refusal}`).toBe("refused");
           expect([next, cmds], `${label}: the door refused for ${refusal}`).toMatchObject([
-            { _tag: "refused", dial: prev.dial, reason: /^[a-z_]{1,40}$/.test(refusal) ? refusal : "other" },
+            { dial: prev.dial, reason: /^[a-z_]{1,40}$/.test(refusal) ? refusal : "other" },
             [],
           ]);
         }

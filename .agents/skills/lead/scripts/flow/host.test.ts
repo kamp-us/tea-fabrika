@@ -18,6 +18,7 @@ import {
   runCommands,
   runners,
 } from "./host.ts";
+import * as Outcome from "./Outcome.ts";
 import * as Step from "./Step.ts";
 
 const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
@@ -117,7 +118,8 @@ describe("the host step's outcomes", () => {
     ran(
       Effect.gen(function* () {
         const hosted = yield* host(args([]));
-        expect(hosted).toEqual({ outcome: expect.objectContaining({ _tag: "skip" }), head: sha, log: null });
+        expect(hosted.outcome._tag).toBe("skip");
+        expect(hosted).toEqual({ outcome: hosted.outcome, head: sha, log: null });
       }),
     ));
 
@@ -151,7 +153,8 @@ describe("the host step's outcomes", () => {
             const dir = yield* temp;
             const log = `${dir}/log`;
             const outcome = yield* runCommands(dir, ["true", `echo ${said}; exit ${code}`, "touch later"], {}, log, 1);
-            expect(outcome).toMatchObject({ _tag: "send", to: "build" });
+            expect(outcome?._tag).toBe("send");
+            expect(outcome).toMatchObject({ to: "build" });
             expect(outcome?.reason).toContain(`exited ${code}`);
             expect(outcome?.reason).toContain(said);
             const fs = yield* FileSystem.FileSystem;
@@ -187,7 +190,8 @@ describe("the host step's outcomes", () => {
         // 0.002 minutes is 120 ms.
         const outcome = yield* runCommands(dir, ["echo begun; sleep 30"], {}, `${dir}/log`, 0.002);
         expect(Date.now() - started).toBeLessThan(10_000);
-        expect(outcome).toMatchObject({ _tag: "send", to: "build" });
+        expect(outcome?._tag).toBe("send");
+        expect(outcome).toMatchObject({ to: "build" });
         expect(outcome?.reason).toContain("0.002-minute limit");
         expect(outcome?.reason).toContain("begun");
       }),
@@ -253,9 +257,9 @@ describe("the quest's state file", () => {
         };
         yield* fs.writeFileString(state, JSON.stringify(before));
         const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
-        const sent = { _tag: "send", to: "build", reason: "red" } as const;
+        const sent = Outcome.send("build", "red");
         yield* recordInQuest(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
-        const done = { _tag: "done", reason: "ok" } as const;
+        const done = Outcome.done("ok");
         yield* recordInQuest(at, { outcome: done, head: "b".repeat(40), log: "y.log" }, "t2");
         const after = JSON.parse(yield* fs.readFileString(state));
         expect(after.ticket).toBe("7");
@@ -290,7 +294,7 @@ describe("the quest's state file", () => {
           steps: [{ step: "build", box: "t9-build1", outcome: "done", head: sha }],
         };
         yield* fs.writeFileString(state, `${JSON.stringify(before, null, "\t")}\n`);
-        const done = { _tag: "done", reason: "ok" } as const;
+        const done = Outcome.done("ok");
         yield* recordInQuest(
           { boxes, quest: "t9", name: "t9-host1", head: sha },
           { outcome: done, head: sha, log: null },
