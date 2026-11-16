@@ -10,13 +10,14 @@
   "role": "step",
   "model": "claude-opus-5-5",
   "effort": null,
-  "outcome": "blocked",
+  "outcome": "parked",
   "why": "Tests step for judgment slice E55 (deterministicKeys) in next/ and our tooling, under decision 0575. Counted with only deterministicKeys at error through --lspconfig, nothing written to a tsconfig: 14 hits in the row's folders, as the plan says (.agents 5, app:src 3, libfabrika top, access, ci, codehost, ledger and processes 1 each); none sits in a file of pull request 1366. 0575 step 1, proved by running the checker: keyPatterns cannot give our dot form. On libfabrika, pattern default asks for @kampus/libfabrika/ledger/Ledger/Doorbell, package-identifier for @kampus/libfabrika/Ledger/Doorbell, identifier for Doorbell, default-hashed for 8bbe0459a17d43da, and an extra separator key is ignored (still Ledger/Doorbell). So the IDs take the checker's default form. Its default skipLeadingPath, src/, is already the source folder of libfabrika and the app, so no tsconfig option is needed. Search before renaming: no ID of the 14 is a stored value, a wire value, a log key another program reads or a fixture; the only other spellings are the service-id rule's own synthetic test vectors, its comments and README, .patterns/effect-services-and-layers.md and decision records. Fixed the 3 app hits (exam paths, outside service-id's folder) by hand: Wire in next/apps/fabrika/src/record.laws.integration.test.ts, World and SpinSample in next/apps/fabrika/src/worker-usage.integration.test.ts; the app recount is 0. Blocked: the 6 libfabrika hits cannot be renamed while the lint rule service-id stays at error there. Renaming Ledger.Doorbell to the checker's form, once, made pnpm lint's service-id block (Ledger.ts:55, should be the dot form) and made service-id.test.ts's replay law red; the file was restored by copy. The brief keeps service-id until E93, and 0575 forbids a gap between the two, so the 2 exam-path hits (ci/CiTest.ts:38, codehost/CodeHostTest.ts:52) are left, and the 4 product hits (Id.ts:152, access/SessionManager.ts:164, ledger/Ledger.ts:55, processes/Mailbox.ts:30) cannot be built either. The 5 .agents hits are product files outside service-id's folder, left for the build.",
   "tokens": null,
   "tools": null,
   "minutes": 11,
   "driver_caused": false,
   "costUsd": null,
+  "billed": null,
   "note": "No new or changed law: no law reads any of the renamed IDs. Tests run at the step's head with the edits in place: next/apps/fabrika/src/record.laws.integration.test.ts 7 passed, next/apps/fabrika/src/worker-usage.integration.test.ts 1 passed and 1 expected fail. pnpm lint passed (NODE_OPTIONS=--max-old-space-size=6144), the ratchet exited 0. No typecheck was run. The checker's .agents form is @tea-fabrika/agents/skills/<skill>/scripts/<path>, since .agents has no package.json and no src/ folder; a shorter form would need a keyPatterns skipLeadingPath in .agents/tsconfig.json, a plugin option this slice does not add.",
   "plants": [
     {
