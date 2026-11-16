@@ -80,6 +80,44 @@ export const VI_METHODS: Plant = {
     ['export const f = "vi.fn()";', false],
     ["other.fn();", false],
     ['describe("a", () => { it("b", () => { expect(1).toBe(1); }); });', false],
+    // A miss of this rule alone, in oxlint 1.90.0 and 1.93.0 alike: a call chained onto the vi call
+    // is not refused, though the same call in parentheses is
+    // (https://github.com/oxc-project/oxc/issues/29656). The lock still refuses it: VI_PROPERTIES.
+    ['export const g = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
+    ["export const h = vi.fn().mockReturnValue(1);", false],
+    ['export const i = (vi.spyOn(console, "warn")).mockImplementation(() => undefined);', true],
+  ],
+};
+
+/**
+ * The lock's other half (T1067, lead ruling 2026-11-16: the lock is a pair): oxlint's
+ * `no-restricted-properties`, with one `object: "vi"` entry per banned member, refuses the member
+ * itself, so it holds the chained calls `vitest/no-restricted-vi-methods` misses
+ * (https://github.com/oxc-project/oxc/issues/29656). A line is held by the lock when VI_METHODS or
+ * this plant refuses it. plants.test.ts runs these lines in a file of every folder a vi ban block
+ * lists. They are not in BUILTIN_PLANTS: no block lists `oxlint-plugins/`.
+ * Plant: drop the block's `vi` entries from `no-restricted-properties`, and the chained lines are not
+ * refused.
+ */
+export const VI_PROPERTIES: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: [TEST, "declare const other: {fn: () => unknown};"],
+  lines: [
+    // The chained calls the vitest rule misses.
+    ['export const a = vi.spyOn(console, "warn").mockImplementation(() => undefined);', true],
+    ["export const b = vi.fn().mockReturnValue(1);", true],
+    // One plain call of each banned member.
+    ["export const c = vi.fn();", true],
+    ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./b.ts");', true],
+    ['export const d = vi.spyOn(console, "warn");', true],
+    ['vi.stubEnv("A", "1");', true],
+    // The rest of vi passes, as do a comment, a string and another object's fn.
+    ["export const e = vi.hoisted(() => 1);", false],
+    ["export const f = vi.waitFor(() => 1);", false],
+    ["// vi.fn() in a comment", false],
+    ['export const g = "vi.spyOn(console)";', false],
+    ["export const h = other.fn();", false],
   ],
 };
 
