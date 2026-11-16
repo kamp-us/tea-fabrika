@@ -3,7 +3,14 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    // E8: a block-bodied arrow that only returns an expression is an error here.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unnecessaryArrowBlock": "error" }
+      }
+    ]
   },
   "include": ["src"]
 }

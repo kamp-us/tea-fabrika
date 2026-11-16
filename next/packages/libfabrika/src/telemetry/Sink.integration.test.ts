@@ -1263,8 +1263,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       fc.bigInt(),
     );
     await fc.assert(
-      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;
             yield* Effect.gen(function* () {
@@ -1305,8 +1305,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               }
             }).pipe(Effect.provide(world(sql)));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });

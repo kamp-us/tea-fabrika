@@ -1,4 +1,13 @@
 {
   "extends": "../../../tsconfig.base.json",
+  // E8: a block-bodied arrow that only returns an expression is an error here.
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unnecessaryArrowBlock": "error" }
+      }
+    ]
+  },
   "include": ["src"]
 }

@@ -3,7 +3,14 @@
   "compilerOptions": {
     // The window export is React in a browser tab; the program entry reaches neither.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    // E8: a block-bodied arrow that only returns an expression is an error here.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "unnecessaryArrowBlock": "error" }
+      }
+    ]
   },
   "include": ["src"]
 }
