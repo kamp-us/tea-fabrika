@@ -16,7 +16,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Option, Result, Schema } from "effect";
+import { Context, Effect, Function, Option, Result, Schema } from "effect";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
@@ -213,5 +213,9 @@ export const provide =
  * @stability unstable
  * @category combinators
  */
-export const recheck = (proof: Proof<unknown>, tuples: Tuples): boolean =>
-  Option.match(sealed(proof), { onNone: () => false, onSome: ({ holds }) => holds(tuples) });
+export const recheck: {
+  (tuples: Tuples): (proof: Proof<unknown>) => boolean;
+  (proof: Proof<unknown>, tuples: Tuples): boolean;
+} = Function.dual(2, (proof: Proof<unknown>, tuples: Tuples): boolean =>
+  Option.match(sealed(proof), { onNone: () => false, onSome: ({ holds }) => holds(tuples) }),
+);

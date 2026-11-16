@@ -12,6 +12,7 @@
  *
  * @stability unstable
  */
+import { Function } from "effect";
 import { GAP, order, type Rect } from "./Layout.ts";
 import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
 
@@ -42,8 +43,12 @@ type Size = { readonly width: number; readonly height: number };
  * @stability unstable
  * @category getters
  */
-export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
-  typeof node === "string" ? strips.has(node) : node.parts.every((p) => shut(p.inner, strips));
+export const shut: {
+  (strips: ReadonlySet<TileId>): (node: Layout) => boolean;
+  (node: Layout, strips: ReadonlySet<TileId>): boolean;
+} = Function.dual(2, (node: Layout, strips: ReadonlySet<TileId>): boolean =>
+  typeof node === "string" ? strips.has(node) : node.parts.every((p) => shut(p.inner, strips)),
+);
 
 /**
  * Returns each part's length along a container of `length` pixels, gaps not counted: a part that is
@@ -55,37 +60,38 @@ export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
  * @stability unstable
  * @category getters
  */
-export const lengths = (
-  node: Container,
-  length: number,
-  strips: ReadonlySet<TileId>,
-  focus: TileId,
-): ReadonlyArray<number> => {
-  const left = length - (node.parts.length - 1) * GAP;
-  const fixed = node.parts.map((p) => shut(p.inner, strips));
-  const count = fixed.filter((f) => f).length;
-  const has = left - count * STRIP[node.dir];
+export const lengths: {
+  (length: number, strips: ReadonlySet<TileId>, focus: TileId): (node: Container) => ReadonlyArray<number>;
+  (node: Container, length: number, strips: ReadonlySet<TileId>, focus: TileId): ReadonlyArray<number>;
+} = Function.dual(
+  4,
+  (node: Container, length: number, strips: ReadonlySet<TileId>, focus: TileId): ReadonlyArray<number> => {
+    const left = length - (node.parts.length - 1) * GAP;
+    const fixed = node.parts.map((p) => shut(p.inner, strips));
+    const count = fixed.filter((f) => f).length;
+    const has = left - count * STRIP[node.dir];
 
-  if (has < 0) {
-    return fixed.map((f) => (f ? Math.max(0, left) / count : 0));
-  }
+    if (has < 0) {
+      return fixed.map((f) => (f ? Math.max(0, left) / count : 0));
+    }
 
-  const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
-  const shares = node.parts.map((p, i) => (fixed[i] ? STRIP[node.dir] : (has * p.percent) / total));
-  const lead = node.parts.findIndex((p) => order(p.inner).includes(focus));
-  const least = Math.min(node.dir === "row" ? SMALLEST.width : SMALLEST.height, has);
+    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
+    const shares = node.parts.map((p, i) => (fixed[i] ? STRIP[node.dir] : (has * p.percent) / total));
+    const lead = node.parts.findIndex((p) => order(p.inner).includes(focus));
+    const least = Math.min(node.dir === "row" ? SMALLEST.width : SMALLEST.height, has);
 
-  const held = node.parts[lead];
+    const held = node.parts[lead];
 
-  if (held === undefined || (shares[lead] ?? 0) >= least) {
-    return shares;
-  }
+    if (held === undefined || (shares[lead] ?? 0) >= least) {
+      return shares;
+    }
 
-  const rest = total - held.percent;
-  return node.parts.map((p, i) =>
-    i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
-  );
-};
+    const rest = total - held.percent;
+    return node.parts.map((p, i) =>
+      i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+    );
+  },
+);
 
 /**
  * Returns each tile's drawn box in an area of `size`, from its top left, when `strips` are drawn as
@@ -94,7 +100,10 @@ export const lengths = (
  * @stability unstable
  * @category getters
  */
-export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): ReadonlyMap<string, Rect> => {
+export const drawn: {
+  (size: Size, strips: ReadonlySet<TileId>): (w: Workspace) => ReadonlyMap<string, Rect>;
+  (w: Workspace, size: Size, strips: ReadonlySet<TileId>): ReadonlyMap<string, Rect>;
+} = Function.dual(3, (w: Workspace, size: Size, strips: ReadonlySet<TileId>): ReadonlyMap<string, Rect> => {
   const out = new Map<TileId, Rect>();
   const band = (tiles: ReadonlyArray<TileId>, r: Rect, upright: boolean) => {
     const each = Math.max(0, ((upright ? r.height : r.width) - (tiles.length - 1) * GAP) / tiles.length);
@@ -131,7 +140,7 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
   };
   walk(w.layout, { x: 0, y: 0, width: size.width, height: size.height });
   return out;
-};
+});
 
 /**
  * Returns the tiles of workspace `w` that a window of `size` draws as strips: from none, every open
@@ -141,7 +150,10 @@ export const drawn = (w: Workspace, size: Size, strips: ReadonlySet<TileId>): Re
  * @stability unstable
  * @category getters
  */
-export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
+export const fold: {
+  (size: Size): (w: Workspace) => ReadonlySet<TileId>;
+  (w: Workspace, size: Size): ReadonlySet<TileId>;
+} = Function.dual(2, (w: Workspace, size: Size): ReadonlySet<TileId> => {
   let strips: ReadonlySet<TileId> = new Set();
 
   for (;;) {
@@ -159,4 +171,4 @@ export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
 
     strips = new Set([...strips, ...due]);
   }
-};
+});

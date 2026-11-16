@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e43-build1",
+  "ticket": "1075",
+  "pr": "kamp-us/tea-fabrika#1473",
+  "started": "2026-11-15T20:47:12-08:00",
+  "ended": "2026-11-15T21:14:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), in next/ and our tooling, which fixes code only and adds no lock line. The recount matched the tests step: 305 hits in the slice's 24 folders, 154 in exam paths and 151 in product files, none in PR 1366's files. Fixed 16 product hits by hand with Function.dual, which keeps every data-first call as it was and adds the pipeable form Effect's own modules have (0023): the five Layout combinators and getters and the four Fold getters in libfabrika's tezgah module, Keys.route, WindowMachine.lastCursor, Access.admitted, TaskAccess.owns and select, Rebac.recheck and Trace.partName. Each is a pure function of a public libfabrika module whose first argument is the value it reads or changes, and every caller calls it data-first with all its arguments, so no caller changed. Layout.rects has an optional last argument, so its dual decides by a predicate on the first argument, not by count. Left 135 product hits, by class: 86 lead tooling scripts, 11 Layer constructors, 4 comparators or equivalences, 10 app, program and window helpers, 3 test tooling functions, and 21 libfabrika functions that are constructors, symmetric, fold or update steps, or whose first argument is a handle, or that sit in internal/ modules. The slice now holds 289 hits, 393 in scope down to 377.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 27,
+  "note": "The --changed origin/main run picked up .visual. tests, which this box must not run, and they failed here for want of a browser (Playwright's chromium is not installed) and of ssh-keygen; the one .integration. failure, instance-wire.integration.test.ts, is the same missing ssh-keygen. 20 failed of 2029, all at setup, none in the changed code; 1999 passed. Every narrow law of the changed files and the integration laws they reach passed.",
+  "step": "build"
+}

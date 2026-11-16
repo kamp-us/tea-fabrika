@@ -9,7 +9,7 @@
  *
  * @stability unstable
  */
-import { Predicate, Schema } from "effect";
+import { Function, Predicate, Schema } from "effect";
 import { type Container, Dir, type Layout, type Part, type TileId, type Workspace } from "./Workspace.ts";
 
 /** How far a container's percents may drift from 100 by float rounding before it is untidy. */
@@ -110,10 +110,14 @@ const focused = (recent: ReadonlyArray<TileId>, tile: TileId): ReadonlyArray<Til
  * @stability unstable
  * @category combinators
  */
-export const split = (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspace =>
+export const split: {
+  (at: TileId, dir: Dir, tile: TileId): (w: Workspace) => Workspace;
+  (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspace;
+} = Function.dual(4, (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspace =>
   !order(w.layout).includes(at) || order(w.layout).includes(tile)
     ? w
-    : { ...w, layout: placed(w.layout, at, dir, tile), focus: tile, recent: focused(w.recent, tile) };
+    : { ...w, layout: placed(w.layout, at, dir, tile), focus: tile, recent: focused(w.recent, tile) },
+);
 
 /**
  * Focuses `tile`: it comes first in `recent`, the rest keep their order, and the layout stays. A
@@ -122,8 +126,12 @@ export const split = (w: Workspace, at: TileId, dir: Dir, tile: TileId): Workspa
  * @stability unstable
  * @category combinators
  */
-export const focus = (w: Workspace, tile: TileId): Workspace =>
-  order(w.layout).includes(tile) ? { ...w, focus: tile, recent: focused(w.recent, tile) } : w;
+export const focus: {
+  (tile: TileId): (w: Workspace) => Workspace;
+  (w: Workspace, tile: TileId): Workspace;
+} = Function.dual(2, (w: Workspace, tile: TileId): Workspace =>
+  order(w.layout).includes(tile) ? { ...w, focus: tile, recent: focused(w.recent, tile) } : w,
+);
 
 /** A container settled: no part, nothing; one part, that part; a part of its own direction merged
  *  in by its share; the last part takes what float rounding left of 100. */
@@ -181,7 +189,10 @@ const without = (node: Layout, tile: TileId): Layout | null => {
  * @stability unstable
  * @category combinators
  */
-export const remove = (w: Workspace, tile: TileId): Workspace => {
+export const remove: {
+  (tile: TileId): (w: Workspace) => Workspace;
+  (w: Workspace, tile: TileId): Workspace;
+} = Function.dual(2, (w: Workspace, tile: TileId): Workspace => {
   const was = order(w.layout);
   const at = was.indexOf(tile);
   const layout = without(w.layout, tile);
@@ -199,7 +210,7 @@ export const remove = (w: Workspace, tile: TileId): Workspace => {
   // `layout` is not null, so another tile is left, after `tile` or before it.
   const heir = was[at + 1] ?? was[at - 1] ?? w.focus;
   return { ...w, layout, focus: heir, recent: focused(recent, heir) };
-};
+});
 
 /**
  * The gap a frame draws between two parts of a container, and around a workspace, in CSS pixels:
@@ -219,34 +230,48 @@ export const GAP = 4;
  * @stability unstable
  * @category getters
  */
-export const rects = (
-  layout: Layout,
-  size: { readonly width: number; readonly height: number },
-  options: { readonly gap: number } = { gap: 0 },
-): ReadonlyMap<TileId, Rect> => {
-  const out = new Map<TileId, Rect>();
-  const walk = (node: Layout, r: Rect): void => {
-    if (isTile(node)) {
-      out.set(node, r);
-      return;
-    }
+export const rects: {
+  (
+    size: { readonly width: number; readonly height: number },
+    options?: { readonly gap: number },
+  ): (layout: Layout) => ReadonlyMap<TileId, Rect>;
+  (
+    layout: Layout,
+    size: { readonly width: number; readonly height: number },
+    options?: { readonly gap: number },
+  ): ReadonlyMap<TileId, Rect>;
+} = Function.dual(
+  // The size comes first only when piped; a layout is a tile id or a container with parts.
+  (args) => Predicate.isString(args[0]) || Predicate.hasProperty(args[0], "parts"),
+  (
+    layout: Layout,
+    size: { readonly width: number; readonly height: number },
+    options: { readonly gap: number } = { gap: 0 },
+  ): ReadonlyMap<TileId, Rect> => {
+    const out = new Map<TileId, Rect>();
+    const walk = (node: Layout, r: Rect): void => {
+      if (isTile(node)) {
+        out.set(node, r);
+        return;
+      }
 
-    const row = node.dir === "row";
-    const left = (row ? r.width : r.height) - (node.parts.length - 1) * options.gap;
-    let at = row ? r.x : r.y;
+      const row = node.dir === "row";
+      const left = (row ? r.width : r.height) - (node.parts.length - 1) * options.gap;
+      let at = row ? r.x : r.y;
 
-    for (const p of node.parts) {
-      const share = (left * p.percent) / 100;
-      walk(
-        p.inner,
-        row ? { x: at, y: r.y, width: share, height: r.height } : { x: r.x, y: at, width: r.width, height: share },
-      );
-      at += share + options.gap;
-    }
-  };
-  walk(layout, { x: 0, y: 0, width: size.width, height: size.height });
-  return out;
-};
+      for (const p of node.parts) {
+        const share = (left * p.percent) / 100;
+        walk(
+          p.inner,
+          row ? { x: at, y: r.y, width: share, height: r.height } : { x: r.x, y: at, width: r.width, height: share },
+        );
+        at += share + options.gap;
+      }
+    };
+    walk(layout, { x: 0, y: 0, width: size.width, height: size.height });
+    return out;
+  },
+);
 
 /**
  * A side of a tile, for a focus move: tmux's `select-pane -L -R -U -D`.
@@ -282,7 +307,10 @@ const shared = (from: Rect, other: Rect, side: Side): number => {
  * @stability unstable
  * @category getters
  */
-export const neighbor = (layout: Layout, from: TileId, side: Side): TileId | null => {
+export const neighbor: {
+  (from: TileId, side: Side): (layout: Layout) => TileId | null;
+  (layout: Layout, from: TileId, side: Side): TileId | null;
+} = Function.dual(3, (layout: Layout, from: TileId, side: Side): TileId | null => {
   const boxes = rects(layout, { width: 1, height: 1 });
   const box = boxes.get(from);
 
@@ -297,7 +325,7 @@ export const neighbor = (layout: Layout, from: TileId, side: Side): TileId | nul
   const most = Math.max(0, ...shares.map((x) => x.share));
   // Float rounding may split a tie by a hair: anything this close to the most is the most.
   return shares.find((x) => x.share > most - 1e-6)?.t ?? null;
-};
+});
 
 /** Every way one container and the containers in it are untidy. */
 const untidy = (node: Container, parent: Dir | null): ReadonlyArray<Violation> => {

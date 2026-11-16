@@ -9,7 +9,7 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Predicate, Result, Schema } from "effect";
+import { Function, Option, Predicate, Result, Schema } from "effect";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -219,13 +219,16 @@ export type WindowModel = typeof WindowModel.Type;
  * @stability unstable
  * @category getters
  */
-export const lastCursor = (
-  tezgah: WindowModel["tezgah"],
-  tile: { readonly id: string; readonly cursor: string | null },
-): string | null => {
-  const notes = tezgah?.cursors ?? {};
-  return Object.hasOwn(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
-};
+export const lastCursor: {
+  (tile: { readonly id: string; readonly cursor: string | null }): (tezgah: WindowModel["tezgah"]) => string | null;
+  (tezgah: WindowModel["tezgah"], tile: { readonly id: string; readonly cursor: string | null }): string | null;
+} = Function.dual(
+  2,
+  (tezgah: WindowModel["tezgah"], tile: { readonly id: string; readonly cursor: string | null }): string | null => {
+    const notes = tezgah?.cursors ?? {};
+    return Object.hasOwn(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
+  },
+);
 
 const Own = Schema.Union([
   // What one dial's socket saw, raw: it opened, the door sent a text frame, or it closed with a code.

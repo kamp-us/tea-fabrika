@@ -14,7 +14,7 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import { Function, Result, Schema } from "effect";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -176,7 +176,10 @@ const R = Routed.cases;
  * @stability unstable
  * @category getters
  */
-export const route = (table: Table, prefix: Prefix, _mode: null, press: { readonly key: string }): Routed => {
+export const route: {
+  (prefix: Prefix, mode: null, press: { readonly key: string }): (table: Table) => Routed;
+  (table: Table, prefix: Prefix, mode: null, press: { readonly key: string }): Routed;
+} = Function.dual(4, (table: Table, prefix: Prefix, _mode: null, press: { readonly key: string }): Routed => {
   const key = press.key;
 
   if (table.backend.cannot.includes(key)) {
@@ -202,7 +205,7 @@ export const route = (table: Table, prefix: Prefix, _mode: null, press: { readon
     : does === undefined
       ? R.tile.make({ key })
       : R.command.make({ does });
-};
+});
 
 /** The keys a press names by its own name, lower case. */
 const NAMED: Readonly<Record<string, string>> = { " ": "space", Esc: "escape" };

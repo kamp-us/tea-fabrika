@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Cause, Schema } from "effect";
+import { Cause, Function, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -47,7 +47,10 @@ export const chainName = (chain: Chain): string =>
  * @stability unstable
  * @category getters
  */
-export const partName = (chain: Chain, part: number): string => `${chainName(chain)}/${part}`;
+export const partName: {
+  (part: number): (chain: Chain) => string;
+  (chain: Chain, part: number): string;
+} = Function.dual(2, (chain: Chain, part: number): string => `${chainName(chain)}/${part}`);
 
 /**
  * The span tag that names a span's process. A span without it takes its nearest ancestor's, and

@@ -15,7 +15,7 @@
  * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
-import { Result, Schema } from "effect";
+import { Function, Result, Schema } from "effect";
 
 /**
  * Schema for what the person saw when they let a client in.
@@ -713,21 +713,38 @@ const chainLive = (members: Access, key: string): boolean => {
  * @stability unstable
  * @category combinators
  */
-export const admitted = (
-  members: Access,
-  key: string,
-):
-  | { readonly key: string; readonly person: string; readonly as: "window" | "agent" | "hands" }
-  | { readonly reason: "not_granted" } => {
-  const known = members.keys.get(key);
+export const admitted: {
+  (
+    key: string,
+  ): (
+    members: Access,
+  ) =>
+    | { readonly key: string; readonly person: string; readonly as: "window" | "agent" | "hands" }
+    | { readonly reason: "not_granted" };
+  (
+    members: Access,
+    key: string,
+  ):
+    | { readonly key: string; readonly person: string; readonly as: "window" | "agent" | "hands" }
+    | { readonly reason: "not_granted" };
+} = Function.dual(
+  2,
+  (
+    members: Access,
+    key: string,
+  ):
+    | { readonly key: string; readonly person: string; readonly as: "window" | "agent" | "hands" }
+    | { readonly reason: "not_granted" } => {
+    const known = members.keys.get(key);
 
-  if (known === undefined || !known.live || !chainLive(members, key)) {
-    return { reason: "not_granted" };
-  }
+    if (known === undefined || !known.live || !chainLive(members, key)) {
+      return { reason: "not_granted" };
+    }
 
-  if (known.rank !== "window" && known.rank !== "agent" && known.rank !== "hands") {
-    return { reason: "not_granted" };
-  }
+    if (known.rank !== "window" && known.rank !== "agent" && known.rank !== "hands") {
+      return { reason: "not_granted" };
+    }
 
-  return { key, person: members.person, as: known.rank };
-};
+    return { key, person: members.person, as: known.rank };
+  },
+);
