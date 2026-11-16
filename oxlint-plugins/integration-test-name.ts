@@ -14,6 +14,7 @@
 // call of 2026-11-14 and still make one through Effect's FileSystem. Whether a temp folder alone is
 // a real resource under 0536 is the owner's to rule; until then this rule holds the other kinds.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { dotted, pathIn, type Node } from "./match.ts";
 
 /** What a call drives, by the module its name came from, and the names in that module that open it. */
@@ -43,7 +44,7 @@ const LAUNCHERS = new Set(["chromium", "firefox", "webkit", "_electron"]);
 const NAMED = /\.(?:integration|visual)\.test\.tsx?$/;
 
 const literal = (node: Node | undefined): string | null =>
-  node?.type === "Literal" && typeof node.value === "string"
+  node?.type === "Literal" && Predicate.isString(node.value)
     ? node.value
     : node?.type === "TemplateLiteral" && node.expressions.length === 0
       ? (node.quasis[0]?.value.cooked ?? null)

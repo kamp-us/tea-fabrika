@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, Fiber, Predicate, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -75,7 +75,7 @@ it(
 );
 
 const field = (a: string | Buffer) => {
-  const bytes = typeof a === "string" ? Buffer.from(a) : a;
+  const bytes = Predicate.isString(a) ? Buffer.from(a) : a;
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
   return Buffer.concat([size, bytes]);
@@ -362,7 +362,7 @@ class Client {
   }
 
   async challenge() {
-    return (await this.next((f) => typeof f !== "string" && f.method === "challenge")).params.nonce as string;
+    return (await this.next((f) => !Predicate.isString(f) && f.method === "challenge")).params.nonce as string;
   }
 
   hello(nonce?: string, overrides: object = {}) {
@@ -400,7 +400,7 @@ class Client {
     }
 
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-    return this.next((f) => typeof f !== "string" && f.id === id);
+    return this.next((f) => !Predicate.isString(f) && f.id === id);
   }
 
   ping() {
@@ -754,7 +754,7 @@ describe("P12 real dev.ts wire", () => {
       body: JSON.stringify({ text, armored: s.key.proof(text) }),
     });
     expect(granted.ok).toBe(true);
-    const notification = await other.next((f) => typeof f !== "string" && f.method === "client.granted");
+    const notification = await other.next((f) => !Predicate.isString(f) && f.method === "client.granted");
     expect((await Effect.runPromise(other.hello(notification.params.nonce))).error).toBeUndefined();
     const identityChanged = await send(other, pid, "once");
     expect(identityChanged.error?.data?.reason ?? identityChanged.result?.reason).toBe("id_reused");
@@ -825,7 +825,7 @@ describe("P12 real dev.ts wire", () => {
     let count = 0;
 
     for (let pos = 1; pos <= 12; pos++) {
-      const news = await a.next((f) => typeof f !== "string" && f.method === "view.patch");
+      const news = await a.next((f) => !Predicate.isString(f) && f.method === "view.patch");
       expect(news.params).toMatchObject({ base: pos - 1, rev: pos });
 
       for (const p of news.params.patch) {

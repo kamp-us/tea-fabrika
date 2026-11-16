@@ -1,6 +1,7 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import { builtinModules } from "node:module";
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const builtins = new Set(builtinModules);
@@ -56,7 +57,7 @@ export const noNodeImports: CreateRule = {
             ? source.quasis[0]?.value.cooked
             : null;
 
-      if (typeof value !== "string" || source == null) {
+      if (!Predicate.isString(value) || source == null) {
         return;
       }
 

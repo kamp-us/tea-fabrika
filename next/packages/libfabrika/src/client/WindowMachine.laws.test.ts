@@ -46,7 +46,7 @@ import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { SchemaAST } from "effect";
-import { Arbitrary, Option, Result, Schema } from "effect";
+import { Arbitrary, Option, Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -528,7 +528,7 @@ const walk = <W extends World, C extends Choice>(
       w.old.push(...(lost === undefined ? [] : [lost]));
     }
 
-    if ("id" in m && typeof m.id === "number" && "dial" in m) {
+    if ("id" in m && Predicate.isNumber(m.id) && "dial" in m) {
       const answer = m;
       const answered = w.flights.find((f) => f.id === answer.id && f.dial === answer.dial);
 
@@ -551,7 +551,7 @@ const walk = <W extends World, C extends Choice>(
 
       if (m.type === "tile") {
         const sent: unknown = Reflect.get(Object(p.m), "name");
-        w.submitted.add(typeof sent === "string" ? sent : "");
+        w.submitted.add(Predicate.isString(sent) ? sent : "");
       }
     }
 
@@ -972,7 +972,7 @@ describe("L8: the window parent's connection", () => {
         fold(list, ({ prev, m, next, world }) => {
           const answer = m;
           const flight =
-            "id" in answer && typeof answer.id === "number" && "dial" in answer
+            "id" in answer && Predicate.isNumber(answer.id) && "dial" in answer
               ? prev.flight.find((f) => f.id === answer.id && f.dial === answer.dial)
               : undefined;
           const call = flight?.call;
@@ -1666,7 +1666,7 @@ const verdict = (
 
   const named = Option.getOrUndefined(answerId(m.text))?.id;
 
-  if (e._tag === "handshake" && !(typeof named === "string" && named !== handshakeIn(prev).id)) {
+  if (e._tag === "handshake" && !(Predicate.isString(named) && named !== handshakeIn(prev).id)) {
     return [
       `${m.text}: a handshake frame settled a flight`,
       after[0].flight.filter((x) => prev.flight.includes(x)),
@@ -2157,7 +2157,7 @@ const INBOX = clientInbox(TAB);
 /** The brain's own writer, as the window trusts it: `brain` or `brain:<project>`. */
 const BRAIN_BY = "brain:p18";
 const PERSON_BY = "SHA256:person";
-const trusted = (by: unknown) => typeof by === "string" && (by === "brain" || by.startsWith("brain:"));
+const trusted = (by: unknown) => Predicate.isString(by) && (by === "brain" || by.startsWith("brain:"));
 /** Real process ids, one per life the brain places, so a DOWN for one decodes as `Down`. */
 const processAt = (n: number) => `process_0000000000e00800${String(n).padStart(10, "0")}`;
 
@@ -2360,7 +2360,7 @@ const brainStep = (w: Follow, c: FollowChoice) => {
 const forge = (w: Follow, c: FollowChoice) => {
   const held = w.s.tiles.flatMap((t) => {
     const r: ReachView = t.reach;
-    return holds(r) && typeof r.ref === "string" && r.pid !== undefined ? [{ ref: r.ref, pid: r.pid }] : [];
+    return holds(r) && Predicate.isString(r.ref) && r.pid !== undefined ? [{ ref: r.ref, pid: r.pid }] : [];
   });
 
   if (held.length === 0) {
@@ -2526,11 +2526,11 @@ const readName = (entries: ReadonlyArray<unknown>, name: string) => {
   for (const raw of entries) {
     const entry = Object(raw);
     const rev: unknown = Reflect.get(entry, "rev");
-    after = typeof rev === "number" ? Math.max(after, rev) : after;
+    after = Predicate.isNumber(rev) ? Math.max(after, rev) : after;
     const body = Object(Reflect.get(entry, "body"));
     const process: unknown = Reflect.get(body, "process");
 
-    if (!trusted(Reflect.get(entry, "by")) || typeof process !== "string") {
+    if (!trusted(Reflect.get(entry, "by")) || !Predicate.isString(process)) {
       continue;
     }
 
@@ -2555,7 +2555,7 @@ const takenOn = (s: WindowModel, letter: unknown) => {
   const id: unknown = Reflect.get(entry, "id");
   const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
 
-  if (!trusted(Reflect.get(entry, "by")) || typeof id !== "string" || !inSignalSpace(id) || !Schema.is(Down)(m)) {
+  if (!trusted(Reflect.get(entry, "by")) || !Predicate.isString(id) || !inSignalSpace(id) || !Schema.is(Down)(m)) {
     return null;
   }
 
@@ -2573,7 +2573,7 @@ const ignoredAs = (s: WindowModel, letter: unknown): string => {
   const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
   return !trusted(Reflect.get(entry, "by"))
     ? "writer"
-    : typeof id !== "string" || !inSignalSpace(id)
+    : !Predicate.isString(id) || !inSignalSpace(id)
       ? "plain"
       : !Schema.is(Down)(m)
         ? "shape"
@@ -2717,7 +2717,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               const now: ReachView = t.reach;
               seen.held += holds(now) ? 1 : 0;
               expect(
-                !holds(now) || (typeof now.ref === "string" && refs.has(now.ref)),
+                !holds(now) || (Predicate.isString(now.ref) && refs.has(now.ref)),
                 `${t.id} ${now._tag} holds no ref a monitor wrote`,
               ).toBe(true);
               expect(holds(was) && holds(now) && was.pid === now.pid ? now.ref : null, `${t.id}'s ref changed`).toBe(
@@ -4220,7 +4220,7 @@ const FOLD_SMALLEST = { width: 220, height: 120 } as const;
 const FOLD_ACROSS = { row: 22, column: 20 } as const;
 
 const foldTiles = (node: Workspace["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => foldTiles(p.inner));
+  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => foldTiles(p.inner));
 
 type Extent = { readonly width: number; readonly height: number };
 
@@ -4231,7 +4231,7 @@ type Extent = { readonly width: number; readonly height: number };
 const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): ReadonlyMap<string, Extent> => {
   const out = new Map<string, Extent>();
   const walk = (node: Workspace["layout"], box: Extent): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, box);
       return;
     }
@@ -4253,7 +4253,7 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
     }
 
     for (const [i, p] of node.parts.entries()) {
-      if (!fixed[i] || typeof p.inner === "string") {
+      if (!fixed[i] || Predicate.isString(p.inner)) {
         walk(p.inner, row ? { width: shares[i]!, height: box.height } : { width: box.width, height: shares[i]! });
       }
     }
@@ -4312,7 +4312,7 @@ const msgCase = (t: string) =>
 const keysIn = (v: unknown): ReadonlyArray<string> =>
   Array.isArray(v)
     ? v.flatMap(keysIn)
-    : v !== null && typeof v === "object"
+    : Predicate.isObjectOrArray(v)
       ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
       : [];
 
@@ -4356,7 +4356,7 @@ const foldWalk = (
       if (
         c.call._tag === "send" &&
         c.call["pid"] === TEZGAH_PID &&
-        typeof to === "string" &&
+        Predicate.isString(to) &&
         !w.took.includes(letter) &&
         Layout.order(space.layout).includes(to as TileId)
       ) {

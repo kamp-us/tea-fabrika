@@ -1,5 +1,6 @@
 // next/ product code uses Effect's replaceable FileSystem and Path services.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const native = /^(?:node:)?(?:fs(?:\/promises)?|path(?:\/(?:posix|win32))?)$/;
@@ -30,7 +31,7 @@ export const noNodeFilesystem: CreateRule = {
               /^\s*edge:\s*\S/.test(comment.value),
           );
 
-      if (typeof value === "string" && native.test(value) && !edge) {
+      if (Predicate.isString(value) && native.test(value) && !edge) {
         context.report({
           node,
           message: "Use Effect FileSystem and Path in next/ product code (docs/direction/build-on-effect.md).",

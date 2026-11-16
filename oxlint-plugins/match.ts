@@ -3,6 +3,7 @@
 // `Effect.all<T>(x)` and `x.Effect.all(y)` did not. The rules keep that exactly: README.md says how
 // that was measured.
 import type { Context, ESTree, Visitor } from "@oxlint/plugins";
+import { Predicate } from "effect";
 
 type Source = Context["sourceCode"];
 export type Node = ESTree.Node;
@@ -138,7 +139,7 @@ export function* ancestors(node: Node): Generator<Node> {
 
 /** A string literal in the source, with its quotes: `"a"`. */
 export const quoted = (node: Node): string | null =>
-  node.type === "Literal" && typeof node.value === "string" ? node.raw : null;
+  node.type === "Literal" && Predicate.isString(node.value) ? node.raw : null;
 
 /** The empty string, in either quote, with no parentheses around it. */
 export const isEmptyString = (source: Source, node: Node | null): boolean =>
@@ -149,12 +150,13 @@ export function* below(node: Node): Generator<Node> {
   yield node;
 
   for (const [key, value] of Object.entries(node)) {
-    if (key === "parent" || value === null || typeof value !== "object") {
+    if (key === "parent") {
       continue;
     }
 
+    // Only a node has a string `type`: a primitive, null or a plain list of numbers has none.
     for (const part of Array.isArray(value) ? value : [value]) {
-      if (part !== null && typeof part === "object" && typeof part.type === "string") {
+      if (Predicate.isString(part?.type)) {
         yield* below(part);
       }
     }

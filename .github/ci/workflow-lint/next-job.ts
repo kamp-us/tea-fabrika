@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
+import { Predicate } from "effect";
 import {
   CHANGED_FROM_BASE,
   chromium,
@@ -98,7 +99,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   require(compact(testStep?.["if"]) ===
     compact(`!${ON_E2E}`), "next's vitest step runs only on the numbered legs, and has no other guard");
   // A larger denominator leaves a share of the files on no machine; a smaller one fails a leg.
-  require(typeof shard === "string" &&
+  require(Predicate.isString(shard) &&
     new RegExp(`^${SHARD_OF}/${denominator("vitest", VITEST_LEGS.length)}$`).test(
       shard,
     ), "next's vitest step passes --shard <leg>/<the count of numbered legs>");
@@ -112,7 +113,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
-  require(typeof e2eShard === "string" &&
+  require(Predicate.isString(e2eShard) &&
     new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
       e2eShard,
     ), "next's end-to-end step passes --shard <leg>/<the count of e2e legs>");

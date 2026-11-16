@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 // Desk S2b, next/ (the desk program fabrika/tezgah, ticket named by its title): law L21 of the approved
 // plan, and the slice's shots. Written before the tab draws tezgah's workspace and before it reads a
 // key. Starts the real `dev.ts` in its own temp home on its own port and drives headless Chromium;
@@ -148,7 +148,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           // C-b %: t1 and a new tile side by side, focus on the new one.
           yield* keys(page, "Control+b", "%");
           const side = yield* drawnAs(
-            (n, v) => n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "row",
+            (n, v) => n === 2 && !Predicate.isString(v.workspaces[0]!.layout) && v.workspaces[0]!.layout.dir === "row",
             "two side by side",
           );
           expect(focused(side).id, "L21: the split's new tile takes focus").not.toBe(t1.id);
@@ -172,7 +172,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
           yield* keys(page, "Control+b", '"');
           yield* drawnAs(
             (n, v) =>
-              n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "column",
+              n === 2 && !Predicate.isString(v.workspaces[0]!.layout) && v.workspaces[0]!.layout.dir === "column",
             "two stacked",
           );
           yield* shoot(page, "split-down", "stacked");
@@ -199,9 +199,9 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
             const l = v.workspaces[0]!.layout;
             return (
               n === 4 &&
-              typeof l !== "string" &&
+              !Predicate.isString(l) &&
               l.dir === "column" &&
-              l.parts.every((p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2)
+              l.parts.every((p) => !Predicate.isString(p.inner) && p.inner.dir === "row" && p.inner.parts.length === 2)
             );
           }, "a 2x2");
           yield* shoot(page, "grid", "grid-2x2");
@@ -283,9 +283,9 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
               wire.reads.push(read);
               wire.sockets.push({ close: () => ws.close({ code: 4000, reason: "the law drops the socket" }) });
               ws.onMessage((message) => {
-                const found = typeof message === "string" ? TEZGAH_READ.exec(message) : null;
+                const found = Predicate.isString(message) ? TEZGAH_READ.exec(message) : null;
 
-                if (typeof message !== "string" || found === null) {
+                if (!Predicate.isString(message) || found === null) {
                   server.send(message);
                   return;
                 }

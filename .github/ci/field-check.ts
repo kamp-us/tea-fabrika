@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Predicate, Result } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
@@ -29,13 +30,7 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -118,7 +113,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
   }
 
   findings.push(...checkRow(file, 1, value));
-  const row: Record<string, unknown> = typeof value === "object" && value !== null ? { ...value } : {};
+  const row: Record<string, unknown> = Predicate.isObjectOrArray(value) ? { ...value } : {};
   const key = idKey(logOf(file), row);
 
   if (name !== undefined && key !== null && row[key] !== name) {
@@ -127,7 +122,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
 
   const day = row["date"];
 
-  if (name !== undefined && typeof day === "string" && !name.startsWith(`${day}-`)) {
+  if (name !== undefined && Predicate.isString(day) && !name.startsWith(`${day}-`)) {
     findings.push(
       Finding.cases.warning.make({ file, line: 1, field: "date", reason: "differs from the file name's date" }),
     );
@@ -257,16 +252,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   if (local && process.env["GITHUB_ACTIONS"] === "true") {
     console.log("field: this CI run's field job checks the added rows");
-  } else {
-    try {
-      main(local);
-    } catch {
-      console.error(
-        local
-          ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
-          : "field: history or input could not be read; validation did not finish",
-      );
-      process.exitCode = 2;
-    }
+  } else if (Result.isFailure(Result.try(() => main(local)))) {
+    console.error(
+      local
+        ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"
+        : "field: history or input could not be read; validation did not finish",
+    );
+    process.exitCode = 2;
   }
 }

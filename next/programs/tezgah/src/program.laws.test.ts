@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -66,18 +66,16 @@ const typeId = (prefix: string, n: number): string => {
 type Node = string | { readonly dir: string; readonly parts: ReadonlyArray<{ percent: number; inner: Node }> };
 
 const isNode = (u: unknown): u is Node =>
-  typeof u === "string" ||
-  (typeof u === "object" &&
-    u !== null &&
+  Predicate.isString(u) ||
+  (Predicate.isObjectOrArray(u) &&
     "dir" in u &&
     "parts" in u &&
     Array.isArray(u.parts) &&
     u.parts.every(
       (p: unknown) =>
-        typeof p === "object" &&
-        p !== null &&
+        Predicate.isObjectOrArray(p) &&
         "percent" in p &&
-        typeof p.percent === "number" &&
+        Predicate.isNumber(p.percent) &&
         "inner" in p &&
         isNode(p.inner),
     ));
@@ -111,13 +109,13 @@ type Tile = View["tiles"][number];
 
 /** Reading order: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => order(p.inner));
+  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => order(p.inner));
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number };
 
 /** Each tile's rectangle in the unit square: a row splits the width by percent, a column the height. */
 const rects = (node: Node, r: Rect = { x: 0, y: 0, w: 1, h: 1 }, out = new Map<string, Rect>()) => {
-  if (typeof node === "string") {
+  if (Predicate.isString(node)) {
     out.set(node, r);
     return out;
   }

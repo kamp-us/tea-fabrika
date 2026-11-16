@@ -28,6 +28,7 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Predicate } from "effect";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -216,7 +217,7 @@ const list = (root: string, args: readonly string[]): string[] => {
   const files: unknown = JSON.parse(readFileSync(out, "utf8"));
   return (Array.isArray(files) ? files : [])
     .flatMap((entry: unknown) =>
-      typeof entry === "object" && entry !== null && "file" in entry && typeof entry.file === "string"
+      Predicate.isObjectOrArray(entry) && "file" in entry && Predicate.isString(entry.file)
         ? [relative(root, entry.file)]
         : [],
     )

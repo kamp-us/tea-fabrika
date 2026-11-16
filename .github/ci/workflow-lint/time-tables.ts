@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
+import { Predicate } from "effect";
 import { fileName, STEP } from "../time-table.ts";
 import { compact, env, map, type Rule, sameEntries, steps, TOKEN, uses } from "./shared.ts";
 
@@ -39,7 +40,7 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
       Object.entries(given).filter(([key]) => key !== "retention-days"),
       Object.entries(TIMINGS),
     ) &&
-    typeof kept === "number" &&
+    Predicate.isNumber(kept) &&
     kept >= 1
   );
 };

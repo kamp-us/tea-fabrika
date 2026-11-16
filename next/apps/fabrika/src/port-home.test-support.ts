@@ -9,7 +9,7 @@
 // may still write a `-shm` file, so it opens the copy.
 // edge: Effect SQL has no read-only open of a SQLite file, and the guard reads every cell of one
 import { DatabaseSync } from "node:sqlite";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Predicate, Schema } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -106,10 +106,9 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
             for (const [row, cells] of rows.entries()) {
               for (const [column, value] of Object.entries(cells)) {
                 for (const { root, forms } of roots) {
-                  const holds =
-                    typeof value === "string"
-                      ? forms.some(({ text }) => value.includes(text))
-                      : value instanceof Uint8Array && forms.some(({ bytes }) => offsets(value, bytes).length > 0);
+                  const holds = Predicate.isString(value)
+                    ? forms.some(({ text }) => value.includes(text))
+                    : value instanceof Uint8Array && forms.some(({ bytes }) => offsets(value, bytes).length > 0);
 
                   if (holds) {
                     hits.push({ file, place: Place.cases.cell.make({ table, row, column }), root });

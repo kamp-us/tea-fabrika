@@ -1,4 +1,5 @@
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC16).
+import { Predicate, Result } from "effect";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -91,7 +92,7 @@ const BACKSTOP = 3;
  */
 const limitOf = (jobs: Record<string, unknown>, suite: keyof typeof SUITES): unknown => {
   const commands: readonly string[] = SUITES[suite];
-  const found = steps(map(jobs[TESTS_JOB])).filter((s) => typeof s["run"] === "string" && commands.includes(s["run"]));
+  const found = steps(map(jobs[TESTS_JOB])).filter((s) => Predicate.isString(s["run"]) && commands.includes(s["run"]));
   const limits = new Set(found.map((s) => s["timeout-minutes"]));
   return found.length > 0 && limits.size === 1 ? [...limits][0] : undefined;
 };
@@ -113,9 +114,9 @@ const listed = (job: Record<string, unknown>): unknown[] => {
  */
 const depth = (jobs: Record<string, unknown>, name: string, seen: readonly string[] = []): number => {
   const needs = map(jobs[name])["needs"];
-  const list = typeof needs === "string" ? [needs] : Array.isArray(needs) ? needs : [];
+  const list = Predicate.isString(needs) ? [needs] : Array.isArray(needs) ? needs : [];
   const known = list.filter(
-    (need): need is string => typeof need === "string" && need in jobs && !seen.includes(need) && need !== name,
+    (need): need is string => Predicate.isString(need) && need in jobs && !seen.includes(need) && need !== name,
   );
   return known.length === 0 ? 0 : 1 + Math.max(...known.map((need) => depth(jobs, need, [...seen, name])));
 };
@@ -125,15 +126,13 @@ const depth = (jobs: Record<string, unknown>, name: string, seen: readonly strin
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(source.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
   const errors: string[] = [];
@@ -151,7 +150,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(on["push"]) === JSON.stringify({ branches: ["main"] }) &&
     crons.length === 1 &&
     Object.keys(map(crons[0])).length === 1 &&
-    typeof map(crons[0])["cron"] === "string" &&
+    Predicate.isString(map(crons[0])["cron"]) &&
     HOURLY.test(
       String(map(crons[0])["cron"]),
     ), "SC1: it runs on a push to main, on one hourly schedule at a minute from 1 to 59, and by hand, on no other event");
@@ -159,12 +158,12 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // (0581's binding constraint), so a person changes it in one line beside the cron line.
   const gap = map(workflow["env"])[GAP];
   require(JSON.stringify(Object.keys(map(workflow["env"]))) === JSON.stringify([GAP]) &&
-    typeof gap === "number" &&
+    Predicate.isNumber(gap) &&
     Number.isInteger(gap) &&
     gap >= LEAST_GAP, `SC16: the workflow's env is ${GAP} alone, a whole number of minutes, ${LEAST_GAP} or more`);
   // SC2. One run at a time, and a running one is never cut short.
   const concurrency = map(workflow["concurrency"]);
-  require(typeof concurrency["group"] === "string" &&
+  require(Predicate.isString(concurrency["group"]) &&
     !concurrency["group"].includes("${{") &&
     concurrency["cancel-in-progress"] === false, "SC2: one run at a time, in one fixed group, and none cut short");
 
@@ -190,8 +189,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // job's limit is an expression by its leg's suite, and SC13 pins it exactly.
   for (const [name, job] of Object.entries(jobs)) {
     const limit = map(job)["timeout-minutes"];
-    require((typeof limit === "number" && limit > 0 && limit < 360) ||
-      (name === TESTS_JOB && typeof limit === "string"), `SC4: ${name} sets timeout-minutes`);
+    require((Predicate.isNumber(limit) && limit > 0 && limit < 360) ||
+      (name === TESTS_JOB && Predicate.isString(limit)), `SC4: ${name} sets timeout-minutes`);
 
     for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       require(map(step["with"])["persist-credentials"] ===
@@ -285,8 +284,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const gateLimits = steps(gateJob).map((s) => s["timeout-minutes"]);
   const gateLimit = gateJob["timeout-minutes"];
   require(gateLimits.length > 0 &&
-    gateLimits.every((limit) => typeof limit === "number" && Number.isInteger(limit) && limit > 0) &&
-    typeof gateLimit === "number" &&
+    gateLimits.every((limit) => Predicate.isNumber(limit) && Number.isInteger(limit) && limit > 0) &&
+    Predicate.isNumber(gateLimit) &&
     (gateLimits as number[]).reduce((sum, limit) => sum + limit, 0) < gateLimit &&
     !("continue-on-error" in gateJob) &&
     steps(gateJob).every(
@@ -318,7 +317,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     const most = strategy["max-parallel"];
 
     if ("strategy" in job) {
-      require(typeof most === "number" &&
+      require(Predicate.isNumber(most) &&
         Number.isInteger(most) &&
         most >= 1 &&
         most <= listed(job).length &&
@@ -327,7 +326,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     }
 
     const at = depth(jobs, name);
-    atOnce.set(at, (atOnce.get(at) ?? 0) + ("strategy" in job && typeof most === "number" ? most : 1));
+    atOnce.set(at, (atOnce.get(at) ?? 0) + ("strategy" in job && Predicate.isNumber(most) ? most : 1));
   }
 
   require([...atOnce.values()].every(
@@ -340,7 +339,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const tests = map(jobs[TESTS_JOB]),
     testSteps = steps(tests),
     shards = listed(tests),
-    toolingLegs = shards.filter((shard) => typeof shard === "string" && shard.startsWith(TOOLING_LEG)),
+    toolingLegs = shards.filter((shard) => Predicate.isString(shard) && shard.startsWith(TOOLING_LEG)),
     nextLegs = shards.filter((shard) => !toolingLegs.includes(shard)),
     legsOfCheck = legs(nextJob(check)),
     e2eCount = ends(legsOfCheck).length,
@@ -377,7 +376,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   const commandsOf = (job: Record<string, unknown>) =>
-    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+    steps(job).flatMap((s) => (Predicate.isString(s["run"]) ? [s["run"]] : []));
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
     JSON.stringify(
       ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),
@@ -388,7 +387,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const kept = testSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
-  const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
+  const last = testSteps.findLastIndex((s) => Predicate.isString(s["run"]) && s["run"].includes(RESULTS));
   require(kept.length === 1 &&
     compact(kept[0]?.["if"]) === "!cancelled()" &&
     testSteps.indexOf(kept[0] ?? {}) >
@@ -416,7 +415,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // after it (probe runs 43778586135 and 43778355238 on a throwaway copy of this workflow). The
   // job's limit may read `matrix` (GitHub's docs, "Contexts reference").
   const whole = (limit: unknown): limit is number =>
-    typeof limit === "number" && Number.isInteger(limit) && limit > 0 && limit + BACKSTOP < 360;
+    Predicate.isNumber(limit) && Number.isInteger(limit) && limit > 0 && limit + BACKSTOP < 360;
   const nextLimit = limitOf(jobs, "next"),
     toolingLimit = limitOf(jobs, "tooling");
 

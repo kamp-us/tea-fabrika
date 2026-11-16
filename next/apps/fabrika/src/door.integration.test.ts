@@ -49,7 +49,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Predicate, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -101,7 +101,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   return Buffer.concat([u32(b.length), b]);
 };
 
@@ -2208,7 +2208,7 @@ describe("P10 review regressions", () => {
           );
         expect(rows()).toHaveLength(2);
         assert(
-          "disconnect" in d && typeof d.disconnect === "function",
+          "disconnect" in d && Predicate.isFunction(d.disconnect),
           "Gateway.disconnect must handle a closed connection",
         );
         yield* d.disconnect(closed.client);

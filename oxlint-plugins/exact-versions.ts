@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { Predicate, Result } from "effect";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -24,10 +25,9 @@ const FIELDS = ["dependencies", "devDependencies", "peerDependencies", "optional
 const OVERRIDES = ["overrides", "resolutions"];
 
 const passes = (version: unknown): boolean =>
-  typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
+  Predicate.isString(version) && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 
-const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isMap = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** One line per name in `map` whose version does not pass. */
 const refused = (file: string, field: string, map: unknown): readonly string[] =>
@@ -104,13 +104,14 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
-  }
-};
+const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } =>
+  Result.match(
+    Result.try(() => check(file)),
+    {
+      onSuccess: (lines) => ({ lines, broken: false }),
+      onFailure: (error) => ({ lines: [`${file}: could not read: ${String(error)}`], broken: true }),
+    },
+  );
 
 const results = files.map(attempt);
 const lines = results.flatMap((result) => result.lines);

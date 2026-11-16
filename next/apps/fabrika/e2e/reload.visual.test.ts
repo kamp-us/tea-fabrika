@@ -12,7 +12,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, type Layer, Path, Predicate, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -82,7 +82,7 @@ const driver = (p: Page, url: string, tab: string) =>
           return result;
         };
         const field = (data: string | Uint8Array) => {
-          const body = typeof data === "string" ? bytes(data) : data,
+          const body = Predicate.isString(data) ? bytes(data) : data,
             n = new Uint8Array(4);
           new DataView(n.buffer).setUint32(0, body.length);
           return concat(n, body);
@@ -155,7 +155,7 @@ const driver = (p: Page, url: string, tab: string) =>
               frames.push({ method: "reinitialized", result: await hello(frame.params.nonce) });
             }
 
-            if (typeof frame.id === "number") {
+            if (Predicate.isNumber(frame.id)) {
               pending.get(frame.id)?.(frame);
               pending.delete(frame.id);
             }
@@ -213,7 +213,7 @@ const scoped = <A, E>(
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */
 const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
-  typeof value !== "object" || value === null
+  !Predicate.isObjectOrArray(value)
     ? []
     : Array.isArray(value)
       ? value.flatMap(objects)
@@ -385,7 +385,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
         const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
         expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
-        expect(typeof failed?.body.line).toBe("number");
+        expect(Predicate.isNumber(failed?.body.line)).toBe(true);
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 9 });
 

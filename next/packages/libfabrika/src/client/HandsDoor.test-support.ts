@@ -8,7 +8,7 @@
 // `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
-import { Layer, Option, Schema } from "effect";
+import { Layer, Option, Predicate, Schema } from "effect";
 import { Socket } from "effect/socket";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
@@ -130,10 +130,10 @@ export const brain = () => {
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
-    const p = typeof params === "object" && params !== null ? new Map(Object.entries(params)) : new Map();
+    const p = Predicate.isObjectOrArray(params) ? new Map(Object.entries(params)) : new Map();
     const text = (name: string) => {
       const value = p.get(name);
-      return typeof value === "string" ? value : "";
+      return Predicate.isString(value) ? value : "";
     };
 
     if (method === "tasks.list") {
@@ -145,7 +145,7 @@ export const brain = () => {
 
     if (method === "tasks.wait") {
       const after = p.get("after");
-      const n = typeof after === "number" ? after : 0;
+      const n = Predicate.isNumber(after) ? after : 0;
       return rev(key) > n
         ? Outcome.cases.result.make({ result: { rev: rev(key) } })
         : Outcome.cases.parked.make({ after: n });

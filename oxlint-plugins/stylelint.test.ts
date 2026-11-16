@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { Predicate } from "effect";
 import stylelint from "stylelint";
 import { afterAll, assert, describe, expect, it } from "vitest";
 
@@ -216,7 +217,7 @@ const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.
 };
 
 const warningPaths = (value: unknown, path = "config"): string[] => {
-  if (value === null || typeof value !== "object") {
+  if (!Predicate.isObjectOrArray(value)) {
     return [];
   }
 

@@ -19,7 +19,7 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, Predicate, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -773,7 +773,7 @@ describe("P12 Project authority", () => {
 });
 
 describe("P12 Project saved and wire readers", () => {
-  const malformed = fc.jsonValue().filter((value) => typeof value !== "string");
+  const malformed = fc.jsonValue().filter((value) => !Predicate.isString(value));
   const typed = (exit: Exit.Exit<unknown, unknown>) => {
     expect(Exit.isFailure(exit)).toBe(true);
     const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
@@ -1075,7 +1075,7 @@ describe("P12 Connection recording", () => {
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+            Object.values(refused[0]!.attributes).filter((tag) => Predicate.isString(tag) && tag.includes(text)),
           ).toEqual([]);
         }, signal),
       ),

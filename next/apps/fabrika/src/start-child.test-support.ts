@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
@@ -251,7 +251,7 @@ export const childProject = Effect.fnUntraced(function* () {
         // Keep each occurrence, including repeated reads before and after the write turn.
         observe(query.replace(/\s+/g, " ").trim());
 
-        const process = typeof params[0] === "string" ? params[0] : undefined;
+        const process = Predicate.isString(params[0]) ? params[0] : undefined;
 
         if (query === "SELECT value FROM dev_descriptors WHERE process=?") {
           trip("owner");
@@ -439,7 +439,7 @@ export const childProject = Effect.fnUntraced(function* () {
       sql
         .exec("SELECT name FROM sqlite_master WHERE type='table'")
         .flatMap(({ name }) =>
-          typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
+          Predicate.isString(name) ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
         ),
     observe: (operation?: number, error?: Error) => {
       operations = [];

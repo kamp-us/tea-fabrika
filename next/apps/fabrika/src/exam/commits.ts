@@ -18,7 +18,7 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, Effect, Exit, FileSystem, Option, Path, Predicate, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -762,7 +762,7 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
       catch: () => new Failed({ message: `field/runs.jsonl line ${i + 1} is not JSON` }),
     });
 
-    if (row === null || typeof row !== "object") {
+    if (!Predicate.isObjectOrArray(row)) {
       continue;
     }
 
@@ -1041,7 +1041,7 @@ if (import.meta.main) {
       Effect.provide(NodeServices.layer),
     ),
     {
-      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && typeof exit.value === "number" ? exit.value : 2),
+      teardown: (exit, onExit) => onExit(Exit.isSuccess(exit) && Predicate.isNumber(exit.value) ? exit.value : 2),
     },
   );
 }

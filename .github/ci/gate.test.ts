@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -748,7 +749,7 @@ const stepLimit = (() => {
   const workflow = parse(readFileSync(new URL("../workflows/scheduled.yaml", import.meta.url), "utf8"));
   const steps: { id?: string; "timeout-minutes"?: unknown }[] = workflow?.jobs?.gate?.steps ?? [];
   const limit = steps.find((step) => step.id === "decide")?.["timeout-minutes"];
-  return typeof limit === "number" ? limit * MINUTE : Number.NaN;
+  return Predicate.isNumber(limit) ? limit * MINUTE : Number.NaN;
 })();
 
 it("G7 property: a gate whose calls would run past its step's time limit stops before it, with a non-zero exit and no start line, and one that finishes in time answers", async () => {

@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Path, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -111,7 +111,7 @@ vi.mock("rolldown", async (original) => {
           }
 
           const assets = Object.values(output).flatMap((o) =>
-            o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
+            o.type === "asset" ? [Predicate.isString(o.source) ? o.source : new TextDecoder().decode(o.source)] : [],
           );
           observations.builds.push({ input: options.input, modules, chunks, assets });
         },
@@ -152,7 +152,7 @@ const TEXT = "\0fabrika-text:";
 const joined = (graph: Observed) => graph.chunks.map((c) => c.code).join("\n");
 
 const realBrain = (all: ReadonlyArray<Observed>) => {
-  const found = all.find((b) => typeof b.input === "string" && b.input.endsWith("/src/brain.ts"));
+  const found = all.find((b) => Predicate.isString(b.input) && b.input.endsWith("/src/brain.ts"));
 
   if (found === undefined) {
     throw new Error("no actual P12 brain build observed");
@@ -179,9 +179,8 @@ const APP_TAB = new URL("../entry/browser.tsx", import.meta.url).pathname;
 const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 
 const isWindow = (graph: Observed) =>
-  typeof graph.input === "object" &&
-  graph.input !== null &&
-  Object.values(graph.input).every((v) => typeof v === "string" && v.startsWith("fabrika:window:"));
+  Predicate.isObjectOrArray(graph.input) &&
+  Object.values(graph.input).every((v) => Predicate.isString(v) && v.startsWith("fabrika:window:"));
 
 // The whole build's check: every Rolldown call is clean, and every text the brain carries is the
 // output of an observed program, window or tab call, so no carried script escapes its own graph's check.

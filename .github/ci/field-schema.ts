@@ -3,7 +3,7 @@
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema } from "effect";
+import { Predicate, Schema } from "effect";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 export type Log = typeof Log.Type;
@@ -136,8 +136,7 @@ const words: Record<string, readonly string[]> = {
   outcome: ["merged", "pass", "fail", "triaged", "parked", "skip", "stopped"],
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const isObject = (value: unknown): value is Record<string, unknown> => Predicate.isObject(value);
 
 /** Never put a value or a decoder's input-bearing error into a finding. */
 export const checkRow = (file: string, line: number, value: unknown): Finding[] => {
@@ -230,7 +229,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   for (const key of questKeys) {
     const quests = value[key];
 
-    if (Array.isArray(quests) && quests.some((quest) => typeof quest !== "string")) {
+    if (Array.isArray(quests) && quests.some((quest) => !Predicate.isString(quest))) {
       findings.push(warning(key, "quest member is not text"));
     }
   }
@@ -240,7 +239,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   if (
     !found &&
     !folder &&
-    typeof value[id] === "string" &&
+    Predicate.isString(value[id]) &&
     !/^\d{4}-\d{2}-\d{2}-(?:r)?\d+(?:-c\d+)?$/.test(value[id])
   ) {
     findings.push(warning(id, "unusual record id"));
@@ -249,7 +248,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   const day = value["date"];
 
   if (
-    typeof day === "string" &&
+    Predicate.isString(day) &&
     (!Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day)
   ) {
     findings.push(warning("date", "unusual calendar date"));
@@ -259,7 +258,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     const time = value[field];
 
     if (
-      typeof time === "string" &&
+      Predicate.isString(time) &&
       (!/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(time) || !Number.isFinite(Date.parse(time)))
     ) {
       findings.push(warning(field, "unusual timestamp"));
@@ -269,13 +268,13 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   for (const field of ["ticket", "pr"]) {
     const ref = value[field];
 
-    if (ref != null && (typeof ref !== "string" || !/^[^/\s]+\/[^#\s]+#\d+$/.test(ref))) {
+    if (ref != null && (!Predicate.isString(ref) || !/^[^/\s]+\/[^#\s]+#\d+$/.test(ref))) {
       findings.push(warning(field, "unusual reference"));
     }
   }
 
   if (
-    typeof value["parent"] === "string" &&
+    Predicate.isString(value["parent"]) &&
     !/^\d{4}-\d\d-\d\d-r\d+(?:-c\d+)?$/.test(value["parent"]) &&
     !dated.test(value["parent"])
   ) {
@@ -283,33 +282,33 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
   }
 
   if (
-    typeof value["started"] === "string" &&
-    typeof value["ended"] === "string" &&
+    Predicate.isString(value["started"]) &&
+    Predicate.isString(value["ended"]) &&
     Date.parse(value["ended"]) < Date.parse(value["started"])
   ) {
     findings.push(warning("ended", "end precedes start"));
   }
 
   if (
-    typeof value["active"] === "number" &&
-    typeof value["minutes"] === "number" &&
+    Predicate.isNumber(value["active"]) &&
+    Predicate.isNumber(value["minutes"]) &&
     value["active"] > value["minutes"]
   ) {
     findings.push(warning("active", "active time exceeds wall time"));
   }
 
   if (
-    typeof value["cachedTokens"] === "number" &&
-    typeof value["inputTokens"] === "number" &&
+    Predicate.isNumber(value["cachedTokens"]) &&
+    Predicate.isNumber(value["inputTokens"]) &&
     value["cachedTokens"] > value["inputTokens"]
   ) {
     findings.push(warning("cachedTokens", "cached count exceeds input count"));
   }
 
   if (
-    typeof value["billed"] === "number" &&
-    typeof value["inputTokens"] === "number" &&
-    typeof value["outputTokens"] === "number" &&
+    Predicate.isNumber(value["billed"]) &&
+    Predicate.isNumber(value["inputTokens"]) &&
+    Predicate.isNumber(value["outputTokens"]) &&
     value["billed"] !== value["inputTokens"] + value["outputTokens"]
   ) {
     findings.push(warning("billed", "billed count differs from input plus output"));
@@ -317,7 +316,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
 
   if (
     Array.isArray(value["links"]) &&
-    value["links"].some((link) => typeof link === "string" && !/^https?:\/\/\S+$/.test(link))
+    value["links"].some((link) => Predicate.isString(link) && !/^https?:\/\/\S+$/.test(link))
   ) {
     findings.push(warning("links", "unusual public URL"));
   }

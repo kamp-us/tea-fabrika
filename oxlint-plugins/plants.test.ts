@@ -21,6 +21,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Predicate } from "effect";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -499,8 +500,7 @@ type Printed = { readonly overrides: ReadonlyArray<{ files: string[]; rules: Rec
 
 /** True for the ban's own entry, `{ object: "Reflect", property: "get" }`, in a rule's options. */
 const isReflectGet = (entry: unknown): boolean =>
-  typeof entry === "object" &&
-  entry !== null &&
+  Predicate.isObjectOrArray(entry) &&
   "object" in entry &&
   entry.object === "Reflect" &&
   "property" in entry &&

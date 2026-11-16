@@ -15,7 +15,7 @@
 import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Arbitrary, Result, Schema } from "effect";
+import { Arbitrary, Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -65,7 +65,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
           expect.arrayContaining([...FIELDS].sort()),
         );
         expect(tile["child"], "L11: the wire says whether tezgah started the tile").toBe(view.tiles[i]?.child);
-        expect(typeof tile["child"], "L11: child is a boolean on the wire").toBe("boolean");
+        expect(Predicate.isBoolean(tile["child"]), "L11: child is a boolean on the wire").toBe(true);
       }
 
       const [fresh] = tezgahMachine.init(null, { workspace: 1 });
@@ -395,14 +395,14 @@ const serverFocus = (s: WindowModel) =>
 const letterIn = (p: object): string | null => {
   const own: unknown = Reflect.get(p, "letter");
 
-  if (typeof own === "string") {
+  if (Predicate.isString(own)) {
     return own;
   }
 
   for (const v of Object.values(p)) {
-    const inner: unknown = typeof v === "object" && v !== null ? Reflect.get(v, "letter") : undefined;
+    const inner: unknown = Predicate.isObjectOrArray(v) ? Reflect.get(v, "letter") : undefined;
 
-    if (typeof inner === "string") {
+    if (Predicate.isString(inner)) {
       return inner;
     }
   }

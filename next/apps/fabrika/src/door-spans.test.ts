@@ -20,7 +20,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Predicate, Result, Schema, Stream, Tracer } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -39,7 +39,7 @@ const decodeText = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Json)
 
 // SQL columns and span fields can hold another JSON document.
 const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): ReadonlyArray<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     const prior = cache.get(value);
 
     if (prior !== undefined) {
@@ -63,7 +63,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
 
   return Array.isArray(value)
     ? value.flatMap((part) => texts(part, cache))
-    : value !== null && typeof value === "object"
+    : Predicate.isObjectKeyword(value)
       ? Object.values(value).flatMap((part) => texts(part, cache))
       : [];
 };
@@ -88,7 +88,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const bytes = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   return Buffer.concat([u32(bytes.length), bytes]);
 };
 
@@ -426,7 +426,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
                     events: tracer.events,
                   },
-                  (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                  (_k, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
                 );
                 const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
                   (output) => texts(output, decoded),

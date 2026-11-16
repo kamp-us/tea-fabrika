@@ -6,6 +6,7 @@
 // `tsconfig.base.json` has comments, so it is read as a JS expression.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Predicate } from "effect";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -42,7 +43,7 @@ const value = (node: Expression): unknown => {
 };
 
 const record = (x: unknown): Record<string, unknown> =>
-  typeof x === "object" && x !== null && !Array.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
+  Predicate.isObject(x) ? Object.fromEntries(Object.entries(x)) : {};
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Array.isArray(x) ? x : []);
 
@@ -58,7 +59,7 @@ const covers = (outer: string, glob: string): boolean => {
 /** The two globs can read one file: one's fixed start lies inside the other's. */
 const touches = (a: string, b: string): boolean => stem(a).startsWith(stem(b)) || stem(b).startsWith(stem(a));
 
-const strings = (x: unknown): ReadonlyArray<string> => list(x).filter((item) => typeof item === "string");
+const strings = (x: unknown): ReadonlyArray<string> => list(x).filter((item) => Predicate.isString(item));
 
 /**
  * Each glob whose files do not end with `preferNamespaceImport` at error for `effect`, after every

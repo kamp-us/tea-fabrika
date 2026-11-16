@@ -5,7 +5,7 @@ import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
 import { expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { senderTest } from "@kampus/libfabrika/testing";
-import { Arbitrary, Effect, FileSystem, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Predicate, Schema } from "effect";
 
 const SEED = 119120;
 const options = { arbitrary: { seed: SEED, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -234,7 +234,7 @@ const presence = (files: ReadonlySet<string>, load: () => Bridge): Bridge | null
   const b = load();
 
   for (const name of ["tools", "hidden", "waiting", "approved", "check", "malformed", "missing"] as const) {
-    if (typeof b[name] !== "function") {
+    if (!Predicate.isFunction(b[name])) {
       throw new Error(`missing bridge export: ${name}`);
     }
   }

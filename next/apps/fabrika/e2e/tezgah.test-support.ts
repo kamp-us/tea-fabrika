@@ -12,7 +12,7 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -39,7 +39,7 @@ type Box = { readonly x: number; readonly y: number; readonly width: number; rea
 const drawnRule = (layout: TezgahView["workspaces"][number]["layout"], area: Box): ReadonlyMap<string, Box> => {
   const out = new Map<string, Box>();
   const walk = (node: typeof layout, box: Box): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       out.set(node, box);
       return;
     }
@@ -393,7 +393,7 @@ const STRIP_ACROSS = { row: 22, column: 20 } as const;
 type Space = TezgahView["workspaces"][number];
 
 const tilesIn = (node: Space["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
+  Predicate.isString(node) ? [node] : node.parts.flatMap((p) => tilesIn(p.inner));
 
 /** What amendment 13's rule draws in `area` when `strips` are strips: each tile's box outside a band,
  *  and each band (a container whose tiles all fold) with its tiles. Written here from the
@@ -405,7 +405,7 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
   const boxes = new Map<string, Box>();
   const bands: Array<{ readonly box: Box; readonly tiles: ReadonlyArray<string> }> = [];
   const walk = (node: Space["layout"], box: Box): void => {
-    if (typeof node === "string") {
+    if (Predicate.isString(node)) {
       boxes.set(node, box);
       return;
     }
@@ -433,7 +433,7 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
         ? { x: at, y: box.y, width: shares[i] ?? 0, height: box.height }
         : { x: box.x, y: at, width: box.width, height: shares[i] ?? 0 };
 
-      if (fixed[i] && typeof p.inner !== "string") {
+      if (fixed[i] && !Predicate.isString(p.inner)) {
         bands.push({ box: b, tiles: tilesIn(p.inner) });
       } else {
         walk(p.inner, b);

@@ -4,7 +4,7 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -134,7 +134,7 @@ const driver = async (page: Page, url: string, tab: string) => {
         return result;
       };
       const field = (data: string | Uint8Array) => {
-        const body = typeof data === "string" ? bytes(data) : data,
+        const body = Predicate.isString(data) ? bytes(data) : data,
           n = new Uint8Array(4);
         new DataView(n.buffer).setUint32(0, body.length);
         return concat(n, body);
@@ -243,7 +243,7 @@ const driver = async (page: Page, url: string, tab: string) => {
               frames.push({ method: "reinitialized", result: await hello(frame.params.nonce) });
             }
 
-            if (typeof frame.id === "number") {
+            if (Predicate.isNumber(frame.id)) {
               pending.get(frame.id)?.(frame);
               pending.delete(frame.id);
             }

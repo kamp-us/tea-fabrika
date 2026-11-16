@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
+import { Predicate } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -193,7 +194,7 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
   // The real config loads the vendored anti-slop plugins from here (0563).
   symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
-  writeFileSync(join(at, ".oxlintrc.json"), typeof config === "string" ? config : JSON.stringify(config));
+  writeFileSync(join(at, ".oxlintrc.json"), Predicate.isString(config) ? config : JSON.stringify(config));
 
   for (const [path, text] of Object.entries(files)) {
     mkdirSync(dirname(join(at, path)), { recursive: true });
@@ -668,12 +669,12 @@ const inside = (glob: string): string => `${glob.replace(/(\/\*\*)?\/\*\*?$/, ""
 
 /** One option of the rule, named as oxlint names its fire: `JSON.parse`, or `setBounds` alone. */
 const nameOf = (entry: unknown): string => {
-  if (typeof entry !== "object" || entry === null) {
+  if (!Predicate.isObjectOrArray(entry)) {
     return "";
   }
 
-  const object = "object" in entry && typeof entry.object === "string" ? `${entry.object}.` : "";
-  const property = "property" in entry && typeof entry.property === "string" ? entry.property : "";
+  const object = "object" in entry && Predicate.isString(entry.object) ? `${entry.object}.` : "";
+  const property = "property" in entry && Predicate.isString(entry.property) ? entry.property : "";
   return `${object}${property}`;
 };
 

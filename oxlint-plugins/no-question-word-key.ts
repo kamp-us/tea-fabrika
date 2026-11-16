@@ -2,6 +2,7 @@
 // as an identifier; it does not decode a quoted, computed or template key, so this rule holds those.
 // Reads and dynamic keys keep their own meaning.
 import type { CreateRule } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import type { Node } from "./match.ts";
 
 // The five words 0081 retires, also listed for `eslint/id-denylist` in `.oxlintrc.json`.
@@ -11,7 +12,7 @@ export const noQuestionWordKey: CreateRule = {
   create(context) {
     const check = (key: Node, computed: boolean) => {
       const name =
-        key.type === "Literal" && typeof key.value === "string"
+        key.type === "Literal" && Predicate.isString(key.value)
           ? key.value
           : computed && key.type === "TemplateLiteral" && key.expressions.length === 0
             ? key.quasis[0]?.value.cooked

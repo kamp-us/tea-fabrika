@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -66,7 +67,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
 const spaced = (value: unknown, gap: string) =>
-  typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
+  Predicate.isString(value) ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
 const scheduled = fc
   .tuple(
@@ -81,7 +82,7 @@ const scheduled = fc
     const crons = Array.isArray(w.on["schedule"]) ? (w.on["schedule"] as { cron?: unknown }[]) : [];
 
     for (const cron of crons) {
-      if (typeof cron.cron === "string") {
+      if (Predicate.isString(cron.cron)) {
         cron.cron = cron.cron.replace(/^\d+ /, `${minute} `);
       }
     }
@@ -202,7 +203,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC14: the gate's step has another id", (w) => (gate(w).steps.find((s) => s["id"] === "decide")!["id"] = "read")],
   [
     "SC14: the gate checks out the whole repository",
-    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => typeof s["uses"] === "string")!.with!, "sparse-checkout"),
+    (w) => Reflect.deleteProperty(gate(w).steps.find((s) => Predicate.isString(s["uses"]))!.with!, "sparse-checkout"),
   ],
   // SC14, the review of pull request 1404: a gate that ends with no `start` and no failure leaves
   // main unproven with no sev1. A job that hits its own limit ends `cancelled`, read as stopped by
@@ -221,7 +222,7 @@ const plants: [string, (w: Workflow) => void][] = [
     "SC14: the gate's checkout has no time limit of its own",
     (w) =>
       Reflect.deleteProperty(
-        gate(w).steps.find((s) => typeof s["uses"] === "string")!,
+        gate(w).steps.find((s) => Predicate.isString(s["uses"]))!,
         "timeout-minutes",
       ),
   ],
@@ -241,7 +242,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   [
     "SC14: the gate's checkout never runs",
-    (w) => (gate(w).steps.find((s) => typeof s["uses"] === "string")!["if"] = false),
+    (w) => (gate(w).steps.find((s) => Predicate.isString(s["uses"]))!["if"] = false),
   ],
   // SC15: the tests start only on the gate's `true`.
   ["SC15: the tests run whatever the gate said", (w) => Reflect.deleteProperty(w.jobs["tests"]!, "if")],
@@ -329,7 +330,7 @@ const plants: [string, (w: Workflow) => void][] = [
   [
     "SC5: the gate's checkout gets the token",
     (w) => {
-      const checkout = gate(w).steps.find((s) => typeof s["uses"] === "string")!;
+      const checkout = gate(w).steps.find((s) => Predicate.isString(s["uses"]))!;
       checkout.env = { GITHUB_TOKEN: `\${{ github.token }}` };
     },
   ],

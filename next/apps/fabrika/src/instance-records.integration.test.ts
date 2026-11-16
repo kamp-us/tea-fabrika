@@ -17,7 +17,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Predicate, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
@@ -135,7 +135,7 @@ const world = async (
     });
     const destination = outbound.address();
 
-    if (destination === null || typeof destination === "string") {
+    if (destination === null || Predicate.isString(destination)) {
       throw new Error("no probe address");
     }
 

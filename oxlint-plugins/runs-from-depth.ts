@@ -37,6 +37,7 @@
 // - a count passed as a plain argument to a helper (`prop(name, ..., 200)`, `runs(25)`);
 // - a count built by an expression (`numRuns: n * 2`) or read from another file.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */
@@ -65,7 +66,7 @@ type Parented = Node & { readonly parent?: Node | null };
 const parentOf = (node: Node): Node | null => (node as Parented).parent ?? null;
 
 const numberIn = (node: Node | null | undefined): number | null =>
-  node?.type === "Literal" && typeof node.value === "number" ? node.value : null;
+  node?.type === "Literal" && Predicate.isNumber(node.value) ? node.value : null;
 
 /** A key and its value as the parser hands it: in an object literal, a pattern or an assignment target. */
 type Pair = Extract<Node, { readonly type: "Property" }>;
@@ -75,13 +76,13 @@ const keyName = (property: Pair): string | null =>
     ? null
     : property.key.type === "Identifier"
       ? property.key.name
-      : property.key.type === "Literal" && typeof property.key.value === "string"
+      : property.key.type === "Literal" && Predicate.isString(property.key.value)
         ? property.key.value
         : null;
 
 /** The written module name of an import's source, or null when it is built at run time. */
 const moduleName = (source: Node | null | undefined): string | null =>
-  source?.type === "Literal" && typeof source.value === "string"
+  source?.type === "Literal" && Predicate.isString(source.value)
     ? source.value
     : source?.type === "TemplateLiteral" && source.expressions.length === 0
       ? (source.quasis[0]?.value.cooked ?? null)

@@ -46,6 +46,7 @@
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import {
   buildTags,
   type DocScope,
@@ -72,9 +73,7 @@ const isDoc = (comment: Comment): boolean => comment.type === "Block" && comment
 
 const sinceOf = (options: ReadonlyArray<unknown>): Since => {
   const [given] = options;
-  return typeof given === "object" && given !== null && "since" in given && given.since === "required"
-    ? "required"
-    : "absent";
+  return Predicate.isObjectOrArray(given) && "since" in given && given.since === "required" ? "required" : "absent";
 };
 
 /**
@@ -237,9 +236,7 @@ const isReadMember = (member: Node): boolean => {
 };
 
 const nameOfMember = (member: Node, source: Context["sourceCode"]): string =>
-  "key" in member && member.key != null && typeof member.key === "object" && "type" in member.key
-    ? keyName(member.key, source)
-    : "";
+  "key" in member && Predicate.isObjectOrArray(member.key) && "type" in member.key ? keyName(member.key, source) : "";
 
 /** The name a top-level declaration exports, as a reader would say it. */
 const declarationName = (declaration: Node, source: Context["sourceCode"]): string => {

@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -80,7 +80,8 @@ const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
 const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
   const ranges: Array<{ start: number; end: number }> = [];
   const visit = (node: any): void => {
-    if (node === null || typeof node !== "object") {
+    // `not` keeps `node` a parsed node past the guard, as the old typeof check did.
+    if (Predicate.not(Predicate.isObjectOrArray)(node)) {
       return;
     }
 
@@ -238,7 +239,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
     }
 
     const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
-    return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
+    return Predicate.isObjectOrArray(exports) && Object.hasOwn(exports, "./window");
   });
 
 const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
@@ -381,7 +382,7 @@ describe("P16 stack and sealed loader", () => {
             expect(name).not.toMatch(/WINDOW_JS|PROGRAM_SOURCE/);
             expect(JSON.stringify(value)).not.toContain("program-marker");
 
-            if (typeof value === "string") {
+            if (Predicate.isString(value)) {
               expect(Buffer.byteLength(value), "setting under 5 KB encoded").toBeLessThan(5 * 1024);
             } else {
               expect(value).toHaveProperty("type");
@@ -620,7 +621,7 @@ describe("P16 copied-file real instance, serial", () => {
             probe.once("error", fail);
             probe.listen(0, "127.0.0.1", () => {
               const at = probe.address();
-              assert(at && typeof at !== "string");
+              assert(at && !Predicate.isString(at));
               done(at.port);
             });
           });

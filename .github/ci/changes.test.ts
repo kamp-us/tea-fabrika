@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -1852,10 +1853,9 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
         (a) =>
           a.name === name &&
           !a.expired &&
-          typeof a.workflow_run === "object" &&
-          a.workflow_run !== null &&
+          Predicate.isObjectOrArray(a.workflow_run) &&
           "id" in a.workflow_run &&
-          typeof a.workflow_run.id === "number",
+          Predicate.isNumber(a.workflow_run.id),
       );
       const vouched = first !== undefined && (first.workflow_run as { id: number }).id === 11;
       prints(printed, vouched ? noJob : ci.jobs(paths, "merge_group", false));
