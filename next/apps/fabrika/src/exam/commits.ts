@@ -18,7 +18,7 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
@@ -121,7 +121,7 @@ export const keysProblem = (text: string | null): string | null => {
   const roles = new Set<string>();
   const keys = new Set<string>();
 
-  for (const line of text.replace(/\n$/, "").split("\n")) {
+  for (const line of pipe(text, Str.replace(/\n$/, ""), Str.split("\n"))) {
     const m = KEY_LINE.exec(line);
 
     if (m === null) {
@@ -169,8 +169,7 @@ export const decodeExam = Schema.decodeUnknownOption(Schema.fromJsonString(ExamL
 /** A glob as the list writes it: `**` crosses folders, `*` stays inside one, dots match like letters. */
 const globRegex = (glob: string) =>
   new RegExp(
-    `^${glob
-      .split(/(\*\*\/|\/\*\*$|\*\*|\*)/)
+    `^${Str.split(glob, /(\*\*\/|\/\*\*$|\*\*|\*)/)
       .map((part) => {
         if (part === "**/") {
           return "(?:.*/)?";
@@ -188,7 +187,7 @@ const globRegex = (glob: string) =>
           return "[^/]*";
         }
 
-        return part.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+        return pipe(part, Str.replace(/[.+?^${}()|[\]\\]/g, "\\$&"));
       })
       .join("")}$`,
     "s",
@@ -197,13 +196,20 @@ const globRegex = (glob: string) =>
 /** p85: an exam path is on the list, or holds a control character, which never passes quietly. */
 export const examMatcher = (list: ExamList) => {
   const res = list.map((row) => globRegex(row.glob));
-  const control = (path: string) => [...path].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
+  const control = (path: string) =>
+    [...path].some((ch) =>
+      pipe(
+        ch,
+        Str.charCodeAt(0),
+        Option.exists((code) => code < 0x20 || code === 0x7f),
+      ),
+    );
   return (path: string) => control(path) || res.some((re) => re.test(path));
 };
 
 /** The scope rule: only a change under `next/` or on the exam list is judged. */
 export const inScope = (changed: ReadonlyArray<string>, isExam: (path: string) => boolean) =>
-  changed.some((p) => p.startsWith("next/") || isExam(p));
+  changed.some((p) => pipe(p, Str.startsWith("next/")) || isExam(p));
 
 /** A note as CI saw it: decoded, and the role whose key verified its text, or null. */
 interface Signed {
@@ -404,7 +410,7 @@ const must = Effect.fnUntraced(function* (cmd: string, args: ReadonlyArray<strin
     Effect.flatMap((r) =>
       r.code === 0
         ? Effect.succeed(r.out)
-        : Effect.fail(new Failed({ message: `${cmd} ${args.join(" ")}: ${r.err.trim()}` })),
+        : Effect.fail(new Failed({ message: `${cmd} ${args.join(" ")}: ${Str.trim(r.err)}` })),
     ),
   );
 });
@@ -417,8 +423,8 @@ const gitMaybe = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   return yield* run("git", args).pipe(Effect.map((r) => (r.code === 0 ? r.out : null)));
 });
 
-const nul = (out: string) => out.split("\0").filter((p) => p !== "");
-const words = (out: string) => out.split("\n").filter((p) => p !== "");
+const nul = (out: string) => Str.split(out, "\0").filter((p) => p !== "");
+const words = (out: string) => Str.split(out, "\n").filter((p) => p !== "");
 
 const treeAt = Effect.fnUntraced(function* (rev: string) {
   return yield* gitMaybe(["rev-parse", "--verify", "-q", `${rev}^{tree}`]);
@@ -467,15 +473,15 @@ const headerField = (lines: ReadonlyArray<string>, name: string) => {
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i] ?? "";
 
-    if (!line.startsWith(`${name} `)) {
+    if (!pipe(line, Str.startsWith(`${name} `))) {
       continue;
     }
 
-    const value = [line.slice(name.length + 1)];
+    const value = [pipe(line, Str.slice(name.length + 1))];
 
-    while (lines[i + 1]?.startsWith(" ")) {
+    while (pipe(lines[i + 1] ?? "", Str.startsWith(" "))) {
       i += 1;
-      value.push((lines[i] ?? "").slice(1));
+      value.push(pipe(lines[i] ?? "", Str.slice(1)));
     }
 
     values.push(value.join("\n"));
@@ -486,11 +492,11 @@ const headerField = (lines: ReadonlyArray<string>, name: string) => {
 
 /** p83b: git checks native SSH signatures using only the trusted file's person lines. */
 const personVerifier = Effect.gen(function* () {
-  const format = (yield* git(["rev-parse", "--show-object-format"])).trim();
+  const format = Str.trim(yield* git(["rev-parse", "--show-object-format"]));
   const name = format === "sha256" ? "gpgsig-sha256" : "gpgsig";
   return Effect.fnUntraced(function* (keys: string) {
     return yield* Effect.gen(function* () {
-      const people = words(keys).filter((line) => line.startsWith("person:"));
+      const people = words(keys).filter((line) => pipe(line, Str.startsWith("person:")));
 
       if (people.length === 0) {
         return Effect.fnUntraced(function* (_sha: string, _link?: PersonLink) {
@@ -504,14 +510,14 @@ const personVerifier = Effect.gen(function* () {
       return Effect.fnUntraced(function* (sha: string, link?: PersonLink) {
         // gpg.format chooses how to sign; verification detects the signature's own format.
         const raw = yield* gitMaybe(["cat-file", "commit", sha]);
-        const headers = ((raw ?? "").split("\n\n", 1)[0] ?? "").split("\n");
+        const headers = Str.split(Str.split(raw ?? "", "\n\n")[0], "\n");
         const signature = headerField(headers, name);
         const tree = headerField(headers, "tree");
 
         if (
           signature === undefined ||
           tree === undefined ||
-          signature.split("\n", 1)[0] !== "-----BEGIN SSH SIGNATURE-----"
+          Str.split(signature, "\n")[0] !== "-----BEGIN SSH SIGNATURE-----"
         ) {
           return false;
         }
@@ -519,7 +525,11 @@ const personVerifier = Effect.gen(function* () {
         if (link !== undefined) {
           const parent = yield* treeAt(`${sha}^1`);
 
-          if (link.sig !== `${signature}\n` || link.to !== tree || link.from !== parent?.trim()) {
+          if (
+            link.sig !== `${signature}\n` ||
+            link.to !== tree ||
+            link.from !== (parent === null ? undefined : Str.trim(parent))
+          ) {
             return false;
           }
         }
@@ -546,8 +556,8 @@ const notesOn = Effect.fnUntraced(function* (ref: string) {
   const found: Array<{ commit: string; note: Note }> = [];
 
   for (const line of words(yield* git(["notes", `--ref=${ref}`, "list"]))) {
-    const [blob = "", commit = ""] = line.split(" ");
-    const note = decodeNote((yield* git(["cat-file", "blob", blob])).trim());
+    const [blob = "", commit = ""] = Str.split(line, " ");
+    const note = decodeNote(Str.trim(yield* git(["cat-file", "blob", blob])));
 
     if (Option.isSome(note)) {
       found.push({ commit, note: note.value });
@@ -567,13 +577,13 @@ const flag = (name: string) => {
 
 const need = Effect.fnUntraced(function* (name: string) {
   const value = flag(name);
-  return yield* value === undefined || value.startsWith("-")
+  return yield* value === undefined || pipe(value, Str.startsWith("-"))
     ? Effect.fail(new Failed({ message: `${name} is required` }))
     : Effect.succeed(value);
 });
 
 const resolve = Effect.fnUntraced(function* (rev: string) {
-  return yield* git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(Effect.map((s) => s.trim()));
+  return yield* git(["rev-parse", "--verify", "-q", `${rev}^{commit}`]).pipe(Effect.map((s) => Str.trim(s)));
 });
 
 /**
@@ -608,11 +618,17 @@ const endpoints = Effect.gen(function* () {
 });
 
 /** Text inside a workflow command, escaped as GitHub's own toolkit does, so it cannot start another. */
-export const annotate = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+export const annotate = (s: string) =>
+  pipe(s, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"));
 
 /** A path in a printed line: JSON-quoted, and safe inside markdown code and a table. */
 const quote = (path: string) =>
-  JSON.stringify(path).replaceAll("`", "\\u0060").replaceAll("<", "\\u003c").replaceAll("|", "\\u007c");
+  pipe(
+    JSON.stringify(path),
+    Str.replaceAll("`", "\\u0060"),
+    Str.replaceAll("<", "\\u003c"),
+    Str.replaceAll("|", "\\u007c"),
+  );
 
 /** One answer as a line, its paths shown by `show`. */
 export const plain = (a: Answer, show: (path: string) => string = quote) => {
@@ -665,7 +681,7 @@ const changedPaths = Effect.fnUntraced(function* (from: string, sha: string) {
 
       for (let i = 0; i < parts.length;) {
         const status = parts[i] ?? "";
-        const two = status.startsWith("R") || status.startsWith("C");
+        const two = pipe(status, Str.startsWith("R")) || pipe(status, Str.startsWith("C"));
         paths.push(...parts.slice(i + 1, i + (two ? 3 : 2)));
         i += two ? 3 : 2;
       }
@@ -715,11 +731,16 @@ const checkMain = Effect.gen(function* () {
     const note = byCommit.get(sha);
     commits.push({
       sha,
-      tree: (yield* treeAt(sha))?.trim() ?? "",
-      parentTree: parent === null ? null : ((yield* treeAt(parent.trim()))?.trim() ?? null),
+      tree: Str.trim((yield* treeAt(sha)) ?? ""),
+      parentTree:
+        parent === null
+          ? null
+          : pipe(Option.fromNullOr(yield* treeAt(Str.trim(parent))), Option.map(Str.trim), Option.getOrNull),
       exam:
-        parent === null ? null : Option.getOrNull(decodeExam((yield* fileAt(parent.trim(), "exam-paths.json")) ?? "")),
-      paths: parent === null ? [] : yield* changedPaths(parent.trim(), sha),
+        parent === null
+          ? null
+          : Option.getOrNull(decodeExam((yield* fileAt(Str.trim(parent), "exam-paths.json")) ?? "")),
+      paths: parent === null ? [] : yield* changedPaths(Str.trim(parent), sha),
       signed: note === undefined ? null : yield* signedBy(note),
       person: note === undefined && (yield* verifyPerson(sha)) ? true : undefined,
     });
@@ -749,11 +770,11 @@ const checkMain = Effect.gen(function* () {
  * is parsed, never searched as text, so a key written with escapes cannot hide a row.
  */
 const loggedAt = Effect.fnUntraced(function* (rev: string) {
-  const lines = ((yield* fileAt(rev, "field/runs.jsonl")) ?? "").split("\n");
+  const lines = Str.split((yield* fileAt(rev, "field/runs.jsonl")) ?? "", "\n");
   const found: Array<{ line: string; link: ChainLink }> = [];
 
   for (const [i, line] of lines.entries()) {
-    if (line.trim() === "") {
+    if (Str.trim(line) === "") {
       continue;
     }
 
@@ -818,9 +839,9 @@ const headTree = Effect.fnUntraced(function* (squash: string, base: string, comm
     commit,
   ]);
   const tree = yield* treeAt(squash);
-  return merged === null || tree === null || merged.trim() !== tree.trim()
+  return merged === null || tree === null || Str.trim(merged) !== Str.trim(tree)
     ? null
-    : ((yield* treeAt(commit))?.trim() ?? null);
+    : pipe(Option.fromNullOr(yield* treeAt(commit)), Option.map(Str.trim), Option.getOrNull);
 });
 
 const chainMain = Effect.gen(function* () {
@@ -901,7 +922,7 @@ const chainMain = Effect.gen(function* () {
       const tree = yield* treeAt(sha);
 
       if (tree !== null) {
-        trees.set(sha, tree.trim());
+        trees.set(sha, Str.trim(tree));
       }
     }
 
@@ -969,12 +990,12 @@ const signMain = Effect.gen(function* () {
     step: step.value,
     ticket: ticket.value,
     version: top + 1,
-    from: from.trim(),
-    to: to.trim(),
+    from: Str.trim(from),
+    to: Str.trim(to),
   };
   const sig = yield* must("ssh-keygen", ["-Y", "sign", "-n", NAMESPACE, "-f", key], signedText(link));
   const print = yield* must("ssh-keygen", ["-l", "-f", `${key}.pub`]);
-  const note = Note.make({ ...link, key: print.split(" ")[1] ?? "", sig });
+  const note = Note.make({ ...link, key: Str.split(print, " ")[1] ?? "", sig });
 
   if ((yield* verify(keys, note)) !== step.value) {
     return yield* new Failed({

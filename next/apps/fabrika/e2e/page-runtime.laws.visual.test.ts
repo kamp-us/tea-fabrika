@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -193,7 +193,7 @@ const pagehide = (page: Page, persisted: boolean) =>
     }, persisted),
   );
 
-const reported = (seen: Seen) => seen.lines.filter((line) => line.includes("ERROR"));
+const reported = (seen: Seen) => seen.lines.filter((line) => pipe(line, Str.includes("ERROR")));
 
 /** Runs in each page before its script: the page program's first DOM read throws `word`. */
 const failQuery = (word: string) => {
@@ -327,7 +327,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                       yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
                       expect(
                         yield* until(
-                          Effect.sync(() => reported(seen).some((line) => line.includes(word))),
+                          Effect.sync(() => reported(seen).some((line) => pipe(line, Str.includes(word)))),
                           WITHIN,
                         ),
                         `a console line with ERROR and "${word}" within ${WITHIN} ms: ${JSON.stringify(seen.lines)}`,

@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Schema, String as Str, pipe } from "effect";
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
@@ -30,7 +30,7 @@ describe("asks", () => {
     {
       generated: Schema.NonEmptyString.check(
         Schema.isPattern(/^[^\r\n]+$/),
-        Schema.makeFilter((s) => s.trim() === s),
+        Schema.makeFilter((s) => Str.trim(s) === s),
       ),
     },
     ({ generated }) =>
@@ -41,7 +41,7 @@ describe("asks", () => {
             expect(
               run(
                 { [PRODUCT]: file() },
-                { [PRODUCT]: file(EDGE.replace("a Durable Object answers a Promise", value), CALL) },
+                { [PRODUCT]: file(pipe(EDGE, Str.replace("a Durable Object answers a Promise", value)), CALL) },
               ),
             ).toEqual([
               {
@@ -82,7 +82,7 @@ describe("asks", () => {
   });
 
   it("asks again when an old edge's reason is reworded, or its file renamed", () => {
-    const reworded = EDGE.replace("answers", "must answer");
+    const reworded = pipe(EDGE, Str.replace("answers", "must answer"));
     expect(run({ [PRODUCT]: file(EDGE, CALL) }, { [PRODUCT]: file(reworded, CALL) })).toHaveLength(1);
     expect(run({ [PRODUCT]: file(EDGE, CALL) }, { [OTHER]: file(EDGE, CALL) })).toHaveLength(1);
   });
@@ -123,7 +123,7 @@ describe("edges.ts, as CI runs it", () => {
           throw new Error(`git ${args.join(" ")}: ${out.stderr}`);
         }
 
-        return out.stdout.trim();
+        return Str.trim(out.stdout);
       };
       const put = (path: string, text: string) => {
         mkdirSync(dirname(join(repo, path)), { recursive: true });
@@ -155,7 +155,7 @@ describe("edges.ts, as CI runs it", () => {
       const out = edges(base);
       expect(out.stderr).toBe("");
       expect(out.status).toBe(0);
-      expect(out.stdout.trim().split("\n")).toEqual([
+      expect(Str.split(Str.trim(out.stdout), "\n")).toEqual([
         "Edges this pull request adds, for the owner:",
         `${OTHER}:3  fabrika/no-effect-run-outside-edge  edge: the platform calls it  [ok] [no]`,
         `${PRODUCT}:5  fabrika/no-promises  edge: a Durable Object answers a Promise  [ok] [no]`,
@@ -166,7 +166,7 @@ describe("edges.ts, as CI runs it", () => {
   it.effect("in GitHub Actions, notes each line of the diff and writes the step summary", () =>
     Effect.gen(function* () {
       const { repo, edges, base } = yield* scenario;
-      const summary = join(repo, "..", `${repo.split("/").pop()}-summary.md`);
+      const summary = join(repo, "..", `${Str.split(repo, "/").pop()}-summary.md`);
       const out = edges(base, { GITHUB_STEP_SUMMARY: summary });
       expect(out.status).toBe(0);
       expect(out.stdout).toContain(
@@ -182,7 +182,7 @@ describe("edges.ts, as CI runs it", () => {
       const { edges } = yield* scenario;
       const out = edges("HEAD");
       expect(out.status).toBe(0);
-      expect(out.stdout.trim()).toBe("No new edge comments in this pull request.");
+      expect(Str.trim(out.stdout)).toBe("No new edge comments in this pull request.");
     }),
   );
 

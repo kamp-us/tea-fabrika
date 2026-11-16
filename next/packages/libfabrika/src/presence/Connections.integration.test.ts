@@ -4,7 +4,7 @@
 // join({key, client, gateway, session, at}), leave(client, session), online(key).
 // Join values are already checked by P10/P12; probe timestamps come from the gateway.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Fiber, Tracer } from "effect";
+import { Effect, Fiber, Tracer, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -216,7 +216,7 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
         expect(
           (yield* gateways.online("key-a"))
             .map((row) => ({ client: row.client, state: row.state }))
-            .sort((a, b) => a.client.localeCompare(b.client)),
+            .sort((a, b) => pipe(a.client, Str.localeCompare(b.client))),
         ).toEqual([
           { client: "tab-a", state: "unknown" },
           { client: "tab-b", state: "online" },

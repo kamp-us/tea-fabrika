@@ -16,7 +16,7 @@
 // It exits 2 when it could not read something. The answer comes back by hand for now: the lead agent
 // relays each line to the owner and posts the answer on the pull request (P35, flag 2).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, Effect, Exit, FileSystem, Option, Path, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import { parseSync } from "oxc-parser";
 
@@ -51,18 +51,21 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
       return [];
     }
 
-    const at = rest.search(REASON);
-    const rules = (at < 0 ? rest : rest.slice(0, at))
-      .split(",")
-      .map((rule) => rule.trim())
+    const at = pipe(rest, Str.search(REASON));
+    const listed = Option.match(at, { onNone: () => rest, onSome: (start) => pipe(rest, Str.slice(0, start)) });
+    const rules = Str.split(listed, ",")
+      .map((rule) => Str.trim(rule))
       .filter((rule) => rule !== "");
 
     if (!rules.some((rule) => EDGE_RULES.has(rule))) {
       return [];
     }
 
-    const reason = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
-    const line = text.slice(0, comment.start).split("\n").length;
+    const reason = Option.match(at, {
+      onNone: () => "",
+      onSome: (start) => pipe(rest, Str.slice(start), Str.replace(REASON, ""), Str.trim),
+    });
+    const line = pipe(text, Str.slice(0, comment.start), Str.split("\n")).length;
     return [{ path, line, rules: rules.join(", "), reason }];
   });
 });
@@ -121,12 +124,13 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   return out;
 }, Effect.scoped);
 
-const lines = (text: string) => text.split("\n").filter((line) => line !== "");
+const lines = (text: string) => Str.split(text, "\n").filter((line) => line !== "");
 
 /** A note on one line of the diff, in GitHub's workflow command form. */
 const notice = (edge: Edge) => {
-  const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
-  const location = escape(edge.path).replaceAll(":", "%3A").replaceAll(",", "%2C");
+  const escape = (s: string) =>
+    pipe(s, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"));
+  const location = pipe(escape(edge.path), Str.replaceAll(":", "%3A"), Str.replaceAll(",", "%2C"));
   return `::notice file=${location},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
 };
 
@@ -136,11 +140,11 @@ const main = Effect.gen(function* () {
   const args = process.argv.slice(2);
   const flag = args.indexOf("--base");
   const against = (flag < 0 ? undefined : args[flag + 1]) ?? "origin/main";
-  const top = (yield* git(["rev-parse", "--show-toplevel"])).trim();
+  const top = Str.trim(yield* git(["rev-parse", "--show-toplevel"]));
   const at = Effect.fnUntraced(function* (more: ReadonlyArray<string>) {
     return yield* git(["-C", top, ...more]);
   });
-  const base = (yield* at(["merge-base", against, "HEAD"])).trim();
+  const base = Str.trim(yield* at(["merge-base", against, "HEAD"]));
   const changed = lines(yield* at(["diff", "--name-only", "--no-renames", base, "--", "next"]));
   const atBase = new Set(lines(yield* at(["ls-tree", "-r", "--name-only", base, "--", "next"])));
   const fs = yield* FileSystem.FileSystem;

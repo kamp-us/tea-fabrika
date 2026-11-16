@@ -10,7 +10,7 @@
 // newline in `version`. C5, answer `output_limit` without closing the child's scope.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Config, Effect, Layer, Schedule } from "effect";
+import { Config, Effect, Layer, Schedule, String as Str, pipe } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
@@ -34,10 +34,12 @@ describe("P39 slice 4b: the real command on a real host", () => {
         }
 
         expect(answer.code).toBe(0);
-        expect(answer.version.startsWith("git version "), `C4: ${JSON.stringify(answer.version)}`).toBe(true);
-        expect(answer.version.endsWith("\n"), "C4: the trailing newline is dropped").toBe(false);
+        expect(pipe(answer.version, Str.startsWith("git version ")), `C4: ${JSON.stringify(answer.version)}`).toBe(
+          true,
+        );
+        expect(pipe(answer.version, Str.endsWith("\n")), "C4: the trailing newline is dropped").toBe(false);
         // The line C1's vectors replay: one line, far under the cap.
-        expect(answer.version.includes("\n")).toBe(false);
+        expect(pipe(answer.version, Str.includes("\n"))).toBe(false);
         expect(new TextEncoder().encode(answer.version).length).toBeLessThan(CAP);
       }).pipe(Effect.provide(CommandsNode.layer.pipe(Layer.provideMerge(NodeServices.layer)))),
     30_000,

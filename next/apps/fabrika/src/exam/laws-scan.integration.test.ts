@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, String as Str, pipe } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 const PBT = "@demlik/tea/pbt";
@@ -33,13 +33,13 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
           return /\.tsx?$/.test(entry.name) ? [path] : [];
         }
 
-        const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
+        const skip = ["node_modules", "dist"].includes(entry.name) || pipe(entry.name, Str.startsWith("."));
         return skip ? [] : codeFiles(path);
       });
 
 /** The names a file imports from, read from lines that start with `import` and name a `from`. */
 const importsInFile = (file: string): ReadonlyArray<string> =>
-  [...readFileSync(file, "utf8").matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm)].flatMap((m) =>
+  [...pipe(readFileSync(file, "utf8"), Str.matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm))].flatMap((m) =>
     m[1] === undefined ? [] : [m[1]],
   );
 
@@ -47,16 +47,16 @@ const importsInFile = (file: string): ReadonlyArray<string> =>
 const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly laws: ReadonlyArray<string> }> => {
   const files = codeFiles(next);
   return files
-    .filter((file) => !/\.test\.tsx?$/.test(file) && readFileSync(file, "utf8").includes("defineMachine("))
+    .filter((file) => !/\.test\.tsx?$/.test(file) && pipe(readFileSync(file, "utf8"), Str.includes("defineMachine(")))
     .map((machine) => {
-      const stem = basename(machine).replace(/\.tsx?$/, "");
+      const stem = pipe(basename(machine), Str.replace(/\.tsx?$/, ""));
       const laws = files.filter(
         (file) =>
           dirname(file) === dirname(machine) &&
-          basename(file).startsWith(`${stem}.`) &&
-          basename(file).endsWith(".laws.test.ts"),
+          pipe(basename(file), Str.startsWith(`${stem}.`)) &&
+          pipe(basename(file), Str.endsWith(".laws.test.ts")),
       );
-      return { path: relative(next, machine).split(sep).join("/"), laws };
+      return { path: Str.split(relative(next, machine), sep).join("/"), laws };
     })
     .sort((a, b) => (a.path < b.path ? -1 : 1));
 };
@@ -82,7 +82,7 @@ const unsynced = (next: string): ReadonlyArray<string> =>
     .filter((m) =>
       m.laws.every((file) => {
         const text = readFileSync(file, "utf8");
-        return !text.includes(SYNC_TEST) && !LEFT_OUT.test(text);
+        return !pipe(text, Str.includes(SYNC_TEST)) && !LEFT_OUT.test(text);
       }),
     )
     .map((m) => m.path);

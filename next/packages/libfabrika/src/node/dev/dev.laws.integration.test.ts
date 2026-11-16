@@ -7,7 +7,21 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Context, Effect, Exit, Fiber, FileSystem, Option, Predicate, Schema, Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Option,
+  Predicate,
+  Schema,
+  Scope,
+  String as Str,
+  pipe,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -369,7 +383,14 @@ const OLD = { pid: 27001, port: 27002 };
 const NEW = { pid: 27003, port: 27004 };
 const REPLACE = "replace-test";
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
-const install: Install = { id: "install-1", program: "p/replace", hash: "a".repeat(64), source: "", from: "watch" };
+
+const install: Install = {
+  id: "install-1",
+  program: "p/replace",
+  hash: pipe("a", Str.repeat(64)),
+  source: "",
+  from: "watch",
+};
 
 const Body = Schema.fromJsonString(Schema.Struct({ method: Schema.String }));
 

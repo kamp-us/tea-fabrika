@@ -14,10 +14,10 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Console, Effect, Exit, Option, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 
-const ZEROS = "0".repeat(40);
+const ZEROS = pipe("0", Str.repeat(40));
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const LintRows = Schema.fromJsonString(
@@ -141,7 +141,7 @@ const must = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   const r = yield* git(args);
 
   if (r.code !== 0) {
-    return yield* new Failed({ message: `git ${args.join(" ")}: ${r.err.trim()}` });
+    return yield* new Failed({ message: `git ${args.join(" ")}: ${Str.trim(r.err)}` });
   }
 
   return r.out;
@@ -163,7 +163,8 @@ const baseFrom = Effect.fnUntraced(function* (flag: string | undefined) {
 });
 
 /** A GitHub workflow command's text, with its line breaks kept as `%0A`. */
-const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+const escape = (s: string) =>
+  pipe(s, Str.replaceAll("%", "%25"), Str.replaceAll("\r", "%0D"), Str.replaceAll("\n", "%0A"));
 
 const annotation = (answer: Answer, sha: string) => {
   if (answer._tag === "done") {
@@ -188,7 +189,7 @@ const main = Effect.gen(function* () {
   }
 
   const sha = base.value;
-  const top = (yield* must(["rev-parse", "--show-toplevel"])).trim();
+  const top = Str.trim(yield* must(["rev-parse", "--show-toplevel"]));
   const at = (more: ReadonlyArray<string>) => ["-C", top, ...more];
 
   // The `check` job's checkout is shallow, so the base may need fetching first.
@@ -207,9 +208,10 @@ const main = Effect.gen(function* () {
   // that was split, its old path now holding a small new file, shows as `C<score>`, copied to the
   // part that kept its text (0536 split five files this way): its rows are read under that name too.
   // A row left at the old path as well is still counted as added, so a copy cannot hide a new row.
-  const moved = (yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])))
-    .split("\0")
-    .filter((part) => part !== "");
+  const moved = Str.split(
+    yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])),
+    "\0",
+  ).filter((part) => part !== "");
   const renames = new Map<string, string>();
 
   for (let i = 0; i + 2 < moved.length; i += 3) {

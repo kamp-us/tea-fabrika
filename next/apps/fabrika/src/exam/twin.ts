@@ -1,7 +1,7 @@
 // P12, next/. Read the real stack and the installed provider registrations.
 // This exam fails closed on syntax it cannot follow. It does not keep a second resource list.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path } from "effect";
+import { Console, Effect, FileSystem, Path, String as Str, pipe } from "effect";
 import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
@@ -19,7 +19,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     return body;
   };
-  const source = (file: string, spec: string) => resolve(dirname(file), spec.replace(/\.js$/, ".ts"));
+  const source = (file: string, spec: string) => resolve(dirname(file), pipe(spec, Str.replace(/\.js$/, ".ts")));
   const nodes = (node: Tree, visit: (node: Tree) => void): void => {
     if (node === null || typeof node !== "object") {
       return;
@@ -160,7 +160,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
     const result = new Map<string, { file: string; name: string }>();
 
     for (const n of tree(file).body) {
-      if (n.type === "ImportDeclaration" && n.source.value.startsWith(".")) {
+      if (n.type === "ImportDeclaration" && pipe(n.source.value, Str.startsWith("."))) {
         for (const s of n.specifiers) {
           if (s.type === "ImportSpecifier") {
             result.set(s.local.name, { file: source(file, n.source.value), name: name(s.imported) });
@@ -240,7 +240,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
       const props = node.arguments[1]?.properties ?? [];
       dual = props.some(
-        (p: Tree) => p.key?.name === "local" && /ProviderLocal/.test(text(targetFile).slice(p.start, p.end)),
+        (p: Tree) => p.key?.name === "local" && /ProviderLocal/.test(pipe(text(targetFile), Str.slice(p.start, p.end))),
       );
     });
     return dual;
@@ -287,7 +287,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
       return first !== null && (cloud.has(first) || named.has(first));
     };
     const report = (node: Tree, reason: string) =>
-      found.push({ file, line: body.slice(0, node.start).split("\n").length, reason });
+      found.push({ file, line: pipe(body, Str.slice(0, node.start), Str.split("\n")).length, reason });
 
     for (const node of ast.body) {
       if (node.type === "ImportDeclaration") {
@@ -304,7 +304,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
           }
         }
 
-        if (node.source.value.startsWith(".")) {
+        if (pipe(node.source.value, Str.startsWith("."))) {
           for (const spec of node.specifiers) {
             if (spec.type !== "ImportSpecifier" || spec.importKind !== "type") {
               helpers.add(spec.local.name);
@@ -312,7 +312,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
           }
         }
 
-        if (node.source.value.startsWith("@alchemy.run/cloudflare/")) {
+        if (pipe(node.source.value, Str.startsWith("@alchemy.run/cloudflare/"))) {
           report(node, "unsupported-case: Cloudflare subpath import");
         }
 
@@ -374,7 +374,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         checkRoot(node.callee);
       }
 
-      const call = callee?.split(".") ?? [];
+      const call = callee === null ? [] : Str.split(callee, ".");
       const first = call[0];
       const imported = first === undefined ? undefined : named.get(first);
 
@@ -492,7 +492,8 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
               }
 
               const value = unwrap(binding.value);
-              const called = member(value?.callee)?.split(".") ?? [];
+              const calledName = member(value?.callee);
+              const called = calledName === null ? [] : Str.split(calledName, ".");
               const first = called[0];
               const imported = first === undefined ? undefined : named.get(first);
               const target = first && cloud.has(first) ? called.slice(1).join(".") : imported;
@@ -548,7 +549,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         // A binding constructor must actually be exported as such by the installed package.
         const declaration = text(owner);
 
-        if (!/DurableObject|WorkerLoader/.test(symbol) || !declaration.includes(symbol)) {
+        if (!/DurableObject|WorkerLoader/.test(symbol) || !pipe(declaration, Str.includes(symbol))) {
           report(node, `unsupported-case: Cloudflare.${parts.join(".")}`);
         }
       }

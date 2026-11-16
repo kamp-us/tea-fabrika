@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Path, Schema, String as Str, pipe, Option } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -46,16 +46,16 @@ it("L7: module reports keep every id on its own line below 4096 characters", () 
   fc.assert(
     fc.property(fc.array(fc.string({ maxLength: 300 }), { maxLength: 2000 }), (modules) => {
       const report = moduleReport(modules);
-      const lines = report === "" ? [] : report.trimEnd().split("\n");
+      const lines = report === "" ? [] : Str.split(Str.trimEnd(report), "\n");
       expect(lines).toHaveLength(modules.length);
       expect(lines.every((line) => line.length <= 4096)).toBe(true);
-      expect(lines.map((line) => JSON.parse(line.slice("P8 module: ".length)))).toEqual(modules);
+      expect(lines.map((line) => JSON.parse(pipe(line, Str.slice("P8 module: ".length))))).toEqual(modules);
     }),
     {
       seed: 119120,
       numRuns: 100,
       // Pinned bug: the old P8 brain log exceeded gh's line reader with its whole module list.
-      examples: [[Array.from({ length: 2000 }, () => "m".repeat(300))]],
+      examples: [[Array.from({ length: 2000 }, () => pipe("m", Str.repeat(300)))]],
     },
   );
 });
@@ -152,20 +152,20 @@ const TEXT = "\0fabrika-text:";
 const joined = (graph: Observed) => graph.chunks.map((c) => c.code).join("\n");
 
 const realBrain = (all: ReadonlyArray<Observed>) => {
-  const found = all.find((b) => typeof b.input === "string" && b.input.endsWith("/src/brain.ts"));
+  const found = all.find((b) => typeof b.input === "string" && pipe(b.input, Str.endsWith("/src/brain.ts")));
 
   if (found === undefined) {
     throw new Error("no actual P12 brain build observed");
   }
 
-  expect(found.modules.some((m) => m.id.endsWith("/src/brain.ts"))).toBe(true);
+  expect(found.modules.some((m) => pipe(m.id, Str.endsWith("/src/brain.ts")))).toBe(true);
   expect(found.modules.some((m) => m.id === TABLES)).toBe(true);
   return found;
 };
 
 const carried = (brain: Observed) =>
   brain.modules
-    .filter((m) => m.id.startsWith(TEXT))
+    .filter((m) => pipe(m.id, Str.startsWith(TEXT)))
     .map((m) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.String))(m.code));
 
 // What one call emitted: a program's whole bundle, each window chunk and each window asset.
@@ -181,7 +181,7 @@ const TAB_ROUTES: ReadonlyArray<string> = ["/window.js", "/index.html"];
 const isWindow = (graph: Observed) =>
   typeof graph.input === "object" &&
   graph.input !== null &&
-  Object.values(graph.input).every((v) => typeof v === "string" && v.startsWith("fabrika:window:"));
+  Object.values(graph.input).every((v) => typeof v === "string" && pipe(v, Str.startsWith("fabrika:window:")));
 
 // The whole build's check: every Rolldown call is clean, and every text the brain carries is the
 // output of an observed program, window or tab call, so no carried script escapes its own graph's check.
@@ -352,8 +352,8 @@ it.effect(
       const control = yield* windowBuild(`export const view = () => "p8-clean-window";`);
       const brain = checkBuild(control.observed, control.built);
       expect(control.observed.filter(isWindow)).toHaveLength(1);
-      expect(Object.values(control.built.assets).some((a) => a.body.includes("p8-clean-window"))).toBe(true);
-      expect(carried(brain).some((t) => t.includes("p8-clean-window"))).toBe(true);
+      expect(Object.values(control.built.assets).some((a) => pipe(a.body, Str.includes("p8-clean-window")))).toBe(true);
+      expect(carried(brain).some((t) => pipe(t, Str.includes("p8-clean-window")))).toBe(true);
 
       // Plant: the window imports the MCP SDK. The brain's own graph names only text modules, so
       // a brain-only check passes; the whole build's check must fail on the window's call.
@@ -361,7 +361,7 @@ it.effect(
         `import {client} from "@modelcontextprotocol/sdk/client"; export const view = () => client;`,
       );
       const plantedBrain = realBrain(planted.observed);
-      expect(carried(plantedBrain).some((t) => t.includes("p8-mcp-marker"))).toBe(true);
+      expect(carried(plantedBrain).some((t) => pipe(t, Str.includes("p8-mcp-marker")))).toBe(true);
       expect(() => clean(plantedBrain, mcp)).not.toThrow();
       expect(() => checkBuild(planted.observed, planted.built)).toThrow();
       // Without the window call observed, a clean carried text has no checked origin and fails too.
@@ -499,7 +499,7 @@ it.effect.prop(
           "@modelcontextprotocol/client/stdio",
           "@kampus/libfabrika/mcp",
           "@kampus/libfabrika/mcp/client",
-          `@kampus/libfabrika/mcp/${Array.from(g.text, (c) => c.codePointAt(0)!.toString(16)).join("-") || "serve"}/client`,
+          `@kampus/libfabrika/mcp/${Array.from(g.text, (c) => pipe(c, Str.codePointAt(0), Option.getOrThrow).toString(16)).join("-") || "serve"}/client`,
           "micromark/lib/parse",
           "mdast-util-from-markdown",
           "@pierre/highlights",
@@ -532,7 +532,8 @@ it.effect.prop(
           expect(() =>
             clean(
               bad,
-              forbidden.startsWith("@modelcontextprotocol") || forbidden.startsWith("@kampus/libfabrika/mcp")
+              pipe(forbidden, Str.startsWith("@modelcontextprotocol")) ||
+                pipe(forbidden, Str.startsWith("@kampus/libfabrika/mcp"))
                 ? mcp
                 : drawing,
             ),

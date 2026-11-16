@@ -3,7 +3,7 @@
 // only, on the 3-hour schedule; the repository laws run on memory git on every pull request.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Stream } from "effect";
+import { Effect, FileSystem, Path, Stream, String as Str, pipe } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
@@ -65,7 +65,7 @@ const session = (
               [Stream.mkString(Stream.decodeText(child.stdout)), Stream.runDrain(child.stderr), child.exitCode],
               { concurrency: "unbounded" },
             );
-            return { code, out: out.replaceAll(root, "<root>") };
+            return { code, out: pipe(out, Str.replaceAll(root, "<root>")) };
           }),
         );
       });
@@ -77,7 +77,7 @@ const session = (
       ) {
         const { code, out } = yield* git(cwd, args);
         transcript.push(
-          `git ${args.join(" ").replaceAll(root, "<root>")} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
+          `git ${pipe(args.join(" "), Str.replaceAll(root, "<root>"))} => ${code}${data === undefined ? "" : ` ${data === "commits" ? named(out) : out}`}`,
         );
         return out;
       });

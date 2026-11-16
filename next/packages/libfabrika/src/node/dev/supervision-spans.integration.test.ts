@@ -2,7 +2,7 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Layer, Option, Schema, Stream, String as Str, pipe, Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -247,15 +247,15 @@ const located = (location: string): { file: string; folder: boolean } => {
     return { file: `eval at ${origin[1]} (${inner.file}), ${outer.file}`, folder: inner.folder || outer.folder };
   }
 
-  const folder = !location.startsWith("node:") && /[/\\]/.test(location);
+  const folder = !pipe(location, Str.startsWith("node:")) && /[/\\]/.test(location);
   return {
-    file: folder ? location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1) : location,
+    file: folder ? Arr.lastNonEmpty(Str.split(location, /[/\\]/)) : location,
     folder,
   };
 };
 
 const frames = (text: string) =>
-  text.split("\n").flatMap((line) => {
+  Str.split(text, "\n").flatMap((line) => {
     const frame = /^\s*at (?:(.+?) \((.*)\)|(.*?))(?: \{)?$/.exec(line);
 
     if (frame === null) {
@@ -315,7 +315,7 @@ for (const adapter of ["node", "worker"] as const) {
               // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
               const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
               const lost = kept.map((c) => [
-                ...(sample.message === null || c.message.includes(sample.message) ? [] : [sample.message]),
+                ...(sample.message === null || pipe(c.message, Str.includes(sample.message)) ? [] : [sample.message]),
                 ...lostFrames(
                   frames(c.message).map((stored) => stored.frame),
                   thrown.map((raw) => raw.frame),
@@ -358,7 +358,7 @@ for (const adapter of ["node", "worker"] as const) {
                   measurements,
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
-                  expect(JSON.stringify(permanent)).not.toContain(JSON.stringify(text).slice(1, -1));
+                  expect(JSON.stringify(permanent)).not.toContain(pipe(JSON.stringify(text), Str.slice(1, -1)));
                 }
               }
 
@@ -377,7 +377,7 @@ for (const adapter of ["node", "worker"] as const) {
               });
 
               for (const text of sample.private) {
-                expect(JSON.stringify(after)).not.toContain(JSON.stringify(text).slice(1, -1));
+                expect(JSON.stringify(after)).not.toContain(pipe(JSON.stringify(text), Str.slice(1, -1)));
               }
 
               expect(yield* recorded(A)).toEqual(rows);
@@ -456,7 +456,7 @@ describe("P34 supervision recording", () => {
               const at = contents.findIndex((content) =>
                 Option.match(content, {
                   onNone: () => false,
-                  onSome: (c) => c._tag === "kept" && c.message.includes(secret),
+                  onSome: (c) => c._tag === "kept" && pipe(c.message, Str.includes(secret)),
                 }),
               );
               expect(
@@ -474,7 +474,7 @@ describe("P34 supervision recording", () => {
                 yield* read(`processes/${NAME}`),
                 yield* read(`${A}/dead`),
               ]) {
-                expect(JSON.stringify(output)).not.toContain(JSON.stringify(secret).slice(1, -1));
+                expect(JSON.stringify(output)).not.toContain(pipe(JSON.stringify(secret), Str.slice(1, -1)));
               }
 
               const span = rows[at]!;

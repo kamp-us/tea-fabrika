@@ -37,6 +37,8 @@ import {
   Schema,
   Scope,
   Tracer,
+  String as Str,
+  pipe,
 } from "effect";
 import { Base64, Base64Url, Hex } from "effect/encoding";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
@@ -74,7 +76,7 @@ const forms = (d: string): ReadonlyArray<string> => {
   }
 
   const padded = Base64.encode(bytes.success);
-  return [d, Base64Url.encode(bytes.success), padded, padded.replace(/=+$/, ""), Hex.encode(bytes.success)];
+  return [d, Base64Url.encode(bytes.success), padded, pipe(padded, Str.replace(/=+$/, "")), Hex.encode(bytes.success)];
 };
 
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
@@ -424,10 +426,10 @@ describe("P39 slice 4b: the hands key's private half stays in its file", () => {
               for (const [name, texts] of Object.entries(outputs)) {
                 for (const secret of secrets) {
                   for (const form of forms(secret)) {
-                    const at = texts.findIndex((t) => t.includes(form));
+                    const at = texts.findIndex((t) => pipe(t, Str.includes(form)));
                     expect(
                       at,
-                      `S2: [secrets] the private half is in no ${name}: ${at < 0 ? "" : (texts[at] ?? "").slice(0, 400)}`,
+                      `S2: [secrets] the private half is in no ${name}: ${at < 0 ? "" : pipe(texts[at] ?? "", Str.slice(0, 400))}`,
                     ).toBe(-1);
                   }
                 }

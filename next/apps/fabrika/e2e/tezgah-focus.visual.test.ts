@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, String as Str, pipe } from "effect";
 // Desk S3, next/ (the desk program fabrika/tezgah, ticket named by its title): laws L28 and L30 of the
 // approved plan, and the slice's shots. Written before a tab moves focus. Starts the real `dev.ts` in
 // its own temp home on its own port and drives headless Chromium; every resource is acquired in one
@@ -48,7 +48,10 @@ const promised = <A>(f: () => Promise<A>) => Effect.promise(f);
 
 /** A checklist row whose name is the field's longest, 80 characters, so its cursor key `item:<name>`
  *  is 85: past the 80 a cursor key once held (plan amendment 10: up to 256). */
-const LONG = "a row whose name is as long as the checklist field takes, eighty characters in all".slice(0, 80);
+const LONG = pipe(
+  "a row whose name is as long as the checklist field takes, eighty characters in all",
+  Str.slice(0, 80),
+);
 
 /** Runs inside Chromium before the page script: every socket the page opens is kept, so the law
  *  can lose the link as a network drop would, with the page's own redial bringing it back. */

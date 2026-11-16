@@ -2,7 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schema } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schema, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
@@ -156,7 +156,9 @@ it.effect.prop(
       expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
       const from = disk.seen.length;
       expect(Exit.isSuccess(yield* brain.stop.pipe(Effect.exit))).toBe(true);
-      expect(disk.seen.slice(from).find((call) => call.executable.endsWith("launchctl"))?.args[0]).toBe("print");
+      expect(disk.seen.slice(from).find((call) => pipe(call.executable, Str.endsWith("launchctl")))?.args[0]).toBe(
+        "print",
+      );
       expect(removalObservations).toEqual([null, null]);
       expect(yield* disk.read).toBeNull();
       expect(disk.seen.filter((call) => call.args.includes("bootout"))).toHaveLength(initiallyLoaded ? 1 : 0);
@@ -340,7 +342,7 @@ it.effect.prop(
         FABRIKA_BUILD: disk.spec.build,
       });
       expect(disk.seen.some((call) => /(?:sh|bash|zsh)$/.test(call.executable))).toBe(false);
-      const compile = disk.seen.find((call) => call.executable.endsWith("plutil"));
+      const compile = disk.seen.find((call) => pipe(call.executable, Str.endsWith("plutil")));
       expect(compile?.args).toContain("xml1");
       expect(compile?.options.shell).not.toBe(true);
       expect(disk.seen.every((call) => call.options.extendEnv === false)).toBe(true);
@@ -477,7 +479,7 @@ it.effect.prop(
             }
 
             expect(delivered.length).toBeGreaterThanOrEqual(attempts);
-            const actions = delivered.filter(({ span }) => span.name.startsWith("BrainService."));
+            const actions = delivered.filter(({ span }) => pipe(span.name, Str.startsWith("BrainService.")));
             expect(actions.length).toBeGreaterThanOrEqual(attempts);
             expect(actions.some(({ span }) => span.attributes["fab.result"] === "delivery_failed")).toBe(true);
 

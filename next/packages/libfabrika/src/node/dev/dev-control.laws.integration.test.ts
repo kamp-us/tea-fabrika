@@ -7,7 +7,19 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
+import {
+  Clock,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  FileSystem,
+  Option,
+  Queue,
+  Schema,
+  String as Str,
+  pipe,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
@@ -250,7 +262,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       if (key === "rename") {
         return (from: string, to: string) =>
           Effect.gen(function* () {
-            const held = to.endsWith("brain.pending.jsonl") ? gate : null;
+            const held = pipe(to, Str.endsWith("brain.pending.jsonl")) ? gate : null;
 
             if (held !== null) {
               yield* Deferred.await(held);
@@ -258,7 +270,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 
             yield* target.rename(from, to);
             // The startup flush rewrites the file too; only the walk's own writes are counted.
-            synced = to.endsWith("brain.pending.jsonl") && mode === "walk";
+            synced = pipe(to, Str.endsWith("brain.pending.jsonl")) && mode === "walk";
           });
       }
 

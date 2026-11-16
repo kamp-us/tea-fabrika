@@ -22,7 +22,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream, String as Str, pipe } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 
@@ -50,7 +50,7 @@ const key = Effect.fnUntraced(function* () {
   new DataView(blob.buffer).setUint32(15, 32);
   blob.set(raw, 19);
   const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`);
-  const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${pipe(Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))), Str.replace(/=+$/, ""))}`;
   return {
     raw: Base64Url.encode(raw),
     line,
@@ -221,7 +221,7 @@ it.effect.prop(
 
       for (const role of ["person", "window", "agent"]) {
         const before = w.delivered.length;
-        const hello = yield* w.hello(stranger, `${role}-${c.name.slice(0, 80)}`, role);
+        const hello = yield* w.hello(stranger, `${role}-${pipe(c.name, Str.slice(0, 80))}`, role);
         expect(hello.result._tag).not.toBe("online");
         expect(yield* w.door.route(hello.client, "process.send", request(c.body))).toEqual({
           _tag: "refused",
@@ -300,7 +300,7 @@ it.effect.prop(
 // Every kind of /grant change (coordination/text.ts Change: granted, revoked, added), each with generated labels.
 const changes = Effect.fnUntraced(function* (w: World, c: DoorCall) {
   const joining = yield* key(),
-    label = c.name.slice(0, 96);
+    label = pipe(c.name, Str.slice(0, 96));
   return {
     granted: grantText({
       id: "grant_0000000000e008000000000002",

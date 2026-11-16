@@ -31,7 +31,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import { Arbitrary, Effect, Layer, Schema, Stream, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
@@ -119,7 +119,7 @@ const name = "notes-exam:1";
 export const build = "p8-exam";
 
 export const id = (prefix: "input" | "letter", n: number) =>
-  `${prefix}_0000000000e008${n.toString(16).padStart(12, "0")}`;
+  `${prefix}_0000000000e008${pipe(n.toString(16), Str.padStart(12, "0"))}`;
 
 export const incoming = (n: number, body: string, base = 0, work = false): Incoming => ({
   id: id("letter", n),
@@ -151,7 +151,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
       recipient: Recipient.cases.client.make({ client: "exam", session: process }),
       by: "SHA256:exam-brain",
     },
-    Effect.sync(() => `process_0000000000e008${(++nextProcess).toString(16).padStart(12, "0")}`),
+    Effect.sync(() => `process_0000000000e008${pipe((++nextProcess).toString(16), Str.padStart(12, "0"))}`),
   ).pipe(Layer.provide(ledger));
   const shared = Layer.mergeAll(Mailbox.layer, ProcessStore.layer(sql, { process })).pipe(Layer.provideMerge(ledger));
   const mail = yield* Mailbox.pipe(Effect.provide(shared));

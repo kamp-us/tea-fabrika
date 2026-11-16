@@ -7,7 +7,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: a real WAL database, as the brain's span queue keeps one
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
+import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { stored } from "./stored.test-support.ts";
@@ -76,7 +76,9 @@ describe("stored", () => {
                 );
 
                 expect([...disk.running].toSorted()).toEqual(files.map((name) => `/${name}`).toSorted());
-                expect(disk.raw.filter(([label]) => !label.startsWith("home (running)")).toSorted(byLabel)).toEqual(
+                expect(
+                  disk.raw.filter(([label]) => !pipe(label, Str.startsWith("home (running)"))).toSorted(byLabel),
+                ).toEqual(
                   files.map((name): readonly [string, string] => [`home /${name}`, last(name)]).toSorted(byLabel),
                 );
               }),
@@ -110,14 +112,14 @@ describe("stored", () => {
               db.exec("DELETE FROM spans");
 
               for (let n = 0; n < 20; n++) {
-                insert.run("x".repeat(sentinel.length));
+                insert.run(pipe("x", Str.repeat(sentinel.length)));
               }
 
               const disk = yield* stored({ dir, stop: Effect.sync(() => db.close()) }, new Map(), []);
-              const holders = disk.raw.filter(([, text]) => text.includes(sentinel)).map(([label]) => label);
+              const holders = disk.raw.filter(([, text]) => pipe(text, Str.includes(sentinel))).map(([label]) => label);
 
               // The clean stop folds the WAL into the database and deletes it, and the row is gone.
-              expect(holders.filter((label) => !label.startsWith("home (running)"))).toEqual([]);
+              expect(holders.filter((label) => !pipe(label, Str.startsWith("home (running)")))).toEqual([]);
               expect(disk.running).toContain("/brain.records.sqlite-wal");
               expect(holders).toContain("home (running) /brain.records.sqlite-wal");
             }),
@@ -160,18 +162,19 @@ describe("stored", () => {
                 db.exec("DELETE FROM spans");
 
                 for (let n = 0; n < 20; n++) {
-                  insert.run("x".repeat(sentinel.length));
+                  insert.run(pipe("x", Str.repeat(sentinel.length)));
                 }
 
                 const disk = yield* stored({ dir, stop: Effect.sync(() => db.close()) }, new Map(), []);
-                const running = disk.raw.filter(([label]) => label.startsWith("home (running)"));
+                const running = disk.raw.filter(([label]) => pipe(label, Str.startsWith("home (running)")));
                 const labels = new Set(disk.outputs.map(([label]) => label));
 
                 expect(running.length).toBeGreaterThan(0);
                 expect(running.map(([label]) => label).filter((label) => !labels.has(label))).toEqual([]);
                 expect(
                   disk.outputs.some(
-                    ([label, text]) => label === "home (running) /brain.records.sqlite-wal" && text.includes(sentinel),
+                    ([label, text]) =>
+                      label === "home (running) /brain.records.sqlite-wal" && pipe(text, Str.includes(sentinel)),
                   ),
                   "the WAL's deleted row is an output",
                 ).toBe(true);
@@ -239,8 +242,8 @@ describe("stored", () => {
                   onSuccess: (disk) => ({
                     running: [...disk.running].toSorted(),
                     stopped: disk.raw
-                      .filter(([label]) => !label.startsWith("home (running)"))
-                      .map(([label]) => label.slice("home ".length))
+                      .filter(([label]) => !pipe(label, Str.startsWith("home (running)")))
+                      .map(([label]) => pipe(label, Str.slice("home ".length)))
                       .toSorted(),
                   }),
                   onFailure: (cause) => {

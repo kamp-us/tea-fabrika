@@ -3,7 +3,21 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Sink,
+  Stream,
+  String as Str,
+  pipe,
+} from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -113,7 +127,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                 yield* git(f.repo, ["revert", "--no-edit", "HEAD"]);
                 yield* git(f.repo, ["push", "origin", f.branch]);
                 const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-                const object = "a".repeat(40);
+                const object = pipe("a", Str.repeat(40));
                 const validHead = `ref: refs/heads/release\tHEAD\n${object}\tHEAD\n`;
                 const faults = [
                   { operation: "fetch", flag: "--no-tags", output: "", code: 1 },
@@ -126,7 +140,12 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                   { operation: "ls-remote", flag: "--symref", output: `${object}\tHEAD\n`, code: 0 },
                   { operation: "ls-remote", flag: "--symref", output: validHead + validHead, code: 0 },
                   { operation: "ls-remote", flag: "--symref", output: "ref: refs/heads/release\tHEAD\n", code: 0 },
-                  { operation: "ls-remote", flag: "--symref", output: validHead.replace(object, "invalid"), code: 0 },
+                  {
+                    operation: "ls-remote",
+                    flag: "--symref",
+                    output: pipe(validHead, Str.replace(object, "invalid")),
+                    code: 0,
+                  },
                   {
                     operation: "ls-tree",
                     flag: ".fabrika/fabrika.toml",
@@ -403,11 +422,11 @@ it.effect.prop(
         const common = path.join(root, "common");
         yield* fs.makeDirectory(common);
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
-        const first = "a".repeat(width),
-          second = "b".repeat(width);
-        const documentId = "c".repeat(width),
-          firstBlob = "d".repeat(width),
-          secondBlob = "e".repeat(width);
+        const first = pipe("a", Str.repeat(width)),
+          second = pipe("b", Str.repeat(width));
+        const documentId = pipe("c", Str.repeat(width)),
+          firstBlob = pipe("d", Str.repeat(width)),
+          secondBlob = pipe("e", Str.repeat(width));
         let head = first;
         let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
         let held = 0;
@@ -434,10 +453,11 @@ it.effect.prop(
                 }),
             ),
           makeDirectory: (directory, options) =>
-            directory.startsWith(isolatedBase) ? Effect.void : fs.makeDirectory(directory, options),
+            pipe(directory, Str.startsWith(isolatedBase)) ? Effect.void : fs.makeDirectory(directory, options),
           writeFileString: (file, value, options) =>
-            file.startsWith(isolatedBase) ? Effect.void : fs.writeFileString(file, value, options),
-          exists: (file) => (file.startsWith(isolatedBase) ? Effect.sync(() => temporary.has(file)) : fs.exists(file)),
+            pipe(file, Str.startsWith(isolatedBase)) ? Effect.void : fs.writeFileString(file, value, options),
+          exists: (file) =>
+            pipe(file, Str.startsWith(isolatedBase)) ? Effect.sync(() => temporary.has(file)) : fs.exists(file),
         };
         const spawner = ChildProcessSpawner.make((command) =>
           Effect.gen(function* () {

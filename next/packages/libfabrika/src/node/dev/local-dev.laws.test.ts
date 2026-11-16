@@ -5,7 +5,7 @@
 // its moment and what the state said as it went out. No law here reaches the real `process.kill`:
 // the signals are a stand-in, and L6's `signal` runs against a spy.
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Effect, Exit, Fiber, Schema, SubscriptionRef } from "effect";
+import { Clock, Effect, Exit, Fiber, Schema, SubscriptionRef, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
@@ -236,7 +236,8 @@ describe("the memory restart's bounded stop, next/", () => {
 
         // How many signals the replace sends: none for a sample the state does not vouch for, the
         // SIGTERM alone when the process went before the `killed` fold, else both.
-        const sent = stale || point === "before" ? 0 : point.startsWith("killed") || point === "after-SIGKILL" ? 2 : 1;
+        const sent =
+          stale || point === "before" ? 0 : pipe(point, Str.startsWith("killed")) || point === "after-SIGKILL" ? 2 : 1;
         const steps = [
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],

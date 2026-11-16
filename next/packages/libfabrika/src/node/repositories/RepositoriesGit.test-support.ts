@@ -1,7 +1,7 @@
 // T878, next/. The git fixture and reader RepositoriesGit.test.ts and
 // RepositoriesGit.identity.test.ts share, moved out of RepositoriesGit.test.ts unchanged so each
 // file stays under about 60 s on a CI leg. Each runs on the git layers of GitLaws (0535).
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, String as Str } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
@@ -15,21 +15,23 @@ export const gitCommandBudget = 10;
 
 export const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  return (yield* spawner.string(
-    ChildProcess.make("git", [...args], {
-      cwd,
-      extendEnv: true,
-      env: {
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_AUTHOR_NAME: "fixture",
-        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
-        GIT_COMMITTER_NAME: "fixture",
-        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-      },
-    }),
-  )).trim();
+  return Str.trim(
+    yield* spawner.string(
+      ChildProcess.make("git", [...args], {
+        cwd,
+        extendEnv: true,
+        env: {
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_AUTHOR_NAME: "fixture",
+          GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+          GIT_COMMITTER_NAME: "fixture",
+          GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+        },
+      }),
+    ),
+  );
 });
 
 export const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", branch: string) {

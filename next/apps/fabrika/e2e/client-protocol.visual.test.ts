@@ -6,7 +6,7 @@
 // never on a laptop step. Every resource is acquired in the scope of `p14.test-support.ts`'s `suite`.
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
@@ -36,7 +36,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
         try: () => page.getByRole("status").innerText(),
         catch: () => new SuiteError({ waited: "browser: the status line" }),
       }).pipe(
-        Effect.map((text) => text.startsWith("Online")),
+        Effect.map((text) => pipe(text, Str.startsWith("Online"))),
         Effect.orDie,
       ),
       add: (name) =>
@@ -49,7 +49,7 @@ const browserBackend = (context: BrowserContext, dev: Dev) =>
       state: t.state,
       body: t.body,
       // The tab's socket path is `/client/<fingerprint>/<tab>`: its last part is the tab id.
-      tab: Effect.sync(() => new URL(seen.sockets[0] ?? "ws://x/").pathname.split("/").at(-1) ?? ""),
+      tab: Effect.sync(() => Str.split(new URL(seen.sockets[0] ?? "ws://x/").pathname, "/").at(-1) ?? ""),
       pid: Effect.succeed(null),
       close: Effect.tryPromise({
         try: () => page.close(),
@@ -76,11 +76,13 @@ const headlessKey = Effect.gen(function* () {
     yield* Effect.tryPromise({ try: () => crypto.subtle.digest("SHA-256", raw), catch: failed }),
   );
   return {
-    fingerprint: `SHA256:${btoa(String.fromCharCode(...digest)).replace(/=+$/, "")}`,
-    raw: btoa(String.fromCharCode(...raw))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, ""),
+    fingerprint: `SHA256:${pipe(btoa(String.fromCharCode(...digest)), Str.replace(/=+$/, ""))}`,
+    raw: pipe(
+      btoa(String.fromCharCode(...raw)),
+      Str.replaceAll("+", "-"),
+      Str.replaceAll("/", "_"),
+      Str.replace(/=+$/, ""),
+    ),
     line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "created" as const,
     sign: (bytes: Uint8Array) =>

@@ -1,3 +1,4 @@
+import { String as Str } from "effect";
 // P12, next/. Shape belongs in lint; these laws test that rule with planted source.
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -14,7 +15,7 @@ describe("ledger SQL stays behind its service", () => {
         fc.constantFrom(" ", "\n", " /* checked */ "),
         fc.boolean(),
         async (table, space, upper) => {
-          const word = upper ? table.toUpperCase() : table;
+          const word = upper ? Str.toUpperCase(table) : table;
           const queries = [
             `SELECT * FROM${space}${word} AS e`,
             `SELECT e.* FROM dev_clients c JOIN${space}"${word}" e ON 1=1`,

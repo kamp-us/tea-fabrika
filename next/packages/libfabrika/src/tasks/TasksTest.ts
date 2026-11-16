@@ -16,7 +16,7 @@
 // the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
+import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -199,7 +199,7 @@ export const BAD_REQUEST: ReadonlyArray<readonly [string, unknown]> = [
   ["settings", MISSING],
   ["parent", "not-an-input"],
   ["parent", MISSING],
-  ["traceId", "0".repeat(32)],
+  ["traceId", pipe("0", Str.repeat(32))],
   ["traceId", "XYZ"],
 ];
 
@@ -459,7 +459,7 @@ const able = (saved: Saved, cell: Cell): Executor => ({
 
 /** Another execution identity than the saved one, close to it on purpose. */
 const otherExecution = (execution: string, variant: number): string =>
-  choose([`${execution}x`, execution.slice(0, -1) || "e", `other-${execution}`], variant);
+  choose([`${execution}x`, pipe(execution, Str.slice(0, -1)) || "e", `other-${execution}`], variant);
 
 /** A move, or a move in the one phase of the task it was played on. */
 type Done = Move | `${Move}@${Phase}` | "listed" | "listed_empty";

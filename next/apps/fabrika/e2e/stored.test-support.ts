@@ -1,7 +1,7 @@
 // L17's scan of an instance's home (P14 slice 2, ticket 828), in a file of its own so its law in
 // `stored.test.ts` can run it on a folder that a writer changes under it.
 import { Row as LedgerRow } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, type PlatformError, Schema } from "effect";
+import { Effect, FileSystem, Path, type PlatformError, Schema, String as Str, pipe } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -65,18 +65,18 @@ const scan = (
         const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
 
         if (bytes !== undefined) {
-          const label = `home${pass === "running" ? " (running)" : ""} ${file.slice(dir.length)}`;
+          const label = `home${pass === "running" ? " (running)" : ""} ${pipe(file, Str.slice(dir.length))}`;
           read.push({ file, label, bytes: Buffer.from(bytes).toString("latin1") });
         }
       }
 
       const raw = read.map(({ label, bytes }): readonly [string, string] => [label, bytes]);
-      const files = read.map(({ file }) => file.slice(dir.length));
+      const files = read.map(({ file }) => pipe(file, Str.slice(dir.length)));
       const outputs: Array<readonly [string, string]> = [];
       const retained = new Map<string, Map<string, string>>();
 
       for (const { file, label, bytes } of read) {
-        if (!bytes.startsWith("SQLite format 3\0")) {
+        if (!pipe(bytes, Str.startsWith("SQLite format 3\0"))) {
           continue;
         }
 
@@ -89,7 +89,7 @@ const scan = (
         );
 
         for (const { name } of tables) {
-          const table = `"${name.replaceAll('"', '""')}"`;
+          const table = `"${pipe(name, Str.replaceAll('"', '""'))}"`;
           const keys = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ name: Schema.String, pk: Schema.Int })))(
             db.prepare(`PRAGMA table_info(${table})`).all(),
           )
@@ -159,11 +159,11 @@ const scan = (
         // SQLite's journal repeats the same cells. No other file gets this exception. The raw bytes are
         // still scanned: only the exact text of an omitted cell is swapped for its checked form, so a
         // signature anywhere else in the file, under another key or in another table, is still found.
-        const database = file.replace(/-(?:wal|shm|journal)$/, "");
+        const database = pipe(file, Str.replace(/-(?:wal|shm|journal)$/, ""));
         let checked = bytes;
 
         for (const [body, replacement] of retained.get(database) ?? []) {
-          checked = checked.replaceAll(body, replacement);
+          checked = pipe(checked, Str.replaceAll(body, replacement));
         }
 
         outputs.push([label, checked]);

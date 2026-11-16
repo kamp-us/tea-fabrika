@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
 import { type Role, signedText } from "./commits.ts";
@@ -52,15 +53,14 @@ for (const signer of ["tests", "build", "lead", "stranger", "person"]) {
 sh(KEYS, "ssh-keygen", ["-q", "-t", "ecdsa", "-N", "", "-C", "ecdsa", "-f", join(KEYS, "ecdsa")]);
 
 const pub = (signer: string) =>
-  readFileSync(join(KEYS, `${signer}.pub`), "utf8")
-    .split(" ")
+  Str.split(readFileSync(join(KEYS, `${signer}.pub`), "utf8"), " ")
     .slice(0, 2)
     .join(" ");
 
 /** A key's fingerprint, as `ssh-keygen -l` prints it and a note's `key` holds it. */
 const fingerprint = (signer: string) =>
   // oxlint-disable-next-line typescript/no-non-null-assertion -- Moved test setup reads ssh-keygen's fixed output after checking its exit code.
-  sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]).split(" ")[1]!;
+  Str.split(sh(KEYS, "ssh-keygen", ["-l", "-f", join(KEYS, `${signer}.pub`)]), " ")[1]!;
 
 const keyLine = (role: string, signer: string) => `${role} namespaces="fabrika-step" ${pub(signer)}`;
 
@@ -136,7 +136,7 @@ class Repo {
   }
 
   head(rev = "HEAD") {
-    return this.git("rev-parse", rev).trim();
+    return Str.trim(this.git("rev-parse", rev));
   }
 
   /** Commits one file under `next/`, the usual product change. */
@@ -174,9 +174,8 @@ class Repo {
 
   run(args: string[], env = ENV, cwd = this.dir) {
     const ran = spawnSync("node", [PROGRAM, ...args], { cwd, env, encoding: "utf8" });
-    const answers = ran.stdout
-      .split("\n")
-      .filter((l) => l.startsWith("{"))
+    const answers = Str.split(ran.stdout, "\n")
+      .filter((l) => pipe(l, Str.startsWith("{")))
       .map((l) => JSON.parse(l) as Record<string, unknown>);
     return { code: ran.status, answers, out: ran.stdout, err: ran.stderr };
   }
@@ -249,7 +248,7 @@ const personLink = (r: Repo, sha: string, signer = "person") => {
     to: r.head(`${sha}^{tree}`),
     key: fingerprint(signer),
     // oxlint-disable-next-line typescript/no-non-null-assertion -- The moved test assertion above requires the git signature header.
-    sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
+    sig: `${pipe(signature![1]!, Str.replaceAll("\n ", "\n"))}\n`,
   };
 };
 

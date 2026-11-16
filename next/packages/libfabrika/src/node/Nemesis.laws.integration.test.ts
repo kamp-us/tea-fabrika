@@ -3,7 +3,19 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous S
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
+import {
+  Arbitrary,
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Stream,
+  Tracer,
+  String as Str,
+  pipe,
+} from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -192,14 +204,20 @@ const service = Effect.fnUntraced(function* (
   const ledger = yield* reader(sql);
   const failure = options.failure;
   const lower = failure === undefined ? undefined : new LedgerError({ reason: failure.reason, cause: failure.cause });
-  const affected = failure?.part.startsWith("inbox") ? inbox(name) : `processes/${name}`;
+  const affected =
+    failure !== undefined && pipe(failure.part, Str.startsWith("inbox")) ? inbox(name) : `processes/${name}`;
   const controlled: Ledger["Service"] = {
     ...ledger,
     wait: (stream, after) =>
       Effect.gen(function* () {
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
-        if (lower !== undefined && stream === affected && failure?.part.endsWith("wait")) {
+        if (
+          lower !== undefined &&
+          stream === affected &&
+          failure !== undefined &&
+          pipe(failure.part, Str.endsWith("wait"))
+        ) {
           return yield* Effect.fail(lower);
         }
 
@@ -222,7 +240,7 @@ const service = Effect.fnUntraced(function* (
         return captured;
       }),
     read: (stream, after) =>
-      lower !== undefined && stream === affected && failure?.part.endsWith("read")
+      lower !== undefined && stream === affected && failure !== undefined && pipe(failure.part, Str.endsWith("read"))
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };

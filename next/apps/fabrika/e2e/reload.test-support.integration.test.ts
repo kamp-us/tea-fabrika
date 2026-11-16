@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: real SQLite files, as the b
 import { NodeServices } from "@effect/platform-node";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, String as Str, pipe, Option } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { rebuildSpans, spanOutputs } from "./reload.test-support.ts";
@@ -46,7 +46,10 @@ const rebuild = (spanId: string): SpanRow => ({
 /** Runs `work` on the SQLite file at `file`, made with its folder when it is not there yet. */
 const withDatabase = Effect.fnUntraced(function* (file: string, work: (db: DatabaseSync) => void) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.makeDirectory(file.slice(0, file.lastIndexOf("/")), { recursive: true });
+  yield* fs.makeDirectory(
+    pipe(file, Str.lastIndexOf("/"), Option.match({ onNone: () => ".", onSome: (at) => pipe(file, Str.slice(0, at)) })),
+    { recursive: true },
+  );
   yield* Effect.acquireUseRelease(
     Effect.sync(() => new DatabaseSync(file)),
     (db) => Effect.sync(() => work(db)),

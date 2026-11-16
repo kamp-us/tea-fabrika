@@ -33,6 +33,7 @@ import {
   Schedule,
   Schema,
   Stream,
+  String as Str,
 } from "effect";
 import { Digest } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -87,12 +88,10 @@ const processes = Effect.fn("P19Host.processes")(function* () {
   const out = yield* command("ps", ["-axo", "pid=,ppid=,pgid="]);
   yield* checked(out.code === 0, "cannot-observe-processes");
   return yield* Schema.decodeUnknownEffect(Schema.Array(ProcessGroups.Row))(
-    out.stdout
-      .trim()
-      .split("\n")
+    Str.split(Str.trim(out.stdout), "\n")
       .filter(Boolean)
       .map((line) => {
-        const [pid, parent, group] = line.trim().split(/\s+/).map(Number);
+        const [pid, parent, group] = Str.split(Str.trim(line), /\s+/).map(Number);
         return { pid, parent, group };
       }),
   );
@@ -468,7 +467,7 @@ export const check = Effect.fn("P19Host.check")(function* () {
   const uid = yield* command("id", ["-u"]);
   const config = Config.make({
     home,
-    target: `gui/${uid.stdout.trim()}/${job.Label}`,
+    target: `gui/${Str.trim(uid.stdout)}/${job.Label}`,
     url,
     owner: process.pid,
     stopTimeout: Number(settings.values["desktop.brain-stop-timeout"]),

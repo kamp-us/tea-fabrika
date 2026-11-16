@@ -4,7 +4,7 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Effect, String as Str } from "effect";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -59,7 +59,7 @@ const start = async () => {
   homes.push(home);
   const key = join(home, "person");
   execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-f", key]);
-  const publicKey = readFileSync(`${key}.pub`, "utf8").trim();
+  const publicKey = Str.trim(readFileSync(`${key}.pub`, "utf8"));
   const at = await Effect.runPromise(heldPort());
   ports.push(at.release);
   const url = `http://127.0.0.1:${at.port}`;

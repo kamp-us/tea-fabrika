@@ -8,7 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import type { Schema } from "effect";
-import { Arbitrary, Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Arbitrary, Effect, Exit, FileSystem, Layer, Path, String as Str } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -34,21 +34,23 @@ const cell = fc.record({ move: fc.nat(), pick: fc.nat() });
 const tape = fc.array(cell, { minLength: 1, maxLength: 8 });
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
-  return (yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
-    ChildProcess.make("git", [...args], {
-      cwd,
-      extendEnv: true,
-      env: {
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_AUTHOR_NAME: "fixture",
-        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
-        GIT_COMMITTER_NAME: "fixture",
-        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-      },
-    }),
-  )).trim();
+  return Str.trim(
+    yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
+      ChildProcess.make("git", [...args], {
+        cwd,
+        extendEnv: true,
+        env: {
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_AUTHOR_NAME: "fixture",
+          GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+          GIT_COMMITTER_NAME: "fixture",
+          GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+        },
+      }),
+    ),
+  );
 });
 
 // The 200 real-Git fixtures exceed 60 seconds under load. Allow 15 minutes,

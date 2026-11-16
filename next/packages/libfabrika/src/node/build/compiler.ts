@@ -19,7 +19,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Schema, String as Str, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -90,7 +90,7 @@ interface Fn {
 type Tree = any;
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
-const lineAt = (text: string, at: number) => text.slice(0, at).split("\n").length;
+const lineAt = (text: string, at: number) => pipe(text, Str.slice(0, at), Str.split("\n")).length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
 const saysNoMemo = (body: Tree): boolean => {
@@ -202,7 +202,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
   const out = compile(file, text);
   const source = functions(file, text);
   const compiled = new Set(
-    functions(file.replace(/\.tsx$/, ".js"), out.code)
+    functions(pipe(file, Str.replace(/\.tsx$/, ".js")), out.code)
       .filter((f) => f.cache)
       .map((f) => f.name),
   );

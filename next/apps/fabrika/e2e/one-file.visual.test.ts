@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Effect, Exit, Result, Schema, Scope, String as Str, pipe } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
@@ -103,7 +103,7 @@ describe("P16 real browser from a copied one-file build", () => {
             writeFileSync(join(pkg, "window.css"), "#p16 {color: rgb(12, 34, 56);}");
             cpSync(join(APP, "src"), join(home, "src"), {
               recursive: true,
-              filter: (p) => !p.endsWith(".test.ts"),
+              filter: (p) => !pipe(p, Str.endsWith(".test.ts")),
             });
             const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
@@ -158,12 +158,14 @@ describe("P16 real browser from a copied one-file build", () => {
               ),
             );
             const entry = Object.entries(built.assets).find(
-              ([, a]) => a.type.startsWith("text/javascript") && a.body.includes("__p16Ready"),
+              ([, a]) => pipe(a.type, Str.startsWith("text/javascript")) && pipe(a.body, Str.includes("__p16Ready")),
             );
             assert(entry, "entry script missing");
             // P40: the window's entry route keeps its qualified program name.
             expect(entry[0]).toContain("fabrika/counter");
-            const scripts = Object.entries(built.assets).filter(([, a]) => a.type.startsWith("text/javascript"));
+            const scripts = Object.entries(built.assets).filter(([, a]) =>
+              pipe(a.type, Str.startsWith("text/javascript")),
+            );
             expect(scripts.length).toBeGreaterThan(1);
             const page = await browser.newPage();
             await page.goto(instance.url);
@@ -175,7 +177,7 @@ describe("P16 real browser from a copied one-file build", () => {
               expect(await response.text()).toBe(asset.body);
               expect(createHash("sha256").update(asset.body).digest("hex")).toBe(asset.hash);
 
-              if (asset.type.startsWith("text/css")) {
+              if (pipe(asset.type, Str.startsWith("text/css"))) {
                 await page.addStyleTag({ url: instance.url + route });
               }
             }
@@ -337,7 +339,7 @@ const servedCounter = Effect.gen(function* () {
   mkdirSync(tab);
   writeFileSync(join(tab, "entry.tsx"), TAB_ENTRY);
   writeFileSync(join(tab, "tab.css"), "output { color: rgb(12, 34, 56); }\n");
-  cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !p.endsWith(".test.ts") });
+  cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !pipe(p, Str.endsWith(".test.ts")) });
   const api = (yield* Effect.promise(
     () => import(pathToFileURL(join(ROOT, "next/packages/libfabrika/src/node/build/build.ts")).href),
   )) as {

@@ -8,7 +8,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Effect, FileSystem, Path, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import fc from "fast-check";
 import { API } from "typescript/unstable/sync";
@@ -68,7 +68,9 @@ const outside = Effect.fnUntraced(function* (
     const config = configs[i];
     const project = config === undefined ? undefined : taken.getProject(config);
     const held = new Set(project?.program.getSourceFileNames().map((f) => path.relative(root, f)) ?? []);
-    return tracked.filter((f) => f.startsWith(`${p}/`) && !held.has(f)).map((file) => ({ package: p, file }));
+    return tracked
+      .filter((f) => pipe(f, Str.startsWith(`${p}/`)) && !held.has(f))
+      .map((file) => ({ package: p, file }));
   });
 }, Effect.scoped);
 
@@ -94,7 +96,7 @@ const trackedTypeScript = Effect.fnUntraced(function* (root: string) {
     return yield* new GitFailed({ code });
   }
 
-  return out.split("\0").filter((f) => TYPESCRIPT.test(f));
+  return Str.split(out, "\0").filter((f) => TYPESCRIPT.test(f));
 }, Effect.scoped);
 
 /** Every `next/<group>/<name>` folder that holds a package manifest, with its manifest's scripts. */
@@ -135,7 +137,7 @@ it.effect(
 
       expect(packages.length).toBeGreaterThan(0);
       expect(packages.filter((p) => p.typecheck !== TYPECHECK).map((p) => p.dir)).toEqual([]);
-      expect(tracked.filter((f) => !packages.some((p) => f.startsWith(`${p.dir}/`)))).toEqual([]);
+      expect(tracked.filter((f) => !packages.some((p) => pipe(f, Str.startsWith(`${p.dir}/`))))).toEqual([]);
 
       const gaps = yield* outside(
         root,
@@ -206,7 +208,7 @@ const plantTypeError = Effect.fnUntraced(function* (planted: Plant) {
   const held = program.getSourceFileNames().includes(file);
   const diagnostics = [...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]
     .filter((d) => d.fileName === file)
-    .map((d) => ({ code: d.code, line: text.slice(0, d.pos).split("\n").length }));
+    .map((d) => ({ code: d.code, line: pipe(text, Str.slice(0, d.pos), Str.split("\n")).length }));
   return { held, diagnostics };
 }, Effect.scoped);
 
@@ -280,7 +282,7 @@ it.effect(
               const tracked = files.map((f) => `${pkg}/${f}`);
               const gaps = yield* outside(at, [pkg], tracked);
               expect(gaps.map((g) => g.file).sort()).toEqual(
-                tracked.filter((f) => !f.startsWith(`${pkg}/src/`)).sort(),
+                tracked.filter((f) => !pipe(f, Str.startsWith(`${pkg}/src/`))).sort(),
               );
               expect(gaps.every((g) => g.package === pkg)).toBe(true);
             }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),

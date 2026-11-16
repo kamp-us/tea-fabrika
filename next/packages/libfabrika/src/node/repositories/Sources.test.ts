@@ -2,7 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, Exit, FileSystem, Path, Schema, String as Str, pipe } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
@@ -73,7 +73,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
         expected = [];
 
       for (const from of [".", "./", "./.", "..", "../", "./.."]) {
-        const reads: ReadonlyArray<readonly [string, string]> = from.includes("..")
+        const reads: ReadonlyArray<readonly [string, string]> = pipe(from, Str.includes(".."))
           ? [
               ["entry.txt", parent],
               ["./.fabrika/entry.txt", own],
@@ -129,8 +129,8 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const blobs = new Map<string, string>([["traversal/entry.txt", "regular file"]]);
   const entries = new Map<string, { mode: string; type: string; id: string }>([
-    ["traversal", { mode: "040000", type: "tree", id: "b".repeat(40) }],
-    ["traversal/entry.txt", { mode: "100644", type: "blob", id: "c".repeat(40) }],
+    ["traversal", { mode: "040000", type: "tree", id: pipe("b", Str.repeat(40)) }],
+    ["traversal/entry.txt", { mode: "100644", type: "blob", id: pipe("c", Str.repeat(40)) }],
   ]);
   const links = [
     { name: "file-link", target: "entry.txt" },
@@ -144,7 +144,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
     for (const link of links) {
       yield* fs.symlink(link.target, path.join(folder, link.name));
       blobs.set(`traversal/${link.name}`, link.target);
-      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: "d".repeat(40) });
+      entries.set(`traversal/${link.name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) });
     }
   }
 
@@ -209,16 +209,17 @@ it.effect.prop(
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
         yield* fs.makeDirectory(path.join(repo, "inside space"));
         yield* fs.makeDirectory(person);
-        const commit = Schema.decodeUnknownSync(ObjectId)("a".repeat(40));
+        const commit = Schema.decodeUnknownSync(ObjectId)(pipe("a", Str.repeat(40)));
         const entries = new Map<string, { mode: string; type: string; id: string }>([
-          [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
-          ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],
-          ["inside space/entry.txt", { mode: "100644", type: "blob", id: "e".repeat(40) }],
+          [".fabrika", { mode: "040000", type: "tree", id: pipe("b", Str.repeat(40)) }],
+          ["inside space", { mode: "040000", type: "tree", id: pipe("c", Str.repeat(40)) }],
+          ["inside space/entry.txt", { mode: "100644", type: "blob", id: pipe("e", Str.repeat(40)) }],
           ...["local", "outside", "absolute", "cycle"].map(
-            (name) => [`.fabrika/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
+            (name) => [`.fabrika/${name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) }] as const,
           ),
           ...["local-file", "outside-file", "absolute-local", "absolute-outside"].map(
-            (name) => [`inside space/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
+            (name) =>
+              [`inside space/${name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) }] as const,
           ),
         ]);
         const blobs = new Map([

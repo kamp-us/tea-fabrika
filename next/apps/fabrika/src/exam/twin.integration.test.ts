@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect } from "effect";
+import { Effect, String as Str, pipe, Option } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { scanner } from "./twin.ts";
@@ -37,63 +37,61 @@ const law = (name: string, check: (input: ReturnType<typeof generated.generate>[
     }),
   );
 
+/** What a form's ref names its last member on: `Cloudflare.Zone.Zone` is `Cloudflare.Zone`. */
+const owner = (ref: string): string =>
+  pipe(ref, Str.lastIndexOf("."), Option.match({ onNone: () => ref, onSome: (at) => pipe(ref, Str.slice(0, at)) }));
+
 describe("P12 local twin lint", () => {
   // Review 6 sweep: every way a function value can leave a checked direct call.
   // Rejected syntax is a finding even when the constructor or decorator is never called here.
   const forms: ReadonlyArray<readonly [string, (ref: string, alias: string, args: string) => string]> = [
-    ["computed literal", (r, _a, args) => `${r.replace(/\.([^.]+)$/, '["$1"]')}(${args});`],
-    ["computed expression", (r, _a, args) => `${r.replace(/\.([^.]+)$/, '[String("$1")]')}(${args});`],
-    ["optional member", (r, _a, args) => `${r.replace(/\.([^.]+)$/, "?.$1")}(${args});`],
+    ["computed literal", (r, _a, args) => `${pipe(r, Str.replace(/\.([^.]+)$/, '["$1"]'))}(${args});`],
+    ["computed expression", (r, _a, args) => `${pipe(r, Str.replace(/\.([^.]+)$/, '[String("$1")]'))}(${args});`],
+    ["optional member", (r, _a, args) => `${pipe(r, Str.replace(/\.([^.]+)$/, "?.$1"))}(${args});`],
     ["optional call", (r, _a, args) => `${r}?.(${args});`],
     [
       "bare destructure",
-      (r, _a, args) =>
-        `const {${r.split(".").at(-1)}} = ${r.slice(0, r.lastIndexOf("."))}; ${r.split(".").at(-1)}(${args});`,
+      (r, _a, args) => `const {${Str.split(r, ".").at(-1)}} = ${owner(r)}; ${Str.split(r, ".").at(-1)}(${args});`,
     ],
     [
       "bare default destructure",
       (r, _a, args) =>
-        `const {${r.split(".").at(-1)} = () => null} = ${r.slice(0, r.lastIndexOf("."))}; ${r.split(".").at(-1)}(${args});`,
+        `const {${Str.split(r, ".").at(-1)} = () => null} = ${owner(r)}; ${Str.split(r, ".").at(-1)}(${args});`,
     ],
     [
       "renamed destructure",
-      (r, a, args) =>
-        `const {${r.split(".").at(-1)}: outside${a}} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}(${args});`,
+      (r, a, args) => `const {${Str.split(r, ".").at(-1)}: outside${a}} = ${owner(r)}; outside${a}(${args});`,
     ],
     [
       "default destructure",
       (r, a, args) =>
-        `const {${r.split(".").at(-1)}: outside${a} = () => null} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}(${args});`,
+        `const {${Str.split(r, ".").at(-1)}: outside${a} = () => null} = ${owner(r)}; outside${a}(${args});`,
     ],
     [
       "computed destructure",
       (r, a, args) =>
-        `const {[${JSON.stringify(r.split(".").at(-1))}]: outside${a}} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}(${args});`,
+        `const {[${JSON.stringify(Str.split(r, ".").at(-1))}]: outside${a}} = ${owner(r)}; outside${a}(${args});`,
     ],
     [
       "rest destructure",
       (r, a, args) =>
-        `const {...outside${a}} = ${r.slice(0, r.lastIndexOf("."))}; outside${a}[${JSON.stringify(r.split(".").at(-1))}](${args});`,
+        `const {...outside${a}} = ${owner(r)}; outside${a}[${JSON.stringify(Str.split(r, ".").at(-1))}](${args});`,
     ],
     [
       "assignment destructure",
       (r, a, args) =>
-        `let outside${a}; ({${r.split(".").at(-1)}: outside${a}} = ${r.slice(0, r.lastIndexOf("."))}); outside${a}(${args});`,
+        `let outside${a}; ({${Str.split(r, ".").at(-1)}: outside${a}} = ${owner(r)}); outside${a}(${args});`,
     ],
     [
       "namespace spread",
       (r, a, args) =>
-        `const outside${a} = {...${r.slice(0, r.lastIndexOf("."))}}; outside${a}[${JSON.stringify(r.split(".").at(-1))}](${args});`,
+        `const outside${a} = {...${owner(r)}}; outside${a}[${JSON.stringify(Str.split(r, ".").at(-1))}](${args});`,
     ],
     ["array spread", (r, a, args) => `const outside${a} = [...[${r}]]; outside${a}[0](${args});`],
     ["call", (r, _a, args) => `${r}.call(null, ${args});`],
     ["apply", (r, _a, args) => `${r}.apply(null, [${args}]);`],
     ["Reflect.apply", (r, _a, args) => `Reflect.apply(${r}, null, [${args}]);`],
-    [
-      "Reflect.get",
-      (r, _a, args) =>
-        `Reflect.get(${r.slice(0, r.lastIndexOf("."))}, ${JSON.stringify(r.split(".").at(-1))})(${args});`,
-    ],
+    ["Reflect.get", (r, _a, args) => `Reflect.get(${owner(r)}, ${JSON.stringify(Str.split(r, ".").at(-1))})(${args});`],
     ["bound reference", (r, a, args) => `const outside${a} = ${r}.bind(null); outside${a}(${args});`],
     ["argument", (r, _a, args) => `((make) => make(${args}))(${r});`],
     ["returned reference", (r, _a, args) => `(() => ${r})()(${args});`],
@@ -196,7 +194,7 @@ describe("P12 local twin lint", () => {
   });
   law("a called stack helper is inspected or reported as unsupported", ({ alias }) => {
     const body = `${text()}\nimport {extraResources as ${alias}} from "./unfollowed-stack-helper.ts";\n${alias}();`;
-    expect(scan(stack, body).some((f) => f.reason.startsWith("unsupported-case:"))).toBe(true);
+    expect(scan(stack, body).some((f) => pipe(f.reason, Str.startsWith("unsupported-case:")))).toBe(true);
   });
   law("the actual stack has no findings, with no second resource list", ({ name }) => {
     expect(scan(stack, `${text()}\nconst checkedName = ${JSON.stringify(name)};`)).toEqual([]);
@@ -208,15 +206,20 @@ describe("P12 local twin lint", () => {
       `import * as ${alias} from "@alchemy.run/cloudflare";
        ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${bindings === undefined ? "" : `env:{${bindings}}`}}); ${other}`;
     const binding = `${alias}.DurableObject("RecordPart")`;
-    expect(scan("binding.ts", source(undefined).replace('"Brain"', '"Other"'))).toEqual([]);
+    expect(scan("binding.ts", pipe(source(undefined), Str.replace('"Brain"', '"Other"')))).toEqual([]);
     expect(
-      scan("binding.ts", source(undefined).replace('"Brain"', "workerName")).some((f) =>
-        f.reason.startsWith("unsupported-case:"),
+      scan("binding.ts", pipe(source(undefined), Str.replace('"Brain"', "workerName"))).some((f) =>
+        pipe(f.reason, Str.startsWith("unsupported-case:")),
       ),
     ).toBe(true);
     expect(scan("binding.ts", source(`PROJECT:${alias}.DurableObject("Project"), RecordPart:${binding}`))).toEqual([]);
 
-    for (const broken of [undefined, "", "export class Brain {}", contract.replace("RecordPart", "Unknown[]")]) {
+    for (const broken of [
+      undefined,
+      "",
+      "export class Brain {}",
+      pipe(contract, Str.replace("RecordPart", "Unknown[]")),
+    ]) {
       expect(
         check("binding.ts", source(`RECORD:${binding}`), broken).some(
           (f) => f.reason === "unsupported-case: cannot read host contract",
@@ -232,7 +235,7 @@ describe("P12 local twin lint", () => {
     for (const overwritten of ["undefined", '"Other"', "replacement"]) {
       expect(
         scan("binding.ts", source(`RecordPart:${binding}, RecordPart:${overwritten}`)).some((f) =>
-          f.reason.startsWith("unsupported-case:"),
+          pipe(f.reason, Str.startsWith("unsupported-case:")),
         ),
       ).toBe(true);
     }
@@ -247,7 +250,7 @@ describe("P12 local twin lint", () => {
           "binding.ts",
           `import * as ${alias} from "@alchemy.run/cloudflare";
            ${alias}.Workers.Worker("Brain", {main:"brain.mjs", ${props}});`,
-        ).some((f) => f.reason.startsWith("unsupported-case:")),
+        ).some((f) => pipe(f.reason, Str.startsWith("unsupported-case:"))),
       ).toBe(true);
     }
 
@@ -258,9 +261,9 @@ describe("P12 local twin lint", () => {
       [`RECORD:${binding}, RecordPart:${alias}.DurableObject("Other")`, ""],
       [`RECORD:${binding}`, `${alias}.Workers.Worker("Other", {main:"other.mjs", env:{RecordPart:${binding}}});`],
     ]) {
-      expect(scan("binding.ts", source(bindings!, other)).some((f) => f.reason.includes("class-name binding"))).toBe(
-        true,
-      );
+      expect(
+        scan("binding.ts", source(bindings!, other)).some((f) => pipe(f.reason, Str.includes("class-name binding"))),
+      ).toBe(true);
     }
   });
   law("plant: a remote-only resource and remote override both fail", ({ alias, name }) => {

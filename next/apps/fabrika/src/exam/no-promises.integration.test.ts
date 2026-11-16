@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { NodePath } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Path } from "effect";
+import { Effect, Path, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { API } from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
@@ -157,7 +157,7 @@ const rpcSource = (
   // Installed workers-types: WorkerStub -> Fetcher<T> -> Rpc.Provider<T> ->
   // MethodOrProperty<V> -> Result<Awaited<R>> turns Promise<unknown> into never.
   const before = [
-    ...setup.split("\n"),
+    ...Str.split(setup, "\n"),
     `type Calls = Rpc.WorkerEntrypointBranded & {describe${suffix}(): Promise<unknown>};`,
     "declare const worker: WorkerStub;",
     "const rpc = worker.getEntrypoint<Calls>();",
@@ -338,9 +338,11 @@ describe("no-promises", async () => {
           expect(
             typed(
               {
-                [file]: source
-                  .replaceAll('"effect/Effect"', '"./lookalike-functions"')
-                  .replaceAll('"effect"', '"./lookalike"'),
+                [file]: pipe(
+                  source,
+                  Str.replaceAll('"effect/Effect"', '"./lookalike-functions"'),
+                  Str.replaceAll('"effect"', '"./lookalike"'),
+                ),
                 "next/lookalike.ts": 'export * as Effect from "./lookalike-functions";',
                 "next/lookalike-functions.ts": [
                   "export declare const tryPromise: <A>(options: {try: () => PromiseLike<A>; catch: () => Error}) => number;",
@@ -379,7 +381,7 @@ describe("no-promises", async () => {
       fc.property(markedEdge, fc.boolean(), ([method, rule, indent], sameLine) => {
         const file = "next/wrapped.ts";
         const before = wrappedEdge(method, rule, indent);
-        const line = before.split("\n").length + (sameLine ? 0 : 1);
+        const line = Str.split(before, "\n").length + (sameLine ? 0 : 1);
         const source = `${before}${sameLine ? " " : "\n"}platform.read();`;
         expect(typed({ [file]: source }).map((f) => ({ file: f.file, line: f.line }))).toEqual([
           { file, line: method === "runPromise" ? 11 : 10 },

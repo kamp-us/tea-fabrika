@@ -24,7 +24,21 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Function,
+  Layer,
+  Option,
+  Random,
+  Schema,
+  Scope,
+  Tracer,
+  String as Str,
+  pipe,
+} from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
@@ -275,10 +289,12 @@ const identity = Effect.gen(function* () {
   const line = Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`);
   return {
     fingerprint: "SHA256:test",
-    raw: btoa(String.fromCharCode(...raw))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, ""),
+    raw: pipe(
+      btoa(String.fromCharCode(...raw)),
+      Str.replaceAll("+", "-"),
+      Str.replaceAll("/", "_"),
+      Str.replace(/=+$/, ""),
+    ),
     line,
     found: "reused" as const,
     sign: (bytes: Uint8Array) =>
@@ -908,7 +924,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
 
           const ws = new MemorySocket(url, {
             send: (text) => {
-              owed -= text.includes('"initialize"') ? 1 : 0;
+              owed -= pipe(text, Str.includes('"initialize"')) ? 1 : 0;
               lower();
             },
             closed: lower,
@@ -1125,7 +1141,7 @@ const recording = (spans: Array<Tracer.AnySpan>) =>
   );
 
 /** The ways a secret can be written out: as it is, URL-encoded, and JSON-escaped. */
-const forms = (secret: string) => [secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)];
+const forms = (secret: string) => [secret, encodeURIComponent(secret), pipe(JSON.stringify(secret), Str.slice(1, -1))];
 
 const Secret = Schema.String.check(Schema.isMinLength(4), Schema.isMaxLength(24));
 
@@ -1229,7 +1245,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
         expect(signed.length, "the hello was signed").toBeGreaterThan(0);
         expect(
-          door.sent.some((t) => forms(s.body).some((form) => t.includes(form))),
+          door.sent.some((t) => forms(s.body).some((form) => pipe(t, Str.includes(form)))),
           "the press reached the door",
         ).toBe(true);
         // Every span the start made is its own, a `Span` with a name: an external one is a parent
@@ -1251,13 +1267,13 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
 
         for (const [output, text] of Object.entries(outputs)) {
           expect(
-            secrets.filter((secret) => text.includes(secret)),
+            secrets.filter((secret) => pipe(text, Str.includes(secret))),
             `${output} holds a secret`,
           ).toEqual([]);
         }
 
         // A dial's URL is the origin's socket path, the fingerprint and the tab, and nothing else.
-        const ws = ORIGIN.replace(/^http/, "ws");
+        const ws = pipe(ORIGIN, Str.replace(/^http/, "ws"));
         expect(
           urls.length,
           "the start dialed three times: the throw, its retry, and after the drop",
@@ -1328,7 +1344,7 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         }
 
         expect(run.getState().link._tag, "the page went online").toBe("online");
-        const tab = decodeURIComponent(door.dials[0]!.split("/").at(-1)!);
+        const tab = decodeURIComponent(Str.split(door.dials[0]!, "/").at(-1)!);
         const frames = door.sent.flatMap((t) => Option.toArray(decodeFrame(t)));
         const waits = writes.filter((w) => w.call._tag === "wait");
         const monitors = writes.filter((w) => w.call._tag === "monitor");

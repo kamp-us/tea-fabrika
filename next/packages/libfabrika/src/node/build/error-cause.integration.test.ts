@@ -5,7 +5,7 @@
 // `css.ts:24`, `:28`, `:32` and `:35`, the four branches of the stylesheet refusal, through both of
 // its callers; `bundle.ts:47`, a Rolldown build that rejects.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";
@@ -85,7 +85,7 @@ const world = (step: Step, failure: unknown, bad: string) => {
   };
 };
 
-const stepReason = (step: Step) => (step.startsWith("manifest") ? "table" : "read");
+const stepReason = (step: Step) => (pipe(step, Str.startsWith("manifest")) ? "table" : "read");
 
 describe("T695, the build's shared callback keeps what failed", () => {
   // C5, build.ts:51 through :66, :71, :273 and :283. Plant: `const fail = (reason) => () => ...`.
@@ -108,7 +108,7 @@ describe("T695, the build's shared callback keeps what failed", () => {
         expect(error).toBeInstanceOf(BuildError);
         expect(error.reason).toBe(stepReason(step));
 
-        if (step.endsWith("_decode")) {
+        if (pipe(step, Str.endsWith("_decode"))) {
           expect(Schema.isSchemaError(error.cause), "the cause is the decoder's own failure").toBe(true);
         } else {
           expect(error.cause).toBe(failure);

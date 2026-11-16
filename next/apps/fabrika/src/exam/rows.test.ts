@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Schema, String as Str, pipe, Option } from "effect";
 import fc from "fast-check";
 import { type Row, rowsAt } from "./rows.ts";
 
@@ -30,7 +30,7 @@ describe("the rule file's rows give a file its row", () => {
   // The tool's rule, written a second way, by segments and with no regex over the whole path, so
   // the reader is checked against the rule and not against itself.
   const one = (segment: string, name: string): boolean => {
-    const [head = "", ...rest] = segment.split("*");
+    const [head = "", ...rest] = Str.split(segment, "*");
 
     if (rest.length === 0) {
       return head === name;
@@ -38,22 +38,22 @@ describe("the rule file's rows give a file its row", () => {
 
     let at = head.length;
 
-    if (!name.startsWith(head)) {
+    if (!pipe(name, Str.startsWith(head))) {
       return false;
     }
 
     for (const piece of rest.slice(0, -1)) {
-      const next = name.indexOf(piece, at);
+      const next = pipe(name, Str.slice(at), Str.indexOf(piece));
 
-      if (next < 0) {
+      if (Option.isNone(next)) {
         return false;
       }
 
-      at = next + piece.length;
+      at += next.value + piece.length;
     }
 
     const tail = rest.at(-1) ?? "";
-    return name.length - tail.length >= at && name.endsWith(tail) && name.length > 0;
+    return name.length - tail.length >= at && pipe(name, Str.endsWith(tail)) && name.length > 0;
   };
   const claims = (pattern: ReadonlyArray<string>, path: ReadonlyArray<string>): boolean => {
     const [segment, ...rest] = pattern;
@@ -70,19 +70,19 @@ describe("the rule file's rows give a file its row", () => {
     return name !== undefined && one(segment, name) && claims(rest, below);
   };
   const weight = (pattern: string): number => {
-    const segments = pattern.split("/");
+    const segments = Str.split(pattern, "/");
     const count = (keep: (segment: string) => boolean) => segments.filter(keep).length;
     // Three numbers compared in order. Each is under 1,000 here, so one number holds them.
     return (
       count((s) => s !== "**") * 1_000_000 +
-      count((s) => !s.includes("*")) * 1_000 +
+      count((s) => !pipe(s, Str.includes("*"))) * 1_000 +
       [...pattern].filter((c) => c !== "*" && c !== "/").length
     );
   };
   const expected = (rows: ReadonlyArray<Row>, path: string): ReadonlyArray<string> => {
     const found = rows.flatMap((row) =>
       row.paths
-        .filter((pattern) => claims(pattern.split("/"), path.split("/")))
+        .filter((pattern) => claims(Str.split(pattern, "/"), Str.split(path, "/")))
         .map((pattern) => ({ name: row.name, weight: weight(pattern) })),
     );
     const top = Math.max(...found.map((f) => f.weight));

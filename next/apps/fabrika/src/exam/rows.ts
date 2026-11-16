@@ -1,4 +1,4 @@
-// The exam's row reader: which rows of the rule file (`layer-rules.json`) claim a file. `pnpm
+import { String as Str, pipe } from "effect"; // The exam's row reader: which rows of the rule file (`layer-rules.json`) claim a file. `pnpm
 // lint:layers` (code-graph) reads the same file, so the exam and the tool keep one list of paths.
 // The lead's move checker asks whether a moved file kept its row.
 //
@@ -35,14 +35,13 @@ const SPECIAL = /[.*+?^${}()|[\]\\]/g;
 const segmentSource = (segment: string): string =>
   segment === "*"
     ? "[^/]+"
-    : segment
-        .split("*")
-        .map((literal) => literal.replace(SPECIAL, "\\$&"))
+    : Str.split(segment, "*")
+        .map((literal) => pipe(literal, Str.replace(SPECIAL, "\\$&")))
         .join("[^/]*");
 
 /** The pattern as a test on a path: it claims its own path and everything below it. */
 const claims = (pattern: string): RegExp => {
-  const kept = pattern.split("/");
+  const kept = Str.split(pattern, "/");
 
   while (kept.at(-1) === "**") {
     kept.pop();
@@ -52,20 +51,20 @@ const claims = (pattern: string): RegExp => {
     return /^/;
   }
 
-  const body = kept
-    .map((segment) => (segment === "**" ? "(?:[^/]+/)*" : `${segmentSource(segment)}/`))
-    .join("")
-    .slice(0, -1);
+  const body = pipe(
+    kept.map((segment) => (segment === "**" ? "(?:[^/]+/)*" : `${segmentSource(segment)}/`)).join(""),
+    Str.slice(0, -1),
+  );
 
   return new RegExp(`^${body}(?:/|$)`);
 };
 
 const specificityAt = (pattern: string): Specificity => {
-  const segments = pattern.split("/");
+  const segments = Str.split(pattern, "/");
 
   return [
     segments.filter((segment) => segment !== "**").length,
-    segments.filter((segment) => !segment.includes("*")).length,
+    segments.filter((segment) => !pipe(segment, Str.includes("*"))).length,
     [...pattern].filter((character) => character !== "*" && character !== "/").length,
   ];
 };

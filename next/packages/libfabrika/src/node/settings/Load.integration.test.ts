@@ -14,7 +14,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema, String as Str, pipe } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -259,7 +259,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             expect(row.value).toBe(wanted);
             expect(row.origin._tag).toBe(v.override ? "flag" : v.personPresent ? "file" : "default");
             const report = Print.report(rows, { all: v.all });
-            expect(report.includes(`${row.path} =`)).toBe(v.all || row.origin._tag !== "default");
+            expect(pipe(report, Str.includes(`${row.path} =`))).toBe(v.all || row.origin._tag !== "default");
             expect(touched).toEqual([PERSON]);
           }
         }

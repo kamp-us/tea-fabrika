@@ -5,7 +5,7 @@
 // `next/` file that is not a test, so the list of edge files cannot come back through the config.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Schema, String as Str, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
@@ -163,7 +163,7 @@ describe(".oxlintrc.json", () => {
       expect(o.files.filter((f) => !TESTS.includes(f))).toEqual([]);
     }
 
-    expect(config.ignorePatterns.filter((p) => p.startsWith("next"))).toEqual([]);
+    expect(config.ignorePatterns.filter((p) => pipe(p, Str.startsWith("next")))).toEqual([]);
   });
 
   // `.agents/` is held to next/'s rules (0033) by the three laws below. One override, the mirror,
@@ -173,7 +173,7 @@ describe(".oxlintrc.json", () => {
   // must give `next/` the same level for each of its rules.
   //
   // The mirror is every override whose paths are all in `.agents/` and none is a test path.
-  const agents = (path: string): boolean => path.startsWith(".agents/");
+  const agents = (path: string): boolean => pipe(path, Str.startsWith(".agents/"));
   const test = (path: string): boolean => /\.test\.|Test\.|\.test-support\./.test(path);
   const mirror = (o: (typeof config.overrides)[number]): boolean => o.files.every(agents) && !o.files.some(test);
   const LEVELS: Readonly<Record<string, string>> = { 0: "off", 1: "warn", 2: "error" };
@@ -204,7 +204,7 @@ describe(".oxlintrc.json", () => {
             ([rule, setting]) =>
               !config.overrides.some(
                 (n) =>
-                  n.files.some((f) => f.startsWith("next/") && test(f) === tests) &&
+                  n.files.some((f) => pipe(f, Str.startsWith("next/")) && test(f) === tests) &&
                   rule in n.rules &&
                   level(n.rules[rule]) === level(setting),
               ),

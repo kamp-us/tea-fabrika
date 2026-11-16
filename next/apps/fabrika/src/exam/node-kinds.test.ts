@@ -8,7 +8,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
-import { Schema } from "effect";
+import { Schema, String as Str, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -27,29 +27,32 @@ const Kinds = Schema.fromJsonString(
 
 // The repository's own tracked list, read as text: a reader, which 0536 keeps on pull requests.
 // oxlint-disable-next-line fabrika/integration-test-name -- git ls-files only reads the repository's own index
-const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" })
-  .stdout.split("\0")
-  .filter((p) => p !== "");
+const tracked = Str.split(spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" }).stdout, "\0").filter(
+  (p) => p !== "",
+);
 
 const packages = tracked
-  .filter((p) => p.endsWith("package.json"))
+  .filter((p) => pipe(p, Str.endsWith("package.json")))
   .map((p) => dirname(p))
   .sort((a, b) => b.length - a.length);
 
 /** A path inside its nearest package, as code-graph matches a convention's glob against it. */
 const inPackage = (path: string) => {
-  const dir = packages.find((d) => d === "." || path.startsWith(`${d}/`)) ?? ".";
-  return dir === "." ? path : path.slice(dir.length + 1);
+  const dir = packages.find((d) => d === "." || pipe(path, Str.startsWith(`${d}/`))) ?? ".";
+  return dir === "." ? path : pipe(path, Str.slice(dir.length + 1));
 };
 
-const sources = tracked.filter((p) => p.startsWith("next/") && CODE.test(p) && !TEST.test(p));
+const sources = tracked.filter((p) => pipe(p, Str.startsWith("next/")) && CODE.test(p) && !TEST.test(p));
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
 
 /** A file's text with every comment blanked, so a name in a comment is no binding. */
 const code = (path: string) => {
   const text = read(path);
   const { comments } = parseSync(path, text);
-  return comments.reduce((out, c) => out.slice(0, c.start) + " ".repeat(c.end - c.start) + out.slice(c.end), text);
+  return comments.reduce(
+    (out, c) => pipe(out, Str.slice(0, c.start)) + pipe(" ", Str.repeat(c.end - c.start)) + pipe(out, Str.slice(c.end)),
+    text,
+  );
 };
 
 const exported = (path: string) =>
@@ -76,7 +79,7 @@ const problems = (text: string) => {
         found.push(`${name}: ${binding} is not exported by ${homes.join(", ")}`);
       }
 
-      const literal = new RegExp(`(["'\`])${binding.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\1`);
+      const literal = new RegExp(`(["'\`])${pipe(binding, Str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))}\\1`);
 
       if (!others.some((text) => literal.test(text))) {
         found.push(`${name}: ${binding} is bound by no string in next/ outside ${homes.join(", ")}`);

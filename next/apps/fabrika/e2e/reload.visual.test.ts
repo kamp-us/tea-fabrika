@@ -12,7 +12,19 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import {
+  Effect,
+  FileSystem,
+  type Layer,
+  Path,
+  Schedule,
+  Schema,
+  type Scope,
+  Stream,
+  String as Str,
+  pipe,
+  Option,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -257,7 +269,12 @@ const session = (url: string, key: string) =>
 
 /** The counter's source with `inc` adding `k`, and with any change a law asks for. */
 const edited = (source: string, k: number, more: (s: string) => string = (s) => s) =>
-  more(source.replace("inc: (s) => [{ count: s.count + 1 }, []]", `inc: (s) => [{ count: s.count + ${k} }, []]`));
+  more(
+    pipe(
+      source,
+      Str.replace("inc: (s) => [{ count: s.count + 1 }, []]", `inc: (s) => [{ count: s.count + ${k} }, []]`),
+    ),
+  );
 
 describe("P15 slice 1: hot reload on the real instance", () => {
   // L17: the real build's warning printer, including importers outside the project root.
@@ -302,19 +319,25 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const printed = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
 
               for (const specifier of specifiers) {
-                expect(printed.includes(specifier), "the unresolved import warning is still printed").toBe(true);
+                expect(pipe(printed, Str.includes(specifier)), "the unresolved import warning is still printed").toBe(
+                  true,
+                );
               }
 
               for (const file of [entry, imported]) {
                 expect(
-                  printed.includes(path.relative(root, file)),
+                  pipe(printed, Str.includes(path.relative(root, file))),
                   "the warning names its importer relative to root",
                 ).toBe(true);
               }
 
               for (const forbidden of [home, yield* fs.realPath(home)]) {
-                for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
-                  expect(printed.includes(form), "a printed warning holds an absolute path").toBe(false);
+                for (const form of [
+                  forbidden,
+                  pipe(JSON.stringify(forbidden), Str.slice(1, -1)),
+                  encodeURIComponent(forbidden),
+                ]) {
+                  expect(pipe(printed, Str.includes(form)), "a printed warning holds an absolute path").toBe(false);
                 }
               }
 
@@ -324,8 +347,12 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const actual = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
 
               for (const forbidden of [ROOT, yield* fs.realPath(ROOT), home, copy.home]) {
-                for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
-                  expect(actual.includes(form), "the real brain build printed an absolute path").toBe(false);
+                for (const form of [
+                  forbidden,
+                  pipe(JSON.stringify(forbidden), Str.slice(1, -1)),
+                  encodeURIComponent(forbidden),
+                ]) {
+                  expect(pipe(actual, Str.includes(form)), "the real brain build printed an absolute path").toBe(false);
                 }
               }
             }),
@@ -369,7 +396,13 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         // A save the counter's state cannot be read by: a new field, the same `v`, no upgrade.
         yield* copy.write(
           edited(source, 2, (s) =>
-            s.replace("Schema.Struct({ count: Schema.Int })", "Schema.Struct({ count: Schema.Int, step: Schema.Int })"),
+            pipe(
+              s,
+              Str.replace(
+                "Schema.Struct({ count: Schema.Int })",
+                "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
+              ),
+            ),
           ),
         );
         expect(outcome(yield* changed())).toEqual({
@@ -427,7 +460,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               yield* copy.write(edited(source, k, (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(sentinel)};\n`));
               yield* changed();
               yield* copy.write(
-                `${source}${"\n".repeat(line)}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
+                `${source}${pipe("\n", Str.repeat(line))}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
               );
               yield* changed();
               const outputs = [
@@ -439,9 +472,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
               for (const output of outputs) {
                 for (const text of forbidden) {
-                  for (const form of [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)]) {
+                  for (const form of [text, pipe(JSON.stringify(text), Str.slice(1, -1)), encodeURIComponent(text)]) {
                     expect(
-                      output.includes(form),
+                      pipe(output, Str.includes(form)),
                       `an output holds ${text === sentinel ? "the sentinel" : "a path"}`,
                     ).toBe(false);
                   }
@@ -506,9 +539,12 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               );
 
               if (move === "shape") {
-                text = text.replace(
-                  "Schema.Struct({ count: Schema.Int })",
-                  "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
+                text = pipe(
+                  text,
+                  Str.replace(
+                    "Schema.Struct({ count: Schema.Int })",
+                    "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
+                  ),
                 );
               } else if (move === "syntax") {
                 text += `\nexport const broken = ${JSON.stringify(message)} +;\n`;
@@ -520,7 +556,8 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
               yield* copy.write(text);
               const printed = yield* run.nextLine(
-                (line) => line.startsWith("counter:1 ") || line.startsWith(`${PROGRAM} did not load:`),
+                (line) =>
+                  pipe(line, Str.startsWith("counter:1 ")) || pipe(line, Str.startsWith(`${PROGRAM} did not load:`)),
               );
               expect(printed.length).toBeGreaterThan(0);
               seen.add(move);
@@ -566,27 +603,31 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 for (const forbidden of [sentinel, fakeBearer, copy.home, run.home, ROOT, text]) {
                   for (const form of [
                     forbidden,
-                    JSON.stringify(forbidden).slice(1, -1),
+                    pipe(JSON.stringify(forbidden), Str.slice(1, -1)),
                     encodeURIComponent(forbidden),
                   ]) {
-                    expect(output.includes(form), "a named output copied private input").toBe(false);
+                    expect(pipe(output, Str.includes(form)), "a named output copied private input").toBe(false);
                   }
                 }
               }
 
               // The plan's L17 row: the path is repo-relative. A bundle error names the file it is in,
               // which may be a file the program imports, so the path lies in the program's folder.
-              const folder = copy.relative.slice(0, copy.relative.indexOf("/") + 1);
+              const folder = pipe(
+                copy.relative,
+                Str.indexOf("/"),
+                Option.match({ onNone: () => "", onSome: (at) => pipe(copy.relative, Str.slice(0, at + 1)) }),
+              );
 
               for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
                 const named = String(fact.body.path);
                 const relative =
-                  !named.startsWith("/") &&
+                  !pipe(named, Str.startsWith("/")) &&
                   !/^[A-Za-z]:/.test(named) &&
-                  !named.split(/[/\\]/).includes("..") &&
-                  !named.includes(copy.home);
+                  !Str.split(named, /[/\\]/).includes("..") &&
+                  !pipe(named, Str.includes(copy.home));
                 expect(
-                  relative && named.startsWith(folder),
+                  relative && pipe(named, Str.startsWith(folder)),
                   `code.failed's path is repo-relative and inside ${folder}: ${named}`,
                 ).toBe(true);
               }

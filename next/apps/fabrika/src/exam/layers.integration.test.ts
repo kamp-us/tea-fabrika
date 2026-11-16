@@ -14,7 +14,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe } from "effect";
 import type { Row } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -410,7 +410,11 @@ describe("the real rule file on planted trees", () => {
       const { plant } = yield* planter;
       const claimed = REAL.layers
         .flatMap((row) => row.paths)
-        .filter((path) => (path.startsWith(`${LIB}/`) || path.startsWith(`${TUVAL}/`)) && !path.includes("*"))
+        .filter(
+          (path) =>
+            (pipe(path, Str.startsWith(`${LIB}/`)) || pipe(path, Str.startsWith(`${TUVAL}/`))) &&
+            !pipe(path, Str.includes("*")),
+        )
         .map((path) => (/\.tsx?$/.test(path) ? path : `${path}/Probe.ts`));
       const tree = plant({
         ...Object.fromEntries(claimed.map((path) => [path, lines("export const probe = 1;")])),
@@ -478,7 +482,9 @@ describe("the real rule file on planted trees", () => {
 
   // The rule file's modules: one probe file per row that has a layer, each importing the probe of
   // every other row. The tool breaks exactly the imports that do not go down a layer.
-  const SRC_ROWS = REAL.layers.filter((row) => row.layer !== undefined && row.paths.every((p) => p.startsWith(LIB)));
+  const SRC_ROWS = REAL.layers.filter(
+    (row) => row.layer !== undefined && row.paths.every((p) => pipe(p, Str.startsWith(LIB))),
+  );
   const probe = (row: Row): string => {
     const first = row.paths[0] ?? "";
     return /\.tsx?$/.test(first) ? first : `${first}/Probe.ts`;
@@ -503,7 +509,7 @@ describe("the real rule file on planted trees", () => {
             lines(
               ...SRC_ROWS.filter((other) => other.name !== row.name).map((other, n) => {
                 const spec = relative(dirname(probe(row)), probe(other));
-                return `import * as m${n} from "${spec.startsWith(".") ? spec : `./${spec}`}";`;
+                return `import * as m${n} from "${pipe(spec, Str.startsWith(".")) ? spec : `./${spec}`}";`;
               }),
               "export const p = 1;",
             ),
@@ -639,8 +645,12 @@ describe("the real rule file on planted trees", () => {
   // a program's box and tuval's entry file have no list, on purpose.
   // Plant: drop `next-mcp`'s `imports`. Its row then shows here.
   it("pinned: every library row names the rows it may import", () => {
-    const open = REAL.layers.filter((row) => row.imports === undefined && row.paths.some((p) => p.startsWith("next/")));
-    expect(open.filter((row) => row.paths.some((p) => p.startsWith("next/packages/libfabrika")))).toEqual([]);
+    const open = REAL.layers.filter(
+      (row) => row.imports === undefined && row.paths.some((p) => pipe(p, Str.startsWith("next/"))),
+    );
+    expect(open.filter((row) => row.paths.some((p) => pipe(p, Str.startsWith("next/packages/libfabrika"))))).toEqual(
+      [],
+    );
     expect(open.map((row) => row.name)).toEqual([
       "next-apps",
       "next-program-windows",

@@ -4,7 +4,7 @@
 // last start's file), `:99` (an event to add that does not decode). An `id_reused` refusal has no
 // cause. `dev.ts`'s sites run inside `startDev`, against the local runtime's socket: a container's job.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 
@@ -40,7 +40,7 @@ const started = (id: string) => ({
 
 const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.layerNoop(calls), Path.layer);
 const fails = <A>(failure: unknown) => Effect.fail(failure as never) as Effect.Effect<A, never>;
-const pendingFile = (path: string) => path.endsWith("brain.pending.jsonl");
+const pendingFile = (path: string) => pipe(path, Str.endsWith("brain.pending.jsonl"));
 
 type Read = "exists" | "read" | "decode";
 type Call = "pending" | "last" | "add";

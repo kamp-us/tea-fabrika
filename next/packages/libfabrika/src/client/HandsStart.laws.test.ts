@@ -23,7 +23,7 @@
 // Plants (after build): H2, read `executing` without a result as nothing, so the command runs
 // again. H5, move every work state to `offline` on a drop, losing the result.
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Layer, Schema, Scope } from "effect";
+import { Deferred, Effect, Exit, Layer, Schema, Scope, String as Str, pipe } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -57,10 +57,12 @@ const identity = (() => {
   const blob = new Uint8Array([...field(new TextEncoder().encode("ssh-ed25519")), ...field(raw)]);
   return {
     fingerprint: KEY,
-    raw: btoa(String.fromCharCode(...raw))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/, ""),
+    raw: pipe(
+      btoa(String.fromCharCode(...raw)),
+      Str.replaceAll("+", "-"),
+      Str.replaceAll("/", "_"),
+      Str.replace(/=+$/, ""),
+    ),
     line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "reused" as const,
     sign: () => Effect.succeed(new Uint8Array(64)),

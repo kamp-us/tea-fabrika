@@ -29,6 +29,8 @@ import {
   References,
   Sink,
   Tracer,
+  String as Str,
+  pipe,
 } from "effect";
 import { Command as Cli } from "effect/cli";
 import { Digest } from "effect/crypto";
@@ -113,7 +115,7 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
               : Effect.fail(missing("readFileString", path));
         }
 
-        return path.endsWith(".fabrika/fabrika.toml")
+        return pipe(path, Str.endsWith(".fabrika/fabrika.toml"))
           ? Effect.succeed("[nope]\nkey = 1\n")
           : Effect.fail(missing("readFileString", path));
       },
@@ -302,7 +304,9 @@ const shape = (g: Generated) => {
 
 /** Whether a line of output is a report row: it starts with a declared path. */
 const row = (line: string) =>
-  line.split("\n").some((l) => Declarations.all.declarations.some((d) => l.trimStart().startsWith(d.path)));
+  Str.split(line, "\n").some((l) =>
+    Declarations.all.declarations.some((d) => pipe(l, Str.trimStart, Str.startsWith(d.path))),
+  );
 
 describe("L7, the command loads once, prints only after success, selects no repo and writes nothing", () => {
   it("a run prints the library's report for its load, or fails with no report; it reads only the person's file", async () => {
@@ -323,7 +327,7 @@ describe("L7, the command loads once, prints only after success, selects no repo
         expect(Exit.isSuccess(ran.exit), JSON.stringify(input)).toBe(Exit.isSuccess(oracle));
 
         if (Exit.isSuccess(oracle)) {
-          expect(ran.stdout.join("\n")).toContain(oracle.value.trimEnd());
+          expect(ran.stdout.join("\n")).toContain(Str.trimEnd(oracle.value));
         } else {
           // A failed load prints no row, not even a valid flag's.
           expect(ran.stdout.some(row), ran.stdout.join("\n")).toBe(false);
@@ -335,12 +339,12 @@ describe("L7, the command loads once, prints only after success, selects no repo
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, pipe(JSON.stringify(secret), Str.slice(1, -1)), encodeURIComponent(secret)];
 
 // Made-up secrets with the characters that make the three forms differ.
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${pipe(word, Str.slice(0, 3))}`);
 
 /**
  * Where the person's file holds the secret: nowhere, at an unknown key, or under a declared key.

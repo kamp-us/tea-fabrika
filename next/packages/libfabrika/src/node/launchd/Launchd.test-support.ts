@@ -13,6 +13,8 @@ import {
   Schema,
   Sink,
   Stream,
+  String as Str,
+  pipe,
 } from "effect";
 import { Digest } from "effect/crypto";
 import type { ChildProcess } from "effect/process";
@@ -97,18 +99,18 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
         const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
         let response: Response = {
           ...supplied,
-          stderr: supplied.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),
+          stderr: pipe(supplied.stderr, Str.replace("test.p19.brain", Str.split(args.at(-1) ?? "", "/").at(-1) ?? "")),
         };
 
-        if (command.command.endsWith("launchctl") && !args.includes("print")) {
+        if (pipe(command.command, Str.endsWith("launchctl")) && !args.includes("print")) {
           response = { code: 0, stdout: "", stderr: "" };
         }
 
-        if (command.command.endsWith("id")) {
+        if (pipe(command.command, Str.endsWith("id"))) {
           response = { code: 0, stdout: "501\n", stderr: "" };
         }
 
-        if (command.command.endsWith("plutil")) {
+        if (pipe(command.command, Str.endsWith("plutil"))) {
           if (fault === "compile") {
             return yield* failure("compile");
           }
@@ -233,7 +235,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const links = Effect.gen(function* () {
     const held: Array<ReadonlyArray<number>> = [];
 
-    for (const folder of (yield* fs.readDirectory(home)).filter((name) => name.startsWith(".brain-"))) {
+    for (const folder of (yield* fs.readDirectory(home)).filter((name) => pipe(name, Str.startsWith(".brain-")))) {
       for (const name of yield* fs.readDirectory(path.join(home, folder))) {
         const file = path.join(home, folder, name);
 

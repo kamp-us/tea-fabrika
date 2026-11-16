@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { Option, Schema } from "effect";
+import { Option, Schema, String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -90,12 +90,12 @@ const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
     (n) => {
       const key = side(n);
       const at = n % (name[key].length + 1);
-      const broken = name[key].slice(0, at) + pick(FOREIGN, n) + name[key].slice(at);
+      const broken = pipe(name[key], Str.slice(0, at)) + pick(FOREIGN, n) + pipe(name[key], Str.slice(at));
       return key === "pack" ? `${broken}/${program}` : `${pack}/${broken}`;
     },
     (n) =>
       side(n) === "pack" ? `${pick([..."0123456789-"], n)}${full}` : `${pack}/${pick([..."0123456789-"], n)}${program}`,
-    (n) => `${full}${pick([..."ab_-1"], n).repeat(MAX + 1 - full.length)}`,
+    (n) => `${full}${pipe(pick([..."ab_-1"], n), Str.repeat(MAX + 1 - full.length))}`,
   ];
 };
 

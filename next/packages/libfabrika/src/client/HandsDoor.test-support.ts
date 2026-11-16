@@ -8,7 +8,7 @@
 // `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
 // answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
-import { Layer, Option, Schema } from "effect";
+import { Layer, Option, Schema, String as Str, pipe } from "effect";
 import { Socket } from "effect/socket";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
@@ -351,7 +351,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       return;
     }
 
-    if (!call.method.startsWith("tasks.")) {
+    if (!pipe(call.method, Str.startsWith("tasks."))) {
       return;
     }
 
