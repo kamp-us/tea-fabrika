@@ -5,7 +5,20 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
@@ -76,13 +89,11 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
 
-const rawObject = (a: unknown): Record<string, unknown> | null =>
-  typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
+/** One field of an object that is not an array, or undefined: a read before the decode. */
+const field = (a: unknown, key: string): unknown => (Predicate.isObject(a) ? a[key] : undefined);
 
-const reserved = (a: unknown) => {
-  const value = rawObject(a);
-  return value !== null && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(value, key));
-};
+const reserved = (a: unknown) =>
+  Predicate.isObject(a) && ["id", "by", "for", "arrivedAt"].some((key) => Object.hasOwn(a, key));
 
 const no = (reason: string) => Answer.cases.refused.make({ reason });
 
@@ -1222,7 +1233,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return answer;
     }
 
-    if (reserved(params) || (method === "process.send" && reserved(rawObject(params)?.m))) {
+    if (reserved(params) || (method === "process.send" && reserved(field(params, "m")))) {
       return yield* refuse("reserved");
     }
 
@@ -1306,7 +1317,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         ? Schema.decodeUnknownResult(options.inputs.schema)(request.success.m)
         : null;
     const message = decoded !== null && Result.isSuccess(decoded) ? decoded.success : null;
-    const name = message === null ? undefined : (options.inputs.name?.(message) ?? rawObject(message)?._tag);
+    const name = message === null ? undefined : (options.inputs.name?.(message) ?? field(message, "_tag"));
 
     if (
       method === "process.send" &&
@@ -1836,10 +1847,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const event = rawObject(a.event);
+      const event = a.event;
 
       if (
-        event === null ||
+        !Predicate.isObject(event) ||
         event._tag !== a.kind ||
         a.stream.startsWith("gateway/") ||
         brainOnly({ stream: a.stream, id: a.id, tag: a.kind })

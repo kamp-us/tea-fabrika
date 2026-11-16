@@ -6,6 +6,8 @@
 import type { Effect } from "effect";
 import { Context, Schema } from "effect";
 
+import type { Table } from "./internal/edit.ts";
+
 /**
  * A parsed TOML document: its values, and where each key and table header starts.
  *
@@ -14,7 +16,7 @@ import { Context, Schema } from "effect";
  */
 export interface TomlDocument {
   /** The document's values, as plain tables. */
-  readonly value: Readonly<Record<string, unknown>>;
+  readonly value: Table;
   /**
    * One entry per key/value and per table header: the key's segments and the line it starts on,
    * from 1. `"a.b" = 1` is `["a.b"]`; `a.b = 1` is `["a", "b"]`.

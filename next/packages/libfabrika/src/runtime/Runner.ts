@@ -18,6 +18,7 @@ import {
   Exit,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Semaphore,
@@ -284,43 +285,46 @@ const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
   );
 };
 
+/** A JSON Cmd that is an object of named fields, not an array or a leaf. */
+const isFields = (cmd: Schema.Json): cmd is Schema.JsonObject => Predicate.isObject(cmd);
+
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
  * names are checked before the strict decode, since an empty struct takes any field.
  */
-const operands = (cmd: unknown, fields: object): Option.Option<Record<string, unknown>> => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd)) {
+const operands = (cmd: Schema.Json, fields: object): Option.Option<Schema.JsonObject> => {
+  if (!isFields(cmd)) {
     return Option.none();
   }
 
-  const { type: _type, ...rest } = cmd as Record<string, unknown>;
+  const { type: _type, ...rest } = cmd;
   return Object.keys(rest).every((key) => Object.hasOwn(fields, key)) ? Option.some(rest) : Option.none();
 };
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
 const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
 const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessProperty: "error" });
-const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
-const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
-const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
+const decodeStartChild = (cmd: Schema.Json) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
+const decodeExit = (cmd: Schema.Json) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
+const decodeStopChild = (cmd: Schema.Json) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
 const strictHands = Schema.decodeUnknownOption(HandsInput, { onExcessProperty: "error" });
-const decodeHands = (cmd: unknown) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
+const decodeHands = (cmd: Schema.Json) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
 const strictMonitor = Schema.decodeUnknownOption(MonitorInput, { onExcessProperty: "error" });
-const decodeMonitor = (cmd: unknown) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
+const decodeMonitor = (cmd: Schema.Json) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
 const strictDemonitor = Schema.decodeUnknownOption(DemonitorInput, { onExcessProperty: "error" });
-const decodeDemonitor = (cmd: unknown) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
+const decodeDemonitor = (cmd: Schema.Json) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
 const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
-const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+const withoutInput = (cmd: Schema.Json): Schema.Json => {
+  if (!isFields(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
   }
 
-  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  const { input: _input, ...rest } = cmd;
   return rest;
 };
 
@@ -345,7 +349,7 @@ const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.St
 /** Keeps oversized invalid operands out of the checkpoint and answer. A valid first letter stays
  *  whole in the split checkpoint and reaches the ledger's row check. Refusals keep a start's own
  *  order: `no_program`, then `bad_name`, then `bad_input`. */
-const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
+const oversized = (cmd: Schema.Json): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
   const type = Option.getOrUndefined(Option.map(decodeTyped(cmd), (c) => c.type));
 
   if ((type !== START_CHILD && type !== EXIT && type !== SEND_CHUNKS) || bytes(cmd) <= INPUT_BYTES) {
@@ -403,7 +407,7 @@ const tag = (word: string): string => `fab.runner.${word}`;
 type Live = {
   readonly loaded: Omit<Loaded, "stepper">;
   readonly model: unknown;
-  readonly view: unknown;
+  readonly view: Schema.Json;
   readonly wake: number | null;
   readonly v: number;
   /** The last inbox rev folded, and that letter's inbox position. */

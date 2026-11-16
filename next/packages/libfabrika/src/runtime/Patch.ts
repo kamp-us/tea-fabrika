@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import { Predicate, Result, Schema } from "effect";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -20,17 +20,13 @@ export type Patch =
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
 const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
 
-type Plain = { [key: string]: unknown };
-
-const isPlain = (u: unknown): u is Plain => typeof u === "object" && u !== null && !Array.isArray(u);
-
 /** Same JSON value: `Object.is` for leaves, so `0` and `-0` differ as they do to a watcher. */
 const same = (a: unknown, b: unknown): boolean => {
   if (Array.isArray(a) && Array.isArray(b)) {
     return a.length === b.length && a.every((one, i) => same(one, b[i]));
   }
 
-  if (isPlain(a) && isPlain(b)) {
+  if (Predicate.isObject(a) && Predicate.isObject(b)) {
     const keys = Object.keys(a);
     return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
   }
@@ -61,7 +57,7 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
     return;
   }
 
-  if (isPlain(before) && isPlain(after)) {
+  if (Predicate.isObject(before) && Predicate.isObject(after)) {
     for (const key of Object.keys(before)) {
       if (!Object.hasOwn(after, key)) {
         out.push({ op: "remove", path: `${path}/${token(key)}` });
@@ -160,7 +156,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
         }
 
         parent = parent[Number(part)] ?? null;
-      } else if (isPlain(parent) && Object.hasOwn(parent, part)) {
+      } else if (Predicate.isObject(parent) && Object.hasOwn(parent, part)) {
         parent = parent[part];
       } else {
         return invalid();
@@ -183,7 +179,7 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
       } else {
         parent[index] = structuredClone(op.value);
       }
-    } else if (isPlain(parent)) {
+    } else if (Predicate.isObject(parent)) {
       if (op.op !== "add" && !Object.hasOwn(parent, key)) {
         return invalid();
       }

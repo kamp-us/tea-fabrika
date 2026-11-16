@@ -16,7 +16,7 @@ import * as Predicate from "effect/Predicate";
  * @category constructors
  */
 export const make = <A extends object>(rest: (method: string) => A[keyof A], own: Partial<A> = {}): A => {
-  const members: Readonly<Record<string, unknown>> = own;
+  const members = new Map<PropertyKey, Partial<A>[keyof A]>(Object.entries(own));
   // SAFETY: the one cast. It holds for calls only: reads go through the `get` trap below, but key
   // listing, `in` and spread see this empty null-prototype object, so a stub stands in for calls and
   // nothing more.
@@ -27,7 +27,7 @@ export const make = <A extends object>(rest: (method: string) => A[keyof A], own
         return undefined;
       }
 
-      return Object.hasOwn(members, key) ? members[key] : rest(key);
+      return members.has(key) ? members.get(key) : rest(key);
     },
   });
 };
