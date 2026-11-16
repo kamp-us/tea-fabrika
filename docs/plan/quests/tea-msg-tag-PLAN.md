@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0569, 0572, 0578, 0054, 0214, 0226; body 9741cd80ec65
+
 Plancheck-Version: 3
 
 # Plan: tea moves to 0.27.0, then one local patch keys tea's Msgs, Cmds, Subs and state table on `_tag` and carries eleven more asks, and every machine of ours follows
@@ -42,7 +42,7 @@ syncTest(machine, {}, { msgs, seed });          // 955: save and restart at ever
 
 | # | Pull request | Tea issue | Why here |
 |---|---|---|---|
-| 1 | tea 0.25.0 to 0.27.0; today's version on its own catalog at 0.25.0, unpatched | 897, already shipped | the patch is written against 0.27.0, and the bump deletes the 0.25.0 patch (0569) |
+| 1 | tea 0.25.0 to 0.27.0; today's version on its own catalog at 0.25.0, with its 897 patch kept | 897, shipped in 0.27.0 | the patch is written against 0.27.0; today's version keeps its runtime and types as they are (0569, 0217) |
 | 2 | the `_tag` patch: Msg, Cmd and the `cmd` a settled Msg carries, Sub, the state table; all of our side; old dev and test homes wiped at landing | [949](https://github.com/kamp-us/demlik/issues/949) | every later ask is written in `_tag` terms, and the issues say so ("With #949, `type` here becomes `_tag`") |
 | 3 | `applyCell` and its siblings take their types from the machine | [950](https://github.com/kamp-us/demlik/issues/950) | types only, the smallest; slice 12 steps children with the typed `applyCell` |
 | 4 | a Cmd from `Cmd.make` keeps its Effect schemas in its type; the any-def keeps `input` | [951](https://github.com/kamp-us/demlik/issues/951) | types only; slice 5 builds `settled` from these typed schemas |
@@ -88,15 +88,20 @@ slice that writes a return says which form it writes, so no return is written tw
 
 ## Today's version: answered, no question left
 
-With `next/` and the root on 0.27.0 and today's version left at 0.25.0, pnpm patches only the
-`@demlik/tea@0.27.0` copies, since a patch is keyed by name and exact version. Today's code is
-untouched: slice 1 gives it a named catalog, `catalog:old`, that keeps it at 0.25.0, unpatched, as
-it runs now. No downgrade and no change to today's Msgs: the owner's standing rule leaves today's app
-alone unless he names it.
+With `next/` and the root on 0.27.0 and today's version left at 0.25.0, the two tea copies are
+patched apart, since pnpm keys a patch by name and exact version. Today's code is untouched: slice 1
+gives it a named catalog, `catalog:old`, that keeps it at 0.25.0 with the patch it has now
+(`patches/@demlik__tea@0.25.0.patch`, demlik 897), so it runs and type-checks exactly as now. No
+downgrade and no change to today's Msgs: the owner's standing rule leaves today's app alone unless he
+names it.
 
-- The 0.25.0 patch (demlik 897) goes. It only adds `model` and `msg` to `Machine.make`'s return type
-  (a `.d.ts` hunk), and only `next/`'s `Program.make` reads them (pull request 522). Today's version
-  loses a type it never uses, and nothing at run time changes.
+- The 0.25.0 patch and its `patchedDependencies` row stay, keyed to `@demlik/tea@0.25.0`. The patch
+  adds `model` and `msg` to `Machine.make`'s return type (a `.d.ts` hunk). Today's version has a law
+  on it: `packages/pipeline/src/machine-make.test.ts:60-69` asserts that `Machine.make` returns both
+  schemas, and on 0.25.0 without the patch it fails with TS2344 at line 69 (the tests step of slice 1
+  proved this). That test is the law that holds the kept patch, and no law moves. The 0.25.0 key
+  never reaches `next/`'s 0.27.0, which slice 2 patches with its own file. The patch and its row go
+  when today's version goes (0217).
 - pnpm's catalogs docs describe named catalogs for holding two versions of one package in a
   workspace (from memory of the docs, not fetched for this plan).
   `oxlint-plugins/exact-versions.ts` already checks that a `catalogs.<name>` entry is exact (line
@@ -167,11 +172,13 @@ catalog:
   '@demlik/tea': 0.27.0          # next/, the root (tooling); patched from slice 2 on
 catalogs:
   # Today's version (packages/, programs/, apps/, docs/tutorials/), held at the tea it runs on, with
-  # no patch, while next/ moves to `_tag` (0569). Goes when today's version goes.
+  # its patch, while next/ moves to `_tag` (0569). Goes when today's version goes.
   old:
     '@demlik/tea': 0.25.0
 patchedDependencies:
-  # (the row for @demlik/tea@0.25.0 and its demlik#897 comment go: 0.27.0 ships the fix)
+  # demlik#897: expose the machine's existing schemas. Today's version only, on 0.25.0 (0217);
+  # 0.27.0 ships the fix. Goes when today's version goes.
+  '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
 minimumReleaseAgeExclude:
   - '@demlik/tea@0.25.0 || 0.27.0'
 ```
@@ -189,11 +196,13 @@ const exact = (version: unknown) =>
   typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 ```
 
-- `patches/@demlik__tea@0.25.0.patch` is deleted with `git rm`, and its row at
-  `pnpm-workspace.yaml:147-148` goes.
+- `patches/@demlik__tea@0.25.0.patch` stays as it is, and its row at `pnpm-workspace.yaml:147-148`
+  stays keyed to `@demlik/tea@0.25.0`; only its comment changes, to say it is today's version's
+  alone. `packages/pipeline/src/machine-make.test.ts:60-69` holds it: drop the row and that type law
+  fails with TS2344 at line 69.
 - [0256](../../../.decisions/0256-a-program-is-one-program-make.md) lines 52-53 still say tea's side
-  is unfixed and patched locally. The bump fixes that line: "tea 0.26.0 shipped it (demlik 897); no
-  patch is needed". A fact correction, in the same pull request.
+  is unfixed and patched locally. The bump fixes that line: "tea 0.27.0 ships it (demlik 897); today's
+  version keeps the local patch on 0.25.0 until it goes". A fact correction, in the same pull request.
 - Our code needs one change for 0.27.0, and it is a setting, not code: Effect's checker is told
   that `@demlik/tea` may appear twice in the `.agents` project. Today's library keeps 0.25.0 under
   [0217](../../../.decisions/0217-next-grows-beside-today.md) until `next/` takes the job, the tooling
@@ -730,7 +739,7 @@ const stepLink = (s: WindowModel, msg: LinkMsg): Step => {
 | Law | Kind (lint, type or test?) | Generator | Plant | Where |
 |---|---|---|---|---|
 | E1 (slice 1): `exact-versions` accepts `catalog:<name>` for any lower-case name, refuses a range inside `catalogs.<name>`, and still refuses `catalog:^1`, `catalog: old` and a bare tag. It runs the real script on its own git tree, as its siblings do | test | fc.stringMatching: catalog names, 10 runs | (a) leave `POINTERS` as it is: `catalog:old` is refused, E1 red; (b) a pointer pattern that allows any text after `catalog:`: `catalog:^1` passes, E1 red | oxlint-plugins/exact-versions.test.ts |
-| E2 (slice 1): `next/` and tooling type-check on 0.27.0 with no patch, and today's version on `catalog:old` at 0.25.0, the `.agents` project with its one allowed duplicate. The compiler and the existing suites are the law | type | type | point one `next/` package at `catalog:old`: `Program.make` loses the machine's `msg` type (0.25.0 unpatched has none), and its type check fails | pnpm typecheck |
+| E2 (slice 1): `next/` and tooling type-check on 0.27.0 with no patch, today's version on `catalog:old` at 0.25.0 with its kept 897 patch, and the `.agents` project with its one allowed duplicate. The compiler and the existing suites are the law; on today's side, `packages/pipeline/src/machine-make.test.ts:60-69` is the type law that holds the kept patch | type | type | (a) drop the `@demlik/tea@0.25.0` patch row: `machine-make.test.ts` fails with TS2344 at line 69; (b) drop the `.agents` checker override: `.agents` fails with TS377051 | pnpm typecheck |
 | E3 (slice 1): `allowedDuplicatedPackages` appears in `tsconfig.base.json` only inside one checker override whose `include` is `.agents/**` globs alone, names only `@demlik/tea`, and appears in no other tsconfig of the repo. Read the way `namespace-imports.test.ts` reads the same file | test | format: tsconfig.base.json, the checker's plugin entry and its overrides | (a) set it in the checker's top-level options: E3 red; (b) add `next/**/*.ts` to the override's `include`: E3 red; (c) add a second package name: E3 red | oxlint-plugins/duplicate-packages.test.ts |
 | K1 (slice 2): a Msg made with `Schema.TaggedUnion` is taken by the patched `Machine.make`; a missing handler, a misspelled handler, a misspelled Msg sent to `dispatch`, a Msg schema keyed `type`, and a Cmd input with a `_tag` field are each a compile error (`@ts-expect-error`); an answer (`<cmd>_ok`) is handled in the same table, and its `cmd` is typed with `_tag` | type | type | (a) drop the patch's `.d.ts` hunks: the tagged machine fails to compile, K1 red; (b) keep `Extract<M, { type: K }>` in `Reducer`: the handler's Msg loses its fields, K1 red; (c) keep `Cmd<T>`'s `readonly type`: the answer's `cmd._tag` fails, K1 red | next/packages/libfabrika/src/runtime/MsgKey.types.test.ts |
 | K2 (slice 2): the patched engine routes by `_tag` at run time: for generated Msg sequences of a small tagged machine with one Cmd and one timer Sub, the Effect engine's `run` and tea's `foldMsgs` reach the model a plain reduce over the handlers reaches; the Cmd runs through its interpreter by its `_tag` and its answer comes back; the timer Sub starts and fires; tea's own `arbMsg` draws carry `_tag`; a raw `{ type: "inc" }` is refused as a Msg with no cell | test | @demlik/tea/pbt.arbMsgSequence: the small machine, 100 runs | (a) leave `chunk-SKI5V64W.js:284` on `record[msg.type]`: every Msg misses its cell; (b) leave `chunk-BXLD374W.js:292` on `cmd.type`: the Cmd finds no interpreter; (c) leave `chunk-BXLD374W.js:217` on `sub.type`: the timer never starts; (d) leave `pbt/index.js:41, 45` writing `type`: the draws have no `_tag`. Each turns K2 red | next/packages/libfabrika/src/runtime/MsgKey.test.ts |
@@ -790,9 +799,9 @@ before each merge (see "Calls taken").
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| pnpm-workspace.yaml | tests | 8 | the default catalog at 0.27.0, the `catalogs.old` block with its comment, the 0.25.0 patch row goes, `minimumReleaseAgeExclude` names 0.27.0 |
+| pnpm-workspace.yaml | tests | 8 | the default catalog at 0.27.0, the `catalogs.old` block with its comment, the 0.25.0 patch row kept and keyed to `@demlik/tea@0.25.0` with its comment saying it is today's version's alone, `minimumReleaseAgeExclude` names 0.27.0 |
 | pnpm-lock.yaml | tests | generated | `pnpm install` in the step's box |
-| patches/@demlik__tea@0.25.0.patch | tests | 0 | deleted with `git rm`: 0.27.0 ships demlik 897 |
+| patches/@demlik__tea@0.25.0.patch | tests | 0 | no change: kept for today's version on 0.25.0, held by `packages/pipeline/src/machine-make.test.ts`; goes when today's version goes |
 | oxlint-plugins/exact-versions.ts | tests | 4 | accept `catalog:<name>`; its header comment says so |
 | oxlint-plugins/exact-versions.test.ts | tests | tests | E1 |
 | package.json | tests | 0 | no change: the root (tooling) stays on the default catalog |
@@ -807,7 +816,7 @@ before each merge (see "Calls taken").
 | programs/trace/package.json | build | 1 | `catalog:old` |
 | docs/tutorials/agents/package.json | build | 1 | `catalog:old` |
 | docs/tutorials/two-hosts/package.json | build | 1 | `catalog:old` |
-| .decisions/0256-a-program-is-one-program-make.md | build | docs | lines 52-53: tea 0.26.0 shipped 897, no patch is needed |
+| .decisions/0256-a-program-is-one-program-make.md | build | docs | lines 52-53: tea 0.27.0 ships 897; today's version keeps the local patch on 0.25.0 until it goes |
 | tsconfig.base.json | tests | 6 | one checker override for `.agents/**` with `allowedDuplicatedPackages: ["@demlik/tea"]` and its comment, naming ticket 1065; an exam path, so the tests step writes it |
 | oxlint-plugins/duplicate-packages.test.ts | tests | tests | E3, new |
 | .agents/tsconfig.json | build | 0 | no change: the setting lives in the base file's override (see "Slice 1"); it changes only if the fallback is taken |
@@ -1035,8 +1044,8 @@ slice that edits lines an earlier slice wrote (slice 12 changes `def.ok`, which 
 ## Size
 
 1. Slice 1, tea 0.27.0 and today's catalog: 36 lines (11 package.json files, the catalog block, 4
-   lines in `exact-versions.ts`, the checker's one override, two docs lines), plus E1, E3, the deleted patch
-   and the lockfile.
+   lines in `exact-versions.ts`, the checker's one override, two docs lines), plus E1, E3 and the
+   lockfile; the 0.25.0 patch stays as it is.
 2. Slice 2, the `_tag` switch, which holds the first patch: 1,250 lines (the patch, about 700 diff
    lines; our product code, about 550 lines in about 80 files), plus about 950 spots in about 160
    test files, four new laws, the re-recorded fixture home, the landing wipe and about 10 docs lines.
