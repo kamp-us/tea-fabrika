@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-plant-check-later-record-cannot-supersede",
+  "date": "2026-11-16",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/plant-check.ts",
+    "line": 281
+  },
+  "says": "The plant check reads every plant record of every run row a pull request adds, with no date, order or dedupe, and refuses each record on an owned file that no changed law there claims, so a later record can never supersede an earlier, wrong one for the same law: the only way out is to edit the earlier row before it lands.",
+  "proof": "At c5184b7e0, .github/ci/plant-check.ts:382 keeps every added field/runs/*.json (status A) and :383 flatMaps all their plants into one list; :279 builds the owned set from every head and untouched file on the package's it, and the loop at :281-:289 pushes an unclaimed refusal at :287 for each record whose file is owned and that no held law matches by file, title and plant, whatever other records say. On fabrikalfa/law-options-0580, field/runs/2026-11-16-law-options-0580-slice2-tests.json line 17 names next/packages/libfabrika/src/ledger/LedgerTurnReads.test.ts (on the package's it, its line 7) for the law T1041 L7 ledger, which appears 0 times in that file and once in LedgerTurnEndTest.ts; a correct reprinted record naming LedgerTurnEndTest.ts clears that law's not_recorded side but leaves this unclaimed refusal.",
+  "cost": "Every wrong record in a run row forces an edit of that row before it lands, against the field rule that rows are written once; after a row lands on main, a wrong record in it cannot be fixed at all while its law's file is owned and changed again.",
+  "head": "c5184b7e0d4bb22aa97a0bbd8f6a428eb2ee517d",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497"
+}

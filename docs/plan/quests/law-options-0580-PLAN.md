@@ -366,7 +366,8 @@ shared suites (`LedgerTurnEndTest.ts`, `RelationsTest.ts`, `ProgramMailReadsTest
    `plancheck.sh` and `stepcommit.sh` refuse an exam path owned by any step but tests. So the files
    table gives the line to the tests step, which writes it in its commit; the build writes no exam
    path. If the lead wants the build to own it, the exam list needs a change first, which this plan
-   does not make.
+   does not make. That step is **held for the owner's yes** (the merge session's first ruling,
+   below).
 
 **Where the declaring file comes from.** vitest 5.0.5 has no task field that names it. Its
 `location` (set only with `includeTaskLocation`) is `{ line, column }` with no file, and its runner
@@ -432,15 +433,51 @@ export interface Test {
   can only come from `plant.ts` once the build's change is in, so the build step, as its own proof,
   plants each of the 9 suite laws' breaks as the slice-2 tests row states them, runs `plant.ts` from
   the runner file, restores the product file by copy, and writes the 9 new records in its own row.
-  The slice-2 tests row is in this pull request and not merged, and the plant check reads it as an
-  added row: its one record that names a file on the package's `it`
-  (`LedgerTurnReads.test.ts`, "T1041 L7 ledger ...", declared in `LedgerTurnEndTest.ts`) is the
-  `unclaimed` refusal, so the build takes that one record line out of that row and says so in its
-  own. The other 8 name `.integration.test.ts` runners, which are not on the package's `it`, so the
-  check does not read them; they stay as written. My call, 80%: the doubt is whether the lead would
-  rather the tests step reprint them in a second tests round after the build.
+  These clear the 9 `not_recorded` refusals. They do not clear the one `unclaimed`; only taking
+  the stale record out does (below).
 - **What fact is lost if not recorded now:** none. A record's `file` is new in this quest, and no
   merged row names a runner file.
+
+**The merge session's two rulings on slice 2 (2026-11-16),** written here and not reopened:
+
+1. **`layer-rules.json` waits for the owner's own yes, each time** (his standing rule). The
+   `next-permissions` row's `next-vitest` line stays in this plan, owned by **tests** (an exam path,
+   so `plancheck.sh` and `stepcommit.sh` refuse any other owner), and that step is **held for the
+   owner's yes**. Until he says yes, `lint:layers` stays red on
+   `next/packages/libfabrika/src/permissions/RelationsTest.ts:13`, the `@kampus/vitest` import. The
+   rest of slice 2 goes once this plan is signed.
+2. **The stale record: option (b), the build takes it out before the row lands.** (This replaced
+   the merge session's earlier ruling (c), "never edit the row", the same day.) A field row is never
+   edited once it has landed on main. `field/runs/2026-11-16-law-options-0580-slice2-tests.json` is
+   only on the job branch, and one of its records is wrong: it names
+   `next/packages/libfabrika/src/ledger/LedgerTurnReads.test.ts` for the law "T1041 L7 ledger ...",
+   which `LedgerTurnEndTest.ts` declares. A wrong record may be fixed before it lands. So the
+   build, the step that reprints the 9 suite records, takes out ONLY that one record and changes
+   nothing else in the row. The build does it, not tests, because a run row is no exam path
+   (`plancheck.sh` and `stepcommit.sh` hold only exam paths to tests), and the build is the step
+   whose reprinted record replaces it. In the same commit the build adds one dated note row,
+   `field/notes/2026-11-16-slice2-stale-plant-record-removed.json` (`stage: build`, `kind:
+   friction`, `primitive: Check`), saying what was removed, why, and the `plant-check.ts` lines
+   below that make it needed. Why no later row can fix it instead, read in
+   `.github/ci/plant-check.ts` at `c5184b7e0`:
+   - `:382` `rows` is every `field/runs/*.json` the pull request adds (status `A`), and `:383`
+     collects every plant record in them, with no date, no order and no dedupe. A row added later
+     sits beside the stale one; it does not replace it.
+   - `:262`-`:271`: a changed law passes when ANY matching record is red. So the build's reprinted
+     record, which names `LedgerTurnEndTest.ts`, clears that law's `not_recorded` side.
+   - `:279`-`:289`: the unclaimed side loops over EVERY record and refuses each whose file is an
+     owned head file (on the package's `it`, changed or untouched) that no changed law in that file
+     matches by file, title and plant. `LedgerTurnReads.test.ts` is on the package's `it` (its
+     `:7`) and changed in slice 2, and the law "T1041 L7 ledger ..." is declared in
+     `LedgerTurnEndTest.ts`, not there. So the stale record stays `unclaimed` at `:287`, whatever
+     later rows add, until the record itself is gone.
+
+   So slice 2's plant-check pass on CI, and its fold, are not held: with the stale record out and
+   the 9 reprinted, the check gives no refusal from slice 2's rows. `plant-check.ts` stays
+   unchanged (the sev0 ruling: no CI gate changes). That a later record cannot supersede an
+   earlier one for the same law is a finding row in this commit,
+   `field/findings/2026-11-16-plant-check-later-record-cannot-supersede.json`; the merge session
+   files its ticket for after the sev0.
 
 ### Stacking
 
@@ -544,7 +581,8 @@ it.effect("the bundle holds no node: import", body, {
 | Slice 2: under its plant, each moved property reports the same counterexample and replay path as the old `property` call (0579's same first failing case) | test | fc.commands: and each file's own fast-check inputs, kept unchanged, seed 119120, default runs as before | wrap the one input in `fc.record` in the fast-check path, so the draws shift |
 | Slice 2 amendment: a law declared in one file and run from another is recorded by `plant.ts` under the file that declares it; red now, and seen red through `RelationsTest.ts` and `ProgramMailReadsTest.ts` run from their runner files | test | scenario: one law declared in a fixture file and run from a second fixture file, since where a law is declared is one fact of the module graph, not a value to generate | record the running file in place of the declaring one (`Plants.records` reads `file.filepath` and leaves `meta.file` unread) |
 | Slice 2 amendment: `Plants.records` names each record's file from the law's `meta.file`, relative to the root, and from its test file when `meta.file` is unset | test | fc.array: vitest task trees as before, with `meta.file` set on some laws, 100 runs | read `file.filepath` for every law |
-| Slice 2 amendment: `lint:layers` passes with `RelationsTest.ts` importing `@kampus/vitest` | lint | lint | take `next-vitest` out of the `next-permissions` row again |
+| Slice 2 amendment, held for the owner's yes: `lint:layers` passes with `RelationsTest.ts` importing `@kampus/vitest`; until then it stays red at `RelationsTest.ts:13` | lint | lint | take `next-vitest` out of the `next-permissions` row again |
+| Slice 2 amendment: the plant check on CI passes for slice 2's rows: the build's 9 reprinted records clear every `not_recorded`, and with the stale `LedgerTurnReads.test.ts` record taken out of the slice-2 tests row no `unclaimed` is left | test | scenario: the one pull request's diff and its added rows, since this is one fact of this branch | put the stale record back, and the check gives `unclaimed` at `plant-check.ts:287` |
 | Slice 3: a call of `property` from `Testing.test-support.ts` no longer counts as a property | lint | lint | keep `SHARED` in `law-shape.ts` |
 
 No law here needs a real resource: the moved `.integration.` files were integration before, and
@@ -599,12 +637,13 @@ any of it.
 | `next/packages/vitest/src/Law.ts` | build | slice 2 amendment: `declaredIn`, and each member writes the declaring file into `meta.file` at registration; the `TaskMeta` widening gains `file` | 25 |
 | `next/packages/vitest/src/Plants.ts` | build | slice 2 amendment: `Test.meta` gains `file`; a record's file is `meta.file`, else the test file | 6 |
 | `.agents/skills/tests/scripts/plant.ts` | build | slice 2 amendment: its doc says `<file>` is the file to run and the record names the declaring file | docs |
-| `layer-rules.json` | tests | slice 2 amendment: the `next-permissions` row imports `next-vitest`; a build-owned config line by the lead's call, owned by tests here because the exam list holds the file | 1 |
+| `layer-rules.json` | tests | slice 2 amendment, held for the owner's yes: the `next-permissions` row imports `next-vitest`; a build-owned config line by the lead's call, owned by tests here because the exam list holds the file | 1 |
+| `field/runs/2026-11-16-law-options-0580-slice2-tests.json` | build | slice 2 amendment (option b): only its one stale record goes, the `LedgerTurnReads.test.ts` record of the law "T1041 L7 ledger ..."; nothing else in the row changes. It is not on main, so this is a fix before it lands | docs |
+| `field/notes/2026-11-16-slice2-stale-plant-record-removed.json` | build | slice 2 amendment: new: a dated note of what was removed, why, and `plant-check.ts:279`-`:289` | docs |
 | `.agents/skills/tests/scripts/plant.test.ts` | tests | slice 2 amendment: the declaring-file law | tests |
 | `.agents/skills/tests/scripts/fixtures/plant/shared.fixture.ts` | tests | slice 2 amendment: new: a law with a plant, declared inside an exported suite function | tests |
 | `.agents/skills/tests/scripts/fixtures/plant/runs-shared.fixture.ts` | tests | slice 2 amendment: new: runs that suite | tests |
 | `next/packages/vitest/src/Plants.test.ts` | tests | slice 2 amendment: the generator sets `meta.file` on some laws, and the model reads it | tests |
-| `field/runs/2026-11-16-law-options-0580-slice2-tests.json` | build | slice 2 amendment: its one `LedgerTurnReads.test.ts` record of a suite law goes, replaced by the build row's 9 reprinted records | docs |
 
 The libfabrika test files' new dependency is already there: 110 files in `next/` import
 `@kampus/vitest` today. `next/AGENTS.md`'s libfabrika test: none of these is product code.
@@ -625,15 +664,22 @@ The libfabrika test files' new dependency is already there: 110 files in `next/`
    with two reds left outside its files (the amendment above). Slice 2 then goes on:
    1. **Tests:** the declaring-file law and its fixtures, seen red for the right reason (the record
       names the running fixture), with its plant; `plant.ts` run from `Relations.integration.test.ts`
-      and `ProgramMailReads.integration.test.ts`, both printed records in the row; the widened
-      `Plants.records` law; and the `layer-rules.json` line, so `lint:layers` passes.
-   2. **Build:** `declaredIn` and `meta.file` in `Law.ts`, the record's file in `Plants.ts`, the
-      `plant.ts` doc; then the 9 suite records printed again and the one stale record taken out of
-      the slice-2 tests row, until the plant check and every law are green. `plant-check.ts` is not
-      touched (the sev0 ruling).
-   3. **One review** by an Opus agent of the whole slice-2 diff, which also judges the `reach`
+      and `ProgramMailReads.integration.test.ts`, both printed records in the row; and the widened
+      `Plants.records` law. Runs once the plan is signed.
+   2. **Tests, held for the owner's yes:** the `layer-rules.json` line, so `lint:layers` passes.
+      Until the owner says yes, `lint:layers` stays red on `RelationsTest.ts:13`, and no step
+      writes the line.
+   3. **Build:** `declaredIn` and `meta.file` in `Law.ts`, the record's file in `Plants.ts`, the
+      `plant.ts` doc; then the 9 suite records printed again in the build's own row; then only the
+      one stale `LedgerTurnReads.test.ts` record taken out of the slice-2 tests row, with the note
+      row that says so, until every law is green and the plant check gives no refusal. Runs once
+      the plan is signed. `plant-check.ts` is not touched (the sev0 ruling).
+   4. **One review** by an Opus agent of the whole slice-2 diff, which also judges the `reach`
       helper copied into 11 files and whether it should be one shared test-support file. It stays as
-      it is until then.
+      it is until then. The review checks that the build's edit to the tests row took out that one
+      record and nothing else.
+   5. **The fold** goes once the review passes and CI is green, apart from `lint:layers`, which
+      waits on the held `layer-rules.json` line.
 5. **Slice 3**, after pull request 1366 merges: `StartsTest.ts` moves, `property` and `SHARED` go.
    One review.
 
@@ -646,8 +692,11 @@ the typecheck.
    the parsed-code compare included), plus about 720 test lines; 18 files; about 3 agent hours.
 2. Slice 2, the property runner's 13 files: 260 lines, all tests, the reason lines included; 14
    files; about 1.5 agent hours, with the before-and-after plant runs. The amendment adds 32
-   lines (build 31, the `layer-rules.json` line 1), plus about 60 test and fixture lines; 9 more
-   files; about 1 agent hour for its tests and build steps, the 9 reprinted plants included.
+   lines: 31 that run now (the build's `declaredIn`, `meta.file` and `Plants.records` change and
+   the `plant.ts` doc), and the 1 `layer-rules.json` line held for the owner's yes; plus about 60
+   test and fixture lines, one record line out of the tests row and one note row; 10 more files
+   that run now and 1 held; about 1 agent hour for its tests and build steps, the 9 reprinted
+   plants included.
 3. Slice 3, after 1366: 60 lines; 3 files; about 0.5 agent hours.
 
 Sure of slice 2's and 3's size at 80%: each call site is about ten lines. Slice 1 at 65%: the
@@ -667,11 +716,21 @@ Estimate: 10 steps, $45
 - No amendment to 0579: slice 2 keeps its "same first failing case" rule as written.
 - This step's own rows: `field/runs/2026-11-15-law-options-0580-plan.json` (round 1) and
   `field/runs/2026-11-15-law-options-0580-plan-fix.json` (the fix round), and
-  `field/runs/2026-11-16-law-options-0580-plan-amend.json` (the slice-2 amendment).
+  `field/runs/2026-11-16-law-options-0580-plan-amend.json` (the slice-2 amendment), and
+  `field/runs/2026-11-16-law-options-0580-plan-amend2.json` (the merge session's two rulings).
 - The lead's two calls of 2026-11-16 are written in
   [the amendment](#slice-2-amendment-a-record-names-the-file-that-declares-its-law-2026-11-16):
   option (a), and the `next-vitest` line as a config line. `plant-check.ts` is unchanged by the
   merge session's sev0 ruling that no CI gate changes during the sev0.
+- The merge session's two rulings of 2026-11-16 are written there too: the `layer-rules.json`
+  line is held for the owner's yes; and the stale record follows option (b), which replaced its
+  earlier ruling (c) the same day: the build takes that one record out of the slice-2 tests row
+  before the row lands, and writes a note row saying so.
+- A field row is never edited once it has landed on main. The slice-2 tests row has not landed,
+  so the one-record fix is allowed; nothing else in it changes.
+- The finding row `field/findings/2026-11-16-plant-check-later-record-cannot-supersede.json`, in
+  this plan's commit: the plant check should let a later record supersede an earlier one for the
+  same law.
 
 ## Existing tools
 
@@ -701,6 +760,13 @@ Estimate: 10 steps, $45
 - Whether every moved law draws the same cases on every run. Same engine, seed and arbitrary say it
   should, and slice 2 checks the first failing case under each plant, as 0579 asks; it does not
   compare the passing cases one by one.
+- Whether slice 2 is whole on CI before the owner's yes. Until the `layer-rules.json` line lands,
+  `lint:layers` stays red on `RelationsTest.ts:13`. Until the build takes the stale record out,
+  the CI plant check stays red with one `unclaimed`, the `LedgerTurnReads.test.ts` record, at
+  `plant-check.ts:287`.
+- Whether another stale record will show up the same way. The check lets no later record
+  supersede an earlier one (the finding row), so any wrong record in an added row stays a refusal
+  until that row is fixed before it lands.
 
 ## Open questions
 
@@ -711,6 +777,9 @@ seed 119120 and its fast-check inputs, so 0579's same-first-failing-case rule ho
 the Schema rewrite is 0579's later sweep.
 
 ## Findings
+
+The second amendment's finding is committed as its own file, not saved from here:
+`field/findings/2026-11-16-plant-check-later-record-cannot-supersede.json`.
 
 ```json
 {"_tag":"finding","id":"2026-11-15-0579-runner-count","date":"2026-11-15","by":"plan step, law-options-0580","model":"claude-opus-5-5","rule":"doc_drift","location":{"path":".decisions/0579-property-laws-use-it-prop.md","line":43},"says":"0579 counts 279 calls of our property( runner in 73 libfabrika files, but that pattern also matches fast-check's fc.property(; the shared runner has 23 calls in 14 files","proof":"git grep -c 'property(' 6f3c96c46 -- next/packages/libfabrika sums to 279 in 73 files, as 0579 says; on main d3a444edf, rg for a property( call not after a dot, Testing.test-support.ts left out, gives 23 in 14 files","cost":"a sweep sized from 0579's row plans for twelve times the work the runner's move is","head":"d3a444edfe229a76ae352c3471984a76676d999f","ticket":null,"pr":null}

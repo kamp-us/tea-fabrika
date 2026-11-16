@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-plan-amend2",
+  "ticket": "580",
+  "pr": null,
+  "started": "2026-11-16T01:48:05-08:00",
+  "ended": "2026-11-16T01:53:00-08:00",
+  "parent": "2026-11-16-law-options-0580-plan-amend",
+  "active": null,
+  "role": "plan",
+  "step": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Second amendment to slice 2 of docs/plan/quests/law-options-0580-PLAN.md, writing in the merge session's two rulings of 2026-11-16. First: the layer-rules.json line (next-permissions imports next-vitest) stays tests-owned, since it is an exam path, and is held for the owner's yes; until then lint:layers stays red on next/packages/libfabrika/src/permissions/RelationsTest.ts:13. Second, option (b), which replaced ruling (c) mid-step: the build takes ONLY the one stale record (LedgerTurnReads.test.ts for the law T1041 L7 ledger, declared in LedgerTurnEndTest.ts) out of field/runs/2026-11-16-law-options-0580-slice2-tests.json, which has not landed on main, and adds a dated note row saying so. The reason, read in .github/ci/plant-check.ts at c5184b7e0: :382-:383 collect every plant record of every added row with no order or dedupe; :262-:271 a changed law passes on any red match; :279-:289 every record on an owned file that no changed law there claims is refused at :287, so no later row can supersede it. Slice 2's plant-check pass and fold are not held. A finding row says the check should let a later record supersede an earlier one. Laws, Files, Steps, Size, Records and What this cannot tell are updated.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Course change mid-step: the coordinator replaced ruling (c) with option (b) before anything was committed, so this is one commit. The build owns the edit to the tests row, since a run row is no exam path and the build reprints the records that replace it. The brief's :279-:288 reads :279-:289 at c5184b7e0 (the loop closes at :289). The approval line is kept as it stood; its body digest no longer matches, so the lead signs again. Read only apart from pnpm install --frozen-lockfile, plancheck --draft on an unsigned scratchpad copy, pnpm format and pnpm lint. No test or typecheck ran."
+}
