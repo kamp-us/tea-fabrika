@@ -28,6 +28,7 @@ const SEED = 119120;
 class Unread extends Schema.TaggedError<Unread, { readonly brand: unique symbol }>()("Unread", {
   cause: Schema.Defect(),
 }) {}
+
 const TOKEN = "control-token-law";
 
 /** The names each target's door calls, from its doc block and today's sets. */
