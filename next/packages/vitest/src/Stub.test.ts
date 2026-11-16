@@ -9,7 +9,10 @@ import * as Stub from "./Stub.ts";
 
 const SEED = 119120;
 
-type Method = (...args: ReadonlyArray<unknown>) => unknown;
+/** What a stubbed method answers here: its own name, or the name rest was asked for and the arguments. */
+type Answer = string | { readonly name: string; readonly given: ReadonlyArray<fc.JsonValue> };
+
+type Method = (...args: ReadonlyArray<fc.JsonValue>) => Answer;
 
 /** Every name Object.prototype holds. A stub with none of them in `own` answers `rest` for each. */
 const PROTOTYPE_NAMES = [
