@@ -165,6 +165,21 @@ type Waiting =
 type Dir = "right" | "down";
 const DOES = { right: "tezgah.split_right", down: "tezgah.split_down" } as const;
 
+/** tezgah's focus moves: its key rows' moves, and `tezgah.focus` for a click or Tab. */
+const MOVES = [
+  "tezgah.focus",
+  "tezgah.focus_next",
+  "tezgah.focus_previous",
+  "tezgah.focus_last",
+  "tezgah.focus_left",
+  "tezgah.focus_right",
+  "tezgah.focus_up",
+  "tezgah.focus_down",
+] as const;
+
+/** The cursors a letter leaves on its `from`: the checklist's keys, or none. */
+const LEFT = ["item:milk", "item:eggs", null] as const;
+
 /** What the walk keeps beside the program's saved model: the starts waiting on an answer. */
 type World = {
   model: unknown;
@@ -245,6 +260,8 @@ type Kind =
   | "attach_reused"
   | "split_right"
   | "split_down"
+  | "split_cursor"
+  | "focus"
   | "close"
   | "close_waiting"
   | "answer"
@@ -304,6 +321,46 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       }
 
       return { move: `split ${dir} ${from} -> ${tile}`, ...e, from, ...(waiting === undefined ? {} : { waiting }) };
+    }
+
+    case "split_cursor": {
+      // A split that leaves a cursor on `from`, as Desk S3's walk sends one (plan amendment 9).
+      const from = tiles[pick % Math.max(tiles.length, 1)];
+
+      if (from === undefined) {
+        return null;
+      }
+
+      const dir: Dir = pick % 2 === 0 ? "right" : "down";
+      const tile = typeId("tile", w.next++);
+      const cursor = LEFT[(pick >> 3) % LEFT.length]!;
+      const e = take(p, w, { type: "did", does: DOES[dir], from, via, tile, cursor }, false);
+      const cmd = starts(e.cmds)[0];
+      const space = spaceWith(w.view, from)?.id ?? "";
+
+      if (cmd !== undefined) {
+        w.waiting.push({ _tag: "split", from, tile, dir, cmd, space });
+      }
+
+      return { move: `split ${dir} ${from} -> ${tile} leaving ${String(cursor)}`, ...e, from };
+    }
+
+    case "focus": {
+      // A focus move to another tile of `from`'s workspace, by a key or a click, with the cursor it
+      // leaves on `from`, as Desk S3's walk sends one.
+      const from = tiles[pick % Math.max(tiles.length, 1)];
+      const space = from === undefined ? undefined : spaceWith(w.view, from);
+      const near = space === undefined ? [] : order(space.layout).filter((t) => t !== from);
+      const to = near[(pick >> 4) % Math.max(near.length, 1)];
+
+      if (from === undefined || to === undefined) {
+        return null;
+      }
+
+      const does = MOVES[(pick >> 2) % MOVES.length]!;
+      const cursor = LEFT[(pick >> 7) % LEFT.length]!;
+      const msg = { type: "did", does, from, to, via: does === "tezgah.focus" ? { _tag: "click" } : via, cursor };
+      return { move: `${does} ${from} -> ${to}`, ...take(p, w, msg, false), from };
     }
 
     case "reattach": {
@@ -1135,20 +1192,53 @@ describe("Desk S3: focus moves at the program", () => {
 // S2 (docs/direction/saved-state.md): tezgah saves through its program's state schema, and a load at
 // any cut of a walk (attaches, splits, closes, the answers to the starts it asked for, and refused
 // letters, which the stepper never steps) goes on as the run that never stopped, every Cmd
-// included. Plant, run once (0093): `init` ignores the loaded desk and starts with no workspace: red.
+// included. The walk also moves focus and splits with the cursor a letter leaves, as Desk S3's walk
+// sends them, so tiles' cursors are saved; it states each kind of Msg the program takes and fails
+// when one is never stepped. Plants, run once (0093): `init` ignores the loaded desk and starts with
+// no workspace: red; a load clears every tile's cursor: red (it came back green while the walk sent
+// no focus move and no cursor).
+/** What kind of Msg the stepper took: its type, and for a `did` what it does and whether it leaves a cursor. */
+const msgKind = (msg: unknown): string => {
+  const m = Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String, does: Schema.optionalKey(Schema.String) }))(
+    msg,
+  );
+  const left = Schema.is(Schema.Struct({ cursor: Schema.String }))(msg) ? " leaving a cursor" : "";
+  const does = m.does === undefined ? "" : m.does.startsWith("tezgah.focus") ? " focus" : ` ${m.does}`;
+  return `${m.type}${does}${left}`;
+};
+
 describe("S2: tezgah passes the sync test", () => {
   it("S2: every save and load of a desk walk resumes to the same desk and Cmds", async () => {
     const p = await loaded();
     const { tezgah } = await load();
+    const reached = new Set<string>();
     fc.assert(
       fc.property(
         tape(
-          ["split_right", "split_down", "answer", "refuse", "attach", "reattach", "close", "close_waiting", "stop"],
+          [
+            "split_right",
+            "split_down",
+            "split_cursor",
+            "focus",
+            "focus",
+            "answer",
+            "refuse",
+            "attach",
+            "reattach",
+            "close",
+            "close_waiting",
+            "stop",
+          ],
           40,
         ),
         (cmds) => {
           const taken: Array<unknown> = [];
           walk(p, cmds, taken);
+
+          for (const msg of taken) {
+            reached.add(msgKind(msg));
+          }
+
           syncTest(
             tezgah.machine,
             {},
@@ -1163,6 +1253,22 @@ describe("S2: tezgah passes the sync test", () => {
         },
       ),
       { seed: SEED, numRuns: 200 },
+    );
+    expect([...reached].toSorted(), "S2: the walks step every Msg tezgah takes, cursors included").toEqual(
+      [
+        "attach",
+        "did focus",
+        "did focus leaving a cursor",
+        "did tezgah.close",
+        "did tezgah.split_down",
+        "did tezgah.split_down leaving a cursor",
+        "did tezgah.split_right",
+        "did tezgah.split_right leaving a cursor",
+        "start_child_err",
+        "start_child_ok",
+        "stop_child_err",
+        "stop_child_ok",
+      ].toSorted(),
     );
   });
 });

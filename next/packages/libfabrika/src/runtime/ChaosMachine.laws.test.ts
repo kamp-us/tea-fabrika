@@ -4,7 +4,7 @@
 // header's "saved requests precede outside work, and unanswered work stays unknown"); and the sync
 // test (S2, docs/direction/saved-state.md) through `Model`, the complete saved control state. The
 // chaos program's own laws (`next/programs/chaos/src/program.laws.test.ts`) hold the rest.
-import { applyCell } from "@demlik/tea";
+import { applyCell, msgKeysOf } from "@demlik/tea";
 import { arbGuidedSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
@@ -68,13 +68,21 @@ const walks = arbGuidedSequence(
       stop: fc.constant({ type: "stop" as const }),
     },
     answers: {
-      now: { draw: fc.integer({ min: 0, max: 200 }), make: (cmd, at) => now.ok(cmd, at, at) },
+      // A clock or a check may fail: the host's error ends the experiment incomplete, its reason saved.
+      now: {
+        draw: fc.record({ ok: fc.nat({ max: 3 }), at: fc.integer({ min: 0, max: 200 }) }),
+        make: (cmd, { ok, at }) => (ok > 0 ? now.ok(cmd, at, at) : now.err(cmd, { _tag: "handler_failed" }, at)),
+      },
       fire: {
         draw: fc.record({ ok: fc.boolean(), value: fired, at: fc.nat({ max: 400 }) }),
         make: (cmd, { ok, value, at }) =>
           ok ? fire.ok(cmd, value, at) : fire.err(cmd, { _tag: "handler_failed" }, at),
       },
-      inspect: { draw: fc.nat({ max: 400 }), make: (cmd, at) => inspect.ok(cmd, report, at) },
+      inspect: {
+        draw: fc.record({ ok: fc.nat({ max: 2 }), at: fc.nat({ max: 400 }) }),
+        make: (cmd, { ok, at }) =>
+          ok > 0 ? inspect.ok(cmd, report, at) : inspect.err(cmd, { _tag: "handler_failed" }, at),
+      },
     },
   },
   { maxLength: 80, size: "max" },
@@ -129,11 +137,25 @@ describe("the chaos machine", () => {
     );
   });
 
-  // Plant, run once (0093): `init` ignores the saved model and starts idle at number 0: red.
+  // The walk answers `now` and `inspect` either way, so an experiment the clock or the check failed is
+  // saved with its reason; it states every Msg the machine takes and each saved phase and reason, and
+  // fails when one is never reached. Plants, run once (0093): `init` ignores the saved model and
+  // starts idle at number 0: red; a load drops the `clock` or the `check` reason: red (both came back
+  // green while the walk never answered `now` or `inspect` with an error).
   it("S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds", () => {
     const Saved = Schema.fromJsonString(Model);
+    const reached = new Set<string>();
+    const phases = new Set<string>();
     fc.assert(
       fc.property(walks, (msgs) => {
+        let [model] = chaosMachine.init(null, {});
+
+        for (const msg of msgs) {
+          [model] = applyCell(chaosMachine, model, msg);
+          reached.add(msg.type);
+          phases.add(model.phase._tag === "incomplete" ? `incomplete:${model.phase.reason}` : model.phase._tag);
+        }
+
         syncTest(
           chaosMachine,
           {},
@@ -148,5 +170,14 @@ describe("the chaos machine", () => {
       }),
       options,
     );
+    expect([...reached].toSorted(), "S2: the walks send every Msg the chaos machine takes").toEqual(
+      msgKeysOf(chaosMachine).toSorted(),
+    );
+    expect(
+      ["idle", "starting", "active", "checking", "done", "stopped", "incomplete:clock", "incomplete:check"].filter(
+        (x) => !phases.has(x),
+      ),
+      "S2: the walks save every phase, and an experiment the clock or the check failed",
+    ).toEqual([]);
   });
 });

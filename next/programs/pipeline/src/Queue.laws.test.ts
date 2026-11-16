@@ -532,33 +532,42 @@ for (const [law, reached] of [
 }
 
 // S2 (docs/direction/saved-state.md): the queue saves through its program's state schema, and a load
-// at any cut of a guided walk (enqueues, drops, resumes and the answers to the starts it asked for)
-// goes on as the run that never stopped, every Cmd included. Plant, run once (0093): `init` ignores
-// the loaded line and starts idle: red.
+// at any cut of a walk goes on as the run that never stopped, every Cmd included. The walk is Q1's:
+// each step reads the queue's state and picks enqueues, drops, resumes, either answer to a start it
+// asked for, either answer to a send, and the merger's reply on the current landing's ref, or a late
+// one; a merged reply whose tree differs from the checked one stops the queue with `tree_drift`. It
+// states every Msg it reaches and every reply case, the drift stop and a landing among them, and
+// fails when one is never sent. Plants, run once (0093): `init` ignores the loaded line and starts
+// idle: red; a load drops the stop reason's tree: red (it came back green while the walk sent no
+// reply, so landing never ended and no tree_drift stop was saved).
 it("S2: every save and load of a queue walk resumes to the same lines and Cmds", () => {
+  const seen = new Set<string>();
+  const reached = new Set<string>();
   fc.assert(
     fc.property(
-      world.chain((drawn) => {
-        const p = program({ ...drawn, enabled: true });
-        return arbGuidedSequence(
-          p.machine,
-          ctx,
-          {
-            outside: {
-              enqueue: draw.map((cell) => enqueue(cell, (cell.pick % 10) + 1)),
-              resume: fc.constant(Mail.Resume.make({ type: "resume" })),
-              drop: fc.integer({ min: 1, max: 10 }).map((change) => Mail.Drop.make({ type: "drop", change })),
+      fc.commands(
+        [
+          draw.map((cell): fc.Command<{ walk: Walk; taken: Array<Msg> }, object> => ({
+            check: () => true,
+            run: (r) => {
+              const msg = choose(r.walk, cell);
+              const landing = r.walk.model._tag === "landing";
+              step(r.walk, msg);
+              r.taken.push(msg);
+              reached.add(msg.type === "reply" ? `reply:${msg._tag}${landing ? "" : ":late"}` : msg.type);
             },
-            answers: { start_child: { draw, make: (cmd: Start, cell: Cell) => startAnswer(p, cmd, cell) } },
-          },
-          { maxLength: 100, size: "max" },
-        ).map((msgs) => ({ p, msgs }));
-      }),
-      ({ p, msgs }) => {
-        syncTest(p.machine, ctx, {
-          msgs,
-          encode: Schema.encodeSync(p.state.schema),
-          decode: Schema.decodeUnknownSync(p.state.schema),
+            toString: () => JSON.stringify(cell),
+          })),
+        ],
+        { maxCommands: 100, size: "max" },
+      ),
+      (commands) => {
+        const r = { walk: open({ most: 6, enabled: true }, seen), taken: [] as Array<Msg> };
+        fc.modelRun(() => ({ model: r, real: {} }), commands);
+        syncTest(r.walk.p.machine, ctx, {
+          msgs: r.taken,
+          encode: Schema.encodeSync(r.walk.p.state.schema),
+          decode: Schema.decodeUnknownSync(r.walk.p.state.schema),
           equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
           seed: 119120,
         });
@@ -566,6 +575,34 @@ it("S2: every save and load of a queue walk resumes to the same lines and Cmds",
     ),
     { seed: 119120, numRuns: 100 },
   );
+  expect([...reached].toSorted(), "S2: the walks send every Msg the queue takes, each reply case").toEqual(
+    [
+      "drop",
+      "enqueue",
+      "reply:abandoned",
+      "reply:behind",
+      "reply:closed",
+      "reply:conflict",
+      "reply:merged",
+      "reply:moved",
+      "reply:red",
+      "reply:unset",
+      "reply:abandoned:late",
+      "reply:behind:late",
+      "reply:closed:late",
+      "reply:conflict:late",
+      "reply:merged:late",
+      "reply:moved:late",
+      "reply:red:late",
+      "reply:unset:late",
+      "resume",
+      "send_err",
+      "send_ok",
+      "start_child_err",
+      "start_child_ok",
+    ].toSorted(),
+  );
+  expect(seen.has("drift"), "S2: the walks save a tree_drift stop").toBe(true);
 });
 
 // pinned: Q8 is a compile-time contract. CI checks the deliberately invalid assignments.

@@ -1,4 +1,4 @@
-import { applyCell } from "@demlik/tea";
+import { applyCell, msgKeysOf } from "@demlik/tea";
 // P18 slice 1, next/ (ticket 290): the window parent, moved from Tuval into the library with its
 // laws. P14 slice 2's laws (ticket 828: L8 connection, L9 records) keep every assertion (P18 L1); P18
 // adds L3 (each frame reaches one owner), L6 (a cut Model continues the same), L10 (the wire's
@@ -586,22 +586,164 @@ const unsaid = (value: unknown): unknown =>
     ? { ...value, said: { id: value.said.id } }
     : value;
 
+/** Keys a window with no key table reads: each still counts as one press read. */
+const STRAY_KEYS = ["a", "ctrl+b", "f6", "enter"] as const;
+
+/** A failure each Cmd the window hands out may answer with, by the Cmd's type. */
+const FAILED: Readonly<Record<string, unknown>> = {
+  key: { _tag: "ClientKeyError", op: "open", error: "QuotaExceededError" },
+  now: { _tag: "clock" },
+  write: { _tag: "unreachable" },
+  persist: { _tag: "unsupported" },
+  record: { _tag: "failed" },
+  ping: { _tag: "closed" },
+  hello: { _tag: "closed" },
+  enroll: { _tag: "closed" },
+  mint: { _tag: "entropy" },
+};
+
+/**
+ * S2's walk: slice 1's moves, and one step in three a move that carries the window forward or a key.
+ * A cut of slice 1's walk short enough to sync rarely gets a letter written, since each step there
+ * picks among some forty moves; here an online window's calls are answered, its open tiles pressed and
+ * its letters dated often enough that letters are answered, and every call and Cmd may also fail.
+ */
+const pressing = (w: World, c: Choice): ReadonlyArray<() => WindowMsg> => {
+  if (c.word.charCodeAt(0) % 3 !== 0) {
+    return moves(w, c);
+  }
+
+  const s = w.s;
+  const out: Array<() => WindowMsg> = [];
+
+  if (c.aux % 4 === 0) {
+    out.push(() => ({ type: "key", key: STRAY_KEYS[c.pick % STRAY_KEYS.length]!, at: c.ms }));
+  }
+
+  const live = w.flights.filter((f) => s.flight.some((x) => x.id === f.id && x.dial === f.dial));
+  const f = live[c.pick % Math.max(1, live.length)];
+
+  if (f !== undefined) {
+    const on = { id: f.id, dial: f.dial };
+    out.push(() => answerMsg({ type: `${f.call._tag}_err`, ...on, error: { _tag: "unreachable" } }));
+    out.push(() => {
+      if (f.call._tag === "read") {
+        const name = String(f.call["stream"]).replace(/^processes\//, "");
+        const pid = w.pids.get(name) ?? `process_${name}_${c.word}`;
+        w.pids.set(name, pid);
+        const started = { _tag: "started", by: "brain", body: { process: pid, name }, rev: 1, arrivedAt: "t" };
+        return answerMsg({ type: "read_ok", ...on, value: [started], ms: c.ms });
+      }
+
+      if (f.call._tag === "open") {
+        const b = brainFor(w, String(f.call["pid"]));
+        return answerMsg({ type: "open_ok", ...on, value: { rev: b.rev, view: b.views[b.rev]! }, ms: c.ms });
+      }
+
+      if (f.call._tag === "send") {
+        const value =
+          c.aux % 2 === 0
+            ? { _tag: "accepted", rev: c.ms, pos: c.aux }
+            : { _tag: "refused", reason: REASONS[c.ms % REASONS.length]! };
+        return answerMsg({ type: "send_ok", ...on, value, ms: c.ms });
+      }
+
+      if (f.call._tag === "wait") {
+        return answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms });
+      }
+
+      return answerMsg({ type: `${f.call._tag}_ok`, ...on, value: null, ms: c.ms });
+    });
+  }
+
+  // The key store's failure blocks the link; slice 1's moves send it already.
+  const failing = w.waiting.filter((x) => x.type !== "key");
+  const cmd = failing[c.aux % Math.max(1, failing.length)];
+
+  if (cmd !== undefined) {
+    out.push(() => answerMsg({ type: `${cmd.type}_err`, cmd, error: FAILED[cmd.type] }));
+  }
+
+  const dated = w.waiting.find((x) => x.type === "now");
+
+  if (dated !== undefined) {
+    const value = { letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-11T00:00:00.000Z" };
+    out.push(() => answerMsg({ type: "now_ok", cmd: dated, value }));
+  }
+
+  const opened = s.tiles.filter((t) => t.reach._tag === "open");
+
+  if (opened.length > 0) {
+    const t = opened[c.pick % opened.length]!;
+    out.push(() => ({ type: "press", tile: t.id, m: { type: "add", name: c.word } }));
+  }
+
+  return out.length === 0 ? moves(w, c) : out;
+};
+
+/** Every Msg slice 1's walk offers, with the key presses S2 adds. */
+const SLICE_ONE_MSGS = [
+  "admitted",
+  "ask_again",
+  "beat",
+  "closed",
+  "granted",
+  "key",
+  "key_err",
+  "key_ok",
+  "knock_ok",
+  "monitor_err",
+  "monitor_ok",
+  "not_granted",
+  "now_err",
+  "now_ok",
+  "open_err",
+  "open_ok",
+  "persist_err",
+  "persist_ok",
+  "pong",
+  "press",
+  "read_err",
+  "read_ok",
+  "record_err",
+  "record_ok",
+  "renew",
+  "resend",
+  "retry",
+  "seen",
+  "send_err",
+  "send_ok",
+  "stalled",
+  "tile",
+  "view",
+  "wait_err",
+  "wait_ok",
+  "write_err",
+  "write_ok",
+] as const;
+
 describe("S2: the window parent passes the sync test", () => {
   // S2 (docs/direction/saved-state.md): the window saves as JSON text through its Model's own schema,
   // its tiles' own Models, link, handshake and client inside it, and a load at any cut of slice 1's
   // walk goes on as the run that never stopped, every Cmd included, but for the status burst a load
-  // ends by design (`unsaid`). Plant, run once (0093): `init` ignores the loaded window and starts
-  // fresh: red.
+  // ends by design (`unsaid`). Slice 1's walk plus key presses: a window with no key table still
+  // counts each press it reads in `presses`. The walk states which Msgs it reaches and fails when one
+  // is never sent; the Msgs only a window with keys and a tezgah takes are walked by the next law.
+  // Plants, run once (0093): `init` ignores the loaded window and starts fresh: red; a load resets
+  // `presses` to 0: red (it came back green while the walk sent no key).
   it("S2: every save and load of a window walk resumes to the same window and Cmds", () => {
     const Saved = Schema.fromJsonString(Schema.toType(machine.model));
+    const reached = new Set<string>();
     fc.assert(
       fc.property(walks, (list) => {
         const msgs: Array<WindowMsg> = [];
         let first = true;
-        fold(list.slice(0, 80), ({ m }) => {
+        const [w, cmds0] = fresh();
+        walk(w, cmds0, list.slice(0, 120), { moves: (c) => pressing(w, c) }, ({ m }) => {
           // The fold's first call is its start, not a Msg the window took.
           if (!first) {
             msgs.push(m);
+            reached.add(m.type);
           }
 
           first = false;
@@ -614,7 +756,10 @@ describe("S2: the window parent passes the sync test", () => {
           seed: SEED,
         });
       }),
-      { seed: SEED, numRuns: 30 },
+      { seed: SEED, numRuns: 20 },
+    );
+    expect([...reached].toSorted(), "S2: the walks send every Msg slice 1's walk offers, a key included").toEqual(
+      [...SLICE_ONE_MSGS].toSorted(),
     );
   });
 });
@@ -3854,16 +3999,18 @@ const inboxParked = (s: WindowModel, f: WindowModel["flight"][number]): boolean 
   f.call._tag === "wait" && s.inbox._tag === "waiting" && f.id === s.inbox.id;
 
 /** Every move the focus world allows now. With `ends`, a read of a tile's name finds, by the pick,
- *  either a live process or one that started and then ended with one of the exit reasons. */
+ *  either a live process or one that started and then ended with one of the exit reasons. `machine`
+ *  is the window it steps: the focus window, or S2's, whose key table also splits and closes. */
 const focusMoves = (
   w: FocusWorld,
   c: DeskPick,
   each: (e: DeskEvent) => void,
   ends = false,
+  machine: typeof focusWindow = focusWindow,
 ): ReadonlyArray<() => void> => {
   const s = w.s;
   const out: Array<() => void> = [];
-  const send = (m: WindowMsg) => deskStep(w, m, focusWindow, each);
+  const send = (m: WindowMsg) => deskStep(w, m, machine, each);
 
   // A `ledger.wait` stays parked at the door: nothing in this world writes past its cursor, the
   // window's inbox or a tile's name, so the door never answers it (P18 slice 2's inbox wait).
@@ -4577,5 +4724,372 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
     expect(seen.sizes, "L32: the walks say sizes").toBeGreaterThan(0);
     expect(seen.folded, "L32: the walks say sizes at which tiles fold").toBeGreaterThan(0);
     expect(seen.letters, "L32: the walks send tezgah letters").toBeGreaterThan(0);
+  });
+});
+
+// S2 on a window with keys and a tezgah (slice E's fix round, 0591). Slice 1's window has neither, so
+// its walk never saves an armed or asking prefix, a tezgah link, a tile's cursor or a size, and never
+// answers a mint. This walk is L26's focus world on a window whose key table also splits and closes,
+// and each step picks one move possible in the state it folded: a focus world move (a focus key, a
+// click with or without a cursor, an answer to a call or a Cmd, a socket drop, a view tezgah sent), a
+// split, a close and its answer, a lone prefix or a stray key, a size, either answer to any Cmd that
+// waits and a failed answer to any call in flight, the door's next handshake frame or a junk one, a
+// socket failure, the link's timers, a press or a tile's own Msg, a tile's view, and a tezgah view
+// without the window's workspace, which mints the window's own attach. A new dial is admitted, or now
+// and then refused, so the walk knocks and waits for a grant. The walk states every Msg it reaches and
+// fails when one is never sent, and with slice 1's walk it sends every Msg the window takes.
+// Plants, run once (0093): a load resets `prefix` to idle: red (green on slice 1's walk, which has no
+// key table); a load clears every tile's cursor in the tezgah link: red.
+const SYNC_ROWS: ReadonlyArray<Binding> = [
+  ...FOCUS_ROWS,
+  { does: "tezgah.split_right", keys: ["<prefix>v"], word: "split right", label: "Split right" },
+  { does: "tezgah.split_down", keys: ["<prefix>s"], word: "split down", label: "Split down" },
+  { does: "tezgah.close", keys: ["<prefix>x"], word: "close", label: "Close tile" },
+];
+
+const syncWindow = windowMachineFor({
+  decode: () => Schema.decodeUnknownSync(ListView),
+  tile: tileFor,
+  keys: Result.getOrThrow(Keys.load(Keys.ship(SYNC_ROWS, FOCUS_BACKEND), FOCUS_BACKEND)),
+});
+
+const SYNC_CTX = { tiles: [], tab: TAB, tezgah: { workspace: 1 } };
+
+/** What the walk presses at once: a split each way, a close and its answers, a lone prefix, a stray key. */
+const SYNC_PRESSES: ReadonlyArray<ReadonlyArray<string>> = [
+  ["ctrl+b", "v"],
+  ["ctrl+b", "s"],
+  ["ctrl+b", "x"],
+  ["y"],
+  ["n"],
+  ["ctrl+b"],
+  ["a"],
+  ["ctrl+b", "ctrl+b"],
+];
+
+/** Every Msg the tezgah window's walk sends. The link's own Msgs come in its frames here. */
+const TEZGAH_WINDOW_MSGS = [
+  "beat",
+  "blocked",
+  "enroll_err",
+  "enroll_ok",
+  "focus",
+  "frame",
+  "hello_err",
+  "hello_ok",
+  "key",
+  "key_ok",
+  "knock_err",
+  "knock_ok",
+  "mint_err",
+  "mint_ok",
+  "monitor_ok",
+  "now_err",
+  "now_ok",
+  "open_ok",
+  "persist_ok",
+  "ping_err",
+  "ping_ok",
+  "press",
+  "read_err",
+  "read_ok",
+  "record_err",
+  "record_ok",
+  "renew",
+  "resend",
+  "retry",
+  "seen",
+  "send_ok",
+  "size",
+  "socket_closed",
+  "socket_failure",
+  "socket_opened",
+  "stalled",
+  "tile",
+  "view",
+  "wait_err",
+  "wait_ok",
+  "write_err",
+  "write_ok",
+] as const;
+
+/** An answer to Cmd `cmd` that it may really get. */
+const syncOk = (w: FocusWorld, cmd: Cmd, c: DeskPick): unknown =>
+  cmd.type === "key"
+    ? { found: cmd["rejected"] === null ? "reused" : "replaced", fingerprint: "SHA256:k" }
+    : cmd.type === "mint"
+      ? { tile: typeId("tile", 300 + ++w.letters) }
+      : cmd.type === "now"
+        ? { letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
+        : cmd.type === "persist"
+          ? c.pick % 2 === 0
+          : null;
+
+/** The hello exchange on a new dial: admitted as L26's walk is, or refused, so the window knocks. */
+const dialIn = (w: FocusWorld, each: (e: DeskEvent) => void, dial: number, admit: boolean) => {
+  if (admit) {
+    goOnline(w, syncWindow, each, dial);
+    return;
+  }
+
+  const send = (m: unknown) => deskStep(w, m as WindowMsg, syncWindow, each);
+  const key = w.waiting.find((c) => c.type === "key");
+
+  if (key !== undefined) {
+    send({ type: "key_ok", cmd: key, value: { found: "reused", fingerprint: "SHA256:k" } });
+  }
+
+  send({ type: "socket_opened", dial, at: 0 });
+  send({ type: "frame", dial, text: rpc({ method: "challenge", params: { nonce: `n0nce${dial}` } }), at: 1 });
+  const hello = w.waiting.find((c) => c.type === "hello" && c["dial"] === dial);
+
+  if (hello !== undefined) {
+    send({ type: "hello_ok", cmd: hello, value: null });
+    send({ type: "frame", dial, text: rpc({ id: hello["id"], error: NOT_GRANTED }), at: 2 });
+  }
+};
+
+/** Every move the tezgah window's world allows now. */
+const syncMoves = (w: FocusWorld, c: DeskPick, each: (e: DeskEvent) => void): ReadonlyArray<() => void> => {
+  const s = w.s;
+  const send = (m: unknown) => deskStep(w, m as WindowMsg, syncWindow, each);
+  const focusing = focusMoves(w, c, each, true, syncWindow);
+
+  // Two steps in three are the focus world's, which go online and answer, so a walk short enough to
+  // sync reaches an open tezgah link with tiles drawn.
+  if (c.ms % 3 !== 0) {
+    return focusing;
+  }
+
+  const out: Array<() => void> = [];
+  const keys = SYNC_PRESSES[c.pick % SYNC_PRESSES.length]!;
+  const pressed = () => {
+    for (const key of keys) {
+      send({ type: "key", key, at: c.ms });
+    }
+  };
+  out.push(
+    pressed,
+    pressed,
+    pressed,
+    () => send({ type: "size", width: 320 + ((c.ms * 13) % 2_241), height: 240 + ((c.pick * 7) % 1_361) }),
+    () => send({ type: "seen", rev: c.ms % 50 }),
+  );
+  // A Cmd that waits, its type picked first: records pile up, and would crowd out a waiting mint.
+  const types = [...new Set(w.waiting.map((x) => x.type))];
+  const cmd = w.waiting.find((x) => x.type === types[c.pick % Math.max(1, types.length)]);
+
+  if (cmd !== undefined) {
+    out.push(
+      () => send({ type: `${cmd.type}_ok`, cmd, value: syncOk(w, cmd, c) }),
+      () => send({ type: `${cmd.type}_err`, cmd, error: FAILED[cmd.type] }),
+    );
+  }
+
+  // A call in flight, its kind picked first, as a Cmd's type is.
+  const calls = [...new Set(s.flight.map((x) => x.call._tag))];
+  const f = s.flight.find((x) => x.call._tag === calls[c.ms % Math.max(1, calls.length)]);
+
+  if (f !== undefined) {
+    const on = { id: f.id, dial: f.dial };
+    out.push(() => send({ type: `${f.call._tag}_err`, ...on, error: { _tag: "unreachable" } }));
+
+    if (f.call._tag === "wait") {
+      out.push(() => send({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms }));
+    }
+
+    if (f.call._tag === "send") {
+      out.push(() =>
+        send({ type: "send_ok", ...on, value: { _tag: "refused", reason: REASONS[c.ms % REASONS.length]! }, ms: c.ms }),
+      );
+    }
+  }
+
+  const dial = socketDial(s);
+
+  if (dial !== null) {
+    const hs = handshakeIn(s);
+    out.push(
+      () => send({ type: "socket_failure", dial, op: "connect", error: "NetworkError" }),
+      () => send({ type: "frame", dial, text: JUNK[c.pick % JUNK.length]!, at: c.ms }),
+      () => send({ type: "resend", dial }),
+    );
+
+    if (hs.dial === dial && hs._tag === "knocking") {
+      const text = rpc({ id: hs.id, result: { code: `c${c.pick}`, until: c.ms } });
+      out.push(() => send({ type: "frame", dial, text, at: c.ms }));
+    }
+
+    if (hs.dial === dial && hs._tag === "waiting") {
+      const text = rpc({ method: "client.granted", params: { nonce: `n${c.ms}` } });
+      out.push(() => send({ type: "frame", dial, text, at: c.ms }));
+    }
+  }
+
+  const timer = linkTimer(s.link);
+
+  if (timer !== null) {
+    out.push(() => send(timer.msg));
+  }
+
+  if (s.link._tag === "removed") {
+    out.push(() => send({ type: "ask_again", dial: s.dials + 1 }));
+  } else if (c.ms % 40 === 0) {
+    out.push(() => send({ type: "blocked", reason: "storage" }));
+  }
+
+  // A minted tile id comes back: a split's new tile, or the window's own attach.
+  const minted = w.waiting.find((x) => x.type === "mint");
+
+  if (minted !== undefined) {
+    out.push(
+      () => send({ type: "mint_ok", cmd: minted, value: syncOk(w, minted, c) }),
+      () => send({ type: "mint_ok", cmd: minted, value: syncOk(w, minted, c) }),
+      () => send({ type: "mint_err", cmd: minted, error: FAILED["mint"] }),
+    );
+  }
+
+  const t = s.tiles[c.pick % Math.max(1, s.tiles.length)];
+
+  if (t !== undefined) {
+    out.push(
+      () => send({ type: "press", tile: t.id, m: { type: "add", name: POOL[c.ms % POOL.length]! } }),
+      () => send({ type: "tile", id: t.id, msg: c.ms % 2 === 0 ? { type: "typed", text: DRAFT } : { type: "submit" } }),
+    );
+
+    if (t.reach._tag === "open" || t.reach._tag === "opening") {
+      const pid = t.reach.pid;
+      out.push(() => send({ type: "view", pid, note: { type: "whole", rev: c.ms, view: EMPTY } }));
+    }
+  }
+
+  // tezgah shows a desk without the window's workspace, then its own again: the window mints its attach.
+  if (w.subscribed) {
+    out.push(() => {
+      w.pos++;
+      send({
+        type: "view",
+        pid: TEZGAH_PID,
+        note: { pid: TEZGAH_PID, type: "whole", rev: w.pos, view: { workspaces: [], tiles: [] } },
+      });
+      w.pos++;
+      w.notices.push({ rev: w.pos, view: w.view });
+    });
+  }
+
+  return out;
+};
+
+/** One walk of the tezgah window's world, from its real init. */
+const syncFold = (
+  cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>,
+  focus: number,
+  picks: ReadonlyArray<DeskPick>,
+  check: (e: DeskEvent) => void,
+) => {
+  const [s0, cmds0] = syncWindow.init(null, SYNC_CTX);
+  const w: FocusWorld = {
+    s: s0,
+    waiting: [...cmds0],
+    desk: { rev: 1, spaces: new Map(), shows: new Map(), next: 1 },
+    shown: null,
+    subscribed: false,
+    up: true,
+    view: focusDesk(cuts, focus),
+    pos: 1,
+    notices: [],
+    moves: [],
+    took: [],
+    letters: 0,
+  };
+  /** tezgah takes a move as the socket hands it over and sends its view while the window listens. */
+  const each = (e: DeskEvent) => {
+    for (const c of e.cmds.filter(isWrite)) {
+      const to = Reflect.get(Object(c.call["m"]), "to");
+      const space = w.view.workspaces[0]!;
+      const letter = String(c.call["letter"]);
+
+      if (
+        c.call._tag === "send" &&
+        c.call["pid"] === TEZGAH_PID &&
+        typeof to === "string" &&
+        !w.took.includes(letter) &&
+        Layout.order(space.layout).includes(to as TileId)
+      ) {
+        w.took.push(letter);
+        w.pos++;
+        w.view = { ...w.view, workspaces: [Layout.focus(space, to as TileId)] };
+
+        if (w.subscribed) {
+          w.notices.push({ rev: w.pos, view: w.view });
+        }
+      }
+    }
+
+    check(e);
+  };
+  goOnline(w, syncWindow, each);
+  const dialed = new Set([1]);
+
+  for (const c of picks) {
+    if (w.s.link._tag === "dialing" && !dialed.has(w.s.link.dial)) {
+      dialed.add(w.s.link.dial);
+      dialIn(w, each, w.s.link.dial, c.pick % 3 !== 0);
+      continue;
+    }
+
+    const options = syncMoves(w, c, each);
+    options[c.move % options.length]!();
+  }
+
+  return w;
+};
+
+describe("S2: a window with keys and a tezgah passes the sync test", () => {
+  it("S2: every save and load of a tezgah window's walk, its keys pressed, its focus moved and its tiles split, resumes to the same window and Cmds", () => {
+    const Saved = Schema.fromJsonString(Schema.toType(syncWindow.model));
+    const reached = new Set<string>();
+    const saved = { armed: 0, asking: 0, cursor: 0, open: 0, size: 0, minting: 0 };
+    fc.assert(
+      fc.property(
+        FoldCuts,
+        fc.nat(),
+        arbMsgSequence(DeskPick, { minLength: 60, maxLength: 140, size: "max" }),
+        (cuts, focus, picks) => {
+          const msgs: Array<WindowMsg> = [];
+          syncFold(cuts, focus, picks, ({ m, next }) => {
+            msgs.push(m);
+            reached.add(m.type);
+            saved.armed += next.prefix._tag === "armed" ? 1 : 0;
+            saved.asking += next.prefix._tag === "asking" ? 1 : 0;
+            saved.cursor += Object.values(next.tezgah?.cursors ?? {}).some((x) => x !== null) ? 1 : 0;
+            saved.open += next.tezgah?.reach._tag === "open" ? 1 : 0;
+            saved.size += next.size === null ? 0 : 1;
+            saved.minting += next.tezgah?.attach === "minting" ? 1 : 0;
+          });
+          syncTest(syncWindow, SYNC_CTX, {
+            msgs,
+            encode: Schema.encodeSync(Saved),
+            decode: Schema.decodeUnknownSync(Saved),
+            equals: (a, b) => canon(unsaid(a)) === canon(unsaid(b)),
+            seed: SEED,
+          });
+        },
+      ),
+      { seed: SEED, numRuns: 15 },
+    );
+    expect([...reached].toSorted(), "S2: the walks send every Msg the tezgah window's walk offers").toEqual(
+      [...TEZGAH_WINDOW_MSGS].toSorted(),
+    );
+    expect(
+      [...new Set([...SLICE_ONE_MSGS, ...TEZGAH_WINDOW_MSGS])].toSorted(),
+      "S2: the two window walks send every Msg the window takes",
+    ).toEqual(msgKeysOf(syncWindow).toSorted());
+    expect(saved.armed, "S2: the walks save an armed prefix").toBeGreaterThan(0);
+    expect(saved.asking, "S2: the walks save a close that asks").toBeGreaterThan(0);
+    expect(saved.cursor, "S2: the walks save a tile's cursor").toBeGreaterThan(0);
+    expect(saved.open, "S2: the walks save an open tezgah link").toBeGreaterThan(0);
+    expect(saved.size, "S2: the walks save a size").toBeGreaterThan(0);
+    expect(saved.minting, "S2: the walks save an attach being minted").toBeGreaterThan(0);
   });
 });

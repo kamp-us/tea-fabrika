@@ -32,7 +32,7 @@
 // Plants (after build): H1, call `execute` before the `executing` write lands. H3, count a finish
 // refused `unavailable` as done and save `acknowledged`; or hold a finish refused `rate_limited`. H4, execute the task in any `assigned`
 // answer, whoever it names.
-import { applyCell, type Cmd } from "@demlik/tea";
+import { applyCell, type Cmd, msgKeysOf } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -174,6 +174,9 @@ type Moves = {
   readonly finish: ReadonlyArray<FinishMode | "lost">;
   /** `held`: a restart only once the journal holds a `held` entry, so the walk still reaches its finishes. */
   readonly restart: boolean | "held";
+  /** S2's walk: also fail a Cmd, refuse a hello so the client knocks and waits for a grant, and hand
+   *  the link its own Msgs, so every Msg the machine takes is sent. */
+  readonly wide?: boolean;
 };
 
 /** One possible move: its label for coverage, how often to offer it, and the Msg it sends (or a world change). */
@@ -435,6 +438,108 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>, sent?: Array<Sent>) =
     return body === null ? null : frame(call.dial, body);
   };
 
+  /** The link's drop as the world sees it: every call on the wire can only be answered late now. */
+  const dropped = () => {
+    w.stale.push(...w.wire);
+    w.wire = [];
+    w.parked = [];
+    w.refused = new Map();
+    w.listRev = null;
+  };
+
+  /** S2's moves beside the laws' own, each only where the state allows it. */
+  const wide = (cell: Cell, dial: number | null): ReadonlyArray<Option> => {
+    const out: Array<Option> = [];
+    const failing = w.waiting.filter((c) => ["write", "hello", "ping", "knock", "execute"].includes(c.type));
+    const c = failing[cell.pick % Math.max(1, failing.length)];
+
+    if (c !== undefined) {
+      // A Cmd that fails: the socket is gone under a write, a hello or a ping, or a command's answer
+      // came back malformed.
+      const error =
+        c.type === "write"
+          ? { _tag: "unreachable" }
+          : c.type === "execute"
+            ? { _tag: "malformed" }
+            : { _tag: "closed" };
+      out.push({
+        label: `fail:${c.type}`,
+        weight: 1,
+        run: () => {
+          w.waiting = w.waiting.filter((x) => x !== c);
+          return { type: `${c.type}_err`, cmd: c, error, at: w.at };
+        },
+      });
+    }
+
+    const hello = w.wire.find((x) => x.method === "initialize" && x.dial === dial);
+
+    if (hello !== undefined) {
+      // The door does not grant this key yet: the client knocks, and waits for a grant.
+      out.push({
+        label: "not_granted",
+        weight: 1,
+        run: () => {
+          w.wire = w.wire.filter((x) => x !== hello);
+          w.stale.push(hello);
+          return frame(
+            hello.dial,
+            rpc({ id: hello.id, error: { code: -32000, message: "no", data: { reason: "not_granted" } } }),
+          );
+        },
+      });
+    }
+
+    const h = w.s.handshake;
+
+    if (dial !== null && h.dial === dial && h._tag === "knocking") {
+      out.push({
+        label: "code",
+        weight: 3,
+        run: () => frame(dial, rpc({ id: h.id, result: { code: `c${cell.pick % 1000}`, until: w.at + 60_000 } })),
+      });
+    }
+
+    if (dial !== null && h.dial === dial && h._tag === "waiting") {
+      out.push({
+        label: "granted",
+        weight: 3,
+        run: () => frame(dial, rpc({ method: "client.granted", params: { nonce: `granted_${w.n}` } })),
+      });
+    }
+
+    // The link's own Msgs, as it takes them.
+    const link = w.s.link;
+    const on = "dial" in link ? link.dial : null;
+
+    // Now and then only: most of them end the socket.
+    if (on !== null && cell.move % 3 === 0) {
+      const raw: ReadonlyArray<Sent> = [
+        { type: "admitted", dial: on, ping: 30_000, ms: 0 },
+        { type: "not_granted", dial: on, fingerprint: KEY, code: `c${cell.pick % 1000}`, until: w.at, ms: 0 },
+        { type: "granted", dial: on },
+        { type: "pong", dial: on },
+        { type: "closed", dial: on, code: 1006, fingerprint: KEY, ms: 0 },
+        { type: "ask_again", dial: on + 1 },
+        { type: "blocked", reason: "storage" },
+      ];
+      const m = raw[cell.variant % raw.length]!;
+      out.push({
+        label: `link:${m.type}`,
+        weight: 1,
+        run: () => {
+          if (["closed", "blocked", "ask_again", "not_granted"].includes(m.type)) {
+            dropped();
+          }
+
+          return m;
+        },
+      });
+    }
+
+    return out;
+  };
+
   const options = (cell: Cell): ReadonlyArray<Option> => {
     const out: Array<Option> = [];
     const dial = socketDial();
@@ -593,6 +698,11 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>, sent?: Array<Sent>) =
           return { type: "socket_closed", dial, code: 1006, at: w.at };
         },
       });
+    }
+
+    // One step in four only, so the walk still reaches every finish.
+    if (moves.wide === true && cell.pick % 4 === 0) {
+      out.push(...wide(cell, dial));
     }
 
     const heldSaved = [...w.journal.values()].some((entry) => tagIn(entry) === "held");
@@ -786,6 +896,24 @@ const law = (name: string, moves: Moves, required: ReadonlyArray<string>, runs: 
     expect([...done]).toEqual(expect.arrayContaining([...required]));
   });
 
+/** H3's ways a finish is answered: taken, lost, refused for a reason that may pass, or refused for good. */
+const FINISH = [
+  "ok",
+  "lost",
+  "unavailable",
+  "garbled",
+  "rate_limited",
+  "unreachable",
+  "storage",
+  "not_granted",
+  "reason_nobody_answers_yet",
+  "lacks_capability",
+  "not_allowed",
+  "conflict",
+  "wrong_state",
+  "bad_input",
+] as const;
+
 describe("P39 slice 4a: the hands machine", () => {
   law(
     "H1: the client calls execute only in executing, only after tasks.started answered ok and executing was saved, and at most once per task across every restart; a result keeps when its command started",
@@ -804,26 +932,7 @@ describe("P39 slice 4a: the hands machine", () => {
   );
   law(
     "H3: a finish refused for a reason that may pass (unavailable, rate_limited, unreachable, storage, not_granted, a reason nobody answers yet, an answer that does not decode) is sent again with the same result and never held; lacks_capability holds nothing and is sent again on a new link; only a refusal on the closed list saves a held entry with the brain's reason, and that task is never sent or taken again while other work goes on; a second, different result is never sent for one task",
-    {
-      forge: false,
-      finish: [
-        "ok",
-        "lost",
-        "unavailable",
-        "garbled",
-        "rate_limited",
-        "unreachable",
-        "storage",
-        "not_granted",
-        "reason_nobody_answers_yet",
-        "lacks_capability",
-        "not_allowed",
-        "conflict",
-        "wrong_state",
-        "bad_input",
-      ],
-      restart: "held",
-    },
+    { forge: false, finish: FINISH, restart: "held" },
     [
       "finish_sent",
       "finish:ok",
@@ -867,15 +976,25 @@ describe("P39 slice 4a: the hands machine", () => {
 
   // S2 (docs/direction/saved-state.md): the hands client saves as JSON text through its Model's own
   // schema, and a load at any cut of a walk with no restart goes on as the run that never stopped,
-  // every Cmd included. Plant, run once (0093): `init` ignores the loaded model and boots on dial 1:
-  // red.
+  // every Cmd included. Its finishes are answered every way H3's are, so a refusal for good saves a
+  // held task, and the walk fails when a finish is never held, retried or lost. It also fails a Cmd,
+  // refuses a hello so the client knocks and waits for a grant, and hands the link its own Msgs, and
+  // fails when a Msg the machine takes is never sent. Plants, run once
+  // (0093): `init` ignores the loaded model and boots on dial 1: red; a load empties `held`: red (it
+  // came back green while every finish was answered ok, so `held` stayed empty).
   it("S2: every save and load of a hands walk resumes to the same models and Cmds", () => {
     const Saved = Schema.fromJsonString(Schema.toType(handsMachine.model));
     const done = new Set<string>();
+    const reached = new Set<string>();
     fc.assert(
       fc.property(Tape, (tape) => {
         const sent: Array<Sent> = [];
-        walk(tape, { forge: true, finish: ["ok"], restart: false }, done, sent);
+        walk(tape, { forge: true, finish: FINISH, restart: false, wide: true }, done, sent);
+
+        for (const m of sent) {
+          reached.add(m.type);
+        }
+
         syncTest(
           handsMachine,
           {},
@@ -890,6 +1009,20 @@ describe("P39 slice 4a: the hands machine", () => {
       }),
       { seed: SEED, numRuns: 100, includeErrorInReport: true },
     );
-    expect([...done], "the walks execute and report").toEqual(expect.arrayContaining(["execute", "finish_sent"]));
+    expect(
+      [
+        "execute",
+        "finish_sent",
+        "finish:ok",
+        "finish:held",
+        "finish:lost",
+        "finish:resent",
+        "finish:again:garbled",
+      ].filter((x) => !done.has(x)),
+      "S2: the walks execute, report, and save each finish's answer, a held task included",
+    ).toEqual([]);
+    expect([...reached].toSorted(), "S2: the walks send every Msg the hands machine takes").toEqual(
+      msgKeysOf(handsMachine).toSorted(),
+    );
   });
 });

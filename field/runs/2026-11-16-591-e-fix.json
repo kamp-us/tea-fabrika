@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-e-fix",
+  "ticket": "kamp-us/tea-fabrika#591",
+  "pr": null,
+  "started": "2026-11-16T01:08:18-08:00",
+  "ended": "2026-11-16T02:05:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E of the exam-to-lint plan (0591), next/, on fabrikalfa/exam-to-lint-e from 4b0d103: the fix round after the review's first send-back, whose one fault class was five S2 sync laws that walk only part of their machine's messages. Each S2 walk now offers every Msg its machine takes and asserts that it reached each, as the Prefix, tezgah child and quota walks do. Window: slice 1's S2 walk also sends key presses, and one step in three a move that carries the window forward (an answer to a live call, a dated letter, a press on an open tile) or a failed answer to a call or a Cmd, since an 80 to 120 step cut reached a letter's send_ok too rarely; it asserts every Msg it offers. A second S2 law walks a window with a key table (focus, split and close rows) and a tezgah, on L26's focus world: splits, closes and their answers, a lone prefix, sizes, mint answers, a refused hello that knocks and waits for a grant, the door's handshake frames, socket failures and a tezgah view without the window's workspace, which mints its attach; it asserts every Msg it offers, that the two walks together send every Msg msgKeysOf gives for the window, and that an armed and an asking prefix, a cursor, an open tezgah link, a size and a minting attach are each saved. Tezgah program: the walk gains focus moves and splits that leave a cursor, and asserts its 12 Msg kinds. Queue: S2 moves from arbGuidedSequence, which cannot send the merger's state-bound reply, to Q1's own choose walk, and asserts every Msg, every reply case on the live ref and late, and a saved tree_drift stop. Hands: S2 answers finishes every way H3 does, with restart false, and a wide flag only S2 sets fails a Cmd, refuses a hello so the client knocks, and hands the link its own Msgs; it asserts every Msg of msgKeysOf and finish:held among its finish cases. Chaos: now and inspect are answered with an error too; S2 asserts every Msg of msgKeysOf and every saved phase, incomplete:clock and incomplete:check among them. No sync law failed on the real machines, so no product fault was found. The review's finding row is committed as field/findings/2026-11-16-new-sync-laws-use-hand-seeded-fc-assert.json with two changes from the text the brief gave, both because the field check refused or the README asks: rule `other` became `rule_break` (.github/ci/field-schema.ts:86 holds a closed list without `other`, and the row reports a break of 0579), and head `015499d` became the full sha 015499de125708c5a27d07653fa859e69442720f (field/README.md, A finding: `head` is the full sha). The laws stay fc.assert with a hand seed, which is that finding's work.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a window walk resumes to the same window and Cmds (the old walk at 4b0d103)",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load resets presses to 0",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a window walk resumes to the same window and Cmds",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load resets presses to 0",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a window walk resumes to the same window and Cmds (the old walk at 4b0d103)",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load resets prefix to idle",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a tezgah window's walk, its keys pressed, its focus moved and its tiles split, resumes to the same window and Cmds",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load resets prefix to idle",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a tezgah window's walk, its keys pressed, its focus moved and its tiles split, resumes to the same window and Cmds",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load clears every tile's cursor in the tezgah link (run with endOnFailure set for this run only, since shrinking a 140-step walk ran past 12 minutes)",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/tezgah/src/program.laws.test.ts: S2: every save and load of a desk walk resumes to the same desk and Cmds (the old walk at 4b0d103)",
+      "plant": "next/programs/tezgah/src/program.ts init: a load sets every tile's cursor to null",
+      "result": "green"
+    },
+    {
+      "law": "next/programs/tezgah/src/program.laws.test.ts: S2: every save and load of a desk walk resumes to the same desk and Cmds",
+      "plant": "next/programs/tezgah/src/program.ts init: a load sets every tile's cursor to null",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/pipeline/src/Queue.laws.test.ts: S2: every save and load of a queue walk resumes to the same lines and Cmds (the old walk at 4b0d103)",
+      "plant": "next/programs/pipeline/src/Queue.ts init: a load of a tree_drift stop drops its tree, setting it to the checked tree",
+      "result": "green"
+    },
+    {
+      "law": "next/programs/pipeline/src/Queue.laws.test.ts: S2: every save and load of a queue walk resumes to the same lines and Cmds",
+      "plant": "next/programs/pipeline/src/Queue.ts init: a load of a tree_drift stop drops its tree, setting it to the checked tree",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/HandsMachine.laws.test.ts: S2: every save and load of a hands walk resumes to the same models and Cmds (the old walk at 4b0d103)",
+      "plant": "next/packages/libfabrika/src/client/HandsMachine.ts init: a load empties held",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/HandsMachine.laws.test.ts: S2: every save and load of a hands walk resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/client/HandsMachine.ts init: a load empties held",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts: S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds (the old walk at 4b0d103)",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts init: a load of an incomplete experiment drops its clock reason, saying unanswered",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts: S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts init: a load of an incomplete experiment drops its clock reason, saying unanswered",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts: S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds (the old walk at 4b0d103)",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts init: a load of an incomplete experiment drops its check reason, saying unanswered",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts: S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts init: a load of an incomplete experiment drops its check reason, saying unanswered",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 57,
+  "note": "Each plant was made with the Edit tool on a product file saved first to the scratchpad, run once, and restored with the Edit tool; a diff against each saved copy then showed all five product files unchanged, and git status shows no product file. An old-walk run put the test file back from HEAD for that one run. Ran under nice -n 19 pnpm exec vitest run --maxWorkers=1, after pnpm format: WindowMachine.laws.test.ts (53 tests, about 60 s), tezgah program.laws.test.ts (9), Queue.laws.test.ts (8), HandsMachine.laws.test.ts (4), ChaosMachine.laws.test.ts (2) and oxlint-plugins/machine-has-laws.test.ts (1), all green. The rule alone (a scratch config with only fabrika/machine-has-laws) found 0 hits on next/ and the known 1 on .agents/ (flow/machine.ts:99). pnpm lint in full with NODE_OPTIONS=--max-old-space-size=6144 passed all 18 parts, the field check included, with no other code agent running. The list ratchet exits 0. One pnpm typecheck exits 0. What these laws cannot tell: each reach check rests on fixed-seed walks, and a few cases (the window's renew and persist answers) are reached only a handful of times, so a change to a walk can move them; the hands S2 walk does not reach finish:lacks_capability or finish:again:unavailable, which H3's own law reaches.",
+  "step": "tests"
+}
