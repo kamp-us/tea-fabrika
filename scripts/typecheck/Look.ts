@@ -81,7 +81,13 @@ export const judge = (look: Look): Seen =>
 
       return Option.match(pidIn(label.text), {
         onNone: () => Seen.cases.stale.make({ reason: "unreadable" }),
-        onSome: (pid) => Seen.cases.stale.make({ reason: look.liveness(pid)._tag === "gone" ? "gone" : "reused" }),
+        onSome: (pid) =>
+          Seen.cases.stale.make({
+            reason: Liveness.match(look.liveness(pid), {
+              gone: () => "gone" as const,
+              running: () => "reused" as const,
+            }),
+          }),
       });
     },
   });
