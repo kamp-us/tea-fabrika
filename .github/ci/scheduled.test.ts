@@ -42,8 +42,8 @@ const steps = fc.array(fc.record({ name: stepName, conclusion: quiet, start: ste
 
 const legName = fc.oneof(
   jobName,
-  fc.constantFrom("e2e-1", "e2e-2", "1", "2", "3", "4", "5").map((shard) => `next (${shard})`),
-  fc.constantFrom("1", "2").map((shard) => `tooling (${shard})`),
+  fc.constantFrom("e2e-1", "e2e-2", "1", "2", "3", "4", "5").map((shard) => `tests (${shard})`),
+  fc.constantFrom("tooling-1", "tooling-2").map((shard) => `tests (${shard})`),
 );
 
 /** A job's start and end, ending before `under` minutes, or unknown. */
@@ -129,7 +129,7 @@ it("property: with no failed step, job, test or time-out: red on a failed need, 
 // GitHub's word or by its run time), or a conclusion that proves no pass.
 const notPassed = fc
   .tuple(
-    fc.constantFrom("e2e-1", "e2e-2", "1", "2", "3", "4", "5").map((shard) => `next (${shard})`),
+    fc.constantFrom("e2e-1", "e2e-2", "1", "2", "3", "4", "5").map((shard) => `tests (${shard})`),
     fc.oneof(
       fc.constantFrom("failure", "timed_out", "neutral", "action_required", "stale", null).map((conclusion) => ({
         conclusion,
@@ -162,7 +162,7 @@ it("property: any set of legs with one that neither passed, was skipped nor was 
   // pinned: the edge. A leg canceled at exactly its limit timed out; one canceled a millisecond
   // before it was canceled by something else.
   const leg = (ms: number) => ({
-    name: "next (4)",
+    name: "tests (4)",
     status: "completed",
     conclusion: "cancelled",
     start: at(0),
@@ -184,14 +184,14 @@ it("property: a leg whose failed step ran for its limit or longer timed out, and
   // time-out).
   fc.assert(
     fc.property(
-      fc.constantFrom("next (1)", "next (e2e-2)", "tooling (2)"),
+      fc.constantFrom("tests (1)", "tests (e2e-2)", "tests (tooling-2)"),
       fc.constantFrom("vitest", "end to end", "tooling tests"),
       fc.nat({ max: 5 * MINUTE }),
       fc.integer({ min: 1, max: 10 * MINUTE }),
       fc.constantFrom("failure", "cancelled"),
       steps,
       (name, step, setup, by, conclusion, others) => {
-        const limit = LIMITS[name.startsWith("next") ? "next" : "tooling"] * MINUTE;
+        const limit = LIMITS[name.includes("(tooling-") ? "tooling" : "next"] * MINUTE;
         const leg = (ran: number) => ({
           name,
           status: "completed",
@@ -212,6 +212,40 @@ it("property: a leg whose failed step ran for its limit or longer timed out, and
     ),
     options,
   );
+});
+
+it("property: a leg's suite is tooling when its shard starts tooling-, and next for any other leg, whatever its job is called", () => {
+  // Every test leg is one matrix of one job since 2026-11-15 (SC6), so the job's id no longer names
+  // the suite and its limit. Plants: read the suite from the job's id, as before (red: every
+  // `tests (tooling-k)` leg read as a `tests` leg with no limit); match `tooling` anywhere in the
+  // name (red: a job named `tooling` with a next shard read as tooling).
+  const shard = fc.oneof(
+    fc.constantFrom("e2e-1", "e2e-2", "1", "5"),
+    fc.stringMatching(/^[a-z0-9]{1,6}$/),
+    fc.integer({ min: 1, max: 9 }).map((k) => `tooling-${k}`),
+  );
+  fc.assert(
+    fc.property(fc.constantFrom("tests", "tooling", "next", "a-job"), shard, (job, leg) => {
+      expect(scheduled.suiteOf(`${job} (${leg})`)).toBe(leg.startsWith("tooling-") ? "tooling" : "next");
+    }),
+    options,
+  );
+  // scenario: on the 9-leg matrix, a tooling leg canceled at 29 minutes was stopped, and at 30 it
+  // timed out by tooling's limit; a next leg canceled at 17 timed out by next's.
+  const canceled = (name: string, minutes: number) => ({
+    name,
+    status: "completed",
+    conclusion: "cancelled",
+    start: at(0),
+    end: at(minutes * MINUTE),
+    steps: [],
+  });
+  expect(scheduled.ending(canceled("tests (tooling-1)", 29), LIMITS)).toBe("canceled");
+  expect(scheduled.ending(canceled("tests (tooling-1)", 30), LIMITS)).toBe("timed out");
+  expect(scheduled.ending(canceled("tests (e2e-1)", 17), LIMITS)).toBe("timed out");
+  expect(scheduled.causes([canceled("tests (tooling-2)", 31)], LIMITS)).toEqual([
+    { _tag: "timed out", leg: "tests (tooling-2)", minutes: 30 },
+  ]);
 });
 
 // Legs that passed or were skipped, as the jobs API lists them once each has finished.
@@ -244,19 +278,19 @@ it("property: when every leg passed or was skipped and every need passed, the ru
 });
 
 it("property: a leg canceled at or past its limit is a time-out, named by its leg and its limit in the issue", () => {
-  // Plants: the limit read from the wrong job (red: tooling's 30 minutes judged a next leg); the
+  // Plants: the limit read from the wrong suite (red: tooling's 30 minutes judged a next leg); the
   // issue names the leg as failed (red: no "timed out" line); the limit left out of the line.
   fc.assert(
     fc.property(
       passed,
-      fc.constantFrom(["next", "e2e-1"], ["next", "4"], ["tooling", "2"]),
+      fc.constantFrom(["next", "e2e-1"], ["next", "4"], ["tooling", "tooling-2"]),
       fc.nat({ max: 5 * MINUTE }),
       steps,
       run,
-      (others, [id, shard], over, list, r) => {
-        const minutes = LIMITS[id as keyof typeof LIMITS];
+      (others, [suite, shard], over, list, r) => {
+        const minutes = LIMITS[suite as keyof typeof LIMITS];
         const leg = {
-          name: `${id} (${shard})`,
+          name: `tests (${shard})`,
           status: "completed",
           conclusion: "cancelled",
           start: at(0),
@@ -286,7 +320,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
       run,
       (fails, cancels, others, seed, r) => {
         const red = fails.map((ms, i) => ({
-          name: `next (${i + 1})`,
+          name: `tests (${i + 1})`,
           status: "completed",
           // A cancel can land on a red leg too (run 43703058643, from when a red leg's last step
           // canceled its own run), or miss it.
@@ -304,7 +338,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
           ],
         }));
         const stopped = cancels.map((ms, i) => ({
-          name: `next (e2e-${i + 1})`,
+          name: `tests (e2e-${i + 1})`,
           status: "completed",
           conclusion: "cancelled",
           start: at(0),

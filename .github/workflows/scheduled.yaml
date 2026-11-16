@@ -20,15 +20,17 @@ name: scheduled
 #   a job hit its job limit, a later always() job failed       cancelled
 #   a person canceled the run, a later always() job failed     cancelled
 #
-# So no step here cancels the run, each matrix fails fast, and the time limit sits on each test step
-# (`timeout-minutes`, which ends the step `failure`), with the job's own limit a few minutes past it
-# as a backstop for a hung setup or upload. workflow-lint.ts holds all of it (SC3 to SC6, SC12).
+# So no step here cancels the run, every test leg sits in one matrix that fails fast, and the time
+# limit sits on each test step (`timeout-minutes`, which ends the step `failure`), with the job's
+# own limit a few minutes past it as a backstop for a hung setup or upload. workflow-lint.ts holds
+# all of it (SC3 to SC6, SC13).
 #
 #   what            legs   how
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
-#   tooling tests   2      the `tooling` project, every file, no `--changed`
+#   tooling tests   2      legs tooling-1 and tooling-2, the `tooling` project, every file, no
+#                          `--changed`; the 9 legs above are one matrix, the `tests` job
 #   report          1      after the others, on any result; it fails unless the run is green, so
 #                          a run whose red leg left no failed job still ends `failure`
 #
@@ -36,7 +38,7 @@ name: scheduled
 # here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
 #
 # 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
-# `max-parallel` on each matrix, which workflow-lint.ts adds up. The legs are check.yaml's full
+# `max-parallel` on the matrix, which workflow-lint.ts adds up. The next legs are check.yaml's full
 # matrix, and workflow-lint.ts keeps the two the same. Their split is not check.yaml's: at full
 # depth a file takes longer, so `Shards` splits and orders these legs by the seconds measured here,
 # vitest.shards.full.json (vitest.shards.ts). Refresh its rows from a leg's `results-next-N` report.
@@ -68,27 +70,39 @@ permissions:
   contents: read
 
 jobs:
+  # Every test leg, in one matrix, so one `fail-fast` reaches them all: the first red leg stops the
+  # other eight, as the stop step did before 2026-11-15, and the run still ends `failure`. Two
+  # matrices would let a red tooling leg leave next's seven legs running, up to about 59 runner
+  # minutes per red run (the review of pull request 1383, at green run 43775455200's leg times).
+  #
   # All of next/, on check.yaml's full matrix of legs: `1` to `5` run vitest over the `next` and
   # `next-integration` projects, each a fifth of the files by measured seconds; `e2e-1` and `e2e-2`
   # fetch chromium and run the `next-visual` project on their half of the visual files. A project,
   # not a path, picks the files: `next/` as a path would start `next-visual` on legs with no
-  # Chromium. Nothing is narrowed: no `--changed`, no list.
-  next:
+  # Chromium. Then every tooling test, on `tooling-1` and `tooling-2`: the tests of neither
+  # version's product code (CI's own, the lint plugins, the root scripts and the skill scripts),
+  # the `tooling` project, since a project ignores `--exclude` (0536). The only CI job that runs
+  # them: the merge line runs none, and a tooling change's author runs its narrow tests on the
+  # laptop (0539). Today's tests run in no CI job (0533). Nothing is narrowed: no `--changed`, no
+  # list.
+  tests:
     runs-on: ubuntu-latest
-    # A backstop: the test steps' own limit, `next-limit` below, and 3 minutes more. In green runs
-    # 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
-    # (chromium's included) and the three after it at most 7 s, against their 2 minutes of step
-    # limits. A job that hits this limit ends `cancelled` and so does its run, so only a hung setup
-    # or upload reaches it; the report still names it as a time-out.
-    timeout-minutes: 20
-    # Fail fast, GitHub's own (ticket 990): the first red leg stops this job's other legs, so they
-    # free their runners, and the run still ends `failure`. It reaches no other job: tooling's legs
-    # run on after a red next leg, and next's after a red tooling leg.
+    # A backstop: the leg's test step limit (`next-limit` or `tooling-limit` below) and 3 minutes
+    # more, so 20 for a next leg and 33 for a tooling leg (GitHub's docs, "Contexts reference": this
+    # key may read `matrix`). In green runs 43765797242, 43734956911 and 43734841211 the steps
+    # before a test step took at most 56 s in all (chromium's included) and the three after it at
+    # most 7 s, against their 2 minutes of step limits. A job that hits this limit ends `cancelled`
+    # and so does its run, so only a hung setup or upload reaches it; the report still names it as a
+    # time-out.
+    timeout-minutes: ${{ startsWith(matrix.shard, 'tooling-') && 33 || 20 }}
+    # Fail fast, GitHub's own (ticket 990): the first red leg stops every other leg, so they free
+    # their runners, and the run still ends `failure`. Every leg at once: 9, and the report job
+    # after them, 10 machines.
     strategy:
       fail-fast: true
-      max-parallel: 7
+      max-parallel: 9
       matrix:
-        shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5"]
+        shard: ["e2e-1", "e2e-2", "1", "2", "3", "4", "5", "tooling-1", "tooling-2"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -97,11 +111,11 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
-      # check.yaml's next limit, for the same legs, on the test step itself: a step
-      # that runs into it ends `failure`, and so does the run. The report reads it through the alias,
-      # to name a leg that ran into it as a time-out.
+      # check.yaml's next limit, for the same legs, on the test step itself: a step that runs into
+      # it ends `failure`, and so does the run. The report reads it through the alias, to name a leg
+      # that ran into it as a time-out.
       - name: vitest
-        if: ${{ !startsWith(matrix.shard, 'e2e-') }}
+        if: ${{ !startsWith(matrix.shard, 'e2e-') && !startsWith(matrix.shard, 'tooling-') }}
         timeout-minutes: &next-limit 17
         env:
           SHARD: ${{ matrix.shard }}/5
@@ -122,21 +136,31 @@ jobs:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
         run: pnpm exec vitest run --project next-visual --shard "${SHARD#e2e-}" --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
+      # Leg `tooling-k` runs shard `k/2` of the tooling tests, with the limit check.yaml's tooling
+      # legs had before 0539 took them off the merge line, on the step itself, as next's.
+      - name: tooling tests
+        if: startsWith(matrix.shard, 'tooling-')
+        timeout-minutes: &tooling-limit 30
+        env:
+          SHARD: ${{ matrix.shard }}/2
+          FABRIKA_TEST_DEPTH: full
+        run: pnpm exec vitest run --project tooling --shard "${SHARD#tooling-}" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
       # The leg's Vitest report, for the report job to name each failing test. After a red step too,
-      # so the leg that failed is the one whose report is kept.
+      # so the leg that failed is the one whose report is kept. Named `results-next-<leg>` and
+      # `results-tooling-<k>`, as before the two jobs became one: vitest.shards.ts's rows are
+      # refreshed from them.
       - name: results
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: results-next-${{ matrix.shard }}
+          name: results-${{ startsWith(matrix.shard, 'tooling-') && matrix.shard || format('next-{0}', matrix.shard) }}
           path: ${{ runner.temp }}/results.json
           if-no-files-found: ignore
           retention-days: 7
       # The leg's time table (time-table.ts), as in check.yaml: each step's seconds from GitHub's jobs
       # API, read with the workflow's token, and the ten slowest test files of the leg's report, in
       # the job summary. On every result, and it never fails the job. Last of the job's commands.
-      - &time-table
-        name: time table
+      - name: time table
         if: always()
         continue-on-error: true
         timeout-minutes: 1
@@ -150,8 +174,7 @@ jobs:
       # The same numbers as one small JSON per leg, to follow each leg's balance over time. The run
       # attempt is in its name, so a rerun keeps the first attempt's file beside its own. Its own
       # limit, as the time table's: each upload took about 1 s on check run 43657196726.
-      - &timings
-        name: timings
+      - name: timings
         if: always()
         continue-on-error: true
         timeout-minutes: 1
@@ -161,47 +184,6 @@ jobs:
           path: ${{ runner.temp }}/timings-${{ github.job }}-${{ matrix.shard }}.json
           if-no-files-found: warn
           retention-days: 90
-
-  # Every tooling test: the tests of neither version's product code (CI's own, the lint plugins, the
-  # root scripts and the skill scripts), on two machines, with no `--changed`: the `tooling` project,
-  # since a project ignores `--exclude` (0536). The only CI job that runs them: the merge line runs
-  # none, and a tooling change's author runs its narrow tests on the laptop (0539). Today's tests run
-  # in no CI job (0533).
-  tooling:
-    runs-on: ubuntu-latest
-    # A backstop, as next's: the tests step's own limit and 3 minutes more.
-    timeout-minutes: 33
-    strategy:
-      fail-fast: true
-      max-parallel: 2
-      matrix:
-        shard: [1, 2]
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/pnpm
-
-      - run: pnpm install --frozen-lockfile
-      # The limit check.yaml's tooling legs had, before 0539 took them off the merge line, on the
-      # step itself, as next's.
-      - name: tooling tests
-        timeout-minutes: &tooling-limit 30
-        env:
-          SHARD: ${{ matrix.shard }}/2
-          FABRIKA_TEST_DEPTH: full
-        run: pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --reporter=github-actions --outputFile.json="$RUNNER_TEMP/results.json"
-      - name: results
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: results-tooling-${{ matrix.shard }}
-          path: ${{ runner.temp }}/results.json
-          if-no-files-found: ignore
-          retention-days: 7
-      - *time-table
-      - *timings
 
   # The verdict. On main: red opens one `ci-scheduled` issue naming the commits since the last
   # green scheduled run, the legs that made it red and the failing tests, or comments on the open
@@ -214,7 +196,7 @@ jobs:
   # the last green run: `needs` folds a matrix's legs into one result. No install: the runner's own
   # Node runs scheduled.mjs.
   report:
-    needs: [next, tooling]
+    needs: [tests]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

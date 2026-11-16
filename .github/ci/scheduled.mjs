@@ -16,7 +16,7 @@
 //
 // A red run ends `failure` on GitHub: no step cancels the run (workflow-lint.ts's SC4), a failed
 // leg is a failed job, and a leg that runs out of time fails its test step, which holds the limit
-// (SC12). The report job fails too unless the run is green, on any branch (`exitCode`), so a red
+// (SC13). The report job fails too unless the run is green, on any branch (`exitCode`), so a red
 // run with no failed job, such as a leg that ended odd, still ends `failure`.
 //
 // No installed dependencies and no type stripping, like required.mjs, so the job runs on the
@@ -63,30 +63,38 @@ const isMap = (value) => typeof value === "object" && value !== null && !Array.i
  */
 
 /**
- * Each test job's test step limit, its `timeout-minutes`, by the job's id in the workflow (`next`,
- * `tooling`). The report step's env holds them as `LIMIT_<ID>`, aliases of the test steps' own
- * lines, so each limit stays one line (workflow-lint.ts holds them the same, and each job's own
- * limit a backstop past it).
+ * Each suite's test step limit, its `timeout-minutes`, by the suite (`next`, `tooling`, as
+ * `suiteOf` reads a leg's). The report step's env holds them as `LIMIT_<SUITE>`, aliases of the
+ * test steps' own lines, so each limit stays one line (workflow-lint.ts holds them the same, and
+ * the job's own limit a backstop past each).
  * @typedef {Readonly<Record<string, number>>} Limits
  */
 
 /**
  * What the run left: `toJSON(needs)` already parsed, the run's jobs and their steps, the failing
- * tests its legs' reports name (`failures`), and each test job's time limit.
+ * tests its legs' reports name (`failures`), and each suite's time limit.
  * @typedef {{needs: unknown, jobs: readonly Job[], failed: readonly string[], limits: Limits}} Outcome
  */
 
 /**
  * How one finished leg ended. `failed`: a step or the job failed. `timed out`: a failed step ran
- * for its job's limit or longer, it was canceled at or past that limit, or GitHub said
+ * for its suite's limit or longer, it was canceled at or past that limit, or GitHub said
  * `timed_out`. `canceled`: it was canceled before its limit, by its matrix's fail-fast after
  * another leg failed, a person, or a sev0's freeze. `odd`: any other conclusion, which proves no
  * pass. `passed`: success, or a skip the workflow meant.
  * @typedef {"passed" | "failed" | "timed out" | "canceled" | "odd"} Ending
  */
 
-/** A leg's job id: GitHub names a matrix leg `<id> (<shard>)`, and no job here sets a `name`. */
-const idOf = (/** @type {string} */ name) => name.split(" (")[0] ?? name;
+/**
+ * A leg's suite, the key of its limit: `tooling` for a leg whose shard starts `tooling-`, `next`
+ * for every other. GitHub names a matrix leg `<job> (<shard>)`, and no job here sets a `name`, so
+ * `tests (tooling-2)` is a tooling leg and `tests (e2e-1)` and `tests (3)` are next legs. The two
+ * suites share one job since 2026-11-15, so one fail-fast stops every leg; the job's id names no
+ * suite any more.
+ * @param {string} name
+ * @returns {"next" | "tooling"}
+ */
+export const suiteOf = (name) => (/\(tooling-[^)]*\)$/.test(name) ? "tooling" : "next");
 
 /**
  * How a finished leg ended. A failed step comes first, whatever the job's conclusion: a cancel
@@ -104,7 +112,7 @@ const idOf = (/** @type {string} */ name) => name.split(" (")[0] ?? name;
  * @returns {Ending}
  */
 export const ending = (job, limits) => {
-  const limit = limits[idOf(job.name)];
+  const limit = limits[suiteOf(job.name)];
   const ranOut = (/** @type {string | null} */ start, /** @type {string | null} */ end) =>
     limit !== undefined && start !== null && end !== null && Date.parse(end) - Date.parse(start) >= limit * 60_000;
   const failed = job.steps.filter((step) => step.conclusion === "failure");
@@ -161,14 +169,14 @@ export const causes = (jobs, limits) => {
       .toSorted((a, b) => failedAt(a).localeCompare(failedAt(b)))
       .map((job) => /** @type {Cause} */ ({ _tag: "failed", leg: job.name })),
     ...of("timed out").map(
-      (job) => /** @type {Cause} */ ({ _tag: "timed out", leg: job.name, minutes: limits[idOf(job.name)] ?? null }),
+      (job) => /** @type {Cause} */ ({ _tag: "timed out", leg: job.name, minutes: limits[suiteOf(job.name)] ?? null }),
     ),
     ...of("odd").map((job) => /** @type {Cause} */ ({ _tag: "odd", leg: job.name, conclusion: job.conclusion })),
   ];
 };
 
 /**
- * Each test job's time limit from the report step's env: `LIMIT_NEXT=17` reads as `next: 17`. A
+ * Each suite's time limit from the report step's env: `LIMIT_NEXT=17` reads as `next: 17`. A
  * value that is not a positive number is left out, so its legs' cancels read as canceled.
  * @param {Record<string, string | undefined>} env
  * @returns {Limits}
