@@ -41,7 +41,7 @@ import * as Layout from "../tezgah/Layout.ts";
 import { type Dir, type TezgahView, type Tile, type TileId, Workspace } from "../tezgah/Workspace.ts";
 import * as Keys from "./Keys.ts";
 import { Prefix } from "./Prefix.ts";
-import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
+import { WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
 
 const SEED = 119120;
 const PREFIX = "ctrl+b";
@@ -62,6 +62,8 @@ const typeId = (prefix: string, n: number): string => {
 
 const PERSON = typeId("person", 41);
 const TEZGAH_PID = "process_of_tezgah";
+/** A written call, the window's own union, read through its exported Model (0567). */
+const Call = WindowModel.fields.flight.value.fields.call;
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: PERSON, as: "window" } };
 const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
 
@@ -194,29 +196,43 @@ const pending: Array<readonly [number, WindowMsg]> = [];
 const drain = (world: World, i: number) => {
   for (let guard = 0; guard < 2_000; guard++) {
     const w = world.wins[i]!;
-    const flight = w.s.flight.find((f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`));
+    const flight = w.s.flight.find((f) => !Call.isAnyOf(["send"])(f.call) && !w.answered.has(`${f.dial} ${f.id}`));
 
     if (flight !== undefined) {
       w.answered.add(`${flight.dial} ${flight.id}`);
       const on = { id: flight.id, dial: flight.dial };
 
-      if (flight.call._tag === "read") {
-        const name = flight.call.stream.replace(/^processes\//, "");
-        const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
-        step(world, i, {
-          type: "read_ok",
-          ...on,
-          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
-          ms: 1,
-        } as WindowMsg);
-      } else if (flight.call._tag === "open" && flight.call.pid === TEZGAH_PID) {
-        w.subscribed = true;
-        step(world, i, { type: "open_ok", ...on, value: { rev: world.rev, view: world.view }, ms: 1 } as WindowMsg);
-      } else if (flight.call._tag === "open") {
-        step(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg);
-      } else {
-        step(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg);
-      }
+      Call.matchOrElse(
+        flight.call,
+        {
+          read: (call) => {
+            const name = call.stream.replace(/^processes\//, "");
+            const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+            step(world, i, {
+              type: "read_ok",
+              ...on,
+              value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+              ms: 1,
+            } as WindowMsg);
+          },
+          open: (call) => {
+            if (call.pid === TEZGAH_PID) {
+              w.subscribed = true;
+              step(world, i, {
+                type: "open_ok",
+                ...on,
+                value: { rev: world.rev, view: world.view },
+                ms: 1,
+              } as WindowMsg);
+            } else {
+              step(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg);
+            }
+          },
+        },
+        () => {
+          step(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg);
+        },
+      );
 
       continue;
     }
@@ -476,16 +492,16 @@ describe("L13: the prefix arms only the window it was pressed in", () => {
 
             // A close of a workspace's last tile is tezgah's to refuse (`last_tile`); whether the window
             // asks first is not this law's.
-            if (before._tag === "armed" && closing && !several) {
+            if (Prefix.isAnyOf(["armed"])(before) && closing && !several) {
               expect(sent.length, "L13: x resolves to at most one command").toBeLessThanOrEqual(1);
               continue;
             }
 
             const known =
-              (before._tag === "armed" && (split !== undefined || (closing && !(child && several)))) ||
-              (before._tag === "asking" && e.key === "y");
+              (Prefix.isAnyOf(["armed"])(before) && (split !== undefined || (closing && !(child && several)))) ||
+              (Prefix.isAnyOf(["asking"])(before) && e.key === "y");
 
-            if (before._tag === "idle" && e.key === PREFIX) {
+            if (Prefix.isAnyOf(["idle"])(before) && e.key === PREFIX) {
               counts.armed++;
               expect(after._tag, "L13: the prefix key arms the window it was pressed in").toBe("armed");
             }

@@ -31,7 +31,7 @@ import {
   type KeyPress,
   lastCursor,
   type Unread,
-  type WindowModel,
+  WindowModel,
   type WindowMsg,
   windowMachineFor,
 } from "./WindowMachine.ts";
@@ -242,6 +242,8 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
 // every window that opened it. Records and writes are answered as soon as they are handed out.
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const TEZGAH_PID = "process_of_tezgah";
+/** A written call, the window's own union, read through its exported Model (0567). */
+const Call = WindowModel.fields.flight.value.fields.call;
 const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person: PERSON, as: "window" } };
 const rpc = (body: object) => JSON.stringify({ jsonrpc: "2.0", ...body });
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
@@ -559,8 +561,9 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
     return;
   }
 
-  const flight = w.s.flight.find((f) => f.id === r.id && f.dial === r.dial && f.call._tag === "send");
-  const letter = flight?.call._tag === "send" ? flight.call.letter : null;
+  const flight = w.s.flight.find((f) => f.id === r.id && f.dial === r.dial && Call.isAnyOf(["send"])(f.call));
+  const letter =
+    flight === undefined ? null : Call.matchOrElse(flight.call, { send: (call) => call.letter }, () => null);
 
   if (letter !== null && r.pos >= 0) {
     w.got.set(letter, r.pos);
@@ -695,7 +698,7 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
 
   for (let guard = 0; guard < 200; guard++) {
     housekeep(world, i, each);
-    const flight = w.s.flight.find((f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`));
+    const flight = w.s.flight.find((f) => !Call.isAnyOf(["send"])(f.call) && !w.answered.has(`${f.dial} ${f.id}`));
 
     if (flight === undefined) {
       return;
@@ -704,34 +707,43 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
     w.answered.add(`${flight.dial} ${flight.id}`);
     const on = { id: flight.id, dial: flight.dial };
 
-    if (flight.call._tag === "read") {
-      const name = flight.call.stream.replace(/^processes\//, "");
-      const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
-      stepWin(
-        world,
-        i,
-        {
-          type: "read_ok",
-          ...on,
-          value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
-          ms: 1,
-        } as WindowMsg,
-        each,
-      );
-    } else if (flight.call._tag === "open" && flight.call.pid === TEZGAH_PID) {
-      w.subscribed = true;
-      w.seen = Math.max(w.seen, world.pos);
-      stepWin(
-        world,
-        i,
-        { type: "open_ok", ...on, value: { rev: world.pos, view: world.view }, ms: 1 } as WindowMsg,
-        each,
-      );
-    } else if (flight.call._tag === "open") {
-      stepWin(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg, each);
-    } else {
-      stepWin(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg, each);
-    }
+    Call.matchOrElse(
+      flight.call,
+      {
+        read: (call) => {
+          const name = call.stream.replace(/^processes\//, "");
+          const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
+          stepWin(
+            world,
+            i,
+            {
+              type: "read_ok",
+              ...on,
+              value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
+              ms: 1,
+            } as WindowMsg,
+            each,
+          );
+        },
+        open: (call) => {
+          if (call.pid === TEZGAH_PID) {
+            w.subscribed = true;
+            w.seen = Math.max(w.seen, world.pos);
+            stepWin(
+              world,
+              i,
+              { type: "open_ok", ...on, value: { rev: world.pos, view: world.view }, ms: 1 } as WindowMsg,
+              each,
+            );
+          } else {
+            stepWin(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg, each);
+          }
+        },
+      },
+      () => {
+        stepWin(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg, each);
+      },
+    );
   }
 };
 

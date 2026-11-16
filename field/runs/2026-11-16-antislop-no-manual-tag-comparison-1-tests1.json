@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tag-comparison-1-tests1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-15T23:52:29-08:00",
+  "ended": "2026-11-16T00:16:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1057, test_writer: slice AS-no-manual-tag-comparison-1, anti-slop-effect/no-manual-tag-comparison over next/packages/libfabrika/src/client, fixes in code only, no lock line and no .oxlintrc.json change, no pull request (owner ruling). The branch was new, made from origin/main at b490a3203, which already holds PR 1366, so the merge of origin/main was a no-op; PR 1366 touched no file of this folder. Rule forced to error in a scratch config outside the repo: 384 hits, 245 in exam paths and 139 in product files. All 245 exam hits are fixed, in 7 files: WindowMachine.laws.test.ts (180), WindowStart.laws.test.ts (38), Prefix.laws.test.ts (8), HandsMachine.laws.test.ts (6), Tezgah.laws.test.ts (5), HandsDoor.test-support.ts (5) and Commands.test-support.ts (3). A scratch codemod made 152 rewrites in WindowMachine.laws.test.ts and WindowStart.laws.test.ts, each `x._tag === \"a\"` into the union's own `Union.isAnyOf([\"a\"])(x)`, with a chain of one value joined into one isAnyOf and counted once; the rest are hand edits, and three codemod lines on a call or an optional chain were redone by hand. The unions are reached through public entry points: Link, Handshake, ClientRecord, Recipient, Pending and Sent are exported; the window's own Reach, Call, Inbox and StatusMessage are read through the exported WindowModel schema (WindowModel.fields.tiles.value.fields.reach and so on). If/else chains and ternary chains over one value became the union's match or matchOrElse (the drain of Prefix and Tezgah laws, HandsDoor answerText and the hello answer, Commands expectedResults, the handshake's next frame, the wait and monitor frame in WindowStart laws). Where a union has no matcher: Match.valueTags for the frame law's Expect and for Effect's span (Span or ExternalSpan), Match.type with Match.tag for the hands machine's Work (not exported) and the follow world's fake ledger Fact, and SchemaAST.isUnion and isObjects for the AST walk. WindowStart laws' local Act became a Schema.TaggedUnion with the same cases in the same order. Type-only changes the rewrite needed: WindowMachine laws' Call, Row, ReachView and InboxView became their real union intersected with the loose fields the laws read by name, so a read the laws made before still compiles; handshakeIn and inboxIn read the Model's field instead of Reflect.get with a fallback that no Model reaches; the writes helper takes a tag of the union and narrows; socketDialIn in WindowStart laws takes Link. One `as` cast went: the wait and monitor frame law no longer casts its call. 139 hits are left, all in product files, for the build step: WindowMachine.ts 90, HandsMachine.ts 37, Tezgah.ts 4, internal/dial.ts 3, Keys.ts 2, Prefix.ts 2, WindowStart.ts 1. None waits on 1366. No disable line was added, no assertion was removed or narrowed, and no law was added; two plants checked that two reshaped laws still fail.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "note": "Ran at the tests commit's tree (base b490a3203 plus these edits): 8 test files, all green, 88 tests: client/Prefix.laws, Tezgah.laws, HandsMachine.laws, HandsStart.laws, WindowStart.laws, WindowMachine.laws, node/client/HandsSecrets.laws and apps/fabrika hands-client. No integration law reaches the touched files. The package's own typecheck (tsc -p next/packages/libfabrika) is green; no pnpm typecheck ran. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 exits 0, and the list ratchet exits 0. Outside the rule: it does not fire on an optional chain, so `x?._tag === \"a\"` forms stay in Tezgah.laws.test.ts (461, 1016, 1133, 1199, 1359), Prefix.laws.test.ts (140) and WindowMachine.laws.test.ts (645, 664, 908, 1174, 1871, 2055, 2822, 3656, 4371, 4499), with a `_tag` read into a variable at 1800 and 1994. The codemod lived in the scratchpad and was never committed.",
+  "step": "tests",
+  "plants": [
+    {
+      "law": "WindowMachine.laws.test.ts: L9 scenario: a press row comes before its letter's first write, and one reply row at settlement counts every send",
+      "plant": "WindowMachine.ts: a refused reply row copies the answer's reason even when it is free text, in place of `other`",
+      "result": "red"
+    },
+    {
+      "law": "WindowStart.laws.test.ts: format: the window's wait is written as ledger.wait {stream, after} on client:<the dial's tab>/inbox and its monitor as process.monitor {ref, pid} before the view.open of the same pid, each under its write's own id",
+      "plant": "WindowStart.ts: the ledger.wait frame says after + 1",
+      "result": "red"
+    }
+  ]
+}

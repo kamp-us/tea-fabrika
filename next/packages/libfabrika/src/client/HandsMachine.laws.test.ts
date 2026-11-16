@@ -34,10 +34,12 @@
 // answer, whoever it names.
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
+import { Link } from "../transport/Link.ts";
 import {
   admitted,
   answerText,
@@ -45,6 +47,7 @@ import {
   type Brain,
   type FinishMode,
   fakeResult,
+  Outcome,
   TakeReply,
 } from "./HandsDoor.test-support.ts";
 import { handsMachine } from "./HandsMachine.ts";
@@ -77,6 +80,19 @@ const HELD: ReadonlySet<string> = new Set([
 ]);
 
 type Model = typeof handsMachine.model.Type;
+/** The machine's work. Its union is not exported, so Effect's Match reads its cases (0567). */
+type Work = Model["work"];
+
+const recalling = Match.type<Work>().pipe(
+  Match.tag("recalling", () => true),
+  Match.orElse(() => false),
+);
+
+const reporting = Match.type<Work>().pipe(
+  Match.tag("reporting", () => true),
+  Match.orElse(() => false),
+);
+
 /** A Msg as the walk builds it: the machine reads it by its `type`. */
 type Sent = { readonly type: string } & Readonly<Record<string, unknown>>;
 type Out = Cmd & Readonly<Record<string, unknown>>;
@@ -315,7 +331,10 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     // A refusal for good is kept for the link it came on: a link that left online, by a close or by
     // its own stall timer, starts a new link, which may try the task again. A held result is held
     // for good, on every link: its journal entry says why.
-    if (prev.link._tag === "online" && (next.link._tag !== "online" || next.link.dial !== prev.link.dial)) {
+    if (
+      Link.isAnyOf(["online"])(prev.link) &&
+      (!Link.isAnyOf(["online"])(next.link) || next.link.dial !== prev.link.dial)
+    ) {
       w.refused = new Map();
       w.listRev = null;
     }
@@ -358,7 +377,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
       // H4: a saved value that reads as no entry cannot change by itself: the task is not taken
       // again on this link until the list's rev moves.
-      if (moves.forge && cell.variant % 5 === 0 && w.s.work._tag === "recalling" && about(w.s).id === task) {
+      if (moves.forge && cell.variant % 5 === 0 && recalling(w.s.work) && about(w.s).id === task) {
         w.refused.set(task, w.listRev ?? -1);
         done.add("recall:bad_entry");
         return { type: "journal_read_err", cmd: c, error: { _tag: "JournalError", reason: "bad_entry" }, at: w.at };
@@ -415,7 +434,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     const mode = moves.finish[cell.variant % moves.finish.length] ?? "ok";
     const outcome = w.door.call(KEY, call.method, call.params, mode === "lost" ? "ok" : mode);
 
-    if (outcome._tag === "parked") {
+    if (Outcome.isAnyOf(["parked"])(outcome)) {
       w.stale = w.stale.filter((x) => x !== call);
       w.parked.push({ ...call, after: outcome.after });
       return null;
@@ -683,7 +702,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       if (reason === "lacks_capability") {
         // A need this link did not offer: nothing is held, and nothing goes again on this link.
         expect(writes, "H3: lacks_capability holds nothing").toEqual([]);
-        expect(next.work._tag === "reporting" && about(next).id === task, "H3: and waits for a new link").toBe(false);
+        expect(reporting(next.work) && about(next).id === task, "H3: and waits for a new link").toBe(false);
         w.owed.set(task, reason);
         done.add("finish:lacks_capability");
       } else if (!receipt && !HELD.has(reason)) {
@@ -715,7 +734,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         w.heldOn.set(task, live.dial ?? -1);
         done.add("finish:held");
       } else {
-        expect(about(next).id === task && next.work._tag === "reporting", "H3: an ok ends the report").toBe(false);
+        expect(about(next).id === task && reporting(next.work), "H3: an ok ends the report").toBe(false);
         done.add("finish:ok");
       }
     }

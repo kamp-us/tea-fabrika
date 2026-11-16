@@ -251,13 +251,12 @@ export type Brain = ReturnType<typeof brain>;
 
 /** The JSON-RPC text that answers call `id` with `outcome`. A parked wait has no text until it is rung. */
 export const answerText = (id: string | number, outcome: Outcome): string | null =>
-  outcome._tag === "parked"
-    ? null
-    : JSON.stringify(
-        outcome._tag === "result"
-          ? { jsonrpc: "2.0", id, result: outcome.result }
-          : { jsonrpc: "2.0", id, error: { code: -32000, message: outcome.reason, data: { reason: outcome.reason } } },
-      );
+  Outcome.match(outcome, {
+    parked: () => null,
+    result: ({ result }) => JSON.stringify({ jsonrpc: "2.0", id, result }),
+    error: ({ reason }) =>
+      JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32000, message: reason, data: { reason } } }),
+  });
 
 /** The door's admission of the hands key `key`, as it answers `initialize`. */
 export const admitted = (key: string) => ({
@@ -336,11 +335,11 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       state.hellos.push(call.params);
       const said = gate.hello();
       on.receive(
-        said._tag === "refuse"
-          ? failed(call.id, said.reason)
-          : said._tag === "not_granted"
-            ? failed(call.id, "not_granted")
-            : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+        HelloAnswer.match(said, {
+          refuse: ({ reason }) => failed(call.id, reason),
+          not_granted: () => failed(call.id, "not_granted"),
+          admit: () => JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+        }),
       );
       return;
     }
@@ -374,7 +373,7 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       return;
     }
 
-    if (outcome._tag === "parked") {
+    if (Outcome.isAnyOf(["parked"])(outcome)) {
       state.parked.push({ id: call.id, after: outcome.after, on });
       return;
     }

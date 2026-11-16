@@ -107,7 +107,7 @@ export const fakeCommands = (s: Seen) =>
           yield* hold(s, "execute", before === "fail" ? "stop" : before);
         }
 
-        const result = fakeResult(s.events.filter((e) => e._tag === "ran").length + 1);
+        const result = fakeResult(s.events.filter(Event.isAnyOf(["ran"])).length + 1);
         s.events.push(Event.cases.ran.make({ command, result }));
         const after = take(s, "execute", "after");
 
@@ -179,22 +179,26 @@ export const expectedResults = (events: ReadonlyArray<Event>) => {
   let pending: { readonly task: string; readonly result: Result } | null = null;
 
   for (const e of events) {
-    if (e._tag === "crash") {
-      pending = null;
-      executing = null;
-    } else if (e._tag === "ran") {
-      const task = executing ?? "";
-      runs.set(task, (runs.get(task) ?? 0) + 1);
-      pending = { task, result: e.result };
-    } else {
-      const step = isEntry(e.entry) ? e.entry._tag : "";
+    Event.match(e, {
+      crash: () => {
+        pending = null;
+        executing = null;
+      },
+      ran: ({ result }) => {
+        const task = executing ?? "";
+        runs.set(task, (runs.get(task) ?? 0) + 1);
+        pending = { task, result };
+      },
+      saved: ({ task, entry }) => {
+        const step = isEntry(entry) ? entry._tag : "";
 
-      if (step === "executing") {
-        executing = e.task;
-      } else if (step === "result" && !results.has(e.task)) {
-        results.set(e.task, pending?.task === e.task ? pending.result : interrupted);
-      }
-    }
+        if (step === "executing") {
+          executing = task;
+        } else if (step === "result" && !results.has(task)) {
+          results.set(task, pending?.task === task ? pending.result : interrupted);
+        }
+      },
+    });
   }
 
   return { runs, results };
