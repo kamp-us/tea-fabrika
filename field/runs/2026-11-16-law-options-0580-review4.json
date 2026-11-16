@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-review4",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:41:20-08:00",
+  "ended": "2026-11-16T00:46:30-08:00",
+  "parent": "2026-11-16-law-options-0580-review3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The last recheck (0177, the lead's last round under 0564) of slice 1 of docs/plan/quests/law-options-0580-PLAN.md, tooling, fix diff 949487d90..d41837351 (head 7615df4fd adds only two coordinator rows): merge-ready. The fault the second recheck named is fixed. .github/ci/plant-check.ts's readInputs now reads at head each added row's record file that changes.mjs's lawFile calls a law file and the diff leaves alone (ls-tree for presence, show for its source) as untouched, and check() holds a record against every head file on the package's it, changed or not. So a record of an unchanged file on the package's it is unclaimed again, a record of a file on another it or gone from head is not read, and the renamed file's old records give no refusal. The lawFile filter matches the files whose laws the check holds at all, so a record outside it names no law the check could claim: no law escapes its plant, and the plan's 'What this cannot tell' already names the parse's reach. The head reads use the same head commit and git objects the changed files are read from, so CI's inputs stay right.",
+  "plants": [
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "hold records only against the changed head files (the 625dd21b1 rule), in a scratch copy of plant-check.ts",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "scenario: a row's record of a law file the pull request does not change is read at head: on the package's it it is unclaimed, on another it or gone from head it is not read",
+      "plant": "hold records only against the changed head files (the 625dd21b1 rule), in a scratch copy of plant-check.ts",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "scenario: a row's record of a law file the pull request does not change is read at head: on the package's it it is unclaimed, on another it or gone from head it is not read",
+      "plant": "drop the ls-tree presence check in readInputs, so a file gone from head is read anyway, in a scratch copy of plant-check.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Read-only apart from this row; plants ran in a scratch git worktree outside the repo, one by one with the file edited back between them. Ran at 7615df4fd on Node 26.13.0 in the fix step's worktree: plant-check.test.ts, Law.test.ts, Law.runner.test.ts and Plants.test.ts (51 passed); a scratch check() call with records for an unchanged file on the package's it, one on @effect/vitest and one gone from head: only the first is unclaimed; plant-check.ts with BASE origin/main 5c94f12f4, HEAD 7615df4fd, EVENT pull_request (exit 0, notices only); pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed); one pnpm typecheck (exit 0). loosening.sh 949487d90..7615df4fd: plant-check.test.ts:47 (the new generated input), plant-check.ts:242 (check() takes untouched), and one removed expect in the model law, which is the old two-key check() call rewritten with untouched: [], the same claim; none loosens a law."
+}
