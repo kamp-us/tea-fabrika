@@ -24,7 +24,7 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Match, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -100,38 +100,36 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
   if (kind === "list") {
     const v = value as ListView;
     const i = v.items.length === 0 ? 0 : at % v.items.length;
-    const items =
-      v.items.length === 0 || e % 4 === 0
-        ? [...v.items, { name: word, done: false }]
-        : e % 4 === 1
-          ? v.items.filter((_, j) => j !== i)
-          : e % 4 === 2
-            ? v.items.map((it, j) => (j === i ? { ...it, done: !it.done } : it))
-            : [{ name: word, done: false }, ...v.items];
+    const items = Match.value(v.items.length === 0 ? 0 : e % 4).pipe(
+      Match.when(0, () => [...v.items, { name: word, done: false }]),
+      Match.when(1, () => v.items.filter((_, j) => j !== i)),
+      Match.when(2, () => v.items.map((it, j) => (j === i ? { ...it, done: !it.done } : it))),
+      Match.orElse(() => [{ name: word, done: false }, ...v.items]),
+    );
     return { items, left: items.filter((it) => !it.done).length };
   }
 
   if (kind === "tags") {
     const v = value as TagsView;
     const i = v.length === 0 ? 0 : at % v.length;
-    return v.length === 0 || e % 4 === 0
-      ? [...v, word]
-      : e % 4 === 1
-        ? v.filter((_, j) => j !== i)
-        : e % 4 === 2
-          ? v.map((t, j) => (j === i ? word : t))
-          : [word, ...v];
+    return Match.value(v.length === 0 ? 0 : e % 4).pipe(
+      Match.when(0, () => [...v, word]),
+      Match.when(1, () => v.filter((_, j) => j !== i)),
+      Match.when(2, () => v.map((t, j) => (j === i ? word : t))),
+      Match.orElse(() => [word, ...v]),
+    );
   }
 
   const v = value as RecordView;
   const i = v.rows.length === 0 ? 0 : at % v.rows.length;
-  return e % 4 === 0
-    ? { ...v, title: word }
-    : e % 4 === 1
-      ? { ...v, n: v.n + 1 }
-      : e % 4 === 2 || v.rows.length === 0
-        ? { ...v, rows: [...v.rows, at] }
-        : { ...v, rows: v.rows.filter((_, j) => j !== i) };
+  return Match.value(e % 4).pipe(
+    Match.when(0, () => ({ ...v, title: word })),
+    Match.when(1, () => ({ ...v, n: v.n + 1 })),
+    Match.when(2, () => ({ ...v, rows: [...v.rows, at] })),
+    Match.orElse(() =>
+      v.rows.length === 0 ? { ...v, rows: [...v.rows, at] } : { ...v, rows: v.rows.filter((_, j) => j !== i) },
+    ),
+  );
 };
 
 /** Each pid's own decoder, counting which pid's decoder checked which notice. */
@@ -708,14 +706,19 @@ const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ?
   let rev = 0;
   return facts.map((f) => {
     rev += f.gap;
-    const body =
-      f.tag === "started"
-        ? { process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" }
-        : f.tag === "restarted"
-          ? { process: f.pid, after: f.after, name: f.name, reason: "crashed", build: "h" }
-          : f.tag === "exited"
-            ? { process: f.pid, reason: f.reason }
-            : { process: f.pid, reason: "too_many", crashes: 1, until: 0 };
+    const body = Match.value(f.tag).pipe(
+      Match.when("started", () => ({ process: f.pid, name: f.name, program: "fabrika/checklist", hash: "h" })),
+      Match.when("restarted", () => ({
+        process: f.pid,
+        after: f.after,
+        name: f.name,
+        reason: "crashed",
+        build: "h",
+      })),
+      Match.when("exited", () => ({ process: f.pid, reason: f.reason })),
+      Match.when("down", () => ({ process: f.pid, reason: "too_many", crashes: 1, until: 0 })),
+      Match.exhaustive,
+    );
     return { _tag: f.tag, by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body };
   });
 };

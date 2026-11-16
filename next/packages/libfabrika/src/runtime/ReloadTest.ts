@@ -11,6 +11,7 @@ import {
   Exit,
   Fiber,
   Layer,
+  Match,
   Option,
   Result,
   Schedule,
@@ -95,28 +96,31 @@ const BASE: Spec = { k: 1, shape: "same", min: 0, max: 0, v: 1, gaps: [], cmd: f
 type CounterModel = { readonly count: number; readonly step?: number };
 
 const schemaFor = (spec: Spec) =>
-  spec.shape === "widened"
-    ? Schema.Struct({ count: Schema.Number })
-    : spec.shape === "narrowed"
-      ? Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) })
-      : spec.shape === "field"
-        ? Schema.Struct({ count: Schema.Int, step: Schema.Int })
-        : Schema.Struct({ count: Schema.Int });
+  Match.value(spec.shape).pipe(
+    Match.when("widened", () => Schema.Struct({ count: Schema.Number })),
+    Match.when("narrowed", () =>
+      Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) }),
+    ),
+    Match.when("field", () => Schema.Struct({ count: Schema.Int, step: Schema.Int })),
+    Match.when("same", () => Schema.Struct({ count: Schema.Int })),
+    Match.exhaustive,
+  );
 
 /** A narrowed counter never leaves its bounds, so its own steps keep its model readable. */
 const clamp = (spec: Spec, n: number) => (spec.shape === "narrowed" ? Math.min(spec.max, Math.max(spec.min, n)) : n);
 
 /** The variant's update, as plain functions the oracle folds too. */
 const updateFor = (spec: Spec, model: CounterModel, m: { readonly type: string }): CounterModel =>
-  m.type === "inc"
-    ? { ...model, count: clamp(spec, model.count + spec.k) }
-    : m.type === "dec"
-      ? { ...model, count: clamp(spec, model.count - spec.k) }
-      : m.type === "reset"
-        ? { ...model, count: clamp(spec, 0) }
-        : m.type === "ping_ok" || m.type === "write_ok" || m.type === "send_ok"
-          ? { ...model, count: clamp(spec, model.count + 10 * spec.k) }
-          : model;
+  Match.value(m.type).pipe(
+    Match.when("inc", (): CounterModel => ({ ...model, count: clamp(spec, model.count + spec.k) })),
+    Match.when("dec", (): CounterModel => ({ ...model, count: clamp(spec, model.count - spec.k) })),
+    Match.when("reset", (): CounterModel => ({ ...model, count: clamp(spec, 0) })),
+    Match.when(Match.is("ping_ok", "write_ok", "send_ok"), (): CounterModel => ({
+      ...model,
+      count: clamp(spec, model.count + 10 * spec.k),
+    })),
+    Match.orElse(() => model),
+  );
 
 /** The chain: one upgrade per number below `v`, except the gaps. A field variant's upgrades add `step`. */
 const upgradesFor = (spec: Spec) =>
@@ -158,13 +162,13 @@ const programFor = (spec: Spec) => {
     update: {
       inc: (s: CounterModel, m: typeof Msg.Type) => [
         updateFor(spec, s, m),
-        spec.durable === "write"
-          ? [write({ stream: "app/reload", write: Write.cases.own.make({ event: changed.make({ count: s.count }) }) })]
-          : spec.durable === "send"
-            ? [send({ to: "recipient:1", m: { type: "add", n: s.count } })]
-            : spec.cmd
-              ? [ping({ n: s.count })]
-              : [],
+        Match.value(spec.durable).pipe(
+          Match.when("write", () => [
+            write({ stream: "app/reload", write: Write.cases.own.make({ event: changed.make({ count: s.count }) }) }),
+          ]),
+          Match.when("send", () => [send({ to: "recipient:1", m: { type: "add", n: s.count } })]),
+          Match.orElse(() => (spec.cmd ? [ping({ n: s.count })] : [])),
+        ),
       ],
       dec: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), []],
       reset: (s: CounterModel, m: typeof Msg.Type) => [updateFor(spec, s, m), []],

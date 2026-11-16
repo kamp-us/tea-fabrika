@@ -2,7 +2,7 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
+import { Cause, Effect, Exit, Match, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -561,13 +561,13 @@ describe("Program.make authoring laws, next/", () => {
               const p = Program.make(fields);
               return {
                 ...p,
-                ...(field === "state"
-                  ? { state: { ...p.state, schema: bad } }
-                  : field === "view"
-                    ? { view: { ...p.view, data: bad } }
-                    : field === "outputs"
-                      ? { outputs: { rows: bad } }
-                      : { msg: bad }),
+                ...Match.value(field).pipe(
+                  Match.when("state", () => ({ state: { ...p.state, schema: bad } })),
+                  Match.when("view", () => ({ view: { ...p.view, data: bad } })),
+                  Match.when("outputs", () => ({ outputs: { rows: bad } })),
+                  Match.when("msg", () => ({ msg: bad })),
+                  Match.exhaustive,
+                ),
               };
             }),
           fc
@@ -1060,16 +1060,13 @@ const built = (r: MachineRecipe, base: typeof machine): unknown => {
   if (r.update === "inherited") {
     inherited.update = table;
   } else if (r.update !== "missing") {
-    own.update =
-      r.update === "table"
-        ? table
-        : r.update === "array"
-          ? Object.assign([], table)
-          : r.update === "null"
-            ? null
-            : r.update === "function"
-              ? Object.assign(() => 0, table)
-              : "update";
+    own.update = Match.value(r.update).pipe(
+      Match.when("table", () => table),
+      Match.when("array", () => Object.assign([], table)),
+      Match.when("null", () => null),
+      Match.when("function", () => Object.assign(() => 0, table)),
+      Match.orElse(() => "update"),
+    );
   }
 
   own.init = callables[r.init]();
@@ -1401,14 +1398,12 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
 
     if (a.cmd !== "missing") {
-      own.cmd =
-        a.cmd === "pending"
-          ? pending
-          : a.cmd === "other"
-            ? { type: "other", n: 1 }
-            : a.cmd === "untyped"
-              ? { type: 7 }
-              : Object.assign([], pending);
+      own.cmd = Match.value(a.cmd).pipe(
+        Match.when("pending", () => pending),
+        Match.when("other", () => ({ type: "other", n: 1 })),
+        Match.when("untyped", () => ({ type: 7 })),
+        Match.orElse(() => Object.assign([], pending)),
+      );
     }
 
     if (a.at !== "missing") {
@@ -1420,20 +1415,15 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     }
 
     if (a.error !== "missing") {
-      own.error =
-        a.error === "tag"
-          ? { _tag: "disk" }
-          : a.error === "empty"
-            ? { _tag: "" }
-            : a.error === "number"
-              ? { _tag: 3 }
-              : a.error === "array"
-                ? Object.assign([], { _tag: "disk" })
-                : a.error === "function"
-                  ? Object.assign(() => 0, { _tag: "disk" })
-                  : a.error === "null"
-                    ? null
-                    : Object.create({ _tag: "disk" });
+      own.error = Match.value(a.error).pipe(
+        Match.when("tag", () => ({ _tag: "disk" })),
+        Match.when("empty", () => ({ _tag: "" })),
+        Match.when("number", () => ({ _tag: 3 })),
+        Match.when("array", () => Object.assign([], { _tag: "disk" })),
+        Match.when("function", () => Object.assign(() => 0, { _tag: "disk" })),
+        Match.when("null", () => null),
+        Match.orElse(() => Object.create({ _tag: "disk" })),
+      );
     }
 
     switch (a.container) {

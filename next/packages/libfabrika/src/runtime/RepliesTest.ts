@@ -3,7 +3,20 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Match,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -348,20 +361,22 @@ const walk = (
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
-        const damaged =
-          kind === "json"
-            ? `${value.slice(0, -1)}${secret}`
-            : kind === "missing"
-              ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
-                )
-              : kind === "key"
-                ? JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) })
-                : kind === "typed"
-                  ? JSON.stringify({ ...json, by: { text: secret } })
-                  : kind === "accepted"
-                    ? JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                    : JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) });
+        const damaged = Match.value(kind).pipe(
+          Match.when("json", () => `${value.slice(0, -1)}${secret}`),
+          Match.when("missing", () =>
+            JSON.stringify(Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length]))),
+          ),
+          Match.when("key", () =>
+            JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) }),
+          ),
+          Match.when("typed", () => JSON.stringify({ ...json, by: { text: secret } })),
+          Match.when("accepted", () =>
+            JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) }),
+          ),
+          Match.orElse(() =>
+            JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) }),
+          ),
+        );
         raw.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, damaged, value);
         corrupt.set(k, damaged);
       }

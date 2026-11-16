@@ -43,6 +43,7 @@ import {
   Fiber,
   Layer,
   Logger,
+  Match,
   Option,
   Predicate,
   Result,
@@ -654,15 +655,13 @@ const STOPS: ReadonlySet<Move> = new Set(["stopper_start", "stop_own", "stop_oth
 /** A forged operand for each extra field a program might add beside its Cmd. */
 const forged = (field: string, world: World): unknown => {
   const sender = world.names.get("sender:1")?.pid ?? DOOR;
-  return field === "requester"
-    ? Recipient.cases.process.make({ process: sender })
-    : field === "owner"
-      ? Owner.cases.brain.make({})
-      : field === "process" || field === "source"
-        ? sender
-        : field === "hash"
-          ? "forged-hash"
-          : "kill";
+  return Match.value(field).pipe(
+    Match.when("requester", () => Recipient.cases.process.make({ process: sender })),
+    Match.when("owner", () => Owner.cases.brain.make({})),
+    Match.when(Match.is("process", "source"), () => sender),
+    Match.when("hash", () => "forged-hash"),
+    Match.orElse(() => "kill"),
+  );
 };
 
 /**
@@ -956,41 +955,49 @@ const walk = (
           const name = choose(starters(), cell.pick);
           const target = fresh();
           const kind = cell.shape % 8;
-          const bad: { ask: Ask; reason: string; tag: string } =
-            kind === 0
-              ? { ask: { program: "merger", name: target, drop: ["program"] }, reason: "bad_cmd", tag: "missing" }
-              : kind === 1
-                ? { ask: { program: "merger", name: target, drop: ["name"] }, reason: "bad_cmd", tag: "missing" }
-                : kind === 2
-                  ? { ask: { program: 5, name: target }, reason: "bad_cmd", tag: "typed" }
-                  : kind === 3
-                    ? { ask: { program: "merger", name: ["x"] }, reason: "bad_cmd", tag: "typed" }
-                    : kind === 4
-                      ? {
-                          ask: { program: `nope${cell.alt % 9}`, name: target },
-                          reason: "no_program",
-                          tag: "no_program",
-                        }
-                      : kind === 5
-                        ? // The loader answers before the name is judged.
-                          { ask: { program: "nope", name: "Bad Name" }, reason: "no_program", tag: "no_program" }
-                        : kind === 6
-                          ? {
-                              ask: {
-                                program: "merger",
-                                name: choose(
-                                  ["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)],
-                                  cell.alt,
-                                ),
-                              },
-                              reason: "bad_name",
-                              tag: "bad_name",
-                            }
-                          : {
-                              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
-                              reason: "bad_input",
-                              tag: "bad_input",
-                            };
+          type BadStart = { ask: Ask; reason: string; tag: string };
+          const bad: BadStart = Match.value(kind).pipe(
+            Match.when(0, (): BadStart => ({
+              ask: { program: "merger", name: target, drop: ["program"] },
+              reason: "bad_cmd",
+              tag: "missing",
+            })),
+            Match.when(1, (): BadStart => ({
+              ask: { program: "merger", name: target, drop: ["name"] },
+              reason: "bad_cmd",
+              tag: "missing",
+            })),
+            Match.when(2, (): BadStart => ({ ask: { program: 5, name: target }, reason: "bad_cmd", tag: "typed" })),
+            Match.when(3, (): BadStart => ({
+              ask: { program: "merger", name: ["x"] },
+              reason: "bad_cmd",
+              tag: "typed",
+            })),
+            Match.when(4, (): BadStart => ({
+              ask: { program: `nope${cell.alt % 9}`, name: target },
+              reason: "no_program",
+              tag: "no_program",
+            })),
+            // The loader answers before the name is judged.
+            Match.when(5, (): BadStart => ({
+              ask: { program: "nope", name: "Bad Name" },
+              reason: "no_program",
+              tag: "no_program",
+            })),
+            Match.when(6, (): BadStart => ({
+              ask: {
+                program: "merger",
+                name: choose(["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)], cell.alt),
+              },
+              reason: "bad_name",
+              tag: "bad_name",
+            })),
+            Match.orElse((): BadStart => ({
+              ask: { program: "merger", name: target, inputBytes: ROW_LIMIT + 1 },
+              reason: "bad_input",
+              tag: "bad_input",
+            })),
+          );
           const before = (yield* answers(name)).length;
           const revBefore = yield* head;
           yield* door(name, { type: "start", ask: bad.ask });

@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { Cause, Clock, Effect, Exit, Layer, Match, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -212,18 +212,14 @@ describe("T285, ledger tracing keep-laws", () => {
                       head++;
                     }
 
-                    const changed =
-                      call.op === "bad_line"
-                        ? { ...input, by: "" }
-                        : call.op === "bad_parent"
-                          ? { ...input, parent: "bad" }
-                          : call.op === "bad_trace"
-                            ? { ...input, traceId: "bad" }
-                            : call.op === "seen_ahead"
-                              ? { ...input, seen: head + 1 }
-                              : call.op === "id_reused"
-                                ? { ...input, body: { changed: a.value } }
-                                : input;
+                    const changed = Match.value(call.op).pipe(
+                      Match.when("bad_line", () => ({ ...input, by: "" })),
+                      Match.when("bad_parent", () => ({ ...input, parent: "bad" })),
+                      Match.when("bad_trace", () => ({ ...input, traceId: "bad" })),
+                      Match.when("seen_ahead", () => ({ ...input, seen: head + 1 })),
+                      Match.when("id_reused", () => ({ ...input, body: { changed: a.value } })),
+                      Match.orElse(() => input),
+                    );
                     const answer = yield* ledger.append(a.stream, id, changed);
                     const accepted = call.op === "append";
 
@@ -1213,13 +1209,12 @@ describe("T285, runner tracing keep-laws", () => {
                   const writing = ["own", "caused", "write_refused", "write_storage"].includes(call.op);
                   const handling = ["work", "handler_fail", "handler_die"].includes(call.op);
                   const stream = `facts/${a.name}`;
-                  const m = writing
-                    ? { type: "write", value: call.value, own: call.op === "own", stream }
-                    : call.op === "step_throw"
-                      ? { type: "throw" }
-                      : call.op === "refuse"
-                        ? { type: "unknown", value: call.value }
-                        : { type: "work", value: call.value };
+                  const unwritten = Match.value(call.op).pipe(
+                    Match.when("step_throw", () => ({ type: "throw" })),
+                    Match.when("refuse", () => ({ type: "unknown", value: call.value })),
+                    Match.orElse(() => ({ type: "work", value: call.value })),
+                  );
+                  const m = writing ? { type: "write", value: call.value, own: call.op === "own", stream } : unwritten;
                   const input = w.input(n, m);
                   // The letter is delivered to the process that will step it: the successor, when this op starts it.
                   const target = starting ? w.upcoming() : pid;
