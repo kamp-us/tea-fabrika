@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s2-tests1",
+  "ticket": "1056",
+  "pr": null,
+  "started": "2026-11-15T18:19:00-08:00",
+  "ended": "2026-11-15T18:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice 2 of the Reflect ban (0554), next/packages/tuval/src/browser: 4 fires in key.laws.visual.test.ts, as the plan counted on main at 82296f5cf. All kind 7: __key and __realOpen are declared once on globalThis and read plainly. The folder joins the ban block of next/ where JSON.parse blocks. L5: an old line back in the folder fails lint.",
+  "plants": [
+    {
+      "law": "L5",
+      "plant": "Reflect.get(globalThis, \"__key\").claim() put back in key.laws.visual.test.ts",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": "The file is a .visual. law and was not run here; CI's full run proves it. pnpm lint and pnpm typecheck passed. Plant restored by copy.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null
+}

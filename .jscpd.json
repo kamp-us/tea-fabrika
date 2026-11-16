@@ -1,0 +1,15 @@
+{
+  "format": ["typescript", "tsx"],
+  "mode": "weak",
+  "minTokens": 60,
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/*.config.ts",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*test-support*",
+    "**/*Test.ts",
+    "**/fixtures/**"
+  ]
+}

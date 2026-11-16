@@ -1,0 +1,29 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-pr1422-fix1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1422",
+  "started": "2026-11-15T20:58:00-08:00",
+  "ended": "2026-11-15T21:08:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round on lead tooling (fast-tracked), today's tooling: the leak-gate property in .agents/skills/lead/scripts/pr/Arm.test.ts failed in full run 43805556480 on the proof branch fabrikalfa/tooling-proof-2 (leak=leakText, expected undefined to be 'LeakGrepRefused'). Root cause: a semantic clash with main's PR 1401 (ticket 1067), which moved PushesTest.layer onto the Recorder, so a refusing method takes an error value keyed by its method name and calls are read with Recorder.calls(Pushes). PR 1422's new laws in Arm.test.ts and Merge.test.ts still passed the string 'leakgrep.sh exited 1' and the old key 'leak', and read remote.calls, which no longer exists. The Recorder failed the leakText check with the bare string, so answer.failure._tag was undefined. Arm.test.ts was green on 1422's branch alone (12 passed) and red on 1422 merged with origin/main alone (same failure), so PRs 1404, 1413 and 1419 are not needed for it. Fix: both test files pass a LeakGrepRefused by method name (leakChange, leakGrep, leakText) and read the recorded calls inside the layer, as Queue.test.ts does on main. After it Arm.test.ts passed 12 of 12 and Merge.test.ts's memory laws passed 6 of 6 (its real-leakgrep process laws were not run here); pnpm lint and one pnpm typecheck passed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "Arm.test.ts: property: over a green full run it arms only when the leak grep passed on the change, each commit and the title and description",
+      "plant": "Leaks.ts: drop the leakText step of Leaks.gate",
+      "result": "red"
+    }
+  ]
+}

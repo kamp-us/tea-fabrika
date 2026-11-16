@@ -28,7 +28,8 @@ on:
   # this event. It picks its jobs from the group's changed paths, as a ready pull request does
   # (0174), and so does a push to main, from what that push brought (0175). The group's own base and head give those paths
   # (see BASE below). Neither runs the whole of next/ (0534): next/ runs the tests the change
-  # reaches, and the schedule (scheduled.yaml) runs everything every 3 hours. No event here runs a
+  # reaches, and the full run (scheduled.yaml) runs everything, on a push to main or the hourly
+  # catch-up, at most once an hour (0581). No event here runs a
   # tooling test (0539): their author runs the narrow ones, and the schedule runs them all. A group
   # whose tree and base tree a ready pull request run already tested green runs no tests (the
   # changes job below).
@@ -291,6 +292,17 @@ jobs:
       - name: install the row check
         if: ${{ needs.changes.outputs.check == 'false' }}
         run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
+      # The clones this change adds, as advice only (0587): jscpd with .jscpd.json, its baseline
+      # built from the pull request's base. It prints warnings and never fails the job; with no base
+      # (the merge queue, a push) it checks nothing. Before lint, so a red lint still shows it.
+      - name: copies (advice)
+        if: ${{ needs.changes.outputs.check != 'false' }}
+        continue-on-error: true
+        # About 2 s on a laptop for the whole tree; the base's blobs come over the blobless clone.
+        timeout-minutes: 3
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node .github/ci/copies.ts --base "$BASE"
       - name: lint
         if: ${{ needs.changes.outputs.check != 'false' }}
         run: pnpm lint
@@ -400,7 +412,7 @@ jobs:
   # xvfb and the keychain are tried.
   # Which tests (0536): the merge line (a pull request, a merge queue group, a push to main) runs the
   # `next` project alone, the tests on our interfaces' in-memory layers. A test that drives a real
-  # resource is named `*.integration.test.ts` and runs on the 3-hour schedule (scheduled.yaml), with
+  # resource is named `*.integration.test.ts` and runs in the full run (scheduled.yaml, 0581), with
   # the visual ones. A visual test (`*.visual.test.ts`, a browser or Electron) runs here only on a
   # pull request with the `visual` label.
   # The full matrix is seven machines, the fallback below on a pull request with the label; the
