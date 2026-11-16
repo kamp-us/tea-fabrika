@@ -11,11 +11,11 @@
   "model": "claude-sonnet-5-5",
   "effort": null,
   "outcome": "pass",
-  "why": "Tests step for slice E13 (preferBarrelImport), in next/apps/fabrika. Recount with only that check at error: 9 hits, all effect/persistence/RateLimiter or KeyValueStore imported by module path. 8 sit in 7 exam-path files, 1 in the product file src/runtime.ts. None is in a file of pull request 1366. Wrote the package-wide lock in next/apps/fabrika/tsconfig.json (barrelImportPackages effect, namespaceImportPackages empty so the app never inherits effect, preferBarrelImport error), nothing in tsconfig.base.json. Fixed the 8 exam-path hits by hand with the editor, taking the checker's suggested fix (import { RateLimiter } from \"effect/persistence\"). The package typecheck is red only on src/runtime.ts line 13, for the build step.",
+  "why": "Tests step for slice E13 (preferBarrelImport), in next/apps/fabrika. Recount with only that check at error: 9 hits, all effect/persistence/RateLimiter or KeyValueStore imported by module path. 8 sit in 7 exam-path files, 1 in the product file src/runtime.ts. The coordinator then asked every hit outside 1366 to be fixed in this slice, so the last one was fixed too. None is in a file of pull request 1366. Wrote the package-wide lock in next/apps/fabrika/tsconfig.json (barrelImportPackages effect, namespaceImportPackages empty so the app never inherits effect, preferBarrelImport error), nothing in tsconfig.base.json. Fixed the 8 exam-path hits by hand with the editor, taking the checker's suggested fix (import { RateLimiter } from \"effect/persistence\"). The package has 0 preferBarrelImport errors after the fix.",
   "tokens": null,
   "tools": null,
   "minutes": 30,
-  "note": "Hits met 9, fixed by quick fix 0 (the fix tool was not available and a later rule forbids it), hand edits 8, left 1, waiting on 1366 0. Counted with effect-tsgo diagnostics --project next/apps/fabrika/tsconfig.json: 9 red, 1 after the hand edits.",
+  "note": "Per-check report, E13 preferBarrelImport: hits met 9, fixed by quick fix 0, hand edits 9 (Edit tool, the checker's suggested form), left 0, waiting on 1366 0. Files: e2e/chaos-revoke.worker.test-support.ts, src/door-recovery.integration.test.ts, src/door-spans.test.ts, src/door.integration.test.ts, src/hands-client.test.ts, src/exam/agent-may.test.ts, src/exam/runner-contract-replay.test.ts, src/runtime.ts. No pull request opened from this slice's branch beyond draft 1439, which is left as it is.",
   "plants": [
     {
       "law": "L1",
