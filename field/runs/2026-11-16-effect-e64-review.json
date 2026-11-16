@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e64-review",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:40:39-08:00",
+  "ended": "2026-11-16T00:58:30-08:00",
+  "parent": "2026-11-16-effect-e64-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of Effect sweep slice E64 (schemaClassMissingBrand, mechanical) in next/, range 891075e7a..9734379 (39 files): merge-ready, no finding row. Every one of the 69 class headers the range changes gets `{ readonly brand: unique symbol }` as its second type argument and nothing else: 67 Schema.TaggedError, 1 Schema.Class and 1 Schema.Opaque (Saved, next/packages/libfabrika/src/runtime/State.ts:39), many reflowed by pnpm format, with every doc comment inside a reflowed block kept. The one other line is State.test.ts:121, which builds the same value through Saved.make, as the brand needs; its assertions are unchanged. All 177 brands of the slice commit b0fc754 are still at the head, plus 2 the fold added. The four merge conflicts kept both sides: e2e/p14.test-support.ts, src/exam/compiler.ts and src/exam/tsconfig-scope.integration.test.ts equal the fold (brand, Schema.Finite and .make all present), and processes/Quotas.ts has the brand plus the fold's Schema.Finite fields and its removed @stability tags. Own recount with only this check at error, per project: 0 in next/packages/libfabrika, next/apps/fabrika, .agents, next/packages/vitest, oxlint-plugins, next/programs/pipeline and next/programs/counter; the same config finds 32 in packages/fabrika (today's version, left on purpose), so the count is live. The tests row lists every folder the range fixed (app src, ledger, ledger/internal, processes, runtime). No lock and no L1 by the coordinator's ruling.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Read-only apart from this row. Head 9734379116db5a27696dda7a6cc53edd883cc413. pnpm typecheck: exit 0. pnpm lint: exit 0 once lint:promise-types, which died with EPIPE under memory, passed alone. loosening.sh 891075e7a HEAD: 9 'unrecognized change' hits, all brand lines in test files plus the Saved.make line in State.test.ts; none loosens a law, since the brand is type-only. Tests passed at the head: State, hands-client, Chunk, Audit, LedgerStreams.types (18), Runner.integration (117), tasks-wire.integration (1), port-home.laws.integration (3, plus the hand-run writer skipped by its own T502_PORT_HOME switch), RecoveryStore.integration (8), runtime-recovery.laws.integration (13 of 13). On 891075e7a alone, runtime-recovery fails T753 L16 with a 60 s timeout, so that timeout is a load flake not caused by this change; it is already recorded in field/findings/2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine.json. git merge-tree of the head with origin/fabrikalfa/effect-mechanical 71c4e4b71: no conflict. No law refused by the 0178 guard.",
+  "step": "review"
+}
