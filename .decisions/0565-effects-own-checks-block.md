@@ -1,7 +1,7 @@
 ---
 id: 0565
 title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
-status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md), [0575](0575-deterministic-keys-is-the-service-id-form.md), [0576](0576-schema-sync-error-result-in-plain-code.md)
+status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md), [0575](0575-deterministic-keys-is-the-service-id-form.md), [0576](0576-schema-sync-error-result-in-plain-code.md), [0577](0577-libraries-namespace-programs-barrel-imports.md)
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
 ---
@@ -274,7 +274,7 @@ too.
   pull request counts its hits.
 - **Not decided here: a check that cannot be on together with something we decided.** Each waits
   for the owner, with the code on both sides.
-  - **`preferBarrelImport` against namespace imports**
+  - **RULED on 2026-11-15 by [0577](0577-libraries-namespace-programs-barrel-imports.md): clash 5, `preferBarrelImport` against namespace imports**
     ([0120](0120-effect-code-guidelines.md), E7). It fires only for packages named in
     `barrelImportPackages`, and `preferNamespaceImport` only for those in
     `namespaceImportPackages`. One package cannot be in both.
@@ -335,3 +335,4 @@ too.
 - 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) rules clashes 1 and 2. `unstableApiUsage`: `@stability` is dropped until the first release and the check is an error, with `allowedUnstableApis` naming each unstable Effect part we use. `apiStabilityLeak`: recounted after the tags go; an error if zero, off if hits remain from Effect's unstable types, which we use on purpose.
 - 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) rules clash 4. `deterministicKeys` is an error and sets the service ID form, `service-id` is deleted, and the sweep tries `keyPatterns` with our dot form first, then renames the 35 IDs to the checker's form.
 - 2026-11-15: [0576](0576-schema-sync-error-result-in-plain-code.md) rules clash 3. `schemaSync` is an error; a plain function (a ledger step, [0050](0050-a-ledger-step-is-a-plain-function.md)) uses the Result form and handles the failure, Effect code the Effect form. The count is 620 on main at `61d551ff3`, where this file said 632. Each hit must handle the failure it ignores today.
+- 2026-11-15: [0577](0577-libraries-namespace-programs-barrel-imports.md) rules clash 5. Libraries in `next/packages/` import `effect` by namespace, held by `preferNamespaceImport`; programs and apps in `next/programs/` and `next/apps/` import it from the barrel, held by `preferBarrelImport`. Both are errors, set in each package's own tsconfig. With it, all five clashes this file lists are ruled.
