@@ -86,7 +86,7 @@ that pattern misses it.
 | `file-services.laws.integration.test.ts` | 1 | 1 | 0 | 1 |
 | `grant-readers.laws.test.ts` | 0 | 5 | 5 | 1 |
 | `door.integration.test.ts`, p27 (`:3083`) | 1 | 1 | 0 | 1 |
-| `instance-one-file.integration.test.ts`, `getEntrypoint` (`:441`) | 0 | 0 | 1 | 1 |
+| `instance-one-file.integration.test.ts`, `getEntrypoint` (`:441`) | 0 | 0 | 1 | moved to the 0042 Alchemy mocks plan (amendment 2026-11-15) |
 | `instance-one-file.integration.test.ts`, spawn (`:49`) | 0 | 0 | 1 | 2 |
 | `exam/alchemy-lifecycle.test.ts` | 0 | 0 | 1 | 2 |
 | `door.integration.test.ts`, crypto and T843 | 2 | 3 | 8 | 3 |
@@ -110,7 +110,7 @@ other sites need first: `next/packages/libfabrika/src/gateway/Gateway.ts` and
 | `grant-readers…:63,107,334` | `grant.ts` never fetches on bad args, usage or flags | a `fetch` stand-in for Effect's `FetchHttpClient.Fetch` reference that keeps a typed list of its calls and rejects; the list stays `[]` | none: `grant.ts` already uses `HttpClient` and `FetchHttpClient.layer` |
 | `grant-readers…:202` | each request `grant.ts` sends, method, URL, headers and body | the same stand-in, answering per mode; its list replaces the spy's `calls` | none |
 | `grant-readers…:234,314,316` | `Granted <key> to <for>` is printed once on `applied`, never otherwise | Effect's `TestConsole.layer`, and `TestConsole.logLines` equals that one line or `[]` | none: `grant.ts` prints with `Console.log` |
-| `instance-one-file…:441` | nothing: the spy only sets a return value on a stub | `getEntrypoint: () => rpc` written in the stub | none |
+| `instance-one-file…:441` | nothing: the spy only sets a return value on a stub | `getEntrypoint: () => rpc` written in the stub (amendment 2026-11-15: does not compile; the site moves to the 0042 Alchemy mocks plan, see "Slice 1") | none |
 | `instance-one-file…:49` | the close of every real child spawned, so a port is free before reuse | a `ChildProcessSpawner` layer that wraps Node's and keeps each handle's exit | the Alchemy patch, slice 2 |
 | `exam/alchemy-lifecycle…:33` | workerd's spawn, made into a fake child the law can crash | a `ChildProcessSpawner` stand-in that answers fake handles | the Alchemy patch, slice 2 |
 | `door…:1871,1877,1888,5121` | WebCrypto `importKey`, `sign` and `verify` of the gateway's nonce, failed once, or held | `Recorder.layer(Mac.Mac, …, { fails })`, and a held `verify` in the impl | `GatewayNonce.ts` takes Effect's `Mac` and `SecureRandom`, slice 3 |
@@ -185,7 +185,7 @@ hit whose way needs a design call.
 
 Sketches, not compiled. Names are the installed effect 4.1.3's and the Recorder's as built.
 
-### Slice 1: four sites, no product change
+### Slice 1: three sites, no product change (amended 2026-11-15; was four, A5 moved)
 
 ```ts
 // file-services.laws.integration.test.ts: the Recorder's store must outlive dev.ts's own provide,
@@ -249,6 +249,23 @@ const stub: ReturnType<Platform["get"]> = { getEntrypoint: () => rpc, getDurable
 
 If `getEntrypoint`'s platform type is generic and `rpc` does not fit it, the stub is typed with the
 one-line `satisfies` the type allows. A double cast is never written (`fabrika/no-type-assertions`).
+
+**Amendment (2026-11-15 Pacific, the lead's ruling): A5 leaves this sweep and moves to the 0042
+Alchemy mocks plan (`fabrikalfa/alchemy-mocks-plan`) as a normal row.** The tests step found that
+the stub above does not compile. In `@cloudflare/workers-types` 5.20261109.1,
+`WorkerStub.getEntrypoint<T extends Rpc.WorkerEntrypointBranded | undefined>()` is generic, so
+`getEntrypoint: () => rpc` fails with TS2322, and the `satisfies` fallback does not exist for a
+generic method. A function with one overload, which the type accepts, fails with TS2589 (type
+instantiation is excessively deep). A cast is refused. This stub is Cloudflare's platform type,
+which [0042](../../../.decisions/0042-platform-pieces-go-through-alchemy.md) sends through
+Alchemy, and that plan is where platform stand-ins get their typed home. Slice 1 is now three
+sites, A1 to A4, and its `getEntrypoint` spy stays in `instance-one-file.integration.test.ts`
+until that plan's row lands.
+
+```ts
+// what the tests step tried, a sketch of the failure, not to be written
+const stub: ReturnType<Platform["get"]> = { getEntrypoint: () => rpc /* TS2322 */, getDurableObjectClass: unused };
+```
 
 ### Slice 2: Alchemy's Workerd spawns through Effect's ChildProcessSpawner
 
@@ -436,7 +453,7 @@ plant is what the review runs once to see it red.
 | A2. The grant command fetches nothing on a bad URL, a usage error or an unknown flag | test | fc.oneof: the bad URLs, as today, with fc.string and fc.integer for the usage law and fc.uuid for flags, 3 runs each (20, 25 and 10 at full depth) | in `next/apps/fabrika/grant.ts`, fetch the target before parsing the URL: `sent` is not `[]` | next/apps/fabrika/src/grant-readers.laws.test.ts |
 | A3. Each grant mode sends exactly its GET and POST, and prints `Granted <key> to <for>` once on `applied` and nothing else | test | fc.constantFrom: the modes, as today, 3 runs (12 at full depth) | print the line on `refused` too, or print a second line: `logLines` differs | next/apps/fabrika/src/grant-readers.laws.test.ts |
 | A4. p27: a granted, revoked or added grant with a wrong `to` never calls `ClientManager.write` and founds nothing | test | Effect Arbitrary: Grant.fields.to | in `next/packages/libfabrika/src/gateway/Gateway.ts`, write the client before the ledger check (the plant is made on a scratch copy; that file is in PR 1366 and is not changed) | next/apps/fabrika/src/door.integration.test.ts |
-| A5. p33 loader: the loader records the real config and answers typed `no_program` for an unknown name | test | fc.string: the source, with fc.uuid for the process, as today, 3 runs | answer the bare short name: the `no_program` check is red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
+| A5. Amendment 2026-11-15 (the lead's ruling): A5 moves to the 0042 Alchemy mocks plan and does not land in this sweep (see "Slice 1"). p33 loader: the loader records the real config and answers typed `no_program` for an unknown name | test | fc.string: the source, with fc.uuid for the process, as today, 3 runs | answer the bare short name: the `no_program` check is red | next/apps/fabrika/src/instance-one-file.integration.test.ts |
 | A6. The lock refuses `vi.fn` and `vi.spyOn` in the files at zero and nowhere else in the folder; a file at zero for all five is in the five-method block and refuses all five (amendment 2026-11-15, ruling 2). Amendment 2026-11-15 (the laptop lead's ruling): A6 does not land in this sweep; it lands with the folder's whole lock once the folder is at zero | test | scenario: the real oxlint over a planted `vi.fn()` in a locked file and in an unlocked file of the folder, through `plantIn` | delete the new override: the locked row stops firing | oxlint-plugins/plants.test.ts |
 | A7. Node's M1 (amendment 2026-11-15, ruling 2): the `VI_METHODS` lines are refused in every path of every block that sets the rule, `vi.fn()`, `vi.spyOn(console, "log")`, `vi.mock`, `vi.doMock` and `vi.stubEnv` among them, and `v.fn()` after `import { vi as v }` joins the set; a plain list is not refused | test | scenario: node's `VI_METHODS` set | drop `fn` from the rule's options: the `vi.fn()` line passes | oxlint-plugins/builtin-plants.ts |
 | A8. The locked files are at zero: `pnpm lint` passes with the lock an error, and no disable line names it. Amendment 2026-11-15 (the laptop lead's ruling): A8 waits with A6 | lint | lint | put back `const touched = vi.fn(() => Effect.never)`: `pnpm lint` exits 1 | next/apps/fabrika/src/file-services.laws.integration.test.ts |
@@ -492,7 +509,7 @@ lands on the mock sweep's one fold branch, `fabrikalfa/mock-fold`, and in its on
 | next/apps/fabrika/src/file-services.laws.integration.test.ts | tests | tests | slice 1: A1 |
 | next/apps/fabrika/src/grant-readers.laws.test.ts | tests | tests | slice 1: A2, A3 |
 | next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 1: A4; slice 3: C1 to C4 |
-| next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | tests | slice 1: A5; slice 2: B3 |
+| next/apps/fabrika/src/instance-one-file.integration.test.ts | tests | tests | slice 2: B3 (amendment 2026-11-15: slice 1's A5 moves to the 0042 Alchemy mocks plan) |
 | .oxlintrc.json | tests | none | slices 1 to 4: the override, its `files` growing, then the folder glob |
 | oxlint-plugins/builtin-plants.ts | tests | tests | slice 1: A7 |
 | oxlint-plugins/plants.test.ts | tests | tests | slice 1: A6; slice 4 changes its rows to the glob |
@@ -580,7 +597,8 @@ Confidence in the line counts: 70%. The doubts are the Alchemy patch and slice 3
 All five slices land on `fabrikalfa/mock-fold`, the sweep's one fold branch, in its one pull
 request (amendment 2026-11-15, ruling 1).
 
-1. Slice 1, the four sites with no product change, the lock for two files, its plants and the
+1. Slice 1, the three sites with no product change (amendment 2026-11-15: the fourth, A5, moves
+   to the 0042 Alchemy mocks plan, 1 spy and about 5 test lines fewer), the lock for two files, its plants and the
    pattern doc: about 0 product lines, about 110 test lines changed, about 20 config lines, about
    30 lines of docs. 0 lines.
 2. Slice 2, the Alchemy patch and the two spawn laws, and the lock for two more files: about 41
