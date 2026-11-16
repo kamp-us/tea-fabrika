@@ -4,7 +4,7 @@
   "ticket": null,
   "pr": "kamp-us/tea-fabrika#1498",
   "started": "2026-11-15T23:01:08-08:00",
-  "ended": "2026-11-15T23:11:00-08:00",
+  "ended": "2026-11-15T23:17:51-08:00",
   "parent": "2026-11-15-trusted-rules-0573-review",
   "active": null,
   "role": "hand",
@@ -36,7 +36,7 @@
   ],
   "tokens": null,
   "tools": null,
-  "minutes": 10,
-  "note": "Run in a cloud box with no step keys, so commits are unsigned (stepcommit --commit-only). Each plant ran once on a saved copy and was restored by copy. With the config intact the same laws were green before each plant. Tests at e2cd8981b plus this round's edits, under nice -n 15 --maxWorkers=3: oxlint-plugins/plants.test.ts, no-node-imports.test.ts, modules.test.ts, ledger.test.ts, effect-checks-held.test.ts, advice.test.ts and next/apps/fabrika/src/exam/edge-comment.integration.test.ts, 7 files, 281 tests, all green; the 0178 guard refused none. The restored rule has no test file of its own on main; its plant runs in plants.test.ts. pnpm format; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint green but for the new finding row's rule word, fixed and rechecked with field-check.ts; the list ratchet exits 0; one pnpm typecheck: 31 projects, 0 errors.",
+  "minutes": 17,
+  "note": "Run in a cloud box with no step keys, so commits are unsigned (stepcommit --commit-only). Each plant ran once on a saved copy and was restored by copy. With the config intact the same laws were green before each plant. Tests at e91fad099 (this round's commit, whose files equal e2cd8981b plus these edits), alone under nice -n 15 --maxWorkers=3: oxlint-plugins/plants.test.ts, no-node-imports.test.ts, modules.test.ts, ledger.test.ts, effect-checks-held.test.ts, advice.test.ts and next/apps/fabrika/src/exam/edge-comment.integration.test.ts, 7 files, 285 tests, all green; the 0178 guard refused none. An earlier run of the same files at the same time as pnpm format, pnpm lint and pnpm typecheck failed 6 tests in plants.test.ts (its 'a plain file cannot take a folder out of the checks' block and its L6 pin), and that lint failed on the tests' planted apps/.plant-* folders (lint.ts EISDIR, format.ts --check); run one at a time, both are green, so the clash was the shared tree. This row, as first committed in e91fad099, quoted test and typecheck totals from before those runs had ended; this commit corrects them. The restored rule has no test file of its own on main; its plant runs in plants.test.ts. pnpm format; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint exit 0, alone; the list ratchet exits 0; one pnpm typecheck exit 0 with no type errors in its output.",
   "step": "tests"
 }
