@@ -94,7 +94,8 @@ guard", with its path. PR 1508 narrows the guard: it allows a run when `CI` is s
 `origin/main` in), run your reached `.integration.` and `.visual.` laws in the box as usual, with no
 override, and still list any the guard refuses. If your own permission check refuses any command, do
 not retry it and do not look for another way: stop, and report the refusal and what it blocked in
-RESULT.
+RESULT. A permission check that errors with NO verdict (an outage, not a decision) is different: after a
+pause, one fresh retry of the same command is allowed; if it errors again, stop and report.
 
 **PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. Merge `origin/main` into your branch first (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
 `oxlint-plugins/effect-checks.test.ts` unless your brief says so. A lock entry goes in
