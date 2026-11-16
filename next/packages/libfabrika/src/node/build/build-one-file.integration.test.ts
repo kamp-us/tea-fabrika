@@ -36,12 +36,14 @@ import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Formatter from "effect/Formatter";
+import type * as PlatformError from "effect/PlatformError";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
 import { afterEach, describe, expect, vi } from "vitest";
+import type { BuildError } from "../../runtime/Built.ts";
 import * as StartsTest from "../../settings/StartsTest.ts";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -176,8 +178,11 @@ type Build = {
     readonly ledger: readonly unknown[];
     readonly chaos: boolean;
     readonly tab?: { readonly entry: string; readonly styles: readonly string[] };
-  }) => Effect.Effect<Built, unknown>;
+  }) => Effect.Effect<Built, BuildFailure>;
 };
+
+// The build fails with what `build.ts` names: a refusal or a disk failure.
+type BuildFailure = BuildError | PlatformError.PlatformError;
 
 const fixture = (value: string, count = 1) => {
   const home = mkdtempSync("/tmp/fh.");
@@ -1478,7 +1483,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
 
   const steps: ReadonlyArray<{
     readonly possible: () => boolean;
-    readonly run: (n: number) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>;
+    readonly run: (n: number) => Effect.Effect<void, BuildFailure, FileSystem.FileSystem | Path.Path>;
   }> = [
     {
       possible: () => true,

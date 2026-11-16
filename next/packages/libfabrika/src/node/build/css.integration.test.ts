@@ -14,12 +14,17 @@ import type * as Path from "effect/Path";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BuildError } from "../../runtime/Built.ts";
 
-type Inline = (file: string) => Effect.Effect<string, unknown, FileSystem.FileSystem | Path.Path>;
+type Inline = (file: string) => Effect.Effect<string, BuildError, FileSystem.FileSystem | Path.Path>;
+
+// The build fails with what `build.ts` names: a refusal or a disk failure.
+type BuildFailure = BuildError | PlatformError.PlatformError;
 
 type Build = {
   readonly build: (options: {
@@ -34,7 +39,7 @@ type Build = {
     readonly files: readonly string[];
     readonly ledger: readonly unknown[];
     readonly chaos: boolean;
-  }) => Effect.Effect<unknown, unknown, FileSystem.FileSystem | Path.Path>;
+  }) => Effect.Effect<unknown, BuildFailure, FileSystem.FileSystem | Path.Path>;
 };
 
 const product = <A>(file: string, name: string) => {
@@ -101,7 +106,7 @@ const fixture = (id: number) => {
 };
 
 // Every refusal is the build's typed bundle failure. A thrown parser error rejects instead.
-const failure = async (stylesheet: Effect.Effect<string, unknown>) => {
+const failure = async (stylesheet: Effect.Effect<string, BuildError>) => {
   const result = await Effect.runPromise(Effect.result(stylesheet));
 
   if (result._tag !== "Failure") {

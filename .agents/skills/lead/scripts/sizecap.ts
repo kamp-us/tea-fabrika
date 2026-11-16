@@ -81,6 +81,7 @@ import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
 import { Array as Arr, String as Str, pipe } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
@@ -369,7 +370,8 @@ export class Failed extends Schema.TaggedError<Failed, { readonly brand: unique 
 
 // The edge: git through effect/process, the plan through FileSystem, the arguments through effect/cli.
 
-const text = (bytes: Stream.Stream<Uint8Array, unknown>) => bytes.pipe(Stream.decodeText(), Stream.mkString);
+const text = (bytes: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  bytes.pipe(Stream.decodeText(), Stream.mkString);
 
 /** One git command's output and exit code. Nothing it prints is run. */
 const git = Effect.fn("sizecap.git")(function* (args: ReadonlyArray<string>) {

@@ -28,6 +28,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Formatter from "effect/Formatter";
+import type * as PlatformError from "effect/PlatformError";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -429,7 +430,7 @@ class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol 
   message: Schema.String,
 }) {}
 
-const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, unknown>) {
+const text = Effect.fnUntraced(function* (s: Stream.Stream<Uint8Array, PlatformError.PlatformError>) {
   return yield* s.pipe(Stream.decodeText(), Stream.mkString);
 });
 

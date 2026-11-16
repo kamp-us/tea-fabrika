@@ -21,6 +21,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Formatter from "effect/Formatter";
+import type * as PlatformError from "effect/PlatformError";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -137,7 +138,8 @@ class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol 
   message: Schema.String,
 }) {}
 
-const text = (s: Stream.Stream<Uint8Array, unknown>) => s.pipe(Stream.decodeText(), Stream.mkString);
+const text = (s: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  s.pipe(Stream.decodeText(), Stream.mkString);
 
 /** One git command's output and exit code. */
 const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {

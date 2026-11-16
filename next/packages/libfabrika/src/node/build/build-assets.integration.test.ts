@@ -26,12 +26,13 @@ import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { BuildError } from "../../runtime/Built.ts";
 import { check } from "./compiler.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
 
 type Serve = {
-  readonly serveAsset?: (assets: Readonly<Record<string, Asset>>, request: Request) => Effect.Effect<Response, unknown>;
+  readonly serveAsset?: (assets: Readonly<Record<string, Asset>>, request: Request) => Effect.Effect<Response>;
 };
 
 const serving = async () => {
@@ -148,8 +149,11 @@ type Options = {
 type Build = {
   readonly build: (
     o: Options,
-  ) => Effect.Effect<{ readonly brain: string; readonly assets: Readonly<Record<string, Asset>> }, unknown>;
+  ) => Effect.Effect<{ readonly brain: string; readonly assets: Readonly<Record<string, Asset>> }, BuildFailure>;
 };
+
+// The build fails with what `build.ts` names: a refusal or a disk failure.
+type BuildFailure = BuildError | PlatformError.PlatformError;
 
 type Handle = { generate: (o: OutputOptions) => Promise<RolldownOutput>; close: () => Promise<void> };
 
@@ -1275,7 +1279,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
 
   const steps: ReadonlyArray<{
     readonly possible: () => boolean;
-    readonly run: (n: number) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>;
+    readonly run: (n: number) => Effect.Effect<void, BuildFailure, FileSystem.FileSystem | Path.Path>;
   }> = [
     {
       possible: () => true,
