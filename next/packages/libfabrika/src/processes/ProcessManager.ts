@@ -10,6 +10,7 @@ import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
 import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
+import type { Sender } from "../permissions/Senders.ts";
 import { Rev } from "../Rev.ts";
 import { short } from "../telemetry/Trace.ts";
 import { decodeExitReason, type ExitReason } from "./ExitReason.ts";
@@ -29,6 +30,7 @@ import {
   ProcessEvent,
   type ProcessInfo,
   ProcessTable,
+  type Recipient,
   signalId,
   type Start,
   type StartAnswer,
@@ -49,6 +51,19 @@ type Wiring = Caller & { readonly by: string };
 /** A folded process table and the log rev it was folded through. */
 type Folded = { readonly table: ProcessTable; readonly rev: Rev };
 
+/**
+ * Trusted, and passed only by a brain-side service: the process a watch is for, in place of the
+ * wiring's own recipient. `name` is the registered name the watch was asked by, `member` the member
+ * it was checked against, and `answer` the watch Cmd's answer letter, written in the watch's own
+ * turn before any `noproc` DOWN.
+ */
+type Watcher = {
+  readonly to: typeof Recipient.cases.process.Type;
+  readonly name: string;
+  readonly member?: Sender;
+  readonly answer: { readonly id: string; readonly m: Schema.Json };
+};
+
 const failed = Effect.fnUntraced(function* (error: Failure) {
   yield* Effect.annotateCurrentSpan({ [tag("answer")]: "refused", [tag("reason")]: error.reason });
 });
@@ -67,7 +82,8 @@ const failed = Effect.fnUntraced(function* (error: Failure) {
  *
  * The caller is trusted wiring, fixed when the layer is built. `exit`, `down`, `dead`, `status`,
  * `resolve` and a restart are refused `not_parent` unless that caller's `owner` registered the
- * name. A watch delivers to that caller's `recipient`.
+ * name. A watch delivers to that caller's `recipient`, unless a brain-side service passes the
+ * trusted `as` for a program's watch.
  *
  * @stability unstable
  * @category services
@@ -122,11 +138,16 @@ export class ProcessManager extends Context.Service<
     readonly isLive: (process: string) => Effect.Effect<boolean, LedgerError>;
     /**
      * Watches `process` under the caller's own `ref`. A target that is not live gets its `DOWN`,
-     * with `noproc`, in the same turn.
+     * with `noproc`, in the same turn. With `as`, the watch is that process's instead: its row
+     * keeps the name and member, its answer letter lands in its inbox in the same turn, and before
+     * the `noproc` DOWN.
      */
-    readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, Failure>;
-    /** Cancels the caller's own live watch under `ref`. With no such watch it writes nothing. */
-    readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
+    readonly monitor: (ref: string, process: string, from: From, as?: Watcher) => Effect.Effect<void, Failure>;
+    /**
+     * Cancels the caller's own live watch under `ref`, or with `as` that process's. With no such
+     * watch it writes nothing.
+     */
+    readonly demonitor: (ref: string, from: From, as?: Pick<Watcher, "to">) => Effect.Effect<void, Failure>;
     /**
      * Ends every live watch whose recipient is the client session `session`, as a watcher's exit
      * ends its watches: each gets `demonitored {reason: "watcher_exited"}`. With none it writes
@@ -221,13 +242,13 @@ export class ProcessManager extends Context.Service<
         const signal = (
           table: ProcessTable,
           turn: LedgerTurn,
-          watch: { readonly ref: string; readonly round: number },
+          watch: { readonly ref: string; readonly round: number; readonly name?: string | undefined },
           process: string,
           reason: (typeof Down.Type)["reason"],
           to: (typeof Down.Type)["to"],
           from: From,
         ) => {
-          const { ref, round } = watch;
+          const { ref, round, name } = watch;
           const inbox =
             to._tag === "client" ? clientInbox(to.client) : `${Option.getOrThrow(table.life(to.process)).name}/inbox`;
           const letter = signalId(to, ref, round);
@@ -238,7 +259,8 @@ export class ProcessManager extends Context.Service<
             return;
           }
 
-          turn.append(inbox, letter, line(from, Send.make({ m: Down.make({ ref, process, reason, to }) })));
+          const down = Down.make({ ref, process, ...(name === undefined ? {} : { name }), reason, to });
+          turn.append(inbox, letter, line(from, Send.make({ m: down })));
         };
         // A watcher that ends takes its watches with it, as OTP's monitors go with a dead process.
         const watcherExited = (turn: LedgerTurn, watches: ReturnType<ProcessTable["held"]>, from: From) => {
@@ -394,13 +416,19 @@ export class ProcessManager extends Context.Service<
           yield* Effect.annotateCurrentSpan({ [tag("session")]: session });
           yield* tx.transact((turn) => accounted(() => watcherExited(turn, committed(turn).held(session), from)));
         }, Effect.tapError(failed));
-        const monitor = Effect.fn("process.monitor")(function* (ref: string, process: string, from: From) {
+        const monitor = Effect.fn("process.monitor")(function* (
+          ref: string,
+          process: string,
+          from: From,
+          as?: Watcher,
+        ) {
           yield* Effect.annotateCurrentSpan({
             "fab.process": process,
             ...short({ [tag("ref")]: ref }),
           });
+          const to = as?.to ?? caller.recipient;
           yield* checked((table, turn) => {
-            const round = table.monitor(ref, process, caller.recipient);
+            const round = table.monitor(ref, process, to);
 
             if (Result.isFailure(round)) {
               return Result.fail(round.failure);
@@ -410,44 +438,46 @@ export class ProcessManager extends Context.Service<
               return Result.succeed(undefined);
             }
 
+            const watch = { ref, round: round.success.value, ...(as === undefined ? {} : { name: as.name }) };
             turn.append(
               ProcessTable.stream,
-              id("monitored", caller.recipient, ref, round.success.value),
-              line(from, ProcessEvent.cases.monitored.make({ ref, process, to: caller.recipient })),
+              id("monitored", to, ref, watch.round),
+              line(
+                from,
+                ProcessEvent.cases.monitored.make({
+                  ref,
+                  process,
+                  to,
+                  ...(as === undefined ? {} : { name: as.name }),
+                  ...(as?.member === undefined ? {} : { member: as.member }),
+                }),
+              ),
             );
 
+            // The answer comes first, so the watcher reads it before any DOWN for this watch.
+            if (as !== undefined) {
+              const watcher = Option.getOrThrow(table.life(as.to.process)).name;
+              turn.append(inbox(watcher), as.answer.id, letterLine(from, as.answer.m));
+            }
+
             if (!table.isLive(process)) {
-              signal(
-                table,
-                turn,
-                { ref, round: round.success.value },
-                process,
-                NoProc.make({}),
-                caller.recipient,
-                from,
-              );
+              signal(table, turn, watch, process, NoProc.make({}), to, from);
             }
 
             return Result.succeed(undefined);
           });
         }, Effect.tapError(failed));
-        const demonitor = Effect.fn("process.demonitor")(function* (ref: string, from: From) {
+        const demonitor = Effect.fn("process.demonitor")(function* (ref: string, from: From, as?: Pick<Watcher, "to">) {
           yield* Effect.annotateCurrentSpan(short({ [tag("ref")]: ref }));
+          const to = as?.to ?? caller.recipient;
           yield* checked((table, turn) => {
-            const watch = table.demonitor(ref, caller.recipient);
+            const watch = table.demonitor(ref, to);
 
             if (Option.isSome(watch)) {
               turn.append(
                 ProcessTable.stream,
-                id("demonitored", caller.recipient, ref, watch.value.round),
-                line(
-                  from,
-                  ProcessEvent.cases.demonitored.make({
-                    ref,
-                    to: caller.recipient,
-                    reason: "canceled",
-                  }),
-                ),
+                id("demonitored", to, ref, watch.value.round),
+                line(from, ProcessEvent.cases.demonitored.make({ ref, to, reason: "canceled" })),
               );
             }
 
@@ -587,21 +617,23 @@ export class ProcessManager extends Context.Service<
  * A receive collects its letters so the call can cross an RPC; `remoteProcessManager` rebuilds the
  * Stream. Refusals keep their `ProcessError`; a transport failure stays the caller's
  * `LedgerError`. A start takes no guard: a guard runs inside the owner's own turn, which no call
- * across an RPC reaches. There is no `leave`: a session ends where its socket closes, in the
- * owner itself.
+ * across an RPC reaches. A watch takes no `as`, so no object across an RPC names another recipient.
+ * There is no `leave`: a session ends where its socket closes, in the owner itself.
  *
  * @stability unstable
  * @category models
  */
 export type ProcessCalls = Omit<
   Context.Service.Shape<typeof ProcessManager>,
-  "receive" | "table" | "ackedPos" | "start" | "leave"
+  "receive" | "table" | "ackedPos" | "start" | "leave" | "monitor" | "demonitor"
 > & {
   readonly start: (
     request: Start,
     from: From,
     first?: { readonly m: Schema.Json },
   ) => Effect.Effect<StartAnswer, Failure>;
+  readonly monitor: (ref: string, process: string, from: From) => Effect.Effect<void, Failure>;
+  readonly demonitor: (ref: string, from: From) => Effect.Effect<void, Failure>;
   readonly receive: (process: string, after: Rev) => Effect.Effect<ReadonlyArray<Letter>, Failure>;
 };
 
@@ -612,8 +644,10 @@ export type ProcessCalls = Omit<
  *
  * `by` is the brain's own writer key: a turn this side is given folds as the brain's does. A start
  * with a guard is refused `forbidden` and asks nothing: this side cannot run the guard in the turn
- * that writes, and a check it cannot make never lets a start through. A `leave` fails `refused`
- * and writes nothing: only the owner, where the socket closed, ends a session.
+ * that writes, and a check it cannot make never lets a start through. A watch or its end with `as`
+ * is refused `forbidden` the same way: those calls cannot carry it, and dropping it would watch for
+ * the wrong recipient. A `leave` fails `refused` and writes nothing: only the owner, where the
+ * socket closed, ends a session.
  *
  * @stability unstable
  * @category layers
@@ -623,6 +657,10 @@ export const remoteProcessManager = (calls: ProcessCalls, by: string): Layer.Lay
     ...calls,
     start: (request, from, first, guard) =>
       guard === undefined ? calls.start(request, from, first) : Effect.fail(new ProcessError({ reason: "forbidden" })),
+    monitor: (ref, process, from, as) =>
+      as === undefined ? calls.monitor(ref, process, from) : Effect.fail(new ProcessError({ reason: "forbidden" })),
+    demonitor: (ref, from, as) =>
+      as === undefined ? calls.demonitor(ref, from) : Effect.fail(new ProcessError({ reason: "forbidden" })),
     leave: () => Effect.fail(new LedgerError({ reason: "refused" })),
     table: (turn) => ProcessTable.read(turn.read, by),
     ackedPos: (turn, name) => ackedPos(turn, name, by),

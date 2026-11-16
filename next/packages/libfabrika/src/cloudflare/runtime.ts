@@ -64,6 +64,8 @@ import {
 import * as ChildrenLedger from "../processes/ChildrenLedger.ts";
 import { decodeExitReason, type ExitReason } from "../processes/ExitReason.ts";
 import { Mailbox, type From, type Letter } from "../processes/Mailbox.ts";
+import { Monitors, MonitorsError, type Unwatch, type Watch, type Watched } from "../processes/Monitors.ts";
+import * as MonitorsLedger from "../processes/MonitorsLedger.ts";
 import {
   type Activity,
   type DeadInput,
@@ -118,6 +120,7 @@ import { Answer, RateCountFailure } from "../transport/Wire.ts";
 import {
   ChildReplies,
   StopReplies,
+  MonitorReplies,
   CommitReply,
   MailReplies,
   type MailReply,
@@ -537,6 +540,19 @@ const stopReply = (work: Effect.Effect<void, unknown>): Effect.Effect<typeof Sto
     Effect.catch((error): Effect.Effect<typeof StopReplies.Type, LedgerError> =>
       error instanceof ChildrenError && error.reason !== "storage"
         ? Effect.succeed(StopReplies.cases.ChildrenError.make({ reason: error.reason }))
+        : Effect.fail(new LedgerError({ reason: "storage" })),
+    ),
+  );
+
+/** A watch's checked refusals are replies, as a start's are; storage remains a retryable rejection. */
+const monitorReply = (
+  work: Effect.Effect<typeof Watched.Type, unknown>,
+): Effect.Effect<typeof MonitorReplies.Type, LedgerError> =>
+  work.pipe(
+    Effect.map((value) => MonitorReplies.cases.ok.make({ value })),
+    Effect.catch((error): Effect.Effect<typeof MonitorReplies.Type, LedgerError> =>
+      error instanceof MonitorsError && error.reason !== "storage"
+        ? Effect.succeed(MonitorReplies.cases.MonitorsError.make({ reason: error.reason }))
         : Effect.fail(new LedgerError({ reason: "storage" })),
     ),
   );
@@ -1256,6 +1272,21 @@ const projectLogic = Effect.fn("project.init")(function* (
       ),
     ),
   );
+  // A program's watch decides in the same manager's turns, checked against the same member (0170,
+  // 0531), and writes as the watcher through the trusted argument only this side holds.
+  const monitors = yield* Monitors.pipe(
+    Effect.provide(
+      MonitorsLedger.layer({ fabrika: Model.ref("fabrika", name) }).pipe(
+        Layer.provide(
+          Layer.succeed(
+            Senders,
+            SessionSenders.make((parent, process) => door.sender(process, parent)),
+          ),
+        ),
+        Layer.provide(Layer.succeedContext(services)),
+      ),
+    ),
+  );
   const gateways = yield* Connections.pipe(
     Effect.provide(
       Connections.layer(sql, {
@@ -1478,6 +1509,24 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     return answer;
   });
+  /** Wakes each process that watches `pid`, after the turn that ended it: the exit wrote a `DOWN`
+   *  into each watcher's inbox, and a name's object reads its inbox only once woken, as for mail. A
+   *  watch stays live after its `DOWN`, so a repeated exit wakes again, and a wake that failed fails
+   *  the exit, which may be asked again. A watcher that ended holds no watch, and a window needs no
+   *  wake: the append itself rings its parked wait. */
+  const wakeWatchers = Effect.fnUntraced(function* (pid: string) {
+    const names = yield* Context.get(services, LedgerTransaction).transact((turn) => {
+      const table = processes.table(turn);
+      return table
+        .inbound(pid)
+        .flatMap(({ to }) => (to._tag === "process" ? Option.toArray(table.life(to.process)) : []))
+        .map((life) => life.name);
+    });
+    const wakeups = Context.get(services, MailWakeups);
+    yield* Effect.forEach(new Set(names), (name) => wakeups.wake(name), { concurrency: 1, discard: true }).pipe(
+      Effect.mapError((cause) => new LedgerError({ reason: "unreachable", cause })),
+    );
+  });
   // Project RPC input is untrusted: the reason is decoded before the turn or the retirement.
   const exit = Effect.fnUntraced(function* (pid: string, input: ExitReason, origin: From) {
     const reason = yield* Effect.fromResult(decodeExitReason(input)).pipe(
@@ -1487,18 +1536,25 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* processes.exit(pid, reason, origin);
       yield* door.retire(pid);
     }).pipe(write);
+    yield* wakeWatchers(pid);
   });
   /** A child stop, OTP's terminate_child: one write turn ends the requester's own child with
    *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
   const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
-    yield* Effect.gen(function* () {
+    const child = yield* Effect.gen(function* () {
       const child = (yield* processes.info).find((row) => row.name === input.name);
       yield* children.stop(input, origin);
 
       if (child !== undefined) {
         yield* door.retire(child.process);
       }
+
+      return child;
     }).pipe(write);
+
+    if (child !== undefined) {
+      yield* wakeWatchers(child.process);
+    }
   });
   const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
     const fields = yield* Schema.decodeUnknownEffect(
@@ -1936,6 +1992,13 @@ const projectLogic = Effect.fn("project.init")(function* (
       wrapped(processReply(Stream.runCollect(processes.receive(pid, after)))),
     processChild: (input: Child, origin: From) => wrapped(childReply(child(input, origin))),
     processStop: (input: ChildStop, origin: From) => wrapped(stopReply(stopChild(input, origin))),
+    // A program's watch, as the Process object's runner asks it: the turn holds the call, and its
+    // rings go after it, so a noproc DOWN wakes a parked wait.
+    programMonitor: (watch: Watch, origin: From) => wrapped(monitorReply(write(monitors.monitor(watch, origin)))),
+    programDemonitor: (unwatch: Unwatch, origin: From) =>
+      wrapped(
+        write(monitors.demonitor(unwatch, origin)).pipe(Effect.mapError(() => new LedgerError({ reason: "storage" }))),
+      ),
     boot,
   };
 }, projectStorage);
@@ -2084,6 +2147,10 @@ export class ProjectService extends Context.Service<
     readonly processReceive: (pid: string, after: number) => Effect.Effect<ProcessReply<Array<Letter>>, ProjectFailure>;
     readonly processChild: (input: Child, origin: From) => Effect.Effect<typeof ChildReplies.Type, ProjectFailure>;
     readonly processStop: (input: ChildStop, origin: From) => Effect.Effect<typeof StopReplies.Type, ProjectFailure>;
+    /** A program's watch by name, in the Project's write turn; a refusal is reply data. */
+    readonly programMonitor: (watch: Watch, origin: From) => Effect.Effect<typeof MonitorReplies.Type, ProjectFailure>;
+    /** Ends a program's own watch under its ref, in the Project's write turn. */
+    readonly programDemonitor: (unwatch: Unwatch, origin: From) => Effect.Effect<void, ProjectFailure>;
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
@@ -2290,6 +2357,21 @@ const processLogic = Effect.fnUntraced(function* (
         ),
       ),
   });
+  // A watch is decided in the project too, whose manager writes it as this object's process.
+  const monitors = Monitors.of({
+    monitor: (watch, from) =>
+      asked(rpc(p.programMonitor(watch, from))).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(MonitorReplies)),
+        Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
+        Effect.flatMap((reply) =>
+          reply._tag === "ok" ? Effect.succeed(reply.value) : Effect.fail(new MonitorsError({ reason: reply.reason })),
+        ),
+      ),
+    demonitor: (unwatch, from) =>
+      asked(rpc(p.programDemonitor(unwatch, from))).pipe(
+        Effect.mapError((cause) => new MonitorsError({ reason: "storage", cause })),
+      ),
+  });
   const dependencies = Layer.mergeAll(
     mailLayer(env, project),
     handsLayer(env, project),
@@ -2328,6 +2410,7 @@ const processLogic = Effect.fnUntraced(function* (
     // The project's brain writes as `brain:<project>`, the one writer its process table trusts.
     remoteProcessManager(manager, `brain:${project}`),
     Layer.succeed(Children, children),
+    Layer.succeed(Monitors, monitors),
   );
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.

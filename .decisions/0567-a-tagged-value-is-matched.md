@@ -265,3 +265,8 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
   one-line pointer each, where they name the two rules as not taken or not decided. Their status
   does not change.
 - `.glossary/TERMS.md`: no word is coined.
+
+## Amendments
+
+- 2026-11-15: [0578](0578-tea-cell-answers-a-step.md) says a cell answers a `Step`, not the
+  `[model, cmds]` tuple that this file's examples show. The examples change with the sweep.

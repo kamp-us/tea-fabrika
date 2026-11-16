@@ -94,10 +94,12 @@ merge without a review?"), then search for each:
 
 ```sh
 sh .agents/skills/lead/scripts/governance.sh
+node .agents/skills/lead/scripts/records.ts find "<the question>"
 rg -il '<word>' .decisions docs/direction .glossary
 ```
 
-The script lists the decision files whose title, tags or slug words show up in your diff, and
+`find` ranks live records by the rare words they share with the question, as phoenix's `adr sweep`
+does. The script lists the decision files whose title, tags or slug words show up in your diff, and
 every decision file the diff edits. For now it only lists and always exits 0; it blocks later, once
 its false alarms are measured. An empty
 list is not a clearance: two decisions that disagree about what a word means may share no words.
@@ -122,10 +124,10 @@ links still work.
 
 ## 5. Cite only live decisions
 
-Before you link a decision, open it on `origin/main`:
+Before you link a decision, resolve it on `origin/main`:
 
 ```sh
-git show origin/main:.decisions/<file> | sed -n '1,8p'
+node .agents/skills/lead/scripts/records.ts resolve <id>...   # status, file, and the live one a superseded one names
 ```
 
 Cite it as a rule only when its status is `accepted` or `amended-in-part by ...`. A `superseded`

@@ -190,3 +190,7 @@ service with a test layer (owner, 2026-11-15).**
     that cleanup says so per file.
 - [0563](0563-anti-slop-plugin-as-it-ships.md): the hold named above may move to the plugin's own
   `anti-slop/no-module-mocking` when the plugin is installed. The ban itself does not change.
+
+## Amendments
+
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) answers the open way to spy: `@kalfa/vitest` gets a `Recorder`, our one way to watch calls.

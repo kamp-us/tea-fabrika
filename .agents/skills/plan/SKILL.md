@@ -26,8 +26,9 @@ when to keep going and how to write for a reader who saw none of the work.
    its decisions, patterns and source, and name its answer or say you found none
    ([0054](../../../.decisions/0054-read-upstream-before-patching-it.md)).
 3. **Check what is settled** before you call anything open: `.decisions/`, `docs/direction/`,
-   `experiments/`, `docs/plan/`, and the settled-search tool the brief names, if any. Read every
-   hit.
+   `experiments/`, `docs/plan/`, and the settled-search tool the brief names, if any. Run
+   `node .agents/skills/lead/scripts/records.ts find "<words>"` for each open question, in two or
+   three wordings, and read every hit.
 4. **Lead with the known way.** How the makers do it (Elm and Erlang/OTP first, then Effect and the
    industry). Cite what you read; mark what you did not fetch. A web request carries no detail of
    this project.
@@ -56,6 +57,9 @@ when to keep going and how to write for a reader who saw none of the work.
   the owner's Mac it waits for the lead's read of its signal and launchd lines and the owner's yes
   ([0178](../../../.decisions/0178-host-only-laws-run-first.md)). A test on a real resource is a
   `*.integration.test.ts` file ([0536](../../../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)).
+  A law that can run on a stand-in (an in-memory layer) runs on every pull request, so a new
+  `.integration.` law says in the plan why no stand-in will do
+  ([0581](../../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)).
   A fixture that stands in for a real tool's output comes from a real run and is labeled `vector:`.
 - Screenshots at five layouts when a window changes (`AGENTS.md`, "Shoot more than one layout").
 - Ask "is this a setting?" of each new choice, and say why not when it is not
