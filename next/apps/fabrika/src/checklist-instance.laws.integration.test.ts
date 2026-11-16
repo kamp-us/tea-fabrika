@@ -546,10 +546,12 @@ describe("L21: the boot list", () => {
                     live.delete(pid!);
                   } else {
                     seen.input++;
-                    const isChecklist = pid === first[1]![0];
+                    // An input is offered only while a process is live, so a pick from none fails loudly here.
+                    const to = Schema.decodeUnknownSync(Schema.String)(pid);
+                    const isChecklist = to === first[1]![0];
                     yield* call(w, (p) =>
                       p.route(client, "process.send", {
-                        pid,
+                        pid: to,
                         letter: `letter_${seen.input}_${m.pick}`,
                         m: isChecklist ? { type: "add", name: `item ${m.pick}` } : { type: "inc" },
                         sentAt: SENT,
@@ -610,7 +612,11 @@ describe("L13: notices name their process", () => {
               expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
 
               const [, [pid]] = Schema.decodeUnknownSync(
-                Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                Schema.Tuple([
+                  Schema.Array(Schema.String),
+                  Schema.NonEmptyArray(Schema.String),
+                  Schema.Array(Schema.String),
+                ]),
               )(yield* placings(w));
 
               const client = yield* admit(w);
@@ -684,7 +690,11 @@ describe("L13: notices name their process", () => {
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit()))).toBe(true);
 
                 const [, [pid]] = Schema.decodeUnknownSync(
-                  Schema.Tuple([Schema.Array(Schema.String), Schema.Array(Schema.String), Schema.Array(Schema.String)]),
+                  Schema.Tuple([
+                    Schema.Array(Schema.String),
+                    Schema.NonEmptyArray(Schema.String),
+                    Schema.Array(Schema.String),
+                  ]),
                 )(yield* placings(w));
 
                 const client = yield* admit(w);

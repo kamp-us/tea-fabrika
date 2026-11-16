@@ -82,7 +82,7 @@ const Model = Schema.TaggedUnion({
 const rounds = {
   name: "rounds",
   from: 1,
-  run: (raw: unknown) => {
+  run: (raw: Schema.Json) => {
     const s = Schema.decodeUnknownSync(Previous)(raw);
 
     return Previous.matchOrElse(

@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Match, Predicate, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, Match, Predicate, type Schema, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -35,7 +35,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
       fc.nat(),
       invalid,
       (values, omitted, pick, bad) => {
-        const read = (settings: unknown) =>
+        const read = (settings: Schema.Json) =>
           Effect.runSyncExit(
             Settings.all.parse(
               ConfigProvider.fromUnknown({ pack: { pipeline: { settings } } }, { preserveEmptyStrings: true }).pipe(
@@ -99,7 +99,10 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(declaration.doc.length).toBeGreaterThan(0);
         }
 
-        const broken = structuredClone(table) as { queue: Record<string, unknown>; merger: Record<string, unknown> };
+        const broken = structuredClone(table) as {
+          queue: Record<string, Schema.Json>;
+          merger: Record<string, Schema.Json>;
+        };
 
         const paths = [
           "merger.wait",
@@ -176,7 +179,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = declaration.path.split(".") as [string, string];
 
-      const parse = (value: unknown) =>
+      const parse = (value: Schema.Json) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));
 
       for (const value of [bad, 0]) {

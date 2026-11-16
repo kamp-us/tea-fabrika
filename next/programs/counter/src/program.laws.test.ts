@@ -49,7 +49,7 @@ describe("P11 real counter laws", () => {
             msgs: list,
             encode: Schema.encodeSync(counter.state.schema),
             decode: Schema.decodeUnknownSync(counter.state.schema),
-            equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
             seed: SEED,
           },
         );

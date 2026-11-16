@@ -1547,7 +1547,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   const original = await w.startPoison(NAME);
   const client = await w.admit();
 
-  const route = (method: string, params: Schema.Json) =>
+  const route = (method: string, params: Schema.Json | undefined) =>
     w.project.route(client, method, params).then(
       (answer) => ({ answer }),
       (cause: unknown) => ({ error: String(cause) }),
@@ -1561,7 +1561,9 @@ const runFlow = async (flow: RecoveryFlow) => {
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
       .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
 
-  const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
+  // A name with no live process throws, so `until` polls again and a check on it fails loudly.
+  const live = async () =>
+    Schema.decodeUnknownSync(Schema.String)((await w.project.info()).find((row) => row.name === NAME)?.process);
 
   const downs = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))

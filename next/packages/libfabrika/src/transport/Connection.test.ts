@@ -47,7 +47,7 @@ type Event =
     }
   | { readonly _tag: "call"; readonly method: string; readonly params: unknown; readonly saved: Saved };
 
-const bytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value)).length;
+const bytes = (value: Saved) => new TextEncoder().encode(JSON.stringify(value)).length;
 
 const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]!;
 
@@ -63,7 +63,7 @@ const online = (busy = false, waits: ReadonlyArray<W> = []) =>
     busy,
   });
 
-const waitFrame = (id: string | number, params: unknown) =>
+const waitFrame = (id: string | number, params: Schema.Json) =>
   JSON.stringify({ jsonrpc: "2.0", id, method: "ledger.wait", params });
 
 const callFrame = (id: string | number, method: string) => JSON.stringify({ jsonrpc: "2.0", id, method, params: {} });
@@ -561,7 +561,8 @@ describe("T703 connection driver laws", () => {
   });
 });
 
-const isRev = (result: unknown) => Predicate.isObjectOrArray(result) && "rev" in result;
+const isRev = (result: unknown): result is { readonly rev: unknown } =>
+  Predicate.isObjectOrArray(result) && "rev" in result;
 
 const no = (id: string | number, reason: string) => ({
   _tag: "send",

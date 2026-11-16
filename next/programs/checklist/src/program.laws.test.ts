@@ -9,7 +9,7 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Match, Predicate, Result, Schema } from "effect";
+import { flow, Match, Predicate, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -314,7 +314,7 @@ describe("ticket 806 the checklist's laws", () => {
             msgs,
             encode: Schema.encodeSync(checklist.state.schema),
             decode: Schema.decodeUnknownSync(checklist.state.schema),
-            equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
+            equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
             seed: SEED,
           },
         );
@@ -455,7 +455,7 @@ describe("ticket 806 the checklist's laws", () => {
 
   it("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", async () => {
     const { checklistMachine, finished, Done } = await load();
-    const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
+    const roundTrip = (d: typeof Done.Type) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
     propertyInvariant(
       checklistMachine,
       {},
@@ -500,7 +500,7 @@ describe("ticket 806 the checklist's laws", () => {
     const { checklist } = await load();
     const model = checklist.state.schema;
     const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
-    const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(model)(u));
+    const decodes = flow(Schema.decodeUnknownResult(model), Result.isSuccess);
     expect(checklist.state.v).toBe(1);
     fc.assert(
       fc.property(walked(checklist.machine), Broken, fc.nat(), ({ msgs }, broken, pick) => {
@@ -532,7 +532,7 @@ describe("ticket 806 the checklist's laws", () => {
 
   it("L15: a Msg one field outside the shape fails to decode through checklist.msg, and the same Msg made good decodes", async () => {
     const { checklist } = await load();
-    const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(checklist.msg)(u));
+    const decodes = flow(Schema.decodeUnknownResult(checklist.msg), Result.isSuccess);
     fc.assert(
       fc.property(Bad, (bad) => {
         expect(decodes(bad), JSON.stringify(bad)).toBe(false);

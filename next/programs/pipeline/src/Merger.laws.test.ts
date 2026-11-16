@@ -81,7 +81,7 @@ const tree = (w: World, char: string) => Schema.decodeSync(Tree)(char.repeat(w.s
 
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 
-const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
+const equal = (a: Model, b: Model) => expect(a).toEqual(b);
 
 const runAt = (w: World, choice: number) => ({
   name: w.name,
@@ -809,7 +809,7 @@ describe("the merger, next/", () => {
 
 // This walk answers only the current request. Every update may discover another main.
 const roundWalk = (p: Program, w: World) => {
-  const ok = (cmd: Command, value: unknown): Msg =>
+  const ok = (cmd: Command, value: Schema.Json): Msg =>
     Schema.decodeSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
 
   return arbGuidedSequence(

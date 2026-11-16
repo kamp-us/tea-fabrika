@@ -45,7 +45,7 @@ const call = (method: Method, bytes: Uint8Array<ArrayBuffer>) => {
 };
 
 /** A spy on one WebCrypto method that rejects with `failure`, restored when the Effect ends. */
-const rejecting = <A, E>(method: Method, failure: unknown, work: Effect.Effect<A, E>) =>
+const rejecting = <A, E>(method: Method, failure: object, work: Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => vi.spyOn(crypto.subtle, method).mockRejectedValue(failure)),
     () => work,
