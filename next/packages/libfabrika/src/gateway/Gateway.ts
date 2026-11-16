@@ -7,6 +7,7 @@
 import { applyCell } from "@demlik/tea";
 import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
 import * as Redacted from "effect/Redacted";
@@ -1417,7 +1418,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           digest,
           arrivedAt: at,
           span: { traceId: span.traceId, spanId: span.spanId },
-          sentAt: request !== null && Result.isSuccess(request) ? request.success.sentAt : new Date(at).toISOString(),
+          sentAt:
+            request !== null && Result.isSuccess(request)
+              ? request.success.sentAt
+              : DateTime.formatIso(DateTime.makeUnsafe(at)),
           state: EnvelopeState.cases.allocated.make({}),
         };
 
@@ -1865,7 +1869,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return prior.digest === digest && prior.stream === a.stream ? prior : null;
         }
 
-        const next = { sentAt: new Date(at).toISOString(), digest, stream: a.stream };
+        const next = { sentAt: DateTime.formatIso(DateTime.makeUnsafe(at)), digest, stream: a.stream };
         store.set(`append/${a.id}`, AppendMeta, next);
         return next;
       });
