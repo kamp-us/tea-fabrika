@@ -4,7 +4,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect } from "effect";
 import * as LedgerTurnEndTest from "./LedgerTurnEndTest.ts";
 import { nodeSql } from "./NodeSqlite.ts";
@@ -14,14 +14,11 @@ const file = Effect.acquireRelease(
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 ).pipe(
   Effect.flatMap((path) =>
-    Effect.acquireRelease(
-      Effect.sync(() => {
-        const db = new DatabaseSync(join(path, "ledger.db"));
-        db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-
-        return db;
-      }),
-      (db) => Effect.sync(() => db.close()),
+    // The law needs WAL, as a Durable Object's storage keeps it, so the file opens with `open`, which
+    // sets nothing, and sets its own pragmas.
+    TestDatabase.open(join(path, "ledger.db")).pipe(
+      Effect.orDie,
+      Effect.tap((db) => Effect.sync(() => db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF"))),
     ),
   ),
   Effect.map(nodeSql),

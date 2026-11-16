@@ -48,7 +48,10 @@ import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
-/** One real store. `reopen` closes it and opens the same file again; `probe.open` counts open handles. */
+/**
+ * One real store. `reopen` opens the same file again, then closes the old handle; `probe.open`
+ * counts open handles.
+ */
 export type Store = {
   readonly sql: Sql;
   readonly reopen: Effect.Effect<void>;

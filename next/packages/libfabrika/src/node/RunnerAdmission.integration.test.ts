@@ -1,7 +1,7 @@
 // P13 slice 2, next/. Real SQLite files and ledger services for runtime's admission laws (0062).
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -41,11 +41,7 @@ const files = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p13-admission-" });
 
-  return (name: string) =>
-    Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${name}.sqlite`))),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(Effect.map(nodeSql));
+  return (name: string) => TestDatabase.make(path.join(folder, `${name}.sqlite`)).pipe(Effect.map(nodeSql));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 const services: Harness["services"] = (inbox, manager) =>

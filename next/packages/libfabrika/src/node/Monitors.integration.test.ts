@@ -2,8 +2,8 @@
 // node:sqlite (0062). This module owns the driver, so it acquires the store's folder and handle in a
 // scope, and the scope gives both back (0061).
 // Edge: Effect has no node:sqlite driver.
-import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -20,16 +20,7 @@ const folder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ pr
 const store = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
-
-  const db = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const opened = new DatabaseSync(paths.join(path, "ledger.db"));
-      opened.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-
-      return opened;
-    }),
-    (opened) => Effect.sync(() => opened.isOpen && opened.close()),
-  );
+  const db = yield* TestDatabase.make(paths.join(path, "ledger.db"));
 
   return { sql: nodeSql(db) } satisfies MonitorsTest.Store;
 });

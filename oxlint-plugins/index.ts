@@ -47,6 +47,7 @@ import { programPackageLayout } from "./program-package-layout.ts";
 import { runsFromDepth } from "./runs-from-depth.ts";
 import { serviceContract } from "./service-contract.ts";
 import { serviceId } from "./service-id.ts";
+import { testDatabase } from "./test-database.ts";
 import { useImportExtensions } from "./use-import-extensions.ts";
 import { writtenServiceType } from "./written-service-type.ts";
 
@@ -99,6 +100,7 @@ const plugin: Plugin = {
     "runs-from-depth": runsFromDepth,
     "service-id": serviceId,
     "service-contract": serviceContract,
+    "test-database": testDatabase,
     "use-import-extensions": useImportExtensions,
     "written-service-type": writtenServiceType,
   },

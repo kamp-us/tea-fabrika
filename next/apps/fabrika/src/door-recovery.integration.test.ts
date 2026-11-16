@@ -4,7 +4,6 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as A from "@kampus/libfabrika";
@@ -29,7 +28,8 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Effect, Layer, Schema, Scope, Stream } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -49,58 +49,43 @@ const NAME = "counter:1";
 
 const URL = "https://fabrika.test/entry/project-socket";
 
-// A test's databases live in one temp folder. The scope that opens them closes every connection, then
+// A test's databases live in one temp folder. A disk opens and reopens its file with plain calls, so
+// each connection is acquired into the scope that asked for the disks, which closes every one, then
 // removes the folder (0061).
-const disks = Effect.acquireRelease(
-  Effect.sync(() => {
-    const top = mkdtempSync(join(tmpdir(), "p34-door-"));
-    const opened: DatabaseSync[] = [];
-    let file = 0;
+const disks = Effect.gen(function* () {
+  const scope = yield* Effect.scope;
+  const top = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p34-door-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+  let file = 0;
 
-    const open = (path: string) => {
-      const db = new DatabaseSync(path);
-      // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
-      // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
-      db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-      opened.push(db);
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
+  // decision 0052).
+  const open = (path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
 
-      return db;
+  const disk = () => {
+    const path = join(top, `${++file}.db`);
+    let db = open(path);
+    let inner = nodeSql(db);
+    const sql: Sql = {
+      exec: (q, ...args) => inner.exec(q, ...args),
+      transaction: (f) => inner.transaction(f),
+      size: () => inner.size(),
     };
-
-    const disk = () => {
-      const path = join(top, `${++file}.db`);
-      let db = open(path);
-      let inner = nodeSql(db);
-
-      const sql: Sql = {
-        exec: (q, ...args) => inner.exec(q, ...args),
-        transaction: (f) => inner.transaction(f),
-        size: () => inner.size(),
-      };
-
-      return {
-        sql,
-        reopen: () => {
-          db.close();
-          db = open(path);
-          inner = nodeSql(db);
-        },
-      };
+    return {
+      sql,
+      reopen: () => {
+        db.close();
+        db = open(path);
+        inner = nodeSql(db);
+      },
     };
+  };
 
-    return { top, opened, disk };
-  }),
-  ({ top, opened }) =>
-    Effect.sync(() => {
-      for (const db of opened) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-
-      rmSync(top, { recursive: true, force: true });
-    }),
-);
+  return { top, disk };
+});
 
 type Disks = Effect.Success<typeof disks>;
 

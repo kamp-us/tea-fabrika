@@ -52,7 +52,7 @@ export const DRIVES: Readonly<Record<Tag, string>> = {
   disk: "local disk",
 };
 
-/** What a name from a module is: a call that opens, SQLite's constructor, a Node layer, or a service whose methods need one. */
+/** What a name from a module is: a call that opens, a SQLite opener (its constructor, or the test database's `make` and `open`), a Node layer, or a service whose methods need one. */
 type Role =
   | { readonly _tag: "call"; readonly tag: Tag; readonly needs: Layer | null }
   | { readonly _tag: "sqlite" }
@@ -90,6 +90,8 @@ const MODULES: ReadonlyArray<{ readonly module: RegExp; readonly names: Readonly
   { module: /^(?:node:)?fs$/, names: each(["mkdtemp", "mkdtempSync", "promises.mkdtemp"], call("disk")) },
   { module: /^(?:node:)?fs\/promises$/, names: { mkdtemp: call("disk") } },
   { module: /^(?:node:)?sqlite$/, names: { DatabaseSync: { _tag: "sqlite" } } },
+  // The test primitives' SQLite module (ticket 1029): `make` and `open` open a file, as `new DatabaseSync` does.
+  { module: /^@kampus\/vitest\/TestDatabase$/, names: { make: { _tag: "sqlite" }, open: { _tag: "sqlite" } } },
   {
     module: /^(?:playwright|playwright-core|@playwright\/test)$/,
     names: { ...launchers("chromium"), ...launchers("firefox"), ...launchers("webkit"), ...launchers("_electron") },
@@ -226,6 +228,8 @@ export const reader = <N>() => {
       if (role !== undefined) {
         if (role._tag === "call") {
           open(node, shown, opened(role.tag, first), role.needs);
+        } else if (role._tag === "sqlite" && first !== ":memory:") {
+          open(node, shown, "disk");
         }
       } else if (written === "process.kill") {
         open(node, shown, "signal");

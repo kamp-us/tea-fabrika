@@ -6,9 +6,8 @@
 // every SQLite file is opened from a copy, read-only, and every text and blob cell of every table
 // is read: a cell longer than a page is split across SQLite's overflow pages, so a path in it may
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
-// may still write a `-shm` file, so it opens the copy.
-// edge: Effect SQL has no read-only open of a SQLite file, and the guard reads every cell of one
-import { DatabaseSync } from "node:sqlite";
+// may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Path, Schema } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
@@ -89,13 +88,8 @@ const byteHits = (file: string, bytes: Uint8Array, roots: Forms): Array<typeof H
 
 /** Every text and blob cell of every table of the SQLite file at `copy` that holds a root. */
 const cellHits = (file: string, copy: string, roots: Forms) =>
-  Effect.acquireRelease(
-    Effect.try({
-      try: () => new DatabaseSync(copy, { readOnly: true }),
-      catch: (cause) => new GuardError({ file, cause }),
-    }),
-    (db) => Effect.sync(() => db.close()),
-  ).pipe(
+  TestDatabase.open(copy, { readOnly: true }).pipe(
+    Effect.mapError((error) => new GuardError({ file, cause: error.cause })),
     Effect.flatMap((db) =>
       Effect.try({
         try: () => {

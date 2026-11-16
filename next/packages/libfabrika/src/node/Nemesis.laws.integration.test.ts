@@ -1,8 +1,8 @@
 // P17b slice 1, next/. Runtime's suite on real SQLite; every connection and folder is scoped.
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for the referee's transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -37,12 +37,7 @@ const database: NemesisTest.Database = Effect.gen(function* () {
 
   return path.join(folder, "history.sqlite");
 }).pipe(
-  Effect.map((file) =>
-    Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(file)),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(Effect.map(nodeSql)),
-  ),
+  Effect.map((file) => TestDatabase.make(file).pipe(Effect.map(nodeSql))),
   Effect.provide(NodeServices.layer),
   Effect.orDie,
 );

@@ -1,11 +1,10 @@
 // next/. The driver owns SQLite; runtime's suite owns the laws (0062).
-// edge: node:sqlite is the driver under test, with synchronous transactions
 import { createHash } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -13,6 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
@@ -94,35 +94,17 @@ const open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "isolate-usage-" }).pipe(Effect.orDie);
   const file = path.join(folder, "store.db");
+  const connect = TestDatabase.make(file).pipe(Effect.map(nodeSql));
+  const held = yield* ScopedRef.fromAcquire(connect);
 
-  const handle = yield* Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new DatabaseSync(file);
-
-      return { db, sql: nodeSql(db) };
-    }),
-    (held) =>
-      Effect.sync(() => {
-        if (held.db.isOpen) {
-          held.db.close();
-        }
-      }),
-  );
-
+  // One Sql across reopens: each call goes to the connection open now.
   const sql: Sql = {
-    exec: (query, ...params) => handle.sql.exec(query, ...params),
-    transaction: (body) => handle.sql.transaction(body),
-    size: () => handle.sql.size(),
+    exec: (query, ...params) => ScopedRef.getUnsafe(held).exec(query, ...params),
+    transaction: (body) => ScopedRef.getUnsafe(held).transaction(body),
+    size: () => ScopedRef.getUnsafe(held).size(),
   };
 
-  return {
-    sql,
-    reopen: Effect.sync(() => {
-      handle.db.close();
-      handle.db = new DatabaseSync(file);
-      handle.sql = nodeSql(handle.db);
-    }),
-  } satisfies IsolateUsageTest.Store;
+  return { sql, reopen: ScopedRef.set(held, connect) } satisfies IsolateUsageTest.Store;
 }).pipe(Effect.provide(NodeServices.layer));
 
 const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>

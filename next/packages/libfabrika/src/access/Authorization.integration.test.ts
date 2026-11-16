@@ -4,9 +4,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -44,17 +45,6 @@ const folder = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), "p17-auth-"))),
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
-
-const open = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
 
 const root = "person-public-key",
   old = "old-client-public-key",
@@ -207,7 +197,7 @@ const world = (path?: string, fail = false) =>
   Effect.gen(function* () {
     const file = path ?? join(yield* folder, "home.db");
 
-    return worldOn(yield* open(file), file, fail);
+    return worldOn(yield* TestDatabase.make(file), file, fail);
   });
 
 const read = (stream: string) => Ledger.use((l) => Stream.runCollect(l.read(stream, 0)));

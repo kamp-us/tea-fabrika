@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-14",
+  "run": "2026-11-14-t1029-review",
+  "ticket": "kamp-us/tea-fabrika#1029",
+  "pr": "kamp-us/tea-fabrika#1301",
+  "started": "2026-11-14T23:19:00-08:00",
+  "ended": "2026-11-14T23:27:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Ticket 1029 review at e48acb323, in next/ and lint tooling: merge-ready, no blocking class. The module, the rule and the 53-file move follow the plan and 0538. No law got weaker: none of the 11 stores that left WAL reads from a second connection, checks for a -wal file or kills a writer, and loosening.sh from the merge base printed only unrecognized-change hits, read by hand. The three added disables sit on right code where the rule does not fit (75% sure). The two kept afterAll hooks are rows that existed at base. Two findings: the module's doc said ScopedRef.set closes the old connection first, when Effect opens the new one first (fixed after the review in e9d79d862 and e35ebe59d), and the same reopen handle is written by hand in 12 test files (finding row).",
+  "tokens": 218533,
+  "tools": 59,
+  "minutes": 8,
+  "note": "Not checked by the reviewer: pnpm typecheck (another one was running) and CI. The branch was merged with main after the review; oxlint-plugins/plants.test.ts kept both new entries.",
+  "step": "review"
+}

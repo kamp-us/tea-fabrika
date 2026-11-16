@@ -8,11 +8,10 @@
 // value, a short SQLite cell, a blob cell or a cell longer than a page, which SQLite splits across
 // overflow pages. The roots are generated names under a temp folder of the test's own, never a real
 // machine path. The guard also leaves the folder it reads byte for byte as it was.
-// edge: Effect SQL has no plain synchronous open, and the test writes SQLite files with chosen pages
-import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
@@ -126,12 +125,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
   for (const [n, file] of input.dbs.entries()) {
     const name = `${file.name}-${n}.sqlite`;
-
-    const db = yield* Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(home, name))),
-      (open) => Effect.sync(() => open.close()),
-    );
-
+    const db = yield* TestDatabase.make(path.join(home, name));
     const sqlite = plant !== null && plant.place !== "text" && plant.place !== "json";
     const here = sqlite && plant.pick % input.dbs.length === n;
 

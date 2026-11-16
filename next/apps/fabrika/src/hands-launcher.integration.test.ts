@@ -24,13 +24,13 @@
 // Plants, each run once and undone (recorded in the tests step's field row): E2, open a fresh key
 // file on every start. S2, print the stored JWK in the `online` line.
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Node crypto makes the test person's key; it never touches a file or an account
-import { DatabaseSync } from "node:sqlite"; // edge: S2 reads the journal file's rows as stored, below any layer of ours
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -355,18 +355,20 @@ const flow = Effect.fnUntraced(
       }),
     );
 
-    const db = new DatabaseSync(path.join(hands, "hands", "journal.sqlite"), { readOnly: true });
-
-    const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all()
-      .map((row) => String(row["name"]));
-
-    const journal = Object.fromEntries(
-      tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]),
+    // S2 reads the journal file's rows as stored, below any layer of ours. The hands own it, so it
+    // opens read-only, with nothing set.
+    const journal = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
+          Effect.orDie,
+        );
+        const tables = db
+          .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+          .all()
+          .map((row) => String(row["name"]));
+        return Object.fromEntries(tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]));
+      }),
     );
-
-    db.close();
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
 
     return {

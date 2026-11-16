@@ -49,7 +49,8 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Arbitrary, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Schema, Scope, Stream } from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -299,29 +300,24 @@ beforeEach(async () => {
 });
 
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
-
-const opened: Array<DatabaseSync> = [];
+// A world opens its files with plain calls, so each is acquired into this one scope, which the
+// file's last hook closes before it removes the folder.
+const files = Scope.makeUnsafe();
 
 afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+  // The connections close first, then the folder goes. Closing hundreds of them may yield, so the
+  // hook hands Vitest the run as a Promise.
+  const teardown = Scope.close(files, Exit.void).pipe(
+    Effect.andThen(Effect.sync(() => rmSync(top, { recursive: true, force: true }))),
+  );
 
-  rmSync(top, { recursive: true, force: true });
+  return Effect.runPromise(teardown);
 });
 
 // Each world is a fresh SQLite file, and every door call commits. No law here kills the process
-// mid-write, so the rollback journal stays in memory and no commit waits on the disk. A reopen
-// still reads the same file. This halves the ticket 707 walks, 200 worlds each.
-const open = (path: string) => {
-  const db = new DatabaseSync(path);
-  db.exec("PRAGMA journal_mode = MEMORY; PRAGMA synchronous = OFF");
-  opened.push(db);
-
-  return db;
-};
+// mid-write, so `TestDatabase.make` keeps the rollback journal in memory and no commit waits on the
+// disk. A reopen still reads the same file. This halves the ticket 707 walks, 200 worlds each.
+const open = (path: string) => Effect.runSync(Scope.provide(files)(TestDatabase.make(path)));
 
 const URL = "https://fabrika.test/entry/project-socket";
 

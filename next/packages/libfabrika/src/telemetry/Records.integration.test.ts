@@ -22,11 +22,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
-import type { Layer, Scope } from "effect";
-import { Effect, Option, Schema, Stream } from "effect";
+import type { Layer } from "effect";
+import { Effect, Option, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -40,28 +41,21 @@ type ChainValue = Chain;
 type Row = SpanRow;
 
 /** A folder of its own, and every part file opened in it. `RecordManager.sql` asks for a part's
- *  file with a plain call, so a file cannot be acquired one by one: the folder holds them, and the
- *  scope that asked for the folder closes each one, then removes it (0061). */
-const folder = Effect.acquireRelease(
-  Effect.sync(() => ({
-    dir: mkdtempSync(join(tmpdir(), "p37-records-")),
-    dbs: new Map<string, DatabaseSync>(),
-  })),
-  ({ dir, dbs }) =>
-    Effect.sync(() => {
-      for (const db of dbs.values()) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+ *  file with a plain call, so each file is opened into the scope that asked for the folder: that
+ *  scope closes each one, last opened first, then removes the folder (0061). */
+const folder = Effect.gen(function* () {
+  const scope = yield* Effect.scope;
+  const dir = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-records-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+  const connect = (file: string): DatabaseSync => Effect.runSync(Scope.provide(scope)(TestDatabase.make(file)));
+  return { dir, dbs: new Map<string, DatabaseSync>(), connect };
+});
 
 /** One home of part files: `open(name)` gives the same node:sqlite file each time it is asked. */
 const home = folder.pipe(
-  Effect.map(({ dir, dbs }) => {
+  Effect.map(({ dir, dbs, connect }) => {
     const asked: Array<string> = [];
 
     const db = (name: string): DatabaseSync => {
@@ -71,7 +65,7 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = new DatabaseSync(join(dir, `${name.replaceAll("/", "_")}.db`));
+      const made = connect(join(dir, `${name.replaceAll("/", "_")}.db`));
       dbs.set(name, made);
 
       return made;
