@@ -288,12 +288,14 @@ it.effect(
     scenario: "the app's one real build: each sample would be a whole build, and the tree is the input",
     plant: "libfabrika's workers entry re-exports a module under src/mcp/, so the brain's graph holds MCP",
     // Rolldown reads the build's inputs as files, so a change to one is a change to what is checked.
+    // The app's tab carries the design package's tokens too.
     reads: [
       "next/apps/fabrika/src/**",
       "next/programs/*/src/**",
       "next/programs/*/package.json",
       "next/packages/libfabrika/src/**",
       "next/packages/tuval/src/**",
+      "packages/fabrika-design/src/**",
     ],
   },
 );

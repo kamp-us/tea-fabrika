@@ -7,12 +7,12 @@ import { existsSync, cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symli
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
-import { runsFor } from "@kampus/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, vi } from "vitest";
 import { check } from "./compiler.ts";
 
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
@@ -203,7 +203,6 @@ afterEach(() => {
 describe("P16 assets and Compiler", () => {
   it(
     "outside metadata plants: malformed package and Compiler-ledger JSON fail in the typed channel",
-    { timeout: buildTimeout(4) },
     async () => {
       await fc.assert(
         fc.asyncProperty(values, fc.constantFrom("manifest", "ledger"), async (value, kind) => {
@@ -226,10 +225,20 @@ describe("P16 assets and Compiler", () => {
         { ...runs, numRuns: runsFor({ fast: 3, full: 4 }) },
       );
     },
+    {
+      timeout: buildTimeout(4),
+      plant: "findWindow fails a manifest it cannot decode as read, not table",
+      // Each fixture copies the app's source and links the workspace packages, which Rolldown reads (0591).
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
   it(
     "assets: entry, secondary chunks and CSS retain routes, hashes, MIME types and bytes; missing script is 404",
-    { timeout: buildTimeout() },
     async () => {
       await fc.assert(
         fc.asyncProperty(names, values, async (name, value) => {
@@ -264,61 +273,83 @@ describe("P16 assets and Compiler", () => {
         runs,
       );
     },
+    {
+      timeout: buildTimeout(),
+      plant: "collect hashes each window file's body with a newline added",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
-  it("asset byte buffers decode as UTF-8 and keep their body and hash", { timeout: buildTimeout() }, async () => {
-    await fc.assert(
-      fc.asyncProperty(graphs, async ({ name, value }) => {
-        const f = fixture(name, value),
-          native = await vi.importActual<Roll>("rolldown"),
-          expected = new Map<string, string>();
-        writeFileSync(join(dirname(f.file), "window.css"), `b { --value: ${JSON.stringify(`${value}雪🫖`)}; }`);
-        vi.doMock("rolldown", () => ({
-          ...native,
-          rolldown: async (options: RolldownOptions) => {
-            const handle = await native.rolldown(options);
-            return {
-              ...handle,
-              generate: async (options: OutputOptions) => {
-                const output = await handle.generate(options);
-                return {
-                  ...output,
-                  output: output.output.map((item) => {
-                    if (item.type !== "asset" || typeof item.source !== "string") {
-                      return item;
-                    }
+  it(
+    "asset byte buffers decode as UTF-8 and keep their body and hash",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(graphs, async ({ name, value }) => {
+          const f = fixture(name, value),
+            native = await vi.importActual<Roll>("rolldown"),
+            expected = new Map<string, string>();
+          writeFileSync(join(dirname(f.file), "window.css"), `b { --value: ${JSON.stringify(`${value}雪🫖`)}; }`);
+          vi.doMock("rolldown", () => ({
+            ...native,
+            rolldown: async (options: RolldownOptions) => {
+              const handle = await native.rolldown(options);
+              return {
+                ...handle,
+                generate: async (options: OutputOptions) => {
+                  const output = await handle.generate(options);
+                  return {
+                    ...output,
+                    output: output.output.map((item) => {
+                      if (item.type !== "asset" || typeof item.source !== "string") {
+                        return item;
+                      }
 
-                    expected.set(`/${item.fileName}`, item.source);
-                    return { ...item, source: new TextEncoder().encode(item.source) };
-                  }),
-                };
-              },
-              close: () => handle.close(),
-            };
-          },
-        }));
-        vi.resetModules();
-
-        try {
-          const built = await run(f.options);
-          expect(expected.size).toBeGreaterThan(0);
-
-          for (const [route, body] of expected) {
-            expect(built.assets[route]?.body).toBe(body);
-            expect(built.assets[route]?.hash).toBe(createHash("sha256").update(body).digest("hex"));
-          }
-        } finally {
-          vi.doUnmock("rolldown");
+                      expected.set(`/${item.fileName}`, item.source);
+                      return { ...item, source: new TextEncoder().encode(item.source) };
+                    }),
+                  };
+                },
+                close: () => handle.close(),
+              };
+            },
+          }));
           vi.resetModules();
-        }
-      }),
-      runs,
-    );
-  });
+
+          try {
+            const built = await run(f.options);
+            expect(expected.size).toBeGreaterThan(0);
+
+            for (const [route, body] of expected) {
+              expect(built.assets[route]?.body).toBe(body);
+              expect(built.assets[route]?.hash).toBe(createHash("sha256").update(body).digest("hex"));
+            }
+          } finally {
+            vi.doUnmock("rolldown");
+            vi.resetModules();
+          }
+        }),
+        runs,
+      );
+    },
+    {
+      timeout: buildTimeout(),
+      plant: "collect decodes an asset's byte buffer as latin1",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
+  );
 
   for (const form of cssForms) {
     it(
       `CSS graph plant: ${form} with spaces, escapes and media lists includes every imported rule`,
-      { timeout: buildTimeout(runs.numRuns + 1) },
       async () => {
         await fc.assert(
           fc.asyncProperty(graphs, cssImports, async ({ name, value, id }, css) => {
@@ -401,12 +432,20 @@ describe("P16 assets and Compiler", () => {
           },
         );
       },
+      {
+        timeout: buildTimeout(runs.numRuns + 1),
+        reads: [
+          "next/apps/fabrika/src/**",
+          "next/packages/libfabrika/src/**",
+          "next/programs/*/src/**",
+          "next/programs/*/package.json",
+        ],
+      },
     );
   }
 
   it(
     "CSS imports keep remote rules and wrap local rules only when a media condition exists",
-    { timeout: buildTimeout(runs.numRuns + 2) },
     async () => {
       await fc.assert(
         fc.asyncProperty(
@@ -461,10 +500,19 @@ describe("P16 assets and Compiler", () => {
         },
       );
     },
+    {
+      timeout: buildTimeout(runs.numRuns + 2),
+      plant: "inlineStylesheet resolves a remote @import as a local file",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
   it(
     "Compiler: reachable refused TSX fails before replacing the last good brain",
-    { timeout: buildTimeout(8) },
     async () => {
       await fc.assert(
         fc.asyncProperty(
@@ -500,6 +548,16 @@ describe("P16 assets and Compiler", () => {
         { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
       );
     },
+    {
+      timeout: buildTimeout(8),
+      plant: "build skips its last Compiler check over every file a bundle reached",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
   it("Compiler plants run independently against the moved real check for every refusal", () => {
     fc.assert(
@@ -527,7 +585,6 @@ describe("P16 assets and Compiler", () => {
 describe("P16 cleanup and recording", () => {
   it(
     "the bundler keeps dynamic imports in one module, records its default phase and types acquisition failures",
-    { timeout: buildTimeout() },
     async () => {
       await fc.assert(
         fc.asyncProperty(values, async (value) => {
@@ -570,13 +627,22 @@ describe("P16 cleanup and recording", () => {
         runs,
       );
     },
+    {
+      timeout: buildTimeout(),
+      plant: "bundle records its default phase as build, not bundle",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
 
   for (const point of ["after backup", "before final", "after final"] as const) {
     for (const interrupt of [false, true]) {
       it(
         `publication plant: ${interrupt ? "interruption" : "failure"} ${point} preserves the last good file`,
-        { timeout: buildTimeout(2) },
         async () => {
           await fc.assert(
             fc.asyncProperty(values, async (value) => {
@@ -652,6 +718,15 @@ describe("P16 cleanup and recording", () => {
             { ...runs, numRuns: runsFor({ fast: 2, full: 2 }), endOnFailure: true },
           );
         },
+        {
+          timeout: buildTimeout(2),
+          reads: [
+            "next/apps/fabrika/src/**",
+            "next/packages/libfabrika/src/**",
+            "next/programs/*/src/**",
+            "next/programs/*/package.json",
+          ],
+        },
       );
     }
   }
@@ -659,7 +734,6 @@ describe("P16 cleanup and recording", () => {
   for (const point of ["backup", "final"] as const) {
     it(
       `publication plant: interruption during an in-flight ${point} rename keeps a complete brain after delayed I/O settles`,
-      { timeout: buildTimeout() },
       async () => {
         await fc.assert(
           fc.asyncProperty(
@@ -740,12 +814,20 @@ describe("P16 cleanup and recording", () => {
           { ...runs, endOnFailure: true },
         );
       },
+      {
+        timeout: buildTimeout(),
+        reads: [
+          "next/apps/fabrika/src/**",
+          "next/packages/libfabrika/src/**",
+          "next/programs/*/src/**",
+          "next/programs/*/package.json",
+        ],
+      },
     );
   }
 
   it(
     "cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles",
-    { timeout: buildTimeout(2) },
     async () => {
       await fc.assert(
         fc.asyncProperty(values, async (value) => {
@@ -806,10 +888,19 @@ describe("P16 cleanup and recording", () => {
         { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
       );
     },
+    {
+      timeout: buildTimeout(2),
+      plant: "bundle releases a Rolldown handle without closing it",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
   it(
     "cleanup: failures and interruption at each acquired Rolldown handle close it and preserve old output",
-    { timeout: buildTimeout(6) },
     async () => {
       await fc.assert(
         fc.asyncProperty(values, fc.integer({ min: 0, max: 2 }), fc.boolean(), async (value, phase, interrupt) => {
@@ -875,10 +966,19 @@ describe("P16 cleanup and recording", () => {
         },
       );
     },
+    {
+      timeout: buildTimeout(6),
+      plant: "bundle releases a Rolldown handle without closing it",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
   it(
     "asset collision plant: duplicate emitted routes fail without publishing partial output",
-    { timeout: buildTimeout() },
     async () => {
       await fc.assert(
         fc.asyncProperty(values, async (value) => {
@@ -920,10 +1020,19 @@ describe("P16 cleanup and recording", () => {
         runs,
       );
     },
+    {
+      timeout: buildTimeout(),
+      plant: "collect keeps the second of two files on one route instead of refusing",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
+    },
   );
   it(
     "recording: success and failure retain phases, outcomes, duration, versions, sizes and hashes without content",
-    { timeout: buildTimeout() },
     async () => {
       const versions = { rolldown: installed("rolldown"), effect: installed("effect") };
       await fc.assert(
@@ -1053,6 +1162,16 @@ describe("P16 cleanup and recording", () => {
         }),
         { ...runs, numRuns: runsFor({ fast: 3, full: 3 }) },
       );
+    },
+    {
+      timeout: buildTimeout(),
+      plant: "bundle records no Effect version on its span",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
     },
   );
 });
@@ -1197,7 +1316,6 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
 describe("P40 qualified window routes", () => {
   it(
     "L6: window programs with equal short names in different packs get their own valid routes",
-    { timeout: 10 * windowRuns.numRuns * 10_000 },
     async () => {
       await fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 6 }), async (tape) => {
@@ -1205,6 +1323,16 @@ describe("P40 qualified window routes", () => {
         }),
         windowRuns,
       );
+    },
+    {
+      timeout: 10 * windowRuns.numRuns * 10_000,
+      plant: "build names a window's generated entry by its short name, dropping the pack",
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+      ],
     },
   );
 });

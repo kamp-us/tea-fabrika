@@ -16,11 +16,11 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { runsFor } from "@kampus/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 
 const homes: Array<string> = [];
 
@@ -61,20 +61,35 @@ const generated = fc.record({ name: fc.stringMatching(/^[a-z][a-z0-9]{0,12}$/), 
 const chosen = { name: "view", label: "view-built" };
 
 const law = (name: string, check: (input: ReturnType<typeof generated.generate>["value"]) => Promise<void>) =>
-  it(name, async () => {
-    await fc.assert(
-      fc.asyncProperty(generated, async (input) => {
-        try {
-          await check(input);
-        } finally {
-          for (const h of homes.splice(0)) {
-            rmSync(h, { recursive: true, force: true });
+  it(
+    name,
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(generated, async (input) => {
+          try {
+            await check(input);
+          } finally {
+            for (const h of homes.splice(0)) {
+              rmSync(h, { recursive: true, force: true });
+            }
           }
-        }
-      }),
-      { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [[chosen]] },
-    );
-  });
+        }),
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [[chosen]] },
+      );
+    },
+    {
+      // The app's real build: Rolldown reads its brain, the counter program, the workspace packages
+      // and the tab's stylesheets as files (0591).
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+        "next/packages/libfabrika/src/**",
+        "next/packages/tuval/src/**",
+        "packages/fabrika-design/src/**",
+      ],
+    },
+  );
 
 const snapshot = (dir: string): ReadonlyArray<readonly [string, string]> =>
   readdirSync(dir, { recursive: true, withFileTypes: true })
@@ -362,7 +377,6 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
 
   it(
     "generated build attempts: the page and the script ride in the tables with their hashes and types, and a failure keeps the last good output",
-    { timeout: 900_000 },
     async () => {
       const { build } = await import("./build.ts");
       // A custom property the design package's own token sheet declares.
@@ -436,6 +450,19 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
       );
       expect(seen.built).toBeGreaterThan(0);
       expect(seen.failed).toBeGreaterThan(0);
+    },
+    {
+      timeout: 900_000,
+      plant: "drop the design package's tokens.css from the tab's stylesheets in build.ts",
+      // The token sheet is read here as text, and the build reads every input below as a file.
+      reads: [
+        "next/apps/fabrika/src/**",
+        "next/programs/*/src/**",
+        "next/programs/*/package.json",
+        "next/packages/libfabrika/src/**",
+        "next/packages/tuval/src/**",
+        "packages/fabrika-design/src/**",
+      ],
     },
   );
 });
