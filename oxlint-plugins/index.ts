@@ -14,6 +14,7 @@ import { noBareTell } from "./no-bare-tell.ts";
 import { noCauseSquash } from "./no-cause-squash.ts";
 import { noClockInView } from "./no-clock-in-view.ts";
 import { noContextTag } from "./no-context-tag.ts";
+import { noDataTaggederror } from "./no-data-taggederror.ts";
 import { noEffectPromise } from "./no-effect-promise.ts";
 import { noEffectRunOutsideEdge } from "./no-effect-run-outside-edge.ts";
 import { noExpectInIf } from "./no-expect-in-if.ts";
@@ -63,6 +64,7 @@ const plugin: Plugin = {
     "no-cause-squash": noCauseSquash,
     "no-clock-in-view": noClockInView,
     "no-context-tag": noContextTag,
+    "no-data-taggederror": noDataTaggederror,
     "no-effect-promise": noEffectPromise,
     "no-effect-run-outside-edge": noEffectRunOutsideEdge,
     "no-expect-in-if": noExpectInIf,

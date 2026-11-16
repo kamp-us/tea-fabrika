@@ -1,11 +1,14 @@
-// L3 of the trusted-rules swap (decision 0573): `fabrika/no-data-taggederror` gave way to the Effect
-// checker's `preferSchemaTaggedError`, so the checker's level is the law now. `tsconfig.base.json`
-// names it `error`, and no tsconfig the repo tracks turns it down for any path: no override sets it
-// lower, and no tsconfig sets its own `plugins`, which replaces the base's list, without the checker
-// at `error`. A tsconfig has comments, so each is read as a JS expression, as
+// L3 of the trusted-rules swap (decision 0573): the Effect checker's `preferSchemaTaggedError` holds
+// every type-checked class beside `fabrika/no-data-taggederror`, so the checker's level is a law.
+// `tsconfig.base.json` names it `error`, and no tsconfig the repo tracks turns it down for any path:
+// no override sets it lower, and no tsconfig sets its own `plugins`, which replaces the base's list,
+// without the checker at `error`. A tsconfig has comments, so each is read as a JS expression, as
 // namespace-imports.test.ts reads the base.
+// Nor does any checker block set `"diagnostics": false` or `"ignoreEffectErrorsInTscExitCode": true`,
+// either of which lets the check's errors pass `tsc` at any level.
 // Plant: set `"preferSchemaTaggedError": "warning"` in `tsconfig.base.json`, or add an override
-// `{ "include": ["next/**/*.ts"], "options": { "diagnosticSeverity": { "preferSchemaTaggedError": "off" } } }`.
+// `{ "include": ["next/**/*.ts"], "options": { "diagnosticSeverity": { "preferSchemaTaggedError": "off" } } }`,
+// or set `"diagnostics": false`, or `"ignoreEffectErrorsInTscExitCode": true`, in its checker block.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -83,7 +86,14 @@ const lowered = (file: string, config: Record<string, unknown>): ReadonlyArray<s
         ? [`${file}: override ${i} sets ${CHECK} to ${String(severity[CHECK])}`]
         : [];
     });
-  return [...(top === "error" ? [] : [`${file}: ${CHECK} is ${String(top)}`]), ...overrides];
+  // Either switch lets an error of the check pass `tsc` with no level changed.
+  const off = [
+    ...(service.diagnostics === false ? [`${file}: ${SERVICE} sets diagnostics to false`] : []),
+    ...(service.ignoreEffectErrorsInTscExitCode === true
+      ? [`${file}: ${SERVICE} sets ignoreEffectErrorsInTscExitCode to true`]
+      : []),
+  ];
+  return [...(top === "error" ? [] : [`${file}: ${CHECK} is ${String(top)}`]), ...overrides, ...off];
 };
 
 it("L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path", () => {

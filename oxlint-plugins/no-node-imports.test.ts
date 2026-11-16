@@ -163,25 +163,28 @@ it("multiline imports use the module string's line; strings and neighboring mark
 // L4 of the trusted-rules swap (0573): `fabrika/no-node-filesystem` is gone, so this rule holds every
 // form it held. Its 8 module names and 10 import forms, at its paths: fired in product code, and now
 // at an `exam/` path and a `.d.ts` too, which the old rule skipped; never in a test, a test-support
-// file or `e2e/`; and a line with `// edge: <why>` on it passes.
-// Plant: add `fs` to a skip in no-node-imports.ts, and the fs lines are not refused.
+// file or `e2e/`; and a line with `// edge: <why>` on it passes. Every run checks all 8 names: a draw
+// of one name per run left `fs` and `node:path/posix` out at this seed (fast-check counts examples
+// inside numRuns).
+// Plant: skip only the bare `fs` specifier in no-node-imports.ts, and the fs lines are not refused.
+const FILESYSTEM = [
+  "node:fs",
+  "node:fs/promises",
+  "fs",
+  "fs/promises",
+  "node:path",
+  "path",
+  "node:path/posix",
+  "node:path/win32",
+] as const;
+
 it("holds every filesystem import form the retired no-node-filesystem held, at its paths", async () => {
   let n = 0;
   const cases = new Map<string, Case>();
+  const reached = new Set<string>();
   fc.assert(
-    fc.property(
-      fc.constantFrom(
-        "node:fs",
-        "node:fs/promises",
-        "fs",
-        "fs/promises",
-        "node:path",
-        "path",
-        "node:path/posix",
-        "node:path/win32",
-      ),
-      fc.uuid(),
-      (module, reason) => {
+    fc.property(fc.uuid(), (reason) => {
+      for (const module of FILESYSTEM) {
         const from = JSON.stringify(module);
         const forms = [
           `import * as native0 from ${from};`,
@@ -214,18 +217,13 @@ it("holds every filesystem import form the retired no-node-filesystem held, at i
 
         check("next/packages/libfabrika/src/native.ts", edged);
         cases.set(numbered("next/packages/libfabrika/src/native-edged.ts", n), edged);
+        reached.add(module);
         n++;
-      },
-    ),
-    {
-      seed: 119120,
-      numRuns: 8,
-      examples: [
-        ["node:fs", "a"],
-        ["fs/promises", "b"],
-        ["node:path", "c"],
-      ],
-    },
+      }
+    }),
+    { seed: 119120, numRuns: 8 },
   );
+  // Coverage: every name the old rule held was checked.
+  expect([...reached].sort()).toEqual([...FILESYSTEM].sort());
   await cli(cases);
 });

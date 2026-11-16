@@ -79,6 +79,28 @@ const fires = (path: string, code: string): readonly number[] => linesOf(firesIn
 
 const EFFECT = 'import {Context, Data, Duration, Effect, Schedule} from "effect";';
 
+/**
+ * `fabrika/no-data-taggederror`'s lines. It stays beside oxlint's `no-restricted-properties` entry
+ * (0573, the plan's amendment of 2026-11-15), since only ours refuses `Data.TaggedError` in a type
+ * position: its `banNames` visits `TSQualifiedName`. L1 below runs these lines in every folder too.
+ * Plant: drop `"fabrika/no-data-taggederror"` from `.oxlintrc.json`, and the type lines are not refused.
+ */
+const DATA_TAGGEDERROR: Plant = {
+  code: "fabrika(no-data-taggederror)",
+  prelude: [EFFECT, "declare const Other: {TaggedError: (n: string) => new () => object};"],
+  lines: [
+    ['export class A extends Data.TaggedError("A") {}', true],
+    ["export const ref = Data.TaggedError;", true],
+    ['export const made = Data.TaggedError("C");', true],
+    // Type positions, which no trusted rule refuses.
+    ["export type Made = typeof Data.TaggedError;", true],
+    ['export type Instance = InstanceType<ReturnType<typeof Data.TaggedError<"X">>>;', true],
+    ['export class B extends Other.TaggedError("B") {}', false],
+    ["// Data.TaggedError in a comment", false],
+    ['export const text = "Data.TaggedError";', false],
+  ],
+};
+
 const PLANTS: readonly Plant[] = [
   {
     code: "fabrika(no-bare-tell)",
@@ -104,6 +126,7 @@ const PLANTS: readonly Plant[] = [
       ['export const d = Context.Service("d");', false],
     ],
   },
+  DATA_TAGGEDERROR,
   {
     code: "fabrika(no-effect-promise)",
     prelude: [EFFECT, "declare const p: () => Promise<number>;", "declare const c: () => string;"],
@@ -633,13 +656,14 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   }, 120_000);
 });
 
-describe("the Data.TaggedError entry, which took over from fabrika/no-data-taggederror (0573)", () => {
+describe("the Data.TaggedError entry, which stands beside fabrika/no-data-taggederror (0573)", () => {
   // L1. scenario: the repo's own config, read by oxlint's own --print-config, so every folder that
-  // any block setting `no-restricted-properties` lists gets TAGGED_ERROR's lines, a block that lands
-  // later included, and so do a file at the top and one under no block, which the root rules hold.
+  // any block setting `no-restricted-properties` lists gets TAGGED_ERROR's lines and ours'
+  // (DATA_TAGGEDERROR), a block that lands later included, and so do a file at the top and one under
+  // no block, which the root rules hold. Ours alone refuses the type-position lines.
   // Plant: delete the `Data.TaggedError` entry from one block of `.oxlintrc.json`, and that folder's
-  // lines are not refused.
-  it("L1 scenario: TAGGED_ERROR's lines are refused exactly, in every folder of every block that sets the rule, and under none", () => {
+  // lines are not refused; drop `"fabrika/no-data-taggederror"`, and no folder refuses the type lines.
+  it("L1 scenario: TAGGED_ERROR's lines and ours' type-position lines are refused exactly, in every folder of every block that sets the rule, and under none", () => {
     inConfigCopy(({ printed, lint }) => {
       const globs = globsHolding(printed, () => true);
       // Coverage: today's app, next/ where JSON.parse blocks and where it advises, and the tooling.
@@ -647,18 +671,22 @@ describe("the Data.TaggedError entry, which took over from fabrika/no-data-tagge
         expect.arrayContaining(["apps/fabrika/e2e.ts", "next/**/*", ".agents/**", ".github/**", "oxlint-plugins/**"]),
       );
       expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
-
-      const { text, want } = textOf(TAGGED_ERROR);
       const files = [
         ...new Set(globs.map(({ glob }) => plantPath(glob))),
         // Under no block that sets the rule: the root rules hold these.
         "planted-tagged-error.ts",
         "scripts/planted-tagged-error.ts",
       ];
-      const diagnostics = lint(text, files);
+      // Coverage: ours' plant has type-position lines it must refuse.
+      expect(DATA_TAGGEDERROR.lines.some(([line, refused]) => refused && line.startsWith("export type"))).toBe(true);
 
-      for (const file of files) {
-        expect(refusedIn(diagnostics, file, TAGGED_ERROR.code), file).toEqual(want);
+      for (const p of [TAGGED_ERROR, DATA_TAGGEDERROR]) {
+        const { text, want } = textOf(p);
+        const diagnostics = lint(text, files);
+
+        for (const file of files) {
+          expect(refusedIn(diagnostics, file, p.code), `${p.code} in ${file}`).toEqual(want);
+        }
       }
     });
   }, 120_000);

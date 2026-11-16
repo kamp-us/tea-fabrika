@@ -1137,26 +1137,38 @@ before.
 ## Rules that gave way to trusted ones, decision 0573
 
 [0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md): where a trusted rule holds every line
-ours did, ours goes in the same pull request, so no file is ever unguarded. Three went on 2026-11-16.
+ours did, ours goes in the same pull request, so no file is ever unguarded. Two went on 2026-11-16.
 Each count is at the swap: ours fired 0 times, since `pnpm lint` was green.
 
 | Ours | Taken over by | Where ours ran | Hits at the swap |
 |---|---|---|---|
-| `no-data-taggederror` | the Effect checker's `preferSchemaTaggedError` (`error` in `tsconfig.base.json`) in every type-checked file, and oxlint's `no-restricted-properties` on `Data.TaggedError` in every file oxlint lints | the root rules | 0 and 0 |
 | `no-node-filesystem` | our `no-node-imports`, which checks every builtin, more import forms, and also `exam/` paths and `.d.ts` files | `next/**` and its `.agents/` copy | 0; its 8 `agents-ledger.json` lines were already held by `no-node-imports` entries |
 | `one-id-module` | our `modules`, rule 2: `data` is no folder its list names | the root rules, one path | 0 |
 
-- **Why `no-restricted-properties` stands beside the checker.** The checker catches
-  `class X extends Data.TaggedError(...)`, an aliased import included, but not a bare reference or a
-  call outside a class, and 73 tracked files under `.agents/` and `scripts/` are in no type-checked
-  project. The entry is in the root rules and in every block that sets the rule, since an override
-  replaces a rule's options. `plants.test.ts` plants `TAGGED_ERROR` (`builtin-plants.ts`) in every
-  folder of every such block and under none (L1), and fails when a block lacks the entry (L2).
-  `effect-checks-held.test.ts` (L3) fails when a tracked tsconfig turns the checker's level down.
-- **Documented misses.** An alias of `Data` (`const D = Data; D.TaggedError`) passes oxlint's rule,
-  as it passed ours. In a type-checked file the checker still catches the class; in an untyped
-  script nothing does.
-- **`no-node-filesystem`'s and `one-id-module`'s laws moved** to `no-node-imports.test.ts` (L4) and
-  `modules.test.ts` (L5), with the same generators.
+- **`no-data-taggederror` stays,** beside two trusted rules that each hold part of it, until a
+  trusted rule refuses `Data.TaggedError` in a type position. Ours matches with `banNames`
+  (`match.ts`), which visits `TSQualifiedName`, so it refuses `type Made = typeof Data.TaggedError`
+  and `InstanceType<ReturnType<typeof Data.TaggedError<"X">>>`. No trusted rule does: oxlint's
+  `no-restricted-properties` reads only value members, `typescript/no-restricted-types` names
+  types, and the Effect checker's `preferSchemaTaggedError` reads only a class's `extends`
+  (the plan's amendment of 2026-11-15, `docs/plan/quests/trusted-rules-0573-PLAN.md`).
+- **The two beside it.** The checker's `preferSchemaTaggedError` (`error` in `tsconfig.base.json`)
+  catches `class X extends Data.TaggedError(...)`, an aliased import included, in every type-checked
+  file. oxlint's `no-restricted-properties` refuses the value forms (a bare reference, a call,
+  `const { TaggedError } = Data`, `Data["TaggedError"]`) in every file oxlint lints, the 73 tracked
+  files in no type-checked project included: 66 under `.agents/`, 5 under `scripts/`, and the root
+  `vitest.shards.test.ts` and `vitest.changed.test.ts`. The entry is in the root rules and in every
+  block that sets the rule, since an override replaces a rule's options.
+- **Its laws.** `plants.test.ts` plants `TAGGED_ERROR` (`builtin-plants.ts`) and ours'
+  `DATA_TAGGEDERROR`, type lines included, in every folder of every such block and under none (L1),
+  and fails when a block lacks the entry (L2). `effect-checks-held.test.ts` (L3) fails when a
+  tracked tsconfig turns the checker's level down, sets its `diagnostics` to `false` or sets
+  `ignoreEffectErrorsInTscExitCode`.
+- **Documented misses.** An alias of `Data` (`const D = Data; D.TaggedError`) passes oxlint's rule
+  and ours. In a type-checked file the checker still catches the class; in an untyped script nothing
+  does.
+- **`no-node-filesystem`'s and `one-id-module`'s laws moved** to `no-node-imports.test.ts` (L4),
+  which checks all 8 module names in every run, and `modules.test.ts` (L5), with the same
+  generators.
 - **`no-context-tag` stays** until ticket 486 brings the 73 untyped files into a type-checked
   project: `interface I extends Context.Tag<A, B> {}` is caught by ours and by no trusted rule.

@@ -35,6 +35,7 @@
 
     "fabrika/no-bare-tell": "error",
     "fabrika/no-context-tag": "error",
+    "fabrika/no-data-taggederror": "error",
     "fabrika/no-implicit-effect-concurrency": "error",
     "fabrika/no-numeric-duration": "error",
     // In next/'s test files, a law over real IO reads the test depth (0535); a law in memory keeps its
@@ -47,10 +48,11 @@
     // P17a counted before enabling: 53 retired-door statements, 1 throwing saved decoder.
     // All inspected: app door code moves; runner's saved Cmd decode needs a typed result.
     "fabrika/door-is-library": "error",
-    // 0573: `fabrika/no-data-taggederror` gave way to the Effect checker's preferSchemaTaggedError,
-    // which reads only type-checked files, and to this entry, which holds every file oxlint lints.
-    // An override replaces a rule's options, so every block that sets this rule writes the entry out
-    // again (oxlint-plugins/plants.test.ts, L2).
+    // 0573: this entry stands beside `fabrika/no-data-taggederror` and the Effect checker's
+    // preferSchemaTaggedError, as extra cover for the value forms in every file oxlint lints. Ours
+    // stays, since only it refuses `Data.TaggedError` in a type position. An override replaces a
+    // rule's options, so every block that sets this rule writes the entry out again
+    // (oxlint-plugins/plants.test.ts, L2).
     "eslint/no-restricted-properties": [
       "error",
       {

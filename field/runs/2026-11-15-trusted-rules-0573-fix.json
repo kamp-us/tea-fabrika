@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-trusted-rules-0573-fix",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1498",
+  "started": "2026-11-15T23:01:08-08:00",
+  "ended": "2026-11-15T23:11:00-08:00",
+  "parent": "2026-11-15-trusted-rules-0573-review",
+  "active": null,
+  "role": "hand",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The one fix round (0177) after the review's first send-back of decision 0573's first pull request, in next/ and our tooling. Merged origin/main (it holds PR 1508) cleanly, then amended the plan as its own commit 2e5190bec: fabrika/no-data-taggederror stays and waits like no-context-tag, since only its banNames TSQualifiedName visitor refuses Data.TaggedError in a type position (typeof Data.TaggedError, InstanceType<ReturnType<typeof Data.TaggedError<\"X\">>>), and pull request 1 swaps two rules (no-node-filesystem, one-id-module). Restored oxlint-plugins/no-data-taggederror.ts, its index.ts name and its root .oxlintrc.json line exactly as on origin/main (main had no test file of its own; its plant in plants.test.ts came back as DATA_TAGGEDERROR, with the two type lines refused). The Data.TaggedError entries of no-restricted-properties stay in the root rules and every block, and L2 is unchanged. L1 (plants.test.ts) now runs TAGGED_ERROR and DATA_TAGGEDERROR in every folder of every block that sets the rule and under none; builtin-plants.ts no longer lists typeof Data.TaggedError as a passing line. L3 (effect-checks-held.test.ts) also fails on diagnostics false or ignoreEffectErrorsInTscExitCode true in a checker block. L4 (no-node-imports.test.ts) checks all 8 module names in every run, where a draw per run reached 6. The README's 0573 section and .patterns/effect-errors-keep-their-cause.md say ours stays, and the README now names the 73 untyped files rightly (66 under .agents/, 5 under scripts/, and the root vitest.shards.test.ts and vitest.changed.test.ts), so no finding row for it. The L4 draw is fixed here, so no finding row for it either. One finding row: the pr-check-file-laws plan git-mvs two test files this pull request deletes and leaves out effect-checks-held.test.ts.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/plants.test.ts: L1 scenario: TAGGED_ERROR's lines and ours' type-position lines are refused exactly, in every folder of every block that sets the rule, and under none",
+      "plant": "the \"fabrika/no-data-taggederror\": \"error\" line removed from .oxlintrc.json; red: fabrika(no-data-taggederror) in apps/fabrika/e2e.ts: expected [] to deeply equal [ 3, 4, 5, 6, 7 ]",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/no-node-imports.test.ts: holds every filesystem import form the retired no-node-filesystem held, at its paths",
+      "plant": "only the bare fs specifier skipped in oxlint-plugins/no-node-imports.ts; red: Property failed after 1 tests, Should have 10 errors but had 0",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario: preferSchemaTaggedError stays at error in every tracked tsconfig, for every path",
+      "plant": "\"diagnostics\": false in tsconfig.base.json's @effect/language-service block",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/effect-checks-held.test.ts: L3 scenario",
+      "plant": "\"ignoreEffectErrorsInTscExitCode\": true in tsconfig.base.json's @effect/language-service block",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Run in a cloud box with no step keys, so commits are unsigned (stepcommit --commit-only). Each plant ran once on a saved copy and was restored by copy. With the config intact the same laws were green before each plant. Tests at e2cd8981b plus this round's edits, under nice -n 15 --maxWorkers=3: oxlint-plugins/plants.test.ts, no-node-imports.test.ts, modules.test.ts, ledger.test.ts, effect-checks-held.test.ts, advice.test.ts and next/apps/fabrika/src/exam/edge-comment.integration.test.ts, 7 files, 281 tests, all green; the 0178 guard refused none. The restored rule has no test file of its own on main; its plant runs in plants.test.ts. pnpm format; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint green but for the new finding row's rule word, fixed and rechecked with field-check.ts; the list ratchet exits 0; one pnpm typecheck: 31 projects, 0 errors.",
+  "step": "tests"
+}

@@ -139,9 +139,10 @@ cause is a dropped fact.
 
 ## Holds it
 
-- Lint, on: `no-restricted-properties` on `Data.TaggedError`, `fabrika/no-throw-in-effect-gen` and
-  `fabrika/no-cause-squash` (`.oxlintrc.json:54`, `:43`, `:665`). The first and the checker's
-  `preferSchemaTaggedError` took over from a rule of our own
+- Lint, on: `fabrika/no-data-taggederror`, `fabrika/no-throw-in-effect-gen` and
+  `fabrika/no-cause-squash` (`.oxlintrc.json:38`, `:44`, `:667`), with oxlint's
+  `no-restricted-properties` on `Data.TaggedError` beside the first (`:56`). Ours stays because
+  only it refuses `Data.TaggedError` in a type position
   ([0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md)).
 - Effect's checker, on in `next/`: `preferSchemaTaggedError` (`tsconfig.base.json:55`) and
   `errorPayloadShadowsName` (`tsconfig.base.json:81`). Not yet on:
