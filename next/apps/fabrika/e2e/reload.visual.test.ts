@@ -12,7 +12,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -208,7 +208,7 @@ const scoped = <A, E>(
   work: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof NodeServices.layer> | SecureRandom.SecureRandom>,
 ) =>
   Effect.runPromise(
-    Effect.scoped(work).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
+    Effect.scoped(work).pipe(Effect.provide(NodeServices.layer.pipe(Layer.provideMerge(SecureRandom.layerWebCrypto)))),
   );
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */

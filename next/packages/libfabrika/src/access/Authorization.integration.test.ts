@@ -264,7 +264,7 @@ describe("P17a, appendAdmitted", () => {
                     { op: "append", stream: "notes", after: undefined, inside: true },
                   ]);
                 }
-              }).pipe(Effect.provide(w.layer), Effect.provide(TestClock.layer())),
+              }).pipe(Effect.provide(w.layer.pipe(Layer.provideMerge(TestClock.layer())))),
             ).pipe(Effect.scoped),
           ),
       ),
@@ -319,7 +319,7 @@ describe("P17a, appendAdmitted", () => {
 
                 expect(result.failure).toMatchObject({ _tag: "NotGranted" });
                 expect(yield* read("notes")).toEqual([]);
-              }).pipe(Effect.provide(fresh.layer), Effect.provide(TestClock.layer()));
+              }).pipe(Effect.provide(fresh.layer.pipe(Layer.provideMerge(TestClock.layer()))));
             }).pipe(Effect.scoped),
           ),
       ),

@@ -324,7 +324,7 @@ const served = Effect.gen(function* () {
       window: old.raw,
       port,
     }),
-  ).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(localState()));
+  ).pipe(Effect.provide(SecureRandom.layerWebCrypto.pipe(Layer.provideMerge(localState()))));
   const from = {
     by: root.fingerprint,
     for: PERSON,

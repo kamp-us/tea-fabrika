@@ -7,7 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
+import { Clock, Context, Deferred, Duration, Effect, FileSystem, Layer, Option, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
@@ -564,11 +564,14 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 // Each run gets its own clock, file system, process ids and secrets.
 const walked = (walk: Walk) =>
   run(walk).pipe(
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+    Effect.provide(
+      fetchClient.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
   );
 
 describe("T708 dev control laws", () => {

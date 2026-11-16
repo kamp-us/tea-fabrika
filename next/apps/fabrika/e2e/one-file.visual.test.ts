@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Effect, Exit, Layer, Result, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
@@ -152,9 +152,12 @@ describe("P16 real browser from a copied one-file build", () => {
                 }),
               ).pipe(
                 Effect.provideService(Scope.Scope, scope),
-                Effect.provide(localState()),
-                Effect.provide(SecureRandom.layerWebCrypto),
-                Effect.provide(NodeServices.layer),
+                Effect.provide(
+                  localState().pipe(
+                    Layer.provideMerge(SecureRandom.layerWebCrypto),
+                    Layer.provideMerge(NodeServices.layer),
+                  ),
+                ),
               ),
             );
             const entry = Object.entries(built.assets).find(
@@ -377,9 +380,9 @@ const servedCounter = Effect.gen(function* () {
         port,
       }),
     ).pipe(
-      Effect.provide(localState()),
-      Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+      ),
     ),
     // localInstance registers its own release on this scope; the instance's port is what must close.
     () => Effect.void,

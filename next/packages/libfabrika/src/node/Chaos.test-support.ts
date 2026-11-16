@@ -234,8 +234,9 @@ export const open = Effect.gen(function* () {
           Effect.orDie,
         );
         const checkpoint = yield* ProcessStore.use((store) => store.load).pipe(
-          Effect.provide(ProcessStore.layer(sql, { process: status.state.process })),
-          Effect.provide(ledgerLayer(ledger)),
+          Effect.provide(
+            ProcessStore.layer(sql, { process: status.state.process }).pipe(Layer.provideMerge(ledgerLayer(ledger))),
+          ),
           Effect.orDie,
         );
 

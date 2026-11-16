@@ -7,7 +7,20 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Context, Effect, Exit, Fiber, FileSystem, Option, Predicate, Schema, Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Option,
+  Predicate,
+  Schema,
+  Scope,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -69,11 +82,14 @@ it("the control plugin returns a typed error for malformed platform port data", 
                 }),
               ),
             ).pipe(
-              Effect.provide(fetchClient),
-              Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
-              Effect.provide(rssLayer(() => 0)),
-              Effect.provide(NodeServices.layer),
+              Effect.provide(
+                fetchClient.pipe(
+                  Layer.provideMerge(ProcessIdGenerator.layer),
+                  Layer.provideMerge(SecureRandom.layerWebCrypto),
+                  Layer.provideMerge(rssLayer(() => 0)),
+                  Layer.provideMerge(NodeServices.layer),
+                ),
+              ),
             ),
           );
           expect(Exit.isFailure(exit)).toBe(true);
@@ -256,20 +272,23 @@ it("every observed exit is durable once across restart or brake, with its reason
               expect(kill.mock.calls).toEqual(memoryPids.map((pid) => [pid, "SIGTERM"]));
             }),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(
-              rssLayer(
-                () => {
-                  platform.samples++;
-                  return platform.rss;
-                },
-                (command, args) => spawned.push({ command, args }),
+              fetchClient.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(
+                  rssLayer(
+                    () => {
+                      platform.samples++;
+                      return platform.rss;
+                    },
+                    (command, args) => spawned.push({ command, args }),
+                  ),
+                ),
+                Layer.provideMerge(NodeServices.layer),
+                Layer.provideMerge(TestClock.layer()),
               ),
             ),
-            Effect.provide(NodeServices.layer),
-            Effect.provide(TestClock.layer()),
           ),
           { signal },
         );
@@ -296,11 +315,14 @@ it("every observed exit is durable once across restart or brake, with its reason
               }),
             ),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
-            Effect.provide(rssLayer(() => 0)),
-            Effect.provide(NodeServices.layer),
+            Effect.provide(
+              fetchClient.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(rssLayer(() => 0)),
+                Layer.provideMerge(NodeServices.layer),
+              ),
+            ),
           ),
           { signal },
         );
@@ -519,11 +541,14 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
 const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   work.pipe(
     Effect.scoped,
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+    Effect.provide(
+      fetchClient.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
   );
 
 // L7. Plant: main's dev.ts, with no `replacing`: SIGTERM goes out every second, no SIGKILL comes, and

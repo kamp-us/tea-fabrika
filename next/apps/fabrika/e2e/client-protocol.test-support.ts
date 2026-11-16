@@ -275,7 +275,7 @@ export const served = (h: Home) =>
         window: null,
         port,
       }),
-    ).pipe(Effect.provide(localState()), Effect.provide(SecureRandom.layerWebCrypto));
+    ).pipe(Effect.provide(localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto))));
     const control = instance.project(PROJECT);
     // The private binding already speaks the project's public ledger-call protocol.
     const { append, read, wait } = control;

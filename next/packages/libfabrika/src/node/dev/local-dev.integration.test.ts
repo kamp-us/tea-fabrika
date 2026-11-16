@@ -278,7 +278,7 @@ describe("P12 durable brain outbox", () => {
                 expect(joins).toContainEqual([folder, "brain.pending.jsonl"]);
                 expect(joins).toContainEqual([folder, "brain.last.json"]);
               }),
-            ).pipe(Effect.provide(fs), Effect.provide(paths));
+            ).pipe(Effect.provide(fs.pipe(Layer.provideMerge(paths))));
           }),
         ),
       ),

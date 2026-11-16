@@ -211,9 +211,8 @@ const run = (input: Input) => {
         Digest.layerWebCrypto,
         logged.layer,
         ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...input.env } })),
-      ),
+      ).pipe(Layer.provideMerge(NodeServices.layer)),
     ),
-    Effect.provide(NodeServices.layer),
     Effect.runPromise,
   );
 };
@@ -227,8 +226,11 @@ const expected = (input: Input, flags: Readonly<Record<string, string>>, all: bo
   return Load.load({ person: at, flags, env, version: VERSION }).pipe(
     Effect.map((loaded) => Print.report(Reference.rows(Declarations.all, loaded.snapshot), { all })),
     Effect.exit,
-    Effect.provide(Layer.mergeAll(files(at.path, input.person, []), TomlParser.layer, Digest.layerWebCrypto)),
-    Effect.provide(NodeServices.layer),
+    Effect.provide(
+      Layer.mergeAll(files(at.path, input.person, []), TomlParser.layer, Digest.layerWebCrypto).pipe(
+        Layer.provideMerge(NodeServices.layer),
+      ),
+    ),
     Effect.runPromise,
   );
 };

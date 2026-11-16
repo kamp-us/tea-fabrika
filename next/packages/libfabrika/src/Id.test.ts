@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
-import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer } from "effect";
+import { Arbitrary, Cause, Clock, Effect, Exit, Layer, Schema, SchemaIssue, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
@@ -1014,7 +1014,7 @@ describe("T518 shared Id generator", () => {
           }
 
           return ids;
-        }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
+        }).pipe(Effect.provide(Id.Generator.layer.pipe(Layer.provideMerge(TestClock.layer())))),
       );
       expect(allocated).toHaveLength(returned.length);
       expect([...allocated].sort()).toEqual([...returned].sort());

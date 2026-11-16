@@ -235,7 +235,7 @@ describe("p101, measurements in two levels", () => {
               // A span in a later hour; its own hour stays open, so no summary has it.
               yield* span("closing", hourStart(t) + 2 * H + 1);
               expect([...(yield* summaries)].sort(bySummary)).toEqual(rollup(spans));
-            }).pipe(Effect.provide(world(sql)), Effect.provide(TestClock.layer()));
+            }).pipe(Effect.provide(world(sql).pipe(Layer.provideMerge(TestClock.layer()))));
           }).pipe(Effect.scoped),
         );
       }),
@@ -577,7 +577,7 @@ describe("p101, no raw row is ever lost", () => {
               check(t);
               const local = db.prepare(`SELECT at FROM measurements WHERE piece != '${ARCHIVE}'`).all();
               expect(local.every((row) => utcDay(Number(row["at"])) === utcDay(last))).toBe(true);
-            }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls))), Effect.provide(TestClock.layer()));
+            }).pipe(Effect.provide(world(sql, Archive.bucket(r2.calls)).pipe(Layer.provideMerge(TestClock.layer()))));
           }).pipe(Effect.scoped),
         );
       }),
