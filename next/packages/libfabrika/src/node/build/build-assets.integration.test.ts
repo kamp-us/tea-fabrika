@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { NodePath, NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -183,7 +184,7 @@ const load = async () => {
 };
 
 const run = async (options: Options) =>
-  Effect.runPromise((await load()).build(options).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise((await load()).build(options).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])));
 
 const previous = (f: ReturnType<typeof fixture>, value: string) => {
   mkdirSync(f.options.out);
@@ -215,7 +216,9 @@ describe("P16 assets and Compiler", () => {
           writeFileSync(file, `{${JSON.stringify(value)}`);
           const { ledger: _ledger, ...options } = f.options;
           const result = await Effect.runPromise(
-            Effect.result((await load()).build(options)).pipe(Effect.provide(NodeServices.layer)),
+            Effect.result((await load()).build(options)).pipe(
+              Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+            ),
           );
           expect(result).toMatchObject({
             _tag: "Failure",
@@ -488,7 +491,9 @@ describe("P16 assets and Compiler", () => {
             expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
             writeFileSync(f.file, source);
             const result = await Effect.runPromise(
-              Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
+              Effect.result((await load()).build({ ...f.options, ledger })).pipe(
+                Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+              ),
             );
             expect(result).toMatchObject({
               _tag: "Failure",
@@ -627,7 +632,7 @@ describe("P16 cleanup and recording", () => {
                 return yield* builder
                   .build(f.options)
                   .pipe(Effect.provideService(FileSystem.FileSystem, { ...fs, rename }));
-              }).pipe(Effect.provide(NodeServices.layer));
+              }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto]));
 
               if (interrupt) {
                 const fiber = Effect.runFork(task);
@@ -724,7 +729,7 @@ describe("P16 cleanup and recording", () => {
                       delayed(fs.writeFileString(path, text, options), delays.write),
                   }),
                 );
-              }).pipe(Effect.provide(NodeServices.layer));
+              }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto]));
               const fiber = Effect.runFork(task);
 
               try {
@@ -851,7 +856,9 @@ describe("P16 cleanup and recording", () => {
             },
           }));
           vi.resetModules();
-          const task = (await load()).build(f.options).pipe(Effect.provide(NodeServices.layer));
+          const task = (await load())
+            .build(f.options)
+            .pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto]));
 
           if (interrupt) {
             const fiber = Effect.runFork(task);
@@ -915,7 +922,9 @@ describe("P16 cleanup and recording", () => {
           }));
           vi.resetModules();
           const result = await Effect.runPromise(
-            Effect.result((await load()).build(f.options)).pipe(Effect.provide(NodeServices.layer)),
+            Effect.result((await load()).build(f.options)).pipe(
+              Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+            ),
           );
           expect(fired).toBe(true);
           expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
@@ -956,7 +965,7 @@ describe("P16 cleanup and recording", () => {
             const result = await Effect.runPromise(
               Effect.result((await load()).build(f.options)).pipe(
                 Effect.withTracer(tracer),
-                Effect.provide(NodeServices.layer),
+                Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
               ),
             );
             expect(result._tag).toBe(fail ? "Failure" : "Success");
@@ -1207,7 +1216,9 @@ describe("P40 qualified window routes", () => {
     async () => {
       await fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 6 }), async (tape) => {
-          await Effect.runPromise(Effect.scoped(windowWalk(tape)).pipe(Effect.provide(NodeServices.layer)));
+          await Effect.runPromise(
+            Effect.scoped(windowWalk(tape)).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
+          );
         }),
         windowRuns,
       );

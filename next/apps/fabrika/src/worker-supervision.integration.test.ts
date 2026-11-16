@@ -9,7 +9,7 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Layer, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -105,7 +105,9 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
     const poison = join(home, "poison.ts");
     writeFileSync(poison, poisonSource);
     const built = await Effect.runPromise(
-      build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(Effect.provide(NodeServices.layer)),
+      build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(
+        Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+      ),
     );
     const code = built.programs[PROGRAM];
     expect(code, "the fixture program must be built").toBeDefined();
@@ -155,7 +157,7 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
         Effect.scoped,
         Effect.provide(localState()),
         Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(NodeServices.layer),
+        Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
       ),
     );
   } finally {
@@ -325,12 +327,15 @@ const worldScoped = Effect.gen(function* () {
   const poison = join(home, "poison.ts");
   writeFileSync(poison, poisonSource);
   const built = yield* build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(
-    Effect.provide(NodeServices.layer),
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
   );
   const code = built.programs[PROGRAM];
   expect(code, "the fixture program must be built").toBeDefined();
   const context = yield* Layer.build(
-    localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+    localState().pipe(
+      Layer.provideMerge(Layer.merge(SecureRandom.layerWebCrypto, Digest.layerWebCrypto)),
+      Layer.provideMerge(NodeServices.layer),
+    ),
   );
   const instance: Instance = yield* localInstance(
     built,

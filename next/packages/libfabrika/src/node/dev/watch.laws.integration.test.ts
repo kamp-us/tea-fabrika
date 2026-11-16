@@ -16,6 +16,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -366,7 +367,7 @@ describe("P15 slice 1: the watcher", () => {
 
               seen.add(move);
             }),
-          ).pipe(Effect.provide(NodeServices.layer)),
+          ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true, examples: each },
@@ -498,7 +499,7 @@ describe("P15 slice 1: the watcher", () => {
                 seen.add(move);
               }
             }),
-          ).pipe(Effect.provide(NodeServices.layer)),
+          ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
@@ -558,7 +559,7 @@ describe("P15 slice 1: the watcher", () => {
                 seen.add(reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside");
               }
             }),
-          ).pipe(Effect.provide(NodeServices.layer)),
+          ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
@@ -645,7 +646,7 @@ describe("P15 slice 1: the watcher", () => {
               opened.results.filter((r) => !r.closed),
               "results left open",
             ).toEqual([]);
-          }).pipe(Effect.provide(NodeServices.layer)),
+          }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },

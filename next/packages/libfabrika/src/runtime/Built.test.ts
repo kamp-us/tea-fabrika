@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -66,7 +67,7 @@ const runs = { seed: 119120, numRuns: 100 };
 
 const failed = async (api: Api, raw: unknown) => {
   // A throwing decode rejects here instead of returning a typed Failure.
-  const result = await Effect.runPromise(Effect.result(api.decodeBuilt(raw)));
+  const result = await Effect.runPromise(Effect.provide(Effect.result(api.decodeBuilt(raw)), Digest.layerWebCrypto));
   expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
 };
 
@@ -79,15 +80,25 @@ describe("P16 checked built tables", () => {
           programs: Object.fromEntries(rows.map(({ name, source }) => [name, { hash: sha(source), source }])),
           assets: Object.fromEntries(assets.map(({ route, type, body }) => [route, { hash: sha(body), type, body }])),
         };
-        expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
-        expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
+        expect(await Effect.runPromise(Effect.provide(api.decodeBuilt(raw), Digest.layerWebCrypto))).toEqual(raw);
+        expect(
+          await Effect.runPromise(Effect.provide(Schema.decodeUnknownEffect(api.Built)(raw), Digest.layerWebCrypto)),
+        ).toEqual(raw);
 
         for (const program of Object.values(raw.programs)) {
-          expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.BuiltProgram)(program))).toEqual(program);
+          expect(
+            await Effect.runPromise(
+              Effect.provide(Schema.decodeUnknownEffect(api.BuiltProgram)(program), Digest.layerWebCrypto),
+            ),
+          ).toEqual(program);
         }
 
         for (const asset of Object.values(raw.assets)) {
-          expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(asset);
+          expect(
+            await Effect.runPromise(
+              Effect.provide(Schema.decodeUnknownEffect(api.Asset)(asset), Digest.layerWebCrypto),
+            ),
+          ).toEqual(asset);
         }
       }),
       runs,
@@ -110,7 +121,9 @@ describe("P16 checked built tables", () => {
             programs: { [a.name]: { hash: sha(a.source), source: a.source } },
             assets: { [asset.route]: { hash: sha(asset.body), type: asset.type, body: asset.body } },
           };
-          await expect(Effect.runPromise(api.decodeBuilt(good))).resolves.toEqual(good);
+          await expect(
+            Effect.runPromise(Effect.provide(api.decodeBuilt(good), Digest.layerWebCrypto)),
+          ).resolves.toEqual(good);
 
           for (const raw of [
             null,
@@ -185,7 +198,9 @@ describe("P16 checked built tables", () => {
           if (i % 2 === 0) {
             const key = `pack${n % 5}/added${i}`;
             programs[key] = { hash: sha(key), source: key };
-            const decoded = await Effect.runPromise(api.decodeBuilt({ programs, assets: {} }));
+            const decoded = await Effect.runPromise(
+              Effect.provide(api.decodeBuilt({ programs, assets: {} }), Digest.layerWebCrypto),
+            );
             expect(Object.keys(decoded.programs).sort()).toEqual(Object.keys(programs).sort());
             expect(decoded.programs).toEqual(programs);
             added++;

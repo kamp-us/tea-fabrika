@@ -27,6 +27,7 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import { Digest } from "effect/crypto";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -99,7 +100,7 @@ const shell = (env: Env, route: (typeof routes)[number]) => {
       ).pipe(Layer.provide(recorded));
     }),
   );
-  return { service: ObjectService.make(Probe, ready), builds: () => builds };
+  return { service: ObjectService.make(Probe, ready.pipe(Layer.provide(Digest.layerWebCrypto))), builds: () => builds };
 };
 
 // The three kinds of bad setting the plan names. Each is a recipe applied to a good setting.

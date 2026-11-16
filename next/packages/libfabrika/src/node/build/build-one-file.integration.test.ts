@@ -25,6 +25,7 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -117,7 +118,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
             expect(actual.updates).toBe(tape.length);
             expect(actual.records.map((r) => r.value)).toEqual(types.map((type) => ({ type })));
           }),
-        ).pipe(Effect.provide(NodeServices.layer)),
+        ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
       ),
     ),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) },
@@ -216,7 +217,7 @@ const api = async () => {
 };
 
 const build = async (options: Parameters<Build["build"]>[0]) =>
-  Effect.runPromise((await api()).build(options).pipe(Effect.provide(NodeServices.layer)));
+  Effect.runPromise((await api()).build(options).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])));
 
 const strings = (source: string) => {
   const parsed = parseSync("brain.mjs", source);
@@ -417,7 +418,7 @@ describe("P16 p33 one-file build", () => {
                 ...f.options,
                 programs: [f.options.programs[0]!, f.options.programs[0]!],
               }),
-            ).pipe(Effect.provide(NodeServices.layer)),
+            ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
           );
           expect(result).toMatchObject({
             _tag: "Failure",
@@ -466,7 +467,7 @@ describe("P16 p33 one-file build", () => {
                 ...f.options,
                 programs: [{ ...selection, [field]: value }],
               }),
-            ).pipe(Effect.provide(NodeServices.layer)),
+            ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
           );
           expect(result).toMatchObject({
             _tag: "Failure",
@@ -621,7 +622,7 @@ const runBuild = async (options: Parameters<Build["build"]>[0], tracer?: Tracer.
   const work = (await api()).build(options);
   return Effect.runPromise(
     Effect.result(tracer === undefined ? work : work.pipe(Effect.withTracer(tracer))).pipe(
-      Effect.provide(NodeServices.layer),
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
     ),
   );
 };
@@ -1407,7 +1408,9 @@ describe("P40 qualified selections through the real builder", () => {
     async () => {
       await fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (tape) => {
-          await Effect.runPromise(Effect.scoped(p40Walk(tape)).pipe(Effect.provide(NodeServices.layer)));
+          await Effect.runPromise(
+            Effect.scoped(p40Walk(tape)).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
+          );
         }),
         p40Runs,
       );

@@ -18,6 +18,7 @@ import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
 import { Clock, DateTime, Effect, FileSystem, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { type Browser, type BrowserContext, chromium, type Page, type WebSocket as PageSocket } from "playwright";
@@ -68,7 +69,10 @@ export const stopped = Effect.callback<never, Stopped>((resume) => {
 });
 
 /** Vitest aborts its signal on timeout. Wait for that interruption's finalizers before the worker exits. */
-export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.Scope>, context: TestContext) => {
+export const suite = <A>(
+  body: Effect.Effect<A, unknown, import("effect").Scope.Scope | Digest.Digest>,
+  context: TestContext,
+) => {
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest starts this scoped Effect with its cancellation signal
   const running = Effect.runPromise(
     Effect.scoped(
@@ -77,7 +81,7 @@ export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.
           fault?.kind === "test" ? Effect.die(new Error(`test fault after ${fault.at}`)) : Effect.void,
         ),
       ),
-    ).pipe(Effect.raceFirst(stopped)),
+    ).pipe(Effect.raceFirst(stopped), Effect.provide(Digest.layerWebCrypto)),
     { signal: context.signal },
   );
   const finished = () =>

@@ -6,7 +6,7 @@ import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
@@ -353,7 +353,7 @@ const served = Effect.gen(function* () {
   const { process: pid } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started);
   const read = (stream: string) => invoke(instance.project(PROJECT), "read", [stream, 0, "p17b-audit"]);
   return { root, old, other, instance, pid, read, built: built.build };
-}).pipe(Effect.provide(NodeServices.layer));
+}).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto]));
 
 const until = Effect.fn("RevokeTest.until")(function* <A, E, R>(
   look: Effect.Effect<A, E, R>,

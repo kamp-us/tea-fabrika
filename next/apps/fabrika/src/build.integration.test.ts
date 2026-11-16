@@ -18,14 +18,15 @@ import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
 
 const homes: Array<string> = [];
 
-const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path>) =>
-  Effect.runPromise(work.pipe(Effect.provide(NodeServices.layer)));
+const runNode = <A, E>(work: Effect.Effect<A, E, FileSystem.FileSystem | Path.Path | Digest.Digest>) =>
+  Effect.runPromise(work.pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])));
 
 const discovery = (files: Array<string>, seen?: { calls: number }) =>
   Layer.effect(

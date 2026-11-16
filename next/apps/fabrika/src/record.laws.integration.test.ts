@@ -11,6 +11,7 @@ import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/li
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Digest } from "effect/crypto";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -131,7 +132,7 @@ const WireLive = Layer.effect(
     });
     return { driver };
   }),
-);
+).pipe(Layer.provide(Digest.layerWebCrypto));
 
 for (const [kind, live] of [
   ["node", NodeLive],

@@ -13,7 +13,7 @@ import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -205,10 +205,17 @@ const grant = (p: Page, url: string, fingerprint: string, key: string) =>
 
 /** Runs one law's world: every resource it acquired is given back when it ends. */
 const scoped = <A, E>(
-  work: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof NodeServices.layer> | SecureRandom.SecureRandom>,
+  work: Effect.Effect<
+    A,
+    E,
+    Scope.Scope | Layer.Success<typeof NodeServices.layer> | SecureRandom.SecureRandom | Digest.Digest
+  >,
 ) =>
   Effect.runPromise(
-    Effect.scoped(work).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
+    Effect.scoped(work).pipe(
+      Effect.provide(NodeServices.layer),
+      Effect.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]),
+    ),
   );
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */

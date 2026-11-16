@@ -29,7 +29,7 @@ import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -215,7 +215,7 @@ const startInstance = Effect.fnUntraced(
     return { instance, key };
   },
   Effect.provide(SecureRandom.layerWebCrypto),
-  Effect.provide(NodeServices.layer),
+  Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
 );
 
 const calls = (instance: Instance) => {

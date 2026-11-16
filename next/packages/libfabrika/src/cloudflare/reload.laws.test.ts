@@ -37,6 +37,7 @@ import {
   Schema,
   Scope,
 } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -470,10 +471,12 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
   build: BRAIN_BUILD,
 };
 
-const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope>, runs: number) =>
+const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope | Digest.Digest>, runs: number) =>
   Effect.gen(function* () {
-    // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope.
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(Effect.scoped(body(g))));
+    // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope and Digest.
+    const property = fc.asyncProperty(fc.gen(), (g) =>
+      Effect.runPromise(Effect.scoped(body(g)).pipe(Effect.provide(Digest.layerWebCrypto))),
+    );
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // edge: fast-check answers its assertion through a Promise.
     yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: rejected });

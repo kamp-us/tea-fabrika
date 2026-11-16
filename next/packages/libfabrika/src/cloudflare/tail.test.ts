@@ -2,6 +2,7 @@
 // Only the platform is doubled. Decoding, routing and the loader are the product's public calls.
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { workerLoader } from "./index.ts";
@@ -134,45 +135,48 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
       ({ tape }) =>
         // edge: fast-check awaits each scoped Effect property
         Effect.runPromise(
-          Effect.scoped(
-            Effect.gen(function* () {
-              const seen: Array<{ key: string; tails: ReadonlyArray<unknown> | undefined }> = [];
-              const declaration = { name: "checklist", v: 1, inputs: {}, writes: {}, cmds: [] };
-              // oxlint-disable-next-line fabrika/no-type-assertions -- recording Worker Loader implements only get and describe
-              const loader = {
-                get: (key: string, code: () => { tails?: ReadonlyArray<unknown> }) => {
-                  seen.push({ key, tails: code().tails });
-                  return { getEntrypoint: () => ({ describe: () => Promise.resolve(declaration) }) };
-                },
-              } as unknown as Parameters<typeof workerLoader>[0];
-              const load = workerLoader(loader, {
-                checklist: CODE,
-              }).load;
-              const live = new Map([
-                ["checklist:1", 1],
-                ["checklist:2", 2],
-              ]);
-              const tails = new Map<number, BoundTail>();
-              let next = 2;
+          Effect.provide(
+            Effect.scoped(
+              Effect.gen(function* () {
+                const seen: Array<{ key: string; tails: ReadonlyArray<unknown> | undefined }> = [];
+                const declaration = { name: "checklist", v: 1, inputs: {}, writes: {}, cmds: [] };
+                // oxlint-disable-next-line fabrika/no-type-assertions -- recording Worker Loader implements only get and describe
+                const loader = {
+                  get: (key: string, code: () => { tails?: ReadonlyArray<unknown> }) => {
+                    seen.push({ key, tails: code().tails });
+                    return { getEntrypoint: () => ({ describe: () => Promise.resolve(declaration) }) };
+                  },
+                } as unknown as Parameters<typeof workerLoader>[0];
+                const load = workerLoader(loader, {
+                  checklist: CODE,
+                }).load;
+                const live = new Map([
+                  ["checklist:1", 1],
+                  ["checklist:2", 2],
+                ]);
+                const tails = new Map<number, BoundTail>();
+                let next = 2;
 
-              for (const cell of tape) {
-                const names = [...live.keys()];
-                const name = names[cell.pick % names.length] ?? "checklist:1";
-                const previous = live.get(name) ?? 1;
-                const n = cell.replace ? ++next : previous;
-                live.set(name, n);
-                const process = `process_0000000000e00800${String(n).padStart(10, "0")}`;
-                // oxlint-disable-next-line fabrika/no-type-assertions -- opaque platform tail identity, never invoked by this fake loader
-                const bound = tails.get(n) ?? ({ process, name } as unknown as BoundTail);
-                tails.set(n, bound);
-                // The third argument is the process-bound tail. Bootstrap callers omit it.
-                yield* load("checklist", process, bound);
-                expect(seen.at(-1)).toEqual({ key: `${CODE.hash}/${process}`, tails: [bound] });
-              }
+                for (const cell of tape) {
+                  const names = [...live.keys()];
+                  const name = names[cell.pick % names.length] ?? "checklist:1";
+                  const previous = live.get(name) ?? 1;
+                  const n = cell.replace ? ++next : previous;
+                  live.set(name, n);
+                  const process = `process_0000000000e00800${String(n).padStart(10, "0")}`;
+                  // oxlint-disable-next-line fabrika/no-type-assertions -- opaque platform tail identity, never invoked by this fake loader
+                  const bound = tails.get(n) ?? ({ process, name } as unknown as BoundTail);
+                  tails.set(n, bound);
+                  // The third argument is the process-bound tail. Bootstrap callers omit it.
+                  yield* load("checklist", process, bound);
+                  expect(seen.at(-1)).toEqual({ key: `${CODE.hash}/${process}`, tails: [bound] });
+                }
 
-              yield* load("checklist", "project:bootstrap/checklist:1");
-              expect(seen.at(-1)).toEqual({ key: `${CODE.hash}/project:bootstrap/checklist:1`, tails: undefined });
-            }),
+                yield* load("checklist", "project:bootstrap/checklist:1");
+                expect(seen.at(-1)).toEqual({ key: `${CODE.hash}/project:bootstrap/checklist:1`, tails: undefined });
+              }),
+            ),
+            Digest.layerWebCrypto,
           ),
         ),
     ),

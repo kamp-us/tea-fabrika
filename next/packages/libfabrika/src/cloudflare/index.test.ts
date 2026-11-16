@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { fetch, serveAsset, workerLoader } from "./index.ts";
@@ -14,13 +15,16 @@ it("an unknown program is refused before the Worker Loader is called", async () 
   await fc.assert(
     fc.asyncProperty(fc.string(), fc.string(), (name, process) =>
       Effect.runPromise(
-        Effect.gen(function* () {
-          const loader = workerLoader({ get: unexpected, load: unexpected }, {});
-          expect(yield* Effect.flip(loader.load(name, process))).toMatchObject({
-            _tag: "ProgramDown",
-            reason: "no_program",
-          });
-        }),
+        Effect.provide(
+          Effect.gen(function* () {
+            const loader = workerLoader({ get: unexpected, load: unexpected }, {});
+            expect(yield* Effect.flip(loader.load(name, process))).toMatchObject({
+              _tag: "ProgramDown",
+              reason: "no_program",
+            });
+          }),
+          Digest.layerWebCrypto,
+        ),
       ),
     ),
     { seed: 119120, examples: [["missing", "process-test"]] },

@@ -4,7 +4,7 @@ import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Clock, Effect, FileSystem, Path, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -195,6 +195,10 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           expect(stable.alarm).toBe(stable.before.view.next);
         }
       }).pipe(Effect.provide(localState()));
-    }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(SecureRandom.layerWebCrypto),
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+    ),
   );
 }, 180_000);

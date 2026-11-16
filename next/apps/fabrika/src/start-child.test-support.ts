@@ -17,7 +17,7 @@ import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -155,7 +155,7 @@ export const childHome = Effect.fnUntraced(
           starts,
         }),
       );
-    }).pipe(Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer));
+    }).pipe(Effect.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]), Effect.provide(NodeServices.layer));
     const from: From = {
       by: key.fingerprint,
       for: PERSON,
@@ -167,7 +167,7 @@ export const childHome = Effect.fnUntraced(
     };
     return { boot, key, hashes, from };
   },
-  Effect.provide(SecureRandom.layerWebCrypto),
+  Effect.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]),
   Effect.provide(NodeServices.layer),
 );
 

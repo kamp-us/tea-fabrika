@@ -18,7 +18,7 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
 import { Effect, Layer, Schema, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -192,7 +192,7 @@ const world = async (
           "p12/sealed-fixture": sealed,
           "p12/alarm-fixture": alarm,
         },
-      }).pipe(Effect.provide(NodeServices.layer)),
+      }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
     );
 
     if (instrument) {
@@ -246,7 +246,7 @@ const world = async (
         Effect.scoped,
         Effect.provide(localState()),
         Effect.provide(SecureRandom.layerWebCrypto),
-        Effect.provide(NodeServices.layer),
+        Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
       ),
     );
   } finally {

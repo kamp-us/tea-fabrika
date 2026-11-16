@@ -6,7 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -352,7 +352,10 @@ class SpinSample extends Context.Service<SpinSample, Effect.Success<typeof spinS
 ) {}
 
 it.layer(
-  Layer.effect(World, world).pipe(Layer.provide(SecureRandom.layerWebCrypto), Layer.provide(NodeServices.layer)),
+  Layer.effect(World, world).pipe(
+    Layer.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]),
+    Layer.provide(NodeServices.layer),
+  ),
   { excludeTestServices: true, timeout: "180 seconds" },
 )("U9 real local isolate usage", (it) => {
   it.effect(

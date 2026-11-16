@@ -9,6 +9,7 @@
 // bytes no longer hash to its key fails `bad_row`; it never reads as absent or as the wrong bytes.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit, Option, Schema, Scope } from "effect";
+import { Digest } from "effect/crypto";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import { BuiltProgram, hash } from "./Built.ts";
@@ -167,7 +168,7 @@ export const suite = (database: Database) =>
     it.live.prop(
       "L13: a put then get answers the same bytes; a second put is a no-op; a row that no longer hashes to its key is bad_row; rows survive a reopen",
       [Tape],
-      ([tape]) => Effect.scoped(walk(database, tape)),
+      ([tape]) => Effect.scoped(walk(database, tape)).pipe(Effect.provide(Digest.layerWebCrypto)),
       { timeout: 120_000, arbitrary: { seed: SEED, runs: RUNS } },
     );
 

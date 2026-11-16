@@ -19,7 +19,7 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Result, Schema, Scope } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
 import { describe, expect, it } from "vitest";
@@ -154,7 +154,7 @@ describe("P16 real browser from a copied one-file build", () => {
                 Effect.provideService(Scope.Scope, scope),
                 Effect.provide(localState()),
                 Effect.provide(SecureRandom.layerWebCrypto),
-                Effect.provide(NodeServices.layer),
+                Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
               ),
             );
             const entry = Object.entries(built.assets).find(
@@ -401,7 +401,7 @@ const servedCounter = Effect.gen(function* () {
     ).pipe(
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
     ),
     // localInstance registers its own release on this scope; the instance's port is what must close.
     () => Effect.void,

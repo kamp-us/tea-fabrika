@@ -2,6 +2,7 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -205,7 +206,7 @@ const projectWalk = Effect.fnUntraced(function* (
           bootstrap: [{ name: NAME, id: "project-start", program: PROGRAM }],
           door: harness.door(url, ProjectInput),
         },
-      ),
+      ).pipe(Layer.provide(Digest.layerWebCrypto)),
     ),
   );
   const client = yield* project.connect();

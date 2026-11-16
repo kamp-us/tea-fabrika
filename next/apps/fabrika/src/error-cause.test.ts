@@ -3,6 +3,7 @@
 // (the instance's settings). `local-instance.ts:20` and `:26` translate a failed module import, which no
 // generated input can cause in-process.
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { build } from "./build.ts";
@@ -16,10 +17,14 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
+const law = <T>(
+  name: string,
+  input: fc.Arbitrary<T>,
+  check: (input: T) => Effect.Effect<void, unknown, Digest.Digest>,
+) =>
   it(name, () =>
     fc.assert(
-      fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
+      fc.asyncProperty(input, (value) => Effect.runPromise(check(value).pipe(Effect.provide(Digest.layerWebCrypto)))),
       { seed: SEED, numRuns: RUNS },
     ),
   );

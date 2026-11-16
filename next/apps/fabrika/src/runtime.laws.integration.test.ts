@@ -20,6 +20,7 @@ import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -945,14 +946,15 @@ describe("P12 Connection recording", () => {
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
       const project = {
         getByName: () => ({
-          settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
+          settingsStart: async () =>
+            StartsTest.reply(await Effect.runPromise(Effect.provide(settings(w.env), Digest.layerWebCrypto))),
           leave: async () => {},
           disconnect: async () => {},
         }),
       } as unknown as Env["PROJECT"];
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
       const socket = ws as unknown as WebSocket;
-      const config = await Effect.runPromise(settings(w.env));
+      const config = await Effect.runPromise(Effect.provide(settings(w.env), Digest.layerWebCrypto));
       const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, config);
 
       try {
@@ -1023,7 +1025,8 @@ describe("P12 Connection recording", () => {
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
     const project = {
       getByName: () => ({
-        settingsStart: async () => StartsTest.reply(await Effect.runPromise(settings(w.env))),
+        settingsStart: async () =>
+          StartsTest.reply(await Effect.runPromise(Effect.provide(settings(w.env), Digest.layerWebCrypto))),
         route: async () => {
           throw fault;
         },
@@ -1031,7 +1034,11 @@ describe("P12 Connection recording", () => {
     } as unknown as Env["PROJECT"];
     // oxlint-disable-next-line fabrika/no-type-assertions -- Node socket double implements attachment, send and close without workerd's socket brand
     const socket = ws as unknown as WebSocket;
-    const runtime = connectionRuntime(ctx, { ...w.env, PROJECT: project }, await Effect.runPromise(settings(w.env)));
+    const runtime = connectionRuntime(
+      ctx,
+      { ...w.env, PROJECT: project },
+      await Effect.runPromise(Effect.provide(settings(w.env), Digest.layerWebCrypto)),
+    );
 
     try {
       const gateway = await runtime.runPromise(ConnectionService),

@@ -32,7 +32,7 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
@@ -350,7 +350,7 @@ const flow = Effect.fnUntraced(
   },
   Effect.scoped,
   Effect.provide(SecureRandom.layerWebCrypto),
-  Effect.provide(NodeServices.layer),
+  Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
 );
 
 describe("P39 slice 4b: the hands launcher end to end", () => {

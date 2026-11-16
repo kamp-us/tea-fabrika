@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Effect, Schema, Scope } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -371,7 +371,7 @@ const world = async (
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(NodeServices.layer),
       );
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
   );
 };
 
@@ -778,7 +778,7 @@ const checklistWorld = async (
       Effect.scoped,
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
     ),
   );
 };
@@ -1052,7 +1052,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       Effect.scoped,
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
     ),
   );
 }, 180_000);

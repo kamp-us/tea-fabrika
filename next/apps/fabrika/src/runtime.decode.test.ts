@@ -5,7 +5,7 @@
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Result } from "effect";
+import { Effect, Exit, Layer, Result, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
@@ -71,13 +71,14 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const project = held.project.at(-1);
   const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
   expect(typeof door).toBe("function");
-  const checked = await Effect.runPromise(readSettings(env));
-  // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
-  const built: Effect.Effect<unknown, unknown, RecordedStart> = Reflect.apply(door, undefined, [
+  const checked = await Effect.runPromise(Effect.provide(readSettings(env), Digest.layerWebCrypto));
+  // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above. It
+  // builds its layers in the Project object's scope, which this run gives it.
+  const built: Effect.Effect<unknown, unknown, RecordedStart | Scope.Scope> = Reflect.apply(door, undefined, [
     { deliver: () => Effect.void },
   ]);
   await Effect.runPromise(
-    built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
+    built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) }), Effect.scoped),
   );
   const options = held.door.at(-1);
   const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;

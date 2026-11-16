@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, type FileSystem, type Path, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -43,7 +44,7 @@ const inlineStylesheet = (file: string) =>
     product<{ readonly inlineStylesheet: Inline }>("css.ts", "window CSS bundling (node/css.ts)"),
   ).pipe(
     Effect.flatMap((m) => m.inlineStylesheet(file)),
-    Effect.provide(NodeServices.layer),
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
   );
 
 const build: Build["build"] = (options) =>
@@ -196,7 +197,7 @@ const refusedBuild = async (home: string) => {
     files: [],
     ledger: [],
     chaos: false,
-  }).pipe(Effect.result, Effect.provide(NodeServices.layer));
+  }).pipe(Effect.result, Effect.provide([NodeServices.layer, Digest.layerWebCrypto]));
   const file = join(home, "root.css"),
     original = readFileSync(file, "utf8");
 

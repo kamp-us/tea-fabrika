@@ -15,7 +15,7 @@ import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -360,7 +360,9 @@ describe("P16 stack and sealed loader", () => {
             window: null,
             build: built.build,
           });
-          const checked = await Effect.runPromise(readSettings({ INSTANCE: JSON.stringify(settings) }));
+          const checked = await Effect.runPromise(
+            Effect.provide(readSettings({ INSTANCE: JSON.stringify(settings) }), Digest.layerWebCrypto),
+          );
           const result = await Effect.runPromise(Effect.result(stack(built, checked)));
           const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
 
@@ -454,9 +456,13 @@ describe("P16 stack and sealed loader", () => {
             "fabrika/counter": { hash: hash(source), source },
             "other/counter": { hash: hash(other), source: other },
           });
-          const bare = await Effect.runPromise(Effect.result(loader.load("counter", process)));
+          const bare = await Effect.runPromise(
+            Effect.provide(Effect.result(loader.load("counter", process)), Digest.layerWebCrypto),
+          );
           expect(bare).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown", reason: "no_program" } });
-          const loaded = await Effect.runPromise(loader.load("fabrika/counter", process));
+          const loaded = await Effect.runPromise(
+            Effect.provide(loader.load("fabrika/counter", process), Digest.layerWebCrypto),
+          );
           expect(loaded.hash).toBe(hash(source));
           expect(calls).toEqual([
             {
@@ -470,7 +476,9 @@ describe("P16 stack and sealed loader", () => {
               },
             },
           ]);
-          const refused = await Effect.runPromise(Effect.result(loader.load(`missing-${missing}`, process)));
+          const refused = await Effect.runPromise(
+            Effect.provide(Effect.result(loader.load(`missing-${missing}`, process)), Digest.layerWebCrypto),
+          );
           expect(refused).toMatchObject({
             _tag: "Failure",
             failure: { _tag: "ProgramDown", reason: "no_program" },
@@ -593,7 +601,9 @@ describe("P16 copied-file real instance, serial", () => {
         const h = home(),
           { build } = await import("./build.ts");
         const built = await Effect.runPromise(
-          build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
+          build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(
+            Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+          ),
         );
         const source = readFileSync(built.brain, "utf8");
 
@@ -645,7 +655,7 @@ describe("P16 copied-file real instance, serial", () => {
               files: [],
               ledger: [],
               programs: Object.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
-            }).pipe(Effect.provide(NodeServices.layer)),
+            }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
           );
           const alone = join(h, "alone");
           mkdirSync(alone);
@@ -739,7 +749,7 @@ describe("P16 copied-file real instance, serial", () => {
                   ).pipe(
                     Effect.provide(localState()),
                     Effect.provide(SecureRandom.layerWebCrypto),
-                    Effect.provide(NodeServices.layer),
+                    Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
                   ),
                 ),
               );
@@ -764,7 +774,9 @@ describe("P16 copied-file real instance, serial", () => {
           const { build } = await import("./build.ts"),
             { localInstance } = await import("./local-instance.ts");
           const built = await Effect.runPromise(
-            build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
+            build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(
+              Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+            ),
           );
           const alone = join(h, "alone");
           mkdirSync(alone);
@@ -911,7 +923,7 @@ describe("P16 copied-file real instance, serial", () => {
                 ).pipe(
                   Effect.provide((await import("alchemy/State/LocalState")).localState()),
                   Effect.provide(SecureRandom.layerWebCrypto),
-                  Effect.provide(NodeServices.layer),
+                  Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
                 ),
               ),
             );

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-tests5",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:15:05-08:00",
+  "ended": "2026-11-16T00:32:11-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step, round 5, for judgment slice E30 (strictEffectProvide), in next/. The build (2026-11-16-effect-e30-build4) made 21 product hits caller-provides, pushed at 7718a634a, and left 47 test, suite and test-support edits uncommitted, because stepcommit refuses exam paths from a build. This step read all 47 edits line by line and kept every one: each only adds Digest.layerWebCrypto at a run edge or beside a layer the test already provides (NodeServices, SecureRandom, a law helper's run, a test layer, a Layer.build), widens a helper's requirement type to Digest.Digest where its run edge now provides it, or, in runtime.decode.test.ts, scopes the door run, since the door now builds its layers in the Project's scope. No assertion, generator, run count, seed or timeout changed, no skip or only was added, and no law was loosened, so none was reverted. Four laws hide the requirement from tsc (build-assets, build-one-file and css integration laws, runtime/Built.test.ts); for two of them the edit was taken out once and the law ran red with 'Service not found: effect/crypto/Digest' (Built.test 3 of 3 failed, css.integration 3 of 30 failed), then the edit was restored by copy and the diff checked byte for byte against the build's saved patch. Hits: met 21 (all product, fixed by the build), fixed by quick fix 0, hand edits 0 in this step, left 0, waiting on 1366 0. No product file touched, no lock line added.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17.1,
+  "note": "Ran at product head 7718a634a with the 47 edits in the worktree (committed in this step): vitest, one file at a time, nice -n 15 --maxWorkers=3, TYPESAFE_API_KEY unset, all green. libfabrika: runtime/Built.test.ts 3, node/build/css.integration 30, build-one-file.integration 12, build-assets.integration 25, cloudflare/ObjectService 3, cloudflare/error-cause 12, cloudflare/index 3, cloudflare/leave.laws 1, cloudflare/mail 8, cloudflare/reload.laws 11, cloudflare/tail 2, runtime/ErrorCause 11, node/build/error-cause 4, node/CodeStore.integration 2 (runs CodeStoreTest.ts), node/Reload.integration 9 (ReloadTest.ts), node/RunnerAdmission.integration 11 (ProjectAuditTest.ts), node/IsolateUsage.integration 7, node/dev/watch.laws.integration 4. App: src/error-cause 2, runtime.decode 2, build.integration 11, file-services.laws.integration 13, record.laws.integration 7, door.integration 153, runtime.laws.integration 29, local-instance.integration 3, exam/bytes.integration 6, memory-replace.laws.integration 2, start-child.laws.integration 23 (start-child.test-support.ts). Not run here: the five .visual. files (one-file, page-runtime.laws, reload, and p14.test-support's users), which the brief keeps out, and the other app integration laws in the list (chaos-revoke, hands-launcher, input-recording, instance-one-file, instance-records, port-home.laws, scheduled-job-alarm, tasks-wire, tezgah-runner.laws, worker-mail, worker-monitor, worker-quotas, worker-supervision, worker-usage), left for CI's full run because the sample above already covers each edit shape they use. tsc --noEmit: libfabrika clean, no diagnostic; the app shows only 15 TS377000 directive warnings, none in a test file, as expected until the integrator's lock. pnpm format changed nothing; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed, 18 parts; the exam ratchet exited 0.",
+  "plants": [
+    {
+      "law": "P16 checked built tables (next/packages/libfabrika/src/runtime/Built.test.ts)",
+      "plant": "the build's uncommitted Digest provides taken out of this law file (the committed version put back by git checkout, the edit restored by copy), product at 7718a634a",
+      "result": "red"
+    },
+    {
+      "law": "window CSS bundling and refused builds (next/packages/libfabrika/src/node/build/css.integration.test.ts)",
+      "plant": "the build's uncommitted Digest provides taken out of this law file (the committed version put back by git checkout, the edit restored by copy), product at 7718a634a",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

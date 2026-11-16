@@ -9,7 +9,7 @@ import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenera
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -173,7 +173,7 @@ it.live.prop(
       ).pipe(
         Effect.provide(fetchClient),
         Effect.provide(ProcessIdGenerator.layer),
-        Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]),
         Effect.provide(filesWithoutSync),
         Effect.result,
       );
@@ -222,7 +222,7 @@ it.live.prop(
             ).pipe(
               Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
+              Effect.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]),
               Effect.provide(quietMemory),
               Effect.provide(filesWithoutSync),
             );
@@ -289,7 +289,7 @@ it.live.prop(
         Effect.scoped,
         Effect.provide(fetchClient),
         Effect.provide(ProcessIdGenerator.layer),
-        Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide([SecureRandom.layerWebCrypto, Digest.layerWebCrypto]),
         Effect.provide(quietMemory),
         Effect.provide(NodeServices.layer),
       );

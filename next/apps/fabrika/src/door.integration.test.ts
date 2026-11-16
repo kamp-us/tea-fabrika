@@ -50,6 +50,7 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -817,7 +818,8 @@ const wire = Effect.fnUntraced(function* (
     },
   };
   const layer: ReturnType<typeof connectionLayer> = Reflect.apply(connectionLayer, undefined, [state, env, input]);
-  const context = yield* Layer.build(layer);
+  // The Connection object's edge provides the Digest that checks the start's settings.
+  const context = yield* Layer.build(layer.pipe(Layer.provide(Digest.layerWebCrypto)));
   const service = yield* ConnectionService.pipe(Effect.provideContext(context));
   let id = 0;
   const send = (method: string, params: unknown): Effect.Effect<void, unknown> => {

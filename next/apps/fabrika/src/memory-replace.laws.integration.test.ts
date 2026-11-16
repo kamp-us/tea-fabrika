@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Predicate, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -238,11 +238,14 @@ const world = (kib: (pid: number) => number | null) =>
     // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
     const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-    const built = yield* build({ out: join(home, "dist") }).pipe(Effect.provide(NodeServices.layer));
+    const built = yield* build({ out: join(home, "dist") }).pipe(
+      Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
+    );
     const platform = Layer.mergeAll(
       rssStandIn(kib).pipe(Layer.provide(NodeServices.layer)),
       localState(),
       SecureRandom.layerWebCrypto,
+      Digest.layerWebCrypto,
     ).pipe(Layer.provideMerge(NodeServices.layer));
     const context = yield* Layer.build(platform);
     const instance: Instance = yield* localInstance(

@@ -7,6 +7,7 @@
 import { NodePath } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { BuildError, build } from "./build.ts";
 import { bundle } from "./bundle.ts";
@@ -31,7 +32,8 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 );
 
 /** Disk with only these calls; every other call fails as missing, as Effect's noop file system does. */
-const disk = (calls: Partial<FileSystem.FileSystem>) => Layer.merge(FileSystem.layerNoop(calls), Path.layer);
+const disk = (calls: Partial<FileSystem.FileSystem>) =>
+  Layer.mergeAll(FileSystem.layerNoop(calls), Path.layer, Digest.layerWebCrypto);
 
 const ROOT = "/repo";
 

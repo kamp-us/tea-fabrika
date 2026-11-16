@@ -18,6 +18,7 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -78,7 +79,7 @@ beforeAll(async () => {
         const built = yield* build({ out: join(folder, "dist"), ledger: [] });
         return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
       }),
-    ).pipe(Effect.provide(NodeServices.layer)),
+    ).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
   );
 }, 120_000);
 

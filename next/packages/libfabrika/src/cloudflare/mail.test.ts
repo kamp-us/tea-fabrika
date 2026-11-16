@@ -26,6 +26,7 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";
@@ -595,7 +596,7 @@ it.effect(
           minLength: 4,
           maxLength: 12,
         }),
-        (moves) => Effect.runPromise(Effect.scoped(walk(moves))),
+        (moves) => Effect.runPromise(Effect.provide(Effect.scoped(walk(moves)), Digest.layerWebCrypto)),
       );
       yield* Effect.promise(() =>
         fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 10, full: 50 }), endOnFailure: true }),

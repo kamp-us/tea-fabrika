@@ -7,6 +7,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
@@ -212,6 +213,8 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
     const platform = { get: () => ({ getEntrypoint: () => rpc }) } as unknown as Parameters<typeof workerLoader>[0];
     const loader = workerLoader(platform, { "test/usage-fixture": CODE });
+    // The runner's loader checks each build's hash with the Digest, built once in the runner's scope.
+    const digest = Context.get(yield* Layer.build(Digest.layerWebCrypto), Digest.Digest);
     const controller = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
       (held) => Effect.sync(() => held.abort()),
@@ -256,7 +259,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     const context = yield* Layer.build(
       ProgramRunner.withLoader(
         { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER },
-        { load: (name) => loader.load(name, PID, bound) },
+        { load: (name) => loader.load(name, PID, bound).pipe(Effect.provideService(Digest.Digest, digest)) },
         {
           recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
           chunk: mailChunk.default,
@@ -743,7 +746,9 @@ it.effect(
         );
       // Every tape exercises a successor; later moves reload the live process or replace it.
       const tape = fc.array(fc.boolean(), { minLength: 1, maxLength: 8 }).map((moves) => [true, ...moves]);
-      const property = fc.asyncProperty(tape, (moves) => Effect.runPromise(once(moves)));
+      const property = fc.asyncProperty(tape, (moves) =>
+        Effect.runPromise(once(moves).pipe(Effect.provide(Digest.layerWebCrypto))),
+      );
       yield* Effect.promise(() => fc.assert(property, u8Runs));
     }),
   { timeout: u8Runs.numRuns * 2_000 },

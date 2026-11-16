@@ -46,7 +46,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { machinePaths } from "./port-home.test-support.ts";
@@ -238,7 +238,7 @@ class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError",
   cause: Schema.Defect(),
 }) {}
 
-const services = Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto);
+const services = Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto, Digest.layerWebCrypto);
 
 /** One call on the live instance, its answer read as `answer`, a rejection kept as an `InstanceError`. */
 const call = <S extends Schema.Top>(method: string, answer: S, run: () => Promise<unknown>) =>

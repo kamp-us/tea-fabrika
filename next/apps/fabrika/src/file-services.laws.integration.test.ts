@@ -21,6 +21,7 @@ import {
   Sink,
   Stream,
 } from "effect";
+import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
@@ -351,7 +352,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
       }),
   });
   const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
-  const layer = Layer.merge(
+  const layer = Layer.mergeAll(
     fs,
     Layer.succeed(Path.Path, {
       ...path,
@@ -360,6 +361,8 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
         return path.join(...parts);
       },
     }),
+    // The build hashes what it writes; the Digest is the platform's, not a recorded service.
+    Digest.layerWebCrypto,
   );
   return { out, pending, backup, files, calls, paths, modes, layer };
 };

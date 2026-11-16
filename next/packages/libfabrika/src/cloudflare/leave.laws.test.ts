@@ -14,6 +14,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -227,76 +228,80 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
           fc.assert(
             fc.asyncProperty(fc.gen(), (g) =>
               Effect.runPromise(
-                Effect.scoped(
-                  Effect.gen(function* () {
-                    const i = yield* instance();
-                    const pid = i.project.boot.process;
-                    // This file's fold: each session's watches, by client and ref. A watch made while the
-                    // process runs is live; one whose process exited sent its DOWN, and is gone (OTP).
-                    const held = new Map<string, Map<string, "live" | "fired">>();
-                    let running = true;
-                    let sessions = 0;
-                    const steps = g(fc.integer, { min: 1, max: 12 });
+                Effect.provide(
+                  Effect.scoped(
+                    Effect.gen(function* () {
+                      const i = yield* instance();
+                      const pid = i.project.boot.process;
+                      // This file's fold: each session's watches, by client and ref. A watch made while the
+                      // process runs is live; one whose process exited sent its DOWN, and is gone (OTP).
+                      const held = new Map<string, Map<string, "live" | "fired">>();
+                      let running = true;
+                      let sessions = 0;
+                      const steps = g(fc.integer, { min: 1, max: 12 });
 
-                    for (let n = 0; n < steps; n++) {
-                      const holders = [...held.keys()];
-                      const move = g(fc.nat, { max: holders.length > 0 ? 10 : 5 });
+                      for (let n = 0; n < steps; n++) {
+                        const holders = [...held.keys()];
+                        const move = g(fc.nat, { max: holders.length > 0 ? 10 : 5 });
 
-                      if (move < 5) {
-                        // A watch for a session: a held one again or a new one, sometimes on a ref it holds.
-                        const reuse = holders.length > 0 && g(fc.boolean);
-                        const session = reuse ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[sessions++]!;
-                        const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
-                        const ref = REFS[g(fc.nat, { max: REFS.length - 1 })]!;
-                        const to = Recipient.cases.client.make({ client, session });
-                        expect(Exit.isSuccess(yield* Effect.exit(i.monitor(ref, pid, to, origin)))).toBe(true);
-                        const watches = held.get(session) ?? new Map<string, "live" | "fired">();
-                        const key = JSON.stringify([client, ref]);
-                        watches.set(key, watches.get(key) ?? (running ? "live" : "fired"));
-                        held.set(session, watches);
-                      } else if (move === 5) {
-                        // The watched process exits once: every watch on it fires its DOWN.
-                        if (running) {
-                          yield* i.project.exit(pid, NORMAL, origin);
-                          running = false;
+                        if (move < 5) {
+                          // A watch for a session: a held one again or a new one, sometimes on a ref it holds.
+                          const reuse = holders.length > 0 && g(fc.boolean);
+                          const session = reuse ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[sessions++]!;
+                          const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
+                          const ref = REFS[g(fc.nat, { max: REFS.length - 1 })]!;
+                          const to = Recipient.cases.client.make({ client, session });
+                          expect(Exit.isSuccess(yield* Effect.exit(i.monitor(ref, pid, to, origin)))).toBe(true);
+                          const watches = held.get(session) ?? new Map<string, "live" | "fired">();
+                          const key = JSON.stringify([client, ref]);
+                          watches.set(key, watches.get(key) ?? (running ? "live" : "fired"));
+                          held.set(session, watches);
+                        } else if (move === 5) {
+                          // The watched process exits once: every watch on it fires its DOWN.
+                          if (running) {
+                            yield* i.project.exit(pid, NORMAL, origin);
+                            running = false;
 
-                          for (const watches of held.values()) {
-                            for (const key of watches.keys()) {
-                              watches.set(key, "fired");
+                            for (const watches of held.values()) {
+                              for (const key of watches.keys()) {
+                                watches.set(key, "fired");
+                              }
                             }
                           }
+                        } else {
+                          // A close: a session that holds watches, or one that never held any.
+                          const session =
+                            move < 10 ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[NONE + n]!;
+                          const ending = [...(held.get(session) ?? [])]
+                            .filter(([, state]) => state === "live")
+                            .map(([key]) => Schema.decodeUnknownSync(Key)(key));
+                          const before = i.facts("demonitored").length;
+                          const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
+                          const exit = yield* closed(i.project.leave(client, session));
+                          expect(exit, "the leave succeeds with no caller's span").toStrictEqual(Exit.void);
+                          const written = i.facts("demonitored").slice(before);
+                          expect(
+                            written.map((f) => [f.to.client, f.ref, f.to.session, f.reason]).sort(),
+                            "each live watch of the closed session ends once, as its watcher exited",
+                          ).toEqual(ending.map(([c, ref]) => [c, ref, session, "watcher_exited"]).sort());
+                          held.delete(session);
                         }
-                      } else {
-                        // A close: a session that holds watches, or one that never held any.
-                        const session = move < 10 ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[NONE + n]!;
-                        const ending = [...(held.get(session) ?? [])]
-                          .filter(([, state]) => state === "live")
-                          .map(([key]) => Schema.decodeUnknownSync(Key)(key));
-                        const before = i.facts("demonitored").length;
-                        const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
-                        const exit = yield* closed(i.project.leave(client, session));
-                        expect(exit, "the leave succeeds with no caller's span").toStrictEqual(Exit.void);
-                        const written = i.facts("demonitored").slice(before);
-                        expect(
-                          written.map((f) => [f.to.client, f.ref, f.to.session, f.reason]).sort(),
-                          "each live watch of the closed session ends once, as its watcher exited",
-                        ).toEqual(ending.map(([c, ref]) => [c, ref, session, "watcher_exited"]).sort());
-                        held.delete(session);
                       }
-                    }
 
-                    // A watch no leave ended has no demonitored fact: another session's close left it alone.
-                    const ended = new Set(
-                      i.facts("demonitored").map((f) => JSON.stringify([f.to.client, f.to.session, f.ref])),
-                    );
-                    const kept = [...held].flatMap(([session, watches]) =>
-                      [...watches.keys()].map((key) => {
-                        const [client, ref] = Schema.decodeUnknownSync(Key)(key);
-                        return JSON.stringify([client, session, ref]);
-                      }),
-                    );
-                    expect(kept.filter((key) => ended.has(key))).toEqual([]);
-                  }),
+                      // A watch no leave ended has no demonitored fact: another session's close left it alone.
+                      const ended = new Set(
+                        i.facts("demonitored").map((f) => JSON.stringify([f.to.client, f.to.session, f.ref])),
+                      );
+                      const kept = [...held].flatMap(([session, watches]) =>
+                        [...watches.keys()].map((key) => {
+                          const [client, ref] = Schema.decodeUnknownSync(Key)(key);
+                          return JSON.stringify([client, session, ref]);
+                        }),
+                      );
+                      expect(kept.filter((key) => ended.has(key))).toEqual([]);
+                    }),
+                  ),
+                  Digest.layerWebCrypto,
                 ),
               ),
             ),

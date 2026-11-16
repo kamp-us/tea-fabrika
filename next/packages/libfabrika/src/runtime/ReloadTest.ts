@@ -18,6 +18,7 @@ import {
   Scope,
   Stream,
 } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
@@ -846,17 +847,19 @@ const agrees = Effect.fnUntraced(function* (w: World, a: Account, start: string,
 });
 
 /** Runs one generated walk in a fresh world, every resource given back with its scope. */
-const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, never>, runs = 100) =>
+const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Digest.Digest>, runs = 100) =>
   Effect.gen(function* () {
+    // Each walk is its own run, so its run edge provides the Digest that hashes the builds.
+    const walk = (g: fc.GeneratorValue) => body(g).pipe(Effect.provide(Digest.layerWebCrypto));
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check requires a Promise callback
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(body(g)));
+    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(walk(g)));
     // A walk of real runners is slow to shrink: report the first counterexample as found.
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check runs an async property as a Promise
     yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: propertyFailure });
   });
 
-const inWorld = <A, E>(rig: Rig, specs: ReadonlyArray<Spec>, body: (w: World) => Effect.Effect<A, E, never>) =>
+const inWorld = <A, E>(rig: Rig, specs: ReadonlyArray<Spec>, body: (w: World) => Effect.Effect<A, E, Digest.Digest>) =>
   Effect.scoped(
     Effect.gen(function* () {
       const w = yield* world(rig, specs);

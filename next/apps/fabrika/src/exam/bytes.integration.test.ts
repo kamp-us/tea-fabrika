@@ -7,6 +7,7 @@ import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -282,7 +283,7 @@ it.effect(
           built,
         ),
       ).toThrow();
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
   60_000,
 );
 
@@ -371,7 +372,7 @@ it.effect(
           control.built,
         ),
       ).toThrow();
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
   60_000,
 );
 
@@ -393,7 +394,7 @@ it.effect.prop(
       const call = tab.observed.find(tabCall(tab.entry))!;
       expect(call.assets, "the page is one of the tab call's own emitted assets").toContain(page!.body);
       expect(tab.observed.filter(isWindow)).toHaveLength(1);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
   { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 3 }) } },
 );
 

@@ -16,7 +16,7 @@ import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { Effect, Schema, Scope } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -346,7 +346,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         Effect.provide(SecureRandom.layerWebCrypto),
         Effect.provide(NodeServices.layer),
       );
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.scoped, Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
   );
 };
 
