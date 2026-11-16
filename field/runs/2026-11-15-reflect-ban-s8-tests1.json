@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s8-tests1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T19:36:00-08:00",
+  "ended": "2026-11-15T19:55:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 8 of the Reflect ban (0554, ticket 1056) in next/. Slice 8 has no Reflect call to rewrite: next/packages/vitest/** has 0 fires and slice 1 already put it in the next/ error block of .oxlintrc.json, so no config line is added. The slice is the shared stub, so this step writes L6 in next/packages/vitest/src/Stub.test.ts, three properties of 200 runs over Stub.make (an unknown name answers rest(name) with its arguments, an own member answers as given, then and symbol keys are undefined and awaiting gives the stub back). It is red now because next/packages/vitest/src/Stub.ts does not exist. The build must export make from Stub.ts and add export * as Stub from ./Stub.ts to index.ts. The laws were also run against a throwaway Stub.ts, green, and each of three plants went red; the throwaway was then deleted.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "plants": [
+    {
+      "law": "L6",
+      "plant": "throwaway Stub.ts trap answers then with a function: the awaiting law fails, expected [Function] to be undefined",
+      "result": "red"
+    },
+    {
+      "law": "L6",
+      "plant": "throwaway Stub.ts calls rest with a fixed name instead of the asked one: the rest law fails, expected name 'x' to equal the asked name",
+      "result": "red"
+    },
+    {
+      "law": "L6",
+      "plant": "throwaway Stub.ts ignores own: the own-member law fails, expected 'rest' to be 'own:...'",
+      "result": "red"
+    },
+    {
+      "law": "L5",
+      "plant": "Reflect.get({}, \"a\") added in next/packages/vitest/src/Stub.test.ts: oxlint reports error eslint(no-restricted-properties) 'Reflect.get' is restricted (0554); undone",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
