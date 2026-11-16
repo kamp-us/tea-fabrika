@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-plant-check-options-in-body",
+  "date": "2026-11-16",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": ".github/ci/plant-check.ts",
+    "line": 198
+  },
+  "says": "plant-check's header says a law's options argument is not part of the law, but lawsOf strips options only when the last argument is an object literal, so an options argument in second place, a number timeout, or options passed by name stays in the body; moving such a law onto the package's it changes its body and makes it a changed law that needs its own plant run.",
+  "proof": "lawsOf, lines 198 and 204: options = args.length >= 3 && last.type === \"ObjectExpression\" ? last : undefined; body = shape(options === undefined ? args.slice(1) : args.slice(1, -1)). So it(t, { timeout: 900_000 }, fn) becomes it(t, fn, { timeout: 900_000 }) and the body changes, against the header's 'Its options argument ... are not part of it'. Seen on next/apps/fabrika/src/build.integration.test.ts:363 and next/apps/fabrika/src/exam/bytes.integration.test.ts:229 and 348.",
+  "cost": "Slice C of the 0591 sweep left eight files undeclared; the 0580 sweep meets the same cost on every vitest-style file it moves to the package's it.",
+  "head": "6b3e6fd3d05ae3258c093bb3474ec9d266dc5eb6",
+  "ticket": "591",
+  "pr": null
+}
