@@ -287,6 +287,44 @@ below is run once and restored by the step that writes the law (0093).
   `deps` and the commit chain keep their `.integration.` names (0536).
 - No law reads a secret.
 
+## Plants carried, per lint row
+
+0591's Consequences: before an exam test is deleted, the rule that replaces it proves it catches
+the same things with that exam check's own plants. For each row classed lint, the table names the
+plants, the law that runs them against the replacing rule, and the break that must turn it red.
+No row is classed already held whole; the one held law (twin's real-stack run) is `pnpm lint`'s
+`lint:twin` step, green at `0683861`, and its break is the twin laws' own plant (a Zone with no
+local provider) run through `pnpm -s lint:twin` on a scratch copy of the stack: exit 1.
+
+| Exam file | Its cases, as the exam wrote them | Law, at its new path | Break that turns it red |
+|---|---|---|---|
+| clock.integration.test.ts | `view` lines 2, 3, 5, 11, 15, 16 fire; `clean`, `model.ts` and the `.test.tsx` copy pass | M1, oxlint-plugins/no-clock-in-view.test.ts and the `.tsx` plant in oxlint-plugins/builtin-plants.ts | drop the handler visitor of `no-clock-in-view`; turn `react/purity` off in `.oxlintrc.json` |
+| edge-comment.integration.test.ts | the 8 refused and 4 passed comments of `CASES`, the unused comment, and the five `.oxlintrc.json` laws | M1, oxlint-plugins/edge-comment.test.ts | accept `Edge:` as `edge:`; add an off line for `no-promises` on a `next/` product glob |
+| effect-functions.integration.test.ts | `source` lines 3 to 9 fire, 10 to 16 pass; the alias and namespace files fire at line 2; today's and the test copy pass | M1, oxlint-plugins/effect-functions.test.ts | skip the curried-wrapper case (line 7) |
+| ledger-sql.integration.test.ts | the six generated queries and the template fire at lines 1 to 7 of the runtime file; the five other files pass; fc seed 119120, 20 runs | M1, oxlint-plugins/no-ledger-sql.test.ts | stop reading bracket-quoted table names (`main.[entries]`) |
+| no-effect-run-outside-edge.integration.test.ts | `RUN_LINES` 4 to 12 at the fires file and at each of the 18 old edge paths; the edge file and `dev.ts` pass | M1, oxlint-plugins/no-effect-run-outside-edge.test.ts | drop `FiberSet.makeRuntimePromise` from the run set |
+| no-hand-tag.integration.test.ts | `fires` lines 2 to 7; `passes`, `ledger/Log.ts` and the test copy pass | M1, oxlint-plugins/no-hand-tag.test.ts | skip a class field named `_tag` (line 6) |
+| no-of.integration.test.ts | `fires` lines 1 to 11 and 13; `passes`; `lease.ts` line 2 only; the test file line 1 | M1, oxlint-plugins/no-of.test.ts | pass a named import of `of` (line 13) |
+| no-promises.integration.test.ts | the oxlint half: `fires` lines 3 to 30 as listed, `edges` 9 and 12, the unused comment at 7, `passes`, the test and today's copies; the typed half: the RPC bridge spellings, the wrapped edges and the alias cases, fc seed 119120 | M1, oxlint-plugins/no-promises.test.ts; M2, oxlint-plugins/promise-types.test.ts | skip `Stream.toAsyncIterable`; let a marker cover a whole statement |
+| object-imports.integration.test.ts | lines 1 and 6 of the planted `objects.ts`, for each of the four drawn modules, seed 119120, 4 runs | M1, oxlint-plugins/plants.test.ts | drop the side-effect import form from the `objects.ts` block |
+| one-store-hook.integration.test.ts | the fire lines of each of the 13 planted files as the exam lists them, and the no-crash run | M1, oxlint-plugins/one-store-hook.test.ts | drop the `void` call branch |
+| react-rules.integration.test.ts | `fires` lines 3, 8 and 10 for the three rules; `passes` and the test copy pass | M1, the `.tsx` plant in oxlint-plugins/builtin-plants.ts | turn `react/immutability` off in the `next/**/*.tsx` block |
+| layers.integration.test.ts | every planted tree and its expected edges, unclaimed files and exit codes, the pinned layer table and the patch scenarios | M1, oxlint-plugins/layers.test.ts | drop `roots` from the patched tool's reading; move `next-node` to layer 11 |
+| plant.ts, promise-types.ts | no plants of their own: they are the harness and the command the laws above run | M1, M2 | M1's and M2's breaks |
+| compiler.test.ts, compiler.ts | the eight planted views: a clean view, a ref in render, a named view with and without a row, a stale row, a clock, non-ASCII lines, a dropped store value | the moved laws, next/packages/libfabrika/src/node/build/compiler.test.ts | ignore `"use no memo"` with no row |
+| node-kinds.test.ts | a made-up name the real list does not hold | M3, oxlint-plugins/node-kinds.test.ts | skip the binding check |
+| secret-types.integration.test.ts | the planted entropy, Authorization and binding reads at lines 6, 7, 8, wrapped ones passing, fc seed 119120 | M2, oxlint-plugins/promise-types.test.ts | drop the `~effect/Redacted` test |
+| tsconfig-scope.integration.test.ts | the planted type error at each generated path (the `P19Launchd` example first) and the generated include sets | M2, oxlint-plugins/promise-types.test.ts | open one package fewer |
+| twin.integration.test.ts, twin.ts | the review 5 and review 6 forms beside the real stack, and the binding, remote and alias plants | the moved laws beside `twin.ts`, with `reads:` | treat a computed resource call as local |
+| deps.integration.test.ts (its lint half) | the manifest and import breaks of the planted trees, the exam's own files outside a package, and the exports-map cases | M4, oxlint-plugins/next-manifests.test.ts and oxlint-plugins/package-deps.test.ts | pick the first exports key that fits, not the longest |
+
+**The deletion comes last, per file.** The tests step, for each row: (1) runs the new law on the real
+code at its head, green; (2) runs it once under each break above, red, and puts each red result in
+its field row; (3) runs the old exam test on the same head, green, so both agree; (4) only then
+deletes the old file with `git rm`, in its own commit. A row whose law is not green on the real
+code, or not red under its break, keeps its exam file, and the slice is sent back. The review
+checks each row's four results in the field row before it passes the slice.
+
 ## How each new rule is measured at zero
 
 0591 asks that a check which blocks has its false alarms measured; AGENTS.md says about 0% to
