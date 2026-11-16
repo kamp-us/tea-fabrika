@@ -405,7 +405,6 @@ Write-ups are read by busy people, some of them not native English speakers.
 
 ## Changing files
 
-- Change code with an editor-style edit, not with a find-and-replace script run over the tree.
 - Move files with `git mv`, so history follows.
 - Stage your own paths by name. Another session may have work in the same checkout.
 - Push every commit when you make it, and give its branch a draft pull request at the first commit
