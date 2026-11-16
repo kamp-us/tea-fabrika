@@ -3,14 +3,17 @@
 
 import { dirname, matchesGlob } from "node:path";
 
+/** A value as `JSON.parse` gives it back. Written here, so this plain file imports no Effect. */
+type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
+
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
  * before decision 0546 says `lane`, since saved data keeps the word it was written with: it reads
  * as `quest`, and the old key goes, so the next write of the file says `quest`. Anything that is not
  * a JSON object is given back as it is, for the reader's own schema to refuse.
  */
-export const questKeyed = (saved: unknown): unknown => {
-  if (typeof saved !== "object" || saved === null || !("lane" in saved)) {
+export const questKeyed = (saved: Json): Json => {
+  if (typeof saved !== "object" || saved === null || Array.isArray(saved) || !("lane" in saved)) {
     return saved;
   }
 

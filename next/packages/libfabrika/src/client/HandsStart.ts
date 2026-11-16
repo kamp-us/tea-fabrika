@@ -48,7 +48,7 @@ const forHands = (m: DialMsg): m is Exclude<DialMsg, { readonly type: "socket_fa
   m.type !== "socket_failure";
 
 /** A call that says what the client has `seen` also says when it was sent, on the client's own clock. */
-const stamped = (params: unknown, sentAt: string): unknown =>
+const stamped = <P>(params: P, sentAt: string): P =>
   Predicate.isObject(params) && "seen" in params ? { ...params, sentAt } : params;
 
 /**

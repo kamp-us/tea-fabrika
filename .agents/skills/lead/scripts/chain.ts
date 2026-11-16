@@ -240,7 +240,7 @@ const isFault = Schema.is(FaultS);
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
   for (const raw of out.trim().split("\n").toReversed()) {
-    const parsed = Result.try((): unknown => JSON.parse(raw));
+    const parsed = Result.try((): Schema.Json => JSON.parse(raw));
 
     if (Result.isFailure(parsed)) {
       continue;

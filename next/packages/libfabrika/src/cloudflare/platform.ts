@@ -80,7 +80,7 @@ type Calls<S> = {
  * @stability unstable
  * @category error handling
  */
-export const rejected = (error: unknown): unknown => {
+export const rejected = <E>(error: E): E | Error => {
   if (!(error instanceof LedgerError) || error.reason !== "unreachable" || error.message === undefined) {
     return error;
   }
