@@ -37,7 +37,7 @@ describe("shared Worker settings reader, next/", () => {
         }
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
     // vector: the port protocol's inclusive endpoints and their immediate neighbours.
-    [[1], [65535], [0], [65536]],
+    { examples: [[1], [65535], [0], [65536]] },
   );
 
   StartsTest.law(
