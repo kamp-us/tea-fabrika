@@ -402,7 +402,7 @@ describe("T325 K6 plancheck, today's tooling", () => {
           const plan = join(root, "plan.md");
           writeFileSync(
             plan,
-            `${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 3\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\nEstimate: 3 steps, $2\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
+            `${draft ? "" : "Approved by the lead agent, builds note."}\nPlancheck-Version: 3\n\n# Plan\n\n\`\`\`ts\nconst idea = 1;\n\`\`\`\n\n## Laws\n${laws("fc.record: text")}\n## Files\n${table(["File", "Owner step"], [["src/plain.ts", "build"]])}\n## Existing tools\n- \`src/plain.ts\`: searched src; none found.\n## Size\n2 files, 10 lines, 1 agent hour. Confidence: 90%.\nEstimate: 3 steps, $2\n## What it records\nRefusals.\n## What it cannot tell us\nNo live push.\n## Open questions\nNone.\nhttps://github.com/usirin/tea-fabrika/pull/532\n${leak ? privateWord : "Safe text."}\n`,
           );
           const run = () =>
             spawnSync("sh", [join(scripts, "plan/scripts/plancheck.sh"), ...(draft ? ["--draft"] : []), plan], {
@@ -568,6 +568,49 @@ describe("laws and validation advice, today's tooling", () => {
       expect(without.stderr).toContain("MAIN is not set");
     } finally {
       rmSync(folder, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("0587 an Existing tools line for each new helper, today's tooling", () => {
+  // Plants: drop the existing tools check, stop reading the word "searched", read a line inside a
+  // fence, or ask a line of a test file, a file in the repo or a file the tests step owns.
+  const KNOWN = "- `src/plain.ts`: searched `rg plain src`; none found.";
+  const plan = (row: string, line: string) =>
+    complete()
+      .replace("| src/plain.ts | build |", `| src/plain.ts | build |\n${row}`)
+      .replace(KNOWN, `${KNOWN}\n${line}`);
+
+  it("property: a new code file needs a line that names it and says what was searched", () => {
+    fc.assert(
+      fc.property(word, fc.constantFrom(".ts", ".tsx", ".mjs", ".js"), word, (name, ext, other) => {
+        const path = `src/helpers/${name}${ext}`;
+        const row = `| ${path} | build |`;
+        const draft = (line: string) => modeCheck(`\nPlancheck-Version: 3\n${plan(row, line)}`, "--draft");
+
+        const missing = draft("");
+        expect(missing.code, missing.text).toBe(1);
+        expect(missing.text).toContain(`plan existing tools: ${path} is a new code file`);
+
+        const good = draft(`- \`${path}\`: searched \`rg ${name}\` and npm; none fits.`);
+        expect(good.code, good.text).toBe(0);
+
+        expect(draft(`- \`${path}\`: none fits.`).code).toBe(1);
+        expect(draft(`- \`src/helpers/${other}x${ext}\`: searched npm; none fits.`).code).toBe(1);
+        expect(draft(`\`\`\`text\n${path}: searched npm\n\`\`\``).code).toBe(1);
+      }),
+      { seed: 586, numRuns: 4 },
+    );
+  });
+
+  it("scenario: asks no line of a test file, a file in the repo or a file the tests step owns", () => {
+    for (const row of [
+      "| src/helpers/fresh.test.ts | build |",
+      "| .agents/skills/lead/scripts/pr/Queue.ts | build |",
+      "| src/helpers/fresh-support.ts | tests |",
+    ]) {
+      const ran = modeCheck(`\nPlancheck-Version: 3\n${plan(row, "")}`, "--draft");
+      expect(ran.code, ran.text).toBe(0);
     }
   });
 });
