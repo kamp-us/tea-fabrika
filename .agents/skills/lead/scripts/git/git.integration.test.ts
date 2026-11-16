@@ -30,7 +30,7 @@ import { Effect, Exit, FileSystem, Layer, Path, type Scope } from "effect";
 import { Command } from "effect/cli";
 import { TestConsole } from "effect/testing";
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { governance } from "../governance.ts";
 import { run } from "../pr/command.ts";
 import { Git } from "./Git.ts";
@@ -608,6 +608,140 @@ describe("the Git service's two layers", () => {
       ),
       { ...runs, examples: [[ANCESTOR_MERGE], [SWAPPED_LINES]] },
     ));
+
+  // S6 added `commonDir`, `remote` and `globalConfig` for Env.ts. A small real repository, maybe a
+  // worktree of it, maybe an origin, and a global config file of its own (GIT_CONFIG_GLOBAL, so no
+  // person's config is read) that sets user.name and user.email or leaves them out. The model of the
+  // same world must answer the three calls as real git does.
+  // The tests step wrote this law before GitProcess had the three calls, so each plant ran once on a
+  // reference of them, written for the plants and restored by copy before the commit.
+  // Plant, run once: GitProcess's `remote` failed on a missing remote. Red: "no origin" was a
+  // GitError on the real layer and none on the model. Plant, run once: GitProcess's `commonDir` ran
+  // `--show-toplevel`. Red: in a worktree, the real layer named the worktree and the model its main
+  // checkout's git folder.
+  it("property: GitProcess and GitTest answer commonDir, remote and globalConfig alike, in a main checkout and a worktree", () => {
+    const seen = new Set<string>();
+    const world = fc.record({
+      worktree: fc.boolean(),
+      origin: fc.option(
+        fc.constantFrom(
+          "https://github.com/owner/name.git",
+          "git@github.com:owner/name",
+          "https://example.com/a/b.git",
+        ),
+        { nil: undefined, freq: 2 },
+      ),
+      name: fc.option(
+        fc.array(word, { minLength: 1, maxLength: 3 }).map((w) => w.join(" ")),
+        {
+          nil: undefined,
+          freq: 2,
+        },
+      ),
+      email: fc.option(
+        word.map((w) => `${w.toLowerCase()}@example.invalid`),
+        { nil: undefined, freq: 2 },
+      ),
+    });
+    return fc.assert(
+      fc.asyncProperty(world, (w) =>
+        ran(
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const dir = yield* fs.realPath(yield* fs.makeTempDirectoryScoped({ prefix: "git-env-law-" }));
+            const main = path.join(dir, "main");
+            const config = path.join(dir, "gitconfig");
+            yield* fs.makeDirectory(main);
+            yield* fs.writeFileString(config, "");
+            const git = Effect.fn("git.integration.envGit")(function* (cwd: string, ...args: ReadonlyArray<string>) {
+              const r = yield* run("git", args, cwd, { env: CLEAN });
+              expect(r.code, `git ${args.join(" ")}: ${r.err}`).toBe(0);
+            });
+            yield* git(main, "init", "-q", "-b", "main");
+
+            for (const [key, value] of PINNED) {
+              yield* git(main, "config", key, value);
+            }
+
+            yield* git(main, "commit", "-q", "--allow-empty", "-m", "base");
+
+            if (w.origin !== undefined) {
+              yield* git(main, "remote", "add", "origin", w.origin);
+            }
+
+            if (w.name !== undefined) {
+              yield* git(main, "config", "--file", config, "user.name", w.name);
+            }
+
+            if (w.email !== undefined) {
+              yield* git(main, "config", "--file", config, "user.email", w.email);
+            }
+
+            const top = w.worktree ? path.join(dir, "wt") : main;
+
+            if (w.worktree) {
+              yield* git(main, "worktree", "add", "-q", "-b", "wt", top);
+            }
+
+            const model: GitTest.Model = {
+              top,
+              ...(w.worktree ? { commonDir: path.join(main, ".git") } : {}),
+              commits: { b: { parents: [], tree: {} } },
+              refs: { HEAD: "b" },
+              remotes: w.origin === undefined ? {} : { origin: w.origin },
+              globalConfig: {
+                ...(w.name === undefined ? {} : { "user.name": w.name }),
+                ...(w.email === undefined ? {} : { "user.email": w.email }),
+              },
+            };
+            const ask = Effect.gen(function* () {
+              const service = yield* Git;
+              return {
+                commonDir: yield* service.commonDir,
+                origin: yield* service.remote("origin"),
+                other: yield* service.remote("upstream"),
+                name: yield* service.globalConfig("user.name"),
+                email: yield* service.globalConfig("user.email"),
+              };
+            });
+            // GitProcess runs git in this process's environment, so the global config file is set
+            // there for this case alone. Config passed in the environment (GIT_CONFIG_COUNT) is
+            // turned off too: a cloud box sets a `url.<base>.insteadOf` there, which rewrites the
+            // URL `remote get-url` prints, and the law must not lean on the machine (0052).
+            vi.stubEnv("GIT_CONFIG_GLOBAL", config);
+            vi.stubEnv("GIT_CONFIG_NOSYSTEM", "1");
+            vi.stubEnv("GIT_CONFIG_COUNT", "0");
+            const real = yield* ask.pipe(
+              Effect.provide(GitProcess.layer(top).pipe(Layer.provide(NodeServices.layer))),
+              Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
+            );
+            const fake = yield* ask.pipe(Effect.provide(GitTest.layer(model)));
+            expect(fake).toEqual(real);
+            expect(real.commonDir).toBe(path.join(main, ".git"));
+            seen.add(w.worktree ? "worktree" : "main checkout");
+            seen.add(w.origin === undefined ? "no origin" : "origin");
+            seen.add(w.name === undefined ? "no user.name" : "user.name");
+          }),
+        ),
+      ),
+      {
+        ...runs,
+        numRuns: runsFor({ fast: 6, full: 30 }),
+        // Coverage, once every run is done: both checkouts, with and without origin and a name,
+        // each met at least once. A case never reached fails here by name.
+        reporter: (out) => {
+          if (out.failed) {
+            throw new Error(fc.defaultReportMessage(out));
+          }
+
+          expect([...seen].toSorted()).toEqual(
+            ["main checkout", "no origin", "no user.name", "origin", "user.name", "worktree"].toSorted(),
+          );
+        },
+      },
+    );
+  });
 
   // Plant, run once: governance.ts's edge mapped a clean run to exit 1 (`Effect.as(1)`). Red: the
   // process exited 1 where the law asks 0. Plant, run once: a bad command line mapped to exit 1. Red:

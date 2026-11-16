@@ -5,7 +5,7 @@
 // The model answers only the calls it can answer the way git does; any other call fails with
 // GitError, never with an empty answer. git.integration.test.ts holds it to real git on small real
 // repositories, so the model stays honest as later slices add calls.
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, FileSystem, Layer, Option } from "effect";
 import { Git, GitError } from "./Git.ts";
 
 /** One commit's files: each path from the top, and its text. */
@@ -21,7 +21,20 @@ export type Model = {
   readonly commits: Readonly<Record<string, Commit>>;
   /** Each ref, `HEAD` included, and the sha it names. */
   readonly refs: Readonly<Record<string, string>>;
+  /**
+   * What `rev-parse --path-format=absolute --git-common-dir` prints: the git folder every worktree
+   * of the repository shares. Left out, the model is its own main checkout, `<top>/.git`.
+   */
+  readonly commonDir?: string;
+  /** Each remote's URL by its name, as `remote get-url <name>` prints it; none when left out. */
+  readonly remotes?: Readonly<Record<string, string>>;
+  /** The keys `config --global --get <key>` answers, and their values; none when left out (S6). */
+  readonly globalConfig?: Readonly<Record<string, string>>;
 };
+
+/** The value a key has in a record the model may leave out, or none. */
+const lookup = (record: Readonly<Record<string, string>> | undefined, key: string): Option.Option<string> =>
+  record !== undefined && Object.hasOwn(record, key) ? Option.fromNullishOr(record[key]) : Option.none();
 
 /** The sha a ref or a sha names, or `undefined` when the model has neither. */
 const resolve = (model: Model, name: string): string | undefined =>
@@ -199,6 +212,9 @@ export const layer = (model: Model): Layer.Layer<Git> =>
     Git.of({
       top: Effect.succeed(model.top),
       diff: (args) => answerDiff(model, args),
+      commonDir: Effect.succeed(model.commonDir ?? `${model.top}/.git`),
+      remote: (name) => Effect.succeed(lookup(model.remotes, name)),
+      globalConfig: (key) => Effect.succeed(lookup(model.globalConfig, key)),
     }),
   );
 
