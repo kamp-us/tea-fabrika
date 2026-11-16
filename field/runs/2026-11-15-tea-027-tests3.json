@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-tests3",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1391",
+  "started": "2026-11-15T17:54:00-08:00",
+  "ended": "2026-11-15T18:04:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Third tests round for slice 1 of docs/plan/quests/tea-msg-tag-PLAN.md (body 301e56d8241d), after the lead kept today's tea 0.25.0 patch. patches/@demlik__tea@0.25.0.patch is restored byte for byte as on main, and its patchedDependencies row is back, keyed to @demlik/tea@0.25.0, with the plan's comment saying it is today's version's alone; the catalogs.old comment now says it keeps its patch. The frozen install refused the old lockfile, as patchedDependencies changed, so the lockfile was rewritten with pnpm install --lockfile-only: it adds the patch row with main's own hash and moves only the catalog:old copies to the patched 0.25.0. The frozen install then passed. Law E2 is green: pnpm -r --no-bail typecheck exits 0 in all 30 projects with no error or warning. packages/pipeline/src/machine-make.test.ts (14 tests), exact-versions.test.ts (58) and duplicate-packages.test.ts (1) pass. pnpm format, pnpm lint and the list ratchet pass.",
+  "plants": [
+    {
+      "law": "E2 pnpm typecheck, packages/pipeline (machine-make.test.ts:60-69)",
+      "plant": "(a) the @demlik/tea@0.25.0 patch row dropped and installed, so 0.25.0 ran unpatched: TS2344 at machine-make.test.ts:69",
+      "result": "red"
+    },
+    {
+      "law": "E2 pnpm typecheck, the .agents project",
+      "plant": "(b) the .agents checker override dropped from tsconfig.base.json: 89 TS377051 warnings, exit 126",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Each plant ran once on saved copies and was restored by copy, checked with cmp. Plant (a) changed the lockfile and node_modules while it ran; both files were restored by copy and a frozen install put the patched copy back. One full no-bail typecheck and two single-project tsc runs, each started only when pgrep -x tsgo found none. The build's line in .decisions/0256-a-program-is-one-program-make.md still says no patch is needed; the amended plan gives that line new words, and it is the build step's file.",
+  "step": "tests"
+}

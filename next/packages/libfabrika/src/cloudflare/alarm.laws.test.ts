@@ -44,6 +44,27 @@ const unexpected = () => {
   throw new Error("unexpected platform call");
 };
 
+const lookup = "SELECT name FROM sqlite_master WHERE name='process_state'";
+
+// The Process object's own accounting (P34c), set up on each build: its two tables and its fault
+// slot, then the guard's fault check before a step. Each is asked for the object's own name only.
+const accounting = (name: string) =>
+  [
+    ["CREATE TABLE IF NOT EXISTS quota_local (account TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+    ["CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)"],
+    ["INSERT OR IGNORE INTO quota_fault (name,value) VALUES (?,?)", name, ""],
+    ["SELECT value FROM quota_fault WHERE name=?", name],
+  ].map((call) => JSON.stringify(call));
+
+/** The object's store: the checkpoint lookup and its own accounting answer empty, and any other query throws. */
+const processSql = (name: string) => {
+  const allowed = new Set([JSON.stringify([lookup]), ...accounting(name)]);
+  return {
+    exec: (query: string, ...args: ReadonlyArray<unknown>) =>
+      allowed.has(JSON.stringify([query, ...args])) ? [] : unexpected(),
+  };
+};
+
 const checkAlarmTime = (at: number) => {
   if (at <= 0) {
     throw new TypeError("setAlarm requires a time greater than 0");
@@ -105,12 +126,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               armed = null;
               eligible = null;
             },
-            sql: {
-              exec: (query: string) => {
-                expect(query).toBe("SELECT name FROM sqlite_master WHERE name='process_state'");
-                return [];
-              },
-            },
+            sql: processSql("alarm:866"),
             transactionSync: unexpected,
           });
           yield* Effect.acquireRelease(
@@ -314,11 +330,8 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
             delete: unexpected,
             setAlarm: unexpected,
             deleteAlarm: unexpected,
-            // The one query a build makes: whether the object holds a checkpoint yet (none here).
-            sql: {
-              exec: (query: string) =>
-                query === "SELECT name FROM sqlite_master WHERE name='process_state'" ? [] : unexpected(),
-            },
+            // A build asks whether the object holds a checkpoint yet (none here) and sets up its accounting.
+            sql: processSql("alarm:502"),
             transactionSync: unexpected,
           });
           yield* Effect.acquireRelease(
