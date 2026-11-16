@@ -107,7 +107,7 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
   );
   const snapshot: Snapshot = {
     values,
-    origins: Schema.decodeUnknownSync(Schema.Record(Schema.String, Origin))(resolved.origins),
+    origins: Schema.decodeSync(Schema.Record(Schema.String, Origin))(resolved.origins),
     hash: yield* hashValues(values),
   };
   return snapshot;

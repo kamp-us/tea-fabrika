@@ -259,7 +259,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     const text = yield* fs.readFileString(file);
     return yield* Effect.forEach(
       text.split("\n").filter(Boolean),
-      (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
+      (row) => Schema.decodeEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
   }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));
@@ -299,7 +299,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         return null;
       }
 
-      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
+      return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.NonEmptyString))(
         yield* fs.readFileString(lastFile),
       );
     }).pipe(Effect.mapError((cause) => new BrainError({ reason: "bad_row", cause })));

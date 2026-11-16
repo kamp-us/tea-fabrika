@@ -847,7 +847,7 @@ describe("T877 public TOML edits, next/", () => {
           const encoded = yield* Schema.encodeEffect(Codec.file(declaration))(value);
           const candidate = yield* toml.set(source, declaration.segments, encoded);
           const parsed = yield* toml.parse(candidate);
-          yield* Schema.decodeUnknownEffect(Files.schema(group, scope))(parsed.value, strict);
+          yield* Schema.decodeEffect(Files.schema(group, scope))(parsed.value, strict);
           return candidate;
         });
 
@@ -858,7 +858,7 @@ describe("T877 public TOML edits, next/", () => {
           text = yield* checkedSet(text, Declarations.port, port, "person");
           text = yield* checkedSet(text, bytes, ByteSize.bytes(count), "person");
           const parsed = yield* toml.parse(text);
-          const decoded = yield* Schema.decodeUnknownEffect(file)(parsed.value, strict);
+          const decoded = yield* Schema.decodeEffect(file)(parsed.value, strict);
           expect(decoded).toEqual({ instance: { port }, limits: { record: ByteSize.bytes(count) } });
           expect(get(parsed.value, bytes.segments)).toBe(Schema.encodeSync(Codec.file(bytes))(ByteSize.bytes(count)));
           expect(Exit.isFailure(yield* Effect.exit(checkedSet(text, Declarations.port, port, "repo")))).toBe(true);
@@ -868,9 +868,7 @@ describe("T877 public TOML edits, next/", () => {
           const raw = yield* toml.set(text, Declarations.port.segments, invalid);
           expect(get((yield* toml.parse(raw)).value, Declarations.port.segments)).toBe(invalid);
           expect(
-            Exit.isFailure(
-              yield* Effect.exit(Schema.decodeUnknownEffect(file)((yield* toml.parse(raw)).value, strict)),
-            ),
+            Exit.isFailure(yield* Effect.exit(Schema.decodeEffect(file)((yield* toml.parse(raw)).value, strict))),
           ).toBe(true);
           retained(text, ["# settings-雪"]);
         }

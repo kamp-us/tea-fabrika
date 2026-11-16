@@ -27,7 +27,7 @@ const translate = (cause: LedgerError): ProcessHistoryError =>
   });
 
 const validate = Effect.fnUntraced(function* (entry: Entry) {
-  yield* Schema.decodeUnknownEffect(Position)(entry.pos);
+  yield* Schema.decodeEffect(Position)(entry.pos);
 
   if (entry._tag === "send") {
     yield* Schema.decodeUnknownEffect(Send)(entry.body);

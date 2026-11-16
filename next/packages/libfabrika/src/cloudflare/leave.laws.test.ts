@@ -204,7 +204,7 @@ const instance = Effect.fnUntraced(function* () {
     facts: (tag: "monitored" | "demonitored") =>
       sql
         .exec("SELECT body FROM entries WHERE stream='processes' AND _tag=? ORDER BY rev", tag)
-        .map((row) => Schema.decodeUnknownSync(Fact)(String(row.body))),
+        .map((row) => Schema.decodeSync(Fact)(String(row.body))),
   };
 });
 
@@ -271,7 +271,7 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                         const session = move < 10 ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[NONE + n]!;
                         const ending = [...(held.get(session) ?? [])]
                           .filter(([, state]) => state === "live")
-                          .map(([key]) => Schema.decodeUnknownSync(Key)(key));
+                          .map(([key]) => Schema.decodeSync(Key)(key));
                         const before = i.facts("demonitored").length;
                         const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
                         const exit = yield* closed(i.project.leave(client, session));
@@ -291,7 +291,7 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                     );
                     const kept = [...held].flatMap(([session, watches]) =>
                       [...watches.keys()].map((key) => {
-                        const [client, ref] = Schema.decodeUnknownSync(Key)(key);
+                        const [client, ref] = Schema.decodeSync(Key)(key);
                         return JSON.stringify([client, session, ref]);
                       }),
                     );

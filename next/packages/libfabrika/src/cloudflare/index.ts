@@ -107,7 +107,7 @@ export const workerLoader = (
     const code =
       found == null
         ? undefined
-        : yield* Schema.decodeUnknownEffect(BuiltProgram)(found).pipe(
+        : yield* Schema.decodeEffect(BuiltProgram)(found).pipe(
             Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })),
           );
 

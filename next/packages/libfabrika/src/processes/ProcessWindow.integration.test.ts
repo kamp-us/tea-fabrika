@@ -171,7 +171,7 @@ describe("T540, next/ process UUIDv7 refusals", () => {
     ([{ process, version, variant, first, length, char, position, prefix }]) => {
       const suffix = process.slice("process_".length);
       const replace = (at: number, char: string) => `process_${suffix.slice(0, at)}${char}${suffix.slice(at + 1)}`;
-      expect(Result.isSuccess(Schema.decodeUnknownResult(Id.Process)(process))).toBe(true);
+      expect(Result.isSuccess(Schema.decodeResult(Id.Process)(process))).toBe(true);
 
       for (const [part, invalid] of [
         ["version", replace(10, version)],
@@ -342,7 +342,7 @@ describe("T319, next/ complete dead values", () => {
     it(`plant, make ${field} optional or default it: complete dead values decode, removing ${field} fails`, () => {
       fc.assert(
         fc.property(complete, (value) => {
-          expect(Result.isSuccess(Schema.decodeUnknownResult(Dead)(value))).toBe(true);
+          expect(Result.isSuccess(Schema.decodeResult(Dead)(value))).toBe(true);
           const { [field]: _removed, ...missing } = value;
           expect(Result.isFailure(Schema.decodeUnknownResult(Dead)(missing))).toBe(true);
         }),

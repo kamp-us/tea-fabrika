@@ -42,7 +42,7 @@ const saved = Effect.fnUntraced(function* (entry: Entry, start: string) {
   }
 
   const { id, rev, pos, arrivedAt, by, for: person, sentAt, seen, parent, traceId } = entry;
-  return yield* Schema.decodeUnknownEffect(Start.Receipt)({
+  return yield* Schema.decodeEffect(Start.Receipt)({
     ...body,
     entry: { id, stream: entry.stream, rev, pos, arrivedAt, by, for: person, sentAt, seen, parent, traceId },
   }).pipe(Effect.mapError(decode));
@@ -71,7 +71,7 @@ export const fromLedger = () =>
       const ledger = yield* Referee;
       const lookup = (start: string) => ledger.read(stream(start), 0, "settings").pipe(Effect.mapError(storage));
       const read = Effect.fnUntraced(function* (start: string) {
-        yield* Schema.decodeUnknownEffect(Start.Input.fields.start)(start).pipe(Effect.mapError(decode));
+        yield* Schema.decodeEffect(Start.Input.fields.start)(start).pipe(Effect.mapError(decode));
         const entries = yield* lookup(start);
         const entry = entries[0];
 
@@ -127,7 +127,7 @@ export const fromLedger = () =>
           });
         const line = lineFor({ ...origin, build: input.build }, event.make(body));
         const reply = yield* ledger.append(stream(input.start), input.start, line).pipe(Effect.mapError(storage));
-        const ack = yield* Schema.decodeUnknownEffect(Appended)(reply).pipe(Effect.mapError(decode));
+        const ack = yield* Schema.decodeEffect(Appended)(reply).pipe(Effect.mapError(decode));
 
         if (ack._tag !== "placed") {
           return yield* new StartsError({ reason: new Refused({ cause: ack }) });

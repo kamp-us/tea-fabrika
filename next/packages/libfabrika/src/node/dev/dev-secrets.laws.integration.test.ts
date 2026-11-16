@@ -161,7 +161,7 @@ const flow = async (sample: Flow) => {
     return Effect.runPromise(store.write(rows));
   };
   const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
-    const call = Schema.decodeUnknownSync(
+    const call = Schema.decodeSync(
       Schema.fromJsonString(
         Schema.Struct({
           target: Schema.String,
@@ -320,7 +320,7 @@ const flow = async (sample: Flow) => {
               // Plugin props and HTTP headers are both platform sends. Each must receive
               // the bearer bytes; serializing a Redacted here would break the real instance.
               expect(
-                Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
+                Schema.decodeSync(Schema.fromJsonString(Schema.Struct({ token: Schema.String })))(
                   plugin.sockets[0]!.service.props.json,
                 ),
               ).toEqual({ token: bearer });

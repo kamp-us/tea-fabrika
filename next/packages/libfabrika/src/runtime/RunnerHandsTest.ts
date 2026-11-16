@@ -148,7 +148,7 @@ const inputId = (n: number) => `input_0000000000e008${n.toString(16).padStart(12
 
 const letter = (n: number, input: unknown): Incoming => ({
   id: `letter-${n}`,
-  envelope: { id: Schema.decodeUnknownSync(InputId)(inputId(n)), by: person, arrivedAt: 1794099600000 + n, input },
+  envelope: { id: Schema.decodeSync(InputId)(inputId(n)), by: person, arrivedAt: 1794099600000 + n, input },
   sentAt: "2026-11-15T01:00:00Z",
   seen: 0,
   span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },

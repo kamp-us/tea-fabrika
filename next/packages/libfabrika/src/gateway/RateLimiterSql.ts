@@ -31,7 +31,7 @@ const fail = (cause: unknown) =>
 const unsupported = Effect.fail(fail(new Error("Unsupported gateway budget operation")));
 
 const make = (sql: Sql, options: { readonly build: string; readonly policy: Policy }) => {
-  const checked = Schema.decodeUnknownResult(Policy)(options.policy);
+  const checked = Schema.decodeResult(Policy)(options.policy);
   const build = options.build;
   return RateLimiter.RateLimiterStore.of({
     fixedWindow: Effect.fnUntraced(function* (

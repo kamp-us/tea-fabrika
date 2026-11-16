@@ -64,7 +64,7 @@ const call = Effect.fnUntraced(function* (
   start: string,
   input?: Start.Input,
 ) {
-  yield* Schema.decodeUnknownEffect(Start.Input.fields.start)(start).pipe(
+  yield* Schema.decodeEffect(Start.Input.fields.start)(start).pipe(
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );
   const raw = yield* work;

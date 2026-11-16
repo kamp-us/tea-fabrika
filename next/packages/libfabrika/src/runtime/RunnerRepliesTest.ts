@@ -204,9 +204,7 @@ let counter = 0;
 const inputId = (): typeof InputId.Type => {
   counter = (counter + 1) % 1024;
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
-  return Schema.decodeUnknownSync(InputId)(
-    `input_0000000000e0080000000000${alphabet[counter >> 5]}${alphabet[counter % 32]}`,
-  );
+  return Schema.decodeSync(InputId)(`input_0000000000e0080000000000${alphabet[counter >> 5]}${alphabet[counter % 32]}`);
 };
 
 const walk = (

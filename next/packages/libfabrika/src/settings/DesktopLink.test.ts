@@ -37,14 +37,14 @@ it.effect.prop(
       expect(resolved.origins[setting.path]?._tag).toBe(source);
       expect(
         Result.isSuccess(
-          Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"))({
+          Schema.decodeResult(Files.schema(Declarations.all, "person"))({
             desktop: { "link-ttl": file },
           }),
         ),
       ).toBe(true);
       expect(
         Result.isFailure(
-          Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), {
+          Schema.decodeResult(Files.schema(Declarations.all, "repo"), {
             onExcessProperty: "error",
           })({ desktop: { "link-ttl": file } }),
         ),

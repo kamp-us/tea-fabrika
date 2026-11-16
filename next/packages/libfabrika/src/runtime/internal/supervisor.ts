@@ -298,7 +298,7 @@ export const supervisor = Machine.make({
       Supervision.make({
         v: 2,
         name: ctx.name,
-        policy: Schema.decodeUnknownSync(Policy)(ctx.policy),
+        policy: Schema.decodeSync(Policy)(ctx.policy),
         seq: 0,
         journal: Journal.cases.idle.make({ process: ctx.process }),
         build: ctx.build,

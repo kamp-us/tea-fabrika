@@ -57,7 +57,7 @@ type Cell = typeof Cell extends Arbitrary.Arbitrary<infer A> ? A : never;
 /** A checked bundle: its bytes and their own hash, decoded through the shape `put` takes. */
 const built = (text: string) =>
   hash(text).pipe(
-    Effect.flatMap((digest) => Schema.decodeUnknownEffect(BuiltProgram)({ hash: digest, source: text })),
+    Effect.flatMap((digest) => Schema.decodeEffect(BuiltProgram)({ hash: digest, source: text })),
     Effect.orDie,
   );
 

@@ -87,7 +87,7 @@ export const RecordPartLive = RecordPart.make(
       RecordedStart,
       RecordedStart.pipe(
         Effect.tap((start) =>
-          Schema.decodeUnknownEffect(Legacy)(start.input).pipe(
+          Schema.decodeEffect(Legacy)(start.input).pipe(
             Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
           ),
         ),

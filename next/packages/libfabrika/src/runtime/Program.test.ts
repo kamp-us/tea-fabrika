@@ -290,7 +290,7 @@ it("P1: policy survives authoring, decoding and Node description, while malforme
                 ),
               ).declaration;
               policyCheck(described, m.policy);
-              policyCheck(Schema.decodeUnknownSync(Declaration)(described), m.policy);
+              policyCheck(Schema.decodeSync(Declaration)(described), m.policy);
               r.described = described;
             }
 
@@ -392,7 +392,7 @@ describe("Program.make authoring laws, next/", () => {
         });
         expect(p.inputs.add.schema).toBe(fields.machine.msg);
         expect(p.inputs.throw.schema).toBe(fields.machine.msg);
-        expect(Result.isSuccess(Schema.decodeUnknownResult(Program.schema)(p))).toBe(true);
+        expect(Result.isSuccess(Schema.decodeResult(Program.schema)(p))).toBe(true);
         expect(load(p).init(null)).toMatchObject({ model: initial, view: { count: initial.count } });
       }),
       parameters,
@@ -436,7 +436,7 @@ describe("Program.make authoring laws, next/", () => {
         expect(calls).toEqual([]);
         expect(p.inputs.read._tag).toBe("read");
         expect(p.inputs.read.description).toBe(description);
-        expect(Schema.decodeUnknownSync(p.inputs.read.schema)({ offset: query })).toEqual({
+        expect(Schema.decodeSync(p.inputs.read.schema)({ offset: query })).toEqual({
           offset: query,
         });
       }),
@@ -746,7 +746,7 @@ describe("P11 program contract and p22 refusal", () => {
   );
   it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
     const { Program } = await import("./Program.ts");
-    const p = load(Schema.decodeUnknownSync(Program.schema)(spec()));
+    const p = load(Schema.decodeSync(Program.schema)(spec()));
     expect(p.init(null)).toMatchObject({
       _tag: "stepped",
       model: { count: 0, replies: 0 },

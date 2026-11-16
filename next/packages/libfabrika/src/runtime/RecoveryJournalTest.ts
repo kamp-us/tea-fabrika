@@ -373,7 +373,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
   const input = (id: string, m: unknown): Incoming => ({
     id,
     envelope: {
-      id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${(++inputs).toString(16).padStart(12, "0")}`),
+      id: Schema.decodeSync(InputId)(`input_0000000000e008${(++inputs).toString(16).padStart(12, "0")}`),
       by: person,
       arrivedAt: 0,
       input: m,

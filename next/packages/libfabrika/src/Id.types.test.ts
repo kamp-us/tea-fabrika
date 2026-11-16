@@ -71,7 +71,7 @@ const checkTypes = (raw: string) => {
     return yield* letter;
   });
   const made = ProcessId.makeEffect(raw);
-  const decoded = Schema.decodeUnknownEffect(ProcessId)(raw);
+  const decoded = Schema.decodeEffect(ProcessId)(raw);
   expectTypeOf(made).toEqualTypeOf<Effect.Effect<typeof ProcessId.Type, SchemaIssue.Issue>>();
   expectTypeOf(decoded).toEqualTypeOf<Effect.Effect<typeof ProcessId.Type, Schema.SchemaError>>();
   expectTypeOf(Id.makeEffect("process")).toEqualTypeOf<Effect.Effect<typeof ProcessId, IdError>>();

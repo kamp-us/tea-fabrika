@@ -96,7 +96,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
                 { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
               ),
             );
-            const actual = Schema.decodeUnknownSync(
+            const actual = Schema.decodeSync(
               Schema.fromJsonString(
                 Schema.Struct({
                   model: Schema.Struct({ count: Schema.Int }),

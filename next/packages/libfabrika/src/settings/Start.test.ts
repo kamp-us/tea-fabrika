@@ -39,7 +39,7 @@ describe("instance start envelope, next/", () => {
         ]);
         const base = yield* StartsTest.input(recipe);
         const wire = { ...base, ...(cap === undefined ? {} : { limits: { recordBytes: cap } }) };
-        const decoded = yield* Schema.decodeUnknownEffect(Start.Input)(wire, { onExcessProperty: "error" });
+        const decoded = yield* Schema.decodeEffect(Start.Input)(wire, { onExcessProperty: "error" });
         expect(decoded.settings).toEqual(base.settings);
         expect(decoded.limits?.recordBytes).toBe(cap);
       }).pipe(Effect.provide(Digest.layerWebCrypto)),

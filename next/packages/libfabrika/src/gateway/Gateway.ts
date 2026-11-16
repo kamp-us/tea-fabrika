@@ -365,7 +365,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const clients = yield* ClientManager;
   const sink = yield* SpanSink;
   const limiter = yield* RateLimiter;
-  const ratePolicy = yield* Schema.decodeUnknownEffect(RatePolicy)(options.rateLimit).pipe(
+  const ratePolicy = yield* Schema.decodeEffect(RatePolicy)(options.rateLimit).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
   const records = yield* RecordManager;
@@ -699,7 +699,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   };
   const waiting = (at: number) => {
     const saved = store.get("waiting", SavedWaiting);
-    const loaded = saved === null ? null : Schema.decodeUnknownResult(Waiting.Stored)(saved);
+    const loaded = saved === null ? null : Schema.decodeResult(Waiting.Stored)(saved);
 
     if (loaded !== null && Result.isFailure(loaded)) {
       throw new LedgerError({ reason: "bad_row", cause: loaded.failure });
@@ -848,7 +848,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     }
 
     const { text, armored } = decoded.success;
-    const change = Schema.decodeUnknownResult(Schema.fromJsonString(Change))(text);
+    const change = Schema.decodeResult(Schema.fromJsonString(Change))(text);
 
     if (Result.isFailure(change)) {
       return GrantReply.cases.refused.make({ reason: "bad_signature" });
@@ -1497,7 +1497,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               );
         safe = yield* selected.pipe(
           Effect.flatMap((value) =>
-            Schema.decodeUnknownEffect(Schema.Json)(value).pipe(
+            Schema.decodeEffect(Schema.Json)(value).pipe(
               Effect.mapError(
                 (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
               ),
@@ -1607,7 +1607,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
               .deliver(
                 binding.process,
                 {
-                  id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
+                  id: yield* Schema.decodeEffect(InputId)(binding.id).pipe(
                     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                   ),
                   by: binding.by,
@@ -1618,7 +1618,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
                 {
                   id: request.success.letter,
                   envelope: {
-                    id: yield* Schema.decodeUnknownEffect(InputId)(binding.id).pipe(
+                    id: yield* Schema.decodeEffect(InputId)(binding.id).pipe(
                       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
                     ),
                     by: binding.by,
@@ -1745,10 +1745,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   });
   /** The runner may save only the exact input whose checked binding the door delivered. */
   const accept = Effect.fn("gateway.accept")(function* (input: Incoming) {
-    const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
+    const incoming = yield* Schema.decodeEffect(Incoming)(input).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
-    const parent = Schema.decodeUnknownResult(InputId)(incoming.envelope.id);
+    const parent = Schema.decodeResult(InputId)(incoming.envelope.id);
 
     if (Result.isFailure(parent)) {
       return yield* new NotGranted({});

@@ -104,7 +104,7 @@ type Fixture = typeof Fixture.Type;
 const sourceFor = (f: Fixture, pad = 0) => `export default {};\n// fixture ${JSON.stringify(f)}\n${"/".repeat(pad)}`;
 
 const readFixture = (source: string): Fixture =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(Fixture))(source.split("\n")[1]!.slice("// fixture ".length));
+  Schema.decodeSync(Schema.fromJsonString(Fixture))(source.split("\n")[1]!.slice("// fixture ".length));
 
 const declaration = (f: Fixture) => {
   const model = Schema.Struct({ count: Schema.Int });
@@ -216,7 +216,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
     PROCESS: {
       getByName: (key: string) => {
-        const [, name] = Schema.decodeUnknownSync(ProcessKey)(key);
+        const [, name] = Schema.decodeSync(ProcessKey)(key);
         return {
           configure: async (d: Pick<Descriptor, "id" | "name" | "build" | "program">) => {
             if (unreachable.has(name)) {
@@ -247,7 +247,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
                 .exec("SELECT body FROM entries WHERE stream='gateway/code' AND _tag='code.loaded'")
                 .map(
                   (row) =>
-                    Schema.decodeUnknownSync(
+                    Schema.decodeSync(
                       Schema.fromJsonString(Schema.Struct({ hash: CodeEvent.cases["code.loaded"].fields.hash })),
                     )(String(row.body)).hash,
                 ),
@@ -404,7 +404,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         rev: Number(row.rev),
         tag: String(row._tag),
         build: String(row.build),
-        body: Schema.decodeUnknownSync(EntryBody)(String(row.body)),
+        body: Schema.decodeSync(EntryBody)(String(row.body)),
       })),
   };
 });

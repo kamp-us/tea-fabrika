@@ -82,7 +82,7 @@ describe("P10 waiting rows", () => {
 
         if (most < 1) {
           expect(() => Waiting.machine.init(null, { most, ttl: 600_000 })).toThrow();
-          expect(Schema.decodeUnknownOption(Waiting.Stored)(raw)).toEqual(Option.none());
+          expect(Schema.decodeOption(Waiting.Stored)(raw)).toEqual(Option.none());
           return;
         }
 
@@ -366,7 +366,7 @@ describe("ticket 707: the waiting machine walks", () => {
           // format: the saved value keeps the flat rows-and-settings shape, each row's `location` key
           // and a `tabs` count derived from clients.
           expect(bytes).toBe(savedShape(after));
-          const reloaded = state(walk.ttl, walk.most, Schema.decodeUnknownSync(json())(bytes));
+          const reloaded = state(walk.ttl, walk.most, Schema.decodeSync(json())(bytes));
           expect(reloaded).toEqual(after);
           let s = reloaded;
 

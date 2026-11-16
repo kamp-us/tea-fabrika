@@ -255,7 +255,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
       return yield* (yield* runner(name)).msg({
         id,
         envelope: {
-          id: Schema.decodeUnknownSync(InputId)(envelope),
+          id: Schema.decodeSync(InputId)(envelope),
           by: person,
           arrivedAt: yield* Clock.currentTimeMillis,
           input: m,

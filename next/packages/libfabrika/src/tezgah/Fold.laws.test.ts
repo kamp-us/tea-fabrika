@@ -181,7 +181,7 @@ type Cut = typeof Cut extends fc.Arbitrary<infer C> ? C : never;
 /** A workspace walked from one tile by `cuts`, focus on the live tile `focus` picks. */
 const walked = (cuts: ReadonlyArray<Cut>, focus: number) => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,

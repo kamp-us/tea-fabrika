@@ -410,7 +410,7 @@ describe("P34 id reuse at the runner", () => {
                   const letter = (type: "inc" | "boom", n: number) => ({
                     id,
                     envelope: {
-                      id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+                      id: Schema.decodeSync(InputId)("input_0000000000e008000000000001"),
                       by: Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" }),
                       arrivedAt: 0,
                       input: { type, n },

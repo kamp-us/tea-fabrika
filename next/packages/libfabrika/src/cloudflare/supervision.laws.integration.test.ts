@@ -110,7 +110,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
         const declaration =
           adapter === "node"
             ? loaded.declaration
-            : Schema.decodeUnknownSync(Declaration)(
+            : Schema.decodeSync(Declaration)(
                 yield* Effect.tryPromise({
                   try: () => box.describe(),
                   catch: (cause) => new ProgramDown({ reason: "load", cause }),
@@ -247,7 +247,7 @@ const incoming = (letter: string, n: number): Incoming =>
   Incoming.make({
     id: letter,
     envelope: {
-      id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+      id: Schema.decodeSync(InputId)("input_0000000000e008000000000001"),
       by: owner,
       arrivedAt: 0,
       input: { type: "add", n },
@@ -374,7 +374,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
             const box: InstanceType<typeof Box> = Reflect.construct(Box, []);
             const raw = await box.describe();
             checkPolicy(raw, m.policy);
-            checkPolicy(Schema.decodeUnknownSync(Declaration)(raw), m.policy);
+            checkPolicy(Schema.decodeSync(Declaration)(raw), m.policy);
             r.described = raw;
           }
 

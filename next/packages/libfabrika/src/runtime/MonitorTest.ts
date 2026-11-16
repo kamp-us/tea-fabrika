@@ -213,8 +213,7 @@ const writerFrom = (): From => ({
   build: BUILD,
 });
 
-const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e00a${n.toString(16).padStart(12, "0")}`);
+const inputId = (n: number) => Schema.decodeSync(InputId)(`input_0000000000e00a${n.toString(16).padStart(12, "0")}`);
 
 const letter = (n: number, input: unknown): Incoming => ({
   id: `letter-${n}`,

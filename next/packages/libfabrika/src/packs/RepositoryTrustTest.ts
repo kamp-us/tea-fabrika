@@ -130,14 +130,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       otherKey === key ? `${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}` : otherKey;
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
-                    const otherPerson = Schema.decodeUnknownSync(Id.make("person"))(
+                    const otherPerson = Schema.decodeSync(Id.make("person"))(
                       `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
                     );
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
-                    const reopened = Schema.decodeUnknownSync(Id.InputId)(
+                    const reopened = Schema.decodeSync(Id.InputId)(
                       `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
                     );
 
@@ -386,7 +386,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       }
                     }
 
-                    const corrupt: Entry = Schema.decodeUnknownSync(EntrySchema)({
+                    const corrupt: Entry = Schema.decodeSync(EntrySchema)({
                       id: selection,
                       stream: "fixture",
                       pos: 1,

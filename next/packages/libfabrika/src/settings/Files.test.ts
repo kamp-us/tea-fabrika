@@ -165,7 +165,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
         const expected = BigInt(v.count) * v.unit.scale + (v.half ? v.unit.scale / 2n : 0n);
         const spelling = `${v.count}${v.half ? ".5" : ""} ${v.unit.name}`;
         const tree = { limits: { record: spelling } };
-        const decoded = Schema.decodeUnknownExit(Files.schema(group, v.file))(tree, { onExcessProperty: "error" });
+        const decoded = Schema.decodeExit(Files.schema(group, v.file))(tree, { onExcessProperty: "error" });
         expect(Exit.isSuccess(decoded)).toBe(true);
 
         if (Exit.isSuccess(decoded)) {
@@ -173,9 +173,9 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
         }
 
         for (const invalid of [Number(expected), String(expected), "0.1 KiB", `${v.count} KB`, `1e3 ${v.unit.name}`]) {
-          expect(
-            Exit.isFailure(Schema.decodeUnknownExit(Files.schema(group, v.file))({ limits: { record: invalid } })),
-          ).toBe(true);
+          expect(Exit.isFailure(Schema.decodeExit(Files.schema(group, v.file))({ limits: { record: invalid } }))).toBe(
+            true,
+          );
         }
 
         const exit = await Effect.runPromiseExit(
@@ -194,7 +194,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
               person: Sources.file(PERSON, files.person.document),
             });
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
+            const transported = Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
             const checked = yield* Snapshot.read(group, transported);
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
           }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),
@@ -462,7 +462,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
             }
           }
 
-          const exit = Schema.decodeUnknownExit(Files.schema(grouped(ds), doc.file))(tree, {
+          const exit = Schema.decodeExit(Files.schema(grouped(ds), doc.file))(tree, {
             onExcessProperty: "error",
           });
           expect(Exit.isSuccess(exit), JSON.stringify({ file: doc.file, tree })).toBe(ok);
@@ -481,7 +481,7 @@ describe("T730 L2, a file's schema keeps omitted tables and empty files valid, a
     fc.assert(
       fc.property(declared, fc.constantFrom<Setting.File>("person", "repo"), (ds, file) => {
         for (const group of [grouped(ds), Declarations.all]) {
-          const exit = Schema.decodeUnknownExit(Files.schema(group, file))({}, { onExcessProperty: "error" });
+          const exit = Schema.decodeExit(Files.schema(group, file))({}, { onExcessProperty: "error" });
           expect(exit).toEqual(Exit.succeed({}));
         }
       }),

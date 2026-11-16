@@ -562,7 +562,7 @@ const processValue = Effect.fnUntraced(function* <A>(reply: ProcessReply<A>) {
     return reply.value;
   }
 
-  const refused = yield* Schema.decodeUnknownEffect(ProcessReplies.cases.ProcessError)(reply).pipe(
+  const refused = yield* Schema.decodeEffect(ProcessReplies.cases.ProcessError)(reply).pipe(
     Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
   );
   return yield* new ProcessError({ reason: refused.reason });
@@ -974,7 +974,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
 
   for (const source of Object.values(programs)) {
-    const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(source);
+    const built = yield* Schema.decodeEffect(BuiltProgram)(source);
     yield* codes.put(built);
   }
 
@@ -1333,7 +1333,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "refused", message: "the owner row", cause })));
   /** Places the process and records its descriptor; a first start's row stays pending until delivered. */
   const place = Effect.fnUntraced(function* (raw: Start, origin: From) {
-    const request = yield* Schema.decodeUnknownEffect(Start)(raw).pipe(
+    const request = yield* Schema.decodeEffect(Start)(raw).pipe(
       Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
     );
 
@@ -1662,7 +1662,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     return swaps;
   });
   const inspect = Effect.fn("code.inspect")(function* (input: typeof Install.Type) {
-    const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(input).pipe(
+    const built = yield* Schema.decodeEffect(BuiltProgram)(input).pipe(
       Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
     );
     const prior = yield* ledger.read("gateway/code", 0).pipe(

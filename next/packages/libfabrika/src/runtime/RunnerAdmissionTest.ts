@@ -629,7 +629,7 @@ const walk = Effect.fnUntraced(function* (
 
     if (move === "legacy_refuse" || move === "invalid") {
       const original = yield* input(cell, true);
-      const message = Schema.decodeUnknownSync(Save)(original.envelope.input);
+      const message = Schema.decodeSync(Save)(original.envelope.input);
       const delivery =
         move === "legacy_refuse"
           ? { ...original, envelope: { ...original.envelope, id: `in-${yield* ids.next(Id.Process)}-${serial}` } }
@@ -743,7 +743,7 @@ const walk = Effect.fnUntraced(function* (
                       : "";
 
     if (refusing) {
-      refusedBodies.push(Schema.decodeUnknownSync(Save)(fresh.envelope.input).body);
+      refusedBodies.push(Schema.decodeSync(Save)(fresh.envelope.input).body);
     }
 
     const exit = yield* Effect.exit(live.runner.msg(fresh));
@@ -887,7 +887,7 @@ const walk = Effect.fnUntraced(function* (
         answers.push({ input: fresh, first: answer });
 
         if (!refusing) {
-          const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+          const m = Schema.decodeSync(Save)(fresh.envelope.input);
           versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
         }
       }
@@ -901,7 +901,7 @@ const walk = Effect.fnUntraced(function* (
       answers.push({ input: fresh, first: answer });
 
       if (!refusing) {
-        const m = Schema.decodeUnknownSync(Save)(fresh.envelope.input);
+        const m = Schema.decodeSync(Save)(fresh.envelope.input);
         versions.set(m.note, (versions.get(m.note) ?? 0) + 1);
       }
     }

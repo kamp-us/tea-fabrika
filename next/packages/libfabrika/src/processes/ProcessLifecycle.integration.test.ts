@@ -57,7 +57,7 @@ describe("P33, saved state and process authority", () => {
     fc.assert(
       fc.property(fcProcessIds, (process) => {
         expect(Schema.is(Owner)({ _tag: "process" }), "missing process owner id").toBe(false);
-        expect(Schema.decodeUnknownSync(Owner)({ _tag: "process", process })).toEqual({
+        expect(Schema.decodeSync(Owner)({ _tag: "process", process })).toEqual({
           _tag: "process",
           process,
         });

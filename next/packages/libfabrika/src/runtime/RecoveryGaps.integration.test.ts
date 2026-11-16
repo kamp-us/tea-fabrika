@@ -143,7 +143,7 @@ const world = Effect.fnUntraced(function* () {
   const input = (id: string, m: unknown = { type: "poison" }): Incoming => ({
     id,
     envelope: {
-      id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
+      id: Schema.decodeSync(InputId)("input_0000000000e008000000000001"),
       by: owner,
       arrivedAt: 0,
       input: m,

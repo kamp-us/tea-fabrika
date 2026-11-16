@@ -548,7 +548,7 @@ const project = Effect.fnUntraced(function* () {
     acks: (name: string) =>
       sql
         .exec("SELECT body FROM entries WHERE stream=? ORDER BY rev", `processes/${name}/acked`)
-        .map((row) => Schema.decodeUnknownSync(AckRow)(String(row.body))),
+        .map((row) => Schema.decodeSync(AckRow)(String(row.body))),
   };
 });
 

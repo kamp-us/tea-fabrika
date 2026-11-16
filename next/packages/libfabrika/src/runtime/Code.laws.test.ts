@@ -75,7 +75,7 @@ const step = (model: Model, msg: Msg): readonly [Model, ReadonlyArray<Cmd>] => {
 /** The selection as stored: encoded to JSON text, then decoded back from that text. */
 const Stored = Schema.fromJsonString(Code.Selected);
 
-const roundTrip = (model: Model): Model => Schema.decodeUnknownSync(Stored)(Schema.encodeSync(Stored)(model));
+const roundTrip = (model: Model): Model => Schema.decodeSync(Stored)(Schema.encodeSync(Stored)(model));
 
 const hashes = fc.uint8Array({ minLength: 32, maxLength: 32 }).map((b) => Buffer.from(b).toString("hex"));
 const names = fc.stringMatching(/^[a-z_][a-z0-9-]{0,7}\/[a-z_][a-z0-9-]{0,7}$/);

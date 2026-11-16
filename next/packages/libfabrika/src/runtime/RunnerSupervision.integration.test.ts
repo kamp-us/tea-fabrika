@@ -172,7 +172,7 @@ const world = (
   const input = (id = "poison", m: unknown = { type: "poison", key: id }): Incoming => ({
     id,
     envelope: {
-      id: Schema.decodeUnknownSync(InputId)(
+      id: Schema.decodeSync(InputId)(
         `input_0000000000e008${(controls.steps.length + 1).toString(16).padStart(12, "0")}`,
       ),
       by: person,

@@ -69,8 +69,7 @@ const writer = (as: "person" | "agent" = "person") => Writer.cases[as].make({ ke
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 // Trusted, repeatable UUIDv7 fixtures. The schema checks the same brand as the real door.
-const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+const inputId = (n: number) => Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
 
 const from = (over: Partial<From> = {}): From => ({
   by: "SHA256:person",

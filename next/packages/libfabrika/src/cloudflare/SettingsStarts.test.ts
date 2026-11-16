@@ -241,7 +241,7 @@ StartsTest.law(
         );
 
         for (const raw of replies) {
-          const reply = yield* Schema.decodeUnknownEffect(Start.Reply)(raw);
+          const reply = yield* Schema.decodeEffect(Start.Reply)(raw);
           expect(reply._tag).toBe("ok");
 
           if (reply._tag === "ok") {

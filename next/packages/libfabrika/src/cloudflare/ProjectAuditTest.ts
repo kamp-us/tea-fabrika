@@ -85,7 +85,7 @@ const projectWalk = Effect.fnUntraced(function* (
     n.writeUInt32BE(bytes.length);
     return Buffer.concat([n, bytes]);
   };
-  const line = Schema.decodeUnknownSync(KeyLine)(
+  const line = Schema.decodeSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
   const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;

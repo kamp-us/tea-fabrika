@@ -170,7 +170,7 @@ describe("T753 complete checked snapshots", () => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
         expect(made.values).toEqual({ "limits.record": String(v.count), "instance.port": v.port, "app.word": v.word });
-        const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(made));
+        const transported = Schema.decodeSync(Schema.fromJsonString(Snapshot.Snapshot))(JSON.stringify(made));
         const wire = { ...transported, values: { ...transported.values }, origins: { ...transported.origins } };
         const checked = await digest(Snapshot.read(flow.group, wire));
         expect(checked.values).toEqual(flow.values);
@@ -256,7 +256,7 @@ describe("T753 complete checked snapshots", () => {
         // Effect accepts several integer spellings. Hash the canonical re-encoding, not that spelling.
         const alternate = `0${v.count}`;
         const byteCodec = Schema.toCodecJson(Schema.ByteSize);
-        const decoded = Schema.decodeUnknownExit(byteCodec)(alternate);
+        const decoded = Schema.decodeExit(byteCodec)(alternate);
 
         if (Exit.isSuccess(decoded)) {
           const normalized = await digest(

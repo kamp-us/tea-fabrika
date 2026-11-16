@@ -504,7 +504,7 @@ export class ProcessManager extends Context.Service<
         const ack = Effect.fn("process.ack")(
           function* (process: string, input: Rev, from: From) {
             yield* Effect.annotateCurrentSpan({ "fab.process": process });
-            const pos = yield* Schema.decodeUnknownEffect(Rev)(input).pipe(
+            const pos = yield* Schema.decodeEffect(Rev)(input).pipe(
               Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
             );
             yield* Effect.annotateCurrentSpan({ [tag("pos")]: pos });
@@ -562,7 +562,7 @@ export class ProcessManager extends Context.Service<
             return { ...status, at: yield* Effect.clockWith((clock) => clock.currentTimeMillis) };
           }),
           dead: Effect.fn("process.dead")(function* (process: string, dead: typeof DeadInput.Type, from: From) {
-            const input = yield* Schema.decodeUnknownEffect(DeadInput)(dead).pipe(
+            const input = yield* Schema.decodeEffect(DeadInput)(dead).pipe(
               Effect.mapError((cause) => new ProcessError({ reason: "bad_text", cause })),
             );
             yield* checked((table, turn) => {

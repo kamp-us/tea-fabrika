@@ -80,14 +80,14 @@ describe("P16 checked built tables", () => {
           assets: Object.fromEntries(assets.map(({ route, type, body }) => [route, { hash: sha(body), type, body }])),
         };
         expect(await Effect.runPromise(api.decodeBuilt(raw))).toEqual(raw);
-        expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Built)(raw))).toEqual(raw);
+        expect(await Effect.runPromise(Schema.decodeEffect(api.Built)(raw))).toEqual(raw);
 
         for (const program of Object.values(raw.programs)) {
-          expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.BuiltProgram)(program))).toEqual(program);
+          expect(await Effect.runPromise(Schema.decodeEffect(api.BuiltProgram)(program))).toEqual(program);
         }
 
         for (const asset of Object.values(raw.assets)) {
-          expect(await Effect.runPromise(Schema.decodeUnknownEffect(api.Asset)(asset))).toEqual(asset);
+          expect(await Effect.runPromise(Schema.decodeEffect(api.Asset)(asset))).toEqual(asset);
         }
       }),
       runs,

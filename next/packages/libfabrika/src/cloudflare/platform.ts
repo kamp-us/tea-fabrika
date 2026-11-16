@@ -27,7 +27,7 @@ export const isolateUsage = Effect.fnUntraced(function* (
   process: string,
   items: Extract<WorkerEvent, { type: "tail" }>["input"],
 ) {
-  return yield* Schema.decodeUnknownEffect(Schema.Array(IsolateUsage.Usage))(
+  return yield* Schema.decodeEffect(Schema.Array(IsolateUsage.Usage))(
     items.map((item) => {
       const event = item.event;
       const method = Predicate.hasProperty(event, "rpcMethod") ? event.rpcMethod : undefined;

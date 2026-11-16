@@ -26,7 +26,7 @@ const target = Chaos.Target.make({
   key: "public:1",
 });
 
-const id = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
+const id = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
 type Failure = {
   readonly reason: "unreachable" | "bad_row" | "storage";
@@ -119,7 +119,7 @@ const failed = Effect.fnUntraced(function* <A>(
 const readReport = Effect.fnUntraced(function* (nemesis: Service, binding = target) {
   const report = yield* nemesis.check(binding);
   const codec = Schema.toCodecJson(Chaos.Report);
-  expect(Schema.decodeUnknownSync(codec)(Schema.encodeSync(codec)(report))).toEqual(report);
+  expect(Schema.decodeSync(codec)(Schema.encodeSync(codec)(report))).toEqual(report);
   return report;
 });
 

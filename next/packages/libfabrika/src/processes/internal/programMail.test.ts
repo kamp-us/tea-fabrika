@@ -100,9 +100,7 @@ describe("P41 slice 1: program mail rules", () => {
             reason: reason === "full" ? { _tag: reason, unread } : { _tag: reason },
           });
           expect(Object.keys(encoded as object)).not.toContain("kind");
-          expect(Schema.decodeUnknownSync(ProgramMailError)(encoded), "it decodes back to the same error").toEqual(
-            error,
-          );
+          expect(Schema.decodeSync(ProgramMailError)(encoded), "it decodes back to the same error").toEqual(error);
         },
       ),
       { seed: SEED, numRuns: 50 },

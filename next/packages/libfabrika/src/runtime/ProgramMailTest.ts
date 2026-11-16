@@ -220,8 +220,7 @@ const GRANTS: Grants = Object.fromEntries(
 const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
-const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+const inputId = (n: number) => Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",

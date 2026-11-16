@@ -129,11 +129,11 @@ describe("T1041: the inbox cap and the chunk size are repo settings", () => {
           ] as const) {
             const strict = { onExcessProperty: "error" } as const;
             expect(
-              Result.isSuccess(Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), strict)(value)),
+              Result.isSuccess(Schema.decodeResult(Files.schema(Declarations.all, "repo"), strict)(value)),
               `${path} may be set in the repo's file`,
             ).toBe(true);
             expect(
-              Result.isFailure(Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), strict)(value)),
+              Result.isFailure(Schema.decodeResult(Files.schema(Declarations.all, "person"), strict)(value)),
               `${path} may not be set in a person's file`,
             ).toBe(true);
           }

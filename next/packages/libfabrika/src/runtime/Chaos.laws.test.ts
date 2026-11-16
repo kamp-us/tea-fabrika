@@ -17,7 +17,7 @@ const arbitrary = { seed: 119120, runs: 100 };
 const process = "process_0000000000e008000000000000";
 const next = "process_0000000000e008000000000001";
 const other = "process_0000000000e008000000000002";
-const experiment = Schema.decodeUnknownSync(Id.make("chaos"))("chaos_0000000000e008000000000000");
+const experiment = Schema.decodeSync(Id.make("chaos"))("chaos_0000000000e008000000000000");
 
 const target = {
   program: "fabrika/checklist",
@@ -94,7 +94,7 @@ it.prop(
   [Arbitrary.schema(Chaos.Fault)],
   ([fault]) => {
     const json = Schema.toCodecJson(Chaos.Fault);
-    expect(Schema.decodeUnknownSync(json)(Schema.encodeSync(json)(fault))).toEqual(fault);
+    expect(Schema.decodeSync(json)(Schema.encodeSync(json)(fault))).toEqual(fault);
 
     for (const field of ["client", "key", "name", "process"] as const) {
       if (field in fault) {

@@ -68,7 +68,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 ) {
   const text = frame[0];
   const attached: A = frame[1];
-  const request = Schema.decodeUnknownResult(Request)(text);
+  const request = Schema.decodeResult(Request)(text);
 
   if (Result.isFailure(request)) {
     return { send: null, attached };

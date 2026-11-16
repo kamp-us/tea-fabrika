@@ -997,7 +997,7 @@ export class ProgramRunner extends Context.Service<
               const policy = yield* Effect.try({
                 try: () => {
                   const wiring = options.policy ?? defaultPolicy;
-                  return Schema.decodeUnknownSync(Policy)(
+                  return Schema.decodeSync(Policy)(
                     loaded.declaration.policy ?? {
                       ...wiring,
                       maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
@@ -2788,7 +2788,7 @@ export class ProgramRunner extends Context.Service<
                       return yield* state.loaded.execution.update(state.model, m);
                     }
 
-                    const parent = Schema.decodeUnknownOption(InputId)(input.envelope.id);
+                    const parent = Schema.decodeOption(InputId)(input.envelope.id);
 
                     if (admission._tag === "invalid" || Option.isNone(parent)) {
                       yield* complete({ type: "abandoned", seq });
@@ -2848,7 +2848,7 @@ export class ProgramRunner extends Context.Service<
             }
 
             // Reading an old delivery never authorizes a new write with a legacy input ID.
-            const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input).pipe(
+            const incoming = yield* Schema.decodeEffect(Incoming)(input).pipe(
               Effect.mapError((cause) => new RunnerError({ reason: "bad_input", cause })),
             );
             yield* store.save(checkpoint(state, Turn.cases.prepared.make({ id: input.id })));

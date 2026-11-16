@@ -261,7 +261,7 @@ export const validate = Effect.fnUntraced(function* <A>(
   yield* supported(files.repo, options.version);
 
   for (const file of ["repo", "person"] as const) {
-    yield* Schema.decodeUnknownEffect(schema(group, file))(files[file].document.value, {
+    yield* Schema.decodeEffect(schema(group, file))(files[file].document.value, {
       onExcessProperty: "error",
     }).pipe(Effect.mapError((error) => explain(group.declarations, files, file, error.issue)));
   }

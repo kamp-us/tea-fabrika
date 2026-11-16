@@ -681,7 +681,7 @@ const replay = (
   inbox: ReadonlyArray<{ readonly id: string; readonly m: unknown }>,
 ) => {
   let spec = code.variants.get(start) ?? BASE;
-  let model: CounterModel = Schema.decodeUnknownSync(schemaFor(spec))(programFor(spec).machine.init(null, {})[0]);
+  let model: CounterModel = Schema.decodeSync(schemaFor(spec))(programFor(spec).machine.init(null, {})[0]);
   let v = spec.v;
   let build = start;
   let upgraded: { readonly ran: ReadonlyArray<string> } | null = null;

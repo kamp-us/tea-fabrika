@@ -126,7 +126,7 @@ export const machine = Machine.make({
   cmds: [],
   types: { ctx: {} as typeof Config.Type },
   init: (loaded, ctx) => {
-    const config = Schema.decodeUnknownSync(Config)(ctx);
+    const config = Schema.decodeSync(Config)(ctx);
     return [loaded ?? Model.cases.empty.make({ rows: [], ...config }), []];
   },
   update: {

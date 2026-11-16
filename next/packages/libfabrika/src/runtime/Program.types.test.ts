@@ -217,7 +217,7 @@ function authoringTypeErrors() {
   Program.make({ ...fields, view: (m) => m, outputs: { count: 3 } });
   Write.cases.own.make({ event: { _tag: "saved" } });
   Write.cases.caused.make({
-    parent: Schema.decodeUnknownSync(Write.cases.caused.fields.parent)("in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-1"),
+    parent: Schema.decodeSync(Write.cases.caused.fields.parent)("in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-1"),
     event: { _tag: "saved" },
   });
   // @ts-expect-error A caused write must name its parent.

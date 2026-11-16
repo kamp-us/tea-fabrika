@@ -58,7 +58,7 @@ const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg
 const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
 
 const roundTrip = (model: Model): unknown =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
+  Schema.decodeSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
 
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>
@@ -88,7 +88,7 @@ const policies: fc.Arbitrary<typeof Policy.Type> = fc
       total += Math.min(minMs * 2 ** n, maxMs);
     }
 
-    return Schema.decodeUnknownSync(Policy)({
+    return Schema.decodeSync(Policy)({
       maxDeliveries: Math.min(deliveries, intensity),
       intensity,
       periodMs: total + slack,
@@ -523,7 +523,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
     fc.assert(
       fc.property(invalid, (candidate) => {
         const bytes = JSON.stringify(candidate);
-        expect(() => Schema.decodeUnknownSync(Policy)(candidate)).toThrow();
+        expect(() => Schema.decodeSync(Policy)(candidate)).toThrow();
         expect(JSON.stringify(candidate)).toBe(bytes);
       }),
       {
@@ -533,7 +533,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
         examples: [[{ ...policy, backoff: { ...policy.backoff, minMs: 0 } }]],
       },
     );
-    expect(Schema.decodeUnknownSync(Policy)(policy)).toEqual(policy);
+    expect(Schema.decodeSync(Policy)(policy)).toEqual(policy);
   });
 
   // J1. Every reached and saved journal is legal; a mutation of a reached state is refused.
@@ -742,7 +742,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
         // T271 decision check: one crash inside the budget wrote a down event.
         examples: [
           [
-            Schema.decodeUnknownSync(Policy)({
+            Schema.decodeSync(Policy)({
               ...policy,
               maxDeliveries: 1,
               backoff: { ...policy.backoff, resetAfterMs: 1_000_000 },
@@ -754,7 +754,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           // begin saved, threw, exit written, wait out the backoff, started, checkpointed, then
           // two idle advances that end exactly resetAfterMs after the checkpoint.
           [
-            Schema.decodeUnknownSync(Policy)(policy),
+            Schema.decodeSync(Policy)(policy),
             [
               { move: 4, gap: 0 },
               { move: 1, gap: 0 },
@@ -810,7 +810,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           total += Math.min(minMs * 2 ** n, maxMs);
         }
 
-        const accepted = Schema.decodeUnknownSync(Policy)({
+        const accepted = Schema.decodeSync(Policy)({
           maxDeliveries: deliveries,
           intensity,
           periodMs: total + 3 * intensity * G + 1 + slack,

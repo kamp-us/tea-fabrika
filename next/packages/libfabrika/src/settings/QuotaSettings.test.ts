@@ -199,10 +199,10 @@ describe("P34c Q11 settings", () => {
             for (const field of ["writes", "bytes"]) {
               const bad = structuredClone(encoded) as Record<string, Record<string, any>>;
               bad[location]![field] = field === "bytes" ? "0 B" : 0;
-              expect(Schema.decodeUnknownResult(recovery.schema)(bad)._tag).toBe("Failure");
+              expect(Schema.decodeResult(recovery.schema)(bad)._tag).toBe("Failure");
               const message = structuredClone(encoded) as Record<string, Record<string, any>>;
               message[location]!.message[field] = field === "bytes" ? "0 B" : 0;
-              expect(Schema.decodeUnknownResult(recovery.schema)(message)._tag).toBe("Failure");
+              expect(Schema.decodeResult(recovery.schema)(message)._tag).toBe("Failure");
             }
           }
         }),

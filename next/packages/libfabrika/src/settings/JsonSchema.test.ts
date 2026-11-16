@@ -250,11 +250,11 @@ describe("L2, the editor schema accepts and refuses exactly what the file's own 
           const own = Files.schema(group, c.file);
           const editor = imported(JsonSchema.make(own) as Json);
           const document = tree(input, c);
-          const expected = Schema.decodeUnknownExit(own)(document, { onExcessProperty: "error" });
-          const got = Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" });
+          const expected = Schema.decodeExit(own)(document, { onExcessProperty: "error" });
+          const got = Schema.decodeExit(editor)(document, { onExcessProperty: "error" });
           expect(Exit.isSuccess(got), JSON.stringify({ file: c.file, document })).toBe(Exit.isSuccess(expected));
           // An empty file and a file of empty tables are valid for the editor too.
-          expect(Exit.isSuccess(Schema.decodeUnknownExit(editor)({}, { onExcessProperty: "error" }))).toBe(true);
+          expect(Exit.isSuccess(Schema.decodeExit(editor)({}, { onExcessProperty: "error" }))).toBe(true);
         },
       ),
       check,
@@ -298,8 +298,8 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
           expect(node.default).not.toBe(String(d.default));
           expect(Schema.decodeUnknownSync(Schema.toCodecStringTree(shared))(node.default)).toBe(d.default);
           const input = { limits: { [d.segments[1]!]: node.default } };
-          expect(Exit.isSuccess(Schema.decodeUnknownExit(editor)(input, { onExcessProperty: "error" }))).toBe(true);
-          expect(Exit.isSuccess(Schema.decodeUnknownExit(Files.schema(group, v.file))(input))).toBe(true);
+          expect(Exit.isSuccess(Schema.decodeExit(editor)(input, { onExcessProperty: "error" }))).toBe(true);
+          expect(Exit.isSuccess(Schema.decodeExit(Files.schema(group, v.file))(input))).toBe(true);
           expect(d.since).toBe("1.2.3");
         }
 
@@ -369,9 +369,9 @@ describe("L3, every allowed declaration keeps its own words and encoded default 
         { instance: { port: 18800 } },
         { instance: {} },
       ]) {
-        const want = Exit.isSuccess(Schema.decodeUnknownExit(own)(value, { onExcessProperty: "error" }));
+        const want = Exit.isSuccess(Schema.decodeExit(own)(value, { onExcessProperty: "error" }));
         expect(
-          Exit.isSuccess(Schema.decodeUnknownExit(editor)(value, { onExcessProperty: "error" })),
+          Exit.isSuccess(Schema.decodeExit(editor)(value, { onExcessProperty: "error" })),
           `${file}: ${JSON.stringify(value)}`,
         ).toBe(want);
       }
@@ -417,15 +417,13 @@ describe("L4, generated local references resolve, with every definition present"
               broken = { [d.table]: { [d.key]: v.value } };
             }
           });
-          const decoded = Schema.decodeUnknownExit(editor)(valid, { onExcessProperty: "error" });
+          const decoded = Schema.decodeExit(editor)(valid, { onExcessProperty: "error" });
           expect(Exit.isSuccess(decoded), JSON.stringify(valid)).toBe(true);
 
           if (broken !== undefined) {
             const [[table, keys]] = Object.entries(broken) as [[string, Record<string, unknown>]];
             const document = { ...valid, [table]: { ...valid[table], ...keys } };
-            expect(Exit.isFailure(Schema.decodeUnknownExit(editor)(document, { onExcessProperty: "error" }))).toBe(
-              true,
-            );
+            expect(Exit.isFailure(Schema.decodeExit(editor)(document, { onExcessProperty: "error" }))).toBe(true);
           }
         },
       ),
