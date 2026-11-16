@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import * as Arr from "effect/Array";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "workspace-reach.ts");
@@ -35,7 +36,7 @@ const run = (files: Readonly<Record<string, string>>) => {
 const WORKSPACE = "packages:\n  - apps/*\n  - packages/*\n  - programs/*\n  - next/packages/*\n";
 
 const pkg = (name: string, deps: readonly string[] = []) =>
-  JSON.stringify({ name, dependencies: Object.fromEntries(deps.map((d) => [d, "workspace:*"])) });
+  JSON.stringify({ name, dependencies: Object.fromEntries(Arr.map(deps, (d) => [d, "workspace:*"])) });
 
 describe("a workspace package", () => {
   it("scenario: one an app depends on, and one that package depends on, are reached", () => {

@@ -38,6 +38,8 @@
 // - a count passed as a plain argument to a helper (`prop(name, ..., 200)`, `runs(25)`);
 // - a count built by an expression (`numRuns: n * 2`) or read from another file.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */
@@ -132,8 +134,7 @@ const overridden = (node: Node): boolean => {
   }
 
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
-
-  return after.some((property) => property.type === "Property" && keyName(property) === "numRuns");
+  return Arr.some(after, (property) => property.type === "Property" && keyName(property) === "numRuns");
 };
 
 /** fast-check's `sample` and `statistics` take `numRuns` as how many values to draw, not a law's cases. */
@@ -182,7 +183,7 @@ export const runsFromDepth: CreateRule = {
     return {
       "Program:exit"(program) {
         const nodes = [...below(program)];
-        const inTest = (node: Node): boolean => [...ancestors(node)].some((above) => isTestCall(above));
+        const inTest = (node: Node): boolean => Arr.some([...ancestors(node)], (above) => isTestCall(above));
 
         // The variables that are real IO: the file's imports from an IO module.
         const io = new Set<Variable>();
@@ -282,7 +283,7 @@ export const runsFromDepth: CreateRule = {
           for (const [variable, node] of declared) {
             const { through, direct } = usesOf(node);
 
-            if (!reaching.has(variable) && (direct || [...through].some((used) => reaching.has(used)))) {
+            if (!reaching.has(variable) && (direct || Arr.some([...through], (used) => reaching.has(used)))) {
               reaching.add(variable);
               grew = true;
             }
@@ -291,8 +292,7 @@ export const runsFromDepth: CreateRule = {
 
         const reaches = (root: Node): boolean => {
           const { through, direct } = usesOf(root);
-
-          return direct || [...through].some((used) => reaching.has(used));
+          return direct || Arr.some([...through], (used) => reaching.has(used));
         };
 
         /** The declarations a node uses, followed through the declarations they use. */
@@ -312,7 +312,7 @@ export const runsFromDepth: CreateRule = {
           return seen;
         };
 
-        const tests = nodes.filter((node) => isTestCall(node) && !inTest(node));
+        const tests = Arr.filter(nodes, (node) => isTestCall(node) && !inTest(node));
 
         // The number a name holds when the file declares it as `const NAME = <number>` and never as
         // anything else.
@@ -340,23 +340,24 @@ export const runsFromDepth: CreateRule = {
         /** Whether the law around a count reaches real IO. */
         const held = (count: Node): boolean => {
           const around = [...ancestors(count)];
-          const test = around.findLast((node) => isTestCall(node));
+          const test = Arr.findLast(around, (node) => isTestCall(node));
 
-          if (test !== undefined) {
-            return reaches(test);
+          if (Option.isSome(test)) {
+            return reaches(test.value);
           }
 
           // Outside a test call: the declarations around the count (`const CHECK = {...}`, a helper
           // function), or else the helper call it is handed to.
-          const enclosing = [...declared].filter(([, node]) => around.includes(node));
-          const call = around.find((node) => node.type === "CallExpression");
-
+          const enclosing = Arr.filter([...declared], ([, node]) => around.includes(node));
+          const call = Arr.findFirst(around, (node) => node.type === "CallExpression");
           const own =
-            enclosing.length > 0 ? enclosing.some(([, node]) => reaches(node)) : call !== undefined && reaches(call);
-
+            enclosing.length > 0 ? Arr.some(enclosing, ([, node]) => reaches(node)) : Option.exists(call, reaches);
           return (
             own ||
-            tests.some((call) => reaches(call) && enclosing.some(([variable]) => usedThrough(call).has(variable)))
+            Arr.some(
+              tests,
+              (call) => reaches(call) && Arr.some(enclosing, ([variable]) => usedThrough(call).has(variable)),
+            )
           );
         };
 

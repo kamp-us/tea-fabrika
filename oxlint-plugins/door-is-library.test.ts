@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
@@ -5,25 +6,34 @@ const code = "fabrika(door-is-library)";
 
 describe("P17a, the library owns the door", async () => {
   const files = {
-    "next/apps/fabrika/src/door.ts": [
-      'export {Gateway} from "@kampus/libfabrika/gateway/Gateway";',
-      'export type {ConnectionId} from "@kampus/libfabrika/gateway/Gateway";',
-      'export * from "@kampus/libfabrika/gateway/Gateway";',
-      'export const guard = (key: string) => key !== "revoked";',
-      'export {Gateway} from "./old-door.ts";',
-      'import {Gateway} from "@kampus/libfabrika/gateway/Gateway";',
-      'export {Gateway as Gate} from "@kampus/libfabrika/door";',
-      'export {Waiting} from "@kampus/libfabrika/gateway/internal/waiting";',
-      'export {Ledger} from "@kampus/libfabrika/ledger/Ledger";',
-    ].join("\n"),
-    "next/apps/fabrika/src/door-store.ts": [
-      'export {gatewayStore} from "@kampus/libfabrika/gateway/GatewayStore";',
-      "export const fold = (rows: unknown[]) => rows;",
-    ].join("\n"),
-    "next/apps/fabrika/src/door-nonce.ts": [
-      'export {gatewayNonce} from "@kampus/libfabrika/gateway/GatewayNonce";',
-      "export default function check() { return true; }",
-    ].join("\n"),
+    "next/apps/fabrika/src/door.ts": Arr.join(
+      [
+        'export {Gateway} from "@kampus/libfabrika/gateway/Gateway";',
+        'export type {ConnectionId} from "@kampus/libfabrika/gateway/Gateway";',
+        'export * from "@kampus/libfabrika/gateway/Gateway";',
+        'export const guard = (key: string) => key !== "revoked";',
+        'export {Gateway} from "./old-door.ts";',
+        'import {Gateway} from "@kampus/libfabrika/gateway/Gateway";',
+        'export {Gateway as Gate} from "@kampus/libfabrika/door";',
+        'export {Waiting} from "@kampus/libfabrika/gateway/internal/waiting";',
+        'export {Ledger} from "@kampus/libfabrika/ledger/Ledger";',
+      ],
+      "\n",
+    ),
+    "next/apps/fabrika/src/door-store.ts": Arr.join(
+      [
+        'export {gatewayStore} from "@kampus/libfabrika/gateway/GatewayStore";',
+        "export const fold = (rows: unknown[]) => rows;",
+      ],
+      "\n",
+    ),
+    "next/apps/fabrika/src/door-nonce.ts": Arr.join(
+      [
+        'export {gatewayNonce} from "@kampus/libfabrika/gateway/GatewayNonce";',
+        "export default function check() { return true; }",
+      ],
+      "\n",
+    ),
     "next/packages/libfabrika/src/gateway/Gateway.ts": "export const guard = () => true;",
     "next/apps/fabrika/src/door.integration.test.ts": "const guard = () => true;",
     "next/apps/fabrika/src/brain.ts": "export const wire = () => true;",

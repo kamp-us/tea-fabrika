@@ -1,5 +1,6 @@
 // P17's decode paths. Follow local aliases, including aliases of curried Schema decoders.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
+import * as Arr from "effect/Array";
 import { ancestors, dotted, pathIn, type Node } from "./match.ts";
 
 const scoped =
@@ -115,16 +116,17 @@ export const outsideInputConstructor: CreateRule = {
         case "Literal":
           return true;
         case "TemplateLiteral":
-          return value.expressions.every((x) => constant(x, new Set(seen)));
+          return Arr.every(value.expressions, (x) => constant(x, new Set(seen)));
         case "UnaryExpression":
           return constant(value.argument, seen);
         case "TSAsExpression":
         case "TSSatisfiesExpression":
           return constant(value.expression, seen);
         case "ArrayExpression":
-          return value.elements.every((x) => x !== null && constant(x, new Set(seen)));
+          return Arr.every(value.elements, (x) => x !== null && constant(x, new Set(seen)));
         case "ObjectExpression":
-          return value.properties.every(
+          return Arr.every(
+            value.properties,
             (x) => x.type === "Property" && !x.computed && constant(x.value, new Set(seen)),
           );
         default:
@@ -171,11 +173,11 @@ export const outsideInputConstructor: CreateRule = {
       }
 
       if (node.type === "ObjectExpression") {
-        return node.properties.some((x) => untrusted(x, new Set(seen)));
+        return Arr.some(node.properties, (x) => untrusted(x, new Set(seen)));
       }
 
       if (node.type === "ArrayExpression") {
-        return node.elements.some((x) => x !== null && untrusted(x, new Set(seen)));
+        return Arr.some(node.elements, (x) => x !== null && untrusted(x, new Set(seen)));
       }
 
       if (node.type === "SpreadElement" || node.type === "AwaitExpression" || node.type === "YieldExpression") {
@@ -189,7 +191,7 @@ export const outsideInputConstructor: CreateRule = {
       if (node.type === "CallExpression") {
         return (
           /(?:\.get|\.read|JSON\.parse)$/.test(dotted(node.callee) ?? "") ||
-          node.arguments.some((x) => untrusted(x, new Set(seen)))
+          Arr.some(node.arguments, (x) => untrusted(x, new Set(seen)))
         );
       }
 
@@ -197,7 +199,7 @@ export const outsideInputConstructor: CreateRule = {
     };
 
     const inDecoder = (node: Node): boolean =>
-      [...ancestors(node)].some((parent) => {
+      Arr.some([...ancestors(node)], (parent) => {
         if (parent.type === "FunctionDeclaration") {
           return /^(?:decode|parse|load|read)/i.test(parent.id?.name ?? "");
         }
@@ -284,7 +286,7 @@ export const outsideInputConstructor: CreateRule = {
         if (
           idMake
             ? args.length === 1 && first !== undefined && constant(first)
-            : !args.some((x) => untrusted(x) || (inDecoder(node) && !constant(x)))
+            : !Arr.some(args, (x) => untrusted(x) || (inDecoder(node) && !constant(x)))
         ) {
           return;
         }

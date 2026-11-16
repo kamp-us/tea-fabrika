@@ -5,6 +5,8 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -19,8 +21,12 @@ const word = fc.stringMatching(/^[a-z]{2,6}$/);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
 const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
-  text: `${lines.map(([line]) => line).join("\n")}\n`,
-  fires: lines.flatMap(([, fires], i) => (fires ? [i + 1] : [])),
+  text: `${pipe(
+    lines,
+    Arr.map(([line]) => line),
+    Arr.join("\n"),
+  )}\n`,
+  fires: Arr.flatMap(lines, ([, fires], i) => (fires ? [i + 1] : [])),
 });
 
 describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
@@ -60,8 +66,7 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
           // Not under `oxlint-plugins/`: the planted folder links that one to the real folder.
           "scripts/probe.ts": body(false),
         };
-
-        const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
+        const linted = await plant(Object.fromEntries(Arr.map(Object.entries(files), ([path, f]) => [path, f.text])));
 
         for (const [path, f] of Object.entries(files)) {
           expect(linted(CODE, path), path).toEqual(f.fires);
@@ -88,8 +93,13 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
     const report: {
       readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }>;
     } = JSON.parse(ran.stdout);
-
-    expect(report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename)).toEqual([]);
+    expect(
+      pipe(
+        report.diagnostics,
+        Arr.filter((d) => d.code === CODE),
+        Arr.map((d) => d.filename),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -127,14 +137,17 @@ const probe = ({
   readonly id: string | null;
   readonly blocking: boolean;
 }) =>
-  `${[
-    'import { Context } from "effect";',
-    "",
-    `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
-    "",
-    `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
-    ...(blocking ? ["", "debugger;"] : []),
-  ].join("\n")}\n`;
+  `${Arr.join(
+    [
+      'import { Context } from "effect";',
+      "",
+      `export class Probe extends Context.Service<Probe, { readonly n: number }>()("${id ?? "@kampus/libfabrika/runtime/Probe"}") {}`,
+      "",
+      `export const read = (text: string): unknown => ${parse ? "JSON.parse(text)" : "text"};`,
+      ...(blocking ? ["", "debugger;"] : []),
+    ],
+    "\n",
+  )}\n`;
 
 const PROBE = "next/packages/libfabrika/src/runtime/Probe.ts";
 

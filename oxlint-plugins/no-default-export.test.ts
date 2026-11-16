@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (0058): on for our source,
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.
@@ -45,7 +46,7 @@ const NAMED = "export const a = 1;\nexport type T = number;\n";
 it("every default export form is refused in our source, under every source folder", async () => {
   await fc.assert(
     fc.asyncProperty(fc.constantFrom(...SOURCE), fc.stringMatching(/^[a-z]{1,8}$/), async (folder, stem) => {
-      const files = Object.fromEntries(FORMS.map((form, i) => [`${folder}/${stem}${i}.ts`, `${form}\n`]));
+      const files = Object.fromEntries(Arr.map(FORMS, (form, i) => [`${folder}/${stem}${i}.ts`, `${form}\n`]));
       const result = await plant({ ...files, [`${folder}/named.ts`]: NAMED });
 
       for (const file of Object.keys(files)) {
@@ -66,8 +67,8 @@ it("an inline edge comment lets the default on the next line through, and no lin
       const farther = `${folder}/farther.ts`;
 
       const result = await plant({
-        [marked]: [edge, "export default { fetch: () => 1 };"].join("\n"),
-        [farther]: [edge, "const a = 1;", "export default a;"].join("\n"),
+        [marked]: Arr.join([edge, "export default { fetch: () => 1 };"], "\n"),
+        [farther]: Arr.join([edge, "const a = 1;", "export default a;"], "\n"),
       });
 
       expect(result(CODE, marked)).toEqual([]);
@@ -79,7 +80,7 @@ it("an inline edge comment lets the default on the next line through, and no lin
 
 it("scenario: tooling and config files, and files outside our source, keep their default export", async () => {
   // A tool loads these by their default, so 0058 leaves them out by glob.
-  const files = Object.fromEntries([...TOOLING, ...OUTSIDE].map((file) => [file, "export default {};\n"]));
+  const files = Object.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
   const result = await plant(files);
 
   for (const file of Object.keys(files)) {

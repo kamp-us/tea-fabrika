@@ -5,6 +5,8 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -53,13 +55,15 @@ const law = (form: string, io: boolean): string => `it("law", () => { ${io ? "op
 
 /** The lines a file must fire on, the prelude being line 1 and the import line 2. */
 const expected = (n: number, io: boolean, held: boolean): ReadonlyArray<number> =>
-  held && io ? forms(n).flatMap(([, count], i) => (count ? [i + 3] : [])) : [];
+  held && io ? Arr.flatMap(forms(n), ([, count], i) => (count ? [i + 3] : [])) : [];
 
 const check = (filename: string, code: string, lines: ReadonlyArray<number>) => {
   tester.run("runs-from-depth", runsFromDepth, {
     valid: lines.length === 0 ? [{ code, filename }] : [],
     invalid:
-      lines.length === 0 ? [] : [{ code, filename, errors: lines.map((line) => ({ line, message: /test depth/ })) }],
+      lines.length === 0
+        ? []
+        : [{ code, filename, errors: Arr.map(lines, (line) => ({ line, message: /test depth/ })) }],
   });
 };
 
@@ -67,7 +71,7 @@ const check = (filename: string, code: string, lines: ReadonlyArray<number>) => 
 const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
   const out = spawnSync(
     join(root, "node_modules/.bin/oxlint"),
-    ["--format=json", ...[...cases.keys()].map((file) => relative(root, file))],
+    ["--format=json", ...Arr.map([...cases.keys()], (file) => relative(root, file))],
     // A hundred runs' files report more than spawnSync's 1 MiB default holds, which cut the JSON short.
     { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
@@ -75,13 +79,13 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
-
-  const found = [...cases.keys()].map((file) => [
+  const found = Arr.map([...cases.keys()], (file) => [
     file,
-    report.diagnostics
-      .filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file)
-      .map((d) => d.labels[0]!.span.line)
-      .sort((a, b) => a - b),
+    pipe(
+      report.diagnostics,
+      Arr.filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file),
+      Arr.map((d) => d.labels[0]!.span.line),
+    ).sort((a, b) => a - b),
   ]);
 
   expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
@@ -171,7 +175,7 @@ const plant = (count: fc.Arbitrary<Plant>, numRuns: number, examples: Array<[Pla
 
 /** A case count and the file of every count form it makes in a law, with the lines that must fire. */
 const inLaw = (count: number, io: boolean): Plant => [
-  [PRELUDE, OPENS, ...forms(count).map(([line]) => law(line, io)), ""].join("\n"),
+  Arr.join([PRELUDE, OPENS, ...Arr.map(forms(count), ([line]) => law(line, io)), ""], "\n"),
   (held) => expected(count, io, held),
 ];
 
@@ -180,8 +184,8 @@ const overIo = (count: number, [from, real]: (typeof IMPORTS)[number]): Plant =>
   const lines = ioForms(count, from, real);
 
   return [
-    [IO_PRELUDE, ...lines.map(([line]) => line), ""].join("\n"),
-    (held) => (held ? lines.flatMap(([, fires], i) => (fires ? [i + 2] : [])) : []),
+    Arr.join([IO_PRELUDE, ...Arr.map(lines, ([line]) => line), ""], "\n"),
+    (held) => (held ? Arr.flatMap(lines, ([, fires], i) => (fires ? [i + 2] : [])) : []),
   ];
 };
 
@@ -202,6 +206,6 @@ it("a law that reaches real IO is refused any written count; a law in memory, a 
       .tuple(fc.integer({ min: 1, max: 5000 }), fc.constantFrom(...IMPORTS))
       .map(([count, from]) => overIo(count, from)),
     100,
-    [...IMPORTS.map((from): [Plant] => [overIo(100, from)]), [overIo(3000, IMPORTS[0])]],
+    [...Arr.map(IMPORTS, (from): [Plant] => [overIo(100, from)]), [overIo(3000, IMPORTS[0])]],
   );
 });

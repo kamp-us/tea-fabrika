@@ -17,7 +17,11 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync, 
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
-import { Predicate, Schema } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, describe, expect, it } from "vitest";
@@ -138,8 +142,8 @@ const EDIT = fc.record({
 });
 
 /** Each kind of edit, committed and not, so every case is reached whatever the random runs draw. */
-const EXAMPLES: Array<[Readonly<Record<string, string>>, Edit]> = KINDS.flatMap((kind) =>
-  [true, false].map((committed): [Readonly<Record<string, string>>, Edit] => [
+const EXAMPLES: Array<[Readonly<Record<string, string>>, Edit]> = Arr.flatMap(KINDS, (kind) =>
+  Arr.map([true, false], (committed): [Readonly<Record<string, string>>, Edit] => [
     { "rules/one.ts": "export const one = 1;\n", "two.ts": "export const two = 2;\n" },
     { kind, committed, at: 1, tree: "f".repeat(40) },
   ]),
@@ -183,11 +187,15 @@ const picomatch: { isMatch: (path: string, globs: ReadonlyArray<string>, options
 
 /** The project, if any, whose include takes this path. */
 const projectOf = (path: string): string | undefined =>
-  projects.find((project) => picomatch.isMatch(path, project.test.include, { dot: true }))?.test.name;
+  pipe(
+    Arr.findFirst(projects, (project) => picomatch.isMatch(path, project.test.include, { dot: true })),
+    Option.map((project) => project.test.name),
+    Option.getOrUndefined,
+  );
 
 /** Every file and folder under vendor/, from the top of the repo. */
 const vendored = (): ReadonlyArray<string> =>
-  readdirSync(join(ROOT, "vendor"), { recursive: true, encoding: "utf8" }).map((path) => `vendor/${path}`);
+  Arr.map(readdirSync(join(ROOT, "vendor"), { recursive: true, encoding: "utf8" }), (path) => `vendor/${path}`);
 
 /** What `tsc --showConfig` resolves a project's include to, its files from the project's folder. */
 const Shown = Schema.fromJsonString(Schema.Struct({ files: Schema.optionalKey(Schema.Array(Schema.String)) }));
@@ -204,15 +212,13 @@ const extended = (config: string): ReadonlyArray<string> => {
   const top = statement?.type === "ExpressionStatement" ? statement.expression : undefined;
   const object = top?.type === "ParenthesizedExpression" ? top.expression : top;
   const properties = object?.type === "ObjectExpression" ? object.properties : [];
-
-  const named = properties.find(
+  const named = Arr.findFirst(
+    properties,
     (property) => property.type === "Property" && property.key.type === "Literal" && property.key.value === "extends",
   );
-
-  const value = named?.type === "Property" ? named.value : undefined;
+  const value = Option.isSome(named) && named.value.type === "Property" ? named.value.value : undefined;
   const items = value?.type === "ArrayExpression" ? value.elements : [value];
-
-  return items.flatMap((item) =>
+  return Arr.flatMap(items, (item) =>
     item?.type === "Literal" && Predicate.isString(item.value)
       ? [relative(ROOT, join(ROOT, dirname(config), item.value))]
       : [],
@@ -238,7 +244,7 @@ describe("L6 nothing of this repo's runs or checks the vendored files", () => {
         fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/),
         fc.constantFrom(...kinds),
         (folders, name, kind) => {
-          expect(projectOf(["vendor", ...folders, `${name}${kind}`].join("/"))).toBeUndefined();
+          expect(projectOf(Arr.join(["vendor", ...folders, `${name}${kind}`], "/"))).toBeUndefined();
         },
       ),
       { seed: 119120, numRuns: 100 },
@@ -248,29 +254,30 @@ describe("L6 nothing of this repo's runs or checks the vendored files", () => {
   it("scenario: no vitest project includes any file of vendor/, their spawning test among them", () => {
     const files = vendored();
     expect(files).toContain("vendor/anti-slop/src/rules/require-readable-spacing-cli.test.ts");
-    expect(files.filter((path) => projectOf(path) !== undefined)).toEqual([]);
+    expect(Arr.filter(files, (path) => projectOf(path) !== undefined)).toEqual([]);
   });
 
   it("scenario: no tsconfig project of the repo includes a path under vendor/, as tsc --showConfig resolves it", () => {
     const listed = spawnSync("git", ["ls-files", "-z", "--", "*tsconfig*.json"], { cwd: ROOT, encoding: "utf8" });
-    const all = listed.stdout.split("\0").filter((path) => /^tsconfig(?:\.[\w-]+)?\.json$/.test(basename(path)));
+    const all = Arr.filter(listed.stdout.split("\0"), (path) => /^tsconfig(?:\.[\w-]+)?\.json$/.test(basename(path)));
     // A base another tsconfig extends is never a compilation of its own: its include is not
     // inherited when it has none, and each project that extends it is read here as it resolves.
-    const bases = new Set(all.flatMap(extended));
-    const configs = all.filter((config) => !bases.has(config));
+    const bases = new Set(Arr.flatMap(all, extended));
+    const configs = Arr.filter(all, (config) => !bases.has(config));
     expect(bases).toContain("tsconfig.base.json");
     // Many projects, each with files: none read means nothing was checked, never that it is clean.
     expect(configs.length).toBeGreaterThan(10);
 
-    const reached = configs.flatMap((config) => {
+    const reached = Arr.flatMap(configs, (config) => {
       const shown = spawnSync(TSC, ["--showConfig", "-p", config], { cwd: ROOT, encoding: "utf8" });
       expect(shown.status, `${config}: ${shown.stderr}`).toBe(0);
       const files = Schema.decodeUnknownSync(Shown)(shown.stdout).files ?? [];
-
-      return files
-        .map((file) => relative(ROOT, join(ROOT, dirname(config), file)))
-        .filter((file) => file === "vendor" || file.startsWith("vendor/"))
-        .map((file) => `${config}: ${file}`);
+      return pipe(
+        files,
+        Arr.map((file) => relative(ROOT, join(ROOT, dirname(config), file))),
+        Arr.filter((file) => file === "vendor" || file.startsWith("vendor/")),
+        Arr.map((file) => `${config}: ${file}`),
+      );
     });
 
     expect(reached).toEqual([]);

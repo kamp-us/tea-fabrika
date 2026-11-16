@@ -1,5 +1,6 @@
 // L12, next/. The lint rule owns contract shape; behavior lives in the desktop laws.
 import { join } from "node:path";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -53,28 +54,30 @@ it("vector: schemas and errors pass; platform imports and running code fail", ()
       { filename: `${top}BrainService.ts`, code: good },
       { filename: `${top}BrainServiceManaged.ts`, code: `${headers}export const layer = Layer.empty;` },
     ],
-    invalid: [
-      'import { app } from "electron";',
-      'import type { BrowserWindow } from "electron";',
-      'import { DatabaseSync } from "node:sqlite";',
-      'export { layer } from "./BrainServiceManaged.ts";',
-      "export const layer = Layer.empty;",
-      "export const stop = () => Effect.void;",
-      "Effect.runSync(Effect.void);",
-    ].map((code) => ({
-      filename: `${top}BrainService.ts`,
-      code: `${headers}${code}`,
-      errors: [{ message: /only its written contract/ }],
-    })),
+    invalid: Arr.map(
+      [
+        'import { app } from "electron";',
+        'import type { BrowserWindow } from "electron";',
+        'import { DatabaseSync } from "node:sqlite";',
+        'export { layer } from "./BrainServiceManaged.ts";',
+        "export const layer = Layer.empty;",
+        "export const stop = () => Effect.void;",
+        "Effect.runSync(Effect.void);",
+      ],
+      (code) => ({
+        filename: `${top}BrainService.ts`,
+        code: `${headers}${code}`,
+        errors: [{ message: /only its written contract/ }],
+      }),
+    ),
   });
 });
 
 it("scenario: L12 the repo config rejects a static Layer at every new contract path", async () => {
   // The config, not RuleTester, must activate this rule at each approved contract.
-  const paths = ["BrainService", "BrainControl", "BrainProbe"].map((name) => `${top}${name}.ts`);
-
+  const paths = Arr.map(["BrainService", "BrainControl", "BrainProbe"], (name) => `${top}${name}.ts`);
   const result = await plant(
-    Object.fromEntries(paths.map((file) => [file, `${headers}${shape} { static layer = Layer.empty; }\n`])),
+    Object.fromEntries(Arr.map(paths, (file) => [file, `${headers}${shape} { static layer = Layer.empty; }\n`])),
   );
 
   for (const file of paths) {

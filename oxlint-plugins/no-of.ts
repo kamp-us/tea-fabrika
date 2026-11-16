@@ -20,6 +20,7 @@
 //
 // `.oxlintrc.json` turns it on in all of `next/**`, tests included: a test names its helpers too.
 import type { CreateRule } from "@oxlint/plugins";
+import * as Arr from "effect/Array";
 import type { Node } from "./match.ts";
 
 const OF = /^of$|[A-Za-z0-9]Of$/;
@@ -47,12 +48,16 @@ const spelled = (node: Node | null | undefined): string | null => {
  */
 const exportsOf = (program: Node): boolean =>
   program.type === "Program" &&
-  program.body.some(
+  Arr.some(
+    program.body,
     (s) =>
       s.type === "ExportNamedDeclaration" &&
       s.source == null &&
       s.exportKind !== "type" &&
-      s.specifiers.some((e) => e.exportKind !== "type" && spelled(e.local) === "of" && spelled(e.exported) === "of"),
+      Arr.some(
+        s.specifiers,
+        (e) => e.exportKind !== "type" && spelled(e.local) === "of" && spelled(e.exported) === "of",
+      ),
   );
 
 export const noOf: CreateRule = {

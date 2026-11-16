@@ -3,6 +3,10 @@ import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { devNull } from "node:os";
 import { join, relative } from "node:path";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 
@@ -21,14 +25,15 @@ if (tracked.status !== 0) {
   process.exit(2);
 }
 
-const files = tracked.stdout.split("\0").filter((path) => path.endsWith(".css"));
+const files = Arr.filter(tracked.stdout.split("\0"), (path) => path.endsWith(".css"));
 
 if (files.length === 0) {
   console.error("stylelint: no tracked CSS files");
   process.exit(2);
 }
 
-try {
+/** The whole check: what it finds sets the exit code, and a throw means it did not finish. */
+const check = async (): Promise<void> => {
   // `code` avoids glob expansion; the empty ignore file prevents .stylelintignore taking effect.
   const config = await stylelint.resolveConfig(join(ROOT, files[0] ?? ""), { configFile });
 
@@ -87,7 +92,8 @@ try {
 
     if (
       report.errored &&
-      report.results.every(
+      Arr.every(
+        report.results,
         (result) =>
           result.warnings.length === 0 && result.parseErrors.length === 0 && result.invalidOptionWarnings.length === 0,
       )
@@ -99,14 +105,15 @@ try {
 
   for (const [rule, hits] of counts) {
     const setting = config.rules?.[rule];
-    const known: unknown = Array.isArray(setting) ? setting[1]?.known : undefined;
+    const options: unknown = Arr.isArray(setting) ? setting[1] : undefined;
+    const known: unknown = Predicate.hasProperty(options, "known") ? options.known : undefined;
 
-    if (!Array.isArray(known)) {
+    if (!Arr.isArray(known)) {
       throw new Error(`${rule} needs its known list`);
     }
 
     for (const entry of known) {
-      if (!hits.known.has(entry)) {
+      if (typeof entry !== "string" || !hits.known.has(entry)) {
         console.error(`${rule}: stale known entry ${entry}`);
         blocks++;
       }
@@ -117,7 +124,14 @@ try {
 
   console.log(`stylelint: ${files.length} files, ${blocks} blocking`);
   process.exitCode = blocks === 0 ? 0 : 1;
-} catch (error) {
-  console.error(`stylelint did not finish in ${relative(ROOT, configFile)}: ${String(error)}`);
+};
+
+// The failure is the thrown value as text, which is all the message below prints of it.
+const finished = await Effect.runPromise(
+  Effect.result(Effect.tryPromise({ try: check, catch: (error) => String(error) })),
+);
+
+if (Result.isFailure(finished)) {
+  console.error(`stylelint did not finish in ${relative(ROOT, configFile)}: ${finished.failure}`);
   process.exitCode = 2;
 }

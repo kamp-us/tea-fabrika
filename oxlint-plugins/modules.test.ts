@@ -1,3 +1,5 @@
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 // Ticket 477, PR 0: the lint laws of libfabrika's modules (decision 0043), each seen to fire on a
 // planted file before a file moves. All of this is `next/`. Three rules carry them:
 //   - `fabrika/modules`, hand-written, since no existing rule says these four: no module re-exports
@@ -35,8 +37,12 @@ const MODULES = [
 ] as const;
 
 /** Every module with every other module: 72 pairs, so no pair is left to a pattern nobody tried. */
-const PAIRS = MODULES.flatMap((module) =>
-  MODULES.filter((other) => other !== module).map((other) => [module, other] as const),
+const PAIRS = Arr.flatMap(MODULES, (module) =>
+  pipe(
+    MODULES,
+    Arr.filter((other) => other !== module),
+    Arr.map((other) => [module, other] as const),
+  ),
 );
 
 const modules = "fabrika(modules)";
@@ -45,8 +51,7 @@ const restricted = "eslint(no-restricted-imports)";
 
 const fileCase = "unicorn(filename-case)";
 
-const file = (...lines: ReadonlyArray<string>): string => ["// planted", ...lines, ""].join("\n");
-
+const file = (...lines: ReadonlyArray<string>): string => Arr.join(["// planted", ...lines, ""], "\n");
 const pascal = (name: string): string => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`;
 
 const own = "export const own = 1;";
@@ -56,7 +61,7 @@ describe("fabrika/modules: no module file re-exports another module's names", as
 
   const files = {
     ...Object.fromEntries(
-      PAIRS.map(([module, other]) => [
+      Arr.map(PAIRS, ([module, other]) => [
         pair(module, other),
         file(
           `export {a} from "../${other}/Front.ts";`, // 2
@@ -122,8 +127,8 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", as
   ];
 
   const taken = [
-    ...MODULES.map((module) => `${SRC}/${module}/Front.ts`),
-    ...MODULES.map((module) => `${SRC}/${module}/Front.test.ts`),
+    ...Arr.map(MODULES, (module) => `${SRC}/${module}/Front.ts`),
+    ...Arr.map(MODULES, (module) => `${SRC}/${module}/Front.test.ts`),
     `${SRC}/node/brain.ts`,
     `${SRC}/cloudflare/brain.ts`,
     `${SRC}/index.ts`,
@@ -141,8 +146,7 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", as
     "next/packages/tuval/src/utils/x.ts",
     "next/apps/fabrika/src/utils/x.ts",
   ];
-
-  const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
+  const linted = await plant(Object.fromEntries(Arr.map([...refused, ...taken], (path) => [path, file(own)])));
 
   // Plants (the plan's): add `src/utils/x.ts`; `src/LedgerError.ts` exists.
   it("fires on a file in a folder or at a top name nobody listed", () => {
@@ -195,7 +199,7 @@ describe("fabrika/modules: every export in an internal/ file is @internal", asyn
   );
 
   const files = {
-    ...Object.fromEntries(MODULES.map((module) => [`${SRC}/${module}/internal/part.ts`, body])),
+    ...Object.fromEntries(Arr.map(MODULES, (module) => [`${SRC}/${module}/internal/part.ts`, body])),
     // The plan's real name, and a folder below `internal/`.
     [`${SRC}/ledger/internal/ledgerStore.ts`]: body,
     [`${SRC}/runtime/internal/holder/state.ts`]: body,
@@ -211,7 +215,7 @@ describe("fabrika/modules: every export in an internal/ file is @internal", asyn
   // Plant: an `internal/` file with one export that has no `@internal` doc comment.
   it("fires on each export with no @internal doc comment, in every module's internal/", () => {
     for (const path of [
-      ...MODULES.map((module) => `${SRC}/${module}/internal/part.ts`),
+      ...Arr.map(MODULES, (module) => `${SRC}/${module}/internal/part.ts`),
       `${SRC}/ledger/internal/ledgerStore.ts`,
       `${SRC}/runtime/internal/holder/state.ts`,
     ]) {
@@ -292,7 +296,7 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
 
   const files = {
     ...Object.fromEntries(
-      PAIRS.flatMap(([module, other]) => [
+      Arr.flatMap(PAIRS, ([module, other]) => [
         [
           front(module, other),
           file(
@@ -394,7 +398,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
   const refused = [
     `${SRC}/ledger/log.ts`, // the plan's plant
     `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
-    ...FRESH.flatMap((module) => [
+    ...Arr.flatMap(FRESH, (module) => [
       `${SRC}/${module}/kebab-case.ts`,
       `${SRC}/${module}/camelCase.ts`,
       `${SRC}/${module}/kebab-case.test.ts`,
@@ -405,7 +409,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
   ];
 
   const taken = [
-    ...FRESH.flatMap((module) => [
+    ...Arr.flatMap(FRESH, (module) => [
       `${SRC}/${module}/PascalCase.ts`,
       `${SRC}/${module}/PascalCase.test.ts`,
       `${SRC}/${module}/internal/camelCase.ts`,
@@ -423,8 +427,7 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
     `${SRC}/telemetry/internal/measurements.test.ts`,
     `${SRC}/Id.test-support.ts`,
   ];
-
-  const linted = await plant(Object.fromEntries([...refused, ...taken].map((path) => [path, file(own)])));
+  const linted = await plant(Object.fromEntries(Arr.map([...refused, ...taken], (path) => [path, file(own)])));
 
   // Plants (the plan's): add `src/ledger/log.ts` and `src/ledger/internal/LedgerStore.ts`.
   it("fires on a front file not in PascalCase and an internal/ file not in camelCase", () => {
@@ -458,17 +461,14 @@ describe("runtime/, access/ and gateway/ never import ledger/", async () => {
       'import {cyan} from "@radix-ui/colors";', // 8
       `export const all = [Ledger, Line, Sink, Mailbox, store, cyan];`,
     );
-
-  const refused = ABOVE.flatMap((module) => [
+  const refused = Arr.flatMap(ABOVE, (module) => [
     [`${SRC}/${module}/Front.ts`, "../"],
     [`${SRC}/${module}/Front.test.ts`, "../"],
     [`${SRC}/${module}/internal/front.ts`, "../../"],
   ]);
-
-  const taken = (["processes", "presence"] as const).map((module) => [`${SRC}/${module}/Front.ts`, "../"]);
-
+  const taken = Arr.map(["processes", "presence"] as const, (module) => [`${SRC}/${module}/Front.ts`, "../"]);
   const linted = await plant(
-    Object.fromEntries([...refused, ...taken].map(([path = "", up = ""]) => [path, body(up)])),
+    Object.fromEntries(Arr.map([...refused, ...taken], ([path = "", up = ""]) => [path, body(up)])),
   );
 
   it("refuses an import or re-export of ledger/, a type too, from each of the three, tests too", () => {

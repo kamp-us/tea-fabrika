@@ -3,6 +3,8 @@
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -21,8 +23,12 @@ const Pascal = word.map((w) => `${w[0]!.toUpperCase()}${w.slice(1)}Svc`);
 
 /** A file of numbered lines, and the lines the rule must fire on. */
 const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
-  text: `${lines.map(([line]) => line).join("\n")}\n`,
-  fires: lines.flatMap(([, fires], i) => (fires ? [i + 1] : [])),
+  text: `${pipe(
+    lines,
+    Arr.map(([line]) => line),
+    Arr.join("\n"),
+  )}\n`,
+  fires: Arr.flatMap(lines, ([, fires], i) => (fires ? [i + 1] : [])),
 });
 
 describe("T737 G2 service IDs carry the package and the file's path", () => {
@@ -125,8 +131,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
               ['export class Old extends Context.Service<Old, {}>()("old/Old") {}', false],
             ]),
           };
-
-          const linted = await plant(Object.fromEntries(Object.entries(files).map(([path, f]) => [path, f.text])));
+          const linted = await plant(Object.fromEntries(Arr.map(Object.entries(files), ([path, f]) => [path, f.text])));
 
           for (const [path, f] of Object.entries(files)) {
             expect(linted(CODE, path), path).toEqual(f.fires);
@@ -207,8 +212,8 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
       files.set(path, lines);
     }
 
-    const planted = [...files].map(([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
-    const linted = await plant(Object.fromEntries(planted.map(([path, f]) => [path, f.text])));
+    const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
+    const linted = await plant(Object.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text])));
 
     for (const [path, f] of planted) {
       expect(linted(CODE, path), path).toEqual(f.fires);
@@ -226,8 +231,11 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
 
     const report: { readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }> } =
       JSON.parse(ran.stdout);
-
-    const hits = report.diagnostics.filter((d) => d.code === CODE).map((d) => d.filename);
+    const hits = pipe(
+      report.diagnostics,
+      Arr.filter((d) => d.code === CODE),
+      Arr.map((d) => d.filename),
+    );
     expect(hits).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 // Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
 // over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
 import { join } from "node:path";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -27,15 +28,15 @@ const check = (filename: string, { text: code, lines }: Case) => {
     invalid:
       lines.length === 0
         ? []
-        : [{ code, filename, errors: lines.map((line) => ({ line, message: /Native imports in next\/ need/ })) }],
+        : [{ code, filename, errors: Arr.map(lines, (line) => ({ line, message: /Native imports in next\/ need/ })) }],
   });
 };
 
 /** One oxlint run over every case's files, through the repo's own config. */
 const cli = async (cases: ReadonlyMap<string, Case>) => {
-  const result = await plant(Object.fromEntries([...cases].map(([path, { text }]) => [path, text])));
-  expect(Object.fromEntries([...cases.keys()].map((path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries([...cases].map(([path, { lines }]) => [path, lines])),
+  const result = await plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text])));
+  expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+    Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
 
   return result;
@@ -99,23 +100,16 @@ it("every native import form needs a nonempty reason on its own line, in product
           "next/e2e/native.ts",
           "packages/fabrika/src/native.ts",
         ];
-
-        const lines = forms.flatMap((form, i) =>
-          [
-            "",
-            ` // edge: ${reason}`,
-            " // edge:   ",
-            "before",
-            ` /* edge: ${reason} */`,
-            ` // not edge: ${reason}`,
-          ].map((mark, j) => {
-            const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
-
-            return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
-          }),
+        const lines = Arr.flatMap(forms, (form, i) =>
+          Arr.map(
+            ["", ` // edge: ${reason}`, " // edge:   ", "before", ` /* edge: ${reason} */`, ` // not edge: ${reason}`],
+            (mark, j) => {
+              const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
+              return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
+            },
+          ),
         );
-
-        const body = lines.join("\n");
+        const body = Arr.join(lines, "\n");
         const expected: number[] = [];
         let line = 1;
 
@@ -147,14 +141,17 @@ it("multiline imports use the module string's line; strings and neighboring mark
       const product = "next/packages/libfabrika/src/native.ts";
 
       const exam = {
-        text: [
-          `import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
-          `import { // edge: ${reason}\n writeFile\n} from "node:fs";`,
-          `const fake = "// edge: ${reason}"; const a = require("node:fs");`,
-          'import {Effect} from "effect";',
-          'import a from "some-package";',
-          'import b from "./fs.ts";',
-        ].join("\n"),
+        text: Arr.join(
+          [
+            `import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
+            `import { // edge: ${reason}\n writeFile\n} from "node:fs";`,
+            `const fake = "// edge: ${reason}"; const a = require("node:fs");`,
+            'import {Effect} from "effect";',
+            'import a from "some-package";',
+            'import b from "./fs.ts";',
+          ],
+          "\n",
+        ),
         lines: [6, 7],
       };
 

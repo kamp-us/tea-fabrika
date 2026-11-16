@@ -26,6 +26,7 @@
 // `// oxlint-disable-next-line fabrika/no-implicit-effect-concurrency -- <reason>`, never a blanket
 // exemption.
 import type { CreateRule } from "@oxlint/plugins";
+import * as Arr from "effect/Array";
 import { plainCall } from "./match.ts";
 
 const WHAT: Readonly<Record<string, string>> = {
@@ -45,9 +46,10 @@ export const noImplicitEffectConcurrency: CreateRule = {
           return;
         }
 
-        const names = context.sourceCode
-          .getTokens(node)
-          .some((token) => token.type === "Identifier" && token.value === "concurrency");
+        const names = Arr.some(
+          context.sourceCode.getTokens(node),
+          (token) => token.type === "Identifier" && token.value === "concurrency",
+        );
 
         if (names) {
           return;

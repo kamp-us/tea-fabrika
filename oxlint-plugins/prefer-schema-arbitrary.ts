@@ -2,6 +2,8 @@
 // warn override still names the folder (0523). Match written schema evidence, never record keys or
 // capitalized names. Scope variables identify imports, aliases and callback inputs without types.
 import type { CreateRule } from "@oxlint/plugins";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import { below, dotted, type Node } from "./match.ts";
 
 const constructors = new Set([
@@ -214,11 +216,11 @@ export const preferSchemaArbitrary: CreateRule = {
 
       if (
         init?.type === "CallExpression" &&
-        [...below(init)].some((part) => {
+        Arr.some([...below(init)], (part) => {
           const importedName = moduleName(part);
 
           return (
-            importedName &&
+            importedName !== undefined &&
             ((importedName.from === "effect" && importedName.name.startsWith("Schema.")) ||
               importedName.from === "effect/Schema")
           );
@@ -234,7 +236,7 @@ export const preferSchemaArbitrary: CreateRule = {
       "Program:exit"(program) {
         const nodes = [...below(program)];
 
-        if (!nodes.some((node) => constructors.has(fcCall(node) ?? ""))) {
+        if (!Arr.some(nodes, (node) => constructors.has(fcCall(node) ?? ""))) {
           return;
         }
 
@@ -261,7 +263,7 @@ export const preferSchemaArbitrary: CreateRule = {
           const found: Node[] = [];
 
           for (const part of below(node)) {
-            if (part === node || found.some((outer) => part.start >= outer.start && part.end <= outer.end)) {
+            if (part === node || Arr.some(found, (outer) => part.start >= outer.start && part.end <= outer.end)) {
               continue;
             }
 
@@ -290,7 +292,7 @@ export const preferSchemaArbitrary: CreateRule = {
             continue;
           }
 
-          callback.params.forEach((param, i) => {
+          Arr.forEach(callback.params, (param, i) => {
             const variable = binding(param);
             const input = node.arguments[i];
 
@@ -471,8 +473,9 @@ export const preferSchemaArbitrary: CreateRule = {
 
             const returns =
               body.type === "BlockStatement"
-                ? [...below(body)]
-                    .filter((part) => {
+                ? pipe(
+                    [...below(body)],
+                    Arr.filter((part) => {
                       if (part.type !== "ReturnStatement" || !part.argument) {
                         return false;
                       }
@@ -488,8 +491,9 @@ export const preferSchemaArbitrary: CreateRule = {
                       }
 
                       return owner === callback;
-                    })
-                    .flatMap((part) => (part.type === "ReturnStatement" && part.argument ? [part.argument] : []))
+                    }),
+                    Arr.flatMap((part) => (part.type === "ReturnStatement" && part.argument ? [part.argument] : [])),
+                  )
                 : [body];
 
             for (const returned of returns) {
@@ -503,8 +507,8 @@ export const preferSchemaArbitrary: CreateRule = {
                 continue;
               }
 
-              const carriesInput = returned.arguments.some((arg) =>
-                [...below(arg)].some((part) => part.type === "Identifier" && binding(part) === parameter),
+              const carriesInput = Arr.some(returned.arguments, (arg) =>
+                Arr.some([...below(arg)], (part) => part.type === "Identifier" && binding(part) === parameter),
               );
 
               if (carriesInput) {
@@ -518,7 +522,10 @@ export const preferSchemaArbitrary: CreateRule = {
 
         for (const [node, name] of matches) {
           if (
-            [...matches.keys()].some((outer) => outer !== node && outer.start <= node.start && outer.end >= node.end)
+            Arr.some(
+              [...matches.keys()],
+              (outer) => outer !== node && outer.start <= node.start && outer.end >= node.end,
+            )
           ) {
             continue;
           }
@@ -533,11 +540,12 @@ export const preferSchemaArbitrary: CreateRule = {
             statement = statement.parent;
           }
 
-          const reasons = source
-            .getCommentsBefore(statement)
-            .filter((c) => statement.loc.start.line - c.loc.end.line <= 1);
+          const reasons = Arr.filter(
+            source.getCommentsBefore(statement),
+            (c) => statement.loc.start.line - c.loc.end.line <= 1,
+          );
 
-          if (reasons.some((c) => /fast-check:\s*(?:edge cases|unsupported Effect)\s*--\s*\S.+/.test(c.value))) {
+          if (Arr.some(reasons, (c) => /fast-check:\s*(?:edge cases|unsupported Effect)\s*--\s*\S.+/.test(c.value))) {
             continue;
           }
 

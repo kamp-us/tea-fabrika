@@ -4,6 +4,8 @@
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.
 import { join } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -104,8 +106,8 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
       // With `squash` imported by name, the import is the one use, and a call of it adds no report.
       const lines: ReadonlyArray<readonly [string, boolean]> = [
         [at.header, module === null],
-        ...OTHERS.map((line) => [line, false] as const),
-        ...pieces.map(({ fires, form }, i): readonly [string, boolean] =>
+        ...Arr.map(OTHERS, (line) => [line, false] as const),
+        ...Arr.map(pieces, ({ fires, form }, i): readonly [string, boolean] =>
           fires
             ? module === null
               ? [`const u${i} = ${at.local}(x);`, false]
@@ -115,27 +117,47 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
       ];
 
       const filename = "next/packages/libfabrika/src/runtime/Case.ts";
-      const errors = lines.flatMap(([, fires], i) => (fires ? [{ line: i + 1, message: REFUSED }] : []));
+      const errors = Arr.flatMap(lines, ([, fires], i) => (fires ? [{ line: i + 1, message: REFUSED }] : []));
       // The same file with every firing line taken out.
-      const valid = lines.flatMap(([line, fires]) => (fires ? [] : [line])).join("\n");
+      const valid = pipe(
+        lines,
+        Arr.flatMap(([line, fires]) => (fires ? [] : [line])),
+        Arr.join("\n"),
+      );
 
       tester.run("no-cause-squash", noCauseSquash, {
         valid: [{ code: valid, filename }],
-        invalid: errors.length === 0 ? [] : [{ code: lines.map(([line]) => line).join("\n"), filename, errors }],
+        invalid:
+          errors.length === 0
+            ? []
+            : [
+                {
+                  code: pipe(
+                    lines,
+                    Arr.map(([line]) => line),
+                    Arr.join("\n"),
+                  ),
+                  filename,
+                  errors,
+                },
+              ],
       });
     }),
     { seed: 119120, numRuns: 100 },
   );
 });
 
-const BODY = [
-  'import { Cause } from "effect";',
-  "export const a = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
-  "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: names whatever failed, for a span",
-  "export const b = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
-  "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: this line squashes nothing",
-  "export const c = 1;",
-].join("\n");
+const BODY = Arr.join(
+  [
+    'import { Cause } from "effect";',
+    "export const a = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
+    "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: names whatever failed, for a span",
+    "export const b = (cause: Cause.Cause<unknown>) => Cause.squash(cause);",
+    "// oxlint-disable-next-line fabrika/no-cause-squash -- edge: this line squashes nothing",
+    "export const c = 1;",
+  ],
+  "\n",
+);
 
 const HELD = [
   "next/packages/libfabrika/src/runtime/Plant.ts",
@@ -156,7 +178,7 @@ const LEFT_OUT = [
 ];
 
 it("scenario: one real lint run per path kind, since only the real config holds which paths are tests", async () => {
-  const linted = await plant(Object.fromEntries([...HELD, ...LEFT_OUT].map((path) => [path, BODY])));
+  const linted = await plant(Object.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY])));
 
   // Product code: the bare call fires, and the call under its edge comment passes.
   for (const path of HELD) {

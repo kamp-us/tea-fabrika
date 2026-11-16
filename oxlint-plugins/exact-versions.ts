@@ -10,6 +10,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -30,14 +33,16 @@ const passes = (version: unknown): boolean =>
   typeof version === "string" && (POINTERS.has(version) || NAMED.test(version) || EXACT.test(version));
 
 const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  typeof value === "object" && value !== null && !Arr.isArray(value);
 
 /** One line per name in `map` whose version does not pass. */
 const refused = (file: string, field: string, map: unknown): readonly string[] =>
   isMap(map)
-    ? Object.entries(map)
-        .filter(([, version]) => !passes(version))
-        .map(([name, version]) => `${file}: ${field}: ${name}: ${JSON.stringify(version)}`)
+    ? pipe(
+        Object.entries(map),
+        Arr.filter(([, version]) => !passes(version)),
+        Arr.map(([name, version]) => `${file}: ${field}: ${name}: ${JSON.stringify(version)}`),
+      )
     : [];
 
 const inPackage = (file: string, text: string): readonly string[] => {
@@ -50,7 +55,7 @@ const inPackage = (file: string, text: string): readonly string[] => {
   const { pnpm } = manifest;
 
   return [
-    ...[...FIELDS, ...OVERRIDES].flatMap((field) => refused(file, field, manifest[field])),
+    ...Arr.flatMap([...FIELDS, ...OVERRIDES], (field) => refused(file, field, manifest[field])),
     ...(isMap(pnpm) ? refused(file, "pnpm.overrides", pnpm["overrides"]) : []),
   ];
 };
@@ -67,7 +72,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
   return [
     ...refused(file, "catalog", catalog),
     ...(isMap(catalogs)
-      ? Object.entries(catalogs).flatMap(([name, map]) => refused(file, `catalogs.${name}`, map))
+      ? Arr.flatMap(Object.entries(catalogs), ([name, map]) => refused(file, `catalogs.${name}`, map))
       : []),
     ...refused(file, "overrides", overrides),
   ];
@@ -82,7 +87,7 @@ const root = process.argv[2] ?? join(import.meta.dirname, "..");
 
 const tracked = spawnSync(
   "git",
-  ["ls-files", "-z", "--", ...Object.keys(READERS).flatMap((name) => [name, `**/${name}`])],
+  ["ls-files", "-z", "--", ...Arr.flatMap(Object.keys(READERS), (name) => [name, `**/${name}`])],
   {
     cwd: root,
     encoding: "utf8",
@@ -90,7 +95,7 @@ const tracked = spawnSync(
   },
 );
 
-const files = tracked.stdout.split("\0").filter((file) => file !== "");
+const files = Arr.filter(tracked.stdout.split("\0"), (file) => file !== "");
 
 // No file read must never read as clean.
 if (tracked.status !== 0 || files.length === 0) {
@@ -109,23 +114,23 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
-  }
-};
+const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } =>
+  Result.match(
+    Result.try(() => check(file)),
+    {
+      onSuccess: (lines) => ({ lines, broken: false }),
+      onFailure: (error) => ({ lines: [`${file}: could not read: ${String(error)}`], broken: true }),
+    },
+  );
 
-const results = files.map(attempt);
-
-const lines = results.flatMap((result) => result.lines);
+const results = Arr.map(files, attempt);
+const lines = Arr.flatMap(results, (result) => result.lines);
 
 for (const line of lines) {
   console.error(line);
 }
 
-if (results.some((result) => result.broken)) {
+if (Arr.some(results, (result) => result.broken)) {
   process.exit(2);
 }
 
