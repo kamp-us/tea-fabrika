@@ -2071,15 +2071,23 @@ describe("P34c live object accounting", () => {
           expect(local.program.writes).toBeGreaterThan(0);
 
           // The process's own healthy mark is saved on its first idle turn once its policy's reset
-          // window has passed, and that save is the supervisor's (0593, law L2 below), which the program
-          // paid for before. This law moves the clock less
-          // than that window, so any write it sees is the refusal's or the hour's.
-          const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
-          const { policy } = Schema.decodeUnknownSync(
-            Schema.fromJsonString(
-              Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Number }) }) }),
-            ),
-          )(journal?.value);
+          // window has passed. That save is the supervisor's (0593, law L2 below): it leaves the
+          // program's account and adds one write to the supervisor tally, which the whole status
+          // read below compares. This law moves the clock less than that window and checks after
+          // each read that no healthy mark was saved, so any write it sees in any account is the
+          // refusal's or the hour's.
+          const saved = () => {
+            const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
+            return Schema.decodeUnknownSync(
+              Schema.fromJsonString(
+                Schema.Struct({
+                  healthyAt: Schema.Number,
+                  policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Number }) }),
+                }),
+              ),
+            )(journal?.value);
+          };
+          const { healthyAt, policy } = saved();
           expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(
             policy.backoff.resetAfterMs,
           );
@@ -2117,7 +2125,8 @@ describe("P34c live object accounting", () => {
             expect(countedIn(other), `refusal ${n} was counted in the other hour`).toBe(counted.other);
 
             // Plant (supervisor.ts: the healthy mark is also saved on the first idle turn in a new
-            // hour): the open after the crossing refusal charges one write of no bytes; red here.
+            // hour): the open after the crossing refusal saves the mark and charges the supervisor
+            // tally one write of no bytes; red on the status read and on the healthy mark.
             expect(yield* w.localUsage(pid), `refusal ${n} changed the program's local account`).toEqual(local);
             expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
               view: { count: 1 },
@@ -2125,6 +2134,7 @@ describe("P34c live object accounting", () => {
             expect(yield* w.localUsage(pid), `the read after refusal ${n} changed the program's local account`).toEqual(
               local,
             );
+            expect(saved().healthyAt, `the read after refusal ${n} saved a healthy mark`).toBe(healthyAt);
 
             if (c.reopen) {
               yield* Effect.promise(() => w.reopenAll());

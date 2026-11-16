@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-recovery-l16-times-out-under-load",
+  "date": "2026-11-16",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+    "line": 1144
+  },
+  "says": "In next/, on a branch based before pull request 1519, the law 'T753 L16 real first/later process steps, recovery and successors keep the shared instance gate' (reached through next/packages/libfabrika/src/settings/StartsTest.ts:22) and L11 in next/apps/fabrika/src/start-child.laws.integration.test.ts:746 hit vitest's 60000 ms default timeout under a --changed run in a cloud box, while each file passes whole alone. This is not an open flake for L16: main fixes it in c8d2646d0 (pull request 1519, 'T753 L16 waits on the third configure itself and reads its case count from the test depth'), after 2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine and 2026-11-16-t753-l16-at-its-timeout-in-the-cloud-box. Start-child L11 already has its tracker ticket, so this row files nothing new for either law.",
+  "proof": "The build's `nice -n 15 pnpm exec vitest run --maxWorkers=3 --changed origin/main` on fabrikalfa/supervisor-writes-uncharged (6bea67060 plus the build's edits) printed 'Error: Test timed out in 60000ms' for both laws, '2 failed | 164 passed (166)'; L16 timed out in two separate runs. Alone, the files passed 15/15 and 23/23. The branch head 8e108c760 does not hold c8d2646d0.",
+  "cost": "Until the branch takes main, a --changed run reads red for no code reason, and a reader must rerun each file alone to tell.",
+  "head": "8e108c7604093b971b914585df6e3a39c6e310d5",
+  "ticket": null,
+  "pr": null
+}

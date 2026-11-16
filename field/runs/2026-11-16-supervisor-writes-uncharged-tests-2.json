@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-supervisor-writes-uncharged-tests-2",
+  "ticket": "supervisor-writes-uncharged",
+  "pr": null,
+  "started": "2026-11-16T02:06:43-08:00",
+  "ended": "2026-11-16T02:13:10-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Short send-back round of the tests step for the supervisor-writes-uncharged plan (decision 0593), in next/. The hour-crossing law from pull request 1515 keeps its resetAfterMs guard, which is still needed: the law compares the whole localUsage status with toEqual, and that status now holds the supervisor tally a healthy mark would move. The guard's comment now says so, the journal decode is a saved() helper read once for healthyAt and policy, and after the second status read the law checks that no healthy mark was saved. The plant comment says the open after the crossing refusal saves the mark and charges the supervisor tally one write of no bytes. No assertion was removed or loosened. The build wrote this edit, but step-commit refused it from a build, so the tests step owns it.",
+  "laws": [
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte",
+      "red": "not red today, a guard: the build already keeps the healthy mark inside its window; red on its plant, on the status read and on the new healthy-mark check"
+    }
+  ],
+  "plants": [
+    {
+      "law": "Q9/Q12 hour-crossing law, status read",
+      "plant": "supervisor.ts: the healthy mark is also saved on the first idle turn in a new hour",
+      "result": "red"
+    },
+    {
+      "law": "Q9/Q12 hour-crossing law, healthy-mark check",
+      "plant": "the same supervisor.ts plant, with the second status read taken out for that one run only",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Plant red on the status read: 'AssertionError: the read after refusal 0 changed the program's local account: expected { program: { writes: 14, …(1) }, …(3) } to deeply equal { program: { writes: 14, …(1) }, …(3) }', so the program's writes held and another account moved. Plant red on the healthy mark: 'AssertionError: the read after refusal 0 saved a healthy mark: expected 1794110401000 to be 1794110398900'. Both plant files were saved by copy and restored by copy; git status showed only the law file before the commit. Ran at 8e108c760 plus this edit, with no override and TYPESAFE_API_KEY unset, under nice -n 15 vitest --maxWorkers=3: the law alone green, then the whole file 15 of 15 green in 78.9 s. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the list ratchet pass. Also saved finding 2026-11-16-recovery-l16-times-out-under-load, which main already fixes for L16 in c8d2646d0.",
+  "step": "tests"
+}
