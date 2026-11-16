@@ -26,7 +26,10 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, Layer, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as DateTime from "effect/DateTime";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
@@ -62,9 +65,7 @@ const KEEP = 336 * H;
 const D = Date.UTC(2026, 9, 23);
 
 const hourStart = (at: number) => Math.floor(at / H) * H;
-
-const utcDay = (at: number) => new Date(at).toISOString().slice(0, 10);
-
+const utcDay = (at: number) => DateTime.formatIso(DateTime.makeUnsafe(at)).slice(0, 10);
 const fileKey = (day: string) => `measurements/${OBJECT}/${day}.jsonl`;
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");

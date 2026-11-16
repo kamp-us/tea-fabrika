@@ -69,6 +69,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import type * as PlatformError from "effect/PlatformError";
+import * as Clock from "effect/Clock";
 import { Array as Arr, pipe, String as Str } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
@@ -869,7 +870,7 @@ interface Ask {
 }
 
 /** A run that ended before the container answered: what was asked, and why it is stuck. */
-const stuckSummary = (ask: Ask, started: number, reason: string, detail: string): Summary => ({
+const stuckSummary = (ask: Ask, started: number, ended: number, reason: string, detail: string): Summary => ({
   outcome: "stuck",
   reason,
   detail,
@@ -879,7 +880,7 @@ const stuckSummary = (ask: Ask, started: number, reason: string, detail: string)
   image: null,
   network: "none",
   limits: { ...LIMITS, seconds: ask.seconds ?? secondsFor(ask.base !== undefined) },
-  seconds: Math.round((Date.now() - started) / 1000),
+  seconds: Math.round((ended - started) / 1000),
   usage: null,
   related: [],
   excluded: [],
@@ -1165,7 +1166,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   });
 
   const summary: Summary = {
-    ...stuckSummary(ask, started, "", ""),
+    ...stuckSummary(ask, started, yield* Clock.currentTimeMillis, "", ""),
     ...ended,
     build,
     base,
@@ -1207,18 +1208,23 @@ const run = Command.make(
   Effect.fn("mutbox.run")(function* (ask) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const started = Date.now();
-
+    const started = yield* Clock.currentTimeMillis;
     const summary = yield* boxed(ask, started).pipe(
       Effect.scoped,
       // Whatever went wrong, the answer is `stuck`: there is no other way to run the sample.
       Effect.catch((e) =>
-        Effect.succeed(
+        Effect.map(Clock.currentTimeMillis, (ended) =>
           e._tag === "Stuck"
-            ? stuckSummary(ask, started, e.reason, e.detail)
+            ? stuckSummary(ask, started, ended, e.reason, e.detail)
             : e._tag === "CallTimeout"
-              ? stuckSummary(ask, started, "docker_timeout", timeoutLine(e))
-              : stuckSummary(ask, started, "crash", "a file or folder the run needs could not be read or written"),
+              ? stuckSummary(ask, started, ended, "docker_timeout", timeoutLine(e))
+              : stuckSummary(
+                  ask,
+                  started,
+                  ended,
+                  "crash",
+                  "a file or folder the run needs could not be read or written",
+                ),
         ),
       ),
     );

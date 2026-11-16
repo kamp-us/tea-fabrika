@@ -37,6 +37,7 @@ import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Formatter from "effect/Formatter";
 import type * as PlatformError from "effect/PlatformError";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -415,13 +416,10 @@ describe("P16 p33 one-file build", () => {
     fc.assert(
       fc.asyncProperty(graph, async ({ text, count, chaos }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
-        vi.setSystemTime(new Date("2030-01-01"));
-
+        vi.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2030-01-01")));
         const a = fixture(text, count),
           first = await build({ ...a.options, chaos });
-
-        vi.setSystemTime(new Date("2031-01-01"));
-
+        vi.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2031-01-01")));
         const b = fixture(text, count),
           second = await build({ ...b.options, chaos });
 
@@ -439,8 +437,8 @@ describe("P16 p33 one-file build", () => {
         for (const marker of [
           a.home,
           b.home,
-          String(new Date("2030-01-01").getTime()),
-          String(new Date("2031-01-01").getTime()),
+          String(DateTime.toEpochMillis(DateTime.makeUnsafe("2030-01-01"))),
+          String(DateTime.toEpochMillis(DateTime.makeUnsafe("2031-01-01"))),
           "2030-01-01T",
           "2031-01-01T",
         ]) {

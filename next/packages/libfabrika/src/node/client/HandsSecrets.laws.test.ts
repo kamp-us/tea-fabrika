@@ -36,6 +36,7 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as References from "effect/References";
@@ -303,7 +304,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
           done.add("file:wide");
         } else if (c === "unreadable" && entry?.type === "File") {
           // A folder where the key file should be: it stats, and reading it fails.
-          disk.entries.set(FILE, { type: "Directory", mode: 0o700, mtime: new Date(0) });
+          disk.entries.set(FILE, { type: "Directory", mode: 0o700, mtime: DateTime.toDateUtc(DateTime.makeUnsafe(0)) });
           done.add("file:unreadable");
         } else if (c !== "none" && entry !== undefined) {
           // A person deletes the key file, or one that cannot be used any more.

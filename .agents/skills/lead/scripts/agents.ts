@@ -30,6 +30,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Formatter from "effect/Formatter";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
@@ -271,9 +272,8 @@ const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
 const appendTo = (events: string, line: object) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs
-      .writeFileString(events, `${Formatter.formatJson({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
-      .pipe(Effect.ignore);
+    const at = DateTime.formatIso(yield* DateTime.now);
+    yield* fs.writeFileString(events, `${Formatter.formatJson({ at, ...line })}\n`, { flag: "a" }).pipe(Effect.ignore);
   });
 
 /**
@@ -587,7 +587,7 @@ export const stepRow = (r: RowAsk): string => {
     const offset = -d.getTimezoneOffset();
     const sign = offset >= 0 ? "+" : "-";
     const pad = (n: number) => pipe(String(Math.abs(n)), Str.padStart(2, "0"));
-    const shifted = pipe(new Date(d.getTime() + offset * 60_000).toISOString(), Str.slice(0, 19));
+    const shifted = pipe(DateTime.formatIso(DateTime.makeUnsafe(d.getTime() + offset * 60_000)), Str.slice(0, 19));
     return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
   };
 

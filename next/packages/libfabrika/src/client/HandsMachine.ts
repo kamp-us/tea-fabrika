@@ -14,6 +14,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
@@ -169,7 +170,7 @@ const assigned = (w: Assigned): Assigned => ({
 });
 
 /** A Msg's time as the journal keeps it: the client's own clock, in ISO text. */
-const iso = (at: number): string => new Date(at).toISOString();
+const iso = (at: number): string => DateTime.formatIso(DateTime.makeUnsafe(at));
 
 /** The start time to keep on an entry, when one is known. */
 const since = (startedAt: string | undefined) => (startedAt === undefined ? {} : { startedAt });

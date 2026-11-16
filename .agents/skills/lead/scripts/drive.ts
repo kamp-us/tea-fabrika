@@ -115,6 +115,8 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Order from "effect/Order";
 import * as Formatter from "effect/Formatter";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, pipe, String as Str } from "effect";
 import { ChildProcess } from "effect/process";
 import * as Rec from "effect/Record";
@@ -1285,7 +1287,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 
   return {
     box_new: (cmd: Ask) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const r = box(
           "new",
           cmd.box,
@@ -1303,7 +1305,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 
         writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
         phases = [...phases, ...phasesIn(r.err)];
-        ready = Date.now();
+        ready = yield* Clock.currentTimeMillis;
         const started = startedOf(r.code, r.err);
 
         if (started._tag !== "made") {
@@ -1485,10 +1487,11 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         );
       }),
     record: (e: typeof Entry.Type) =>
-      Effect.sync(() => {
+      Effect.gen(function* () {
         const { ask } = e;
         const notes: string[] = [];
-        const ended = new Date().toISOString();
+        const endedAt = yield* DateTime.now;
+        const ended = DateTime.formatIso(endedAt);
         dropView(env, ask.box);
 
         // The saved files are scrubbed first (redact.sh prints only a count), then the field row,
@@ -1512,8 +1515,8 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               effort: ask.effort,
               outcome: rowOf(e.outcome),
               reason: `drive.ts ${ask.step} in box ${ask.box} at ${pipe(ask.base, Str.slice(0, 8))}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}`,
-              started: new Date(ask.started),
-              ended: new Date(ended),
+              started: DateTime.toDateUtc(DateTime.makeUnsafe(ask.started)),
+              ended: DateTime.toDateUtc(endedAt),
               spent: e.spent,
               redacted: Number.isFinite(redacted) ? redacted : null,
               plants: e.plants,
@@ -2178,9 +2181,9 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return usageError("the branch is fabrikalfa/<name>");
   }
 
-  const fetchStart = Date.now();
+  const fetchStart = DateTime.toEpochMillis(DateTime.nowUnsafe());
   sh("git", ["-C", env.MAIN, "fetch", "-q", "origin"]);
-  const phases: Phase[] = [{ name: "fetch", ms: Date.now() - fetchStart }];
+  const phases: Phase[] = [{ name: "fetch", ms: DateTime.toEpochMillis(DateTime.nowUnsafe()) - fetchStart }];
 
   // A plan writer reads the main checkout as it stands, so its base is that checkout's HEAD.
   if (step === "plan" && p.from !== undefined) {
@@ -2242,7 +2245,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     events: step === "plan" ? at("-plan.jsonl") : at(".jsonl"),
     err: at(".err"),
     minutes: Number(process.env.DRIVE_MINUTES ?? 60),
-    started: Date.now(),
+    started: DateTime.toEpochMillis(DateTime.nowUnsafe()),
   };
 
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
@@ -2374,7 +2377,7 @@ export const driveStep = (
   const lock = join(env.BOXES, "state", "electron.lock");
 
   const program = Effect.gen(function* () {
-    const waitStart = Date.now();
+    const waitStart = yield* Clock.currentTimeMillis;
 
     if (holdsElectron(ask.step, p.electron)) {
       yield* takeElectron(env);
@@ -2403,7 +2406,7 @@ export const driveStep = (
 
     const handle = yield* run(machine, {
       ctx: undefined,
-      interpret: handlers(env, [...p.phases, { name: "wait", ms: Date.now() - waitStart }]),
+      interpret: handlers(env, [...p.phases, { name: "wait", ms: (yield* Clock.currentTimeMillis) - waitStart }]),
       subscribe: { draft: agentsDraft(env, agents) },
       terminal: (m) => m.phase === "over",
     });

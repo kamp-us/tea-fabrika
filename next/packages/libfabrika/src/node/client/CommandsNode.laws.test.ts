@@ -28,6 +28,7 @@ import * as Path from "effect/Path";
 import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
@@ -356,7 +357,11 @@ describe("P39 slice 4b: the real command layer", () => {
                 if (f.kind === "file") {
                   MemoryFiles.put(d, git, new Uint8Array([0x23, 0x21]), f.mode);
                 } else if (f.kind === "folder") {
-                  d.entries.set(git, { type: "Directory", mode: 0o755, mtime: new Date(0) });
+                  d.entries.set(git, {
+                    type: "Directory",
+                    mode: 0o755,
+                    mtime: DateTime.toDateUtc(DateTime.makeUnsafe(0)),
+                  });
                 }
               });
               const runnable = Arr.some(folders, (f) => f.kind === "file" && (f.mode & 0o111) !== 0);

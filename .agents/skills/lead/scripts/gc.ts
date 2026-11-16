@@ -41,6 +41,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, pipe, String as Str } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
@@ -393,7 +394,7 @@ const keptByDrive = (boxes: string): Map<string, number> => {
 
       for (const step of quest.steps ?? []) {
         if (step.kept === true && step.box !== undefined && step.box !== "") {
-          kept.set(step.box, Date.parse(step.ended ?? "") || Date.now());
+          kept.set(step.box, Date.parse(step.ended ?? "") || DateTime.toEpochMillis(DateTime.nowUnsafe()));
         }
       }
     });
@@ -499,7 +500,7 @@ const main = () => {
   );
   const busyIn = cwds();
   const kept = keptByDrive(env.BOXES);
-  const now = Date.now();
+  const now = DateTime.toEpochMillis(DateTime.nowUnsafe());
   let removed = 0;
   let freed = 0;
   let keptCount = 0;

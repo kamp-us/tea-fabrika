@@ -3,6 +3,7 @@ import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as DateTime from "effect/DateTime";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { expect } from "vitest";
@@ -112,7 +113,7 @@ const rowsUnder = (text: string, heading: string): string[] => {
 };
 
 // A time as the jobs API writes it, to the second: 2026-11-14T10:00:00Z.
-const iso = (seconds: number) => new Date(seconds * 1000).toISOString().replace(".000Z", "Z");
+const iso = (seconds: number) => DateTime.formatIso(DateTime.makeUnsafe(seconds * 1000)).replace(".000Z", "Z");
 
 // A jobs API step: started or not, ended or not, with a conclusion once GitHub gives one. Names are
 // single-spaced, so a table cell holds them as they are.

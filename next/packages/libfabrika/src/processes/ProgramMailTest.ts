@@ -15,7 +15,7 @@
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import { DateTime, Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -180,7 +180,7 @@ type Move =
 const said = (cell: Cell, over: Partial<From> = {}): From =>
   from({
     by: "SHA256:program-writer",
-    sentAt: new Date(Date.UTC(2026, 10, 11) + cell.clock).toISOString(),
+    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 11) + cell.clock)),
     build: cell.build,
     traceId: cell.trace,
     ...over,

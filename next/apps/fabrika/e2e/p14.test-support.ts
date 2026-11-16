@@ -767,7 +767,7 @@ export const reader = (h: Home, dev: Dev) =>
         nonce,
         platform: "headless",
         os: "linux",
-        sentAt: new Date().toISOString(),
+        sentAt: DateTime.formatIso(DateTime.nowUnsafe()),
         signed: key.proof(`fabrika-hello\n${dev.url}\n${tab}\n${nonce}`),
       });
 

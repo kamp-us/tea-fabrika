@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
@@ -616,8 +617,7 @@ const run = (setup: Setup = {}) => {
     writeFileSync(join(dir, path), text);
   }
 
-  const started = Date.now();
-
+  const started = DateTime.toEpochMillis(DateTime.nowUnsafe());
   const ran = spawnSync(
     process.execPath,
     [
@@ -670,7 +670,7 @@ const run = (setup: Setup = {}) => {
       : null,
     lockLeft: existsSync(lock),
     inputLeft: existsSync(join(out, "in")),
-    ms: Date.now() - started,
+    ms: DateTime.toEpochMillis(DateTime.nowUnsafe()) - started,
     fake,
     dir,
     build,
@@ -1127,20 +1127,15 @@ describe("a call past its bound is stopped, and its child with it", () => {
 
   // scenario: a hung client that ignores SIGTERM still goes, by SIGKILL after the grace. Its
   // `sleep` inherits the ignored TERM. This one waits the grace on the real clock.
-  it("scenario: a child that ignores SIGTERM is killed after the grace", () => {
-    const started = Date.now();
-
-    return called(2 * limit, `trap '' TERM; ${waits}`).pipe(
-      Effect.tap(({ exit, pid }) =>
-        Effect.sync(() => {
+  it("scenario: a child that ignores SIGTERM is killed after the grace", () =>
+    Effect.gen(function* () {
+      const started = yield* Clock.currentTimeMillis;
+      const { exit, pid } = yield* called(2 * limit, `trap '' TERM; ${waits}`);
+      const ended = yield* Clock.currentTimeMillis;
           expect(Exit.isFailure(exit)).toBe(true);
           expect(alive(pid)).toBe(false);
-          expect(Date.now() - started).toBeGreaterThanOrEqual(KILL_GRACE_SECONDS * 1000);
-        }),
-      ),
-      Effect.runPromise,
-    );
-  });
+      expect(ended - started).toBeGreaterThanOrEqual(KILL_GRACE_SECONDS * 1000);
+    }).pipe(Effect.runPromise));
 
   // format: the line gc prints, after "mutbox gc: ", before it exits 0 and the chain goes on.
   it("format: the line a timed-out call leaves", () => {

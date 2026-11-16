@@ -3,8 +3,10 @@
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 
@@ -258,7 +260,7 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
 
   if (
     typeof day === "string" &&
-    (!Number.isFinite(Date.parse(day)) || new Date(day).toISOString().slice(0, 10) !== day)
+    !Option.exists(DateTime.make(day), (at) => DateTime.formatIso(at).slice(0, 10) === day)
   ) {
     findings.push(warning("date", "unusual calendar date"));
   }

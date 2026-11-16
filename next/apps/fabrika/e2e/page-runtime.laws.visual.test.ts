@@ -21,6 +21,8 @@ import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
@@ -138,7 +140,7 @@ const profile = (b: Browser, init?: { readonly script: (arg: string) => void; re
     );
     yield* playwright("routeWebSocket", () =>
       context.routeWebSocket(/^ws:\/\/127\.0\.0\.1\//, (ws) => {
-        const dial: Dial = { at: Date.now(), from: ws.url(), closed: false };
+        const dial: Dial = { at: DateTime.toEpochMillis(DateTime.nowUnsafe()), from: ws.url(), closed: false };
         seen.dials.push(dial);
         ws.onClose(() => {
           dial.closed = true;
@@ -175,14 +177,14 @@ const open = (seen: Seen) => Arr.filter(seen.dials, (d) => !d.closed).length;
 /** Waits until `check` holds or `within` ms pass, and answers whether it held. */
 const until = <E>(check: Effect.Effect<boolean, E>, within: number) =>
   Effect.gen(function* () {
-    const end = Date.now() + within;
+    const end = (yield* Clock.currentTimeMillis) + within;
 
     for (;;) {
       if (yield* check) {
         return true;
       }
 
-      if (Date.now() >= end) {
+      if ((yield* Clock.currentTimeMillis) >= end) {
         return false;
       }
 
@@ -270,7 +272,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                           yield* until(isStopped(page, seen), WITHIN),
                           `event ${i}, not persisted: stopped within ${WITHIN} ms ${Formatter.format(seen)}`,
                         ).toBe(true);
-                        stoppedAt = Date.now();
+                        stoppedAt = yield* Clock.currentTimeMillis;
                       }
 
                       if (stoppedAt !== null) {

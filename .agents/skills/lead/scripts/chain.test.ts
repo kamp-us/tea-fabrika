@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
 import * as Formatter from "effect/Formatter";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -1342,8 +1343,8 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
         effort: "medium",
         outcome: "pass",
         reason: "done.",
-        started: new Date("2026-11-09T10:00:00Z"),
-        ended: new Date("2026-11-09T10:30:00Z"),
+        started: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:00:00Z")),
+        ended: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:30:00Z")),
         spent,
         redacted: 0,
       }),
@@ -1393,8 +1394,8 @@ describe("T341 the field row prices a turn by its provider, today's tooling", ()
             effort: "medium",
             outcome: "pass",
             reason,
-            started: new Date("2026-11-09T10:00:00Z"),
-            ended: new Date("2026-11-09T10:30:00Z"),
+            started: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:00:00Z")),
+            ended: DateTime.toDateUtc(DateTime.makeUnsafe("2026-11-09T10:30:00Z")),
             spent,
             redacted: null,
             plants: answer.plants,

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as DateTime from "effect/DateTime";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { expect } from "vitest";
@@ -42,7 +43,7 @@ const MINUTE = 60_000;
 const BASE = Date.parse("2026-11-15T14:15:17Z");
 
 /** A time `ms` after the run started, as the jobs API writes one. */
-const at = (ms: number) => new Date(BASE + ms).toISOString();
+const at = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(BASE + ms));
 
 // A job of the run as the jobs API lists it, with no failure anywhere in it: what a leg stopped
 // after another leg failed, or by a person, leaves, and the report job still running. A canceled leg

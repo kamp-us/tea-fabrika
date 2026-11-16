@@ -17,6 +17,7 @@ import { join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
+import * as Clock from "effect/Clock";
 import { String as Str, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
@@ -68,9 +69,8 @@ const FIRST_WINDOW: Target = { file: "first-window.visual.test.ts", test: "L11",
 
 const suite = (trace: string, fault: Fault | undefined, target: Target) =>
   Effect.acquireRelease(
-    Effect.sync(() => {
-      const started = Date.now();
-
+    Effect.gen(function* () {
+      const started = yield* Clock.currentTimeMillis;
       const child = spawn(
         process.execPath,
         [
@@ -98,7 +98,9 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
       );
 
       const ended = Effect.callback<Ended>((resume) => {
-        child.once("exit", (code, signal) => resume(Effect.succeed({ code, signal, ms: Date.now() - started })));
+        child.once("exit", (code, signal) =>
+          resume(Effect.map(Clock.currentTimeMillis, (now) => ({ code, signal, ms: now - started }))),
+        );
       });
 
       return { child, ended };
@@ -177,11 +179,10 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
 
     const gone = (left: Effect.Success<typeof look>) =>
       left.pids.length === 0 && left.ports.length === 0 && left.homes.length === 0;
-
-    const deadline = Date.now() + 10_000;
+    const deadline = (yield* Clock.currentTimeMillis) + 10_000;
     let left = yield* look;
 
-    while (!gone(left) && Date.now() < deadline) {
+    while (!gone(left) && (yield* Clock.currentTimeMillis) < deadline) {
       yield* Effect.sleep("250 millis");
       left = yield* look;
     }

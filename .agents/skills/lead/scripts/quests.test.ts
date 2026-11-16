@@ -8,6 +8,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import * as Rec from "effect/Record";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
@@ -20,10 +21,8 @@ const options = { seed: 119120, numRuns: 300 };
 const T0 = Date.parse("2026-11-12T14:00:00.000Z");
 
 const MIN = 60_000;
-
-const iso = (offset: number) => new Date(T0 + offset).toISOString();
-
-const at = (offset: number) => new Date(T0 + offset);
+const iso = (offset: number) => DateTime.formatIso(DateTime.makeUnsafe(T0 + offset));
+const at = (offset: number) => DateTime.toDateUtc(DateTime.makeUnsafe(T0 + offset));
 
 const beat = (phase: Beat.Phase, sinceMs: number, atMs: number, agentMs: number | null = null): Beat.Beat => ({
   at: iso(atMs),

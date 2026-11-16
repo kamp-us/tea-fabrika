@@ -18,6 +18,7 @@ import { type Runs, runsFor } from "@kampus/vitest";
 import {
   Cause,
   Context,
+  DateTime,
   Deferred,
   Effect,
   Exit,
@@ -359,7 +360,7 @@ const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
 const said = (cell: Cell, parent: string): From =>
   from({
     by: "SHA256:program-writer",
-    sentAt: new Date(Date.UTC(2026, 10, 11) + cell.clock).toISOString(),
+    sentAt: DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 11) + cell.clock)),
     build: cell.build,
     traceId: cell.trace,
     parent,

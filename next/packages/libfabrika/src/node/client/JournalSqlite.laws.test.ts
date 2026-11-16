@@ -21,6 +21,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
@@ -159,8 +160,7 @@ const garbageStep = (n: number, value: string): Step => ({
 });
 
 const Text = fc.string({ minLength: 1, maxLength: 24 });
-
-const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => new Date(ms).toISOString());
+const At = fc.integer({ min: 0, max: 4_102_444_800_000 }).map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms)));
 
 // fast-check: unsupported Effect -- fc.commands draws every step from fast-check arbitraries, and Effect's Arbitrary is another engine
 const AResult = fc.oneof(

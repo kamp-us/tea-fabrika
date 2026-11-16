@@ -32,6 +32,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -55,7 +56,7 @@ export const beat = (now: number, lastPass: number | null, merges: ReadonlyArray
 };
 
 const iso = (ms: number | null) =>
-  ms === null ? "none" : pipe(new Date(ms).toISOString(), Str.replace(/\.\d{3}Z$/, "Z"));
+  ms === null ? "none" : pipe(DateTime.formatIso(DateTime.makeUnsafe(ms)), Str.replace(/\.\d{3}Z$/, "Z"));
 
 const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)} h`;
 

@@ -2,9 +2,12 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Arbitrary, Effect, Schema } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
 import * as Struct from "effect/Struct";
+import * as DateTime from "effect/DateTime";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
@@ -387,7 +390,7 @@ it("a run row written before the plan change passes without note", () => {
     Arbitrary.checkEffect(
       Arbitrary.all([Arbitrary.schema(Run), daysBack]),
       ([row, back]) => {
-        const date = new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString().slice(0, 10);
+        const date = DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 8) - back * 86_400_000)).slice(0, 10);
         const old = without(own({ ...row, date }, "run"), "note");
         const report = checker.checkFile(fileOf("runs"), "", `${JSON.stringify(old)}\n`);
 

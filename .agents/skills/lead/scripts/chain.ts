@@ -126,6 +126,8 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
 import * as Formatter from "effect/Formatter";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, pipe, String as Str } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
@@ -1211,7 +1213,7 @@ const beating = (file: ReturnType<typeof chainFile>) => {
 
   const enter = (phase: Beat.Phase, log: string | null) => {
     events = log;
-    const now = new Date();
+    const now = DateTime.toDateUtc(DateTime.nowUnsafe());
     const entered = Beat.enter(file.readRecord().beat ?? null, phase, now);
     write(Beat.tick(entered, now, writtenAt(events)));
   };
@@ -1220,7 +1222,7 @@ const beating = (file: ReturnType<typeof chainFile>) => {
     const beat = file.readRecord().beat;
 
     if (beat !== undefined) {
-      write(Beat.tick(beat, new Date(), writtenAt(events)));
+      write(Beat.tick(beat, DateTime.toDateUtc(DateTime.nowUnsafe()), writtenAt(events)));
     }
   };
 
@@ -1239,8 +1241,7 @@ const handlers = (s: Setup) => {
   const state = join(env.BOXES, "state", `${s.quest}.json`);
   const md = join(env.BOXES, "state", `${s.quest}.md`);
   const chainState = join(env.BOXES, "state", `${s.quest}-chain.json`);
-  const note = (text: string) => appendFileSync(md, `- ${new Date().toISOString()} chain: ${text}\n`);
-
+  const note = (text: string) => appendFileSync(md, `- ${DateTime.formatIso(DateTime.nowUnsafe())} chain: ${text}\n`);
   const saved = (): {
     head?: string;
     root?: string;
@@ -1332,7 +1333,7 @@ const handlers = (s: Setup) => {
           round,
           step: cmd.step,
           note: cmd.note,
-          startedAt: new Date().toISOString(),
+          startedAt: DateTime.formatIso(yield* DateTime.now),
           endedAt: null,
           line: null,
           judged: null,
@@ -1419,10 +1420,10 @@ const handlers = (s: Setup) => {
             ),
           ),
           Effect.tapError((e) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               saveStep({
                 ...entry,
-                endedAt: new Date().toISOString(),
+                endedAt: DateTime.formatIso(yield* DateTime.now),
                 line: {
                   outcome: `stuck:${e._tag}`,
                   head: "",
@@ -1445,9 +1446,7 @@ const handlers = (s: Setup) => {
             reason: e.reason,
           })),
         );
-
-        saveStep({ ...entry, endedAt: new Date().toISOString(), line });
-
+        saveStep({ ...entry, endedAt: DateTime.formatIso(yield* DateTime.now), line });
         return line;
       }),
     judge: (cmd: { step: StepName; line: Line; round: number }) =>
@@ -1456,8 +1455,7 @@ const handlers = (s: Setup) => {
         const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
         s.beats.enter("judge", at(".jsonl"));
-        const started = new Date();
-
+        const started = yield* DateTime.nowAsDate;
         // One turn in the main checkout on the row that only reads (Codex's read-only profile):
         // the judgment cannot change the checkout, by the harness and not by a promise. That row
         // reads nothing beside the checkout, so the state file and the report ride in the prompt.
@@ -1491,7 +1489,7 @@ const handlers = (s: Setup) => {
             outcome: move._tag === "step" ? "pass" : "parked",
             reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
             started,
-            ended: new Date(),
+            ended: yield* DateTime.nowAsDate,
             spent: turned.spent,
             redacted: scrubbed.code === 0 ? Number(Str.trim(scrubbed.out)) : null,
           }),
@@ -1514,9 +1512,9 @@ const handlers = (s: Setup) => {
         const minutes = yield* TypecheckMinutes;
         const every = yield* TypecheckEvery;
         note(`typecheck: waiting for CI's ${Typecheck.JOB} job at ${pipe(cmd.head, Str.slice(0, 8))} (PR ${cmd.pr})`);
-        const pushed = Date.now();
+        const pushed = yield* Clock.currentTimeMillis;
         const verdict = yield* Typecheck.wait({ main: env.MAIN, head: cmd.head, minutes, every });
-        const took = Math.round((Date.now() - pushed) / 1000);
+        const took = Math.round(((yield* Clock.currentTimeMillis) - pushed) / 1000);
         note(`typecheck: ${Typecheck.summary(verdict)} (${took} s after the push)`);
 
         return verdict;
@@ -1624,7 +1622,7 @@ const handlers = (s: Setup) => {
           round,
           step: "host",
           note: "",
-          startedAt: new Date().toISOString(),
+          startedAt: DateTime.formatIso(yield* DateTime.now),
           endedAt: null,
           line: null,
           judged: null,
@@ -1652,8 +1650,7 @@ const handlers = (s: Setup) => {
             Effect.succeed({ outcome: Outcome.stuck(e.reason), head, log: null } satisfies Host.Hosted),
           ),
         );
-
-        const ended = new Date().toISOString();
+        const ended = DateTime.formatIso(yield* DateTime.now);
         yield* Host.recordInQuest(args, hosted, ended).pipe(
           Effect.catch((e) => Effect.sync(() => note(`round ${round}: host could not write the state file: ${e}`))),
         );
@@ -1701,7 +1698,7 @@ const handlers = (s: Setup) => {
         );
 
         note(`queue: ${added.detail}`);
-        const now = new Date().toISOString();
+        const now = DateTime.formatIso(yield* DateTime.now);
         writeRecord({
           ...readRecord(),
           ...(added.at === "queued" ? { queued: now } : {}),

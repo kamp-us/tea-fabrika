@@ -28,6 +28,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "../src/build.ts";
@@ -324,7 +325,7 @@ export const served = (h: Home) =>
     const from = () => ({
       by: `SHA256:${pipe(createHash("sha256").update(blob).digest("base64"), Str.replace(/=+$/, ""))}`,
       for: PERSON,
-      sentAt: new Date().toISOString(),
+      sentAt: DateTime.formatIso(DateTime.nowUnsafe()),
       seen: 0,
       parent: null,
       traceId: TRACE,

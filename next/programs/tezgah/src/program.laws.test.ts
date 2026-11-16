@@ -46,6 +46,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, pipe, Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 
@@ -907,7 +908,7 @@ const FocusPick = fc.record({
 
 type FocusPick = typeof FocusPick extends fc.Arbitrary<infer A> ? A : never;
 
-const iso = (ms: number) => new Date(Date.UTC(2026, 10, 14) + ms).toISOString();
+const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(Date.UTC(2026, 10, 14) + ms));
 
 /** A focus move from a live tile to another tile on its workspace, picked in the state `w` reached,
  *  or for `focus_far` a `to` that is on no workspace or on another one. */

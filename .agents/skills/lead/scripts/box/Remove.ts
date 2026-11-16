@@ -15,6 +15,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as DateTime from "effect/DateTime";
 import { Array as Arr, pipe, String as Str } from "effect";
 import { BoxGit, type Inspection } from "./BoxGit.ts";
 import { Runs } from "./Runs.ts";
@@ -632,7 +633,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   // Keep Git's racy-index check: a fresh timestamp could hide a same-size edit. The copy's time is
   // never later than the original's (a Date holds milliseconds), so git only checks more.
   const stamp = yield* d.stat(joined(data, "index"));
-  const now = new Date(0);
+  const now = DateTime.toDateUtc(DateTime.makeUnsafe(0));
   yield* d.failed(
     fs.utimes(
       joined(into, "index"),

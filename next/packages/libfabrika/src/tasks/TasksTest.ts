@@ -25,6 +25,7 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Formatter from "effect/Formatter";
 import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -112,7 +113,9 @@ export const fcExecutor = (keys: ReadonlyArray<string>): fc.Arbitrary<Executor> 
 export const fcRecorded = fc.record({
   by: fc.constantFrom("brain", "gateway:hands", "gateway:window"),
   for: fcTypeId("person"),
-  sentAt: fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 }).map((at) => new Date(at).toISOString()),
+  sentAt: fc
+    .integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 })
+    .map((at) => DateTime.formatIso(DateTime.makeUnsafe(at))),
   parent: fc.option(fcTypeId("input"), { nil: null }),
   traceId: fcTraceId,
   build: fcHash,
