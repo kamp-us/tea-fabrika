@@ -299,6 +299,13 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
         schema: QuotaRunnerTest.supervision,
         accounting: accounting(name),
       }).load,
+    save: (name, value) =>
+      recoveryStore(sql(name), {
+        name,
+        capacity: 1_000_000_000,
+        schema: QuotaRunnerTest.supervision,
+        accounting: accounting(name),
+      }).save(value),
     entries: Effect.sync(() =>
       project.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row)),
     ),

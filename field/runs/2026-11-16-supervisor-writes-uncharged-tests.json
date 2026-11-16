@@ -1,0 +1,68 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-supervisor-writes-uncharged-tests",
+  "ticket": "supervisor-writes-uncharged",
+  "pr": "https://github.com/kamp-us/tea-fabrika/pull/1514",
+  "started": "2026-11-16T00:14:31-08:00",
+  "ended": "2026-11-16T00:52:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for the supervisor-writes-uncharged plan (decision 0593), in next/. Laws L1 to L6 are written in the files the plan names. L1, L2 and L3 are red on today's product for the plan's reason: a supervisor save (the healthy mark after resetAfterMs, the first save of a new journal) is charged to the program's local account. L2 shows the finding's own numbers, 16 writes where the law wants 15, bytes 934 both. L4 is green today, as a guard, and red on its plant. L5 and L6 are red as type errors until the build exports Charge and bookkeeping. One plan gap: L4's planned bound, the program's growth no more than an accepted letter's, is wrong for bytes (617 against 524 today, since a failed delivery's receipt keeps its input) and too loose for writes to catch its plant (4 writes a crash against 14). The law keeps the writes bound and adds the exact form the plan's doubt foresaw: the program's account is unchanged across the restart itself, which goes red on the plant. The branch merged origin/main first (PR 1515 adds the hour-crossing law L2 sits beside).",
+  "laws": [
+    {
+      "law": "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts: L1 the healthy mark after an idle gap is the supervisor's save: the program's local account is unchanged",
+      "red": "AssertionError: the healthy mark 0 was charged to the program: expected { writes: 3, bytes: 357 } to deeply equal { writes: 2, bytes: 357 }"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: L2 the healthy mark after the journal's reset window is the supervisor's write, not the program's",
+      "red": "AssertionError: the healthy mark was charged to the program: expected { writes: 16, bytes: 934 } to deeply equal { writes: 15, bytes: 934 }"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts: L3 a bookkeeping save charges only the supervisor, and a program or mixed save charges the program exactly",
+      "red": "AssertionError: first save: a supervisor save was charged to the program: expected { writes: 1, bytes: 357 } to deeply equal { writes: +0, bytes: +0 }"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/QuotaRunnerTest.ts: L4 a crash and its restart leave the supervisor tally, grow recovery, and cost the program no more than a letter",
+      "red": "not red today, a guard: today's store already charges restart saves to recovery; red on its plant"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/RecoveryStore.types.test.ts: type: L5 Accounting.change takes its charge, so four arguments or the old flag do not compile",
+      "red": "tsc: TS2305 Module '\"../processes/Quotas.ts\"' has no exported member 'Charge'; TS2578 Unused '@ts-expect-error' directive (lines 17 and 19); TS2345 Argument of type '\"supervisor\"' is not assignable to parameter of type 'boolean | undefined'"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/RecoveryStore.types.test.ts: type: L6 every bookkeeping name is a field of Supervision, and the program's own fields are not",
+      "red": "tsc: TS2305 Module '\"./internal/supervisor.ts\"' has no exported member 'bookkeeping'"
+    }
+  ],
+  "plants": [
+    {
+      "law": "L1 (QuotaRunnerTest.ts)",
+      "plant": "RecoveryStore.ts charges every non-recovery save to the program: today's product is this plant",
+      "result": "red"
+    },
+    {
+      "law": "L2 (runtime-recovery.laws.integration.test.ts)",
+      "plant": "the same as L1, today's product; also red with a reopen forced between the jump and the open",
+      "result": "red"
+    },
+    {
+      "law": "L3 (QuotaRunnerTest.ts)",
+      "plant": "today's product, which charges a bookkeeping save and a first save to the program",
+      "result": "red"
+    },
+    {
+      "law": "L4 (QuotaRunnerTest.ts)",
+      "plant": "RecoveryStore.ts charges recovery only on recoveryState(saved), so the successor's checkpointed save goes to the program",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 38,
+  "note": "L4 plant failed with: AssertionError: restart 0 was charged to the program: expected { writes: 21, bytes: 1224 } to deeply equal { writes: 20, bytes: 1498 }. Each plant ran once with an Edit and was undone with an Edit; git status showed no product file before the commit. L3's cost reckoning was checked against the real store by running it once with today's rule as its expectation: 40 runs green, then restored. Plants not run here, after build, at review: L3 (a) classify by seq and journal alone, (b) charge every save to supervisor, (c) charge a mixed save to supervisor; L5 make change's fifth parameter optional; L6 add seq to bookkeeping, or rename healthyAt in the schema only. Ran with no override and TYPESAFE_API_KEY unset, under nice -n 15 vitest --maxWorkers=3, on the merge of origin/main at f1ffe244b plus these edits: QuotaRunner.test.ts 10 laws, 8 green and L1, L3 red; RecoveryStore.types.test.ts green under vitest (type assertions only); runtime-recovery.laws.integration.test.ts 15 laws, 14 green and L2 red, also L2 alone at FABRIKA_TEST_DEPTH=full. One tsc on libfabrika to show the type reds: errors only in RecoveryStore.types.test.ts and in QuotaRunner.test.ts, where the World's local status lacks the supervisor field the build adds. pnpm format, pnpm lint and the list ratchet pass.",
+  "step": "tests"
+}
