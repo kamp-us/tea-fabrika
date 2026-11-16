@@ -282,7 +282,7 @@ def run_box():
                     for left in (pathlib.Path(out), events): left.unlink(missing_ok=True)
                     status = status or 1
             ended = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-            row = call([sys.executable, str(here / "fieldrow.py"), "--step", step, "--started", started, "--ended", ended, "--start", state.get("run-start", state["base"]), "--end", state["run-end"], "--status", str(status), str(events), run, ticket, "done" if status == 0 else "stuck", "runner exit " + str(status)])
+            row = call(["node", str(here / "fieldrow.ts"), "--step", step, "--started", started, "--ended", ended, "--start", state.get("run-start", state["base"]), "--end", state["run-end"], "--status", str(status), str(events), run, ticket, "done" if status == 0 else "stuck", "runner exit " + str(status)])
             if row.returncode:
                 status = status or 1
                 print("stuck run_row_failed", file=sys.stderr)

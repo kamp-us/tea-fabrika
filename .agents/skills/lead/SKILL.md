@@ -336,7 +336,7 @@ Read the header before you run one; this table only says what each is for.
 | `land.ts run`, `queue`, `merged` | the lead session only: land a ready quest, add a pull request to the merge queue ([0162](../../../.decisions/0162-no-friction-before-a-merge.md)), and close its tickets after the merge |
 | `governance.sh` | list the `.decisions/` files a diff touches; advice only |
 | `sizecap.ts` | a diff's or a plan's size, as advice only ([0099](../../../.decisions/0099-no-number-caps-a-pull-request.md)); run `diff` by hand, since nothing prints it at landing |
-| `fieldrow.py`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
+| `fieldrow.ts`, `clauderow.ts` | print one `field/runs/` row from a Codex run's events, or from a Claude subagent's transcript |
 | `fieldfile.ts` | save each printed row as its own row file (0090) |
 
 Cleanup is the tooling's job: never ask the owner to free disk
@@ -495,7 +495,7 @@ visible, and never weaken the rules to hide this message.
    that signals a process or calls launchd, and the owner has said yes (0178).
    box.sh run --step checks order and slots, and saves the run row.
 6. **After each step:** read drive's last line, the report and the diff, and log the run the same day:
-   one row file in `field/runs/` (`fieldrow.py` for Codex, `clauderow.ts` for a Claude agent, a
+   one row file in `field/runs/` (`fieldrow.ts` for Codex, `clauderow.ts` for a Claude agent, a
    driver included, once it has finished, or drive's `BOXES/<quest>-rows.jsonl`, each saved with
    `fieldfile.ts runs`), and one note file in `field/notes/` for anything that
    broke, cost too much, needed a person or worked well. Send a fix to the step that owns the file;
