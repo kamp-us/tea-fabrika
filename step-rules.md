@@ -139,6 +139,14 @@ parks at a clean point: its branch pushed, a field row saying where it stands. A
 order, to: (1) a fold, or a fix round of a finished slice; (2) the slice that unblocks a fold, the
 last one missing from a sweep; (3) a new slice.
 
+**Leak checks on the stack (2026-11-16).** PR 1301's branch, the stack's top at `eeb8ecdbb`,
+carries main's old pre-rewrite history: a second root, `6e9a51046`, whose old commits leakgrep
+flags. Everything built on it lands by squash merge only. Do not rebuild it, and push no history
+rewrite. A branch built on `eeb8ecdbb` runs leakgrep twice: once on the tree that lands
+(`git diff origin/main...HEAD > <scratch file>`, then `leakgrep.sh --text <scratch file>`), and once
+on its own commits (`leakgrep.sh --commits eeb8ecdbb..HEAD`). An integrator also runs
+`git rev-list --max-parents=0 HEAD` and names each root in its RESULT.
+
 **Folds roll in batches.** Each sweep has one integrator branch. When 5 or more reviewed slices of
 a sweep sit unfolded, its integrator folds them (merge, never rebase), and the twin mails the head
 for the merge session to stack.
