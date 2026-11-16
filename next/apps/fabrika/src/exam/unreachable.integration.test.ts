@@ -79,9 +79,30 @@ const flagged = (root: string) => {
 /** A folder name code-graph's defaults read as a test folder, which would hide a product file. */
 const TEST_PLACE = /^(tests?|fixtures?|e2e.*|test-.*)$/;
 
+// Names where code-graph 0.15.0 never judges a planted file, so law 2 would be false by its design:
+//   - `index`: a file `index.ts` or `.tsx` is a barrel (`isBarrel`, `BARREL_SUFFIXES` in
+//     dist/index.js), so its exports are withheld as `public-entry-surface`, never `dead`.
+//   - The folders the file walk prunes (`WALK_PRUNE`) and the segments a source file may not hold
+//     (`EXCLUDED_SEGMENTS`, `isSourceFile`), both in dist/chunk-HQJ7I5LA.js: such files are not read.
+// Of these names, the pattern below can draw only `index`, `dist` and `vendor`; the rest guard a
+// wider pattern. Plant: drop this set and force the pattern to `^(index|dist|vendor)$`; law 2 fails.
+const NEVER_JUDGED = new Set([
+  "index",
+  ".claude",
+  ".git",
+  ".next",
+  ".turbo",
+  ".wrangler",
+  "__generated__",
+  "coverage",
+  "dist",
+  "node_modules",
+  "vendor",
+]);
+
 const Segment = Schema.String.check(
   Schema.isPattern(/^[a-z][a-z0-9]{0,6}$/),
-  Schema.makeFilter((s) => !TEST_PLACE.test(s)),
+  Schema.makeFilter((s) => !TEST_PLACE.test(s) && !NEVER_JUDGED.has(s)),
 );
 
 /** A folder below next/: one to three generated segments deep. */
