@@ -6,7 +6,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Layer, Option } from "effect";
+import { Effect, Exit, Layer, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -14,7 +14,7 @@ import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";
 import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
 import * as LedgerTurnEndTest from "./LedgerTurnEndTest.ts";
-import type { Line } from "./Log.ts";
+import { type Line, lineFor } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
 // A fresh in-memory node:sqlite, closed by the test's scope (0061).
@@ -23,17 +23,21 @@ const memory = Effect.acquireRelease(
   (db) => Effect.sync(() => db.close()),
 );
 
-const line = (n: number): Line => ({
-  by: "SHA256:brain",
-  for: "person-a",
-  sentAt: "2026-11-07T00:00:00Z",
-  seen: 0,
-  parent: null,
-  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  build: "writer-build",
-  _tag: "fact",
-  body: { n },
-});
+const Fact = Schema.TaggedStruct("fact", { n: Schema.Number });
+
+const line = (n: number): Line =>
+  lineFor(
+    {
+      by: "SHA256:brain",
+      for: "person-a",
+      sentAt: "2026-11-07T00:00:00Z",
+      seen: 0,
+      parent: null,
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      build: "writer-build",
+    },
+    Fact.make({ n }),
+  );
 
 /** Every query the store sends while `capture` is on, with its parameters. */
 const recorded = (db: DatabaseSync) => {

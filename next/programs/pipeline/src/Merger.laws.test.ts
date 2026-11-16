@@ -423,11 +423,15 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           if (value._tag === "missing") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: "missing" });
+            const reply = sent[0]?.type === "send" && sent[0].m;
+            expect(reply).toHaveProperty("_tag", "closed");
+            expect(reply).toMatchObject({ state: "missing" });
           } else if (value._tag === "found" && value.state !== "open") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: value.state });
+            const reply = sent[0]?.type === "send" && sent[0].m;
+            expect(reply).toHaveProperty("_tag", "closed");
+            expect(reply).toMatchObject({ state: value.state });
           }
         }
 
@@ -435,17 +439,17 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           if (msg.value._tag === "conflict") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({
-              _tag: "conflict",
-              main: msg.value.main,
-              paths: msg.value.paths,
-            });
+            const reply = sent[0]?.type === "send" && sent[0].m;
+            expect(reply).toHaveProperty("_tag", "conflict");
+            expect(reply).toMatchObject({ main: msg.value.main, paths: msg.value.paths });
           }
 
           if (msg.value._tag === "closed") {
             expect(next._tag).toBe("idle");
             expect(sent).toHaveLength(1);
-            expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "closed", state: msg.value.state });
+            const reply = sent[0]?.type === "send" && sent[0].m;
+            expect(reply).toHaveProperty("_tag", "closed");
+            expect(reply).toMatchObject({ state: msg.value.state });
           }
         }
       }
@@ -484,7 +488,9 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       ) {
         expect(next._tag).toBe("idle");
         expect(sent).toHaveLength(1);
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "moved", head: msg.value.head });
+        const reply = sent[0]?.type === "send" && sent[0].m;
+        expect(reply).toHaveProperty("_tag", "moved");
+        expect(reply).toMatchObject({ head: msg.value.head });
         reached = true;
         expect(asked).toEqual([]);
       }
@@ -494,7 +500,9 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       reached = true;
       expect(next._tag).toBe("idle");
       expect(p.wake(next)).toBeNull();
-      expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "abandoned", ref: prev.job.ref });
+      const reply = sent[0]?.type === "send" && sent[0].m;
+      expect(reply).toHaveProperty("_tag", "abandoned");
+      expect(reply).toMatchObject({ ref: prev.job.ref });
     }
 
     if (
@@ -511,7 +519,9 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
         reached = true;
         expect(asked).toEqual([]);
         expect(next._tag).toBe("idle");
-        expect(sent[0]?.type === "send" && sent[0].m).toMatchObject({ _tag: "unset", kind });
+        const reply = sent[0]?.type === "send" && sent[0].m;
+        expect(reply).toHaveProperty("_tag", "unset");
+        expect(reply).toMatchObject({ kind });
       }
     }
 
@@ -768,7 +778,8 @@ describe("the merger, next/", () => {
         (w, commands) => {
           const p = merger(settingsFor(w));
           const [model, initial] = p.machine.init(null, ctx);
-          expect(model).toMatchObject({ _tag: "idle", attempt: 0, late: 0 });
+          expect(model).toHaveProperty("_tag", "idle");
+          expect(model).toMatchObject({ attempt: 0, late: 0 });
           fc.modelRun(
             () => ({
               model: { model, history: [...initial], current: initial, clock: 0, asks: 0, replies: 0 },
@@ -865,18 +876,15 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
               bounded++;
               expect(next._tag).toBe("idle");
               expect(cmds.filter(service)).toEqual([]);
-              expect(cmds.find((c) => c.type === "send")).toMatchObject({
-                m: {
-                  type: "reply",
-                  _tag: "behind",
-                  head: msg.value.head,
-                  main: msg.value.main,
-                  rounds: w.rounds,
-                },
+              const send = cmds.find((c) => c.type === "send");
+              expect(send).toHaveProperty("m._tag", "behind");
+              expect(send).toMatchObject({
+                m: { type: "reply", head: msg.value.head, main: msg.value.main, rounds: w.rounds },
               });
             } else {
               rounds++;
-              expect(next).toMatchObject({ _tag: "checking", round: rounds, head: msg.value.head });
+              expect(next).toHaveProperty("_tag", "checking");
+              expect(next).toMatchObject({ round: rounds, head: msg.value.head });
               expect(cmds).toContainEqual(
                 expect.objectContaining({ type: "checks", head: msg.value.head, start: true }),
               );

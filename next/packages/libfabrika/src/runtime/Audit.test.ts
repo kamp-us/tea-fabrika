@@ -180,7 +180,8 @@ describe("P13 safe audit", () => {
                 if (Exit.isFailure(exit)) {
                   expect(Cause.hasDies(exit.cause)).toBe(false);
                   const error = Cause.squash(exit.cause);
-                  expect(error).toMatchObject({ _tag: "AuditError", reason: { _tag: expect.any(String) } });
+                  expect(error).toHaveProperty("_tag", "AuditError");
+                  expect(error).toHaveProperty("reason._tag", expect.any(String));
                   outputs.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
                 }
 

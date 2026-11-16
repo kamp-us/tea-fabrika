@@ -143,7 +143,8 @@ describe("T319, next/ dead-letter identity", () => {
 
             for (const invalid of values) {
               const error = yield* processes.dead(A, invalid, from()).pipe(Effect.flip);
-              expect(error).toMatchObject({ _tag: "ProcessError", reason: "bad_text" });
+              expect(error).toHaveProperty("_tag", "ProcessError");
+              expect(error).toMatchObject({ reason: "bad_text" });
               expect(disk.rows()).toEqual(before);
             }
           }).pipe(Effect.provide(manager(disk))),
@@ -215,13 +216,12 @@ describe("T319, next/ dead-letter identity", () => {
 
             for (const started of w.starts) {
               const other = w.starts.find((s) => s.name !== started.name)!;
-              const forged = {
+              const forged = Dead.make({
                 ...h.input,
-                _tag: "dead" as const,
                 process: h.processes[5]!,
                 program: other.program,
                 name: other.name,
-              };
+              });
               yield* ProcessManager.use((p) => p.dead(started.process, forged, from())).pipe(Effect.provide(w.layer()));
 
               if (h.reopen) {
@@ -297,13 +297,14 @@ describe("P34 coordination recovery", () => {
               l.append(
                 "processes/counter:1",
                 "foreign-down",
-                lineFor(from({ by: CLIENT }), {
-                  _tag: "down",
-                  process: W,
-                  reason: value,
-                  crashes: 99,
-                  until: 999999,
-                }),
+                // Checks are off: a client's foreign entry may carry any reason text.
+                lineFor(
+                  from({ by: CLIENT }),
+                  ProcessEvent.cases.down.make(
+                    { process: W, reason: value, crashes: 99, until: 999999 },
+                    { disableChecks: true },
+                  ),
+                ),
               ),
             ).pipe(Effect.provide(manager(disk)));
             yield* TestClock.setTime(6100);
@@ -311,9 +312,10 @@ describe("P34 coordination recovery", () => {
               const p = yield* ProcessManager;
               expect(p.status, "P34 parent-checked status read is missing").toBeTypeOf("function");
               const status = yield* p.status("counter:1");
+              expect(status).toHaveProperty("state._tag", "live");
               expect(status).toMatchObject({
                 name: "counter:1",
-                state: { _tag: "live", process: W },
+                state: { process: W },
                 at: 6100,
                 restarts: [1100, 1200],
               });
@@ -351,9 +353,9 @@ describe("P34 coordination recovery", () => {
               yield* p.exit(A, CRASHED, from());
               yield* p.down(A, value, from());
               expect(p.status, "P34 status must include ended and down processes").toBeTypeOf("function");
-              expect(yield* p.status("counter:1")).toMatchObject({
-                state: { _tag: "down", process: A, until: value.until, crashes: value.crashes },
-              });
+              const status = yield* p.status("counter:1");
+              expect(status).toHaveProperty("state._tag", "down");
+              expect(status).toMatchObject({ state: { process: A, until: value.until, crashes: value.crashes } });
             }).pipe(Effect.provide(manager(disk)));
             disk.reopen();
             yield* Effect.gen(function* () {
@@ -396,13 +398,11 @@ describe("P34 coordination recovery", () => {
             yield* Effect.gen(function* () {
               const p = yield* ProcessManager;
               yield* p.dead(A, { ...dead, m: value }, from({ by: CLIENT }));
-              expect(yield* read(`${A}/dead`)).toMatchObject([
-                {
-                  by: BRAIN,
-                  _tag: "dead",
-                  body: { m: value, tries: 3, errors: ["TypeError", "RangeError", "TypeError"] },
-                },
+              const entries = yield* read(`${A}/dead`);
+              expect(entries).toMatchObject([
+                { by: BRAIN, body: { m: value, tries: 3, errors: ["TypeError", "RangeError", "TypeError"] } },
               ]);
+              expect(entries[0]).toHaveProperty("_tag", "dead");
             }).pipe(Effect.provide(manager(disk)));
             yield* Effect.gen(function* () {
               const p = yield* ProcessManager;

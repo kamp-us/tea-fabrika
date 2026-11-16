@@ -1,0 +1,42 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-manual-tagged-construction-2-tests",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:51:29-08:00",
+  "ended": "2026-11-16T00:27:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step of anti-slop judgment slice AS-no-manual-tagged-construction-2 (ticket 1057, decisions 0562 and 0563), on branch fabrikalfa/antislop-no-manual-tagged-construction-2, made from origin/main at b490a3203, which already holds PR 1366 (merging origin/main again said already up to date). Counted with anti-slop-effect/no-manual-tagged-construction forced to error in a scratch config outside the repo: 396 hits in the slice's four folders, recounted with PR 1366's files in them (next/packages/libfabrika/src/runtime 319, next/packages/libfabrika/src/ledger 61, next/programs/pipeline 15, next/packages/tuval 1), against the brief's 300 before 1366. 393 are in exam paths and 3 in one product file. Fixed 379 exam hits, all by hand edits: the Edit tool, small string-replace scripts in the scratchpad, and two scratchpad codemods (a toMatchObject that held only a tag became toHaveProperty(\"_tag\", ...), 32 sites; a toMatchObject of a refusal became toMatchObject(Sent.cases.refused.make(...)), 10 sites); the checker's quick fix was not used, and no script was committed. How: a tagged value is now made by its schema's maker (Appended, Waited, Step, Admission, Write, Input, Sent, Answer, Chain, Pending, ExitReason, Failure, Recovered, RuntimeRecord, ProcessEvent, Dead, Writer, the supervisor's Journal and Origin, Outcome.err) or by a test-local Schema.TaggedStruct or Data.taggedEnum for the exam's own shapes and for events and errors the tests write; a ledger Line is built with lineFor; a mail line with letterLine; a partial expectation that named a tag became toHaveProperty on the tag (or its path) plus toMatchObject on the rest, the same check; a partial expectation on an error became expect.objectContaining(X.make(...)), which checks the same own keys. A case the product does not know (soon, unrecognized, granted, started, a generated kind) is made by a test-local TaggedStruct for that case. Where a test sends a value a filter refuses on purpose (a generated parent, an over-long error class, a negative pos, a foreign reason), the maker runs with disableChecks: true and a comment says why. Left 14 exam hits, each a raw or malformed frame: next/packages/libfabrika/src/runtime/internal/recovery.integration.test.ts:172, next/packages/libfabrika/src/runtime/RecoveryStore.integration.test.ts:87, next/packages/libfabrika/src/runtime/ProcessStore.integration.test.ts:421, next/packages/libfabrika/src/runtime/internal/supervisor.laws.test.ts:1031, next/packages/libfabrika/src/runtime/Program.test.ts:687, :864, :867, :889, :1408, :1410, next/packages/libfabrika/src/ledger/Log.integration.test.ts:259, next/packages/libfabrika/src/runtime/ProgramMailTest.ts:373, next/packages/libfabrika/src/runtime/Execution.test.ts:20, next/packages/libfabrika/src/runtime/StartChildTest.ts:299. 0562 gives such a frame the inline ignore, but that ignore cannot land before the rule's lock line: with the rule off in these folders, reportUnusedDisableDirectives refuses it (tried once on StartChildTest.ts and undone), so the ignores go with the lock pull request; six of them (a tag of 3, an empty tag, a null tag, a wrong tag on a saved journal, a tag spliced onto a caller's input) are cases where the hand-written tag is the test's whole point, which 0562 sends to the owner. Left 3 product hits for the build: next/packages/libfabrika/src/ledger/Log.ts:62 (the Line schema's open _tag field), :105 (lineFor) and :114 (valueFor), the one file the log's design lets write the key, so its right fix is a design call. No disable line was added, no assertion was deleted or narrowed, no law was loosened, no .oxlintrc.json change and no lock line (owner ruling for judgment slices).",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/runtime/State.test.ts: an upgrade that fails is ProgramDown saved_state (expect.objectContaining(ProgramDown.make(...)))",
+      "plant": "next/packages/libfabrika/src/runtime/State.ts:21 makes the saved-state ProgramDown with reason step",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/BrainLife.laws.test.ts: a brain starts in starting (toHaveProperty on the tag)",
+      "plant": "next/packages/libfabrika/src/runtime/BrainLife.ts:60 inits the brain as stopped",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Program.test.ts: a bad Msg is refused bad_msg (Step.cases.refused.make)",
+      "plant": "next/packages/libfabrika/src/runtime/Program.ts:814 refuses with reason bad_message",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/ledger/Rings.integration.test.ts: a wait with news is ready with its stream's newest rev (Waited.cases.ready.make)",
+      "plant": "next/packages/libfabrika/src/ledger/internal/ledgerStore.ts:383 answers ready with head + 1",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 36,
+  "note": "Each plant ran once on a saved copy and was restored by copy; git status showed no product file after. Checks at the final tree: package typechecks (tsc --noEmit -p .) of next/packages/libfabrika, next/programs/pipeline and next/packages/tuval exit 0; no root pnpm typecheck ran. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes 17 of its 18 parts; the one red part is oxlint-plugins/lint.ts asking that next/programs/pipeline and next/packages/tuval, now at zero for this rule, be added to the rule's block in .oxlintrc.json, which the owner ruled waits for the later lock pull request. pnpm format's lint --fix step stops on the same ask, so oxlint-plugins/format.ts ran on its own after it. The list ratchet exits 0. A first format run pruned next-ledger.json's row for Gateway.laws.test.ts's ledger import, because the edit had changed that import line; the edit was undone (the exam now states its own wait answer) and next-ledger.json restored. Tests: the 31 touched test files other than the visual one ran green under nice -n 15 vitest --maxWorkers=3 (465 passed, 1 skipped by its own P34_INSTANCE_DRIVER guard), the .integration. ones included, with no override. Not run: next/packages/tuval/src/browser/key.laws.visual.test.ts (a .visual. test, not named by the brief; its change is one assertion split in two).",
+  "step": "tests"
+}

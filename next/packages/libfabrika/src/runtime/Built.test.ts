@@ -67,7 +67,8 @@ const runs = { seed: 119120, numRuns: 100 };
 const failed = async (api: Api, raw: unknown) => {
   // A throwing decode rejects here instead of returning a typed Failure.
   const result = await Effect.runPromise(Effect.result(api.decodeBuilt(raw)));
-  expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
+  expect(result).toHaveProperty("_tag", "Failure");
+  expect(result).toHaveProperty("failure._tag", "BuildError");
 };
 
 describe("P16 checked built tables", () => {

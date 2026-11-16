@@ -57,9 +57,10 @@ describe("P12 instance machine laws", () => {
           { type: "braked", after, reason },
         ] as const;
         const [initial] = brainLife.init(null, {});
-        expect(initial).toMatchObject({ _tag: "starting" });
+        expect(initial).toHaveProperty("_tag", "starting");
         const [online] = applyCell(brainLife, initial, msgs[0]);
-        expect(online).toMatchObject({ _tag: "online", start, build });
+        expect(online).toHaveProperty("_tag", "online");
+        expect(online).toMatchObject({ start, build });
         const [stopping] = applyCell(brainLife, online, { type: "stop" });
 
         for (const msg of msgs) {
@@ -67,7 +68,7 @@ describe("P12 instance machine laws", () => {
         }
 
         const [stopped] = applyCell(brainLife, stopping, { type: "stopped" });
-        expect(stopped).toMatchObject({ _tag: "stopped" });
+        expect(stopped).toHaveProperty("_tag", "stopped");
       }),
       { seed: SEED, examples: [[normalLife]] },
     );

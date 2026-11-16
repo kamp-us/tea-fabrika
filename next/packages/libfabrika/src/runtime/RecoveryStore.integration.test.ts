@@ -8,9 +8,16 @@ import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
 import * as fc from "fast-check";
+import { Writer } from "../coordination/index.ts";
+import { ExitReason } from "../processes/ExitReason.ts";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
+import { Failure } from "./internal/recovery.ts";
 import { Supervision } from "./internal/supervisor.ts";
+
+/** A dead letter's receipt result. */
+const Dead = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") });
+const Journal = Supervision.fields.journal;
 
 /** The store's own error as these laws read it: its tag, and a tagged reason with the fault it kept. */
 type Fault = {
@@ -52,7 +59,7 @@ const input = {
   id: "poison",
   envelope: {
     id: `in-${A}-1`,
-    by: { _tag: "person", key: "SHA256:caller", for: from().for },
+    by: Writer.cases.person.make({ key: "SHA256:caller", for: from().for }),
     arrivedAt: 1,
     input: { type: "save", text: "original dead input" },
   },
@@ -66,7 +73,7 @@ const terminal = {
   input,
   errors: ["TypeError", "RangeError", "TypeError"],
   tries: 3,
-  result: { _tag: "refused", reason: "dead" },
+  result: Dead.make({ reason: "dead" }),
   process: B,
 };
 
@@ -79,7 +86,7 @@ const before = {
   recovery: {
     _tag: "ending",
     process: B,
-    failure: { _tag: "fresh", process: B, letter: "poison", build: "build-a", seq: 3, error: "TypeError" },
+    failure: Failure.cases.fresh.make({ process: B, letter: "poison", build: "build-a", seq: 3, error: "TypeError" }),
   },
   pending: { type: "dead", id: "dead:poison:3", process: B, from: from() },
   attempt: null,
@@ -95,12 +102,11 @@ const snapshot = {
   policy,
   seq: 3,
   // The dead write still to do, for this exact fresh failure and its terminal receipt.
-  journal: {
-    _tag: "writing_dead",
-    failure: { _tag: "fresh", process: B, letter: "poison", build: "build-a", seq: 3, error: "TypeError" },
-    reason: { _tag: "crashed", phase: "step", error: "TypeError" },
+  journal: Journal.cases.writing_dead.make({
+    failure: Failure.cases.fresh.make({ process: B, letter: "poison", build: "build-a", seq: 3, error: "TypeError" }),
+    reason: ExitReason.cases.crashed.make({ phase: "step", error: "TypeError" }),
     from: from(),
-  },
+  }),
   build: "build-a",
   restarts: [100, 300],
   observations: [1, 2, 3].map((seq) => ({
@@ -178,10 +184,9 @@ describe("P34 recovery storage", () => {
                     { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(value) } },
                   ],
                 };
-                expect(yield* Effect.flip(s.save(full))).toMatchObject({
-                  _tag: "RecoveryStoreError",
-                  reason: { _tag: "Storage" },
-                });
+                const refused = yield* Effect.flip(s.save(full));
+                expect(refused).toHaveProperty("_tag", "RecoveryStoreError");
+                expect(refused).toHaveProperty("reason._tag", "Storage");
                 expect(yield* s.load).toEqual(snapshot);
               }).pipe(Effect.provide(layer())),
             );
@@ -243,10 +248,9 @@ describe("P34 recovery storage", () => {
             disk.reopen();
             await Effect.runPromise(
               Effect.gen(function* () {
-                expect(yield* Effect.flip((yield* S).load)).toMatchObject({
-                  _tag: "RecoveryStoreError",
-                  reason: { _tag: "BadRow" },
-                });
+                const refused = yield* Effect.flip((yield* S).load);
+                expect(refused).toHaveProperty("_tag", "RecoveryStoreError");
+                expect(refused).toHaveProperty("reason._tag", "BadRow");
               }).pipe(Effect.provide(layer())),
             );
           }),
@@ -327,7 +331,8 @@ describe("P34 recovery storage", () => {
         const s = yield* S;
         yield* s.save(snapshot);
         const refused = yield* Effect.flip(s.save(before));
-        expect(refused).toMatchObject({ _tag: "RecoveryStoreError", reason: { _tag: "BadRow" } });
+        expect(refused).toHaveProperty("_tag", "RecoveryStoreError");
+        expect(refused).toHaveProperty("reason._tag", "BadRow");
         expect(Schema.isSchemaError(refused.reason.cause), "the decoder's own failure").toBe(true);
         expect(yield* s.load).toEqual(snapshot);
       }).pipe(Effect.provide(layer())),
@@ -359,11 +364,11 @@ describe("P34 recovery storage", () => {
               ...(tries === 0 && n % 2 === 0 ? { digest: `sha256:${letter}` } : {}),
               errors: Array.from({ length: tries }, () => "TypeError"),
               tries,
-              result: body.dead ? { _tag: "refused", reason: "dead" } : null,
+              result: body.dead ? Dead.make({ reason: "dead" }) : null,
               process: A,
             };
           });
-          const idle = { ...snapshot, journal: { _tag: "idle", process: A } };
+          const idle = { ...snapshot, journal: Journal.cases.idle.make({ process: A }) };
           const disk = storage();
           const layer = () => S.layer(disk.sql, { name: "counter:1", capacity: 1024 ** 3, schema: Supervision });
           await Effect.runPromise(

@@ -1,3 +1,4 @@
+import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Ci from "@kampus/libfabrika/ci/Ci";
 import * as CiTest from "@kampus/libfabrika/ci/CiTest";
@@ -67,7 +68,7 @@ describe("L12: handlers map faults", () => {
             expect(Exit.isSuccess(exit)).toBe(true);
 
             if (Exit.isSuccess(exit)) {
-              expect(exit.value).toEqual({ _tag: "Err", error: { _tag: reason } });
+              expect(exit.value).toEqual(Outcome.err(Schema.TaggedStruct(reason, {}).make({})));
               expect(exit.value._tag === "Err" && Object.keys(exit.value.error as object)).toEqual(["_tag"]);
             }
           } else {
@@ -83,7 +84,8 @@ describe("L12: handlers map faults", () => {
                 expect(reason._tag).toBe("Fail");
 
                 if (reason._tag === "Fail") {
-                  expect(reason.error).toMatchObject({ _tag: "HandlerDefect", cmd: cell.method });
+                  expect(reason.error).toHaveProperty("_tag", "HandlerDefect");
+                  expect(reason.error).toMatchObject({ cmd: cell.method });
                   expect(Object.hasOwn(Object(reason.error), "cause")).toBe(false);
                 }
               }
@@ -113,7 +115,7 @@ it.effect.prop(
         Effect.provide(services),
       );
       RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
-      expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
+      expect(outcome).toEqual(Outcome.err(Schema.TaggedStruct(reason, {}).make({})));
     }),
   { arbitrary: { seed: 119120, runs: 40 } },
 );

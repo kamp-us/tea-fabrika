@@ -7,7 +7,7 @@ import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { Declaration } from "./Execution.ts";
-import { Input, Program, Refusal, stepper } from "./Program.ts";
+import { Admission, Input, Program, ProgramDown, Refusal, Step, stepper } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 type Model = typeof Model.Type;
@@ -53,6 +53,10 @@ const authoring = () => ({
 
 const spec = () => Program.make(authoring());
 const SEED = 119120;
+const Disk = Schema.TaggedStruct("disk", {});
+const Saved = Schema.TaggedStruct("saved", {});
+const Polled = Schema.TaggedStruct("polled", { changed: Schema.Boolean });
+const BAD_MSG = Step.cases.refused.make({ reason: "bad_msg" });
 const parameters = { seed: SEED, numRuns: 100 };
 
 describe("P13 A7 split checking and update", () => {
@@ -109,10 +113,8 @@ describe("P13 A7 split checking and update", () => {
             const folded = pure.fold(current, msg);
             expect(checks).toBe(before.checks);
             expect(updates).toBe(before.updates + 1);
-            expect(folded).toMatchObject({
-              _tag: "stepped",
-              model: { count: current.count + (msg.type === "add" ? msg.n : 0) },
-            });
+            expect(folded).toHaveProperty("_tag", "stepped");
+            expect(folded).toMatchObject({ model: { count: current.count + (msg.type === "add" ? msg.n : 0) } });
             refuseAll = false;
             continue;
           }
@@ -129,16 +131,16 @@ describe("P13 A7 split checking and update", () => {
           const admission = Result.getOrThrow(checked);
           expect(admission).toEqual(
             move === "invalid"
-              ? { _tag: "invalid" }
+              ? Admission.cases.invalid.make({})
               : move === "refuse"
-                ? { _tag: "refused", reason: "limit", now: current.count, most: 10 }
-                : { _tag: "admitted" },
+                ? Admission.cases.refused.make({ reason: "limit", now: current.count, most: 10 })
+                : Admission.cases.admitted.make({}),
           );
           expect(checks).toBe(before.checks + (move === "invalid" ? 0 : 1));
           const composed = pure.step(current, msg);
 
           if (move !== "admit") {
-            expect(composed).toEqual(move === "invalid" ? { _tag: "refused", reason: "bad_msg" } : admission);
+            expect(composed).toEqual(move === "invalid" ? BAD_MSG : admission);
             expect(updates).toBe(before.updates);
 
             if (move === "invalid") {
@@ -384,12 +386,10 @@ describe("Program.make authoring laws, next/", () => {
         expect(p.state.schema).toBe(fields.machine.model);
         expect(p.msg).toBe(fields.machine.msg);
         expect(p.view.data).toBe(Schema.Json);
-        expect(p.inputs.add).toMatchObject({ _tag: "write", description, personOnly: false });
-        expect(p.inputs.throw).toMatchObject({
-          _tag: "write",
-          description: personDescription,
-          personOnly: true,
-        });
+        expect(p.inputs.add).toHaveProperty("_tag", "write");
+        expect(p.inputs.add).toMatchObject({ description, personOnly: false });
+        expect(p.inputs.throw).toHaveProperty("_tag", "write");
+        expect(p.inputs.throw).toMatchObject({ description: personDescription, personOnly: true });
         expect(p.inputs.add.schema).toBe(fields.machine.msg);
         expect(p.inputs.throw.schema).toBe(fields.machine.msg);
         expect(Result.isSuccess(Schema.decodeUnknownResult(Program.schema)(p))).toBe(true);
@@ -490,7 +490,9 @@ describe("Program.make authoring laws, next/", () => {
       fc.property(declarations, ({ fields, initial }) => {
         const p = Effect.runSync(Program.makeEffect(fields));
         expect(p.machine).toBe(fields.machine);
-        expect(load(p).init(null)).toMatchObject({ _tag: "stepped", model: initial });
+        const booted = load(p).init(null);
+        expect(booted).toHaveProperty("_tag", "stepped");
+        expect(booted).toMatchObject({ model: initial });
       }),
       parameters,
     );
@@ -669,14 +671,13 @@ describe("P11 program contract and p22 refusal", () => {
             const p = load(spec());
             const before = { count: 2, replies: 0 };
             const ok = { type: "save_ok", cmd: save({ n: value }), value, at: 42 };
-            const err = { type: "save_err", cmd: save({ n: value }), error: { _tag: "disk" }, at: 42 };
+            const err = { type: "save_err", cmd: save({ n: value }), error: Disk.make({}), at: 42 };
 
             for (const reply of [ok, err]) {
-              expect(p.fold(before, reply)).toMatchObject({
-                _tag: "stepped",
-                model: { count: 2, replies: 1 },
-              });
-              expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
+              const folded = p.fold(before, reply);
+              expect(folded).toHaveProperty("_tag", "stepped");
+              expect(folded).toMatchObject({ model: { count: 2, replies: 1 } });
+              expect(p.step(before, reply)).toEqual(BAD_MSG);
             }
 
             for (const reply of [
@@ -685,9 +686,9 @@ describe("P11 program contract and p22 refusal", () => {
               { ...ok, value: "3" },
               { ...err, error: { _tag: 3 } },
             ]) {
-              expect(p.step(before, reply)).toEqual({ _tag: "refused", reason: "bad_msg" });
+              expect(p.step(before, reply)).toEqual(BAD_MSG);
               expect(() => p.fold(before, reply)).toThrowError(
-                expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
+                expect.objectContaining(ProgramDown.make({ reason: "saved_letter" })),
               );
             }
           }),
@@ -714,7 +715,7 @@ describe("P11 program contract and p22 refusal", () => {
             const p = load(broken);
             expect(
               p.step({ count: 0, replies: 0 }, { type: "save_ok", cmd: save({ n: value }), value, at: 42 }),
-            ).toEqual({ _tag: "refused", reason: "bad_msg" });
+            ).toEqual(BAD_MSG);
           }),
         { concurrency: 1, discard: true },
       ),
@@ -737,7 +738,7 @@ describe("P11 program contract and p22 refusal", () => {
               error = thrown;
             }
 
-            expect(error).toMatchObject({ _tag: "ProgramDown", reason: "saved_state" });
+            expect(error).toEqual(expect.objectContaining(ProgramDown.make({ reason: "saved_state" })));
             expect(Schema.is(ProgramDown)(error)).toBe(true);
           }),
         { concurrency: 1, discard: true },
@@ -747,19 +748,12 @@ describe("P11 program contract and p22 refusal", () => {
   it("plant, reject every declaration: a complete pure tea program loads and steps", async () => {
     const { Program } = await import("./Program.ts");
     const p = load(Schema.decodeUnknownSync(Program.schema)(spec()));
-    expect(p.init(null)).toMatchObject({
-      _tag: "stepped",
-      model: { count: 0, replies: 0 },
-      view: { count: 0 },
-      cmds: [],
-      wake: null,
-    });
-    expect(p.step({ count: 2, replies: 0 }, { type: "add", n: 3 })).toMatchObject({
-      _tag: "stepped",
-      model: { count: 5, replies: 0 },
-      view: { count: 5 },
-      cmds: [save({ n: 3 })],
-    });
+    expect(p.init(null)).toMatchObject(
+      Step.cases.stepped.make({ model: { count: 0, replies: 0 }, view: { count: 0 }, cmds: [], wake: null }),
+    );
+    const stepped = p.step({ count: 2, replies: 0 }, { type: "add", n: 3 });
+    expect(stepped).toHaveProperty("_tag", "stepped");
+    expect(stepped).toMatchObject({ model: { count: 5, replies: 0 }, view: { count: 5 }, cmds: [save({ n: 3 })] });
   });
   it.effect.prop(
     "plant, collapse refusals: bad_msg differs from the program's limit fields",
@@ -771,24 +765,15 @@ describe("P11 program contract and p22 refusal", () => {
           Effect.promise(async () => {
             const p = load(spec());
             const before = { count: 7, replies: 0 };
-            expect(p.step(before, { type: "add", n: "3" })).toEqual({
-              _tag: "refused",
-              reason: "bad_msg",
-            });
-            expect(p.step(before, { type: "add", n: 4 })).toEqual({
-              _tag: "refused",
-              reason: "limit",
-              now: 7,
-              most: 10,
-            });
+            expect(p.step(before, { type: "add", n: "3" })).toEqual(BAD_MSG);
+            expect(p.step(before, { type: "add", n: 4 })).toEqual(
+              Step.cases.refused.make({ reason: "limit", now: 7, most: 10 }),
+            );
             expect(before).toEqual({ count: 7, replies: 0 });
 
             // Review 2: an empty reason is legal and must survive the real stepper too.
             const checked = load({ ...spec(), refuse: () => refusal });
-            expect(checked.step(before, { type: "add", n: 4 })).toEqual({
-              _tag: "refused",
-              ...refusal,
-            });
+            expect(checked.step(before, { type: "add", n: 4 })).toEqual(Step.cases.refused.make(refusal));
             expect(before).toEqual({ count: 7, replies: 0 });
           }),
         { concurrency: 1, discard: true },
@@ -797,11 +782,9 @@ describe("P11 program contract and p22 refusal", () => {
   );
   it("plant, run refusal during replay: fold applies a once-accepted letter despite today's limit", async () => {
     const p = load(spec());
-    expect(p.fold({ count: 9, replies: 0 }, { type: "add", n: 4 })).toMatchObject({
-      _tag: "stepped",
-      model: { count: 13, replies: 0 },
-      cmds: [save({ n: 4 })],
-    });
+    const folded = p.fold({ count: 9, replies: 0 }, { type: "add", n: 4 });
+    expect(folded).toHaveProperty("_tag", "stepped");
+    expect(folded).toMatchObject({ model: { count: 13, replies: 0 }, cmds: [save({ n: 4 })] });
   });
   it.effect.prop(
     "p25 plant, turn a thrown step into a refusal: ProgramDown retains its failure class",
@@ -812,7 +795,7 @@ describe("P11 program contract and p22 refusal", () => {
         (value) =>
           Effect.promise(async () => {
             expect(() => load(spec()).step(value, { type: "throw" })).toThrowError(
-              expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
+              expect.objectContaining(ProgramDown.make({ reason: "step" })),
             );
           }),
         { concurrency: 1, discard: true },
@@ -844,7 +827,7 @@ describe("P11 program contract and p22 refusal", () => {
                 view: part === "view" ? { data: Model, select: () => ({ count: "bad" }) } : spec().view,
               };
               expect(() => load(broken).step(value, { type: "add", n: 1 })).toThrowError(
-                expect.objectContaining({ _tag: "ProgramDown", reason: "step" }),
+                expect.objectContaining(ProgramDown.make({ reason: "step" })),
               );
             }),
           { concurrency: 1, discard: true },
@@ -862,7 +845,7 @@ describe("P11 program contract and p22 refusal", () => {
         (value) =>
           Effect.promise(async () => {
             expect(() => load(spec()).fold({ count: 0, replies: 0 }, { type: "add", n: value })).toThrowError(
-              expect.objectContaining({ _tag: "ProgramDown", reason: "saved_letter" }),
+              expect.objectContaining(ProgramDown.make({ reason: "saved_letter" })),
             );
           }),
         { concurrency: 1, discard: true },
@@ -873,17 +856,11 @@ describe("P11 program contract and p22 refusal", () => {
     const { Input } = await import("./Program.ts");
     const decode = Schema.decodeUnknownSync(Input);
     expect(
-      decode({
-        _tag: "read",
-        schema: Schema.Null,
-        description: "Read count",
-        answer: (v: unknown) => v,
-      }),
-    ).toMatchObject({ _tag: "read" });
-    expect(decode({ _tag: "write", schema: Msg, description: "Add", personOnly: false })).toMatchObject({
-      _tag: "write",
-      personOnly: false,
-    });
+      decode(Input.cases.read.make({ schema: Schema.Null, description: "Read count", answer: (v: unknown) => v })),
+    ).toHaveProperty("_tag", "read");
+    const write = decode(Input.cases.write.make({ schema: Msg, description: "Add", personOnly: false }));
+    expect(write).toHaveProperty("_tag", "write");
+    expect(write).toMatchObject({ personOnly: false });
     expect(() => decode({ _tag: "read", schema: Msg, description: "bad", personOnly: true })).toThrow();
     expect(() =>
       decode({
@@ -905,11 +882,15 @@ describe("P11 program contract and p22 refusal", () => {
           Effect.promise(async () => {
             const { Write } = await import("./Program.ts");
             const decode = Schema.decodeUnknownSync(Write);
-            expect(decode({ _tag: "own", event: { _tag: "polled", changed: false } })).toMatchObject({
-              _tag: "own",
-            });
-            expect(() => decode({ _tag: "caused", event: { _tag: "saved" } })).toThrow();
-            expect(() => decode({ _tag: "caused", parent: value, event: { _tag: "saved" } })).toThrow();
+            expect(decode(Write.cases.own.make({ event: Polled.make({ changed: false }) }))).toHaveProperty(
+              "_tag",
+              "own",
+            );
+            expect(() => decode({ _tag: "caused", event: Saved.make({}) })).toThrow();
+            // Checks are off: the made frame keeps a parent the decoder must refuse.
+            expect(() =>
+              decode(Write.cases.caused.make({ parent: value, event: Saved.make({}) }, { disableChecks: true })),
+            ).toThrow();
           }),
         { concurrency: 1, discard: true },
       ),
@@ -1422,18 +1403,18 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
     if (a.error !== "missing") {
       own.error =
         a.error === "tag"
-          ? { _tag: "disk" }
+          ? Disk.make({})
           : a.error === "empty"
             ? { _tag: "" }
             : a.error === "number"
               ? { _tag: 3 }
               : a.error === "array"
-                ? Object.assign([], { _tag: "disk" })
+                ? Object.assign([], Disk.make({}))
                 : a.error === "function"
-                  ? Object.assign(() => 0, { _tag: "disk" })
+                  ? Object.assign(() => 0, Disk.make({}))
                   : a.error === "null"
                     ? null
-                    : Object.create({ _tag: "disk" });
+                    : Object.create(Disk.make({}));
     }
 
     switch (a.container) {
@@ -1502,7 +1483,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           // Answer a Cmd the machine really returned, once one exists.
           if (fresh < 3 || pending.length === 0) {
             const stepped = p.step(model, { type: "add", n, extra: "kept out by the Msg schema" });
-            expect(stepped).toMatchObject({ _tag: "stepped" });
+            expect(stepped).toHaveProperty("_tag", "stepped");
 
             if (stepped._tag === "stepped") {
               model = stepped.model;
@@ -1518,7 +1499,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
 
           if (!a.saved) {
             // A fresh input never settles a Cmd, and never reaches the machine.
-            expect(p.step(model, msg)).toEqual({ _tag: "refused", reason: "bad_msg" });
+            expect(p.step(model, msg)).toEqual(BAD_MSG);
             expect(received.length).toBe(before);
             seen.add(`fresh:${oldSettled(msg) === true}`);
             continue;
@@ -1535,10 +1516,9 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           const folded = Result.try({ try: () => p.fold(model, msg), catch: (e) => e });
 
           if (expected === "down") {
-            expect(Result.isFailure(folded) ? folded.failure : folded.success).toMatchObject({
-              _tag: "ProgramDown",
-              reason: "saved_letter",
-            });
+            expect(Result.isFailure(folded) ? folded.failure : folded.success).toEqual(
+              expect.objectContaining(ProgramDown.make({ reason: "saved_letter" })),
+            );
             expect(received.length).toBe(before);
           } else {
             expect(Result.isSuccess(folded)).toBe(true);

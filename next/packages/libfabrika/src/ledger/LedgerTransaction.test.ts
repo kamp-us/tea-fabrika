@@ -8,7 +8,7 @@ import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import { LedgerTransaction } from "./LedgerTransaction.ts";
 import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
-import type { Line } from "./Log.ts";
+import { Appended, type Line, lineFor } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
 // A fresh in-memory node:sqlite, closed by the test's scope (0061).
@@ -17,17 +17,23 @@ const memory = Effect.acquireRelease(
   (db) => Effect.sync(() => db.close()),
 );
 
-const line = (n: number): Line => ({
-  by: "SHA256:brain",
-  for: "person-a",
-  sentAt: "2026-11-07T00:00:00Z",
-  seen: 0,
-  parent: null,
-  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  build: "writer-build",
-  _tag: "fact",
-  body: { n },
-});
+const Fact = Schema.TaggedStruct("fact", { n: Schema.Number });
+
+const line = (n: number): Line =>
+  lineFor(
+    {
+      by: "SHA256:brain",
+      for: "person-a",
+      sentAt: "2026-11-07T00:00:00Z",
+      seen: 0,
+      parent: null,
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      build: "writer-build",
+    },
+    Fact.make({ n }),
+  );
+
+const placed = (rev: number, pos: number) => Appended.cases.placed.make({ rev, pos });
 
 const setup = (
   db: DatabaseSync,
@@ -73,7 +79,7 @@ describe("p79, LedgerTransaction", () => {
       return Effect.gen(function* () {
         const ledger = yield* Ledger;
         const tx = yield* LedgerTransaction;
-        expect(yield* ledger.append("a", "one", line(1))).toEqual({ _tag: "placed", rev: 1, pos: 1 });
+        expect(yield* ledger.append("a", "one", line(1))).toEqual(placed(1, 1));
         expect(
           yield* tx.transact((turn) => {
             const a = turn.append("a", "two", line(2));
@@ -81,11 +87,7 @@ describe("p79, LedgerTransaction", () => {
             return { a, b, read: [...turn.read("a", 1)].map((row) => row.id) };
           }),
         ).toEqual({ a: { rev: 2, pos: 2 }, b: { rev: 3, pos: 1 }, read: ["two"] });
-        expect(yield* ledger.append("b", "four", line(4))).toEqual({
-          _tag: "placed",
-          rev: 4,
-          pos: 2,
-        });
+        expect(yield* ledger.append("b", "four", line(4))).toEqual(placed(4, 2));
       }).pipe(Effect.provide(store.layer));
     }),
   );
@@ -116,11 +118,7 @@ describe("p79, LedgerTransaction", () => {
               store.fault.after = null;
               expect((yield* Stream.runCollect(ledger.read("a", 0))).map((row) => row.id)).toEqual(["one"]);
               expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
-              expect(yield* ledger.append("b", "after", line(4))).toEqual({
-                _tag: "placed",
-                rev: 2,
-                pos: 1,
-              });
+              expect(yield* ledger.append("b", "after", line(4))).toEqual(placed(2, 1));
             }).pipe(Effect.provide(store.layer));
           }),
         { concurrency: 1, discard: true },

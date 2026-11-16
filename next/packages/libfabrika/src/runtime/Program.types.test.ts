@@ -8,6 +8,8 @@ import { ProgramLoader } from "./Entry.ts";
 import { type Admission, type Prepared, type Stepper, Input, Program, Write } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int });
+const Disk = Schema.TaggedStruct("disk", {});
+const Saved = Schema.TaggedStruct("saved", {});
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
@@ -61,7 +63,7 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
         readonly count: number;
       }>();
       const ok = p.machine.update.save_ok({ count: 1 }, save.ok(save({ count: 1 }), { stored: 1 }, 1));
-      const err = p.machine.update.save_err({ count: 1 }, save.err(save({ count: 1 }), { _tag: "disk" }, 1));
+      const err = p.machine.update.save_err({ count: 1 }, save.err(save({ count: 1 }), Disk.make({}), 1));
       expectTypeOf(ok[0]).toEqualTypeOf<typeof Model.Type>();
       expectTypeOf(err[1][0]!).toEqualTypeOf<ReturnType<typeof save>>();
       expectTypeOf(Program.makeEffect({ ...fields, view: (m) => ({ total: m.count }) })).toExtend<
@@ -75,7 +77,8 @@ it("a from-scratch libfabrika program compiles and loads with a real Cmd and no 
       );
       const boot = loaded.stepper.init({ count });
       expectTypeOf(boot).toExtend<{ readonly _tag: "stepped" | "refused" }>();
-      expect(boot).toMatchObject({ _tag: "stepped", model: { count }, view: { total: count } });
+      expect(boot).toHaveProperty("_tag", "stepped");
+      expect(boot).toMatchObject({ model: { count }, view: { total: count } });
     }),
     { seed: 119120, numRuns: 100 },
   );
@@ -215,13 +218,13 @@ function authoringTypeErrors() {
   Program.make({ ...fields, view: (m) => m, outputs: { count: Schema.Int } });
   // @ts-expect-error An output needs a schema.
   Program.make({ ...fields, view: (m) => m, outputs: { count: 3 } });
-  Write.cases.own.make({ event: { _tag: "saved" } });
+  Write.cases.own.make({ event: Saved.make({}) });
   Write.cases.caused.make({
     parent: Schema.decodeUnknownSync(Write.cases.caused.fields.parent)("in-process_01jc9q4w7z3m8n5r2t6v0xkb4d-1"),
-    event: { _tag: "saved" },
+    event: Saved.make({}),
   });
   // @ts-expect-error A caused write must name its parent.
-  Write.cases.caused.make({ event: { _tag: "saved" } });
+  Write.cases.caused.make({ event: Saved.make({}) });
 
   expectTypeOf(machine.model).toEqualTypeOf<Schema.Schema<typeof Model.Type>>();
   // @ts-expect-error Schema fields on the tea machine are readonly.

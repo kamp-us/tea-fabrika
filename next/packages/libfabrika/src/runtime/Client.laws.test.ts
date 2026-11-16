@@ -24,11 +24,12 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Data, Result, Schema } from "effect";
 import * as fc from "fast-check";
+import { ExitReason } from "../processes/ExitReason.ts";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
-import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
+import { clientMachineFor, foldName, Pending as PendingSchema, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
 const SEED = 119120;
@@ -162,12 +163,14 @@ const letterChoice = fc.record({
 
 type LetterChoice = typeof letterChoice extends fc.Arbitrary<infer C> ? C : never;
 
+const Answers = Data.taggedEnum<Answer>();
+
 const answerFor = (c: LetterChoice): Answer =>
   [
-    { _tag: "accepted", rev: c.rev, pos: c.rev } as const,
-    { _tag: "refused", reason: "too_many" } as const,
-    { _tag: "unreachable" } as const,
-    { _tag: "unknown" } as const,
+    Answers.accepted({ rev: c.rev, pos: c.rev }),
+    Answers.refused({ reason: "too_many" }),
+    Answers.unreachable(),
+    Answers.unknown(),
   ][c.answer % 4]!;
 
 /** The walk's own memory: every letter it dated, by slot, and the views it showed. */
@@ -324,14 +327,15 @@ describe("L4: client letters (p1)", () => {
 
           presses++;
           expect(next.written).toBe(prev.c.written + 1);
-          expect(next.pending.at(-1)).toEqual({
-            _tag: "dating",
-            n: prev.c.written,
-            pid: m.pid,
-            m: m.m,
-            seen: prev.c.seen,
-            viewRev: prev.c.views[m.pid]?.rev ?? 0,
-          });
+          expect(next.pending.at(-1)).toEqual(
+            PendingSchema.cases.dating.make({
+              n: prev.c.written,
+              pid: m.pid,
+              m: m.m,
+              seen: prev.c.seen,
+              viewRev: prev.c.views[m.pid]?.rev ?? 0,
+            }),
+          );
         });
       }),
       opts,
@@ -686,12 +690,12 @@ const trusted = (writer: string) => writer === "brain" || writer.startsWith("bra
 const FROM_EMPTY: NameFold = { after: 0, live: null, ended: null };
 
 const EXITS = [
-  { _tag: "normal" },
-  { _tag: "shutdown" },
-  { _tag: "kill" },
-  { _tag: "crashed", phase: "step", error: "TypeError" },
-  { _tag: "crashed", phase: "interrupted" },
-] as const;
+  ExitReason.cases.normal.make({}),
+  ExitReason.cases.shutdown.make({}),
+  ExitReason.cases.kill.make({}),
+  ExitReason.cases.crashed.make({ phase: "step", error: "TypeError" }),
+  ExitReason.cases.crashed.make({ phase: "interrupted" }),
+];
 
 const fact = fc.record({
   tag: fc.constantFrom("started", "restarted", "exited", "exited", "down"),
@@ -716,7 +720,14 @@ const stream = (facts: ReadonlyArray<typeof fact extends fc.Arbitrary<infer F> ?
           : f.tag === "exited"
             ? { process: f.pid, reason: f.reason }
             : { process: f.pid, reason: "too_many", crashes: 1, until: 0 };
-    return { _tag: f.tag, by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body };
+    const Fact = Schema.TaggedStruct(f.tag, {
+      by: Schema.String,
+      id: Schema.String,
+      rev: Schema.Number,
+      arrivedAt: Schema.Number,
+      body: Schema.Unknown,
+    });
+    return Fact.make({ by: f.writer, id: `${f.tag}:${rev}`, rev, arrivedAt: rev, body });
   });
 };
 

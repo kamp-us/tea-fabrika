@@ -27,6 +27,7 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ProcessStore } from "./ProcessStore.ts";
+import { Input, Write } from "./Program.ts";
 import { ProgramRunner } from "./Runner.ts";
 
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) };
@@ -56,6 +57,8 @@ const attributes = fc.record({
   build: text,
   value: fc.integer(),
 });
+
+const Saved = Schema.TaggedStruct("saved", { value: Schema.Int });
 
 const PROCESS = "process_01jc9q4w7zfm8s5r2t6v0xkb4d";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -129,17 +132,11 @@ const disk = () => {
   return { db, sql, fault };
 };
 
-const line = (a: typeof attributes extends fc.Arbitrary<infer A> ? A : never, traceId: string): Line => ({
-  by: a.by,
-  for: PERSON,
-  sentAt: "2026-11-08T00:00:00.000Z",
-  seen: 0,
-  parent: null,
-  traceId,
-  build: a.build,
-  _tag: "saved",
-  body: { value: a.value },
-});
+const line = (a: typeof attributes extends fc.Arbitrary<infer A> ? A : never, traceId: string): Line =>
+  lineFor(
+    { by: a.by, for: PERSON, sentAt: "2026-11-08T00:00:00.000Z", seen: 0, parent: null, traceId, build: a.build },
+    Saved.make({ value: a.value }),
+  );
 
 describe("T285, ledger tracing keep-laws", () => {
   it("generated calls keep one span, parent, attributes and refusal spans through Ledger.sql", async () => {
@@ -796,9 +793,13 @@ const machine = Machine.make({
       [
         write({
           stream: m.stream,
+          // Checks are off: a generated parent goes out unchecked, for the runner to refuse.
           write: m.own
-            ? { _tag: "own", event: { _tag: "saved", value: m.value } }
-            : { _tag: "caused", parent: m.parent ?? "", event: { _tag: "saved", value: m.value } },
+            ? Write.cases.own.make({ event: Saved.make({ value: m.value }) })
+            : Write.cases.caused.make(
+                { parent: m.parent ?? "", event: Saved.make({ value: m.value }) },
+                { disableChecks: true },
+              ),
         }),
       ],
     ],
@@ -821,12 +822,12 @@ const program = {
   view: { data: Model, select: (m: typeof Model.Type) => m },
   refuse: () => null,
   inputs: {
-    work: { _tag: "write", schema: Msg, description: "Work", personOnly: false },
-    write: { _tag: "write", schema: Msg, description: "Write", personOnly: false },
-    throw: { _tag: "write", schema: Msg, description: "Throw", personOnly: false },
+    work: Input.cases.write.make({ schema: Msg, description: "Work", personOnly: false }),
+    write: Input.cases.write.make({ schema: Msg, description: "Write", personOnly: false }),
+    throw: Input.cases.write.make({ schema: Msg, description: "Throw", personOnly: false }),
   },
   outputs: {},
-  writes: { saved: { schema: Schema.TaggedStruct("saved", { value: Schema.Int }), personOnly: false } },
+  writes: { saved: { schema: Saved, personOnly: false } },
   wake: () => null,
 };
 
@@ -1072,16 +1073,12 @@ describe("T285, runner tracing keep-laws", () => {
               const store = yield* ProcessStore;
               // This unrelated first row reserves the answer id for the next input at position 2.
               const id = `${PROCESS}/2/0/answer`;
-              expect(yield* ledger.append("refused-reply/inbox", id, line(a, ctx.traceId))).toMatchObject({
-                _tag: "placed",
-                pos: 1,
-              });
+              const first = yield* ledger.append("refused-reply/inbox", id, line(a, ctx.traceId));
+              expect(first).toHaveProperty("_tag", "placed");
+              expect(first).toMatchObject({ pos: 1 });
               const error = yield* Effect.flip(runner.msg(w.input(1, { type: "work", value: a.value })));
-              expect(error).toMatchObject({
-                _tag: "LedgerError",
-                reason: "refused",
-                message: "id_reused",
-              });
+              expect(error).toHaveProperty("_tag", "LedgerError");
+              expect(error).toMatchObject({ reason: "refused", message: "id_reused" });
               expect((yield* store.load)?.cmds).toHaveLength(1);
               const entries = yield* Stream.runCollect(ledger.read("refused-reply/inbox", 0));
               expect(entries.filter((entry) => entry.id === id)).toHaveLength(1);
@@ -1264,11 +1261,9 @@ describe("T285, runner tracing keep-laws", () => {
                   const malformed = call.op === "bad_input";
 
                   if (waiting) {
-                    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null, call.op).toMatchObject(
-                      malformed
-                        ? { _tag: "RunnerError", reason: call.op }
-                        : { _tag: "ProgramDown", reason: "saved_letter" },
-                    );
+                    const squashed = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
+                    expect(squashed, call.op).toHaveProperty("_tag", malformed ? "RunnerError" : "ProgramDown");
+                    expect(squashed, call.op).toMatchObject({ reason: malformed ? call.op : "saved_letter" });
                   }
 
                   expect(w.flushes.length, call.op).toBe(flushes + 1);

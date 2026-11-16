@@ -21,6 +21,7 @@ import { A, B, W, X, brain, data, first, from, ids, PIDS, read, storage } from "
 import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Event, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Input, Write } from "./Program.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
 const NAME = "counter:1";
@@ -33,6 +34,8 @@ const policy = {
 };
 
 const owner = Writer.cases.person.make({ key: "SHA256:caller", for: from().for });
+
+const Saved = Schema.TaggedStruct("saved", { count: Schema.Int });
 
 const Model = Schema.Struct({
   count: Schema.Int,
@@ -106,11 +109,11 @@ const world = Effect.fnUntraced(function* () {
             : [
                 write({
                   stream: "facts",
-                  write: {
-                    _tag: "caused",
-                    parent: s.queue,
-                    event: { _tag: "saved", count: s.count + m.n },
-                  },
+                  // Checks are off: the queued parent is sent as the Msg gave it, for the runner to check.
+                  write: Write.cases.caused.make(
+                    { parent: s.queue, event: Saved.make({ count: s.count + m.n }) },
+                    { disableChecks: true },
+                  ),
                 }),
               ],
         ];
@@ -131,13 +134,13 @@ const world = Effect.fnUntraced(function* () {
     view: { data: Model, select: (s: Model) => s },
     refuse: () => null,
     inputs: {
-      poison: { _tag: "write", schema: Msg, description: "Poison", personOnly: false },
-      add: { _tag: "write", schema: Msg, description: "Add", personOnly: false },
-      wait: { _tag: "write", schema: Msg, description: "Wait", personOnly: false },
-      queue: { _tag: "write", schema: Msg, description: "Queue", personOnly: false },
+      poison: Input.cases.write.make({ schema: Msg, description: "Poison", personOnly: false }),
+      add: Input.cases.write.make({ schema: Msg, description: "Add", personOnly: false }),
+      wait: Input.cases.write.make({ schema: Msg, description: "Wait", personOnly: false }),
+      queue: Input.cases.write.make({ schema: Msg, description: "Queue", personOnly: false }),
     },
     outputs: {},
-    writes: { saved: { schema: Schema.TaggedStruct("saved", { count: Schema.Int }), personOnly: false } },
+    writes: { saved: { schema: Saved, personOnly: false } },
     wake: () => null,
   };
   const input = (id: string, m: unknown = { type: "poison" }): Incoming => ({
@@ -398,10 +401,9 @@ describe("P34 interrupted recovery", () => {
                   expect(records.flat()).toMatchObject([
                     { body: { tries: 3, errors: ["TypeError", "TypeError", "TypeError"] } },
                   ]);
-                  expect(yield* r.msg(w.input("poison"))).toMatchObject({
-                    _tag: "refused",
-                    reason: "dead",
-                  });
+                  const refused = yield* r.msg(w.input("poison"));
+                  expect(refused).toHaveProperty("_tag", "refused");
+                  expect(refused).toMatchObject({ reason: "dead" });
                   expect(w.controls.steps).toBe(3);
                 }
               }).pipe(Effect.provide(w.layer()));
@@ -505,9 +507,7 @@ describe("P34 interrupted recovery", () => {
               yield* sessions.delivered(input.envelope.id, A);
               yield* r.msg(input);
               yield* restart(r, "queued-replacement", "build-b");
-              expect(yield* r.msg(w.input("release", { type: "add", n: value }))).toMatchObject({
-                _tag: "accepted",
-              });
+              expect(yield* r.msg(w.input("release", { type: "add", n: value }))).toHaveProperty("_tag", "accepted");
               expect(yield* read("facts")).toEqual([]);
               expect(w.controls.owns).toBe(0);
               expect(w.controls.commits).toBe(0);
@@ -574,9 +574,13 @@ describe("P34 interrupted recovery", () => {
 
               for (let n = 1; n <= 3; n++) {
                 const answer = yield* Effect.exit(s.send("poison", original));
-                expect(answer).toMatchObject(
-                  n < 3 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", reason: "dead" } },
-                );
+                expect(answer).toHaveProperty("_tag", n < 3 ? "Failure" : "Success");
+
+                if (n === 3) {
+                  expect(answer).toHaveProperty("value._tag", "refused");
+                  expect(answer).toMatchObject({ value: { reason: "dead" } });
+                }
+
                 const down = yield* s.status;
                 // P34 amendment: three crashes stay inside the restart budget, so no down event.
                 expect(down.state).toBe("ended");
@@ -592,16 +596,15 @@ describe("P34 interrupted recovery", () => {
                 expect(yield* s.status).toEqual(next);
               }
 
-              expect(yield* s.send("poison", original)).toMatchObject({
-                _tag: "refused",
-                reason: "dead",
-              });
+              const refused = yield* s.send("poison", original);
+              expect(refused).toHaveProperty("_tag", "refused");
+              expect(refused).toMatchObject({ reason: "dead" });
               expect(yield* s.executions).toBe(3);
               expect(yield* s.dead).toMatchObject([
                 { tries: 3, limit: 3, m: "poison", errors: ["TypeError", "RangeError", "TypeError"] },
               ]);
               expect(yield* s.input("poison")).toMatchObject({ envelope: { input: original } });
-              expect(yield* s.send("good", { type: "add", n: 1 })).toMatchObject({ _tag: "accepted" });
+              expect(yield* s.send("good", { type: "add", n: 1 })).toHaveProperty("_tag", "accepted");
             }),
           (s) => s.close,
         ),

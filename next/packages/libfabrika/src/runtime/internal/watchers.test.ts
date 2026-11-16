@@ -2,7 +2,7 @@
 import { applyCell } from "@demlik/tea";
 import { foldEvents } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Array as Arr, Schema } from "effect";
 import { syncTest } from "../../Testing.ts";
 import { nth } from "../RepliesTest.ts";
 import { Model, watchers } from "./watchers.ts";
@@ -86,7 +86,10 @@ describe("saved view membership, next/", () => {
           [state] = applyCell(watchers, state, { type: "open", watch });
         }
 
-        expect(state).toStrictEqual({ _tag: "watching", clients: opened.slice(2) });
+        const kept = opened.slice(2);
+        expect(state).toStrictEqual(
+          Arr.isReadonlyArrayNonEmpty(kept) ? Model.cases.watching.make({ clients: kept }) : Model.cases.empty.make({}),
+        );
         bounded = state;
       }
 

@@ -28,7 +28,11 @@ import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
 import { syncTest } from "../../Testing.ts";
+import { Reply } from "./reply.ts";
 import { Policy, Supervision, supervisor } from "./supervisor.ts";
+
+/** A dead letter's receipt result, as the exam states it. */
+const Dead = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") });
 
 const SEED = 119120;
 const RUNS = 100;
@@ -617,23 +621,26 @@ describe("P34c slice 2: one saved recovery journal", () => {
             const tries = w.errors.get(attempt.letter)?.length ?? 0;
             const terminal = tries >= (w.limit ?? p.maxDeliveries);
             const receipt = after.receipts.find((r) => r.letter === attempt.letter);
-            expect(receipt?.result ?? null).toEqual(terminal ? { _tag: "refused", reason: "dead" } : null);
+            expect(receipt?.result ?? null).toEqual(terminal ? Dead.make({ reason: "dead" }) : null);
             expect(receipt?.process).toBe(attempt.process);
-            expect(after.journal).toMatchObject(
-              terminal
-                ? {
-                    _tag: "writing_dead",
-                    failure: {
-                      _tag: "fresh",
-                      process: attempt.process,
-                      letter: attempt.letter,
-                      build: attempt.build,
-                      seq: attempt.seq,
-                      error: move.msg.error,
-                    },
-                  }
-                : { _tag: "writing_exit", process: attempt.process, origin: { _tag: "crash" } },
-            );
+
+            if (terminal) {
+              expect(after.journal).toHaveProperty("_tag", "writing_dead");
+              expect(after.journal).toHaveProperty("failure._tag", "fresh");
+              expect(after.journal).toMatchObject({
+                failure: {
+                  process: attempt.process,
+                  letter: attempt.letter,
+                  build: attempt.build,
+                  seq: attempt.seq,
+                  error: move.msg.error,
+                },
+              });
+            } else {
+              expect(after.journal).toHaveProperty("_tag", "writing_exit");
+              expect(after.journal).toHaveProperty("origin._tag", "crash");
+              expect(after.journal).toMatchObject({ process: attempt.process });
+            }
           }
 
           // A second report of a captured attempt, from either source, is a no-op.
@@ -699,7 +706,8 @@ describe("P34c slice 2: one saved recovery journal", () => {
             expect(move.msg.at, "the fold's clock is the exit's").toBe(w.at);
 
             if (before.journal.origin._tag === "manual") {
-              expect(after.journal).toMatchObject({ _tag: "waiting_start", timing: { _tag: "immediate" } });
+              expect(after.journal).toHaveProperty("_tag", "waiting_start");
+              expect(after.journal).toHaveProperty("timing._tag", "immediate");
               return;
             }
 
@@ -708,13 +716,15 @@ describe("P34c slice 2: one saved recovery journal", () => {
             const opening = roomAt(w.restarts, earliest, p);
 
             if (opening === earliest) {
-              expect(after.journal, `crash ${w.crashes} is inside the budget`).toMatchObject({
-                _tag: "waiting_start",
-                timing: { _tag: "scheduled", until: earliest },
-              });
+              expect(after.journal, `crash ${w.crashes} is inside the budget`).toHaveProperty("_tag", "waiting_start");
+              expect(after.journal, `crash ${w.crashes} is inside the budget`).toHaveProperty(
+                "timing._tag",
+                "scheduled",
+              );
+              expect(after.journal, `crash ${w.crashes} is inside the budget`).toHaveProperty("timing.until", earliest);
             } else {
+              expect(after.journal, `crash ${w.crashes} trips the brake`).toHaveProperty("_tag", "writing_down");
               expect(after.journal, `crash ${w.crashes} trips the brake`).toMatchObject({
-                _tag: "writing_down",
                 recovery: { process: before.journal.process, crashes: w.crashes, until: opening },
               });
             }
@@ -722,9 +732,14 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
           if (move.name === "due" && before.journal._tag === "waiting_recovery") {
             const until = before.journal.recovery.until;
-            expect(after.journal).toMatchObject(
-              w.at >= until ? { _tag: "waiting_start", timing: { _tag: "scheduled", until } } : before.journal,
-            );
+
+            if (w.at >= until) {
+              expect(after.journal).toHaveProperty("_tag", "waiting_start");
+              expect(after.journal).toHaveProperty("timing._tag", "scheduled");
+              expect(after.journal).toHaveProperty("timing.until", until);
+            } else {
+              expect(after.journal).toMatchObject(before.journal);
+            }
           }
 
           if (move.name === "started_early" || (move.name === "advance" && before.journal._tag !== "idle")) {
@@ -856,9 +871,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
           tries.set(letter, tries.get(letter)! + 1);
 
           if (tries.get(letter) === p.maxDeliveries) {
-            expect(model.journal, `letter ${letter} goes dead on try ${p.maxDeliveries}`).toMatchObject({
-              _tag: "writing_dead",
-            });
+            expect(model.journal, `letter ${letter} goes dead on try ${p.maxDeliveries}`).toHaveProperty(
+              "_tag",
+              "writing_dead",
+            );
             seen.add(`dead:${p.maxDeliveries}`);
             send({ type: "dead_written", seq });
           }
@@ -872,8 +888,8 @@ describe("P34c slice 2: one saved recovery journal", () => {
             // Down holds until the first restart of the full window leaves it, past the window itself.
             const until = Math.max(earliest, restarts[0]! + p.periodMs + 1);
             expect(until).toBeGreaterThan(p.periodMs);
+            expect(model.journal, `crash ${crashes} trips the brake`).toHaveProperty("_tag", "writing_down");
             expect(model.journal, `crash ${crashes} trips the brake`).toMatchObject({
-              _tag: "writing_down",
               recovery: { process, crashes, until },
             });
             seen.add(`brake:${p.intensity}`);
@@ -881,10 +897,9 @@ describe("P34c slice 2: one saved recovery journal", () => {
           }
 
           const j = model.journal;
-          expect(j, `crash ${crashes} of ${p.intensity} restarts`).toMatchObject({
-            _tag: "waiting_start",
-            timing: { _tag: "scheduled", until: earliest },
-          });
+          expect(j, `crash ${crashes} of ${p.intensity} restarts`).toHaveProperty("_tag", "waiting_start");
+          expect(j, `crash ${crashes} of ${p.intensity} restarts`).toHaveProperty("timing._tag", "scheduled");
+          expect(j, `crash ${crashes} of ${p.intensity} restarts`).toHaveProperty("timing.until", earliest);
 
           if (j._tag !== "waiting_start" || j.timing._tag !== "scheduled") {
             return;
@@ -1154,7 +1169,7 @@ describe("P13 A11 saved admission work", () => {
                 by: from().by,
                 for: from().for,
                 digest: `sha256:${j.attempt.letter}`,
-                answer: { _tag: "refused", reason: "changed_elsewhere", now: cell.gap },
+                answer: Reply.fields.answer.make({ reason: "changed_elsewhere", now: cell.gap }),
               },
             });
           } else {
@@ -1185,15 +1200,14 @@ describe("P13 A11 saved admission work", () => {
           expect(after.observations).toEqual([]);
 
           if (message.type === "begin") {
-            expect(after.journal).toMatchObject({
-              _tag: "checking",
-              attempt: { letter: message.letter, phase: "fresh" },
-            });
+            expect(after.journal).toHaveProperty("_tag", "checking");
+            expect(after.journal).toMatchObject({ attempt: { letter: message.letter, phase: "fresh" } });
             expect(after.receipts).toEqual(before.receipts);
           }
 
           if (message.type === "admitted") {
-            expect(after.journal).toMatchObject({ _tag: "stepping", attempt: { seq: message.seq } });
+            expect(after.journal).toHaveProperty("_tag", "stepping");
+            expect(after.journal).toMatchObject({ attempt: { seq: message.seq } });
             expect(after.receipts.find((r) => r.letter === message.receipt.letter)?.input).toEqual(
               message.receipt.input,
             );
@@ -1204,7 +1218,8 @@ describe("P13 A11 saved admission work", () => {
           }
 
           if (message.type === "refused") {
-            expect(after.journal).toMatchObject({ _tag: "writing_reply", reply: message.reply });
+            expect(after.journal).toHaveProperty("_tag", "writing_reply");
+            expect(after.journal).toMatchObject({ reply: message.reply });
             expect(after.receipts).toEqual(before.receipts);
           }
 
@@ -1237,7 +1252,7 @@ describe("P13 A11 saved admission work", () => {
                   by: from().by,
                   for: from().for,
                   digest: "stale",
-                  answer: { _tag: "refused", reason: "stale" },
+                  answer: Reply.fields.answer.make({ reason: "stale" }),
                 },
                 error: "TypeError",
                 reason: reasonFor("fresh", "TypeError"),

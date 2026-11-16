@@ -1,6 +1,7 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { ProgramDown } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });
 const old = { v: 1, model: { n: 7 }, build: "old-build", after: 12 };
@@ -85,7 +86,7 @@ describe("S3 saved state and named upgrades", () => {
                         ? [normal.upgrades[0]!, { name: "bad_model", from: 2, run: () => ({ count: "bad", step: 1 }) }]
                         : normal.upgrades;
               expect(() => Saved.upgrade(raw, { ...normal, upgrades }, "new-build")).toThrowError(
-                expect.objectContaining({ _tag: "ProgramDown", reason: "saved_state" }),
+                expect.objectContaining(ProgramDown.make({ reason: "saved_state" })),
               );
               expect(JSON.stringify(raw)).toBe(before);
             }),

@@ -5,8 +5,9 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Result, Schema } from "effect";
 import * as fc from "fast-check";
+import { Answer } from "./Audit.ts";
 import { executionFailure, nodeExecution, workerExecution } from "./Execution.ts";
-import { stepper, Step, type Admission, type Prepared, type ProgramDown } from "./Program.ts";
+import { Admission, ProgramDown, stepper, Step, type Prepared } from "./Program.ts";
 import { Saved } from "./State.ts";
 
 const SEED = 119120;
@@ -19,6 +20,9 @@ const missingModel: [fc.JsonValue, boolean, string] = [{ model: {} }, false, "ba
 const malformedModel: [fc.JsonValue, boolean, string] = [{ _tag: "stepped", model: 1 }, false, "bad"];
 const rejectedReply: [fc.JsonValue, boolean, string] = ["reject", true, "bad"];
 const upgradeAndReply: [number, number, number, string] = [2, 7, 42, "bad"];
+
+// A case no audit answers, for a reply the adapter must refuse.
+const Unrecognized = Schema.TaggedStruct("unrecognized", {});
 
 const rejectedRpc = async (): Promise<never> => {
   throw new Error("private RPC body");
@@ -82,7 +86,10 @@ describe("P13 split execution", () => {
                 }
 
                 if (mode === "decode") {
-                  return { _tag: phase === "fresh" ? "stepped" : "admitted", model: { count: 1 } };
+                  // The other call's answer: a fresh check gets a step, an update an admission.
+                  return phase === "fresh"
+                    ? Step.cases.stepped.make({ model: { count: 1 }, view: null, cmds: [], wake: null })
+                    : Admission.cases.admitted.make({});
                 }
 
                 return Result.getOrThrow(f());
@@ -95,7 +102,7 @@ describe("P13 split execution", () => {
                 },
                 fresh: async (s: unknown, m: unknown) => invoke(() => pure.fresh(s, m)),
                 update: async (s: unknown, m: unknown) => invoke(() => pure.update(s, m)),
-                audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
+                audit: async () => Answer.cases.ok.make({ value: { type: "inc" } }),
                 fold: async (s: unknown, m: unknown) => pure.fold(s, m),
                 upgrade: async (saved: unknown) => ({ saved, ran: [] }),
                 reply: async () => null,
@@ -112,18 +119,22 @@ describe("P13 split execution", () => {
               expect(composed, "new calls cannot fall back to composed step").toBe(0);
 
               if (mode === "rpc" || mode === "decode" || mode === "missing") {
-                expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown" } });
+                expect(result).toHaveProperty("_tag", "Failure");
+                expect(result).toHaveProperty("failure._tag", "ProgramDown");
 
                 if (Result.isFailure(result)) {
                   expect(["rpc", "decode"]).toContain(result.failure.source);
                 }
               } else if (phase === "fresh") {
                 expect(Result.getOrThrow(result)).toEqual(
-                  selected.count === 3 ? { _tag: "refused", reason: "limit", now: 3, most: 3 } : { _tag: "admitted" },
+                  selected.count === 3
+                    ? Admission.cases.refused.make({ reason: "limit", now: 3, most: 3 })
+                    : Admission.cases.admitted.make({}),
                 );
               } else {
                 const prepared = Result.getOrThrow(result);
-                expect(prepared).toMatchObject({ _tag: "stepped", model: { count: selected.count + 1 } });
+                expect(prepared).toHaveProperty("_tag", "stepped");
+                expect(prepared).toMatchObject({ model: { count: selected.count + 1 } });
                 history.push(selected);
                 model = { count: selected.count + 1 };
               }
@@ -164,7 +175,7 @@ describe("P13 split execution", () => {
                     return rejectedRpc();
                   }
 
-                  return mode === "ok" ? { _tag: "ok", value: { type: "inc" } } : { _tag: "unrecognized" };
+                  return mode === "ok" ? Answer.cases.ok.make({ value: { type: "inc" } }) : Unrecognized.make({});
                 },
               });
 
@@ -177,16 +188,16 @@ describe("P13 split execution", () => {
               expect(audit._tag).toBe(mode === "ok" ? "Success" : "Failure");
 
               if (mode === "ok") {
-                expect(audit).toMatchObject({ _tag: "Success", value: { type: "inc" } });
+                expect(audit).toHaveProperty("_tag", "Success");
+                expect(audit).toMatchObject({ value: { type: "inc" } });
               } else {
                 expect(Exit.isFailure(audit)).toBe(true);
 
                 if (Exit.isFailure(audit)) {
                   expect(Cause.hasDies(audit.cause)).toBe(false);
-                  expect(Cause.squash(audit.cause)).toMatchObject({
-                    _tag: "AuditError",
-                    reason: { _tag: expect.any(String) },
-                  });
+                  const error = Cause.squash(audit.cause);
+                  expect(error).toHaveProperty("_tag", "AuditError");
+                  expect(error).toHaveProperty("reason._tag", expect.any(String));
                   expect(Cause.pretty(audit.cause)).not.toContain(`private-${n}`);
                 }
               }
@@ -224,10 +235,8 @@ describe("P12 Effect execution adapter", () => {
                 step: async (model: unknown, msg: unknown) => pure.step(model, msg),
                 fresh: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.fresh(model, msg)),
                 update: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.update(model, msg)),
-                audit: async (msg: unknown) => ({
-                  _tag: "ok",
-                  value: await Effect.runPromise(nodeExecution(declared).audit(msg)),
-                }),
+                audit: async (msg: unknown) =>
+                  Answer.cases.ok.make({ value: await Effect.runPromise(nodeExecution(declared).audit(msg)) }),
                 fold: async (model: unknown, msg: unknown) => pure.fold(model, msg),
                 upgrade: async (saved: unknown) => Saved.upgrade(saved, declared.state, "build-a"),
                 reply: rejectedRpc,
@@ -275,7 +284,7 @@ describe("P12 Effect execution adapter", () => {
                 [remote.fold({}, {}), "saved_letter"],
               ] as const) {
                 const result = yield* Effect.flip(action);
-                expect(result).toMatchObject({ _tag: "ProgramDown", reason });
+                expect(result).toEqual(expect.objectContaining(ProgramDown.make({ reason })));
                 expect(JSON.stringify(result)).not.toContain("private RPC body");
               }
             }),

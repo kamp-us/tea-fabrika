@@ -17,10 +17,11 @@ import { mailChunk } from "../settings/Declarations.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { Answer } from "./Audit.ts";
 import { Alarm, CheckedWriter, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { workerExecution } from "./Execution.ts";
 import { Supervision } from "./internal/supervisor.ts";
-import { stepper } from "./Program.ts";
+import { Input, stepper } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
@@ -41,7 +42,7 @@ const program = {
   msg: Msg,
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
-  inputs: { inc: { _tag: "write", schema: Msg, description: "Increment", personOnly: false } },
+  inputs: { inc: Input.cases.write.make({ schema: Msg, description: "Increment", personOnly: false }) },
   outputs: {},
   writes: {},
   wake: () => null,
@@ -72,7 +73,7 @@ describe("P12 saved mail recovery", () => {
                     return Result.getOrThrow(pure.fresh(model, msg));
                   },
                   update: async (model, msg) => Result.getOrThrow(pure.update(model, msg)),
-                  audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
+                  audit: async () => Answer.cases.ok.make({ value: { type: "inc" } }),
                   admit: async () => {
                     if (down && point === "admit") {
                       return Promise.reject(new Error("temporary RPC loss"));
@@ -266,8 +267,8 @@ const reuseProgram = {
   msg: Reuse,
   view: { data: ReuseModel, select: (s: typeof ReuseModel.Type) => s },
   inputs: {
-    inc: { _tag: "write", schema: Reuse, description: "Increment", personOnly: false },
-    boom: { _tag: "write", schema: Reuse, description: "Throw", personOnly: false },
+    inc: Input.cases.write.make({ schema: Reuse, description: "Increment", personOnly: false }),
+    boom: Input.cases.write.make({ schema: Reuse, description: "Throw", personOnly: false }),
   },
 } as const;
 
@@ -297,7 +298,7 @@ describe("P34 id reuse at the runner", () => {
                       steps++;
                       return Result.getOrThrow(pure.update(model, msg));
                     },
-                    audit: async () => ({ _tag: "ok", value: { type: "put" } }),
+                    audit: async () => Answer.cases.ok.make({ value: { type: "put" } }),
                     step: async (model, msg) => {
                       steps++;
                       return pure.step(model, msg);
@@ -426,10 +427,9 @@ describe("P34 id reuse at the runner", () => {
                     expect(Exit.isFailure(sent), "only a throwing letter fails its send").toBe(type === "boom");
                     const before = steps;
                     const changed = other === first ? other + 1 : other;
-                    expect(yield* runner.msg(letter(type, changed))).toMatchObject({
-                      _tag: "refused",
-                      reason: "id_reused",
-                    });
+                    const resent = yield* runner.msg(letter(type, changed));
+                    expect(resent).toHaveProperty("_tag", "refused");
+                    expect(resent).toMatchObject({ reason: "id_reused" });
                     expect(steps, "a refused reuse steps nothing").toBe(before);
                   }).pipe(Effect.provide(layer));
                 } finally {

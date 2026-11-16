@@ -1,11 +1,11 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
-import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
-import { Appended, Entry, Line, PAGE, Waited } from "./Log.ts";
+import { Appended, Entry, Line, lineFor, PAGE, Waited } from "./Log.ts";
 
 const CHECK = { seed: 119120, numRuns: 40 };
 const text = fc.string({ minLength: 1, maxLength: 260 });
@@ -30,16 +30,14 @@ const capture = () => {
   return { spans, tracer };
 };
 
+const Saved = Schema.TaggedStruct("saved", {});
+
 const line = (traceId: string, body: string) =>
   Line.make({
-    by: "writer",
-    for: "person",
-    sentAt: "writer-clock",
-    seen: 0,
-    parent: null,
-    traceId,
-    build: "build",
-    _tag: "saved",
+    ...lineFor(
+      { by: "writer", for: "person", sentAt: "writer-clock", seen: 0, parent: null, traceId, build: "build" },
+      Saved.make({}),
+    ),
     body,
   });
 

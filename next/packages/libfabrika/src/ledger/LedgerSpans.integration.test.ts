@@ -26,7 +26,7 @@ import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import * as LedgerSql from "./LedgerSql.ts";
-import type { Line } from "./Log.ts";
+import { Appended, type Line, lineFor, Waited } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
 import * as RefereeSql from "./RefereeSql.ts";
@@ -77,18 +77,29 @@ const onReferee = (sql: Store, doorbell: Layer.Layer<Doorbell> = quiet) =>
 const BODY = "body-marker-7c1d";
 const SENT = "sent-marker-2026-11-07T21:10:01.204Z";
 
-const line = (over: Partial<Line> = {}): Line => ({
-  by: "SHA256:writer-a",
-  for: "owner",
-  sentAt: SENT,
-  seen: 0,
-  parent: null,
-  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  build: "b-7c1d073",
-  _tag: "saved",
-  body: { note: BODY, base: 3 },
+/** A schema for the event a line carries, under the case `kind`. */
+const Event = (kind: string) => Schema.TaggedStruct(kind, { note: Schema.String, base: Schema.Number });
+
+const line = (over: Partial<Omit<Line, "_tag">> = {}, kind = "saved"): Line => ({
+  ...lineFor(
+    {
+      by: "SHA256:writer-a",
+      for: "owner",
+      sentAt: SENT,
+      seen: 0,
+      parent: null,
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      build: "b-7c1d073",
+    },
+    Event(kind).make({ note: BODY, base: 3 }),
+  ),
   ...over,
 });
+
+const placed = (rev: number, pos: number) => Appended.cases.placed.make({ rev, pos });
+const parked = Waited.cases.parked.make({});
+// A case `wait` never answers, for a stub whose answer must not decode.
+const Soon = Schema.TaggedStruct("soon", {});
 
 /** A tracer that keeps every span it makes; `ended(name)` gives each one that ended, with its tags. */
 const capture = () => {
@@ -150,7 +161,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       yield* ledger.append("notes:1", "w-2", line());
       yield* ledger.append("other", "w-2", line());
       // The log's head is 4; notes:1's newest is 3, and the reader has read up to 3.
-      expect(yield* ledger.wait("notes:1", 3)).toEqual({ _tag: "parked" });
+      expect(yield* ledger.wait("notes:1", 3)).toEqual(parked);
       expect(tags("ledger.wait")).toEqual([
         expect.objectContaining({
           [STREAM]: "notes:1",
@@ -161,11 +172,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           [tag("answer")]: "parked",
         }),
       ]);
-      expect(yield* ledger.append("notes:1", "w-9", line({ seen: 4 }))).toEqual({
-        _tag: "placed",
-        rev: 5,
-        pos: 3,
-      });
+      expect(yield* ledger.append("notes:1", "w-9", line({ seen: 4 }))).toEqual(placed(5, 3));
       expect(tags("ledger.append")).toHaveLength(5);
       expect(tags("ledger.append")[4]).toEqual(
         expect.objectContaining({
@@ -204,7 +211,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           [tag("visible_ms")]: 37,
         }),
       ]);
-      expect(yield* ledger.wait("notes:1", 3)).toEqual({ _tag: "ready", rev: 5 });
+      expect(yield* ledger.wait("notes:1", 3)).toEqual(Waited.cases.ready.make({ rev: 5 }));
       expect(tags("ledger.wait")[1]).toEqual(
         expect.objectContaining({
           [tag("head")]: 5,
@@ -315,7 +322,7 @@ describe("p95, every call is one span, names and numbers only", () => {
     type Names = typeof names extends fc.Arbitrary<infer N> ? N : never;
     const run = ({ stream, id, kind, by, reader }: Names) => {
       const { tracer, all, tags } = capture();
-      const named = (over: Partial<Line> = {}) => line({ _tag: kind, by, ...over });
+      const named = (over: Partial<Omit<Line, "_tag">> = {}) => line({ by, ...over }, kind);
       return Effect.runPromise(
         Effect.gen(function* () {
           const ledger = yield* Ledger;
@@ -353,11 +360,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       const kind = "t".repeat(200);
       return Effect.gen(function* () {
         const ledger = yield* Ledger;
-        expect(yield* ledger.append("notes:1", id, line({ _tag: kind }))).toEqual({
-          _tag: "placed",
-          rev: 1,
-          pos: 1,
-        });
+        expect(yield* ledger.append("notes:1", id, line({}, kind))).toEqual(placed(1, 1));
         const [span = {}] = tags("ledger.append");
         heldShort(span, ID, id);
         heldShort(span, tag("tag"), kind);
@@ -384,12 +387,8 @@ describe("p95, every call is one span, names and numbers only", () => {
       };
       const referee = Effect.gen(function* () {
         const ledger = yield* Ledger;
-        expect(yield* ledger.wait(stream, 0)).toEqual({ _tag: "parked" });
-        expect(yield* ledger.append(stream, id, line({ _tag: kind, by }))).toEqual({
-          _tag: "placed",
-          rev: 1,
-          pos: 1,
-        });
+        expect(yield* ledger.wait(stream, 0)).toEqual(parked);
+        expect(yield* ledger.append(stream, id, line({ by }, kind))).toEqual(placed(1, 1));
         expect((yield* Stream.runCollect(ledger.read(stream, 0))).map((e) => e.id)).toEqual([id]);
         const append = one("ledger.append");
         heldShort(append, STREAM, stream);
@@ -409,13 +408,13 @@ describe("p95, every call is one span, names and numbers only", () => {
       // The caller's side: `Ledger.remote`'s `ledger.call` span takes the stream and the reader too.
       const { tracer: callTracer, tags: callTags } = capture();
       const stub: LedgerCalls = {
-        append: () => Promise.resolve({ _tag: "placed", rev: 1, pos: 1 }),
+        append: () => Promise.resolve(placed(1, 1)),
         read: () => Promise.resolve([]),
-        wait: () => Promise.resolve({ _tag: "parked" }),
+        wait: () => Promise.resolve(parked),
       };
       const remote = Effect.gen(function* () {
         const ledger = yield* Ledger;
-        yield* ledger.append(stream, id, line({ _tag: kind, by }));
+        yield* ledger.append(stream, id, line({ by }, kind));
         yield* Stream.runCollect(ledger.read(stream, 0));
         yield* ledger.wait(stream, 0);
         const calls = callTags("ledger.call");
@@ -550,11 +549,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             const { tracer, tags, failed } = capture();
             return Effect.gen(function* () {
               const ledger = yield* Ledger;
-              expect(yield* ledger.append("a", "w-1", line())).toEqual({
-                _tag: "placed",
-                rev: 1,
-                pos: 1,
-              });
+              expect(yield* ledger.append("a", "w-1", line())).toEqual(placed(1, 1));
               // No page past the ones there now: the next big row fails with SQLITE_FULL, and SQLite rolls
               // the whole transaction back by itself, so a ROLLBACK after it finds none.
               const { page_count: pages } = db.prepare("PRAGMA page_count").get() ?? {};
@@ -568,11 +563,7 @@ describe("p95, every call is one span, names and numbers only", () => {
               expect(error.message ?? "").not.toMatch(/no transaction is active/);
               // With room again, the failed step left nothing behind and the next append is placed.
               db.exec("PRAGMA max_page_count = 1073741823");
-              expect(yield* ledger.append("a", "w-3", line())).toEqual({
-                _tag: "placed",
-                rev: 2,
-                pos: 2,
-              });
+              expect(yield* ledger.append("a", "w-3", line())).toEqual(placed(2, 2));
             }).pipe(Effect.provide(onSql(Effect.succeed(nodeSql(db)))), Effect.withTracer(tracer));
           }),
         { concurrency: 1, discard: true },
@@ -613,10 +604,10 @@ describe("p95, every call is one span, names and numbers only", () => {
         const rang: Array<string> = [];
         return Effect.gen(function* () {
           const referee = yield* Referee;
-          expect(yield* referee.wait("a", 0, DIES)).toEqual({ _tag: "parked" });
-          expect(yield* referee.wait("a", 0, READER)).toEqual({ _tag: "parked" });
+          expect(yield* referee.wait("a", 0, DIES)).toEqual(parked);
+          expect(yield* referee.wait("a", 0, READER)).toEqual(parked);
           const exit = yield* Effect.exit(referee.append("a", "w-1", line()));
-          expect(exit).toEqual(Exit.succeed({ _tag: "placed", rev: 1, pos: 1 }));
+          expect(exit).toEqual(Exit.succeed(placed(1, 1)));
           expect(rang).toEqual([READER]);
           const rings = ended("ledger.ring");
           expect(rings).toHaveLength(2);
@@ -643,7 +634,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       return Effect.gen(function* () {
         const ledger = yield* Ledger;
         yield* ledger.wait("a", 0);
-        expect(yield* ledger.append("a", "w-1", line())).toEqual({ _tag: "placed", rev: 1, pos: 1 });
+        expect(yield* ledger.append("a", "w-1", line())).toEqual(placed(1, 1));
         const rings = tags("ledger.ring");
         expect(rings).toHaveLength(1);
         expect(rings[0]).toEqual(expect.objectContaining({ [tag("to")]: READER, [tag("ok")]: false }));
@@ -666,9 +657,9 @@ describe("p95, every call is one span, names and numbers only", () => {
           const { tracer, tags, failed } = capture();
           const reject = () => Promise.reject(value);
           const stub: LedgerCalls = {
-            append: () => Promise.resolve({ _tag: "placed", rev: 1, pos: 1 }),
+            append: () => Promise.resolve(placed(1, 1)),
             read: reject,
-            wait: () => Promise.resolve({ _tag: "soon" }),
+            wait: () => Promise.resolve(Soon.make({})),
           };
           return Effect.gen(function* () {
             const ledger = yield* Ledger;

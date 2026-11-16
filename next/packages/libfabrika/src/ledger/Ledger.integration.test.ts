@@ -28,7 +28,7 @@ import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import * as LedgerSql from "./LedgerSql.ts";
-import type { Line } from "./Log.ts";
+import { Appended, type Line, lineFor, Waited } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -80,7 +80,7 @@ type Store = Effect.Effect<Sql, never, Scope.Scope>;
 const onSql = (sql: Store, doorbell: Layer.Layer<Doorbell> = quiet) =>
   Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(doorbell)))));
 
-const line = (over: Partial<Line> = {}): Line => ({
+const FROM = {
   by: "SHA256:writer-a",
   for: "owner",
   sentAt: "2026-11-07T21:10:01.204Z",
@@ -88,13 +88,20 @@ const line = (over: Partial<Line> = {}): Line => ({
   parent: null,
   traceId: TRACE,
   build: "b-7c1d073",
-  _tag: "saved",
-  body: { note: "n-7f3a", base: 3 },
+};
+
+const Saved = Schema.TaggedStruct("saved", { note: Schema.String, base: Schema.Number });
+const Deleted = Schema.TaggedStruct("deleted", { note: Schema.String, base: Schema.Number });
+// A case `wait` never answers, for a stub whose answer must not decode.
+const Soon = Schema.TaggedStruct("soon", {});
+
+const line = (over: Partial<Line> = {}): Line => ({
+  ...lineFor(FROM, Saved.make({ note: "n-7f3a", base: 3 })),
   ...over,
 });
 
-const placed = (rev: number, pos: number) => ({ _tag: "placed", rev, pos });
-const refused = (reason: string) => ({ _tag: "refused", reason });
+const placed = (rev: number, pos: number) => Appended.cases.placed.make({ rev, pos });
+const refused = (reason: (typeof Appended.cases.refused.Type)["reason"]) => Appended.cases.refused.make({ reason });
 
 const readAll = (stream: string, after = 0) => Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, after)));
 
@@ -198,7 +205,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
     ["by", { by: "SHA256:writer-b" }],
     ["for", { for: "someone-else" }],
     ["parent", { parent: PARENT }],
-    ["_tag", { _tag: "deleted" }],
+    ["_tag", lineFor(FROM, Deleted.make({ note: "n-7f3a", base: 3 }))],
     ["body", { body: { note: "n-7f3a", base: 4 } }],
   ];
   it.effect.each(changes)("the same id with another %s is refused id_reused, and nothing is written", ([, change]) =>
@@ -320,8 +327,8 @@ describe("p18, the ledger suite on Ledger.sql", () => {
     return Effect.gen(function* () {
       const ledger = yield* Ledger;
       yield* ledger.append("a", "w-1", line());
-      expect(yield* ledger.wait("a", 0)).toEqual({ _tag: "ready", rev: 1 });
-      expect(yield* ledger.wait("a", 1)).toEqual({ _tag: "parked" });
+      expect(yield* ledger.wait("a", 0)).toEqual(Waited.cases.ready.make({ rev: 1 }));
+      expect(yield* ledger.wait("a", 1)).toEqual(Waited.cases.parked.make({}));
       yield* ledger.append("b", "w-1", line());
       yield* ledger.append("a", "w-1", line());
       expect(rang).toEqual([]);
@@ -344,7 +351,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
             yield* ledger.append("a", `w-${n}`, line());
           }
 
-          expect(yield* ledger.wait("b", 5)).toEqual({ _tag: "parked" });
+          expect(yield* ledger.wait("b", 5)).toEqual(Waited.cases.parked.make({}));
         }).pipe(Effect.provide(onSql(Effect.succeed(nodeSql(first)))));
         first.close();
         const { rang, layer } = bell();
@@ -429,7 +436,9 @@ describe("p93, seen is bounded by the log's head", () => {
             for (const [i, { stream, offset }] of writes.entries()) {
               const seen = Math.max(0, head + offset);
               const answer = yield* ledger.append(stream, `w-${i}`, line({ seen }));
-              expect(answer).toEqual(seen > head ? refused("seen_ahead") : placed(head + 1, expect.any(Number)));
+              expect(answer).toEqual(
+                seen > head ? refused("seen_ahead") : { ...placed(head + 1, 1), pos: expect.any(Number) },
+              );
 
               if (answer._tag === "placed") {
                 head = answer.rev;
@@ -554,9 +563,9 @@ describe("p20, failures are typed, and pass", () => {
         ["one", generated],
         (value) => {
           const stub: LedgerCalls = {
-            append: () => Promise.resolve({ _tag: "placed", rev: value }),
+            append: () => Promise.resolve({ ...placed(1, 1), rev: value }),
             read: () => Promise.resolve([{ id: "w-1" }]),
-            wait: () => Promise.resolve({ _tag: "soon" }),
+            wait: () => Promise.resolve(Soon.make({})),
           };
           return Effect.gen(function* () {
             const ledger = yield* Ledger;
@@ -581,21 +590,21 @@ describe("p20, failures are typed, and pass", () => {
   it.effect("a stub that answers well is decoded, and the reader's name rides on each read and wait", () => {
     const asked: Array<readonly [string, string, number, string]> = [];
     const stub: LedgerCalls = {
-      append: () => Promise.resolve({ _tag: "placed", rev: 1, pos: 1 }),
+      append: () => Promise.resolve(placed(1, 1)),
       read: (stream, after, reader) => {
         asked.push(["read", stream, after, reader]);
         return Promise.resolve(page.filter((entry) => entry.rev > after));
       },
       wait: (stream, after, reader) => {
         asked.push(["wait", stream, after, reader]);
-        return Promise.resolve({ _tag: "parked" });
+        return Promise.resolve(Waited.cases.parked.make({}));
       },
     };
     return Effect.gen(function* () {
       const ledger = yield* Ledger;
       expect(yield* ledger.append("a", "w-1", line())).toEqual(placed(1, 1));
       expect(yield* Stream.runCollect(ledger.read("a", 0))).toEqual(page);
-      expect(yield* ledger.wait("a", 1)).toEqual({ _tag: "parked" });
+      expect(yield* ledger.wait("a", 1)).toEqual(Waited.cases.parked.make({}));
       expect(asked[0]).toEqual(["read", "a", 0, READER]);
       expect(asked.at(-1)).toEqual(["wait", "a", 1, READER]);
       expect(asked.every(([, , , reader]) => reader === READER)).toBe(true);
@@ -737,7 +746,7 @@ describe("p20, failures are typed, and pass", () => {
 
   it("a wait leaves nothing running: Effect.runSync of a parking wait answers parked", () => {
     const answer = Effect.runSync(Ledger.use((ledger) => ledger.wait("a", 0)).pipe(Effect.provide(onSql(fresh()))));
-    expect(answer).toEqual({ _tag: "parked" });
+    expect(answer).toEqual(Waited.cases.parked.make({}));
   });
 });
 

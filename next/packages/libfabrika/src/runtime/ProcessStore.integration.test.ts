@@ -107,6 +107,23 @@ const from: From = {
   build: "build-a",
 };
 
+// The store keeps a turn and its Cmds as JSON, whatever their shape; these are the exam's own.
+const Prepared = Schema.TaggedStruct("prepared", {
+  id: Schema.String,
+  input: Schema.Json,
+  parent: Schema.String,
+  span: Schema.Json,
+  sentAt: Schema.String,
+  seen: Schema.Number,
+  next: Schema.Json,
+  cmds: Schema.Array(Schema.Json),
+});
+
+const Dispatched = Schema.TaggedStruct("dispatched", { id: Schema.String, input: Schema.Json, build: Schema.String });
+// Cases no runtime record has, for raw records the decoder must refuse.
+const Granted = Schema.TaggedStruct("granted", {});
+const Started = Schema.TaggedStruct("started", {});
+
 const checkpoint: typeof CheckpointSchema.Type = {
   saved: { v: 1, build: "build-a", model: { count: 2 }, after: 4 },
   turn: null,
@@ -177,18 +194,17 @@ describe("P11 process storage", () => {
         yield* Effect.gen(function* () {
           const store = yield* ProcessStore;
           yield* store.save(checkpoint);
-          expect(
-            yield* Effect.flip(store.save({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } })),
-          ).toMatchObject({ _tag: "LedgerError", reason: "bad_row" });
+          const refused = yield* Effect.flip(store.save({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }));
+          expect(refused).toHaveProperty("_tag", "LedgerError");
+          expect(refused).toMatchObject({ reason: "bad_row" });
           expect(yield* store.load).toEqual(checkpoint);
           disk
             .db()
             .prepare("UPDATE process_state SET checkpoint=? WHERE process=?")
             .run(JSON.stringify({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
-          expect(yield* Effect.flip(store.load)).toMatchObject({
-            _tag: "LedgerError",
-            reason: "bad_row",
-          });
+          const unread = yield* Effect.flip(store.load);
+          expect(unread).toHaveProperty("_tag", "LedgerError");
+          expect(unread).toMatchObject({ reason: "bad_row" });
         }).pipe(Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provide(data(disk.sql)))));
       }),
     ),
@@ -210,10 +226,9 @@ describe("P11 process storage", () => {
       return Effect.gen(function* () {
         const store: Store = yield* ProcessStore;
         expect(calls).toBe(0);
-        expect(yield* Effect.flip(store.load)).toMatchObject({
-          _tag: "LedgerError",
-          reason: "storage",
-        });
+        const failed = yield* Effect.flip(store.load);
+        expect(failed).toHaveProperty("_tag", "LedgerError");
+        expect(failed).toMatchObject({ reason: "storage" });
         expect(calls).toBeGreaterThan(0);
       }).pipe(
         Effect.provide(
@@ -233,8 +248,7 @@ describe("P11 process storage", () => {
         const disk = yield* database;
         const pending = {
           ...checkpoint,
-          turn: {
-            _tag: "prepared",
+          turn: Prepared.make({
             id: "letter-a",
             input: { type: "add", n: 3 },
             parent: `in-${PROCESS}-2`,
@@ -243,8 +257,8 @@ describe("P11 process storage", () => {
             seen: from.seen,
             next: { ...checkpoint.saved, model: { count: 5 } },
             cmds: [],
-          },
-          cmds: [{ id: "stable-cmd", _tag: "dispatched", input: { type: "save", n: 2 }, build: "build-a" }],
+          }),
+          cmds: [Dispatched.make({ id: "stable-cmd", input: { type: "save", n: 2 }, build: "build-a" })],
         };
         yield* Effect.gen(function* () {
           const store: Store = yield* ProcessStore;
@@ -297,25 +311,22 @@ describe("P11 process storage", () => {
     (generated) => {
       for (const [input, pos, ran] of [["a", 2, ["one", "two"]], generated] as const) {
         const decode = Schema.decodeUnknownSync(RuntimeRecord);
-        expect(decode({ _tag: "stepped", input, pos, build: "build-a" })).toMatchObject({
-          _tag: "stepped",
-        });
+        expect(decode(RuntimeRecord.cases.stepped.make({ input, pos, build: "build-a" }))).toHaveProperty(
+          "_tag",
+          "stepped",
+        );
         expect(
-          decode({
-            _tag: "state.upgraded",
-            program: "counter",
-            from: 1,
-            to: 3,
-            ran,
-            build: "build-b",
-          }),
+          decode(
+            RuntimeRecord.cases["state.upgraded"].make({ program: "counter", from: 1, to: 3, ran, build: "build-b" }),
+          ),
         ).toMatchObject({ ran });
 
+        // Checks are off: each made record keeps a position the decoder must refuse.
         for (const raw of [
-          { _tag: "granted" },
-          { _tag: "started" },
-          { _tag: "stepped", input, pos: -pos - 1, build: "build-a" },
-          { _tag: "stepped", input, pos: -1, build: "build-a" },
+          Granted.make({}),
+          Started.make({}),
+          RuntimeRecord.cases.stepped.make({ input, pos: -pos - 1, build: "build-a" }, { disableChecks: true }),
+          RuntimeRecord.cases.stepped.make({ input, pos: -1, build: "build-a" }, { disableChecks: true }),
         ]) {
           expect(() => decode(raw)).toThrow();
         }
@@ -336,16 +347,13 @@ describe("P11 process storage", () => {
         yield* Effect.gen(function* () {
           const store: Store = yield* ProcessStore;
           const ledger = yield* Ledger;
-          const event = { _tag: "stepped", input, pos, build };
+          const event = RuntimeRecord.cases.stepped.make({ input, pos, build });
           const placed = yield* store.record("step:letter-a", event, { ...from, build });
           expect(yield* store.record("step:letter-a", event, { ...from, build })).toEqual(placed);
           const rows = yield* Stream.runCollect(ledger.read(PROCESS, 0));
           expect(rows).toHaveLength(1);
-          expect(rows[0]).toMatchObject({
-            _tag: "stepped",
-            body: { input, pos },
-            build,
-          });
+          expect(rows[0]).toHaveProperty("_tag", "stepped");
+          expect(rows[0]).toMatchObject({ body: { input, pos }, build });
         }).pipe(
           Effect.provide(ProcessStore.layer(disk.sql, { process: PROCESS }).pipe(Layer.provideMerge(data(disk.sql)))),
         );
@@ -392,11 +400,12 @@ describe("P11 process storage", () => {
           const store = yield* ProcessStore;
           const selected = yield* store.select(activity.process);
           expect(selected).toBeDefined();
-          expect(yield* Effect.exit(selected.load)).toMatchObject({ _tag: "Success", value: null });
-          expect(yield* Effect.exit(selected.placed(placed.id))).toMatchObject({
-            _tag: "Success",
-            value: null,
-          });
+          const loaded = yield* Effect.exit(selected.load);
+          expect(loaded).toHaveProperty("_tag", "Success");
+          expect(loaded).toHaveProperty("value", null);
+          const found = yield* Effect.exit(selected.placed(placed.id));
+          expect(found).toHaveProperty("_tag", "Success");
+          expect(found).toHaveProperty("value", null);
           expect(yield* selected.placedByAny(placed.id)).toBeNull();
           expect((yield* Effect.exit(store.save(value, [placed])))._tag).toBe("Success");
           expect(yield* store.placed(placed.id)).toEqual(placed);
@@ -411,10 +420,10 @@ describe("P11 process storage", () => {
           yield* selected.activity(activity);
           expect(yield* selected.readActivity).toEqual(activity);
           values.set("activity", { _tag: "stepping", process: "bad" });
-          expect(yield* Effect.exit(Effect.flip(selected.readActivity))).toMatchObject({
-            _tag: "Success",
-            value: { _tag: "LedgerError", reason: "bad_row" },
-          });
+          const misread = yield* Effect.exit(Effect.flip(selected.readActivity));
+          expect(misread).toHaveProperty("_tag", "Success");
+          expect(misread).toHaveProperty("value._tag", "LedgerError");
+          expect(misread).toMatchObject({ value: { reason: "bad_row" } });
         }).pipe(
           Effect.provide(
             ProcessStore.layer(disk.sql, { process: PROCESS, storage }).pipe(Layer.provide(data(disk.sql))),

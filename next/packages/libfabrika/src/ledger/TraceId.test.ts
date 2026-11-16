@@ -9,9 +9,10 @@ import { inputParents } from "../Id.test-support.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
+import { Chain } from "../telemetry/Trace.ts";
 import { Doorbell, Ledger, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
-import { fromHere, lineFor, TraceId } from "./Log.ts";
+import { Appended, fromHere, lineFor, TraceId } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
 import * as RefereeSql from "./RefereeSql.ts";
@@ -21,6 +22,7 @@ const traceIds = Arbitrary.schema(Schema.String.check(Schema.isPattern(/^[0-9a-f
 );
 
 const SENT = "2026-11-07T21:10:01.204Z";
+const Saved = Schema.TaggedStruct("saved", { note: Schema.String });
 
 const from = {
   by: "SHA256:writer-a",
@@ -103,11 +105,9 @@ describe("T246, fromHere", () => {
           const stamped = yield* fromHere(writer);
           expect(stamped).toEqual({ ...writer, sentAt: SENT, traceId });
           const ledger = yield* Ledger;
-          expect(yield* ledger.append("notes:1", "w-1", lineFor(stamped, { _tag: "saved", note: "n-1" }))).toEqual({
-            _tag: "placed",
-            rev: 1,
-            pos: 1,
-          });
+          expect(yield* ledger.append("notes:1", "w-1", lineFor(stamped, Saved.make({ note: "n-1" })))).toEqual(
+            Appended.cases.placed.make({ rev: 1, pos: 1 }),
+          );
         }).pipe(
           Effect.withSpan("notes.save"),
           Effect.withParentSpan(Tracer.externalSpan({ traceId, spanId: "00f067aa0ba902b7" })),
@@ -117,7 +117,9 @@ describe("T246, fromHere", () => {
         expect(rest).toEqual([]);
         expect(entry).toMatchObject({ id: "w-1", parent, traceId });
         yield* SpanSink.use((sink) => sink.flush);
-        const spans = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+        const spans = yield* RecordManager.use((records) =>
+          Stream.runCollect(records.read(Chain.cases.spans.make({}))),
+        );
         const append = spans.filter(
           (span) => span.name === "ledger.call" && span.attributes["rpc.method"] === "append",
         );

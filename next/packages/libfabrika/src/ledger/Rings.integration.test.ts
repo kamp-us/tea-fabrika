@@ -16,12 +16,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
+import { Deferred, Effect, Fiber, Layer, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
-import type { Line } from "./Log.ts";
+import { Appended, type Line, lineFor, Waited } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import { Referee } from "./Referee.ts";
 import * as RefereeSql from "./RefereeSql.ts";
@@ -73,21 +73,26 @@ const onReferee = (sql: Store, doorbell: Layer.Layer<Doorbell>) =>
 const onLedger = (sql: Store, doorbell: Layer.Layer<Doorbell>, reader: string) =>
   Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader }).pipe(Layer.provide(doorbell)))));
 
+const Saved = Schema.TaggedStruct("saved", { note: Schema.String, base: Schema.Number });
+
 const line = (over: Partial<Line> = {}): Line => ({
-  by: "SHA256:writer-a",
-  for: "owner",
-  sentAt: "2026-11-07T21:10:01.204Z",
-  seen: 0,
-  parent: null,
-  traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  build: "b-7c1d073",
-  _tag: "saved",
-  body: { note: "n-7f3a", base: 3 },
+  ...lineFor(
+    {
+      by: "SHA256:writer-a",
+      for: "owner",
+      sentAt: "2026-11-07T21:10:01.204Z",
+      seen: 0,
+      parent: null,
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      build: "b-7c1d073",
+    },
+    Saved.make({ note: "n-7f3a", base: 3 }),
+  ),
   ...over,
 });
 
-const placed = (rev: number, pos: number) => ({ _tag: "placed", rev, pos });
-const parked = { _tag: "parked" };
+const placed = (rev: number, pos: number) => Appended.cases.placed.make({ rev, pos });
+const parked = Waited.cases.parked.make({});
 const T1 = "connection:t1";
 const T2 = "connection:t2";
 
@@ -101,8 +106,8 @@ describe("p94, a parked wait is a row, rung once", () => {
       const referee = yield* Referee;
       yield* referee.append("a", "w-1", line());
       yield* referee.append("b", "w-1", line());
-      expect(yield* referee.wait("a", 0, T1)).toEqual({ _tag: "ready", rev: 1 });
-      expect(yield* referee.wait("b", 1, T1)).toEqual({ _tag: "ready", rev: 2 });
+      expect(yield* referee.wait("a", 0, T1)).toEqual(Waited.cases.ready.make({ rev: 1 }));
+      expect(yield* referee.wait("b", 1, T1)).toEqual(Waited.cases.ready.make({ rev: 2 }));
       yield* referee.append("a", "w-2", line());
       yield* referee.append("b", "w-2", line());
       expect(rang).toEqual([]);

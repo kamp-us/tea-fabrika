@@ -32,10 +32,14 @@ describe("P34c slice 1: a captured failure becomes one exit reason", () => {
   it("L4: fresh is step, saved is saved_letter, interrupted has no class; a class is kept whole, never cut to fit", () => {
     fc.assert(
       fc.property(failure, (failure) => {
+        // Checks are off: past the bound the expected class is kept whole, which the schema refuses.
         const expected =
           failure._tag === "interrupted"
-            ? { _tag: "crashed", phase: "interrupted" }
-            : { _tag: "crashed", phase: failure._tag === "fresh" ? "step" : "saved_letter", error: failure.error };
+            ? ExitReason.cases.crashed.make({ phase: "interrupted" })
+            : ExitReason.cases.crashed.make(
+                { phase: failure._tag === "fresh" ? "step" : "saved_letter", error: failure.error },
+                { disableChecks: true },
+              );
         const reason = Result.try(() => fromFailure(failure));
         const inBound = failure._tag === "interrupted" || failure.error.length <= ERROR_CLASS_MAX;
         // Inside the bound the reason is exact. Past it, the class is refused here or kept whole for

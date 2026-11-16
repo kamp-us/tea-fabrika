@@ -277,7 +277,8 @@ describe("L3: the browser key store", () => {
                             yield* healStore(page);
                             seen.failed++;
                             expect(a.ok, "a failed store made a key").toBeUndefined();
-                            expect(a.err).toMatchObject({ _tag: "ClientKeyError", error: m.error });
+                            expect(a.err).toHaveProperty("_tag", "ClientKeyError");
+                            expect(a.err).toMatchObject({ error: m.error });
                             expect(["open", "read", "write", "make", "sign"]).toContain(a.err?.op);
                             const after = yield* current(page, null);
                             expect(after.ok?.fingerprint, "the failure replaced the key").toBe(stored_);

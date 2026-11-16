@@ -29,7 +29,7 @@ import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import * as LedgerTransactionFront from "./LedgerTransaction.ts";
 import * as LogFront from "./Log.ts";
-import type { Entry, InputId, Line } from "./Log.ts";
+import { Appended, type Entry, type InputId, type Line, lineFor } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import * as RefereeFront from "./Referee.ts";
 import { Referee } from "./Referee.ts";
@@ -119,17 +119,20 @@ const onReferee = (sql: Store) =>
 const onLedger = (sql: Store) =>
   Layer.unwrap(sql.pipe(Effect.map((sql) => LedgerSql.layer(sql, { reader: READER }).pipe(Layer.provide(quiet)))));
 
-const full: Line = {
-  by: "SHA256:writer-a",
-  for: "owner",
-  sentAt: "2026-11-07T21:10:01.204Z",
-  seen: 0,
-  parent: null,
-  traceId: TRACE,
-  build: "b-7c1d073",
-  _tag: "saved",
-  body: { note: "n-7f3a", base: 3 },
-};
+const Saved = Schema.TaggedStruct("saved", { note: Schema.String, base: Schema.Number });
+
+const full: Line = lineFor(
+  {
+    by: "SHA256:writer-a",
+    for: "owner",
+    sentAt: "2026-11-07T21:10:01.204Z",
+    seen: 0,
+    parent: null,
+    traceId: TRACE,
+    build: "b-7c1d073",
+  },
+  Saved.make({ note: "n-7f3a", base: 3 }),
+);
 
 /** The same line as plain JSON, the way it comes in across an object call. */
 const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
@@ -140,7 +143,8 @@ const without = (key: string): Record<string, unknown> =>
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
 const ENTRY_KEYS = [...KEYS, "id", "stream", "pos", "rev", "arrivedAt"].sort();
 
-const refused = (reason: string) => ({ _tag: "refused", reason });
+const refused = (reason: (typeof Appended.cases.refused.Type)["reason"]) => Appended.cases.refused.make({ reason });
+const placed = (rev: number, pos: number) => Appended.cases.placed.make({ rev, pos });
 
 /** Hands each line to the referee in turn, then answers what each got and what the stream holds. */
 const handIn = (lines: ReadonlyArray<unknown>) =>
@@ -219,7 +223,7 @@ describe("p92, every entry has every field: at the referee", () => {
   it.effect.each(KEYS)("a line missing `%s` is refused bad_line, and nothing is written", (key) =>
     Effect.gen(function* () {
       const { answers, entries } = yield* handIn([without(key), json()]);
-      expect(answers).toEqual([refused("bad_line"), { _tag: "placed", rev: 1, pos: 1 }]);
+      expect(answers).toEqual([refused("bad_line"), placed(1, 1)]);
       expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
@@ -237,7 +241,7 @@ describe("p92, every entry has every field: at the referee", () => {
     (key) =>
       Effect.gen(function* () {
         const { answers, entries } = yield* handIn([{ ...json(), [key]: 7 }, json()]);
-        expect(answers).toEqual([refused("bad_line"), { _tag: "placed", rev: 1, pos: 1 }]);
+        expect(answers).toEqual([refused("bad_line"), placed(1, 1)]);
         expect(entries.map((entry) => [entry.id, entry.rev, entry.pos])).toEqual([["w-2", 1, 1]]);
       }).pipe(Effect.provide(onReferee(fresh()))),
   );
@@ -288,7 +292,7 @@ describe("p92, every entry has every field: at the referee", () => {
         { ...json(), body: { note: big } },
         { ...json(), body: { note: near } },
       ]);
-      expect(answers).toEqual([refused("too_big"), { _tag: "placed", rev: 1, pos: 1 }]);
+      expect(answers).toEqual([refused("too_big"), placed(1, 1)]);
       expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
@@ -321,7 +325,7 @@ describe("p92, every entry has every field: at the referee", () => {
       const overLimit = sized(2_000_001);
       expect([rowBytes(atLimit), rowBytes(overLimit)]).toEqual([2_000_000, 2_000_001]);
       const { answers, entries } = yield* handIn([overLimit, atLimit]);
-      expect(answers).toEqual([refused("too_big"), { _tag: "placed", rev: 1, pos: 1 }]);
+      expect(answers).toEqual([refused("too_big"), placed(1, 1)]);
       expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
@@ -351,7 +355,7 @@ describe("p68, an entry keeps its parent", () => {
     ({ parent }) =>
       Effect.gen(function* () {
         const { answers, entries } = yield* handIn([{ ...json(), parent }]);
-        expect(answers).toEqual([{ _tag: "placed", rev: 1, pos: 1 }]);
+        expect(answers).toEqual([placed(1, 1)]);
         expect(entries.map((entry) => entry.parent)).toEqual([parent]);
       }).pipe(Effect.provide(onReferee(fresh()))),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 4, full: 40 }) } },
@@ -375,7 +379,7 @@ describe("p68, an entry keeps its parent", () => {
         ...bad.map((parent) => ({ ...json(), parent })),
         { ...json(), parent: goodParent },
       ]);
-      expect(answers).toEqual([...bad.map(() => refused("bad_parent")), { _tag: "placed", rev: 1, pos: 1 }]);
+      expect(answers).toEqual([...bad.map(() => refused("bad_parent")), placed(1, 1)]);
       expect(entries.map((entry) => entry.parent)).toEqual([goodParent]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
@@ -417,7 +421,7 @@ describe("p68b, an entry keeps a W3C trace id", () => {
   ] as const)("%s is refused bad_trace and writes nothing", ([, traceId]) =>
     Effect.gen(function* () {
       const { answers, entries } = yield* handIn([{ ...json(), traceId }, json()]);
-      expect(answers).toEqual([refused("bad_trace"), { _tag: "placed", rev: 1, pos: 1 }]);
+      expect(answers).toEqual([refused("bad_trace"), placed(1, 1)]);
       expect(entries.map((entry) => [entry.id, entry.traceId])).toEqual([["w-2", TRACE]]);
     }).pipe(Effect.provide(onReferee(fresh()))),
   );

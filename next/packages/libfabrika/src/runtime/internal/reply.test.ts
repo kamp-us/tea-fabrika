@@ -3,7 +3,7 @@
 // the state it has reached: a new reply while empty, then the stored reply with one field changed.
 import { applyCell, type Machine, type Sub } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Data, Schema } from "effect";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { syncTest } from "../../Testing.ts";
@@ -23,6 +23,9 @@ type Reply = {
 type Model = { readonly _tag: "empty" } | { readonly _tag: "remembered"; readonly reply: Reply };
 type Msg = { readonly type: "remember"; readonly reply: Reply };
 
+const Models = Data.taggedEnum<Model>();
+const Answers = Data.taggedEnum<Reply["answer"]>();
+
 type Subject = {
   /** `Sub<never>`: no Subs, as `Machine.make` types a machine that declares none. */
   readonly reply: Machine<Model, Msg, never, Sub<never>, unknown>;
@@ -39,15 +42,16 @@ const inputId = fc
   .tuple(fc.constantFrom(...ALPHABET), fc.constantFrom(...ALPHABET))
   .map(([a, b]) => InputId.make(`input_0000000000e0080000000000${a}${b}`));
 
-const answer = fc.record(
-  {
-    _tag: fc.constant("refused" as const),
-    reason: fc.constantFrom("changed_elsewhere", "too_long", "bad_msg", "full"),
-    now: fc.nat(1000),
-    most: fc.nat(1000),
-  },
-  { requiredKeys: ["_tag", "reason"] },
-);
+const answer = fc
+  .record(
+    {
+      reason: fc.constantFrom("changed_elsewhere", "too_long", "bad_msg", "full"),
+      now: fc.nat(1000),
+      most: fc.nat(1000),
+    },
+    { requiredKeys: ["reason"] },
+  )
+  .map(Answers.refused);
 
 const reply: fc.Arbitrary<Reply> = fc.record({
   name: fc.constantFrom("notes:1", "notes:2", "counter:1"),
@@ -86,7 +90,7 @@ const fold = (machine: Subject["reply"], walk: ReadonlyArray<readonly [number, R
   const msgs: Array<Msg> = [];
   let first: Reply | null = null;
 
-  expect(model, "init(null) is the empty model").toEqual({ _tag: "empty" });
+  expect(model, "init(null) is the empty model").toEqual(Models.empty());
   expect(cmds).toEqual([]);
 
   for (const move of walk) {
@@ -96,7 +100,7 @@ const fold = (machine: Subject["reply"], walk: ReadonlyArray<readonly [number, R
     [model, cmds] = applyCell(machine, model, msg);
     expect(cmds, "remember runs no Cmd").toEqual([]);
     // The independent record: only the first reply ever offered.
-    expect(model).toEqual({ _tag: "remembered", reply: first });
+    expect(model).toEqual(Models.remembered({ reply: first }));
   }
 
   return msgs;
