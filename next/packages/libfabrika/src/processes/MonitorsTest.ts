@@ -18,6 +18,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Schema, type Scope, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -47,7 +48,7 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00a00${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00a00${Str.padStart(10, "0")(String(n))}`,
 );
 
 type Holder = "founder" | "other";
@@ -215,7 +216,7 @@ const world = Effect.fnUntraced(function* (
           Start.cases.first.make({
             id: `start:${name}:${++n}`,
             name,
-            code: { program: name.split(":")[0] ?? "program", hash: HASH },
+            code: { program: Str.split(name, ":")[0] ?? "program", hash: HASH },
             ...(options.requester === undefined
               ? {}
               : { requester: Recipient.cases.process.make({ process: options.requester }) }),
@@ -237,7 +238,7 @@ const world = Effect.fnUntraced(function* (
           Start.cases.again.make({
             id: `again:${name}:${++n}`,
             name,
-            code: { program: name.split(":")[0] ?? "program", hash: HASH },
+            code: { program: Str.split(name, ":")[0] ?? "program", hash: HASH },
             after,
             reason: "crashed",
           }),
@@ -439,7 +440,17 @@ const m4 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     expect(Math.max(...turn) - Math.min(...turn), `${label}: the three rows are one turn`).toBe(2);
   });
 
-const BAD_NAMES = ["", "Upper:1", "has space", "a/b", "client:x", "processes", "gateway", "-lead", "x".repeat(257)];
+const BAD_NAMES = [
+  "",
+  "Upper:1",
+  "has space",
+  "a/b",
+  "client:x",
+  "processes",
+  "gateway",
+  "-lead",
+  Str.repeat(257)("x"),
+];
 
 const M5Case = fc
   .record({

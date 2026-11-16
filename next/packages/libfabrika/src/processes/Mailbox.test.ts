@@ -16,6 +16,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -281,7 +282,7 @@ describe("p21, send", () => {
           _tag: "refused",
           reason: "bad_parent",
         });
-        expect(yield* send("notes:1", LETTER, m, { traceId: "0".repeat(32) })).toEqual({
+        expect(yield* send("notes:1", LETTER, m, { traceId: Str.repeat(32)("0") })).toEqual({
           _tag: "refused",
           reason: "bad_trace",
         });

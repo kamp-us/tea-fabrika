@@ -45,7 +45,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
-import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
+import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -100,7 +100,7 @@ const identity = (key: typeof TestKey.Type) => {
   return {
     raw: key.jwk.x,
     line: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -154,7 +154,9 @@ const press = Effect.fnUntraced(function* (
   const frames: Array<typeof Frame.Type> = [];
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(id.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(id.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -311,7 +313,9 @@ const observe = Effect.fnUntraced(function* (instance: any) {
   // Through JSON and back, so a live answer compares as the saved one reads from its file.
   return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Seen))(
     JSON.stringify({
-      table: rows.map((row) => ({ name: row.name, process: row.process })).sort((a, b) => a.name.localeCompare(b.name)),
+      table: rows
+        .map((row) => ({ name: row.name, process: row.process }))
+        .sort((a, b) => Str.localeCompare(b.name)(a.name)),
       streams,
     }),
   );
@@ -370,7 +374,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
   for (const file of yield* fs.readDirectory(state, { recursive: true })) {
     const full = path.join(state, file);
 
-    if (!file.endsWith(".json") || (yield* fs.stat(full)).type !== "File") {
+    if (!Str.endsWith(".json")(file) || (yield* fs.stat(full)).type !== "File") {
       continue;
     }
 
@@ -387,7 +391,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     // `src/State/LocalState.ts`). Writing it back the same way changes only `props.main`; a file
     // in any other shape fails here rather than be rewritten.
     expect(JSON.stringify(resource, null, 2), `${file} is not in Alchemy's own shape`).toBe(text);
-    const relative = dists.map((dist) => path.relative(dist, main)).find((one) => !one.startsWith(".."));
+    const relative = dists.map((dist) => path.relative(dist, main)).find((one) => !Str.startsWith("..")(one));
     expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
     // Why a relative path is safe: Alchemy's local provider diff reads only the new props and the
     // saved attributes (`alchemy@2.0.0-beta.85`, `src/Local/LocalProvider.ts`, `diff`), and the
@@ -556,7 +560,7 @@ const rowsUnder = Effect.fnUntraced(function* <S extends Schema.Top>(
   const found: Array<{ file: string; rows: S["Type"] }> = [];
 
   for (const file of yield* fs.readDirectory(home, { recursive: true })) {
-    if (!file.endsWith(".sqlite")) {
+    if (!Str.endsWith(".sqlite")(file)) {
       continue;
     }
 
@@ -746,7 +750,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
         .soft(
           added
             .filter((line) => !moves.includes(line))
-            .filter((line) => JSON.stringify([line.build, line.body]).includes(descriptor.build))
+            .filter((line) => Str.includes(descriptor.build)(JSON.stringify([line.build, line.body])))
             .map((line) => [line.stream, line._tag, line.body]),
           `${descriptor.name}: only its code.loaded names the saved build ${descriptor.build}`,
         )
@@ -829,7 +833,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
   expect(
     lines
       .filter((line) => line.rev >= upgraded[0]!.rev)
-      .filter((line) => line.build !== hash || JSON.stringify(line.body).includes(counter.build))
+      .filter((line) => line.build !== hash || Str.includes(counter.build)(JSON.stringify(line.body)))
       .map((line) => [line._tag, line.build, line.body]),
     `every line from the upgrade on names this build's counter, never the saved build ${counter.build}`,
   ).toEqual([]);

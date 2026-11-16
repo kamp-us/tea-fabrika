@@ -27,6 +27,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer, Scope } from "effect";
 import { Effect, Option, Schema, Stream } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -69,7 +70,7 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = new DatabaseSync(join(dir, `${name.replaceAll("/", "_")}.db`));
+      const made = new DatabaseSync(join(dir, `${Str.replaceAll("/", "_")(name)}.db`));
       dbs.set(name, made);
       return made;
     };
@@ -109,7 +110,7 @@ const row = (spanId: string, fill = 0): Row => ({
   attributes: {
     "fab.process": PROCESS,
     "fab.letter.id": "m-17",
-    ...(fill > 0 ? { "fab.fill": "f".repeat(fill) } : {}),
+    ...(fill > 0 ? { "fab.fill": Str.repeat(fill)("f") } : {}),
   },
   events: [],
   links: [],
@@ -117,7 +118,7 @@ const row = (spanId: string, fill = 0): Row => ({
   ok: true,
 });
 
-const id = (n: number) => `s${String(n).padStart(15, "0")}`;
+const id = (n: number) => `s${Str.padStart(15, "0")(String(n))}`;
 
 const CAP = 64 * 1024;
 const FILL = 2000;
@@ -305,7 +306,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
 
         if (parts !== undefined) {
           expect(
-            parts.asked.filter((name) => name.startsWith("spans/")).every((name) => /^spans\/\d+$/.test(name)),
+            parts.asked.filter((name) => Str.startsWith("spans/")(name)).every((name) => /^spans\/\d+$/.test(name)),
           ).toBe(true);
           expect(parts.names()).toContain("spans/0");
           expect(parts.names()).toContain("spans/1");

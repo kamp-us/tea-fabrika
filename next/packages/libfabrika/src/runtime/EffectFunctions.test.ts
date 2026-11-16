@@ -5,6 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -99,7 +100,7 @@ const child = (span: Tracer.Span, parent: Tracer.AnySpan) => {
 };
 
 const cut = (key: string, value: string) =>
-  value.length <= 128 ? { [key]: value } : { [key]: value.slice(0, 128), [`${key}.length`]: value.length };
+  value.length <= 128 ? { [key]: value } : { [key]: Str.slice(0, 128)(value), [`${key}.length`]: value.length };
 
 const clock = (now: () => number): Clock.Clock => ({
   currentTimeMillisUnsafe: now,
@@ -940,7 +941,7 @@ const runnerWorld = (
   // ledger and its first start names PROCESS; receipts live beside ProcessStore.
   // P34: a successor gets a new process ID, so the world's generator never repeats one.
   let ids = 0;
-  const idFor = (n: number) => (n === 0 ? PROCESS : `process_01jc9q4w7zfm8s5r2t6v0x${String(n).padStart(4, "0")}`);
+  const idFor = (n: number) => (n === 0 ? PROCESS : `process_01jc9q4w7zfm8s5r2t6v0x${Str.padStart(4, "0")(String(n))}`);
   const nextId = Effect.sync(() => idFor(ids++));
   const manager = Layer.effectDiscard(
     ProcessManager.use((m) =>
@@ -1007,7 +1008,7 @@ const runnerWorld = (
       Recording,
       Effect.map(Recording, (actual) => ({
         flush: Effect.sync(() => {
-          const runner = spans.filter((s) => s.name.startsWith("runner."));
+          const runner = spans.filter((s) => Str.startsWith("runner.")(s.name));
 
           for (const span of runner) {
             expect(span.status._tag, `${span.name} must end before flush`).toBe("Ended");
@@ -1032,7 +1033,7 @@ const runnerWorld = (
     decodeIncoming({
       id: `letter-${n}`,
       envelope: {
-        id: `input_0000000000e008${n.toString(16).padStart(12, "0")}`,
+        id: `input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`,
         by: owner,
         arrivedAt: n,
         input: m,
@@ -1121,7 +1122,7 @@ describe("T285, runner tracing keep-laws", () => {
                   now = call.at;
                   yield* runner.msg(w.input(index + 1, { type: "work", value: call.value }));
                   const entries = yield* Stream.runCollect(ledger.read("reply-test/inbox", 0));
-                  const answers = entries.filter((entry) => entry.id.endsWith("/answer"));
+                  const answers = entries.filter((entry) => Str.endsWith("/answer")(entry.id));
                   expect(answers).toHaveLength(index + 1);
                   expect(answers.at(-1)?.body).toEqual({
                     m: {
@@ -1282,7 +1283,7 @@ describe("T285, runner tracing keep-laws", () => {
                     ...(waiting ? [] : writing ? ["runner.write"] : []),
                     ...(!waiting && call.op === "step_throw" ? ["runner.throw"] : []),
                   ];
-                  const selected = spans.filter((s) => s.name.startsWith("runner.") && !recovering.includes(s));
+                  const selected = spans.filter((s) => Str.startsWith("runner.")(s.name) && !recovering.includes(s));
                   expect(
                     selected.map((s) => s.name),
                     call.op,
@@ -1395,12 +1396,12 @@ describe("T285, runner tracing keep-laws", () => {
                   for (const id of pids) {
                     rows.push(
                       ...(yield* Stream.runCollect(records.read(Chain.cases.job.make({ process: id })))).filter((s) =>
-                        s.name.startsWith("runner."),
+                        Str.startsWith("runner.")(s.name),
                       ),
                     );
                   }
 
-                  const all = w.spans.filter((s) => s.name.startsWith("runner."));
+                  const all = w.spans.filter((s) => Str.startsWith("runner.")(s.name));
                   expect(rows.map((s) => s.spanId).sort()).toEqual(all.map((s) => s.spanId).sort());
 
                   for (const span of [...selected, ...recovering]) {

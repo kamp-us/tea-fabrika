@@ -1,6 +1,7 @@
 // P33 / p79 and p80, next/: real restart policy and recovery functions.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -159,9 +160,9 @@ describe("T540, next/ process UUIDv7 refusals", () => {
     [
       Schema.Struct({
         process: Id.Process,
-        version: Schema.Literals([...alphabet].filter((char) => !"ef".includes(char))),
-        variant: Schema.Literals([...alphabet].filter((char) => !"89abrstv".includes(char))),
-        first: Schema.Literals([...alphabet.slice(8)]),
+        version: Schema.Literals([...alphabet].filter((char) => !Str.includes(char)("ef"))),
+        variant: Schema.Literals([...alphabet].filter((char) => !Str.includes(char)("89abrstv"))),
+        first: Schema.Literals([...Str.slice(8)(alphabet)]),
         length: Schema.Union([nat(25), Schema.Int.check(Schema.isBetween({ minimum: 27, maximum: 52 }))]),
         char: Schema.String.check(Schema.isPattern(/^[^0-9a-hjkmnp-tv-z]$/u)),
         position: nat(25),
@@ -169,15 +170,16 @@ describe("T540, next/ process UUIDv7 refusals", () => {
       }),
     ],
     ([{ process, version, variant, first, length, char, position, prefix }]) => {
-      const suffix = process.slice("process_".length);
-      const replace = (at: number, char: string) => `process_${suffix.slice(0, at)}${char}${suffix.slice(at + 1)}`;
+      const suffix = Str.slice("process_".length)(process);
+      const replace = (at: number, char: string) =>
+        `process_${Str.slice(0, at)(suffix)}${char}${Str.slice(at + 1)(suffix)}`;
       expect(Result.isSuccess(Schema.decodeUnknownResult(Id.Process)(process))).toBe(true);
 
       for (const [part, invalid] of [
         ["version", replace(10, version)],
         ["variant", replace(13, variant)],
         ["first character", replace(0, first)],
-        ["length", `process_${suffix.repeat(2).slice(0, length)}`],
+        ["length", `process_${Str.slice(0, length)(Str.repeat(2)(suffix))}`],
         ["alphabet", replace(position, char)],
         ["prefix", `${prefix}_${suffix}`],
       ]) {

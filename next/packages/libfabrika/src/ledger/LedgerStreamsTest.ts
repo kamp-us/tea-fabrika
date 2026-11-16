@@ -3,6 +3,7 @@
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Str from "effect/String";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -59,7 +60,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           });
 
           for (let n = 0; n < a.total; n++) {
-            yield* append(`${a.prefix}${String(n).padStart(5, "0")}`, "first");
+            yield* append(`${a.prefix}${Str.padStart(5, "0")(String(n))}`, "first");
             yield* append(`job:X${n}`, "neighbor");
           }
 
@@ -81,7 +82,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             const actual = yield* LedgerStreams.use((s) => Stream.runCollect(s.list(a.prefix))).pipe(
               Effect.provide(life),
             );
-            const expected = [...names].filter((name) => name.startsWith(a.prefix)).sort();
+            const expected = [...names].filter((name) => Str.startsWith(a.prefix)(name)).sort();
             expect([...actual]).toEqual(expected);
             expect(new Set(actual).size).toBe(actual.length);
             seen.add(a.prefix);

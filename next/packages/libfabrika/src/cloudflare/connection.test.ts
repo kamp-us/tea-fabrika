@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type * as Tracer from "effect/Tracer";
 import { vi } from "vitest";
@@ -67,7 +68,9 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     },
   };
   const input = StartsTest.fixture({ name: "test-project", port: 8787 }, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
   );
   let attached: typeof Attached.Type = Attached.cases.online.make({
     client: "test-client",
@@ -190,7 +193,7 @@ const tableCounts = (db: DatabaseSync) =>
       .all()
       .map(({ name }) => [
         name,
-        db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+        db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
       ]),
   );
 
@@ -499,7 +502,7 @@ const t864Tables = (db: DatabaseSync) =>
       .all()
       .map(({ name }) => [
         name,
-        db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all(),
+        db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}" ORDER BY rowid`).all(),
       ]),
   );
 
@@ -757,7 +760,7 @@ it.effect.prop(
           const sampled = yield* sample(answerCases[category], walk.seed + i * 3 + 1);
           const answer =
             category === "parked_full" && sampled._tag === "parked"
-              ? { ...sampled, stream: sampled.stream.padEnd(FULL, "s") }
+              ? { ...sampled, stream: Str.padEnd(FULL, "s")(sampled.stream) }
               : sampled;
           const request = yield* ordinaryFrame(state, walk.seed + i * 3 + 2, i);
           w.answer(answer);
@@ -773,7 +776,7 @@ it.effect.prop(
             wait === null || !keeps
               ? []
               : [
-                  wait.stream.startsWith(targetStream(""))
+                  Str.startsWith(targetStream(""))(wait.stream)
                     ? { method: "tasks.wait", params: { after: wait.after } }
                     : { method: "ledger.wait", params: { stream: wait.stream, after: wait.after } },
                 ];

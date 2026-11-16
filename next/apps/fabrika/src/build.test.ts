@@ -2,6 +2,7 @@
 // build.integration.test.ts, which runs Rolldown and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Option, String as Str } from "effect";
 import { parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -42,6 +43,6 @@ it("format: the page entry starts its one Effect program through runMain, once, 
   });
   expect(boots, "a React mount never owns the page's Effect run").toHaveLength(1);
   // The import and the one start: any other `runMain`, in a function or a component, is a second start.
-  expect(source.match(/\brunMain\b/g), "there is only one page runtime").toHaveLength(2);
-  expect(source.match(/\brun(?!Main\b)[A-Z]\w*/g), "the entry calls no Effect.run*").toBeNull();
+  expect(Option.getOrNull(Str.match(/\brunMain\b/g)(source)), "there is only one page runtime").toHaveLength(2);
+  expect(Option.getOrNull(Str.match(/\brun(?!Main\b)[A-Z]\w*/g)(source)), "the entry calls no Effect.run*").toBeNull();
 });

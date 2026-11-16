@@ -2,6 +2,7 @@
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -147,9 +148,9 @@ describe("p97, process calls", () => {
         }
 
         const refusal = trace.ended("process.start")[2]!;
-        expect([...refusal.attributes].find(([key]) => key.endsWith(".reason"))?.[1]).toBe("id_reused");
+        expect([...refusal.attributes].find(([key]) => Str.endsWith(".reason")(key))?.[1]).toBe("id_reused");
         expect(trace.ended("process.start")[0]!.attributes.get("fab.process")).toBe(A);
-        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => key.endsWith(".rev"))?.[1]).toBe(
+        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => Str.endsWith(".rev")(key))?.[1]).toBe(
           placed.rev,
         );
         expect(trace.ended("process.exit")[0]!.attributes.get("fab.process")).toBe(A);
@@ -183,11 +184,11 @@ describe("p97, process calls", () => {
         expect(old.filter((row) => row.name === "process.exit")).toHaveLength(1);
         expect(replacement.filter((row) => row.name === "process.start")).toHaveLength(1);
         expect(
-          old.filter((row) => row.name.startsWith("process.")).every((row) => row.attributes["fab.process"] === A),
+          old.filter((row) => Str.startsWith("process.")(row.name)).every((row) => row.attributes["fab.process"] === A),
         ).toBe(true);
         expect(
           replacement
-            .filter((row) => row.name.startsWith("process."))
+            .filter((row) => Str.startsWith("process.")(row.name))
             .every((row) => row.attributes["fab.process"] === B),
         ).toBe(true);
         expect(world.parts.has(`job/${A}/0`)).toBe(true);

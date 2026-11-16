@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -40,7 +40,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),

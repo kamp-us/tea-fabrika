@@ -24,6 +24,7 @@ import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -40,7 +41,7 @@ type Model = typeof Supervision.Type;
 type Journal = Model["journal"];
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 
-const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 /** A process no fold creates. */
 const FOREIGN = pid(9_999_999_999);
 
@@ -64,7 +65,7 @@ const roundTrip = (model: Model): unknown =>
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
     v !== null && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => Str.localeCompare(b)(a)))
       : v,
   );
 
@@ -902,8 +903,8 @@ describe("P34c slice 2: one saved recovery journal", () => {
       { seed: SEED, numRuns: RUNS },
     );
 
-    const brakes = [...seen].filter((s) => s.startsWith("brake:")).map((s) => Number(s.slice(6)));
-    const deads = [...seen].filter((s) => s.startsWith("dead:")).map((s) => Number(s.slice(5)));
+    const brakes = [...seen].filter((s) => Str.startsWith("brake:")(s)).map((s) => Number(Str.slice(6)(s)));
+    const deads = [...seen].filter((s) => Str.startsWith("dead:")(s)).map((s) => Number(Str.slice(5)(s)));
     expect(Math.max(...brakes), "intensity coverage reaches past 32").toBeGreaterThan(32);
     expect(Math.max(...deads), "delivery limits past 16 go dead").toBeGreaterThan(16);
   });

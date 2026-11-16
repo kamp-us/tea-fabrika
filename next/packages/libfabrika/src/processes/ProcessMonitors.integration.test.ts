@@ -1,6 +1,7 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -89,7 +90,7 @@ describe("P33, signal ids, ownership and delivery", () => {
         expect(JSON.parse(id)[0], "signal id protocol starts with DOWN").toBe("DOWN");
 
         for (const spaces of [" ", "\t", "\n"]) {
-          const spaced = `${spaces}[${spaces}${id.slice(1)}`;
+          const spaced = `${spaces}[${spaces}${Str.slice(1)(id)}`;
           expect(inSignalSpace(spaced), "JSON whitespace does not release a signal id").toBe(true);
         }
       }),
@@ -207,7 +208,7 @@ describe("p79, addressed and independent monitors", () => {
           const mail = signals(store);
           expect(mail).toHaveLength(3);
           expect(new Set(mail.map((row) => row.id)).size).toBe(3);
-          expect(mail.map((row) => row.m).sort((a, b) => a.ref.localeCompare(b.ref))).toEqual(
+          expect(mail.map((row) => row.m).sort((a, b) => Str.localeCompare(b.ref)(a.ref))).toEqual(
             [
               Down.make({
                 ref: other!,
@@ -227,7 +228,7 @@ describe("p79, addressed and independent monitors", () => {
                 reason: CRASHED,
                 to: Recipient.cases.process.make({ process: W }),
               }),
-            ].sort((a, b) => a.ref.localeCompare(b.ref)),
+            ].sort((a, b) => Str.localeCompare(b.ref)(a.ref)),
           );
           expect((yield* fresh(store)).map((letter) => letter.id).sort()).toEqual(
             mail

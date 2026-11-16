@@ -1,5 +1,6 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -17,10 +18,9 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       continue;
     }
 
-    const keys = patch.path
-      .slice(1)
-      .split("/")
-      .map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const keys = Str.split(Str.slice(1)(patch.path), "/").map((s) =>
+      Str.replaceAll("~0", "~")(Str.replaceAll("~1", "/")(s)),
+    );
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -236,7 +236,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           // The unsafe key at a path this value holds, as the last token or with one more below it.
           const all = paths(before);
           const at = [...all[pick % all.length]!, unsafe, ...(last ? [] : ["polluted"])];
-          const path = `/${at.map((k) => k.replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
+          const path = `/${at.map((k) => Str.replaceAll("/", "~1")(Str.replaceAll("~", "~0")(k))).join("/")}`;
           const copy = structuredClone(before);
           const got = apply(before, [op === "remove" ? { op, path } : { op, path, value }]);
           expect(Result.isFailure(got), `${op} ${path}`).toBe(true);

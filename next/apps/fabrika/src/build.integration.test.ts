@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
+import { Effect, FileSystem, Layer, type Path, PlatformError, String as Str } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -86,7 +86,7 @@ const snapshot = (dir: string): ReadonlyArray<readonly [string, string]> =>
           readFileSync(join(f.parentPath, f.name)).toString("base64"),
         ] as const,
     )
-    .sort(([a], [b]) => a.localeCompare(b));
+    .sort(([a], [b]) => Str.localeCompare(b)(a));
 
 const clean = "export const Tip = (p: {text: string}) => <b>{p.text}</b>;";
 
@@ -423,7 +423,7 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
                   expect(page!.body, "the page loads the script").toContain("/window.js");
                   expect(script!.body, "the tab bundle names no Node module").not.toMatch(/["'`]node:[a-z]/);
                   // Manti's defaults precede our token mapping (tier-1-detail.md, Styling).
-                  const styles = [...page!.body.matchAll(/<style>([\s\S]*?)<\/style>/g)].map((m) => m[1]!);
+                  const styles = [...Str.matchAll(/<style>([\s\S]*?)<\/style>/g)(page!.body)].map((m) => m[1]!);
                   expect(styles, "the tab's three stylesheets").toHaveLength(3);
                   expect(styles[1], "the design package's tokens follow Manti's styles").toContain(token);
                   good = snapshot(out);

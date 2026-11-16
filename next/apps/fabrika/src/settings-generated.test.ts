@@ -18,7 +18,7 @@ import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
-import { Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Effect, FileSystem, Path, Result, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
@@ -117,8 +117,8 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     expect(files.person).toBe(fresh.person);
     expect(files.repo).toBe(fresh.repo);
     expect(files.reference).toContain(fresh.reference);
-    expect(fresh.person.endsWith("}\n") && !fresh.person.endsWith("\n\n")).toBe(true);
-    expect(fresh.repo.endsWith("}\n") && !fresh.repo.endsWith("\n\n")).toBe(true);
+    expect(Str.endsWith("}\n")(fresh.person) && !Str.endsWith("\n\n")(fresh.person)).toBe(true);
+    expect(Str.endsWith("}\n")(fresh.repo) && !Str.endsWith("\n\n")(fresh.repo)).toBe(true);
   });
 
   it("outputs ignore declaration order, and a changed doc or default reaches each output that shows it", () => {
@@ -145,7 +145,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
           const before = ds[at]!;
           const after = change._tag === "doc" ? { ...before, doc: change.doc } : { ...before, default: change.default };
           // A doc that differs only in spacing may read the same in Markdown, so the change is in its words.
-          const words = (text: string) => text.replace(/\s+/g, " ").trim();
+          const words = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
           fc.pre(change._tag === "doc" ? words(change.doc) !== words(before.doc) : change.default !== before.default);
           const changed = outputs(grouped(ds.map((d, n) => (n === at ? after : d))));
           expect(changed.reference).not.toBe(base.reference);
@@ -218,11 +218,11 @@ const target = fc.constantFrom("package", "relative", "relative-bare", "parser",
 
 /** The relative import spelling from one repo file to another, as `../../packages/x.ts`. */
 const relative = (from: string, to: string) => {
-  const [a, b] = [from.split("/").slice(0, -1), to.split("/")];
+  const [a, b] = [Str.split(from, "/").slice(0, -1), Str.split(to, "/")];
   const shared = a.findIndex((s, n) => s !== b[n]);
   const n = shared === -1 ? a.length : shared;
   const rest = b.slice(n).join("/");
-  return a.length === n ? `./${rest}` : `${"../".repeat(a.length - n)}${rest}`;
+  return a.length === n ? `./${rest}` : `${Str.repeat(a.length - n)("../")}${rest}`;
 };
 
 describe("L9, only the start files take the TOML adapter in next/apps, and only the adapter takes the parser", () => {
@@ -241,7 +241,7 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
                   : t === "relative"
                     ? relative(c.file, ADAPTER)
                     : t === "relative-bare"
-                      ? relative(c.file, ADAPTER).replace(/\.ts$/, "")
+                      ? Str.replace(/\.ts$/, "")(relative(c.file, ADAPTER))
                       : t === "parser"
                         ? "toml-eslint-parser"
                         : "toml-eslint-parser/lib/ast";

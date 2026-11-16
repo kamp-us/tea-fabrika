@@ -10,7 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Option, Result, Schema, String as Str } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -77,7 +77,7 @@ const Input = Schema.Struct({
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
     if (typeof value === "string") {
-      return value.replace(/\p{Cs}/gu, "�");
+      return Str.replace(/\p{Cs}/gu, "�")(value);
     }
 
     if (Array.isArray(value)) {
@@ -86,7 +86,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
 
     if (value !== null && typeof value === "object") {
       return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
+        Object.entries(value).map(([key, item]) => [Str.replace(/\p{Cs}/gu, "�")(key), repair(item)]),
       );
     }
 
@@ -148,7 +148,9 @@ for (const [kind, live] of [
         Effect.gen(function* () {
           const input = wellFormed(generated);
           const chain = input.job
-            ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
+            ? Chain.cases.job.make({
+                process: `process_01m6v5270hf3c8x2q7w9z4k5${Str.padStart(2, "0")(String(input.at))}`,
+              })
             : Chain.cases.spans.make({});
           const name = JSON.stringify([`law-${sequence++}`, partName(chain, input.at)]);
           const { driver } = yield* Wire;
@@ -196,7 +198,7 @@ for (const [kind, live] of [
           const rows = input.rows.map((row, index) => ({
             ...row,
             span: { ...row.span, spanId: String(index) },
-            content: "x".repeat(cap) + (row.content ?? ""),
+            content: Str.repeat(cap)("x") + (row.content ?? ""),
           }));
           const fresh = { ...rows[0]!, span: { ...rows[0]!.span, spanId: "fresh" } };
           const exercise = (part: Part) =>

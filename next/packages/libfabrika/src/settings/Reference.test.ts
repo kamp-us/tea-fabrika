@@ -17,6 +17,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
@@ -67,7 +68,7 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
           since: d.since,
         });
         const report = Print.report(rows, { all: v.all });
-        expect(report.includes(`${d.path} =`)).toBe(v.explicit || v.all);
+        expect(Str.includes(`${d.path} =`)(report)).toBe(v.explicit || v.all);
         const text = plain(Reference.markdown(group));
         // The reference must show the declaration-derived file spelling separately from JSON digits.
         const fileDefault = Schema.encodeSync(Schema.toCodecStringTree(d.schema))(d.default);
@@ -171,7 +172,7 @@ const loaded = async (ds: Declared) => {
   return { group, snapshot };
 };
 
-const triple = (version: string) => version.split(".").map(Number);
+const triple = (version: string) => Str.split(version, ".").map(Number);
 
 /** Whether release `a` is newer than `b`, by whole numbers. */
 const newer = (a: string, b: string) => {
@@ -261,18 +262,42 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
 
 /** The reference as a reader sees it: Markdown escapes and line breaks undone, spaces collapsed. */
 const plain = (text: string) =>
-  text
-    .replace(/<br\s*\/?>/g, " ")
-    .replace(/\\([\\`*_{}[\]()#+\-.!|<>~&])/g, "$1")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#124;|&vert;|&#x7[cC];/g, "|")
-    .replace(/&#96;/g, "`")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ");
+  Str.replace(
+    /\s+/g,
+    " ",
+  )(
+    Str.replace(
+      /&amp;/g,
+      "&",
+    )(
+      Str.replace(
+        /&quot;/g,
+        '"',
+      )(
+        Str.replace(
+          /&#96;/g,
+          "`",
+        )(
+          Str.replace(
+            /&#124;|&vert;|&#x7[cC];/g,
+            "|",
+          )(
+            Str.replace(
+              /&gt;/g,
+              ">",
+            )(
+              Str.replace(
+                /&lt;/g,
+                "<",
+              )(Str.replace(/\\([\\`*_{}[\]()#+\-.!|<>~&])/g, "$1")(Str.replace(/<br\s*\/?>/g, " ")(text))),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 
-const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+const collapse = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
 
 describe("L3, the reference keeps each declaration's words, default, scope and release", () => {
   it("every declaration's path, scope, env, flag, reload, since, default and doc are in the reference", () => {

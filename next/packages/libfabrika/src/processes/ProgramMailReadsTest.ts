@@ -9,6 +9,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, type Scope } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -35,7 +36,7 @@ const CODE = { program: "mail", hash: "build-a" };
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 4 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const from = (over: Partial<From> = {}): From => ({
@@ -155,7 +156,7 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     /** T1041: one letter straight into the responder's inbox, of about `size` bytes, counted by nothing. */
     const fill = (size: number) =>
       Mailbox.use((mail) =>
-        mail.send(RESPONDER, `filler-${++filled}`, { type: "filler", pad: "x".repeat(size) }, from()),
+        mail.send(RESPONDER, `filler-${++filled}`, { type: "filler", pad: Str.repeat(size)("x") }, from()),
       ).pipe(Effect.provide(context), Effect.orDie);
     /** T1041: the responder's live life reads up to `pos` and the brain records it. */
     const ack = (pos: number) =>

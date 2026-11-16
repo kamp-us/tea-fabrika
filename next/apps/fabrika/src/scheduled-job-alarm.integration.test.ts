@@ -3,7 +3,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Clock, Effect, FileSystem, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Path, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -101,7 +101,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const raw = pair.publicKey.export({ format: "jwk" }).x!;
       const bytes = Buffer.from(raw, "base64url");
       const founder = `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`;
-      const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+      const fingerprint = `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const module = path.join(home, "beat.ts");
       const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/schedules/beat.ts");

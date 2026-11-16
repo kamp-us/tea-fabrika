@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -102,9 +102,9 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
   const at = ranges[0]!;
   // An empty spread removes the policy without leaving a spare comma before the tail options.
   const changed =
-    source.slice(0, at.start) +
+    Str.slice(0, at.start)(source) +
     (mode === "binding" ? JSON.stringify({ [name]: value }) : "...{}") +
-    source.slice(at.end);
+    Str.slice(at.end)(source);
   assert.equal(parseSync("brain.mjs", changed).errors.length, 0, "plant must leave executable JavaScript");
   return changed;
 };
@@ -231,7 +231,7 @@ const findManifest = (from: string, name: string): string | undefined => {
 
 const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package: string }>) =>
   selected.some(({ package: name }) => {
-    const file = name.startsWith(".") || isAbsolute(name) ? undefined : findManifest(from, name);
+    const file = Str.startsWith(".")(name) || isAbsolute(name) ? undefined : findManifest(from, name);
 
     if (file === undefined) {
       return false;
@@ -293,7 +293,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(Buffer.from(raw, "base64url")).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(Buffer.from(raw, "base64url")).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -356,7 +356,7 @@ describe("P16 stack and sealed loader", () => {
             name,
             port: 18787,
             person: "person-test",
-            founder: (multibyte ? "雪" : "a").repeat(length),
+            founder: Str.repeat(length)(multibyte ? "雪" : "a"),
             window: null,
             build: built.build,
           });
@@ -401,11 +401,11 @@ describe("P16 stack and sealed loader", () => {
           for (const plant of [
             { ...real, env: { ...real.env, WINDOW_JS: "export const x = 1;" } },
             { ...real, env: { ...real.env, CODE: "program-marker" } },
-            { ...real, env: { ...real.env, WIDE: "雪".repeat(1800) } },
+            { ...real, env: { ...real.env, WIDE: Str.repeat(1800)("雪") } },
             { ...real, main: join(APP, "src/brain.ts") },
             { ...real, bundle: true },
           ]) {
-            expect("雪".repeat(1800).length).toBeLessThan(5 * 1024);
+            expect(Str.repeat(1800)("雪").length).toBeLessThan(5 * 1024);
             expect(() => verify(plant)).toThrow();
           }
         }
@@ -506,7 +506,7 @@ class Client {
     this.url = url;
     this.key = key;
     this.tab = tab;
-    this.ws = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+    this.ws = new WebSocket(`${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     this.ws.addEventListener("error", () => this.frames.push({ closed: true }));
     this.ws.addEventListener("close", () => this.frames.push({ closed: true }));
     this.ws.addEventListener("message", ({ data }) => this.frames.push(JSON.parse(String(data))));
@@ -840,7 +840,7 @@ describe("P16 copied-file real instance, serial", () => {
 
                           const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                             .entries;
-                          const acknowledged = inbox.filter((r: any) => String(r.id).startsWith("p16-"));
+                          const acknowledged = inbox.filter((r: any) => Str.startsWith("p16-")(String(r.id)));
                           expect(acknowledged).toHaveLength(messages.length);
                           expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
                           const input = inbox[0].parent;

@@ -6,28 +6,30 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
+import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream, String as Str } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
-  return (yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
-    ChildProcess.make("git", [...args], {
-      cwd,
-      extendEnv: false,
-      env: {
-        PATH: process.env.PATH,
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_AUTHOR_NAME: "fixture",
-        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
-        GIT_COMMITTER_NAME: "fixture",
-        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-      },
-    }),
-  )).trim();
+  return Str.trim(
+    yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
+      ChildProcess.make("git", [...args], {
+        cwd,
+        extendEnv: false,
+        env: {
+          PATH: process.env.PATH,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_AUTHOR_NAME: "fixture",
+          GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+          GIT_COMMITTER_NAME: "fixture",
+          GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+        },
+      }),
+    ),
+  );
 });
 
 const entries = Effect.fnUntraced(function* (home: string) {
@@ -36,7 +38,7 @@ const entries = Effect.fnUntraced(function* (home: string) {
   const rows: Array<Entry> = [];
 
   for (const file of yield* fs.readDirectory(home, { recursive: true })) {
-    if (!file.endsWith(".sqlite")) {
+    if (!Str.endsWith(".sqlite")(file)) {
       continue;
     }
 
@@ -58,12 +60,10 @@ const entries = Effect.fnUntraced(function* (home: string) {
 
 const jsonLines = (text: string) =>
   // Prompt.Confirm writes cursor-show after its newline, directly before dev's JSON report.
-  stripVTControlCharacters(text)
-    .split(/\r?\n/)
-    .flatMap((line) => {
-      const result = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
-      return Result.isSuccess(result) ? [result.success] : [];
-    });
+  Str.split(stripVTControlCharacters(text), /\r?\n/).flatMap((line) => {
+    const result = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
+    return Result.isSuccess(result) ? [result.success] : [];
+  });
 
 const reports = (text: string, commit: string, result: "ready" | "awaiting_trust") =>
   jsonLines(text).filter((line) => {
@@ -71,11 +71,11 @@ const reports = (text: string, commit: string, result: "ready" | "awaiting_trust
     return (
       Result.isSuccess(fields) &&
       Object.values(fields.success).includes(result) &&
-      JSON.stringify(line).includes(commit)
+      Str.includes(commit)(JSON.stringify(line))
     );
   });
 
-const quote = (word: string) => `'${word.replaceAll("'", "'\\''")}'`;
+const quote = (word: string) => `'${Str.replaceAll("'", "'\\''")(word)}'`;
 
 it.live("scenario: L11 actual dev selects the default commit, saves trust, and reopens without repo execution", () =>
   Effect.scoped(
@@ -170,7 +170,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
             return said;
           }
 
-          if (interactive && !answered && said.includes(commit)) {
+          if (interactive && !answered && Str.includes(commit)(said)) {
             yield* Queue.offer(input, new TextEncoder().encode("y\n"));
             answered = true;
           }

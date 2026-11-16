@@ -3,6 +3,7 @@
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import {
   A,
@@ -26,7 +27,7 @@ import { Dead, Down, Owner, ProcessEvent, Recipient, Start } from "./Process.ts"
 import { ProcessManager } from "./ProcessManager.ts";
 
 const CAP = 256;
-const at = (length: number, unit = "a") => unit.repeat(length);
+const at = (length: number, unit = "a") => Str.repeat(length)(unit);
 const over = at(CAP + 1);
 const acceptedText = Down.fields.ref;
 const overText = Schema.String.check(Schema.isMinLength(CAP + 1), Schema.isMaxLength(CAP * 4));
@@ -242,7 +243,7 @@ describe("P33 rule 1, the text caps live in the schema", () => {
       fc.assert(
         fc.property(fc.stringMatching(/^[a-z0-9]{256}$/), fc.integer({ min: 1, max: CAP }), (text, extra) => {
           expect(Schema.is(Dead)({ ...dead(classes(1)), [key]: text })).toBe(true);
-          expect(Schema.is(Dead)({ ...dead(classes(1)), [key]: text + "a".repeat(extra) })).toBe(false);
+          expect(Schema.is(Dead)({ ...dead(classes(1)), [key]: text + Str.repeat(extra)("a") })).toBe(false);
         }),
         { seed: 119120 },
       );
@@ -448,7 +449,7 @@ describe("P33 rule 1, any accepted monitor still gets its DOWN", () => {
       Schema.Literals(["a", '"', "\\", "é", "\u{1f600}"]),
       Schema.Int.check(Schema.isBetween({ minimum: 200, maximum: 2_100_000 })),
     ]),
-  ).pipe(Arbitrary.map(([unit, length]) => unit.repeat(Math.ceil(length / unit.length))));
+  ).pipe(Arbitrary.map(([unit, length]) => Str.repeat(Math.ceil(length / unit.length))(unit)));
   const unicodeRef = Arbitrary.schema(Schema.Literals([0, 1, 2])).pipe(
     Arbitrary.flatMap((kind) =>
       kind === 0

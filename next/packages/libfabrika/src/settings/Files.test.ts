@@ -19,6 +19,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -91,7 +92,7 @@ const text = (entries: ReadonlyArray<Entry>) => {
     } else if ((e._tag === "port" || e._tag === "bad-port") && !port) {
       port = true;
       instance.push(`port = ${e._tag === "port" ? e.port : e.raw}`);
-    } else if (e._tag === "sibling" && !instance.some((l) => l.startsWith(`${e.key} =`))) {
+    } else if (e._tag === "sibling" && !instance.some((l) => Str.startsWith(`${e.key} =`)(l))) {
       instance.push(`${e.key} = ${e.raw}`);
     } else if (e._tag === "table" && !tables.includes(`[${e.name}]`)) {
       tables.push(`[${e.name}]`, ...(e.empty ? [] : ["key = 1"]));
@@ -322,10 +323,10 @@ describe("L10, the three S5 messages, word for word", () => {
       .map(([at, letter, edit]) => {
         const word = "port";
         return edit === "swap"
-          ? word.slice(0, at) + letter + word.slice(at + 1)
+          ? Str.slice(0, at)(word) + letter + Str.slice(at + 1)(word)
           : edit === "add"
-            ? word.slice(0, at) + letter + word.slice(at)
-            : word.slice(0, at) + word.slice(at + 1);
+            ? Str.slice(0, at)(word) + letter + Str.slice(at)(word)
+            : Str.slice(0, at)(word) + Str.slice(at + 1)(word);
       })
       .filter((w) => w !== "port" && w.length > 0);
     await fc.assert(

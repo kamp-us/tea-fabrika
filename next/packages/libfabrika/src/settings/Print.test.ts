@@ -11,6 +11,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Print from "./Print.ts";
 import * as Reference from "./Reference.ts";
@@ -132,15 +133,15 @@ const loadRows = (ds: Declared) =>
 
 /** Whether `line` starts the row of `path`: the path first, then no further key character. */
 const starts = (line: string, path: string) => {
-  const rest = line.trimStart();
-  return rest.startsWith(path) && !/^[a-z0-9.-]/.test(rest.slice(path.length));
+  const rest = Str.trimStart(line);
+  return Str.startsWith(path)(rest) && !/^[a-z0-9.-]/.test(Str.slice(path.length)(rest));
 };
 
 /** Each shown row's lines, by path, in the order the report prints them. */
 const blocks = (report: string, paths: ReadonlyArray<string>) => {
   const out: Array<{ path: string; text: string }> = [];
 
-  for (const line of report.split("\n")) {
+  for (const line of Str.split(report, "\n")) {
     const path = paths.find((p) => starts(line, p));
 
     if (path !== undefined) {
@@ -153,7 +154,7 @@ const blocks = (report: string, paths: ReadonlyArray<string>) => {
   return out;
 };
 
-const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
+const collapse = (text: string) => Str.trim(Str.replace(/\s+/g, " ")(text));
 
 describe("L5, the printed report says what the snapshot holds, and --all adds only default rows", () => {
   it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", async () => {
@@ -202,8 +203,8 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         const [a, b] = [explicit(all), explicit(plain)];
         expect(a.map((x) => x.path)).toEqual(b.map((x) => x.path));
         a.forEach((x, n) => {
-          const [long, short] = [x.text.trimEnd(), b[n]!.text.trimEnd()].sort((p, q) => q.length - p.length);
-          expect(long!.startsWith(short!), `${long}\n---\n${short}`).toBe(true);
+          const [long, short] = [Str.trimEnd(x.text), Str.trimEnd(b[n]!.text)].sort((p, q) => q.length - p.length);
+          expect(Str.startsWith(short!)(long!), `${long}\n---\n${short}`).toBe(true);
         });
       }),
       check,

@@ -28,7 +28,7 @@ import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
@@ -72,7 +72,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     sign: (data: Uint8Array) => new Uint8Array(sign(null, data, pair.privateKey)),
     proof: (text: string) => {
       const payload = Buffer.concat([
@@ -131,7 +131,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
 /** One door socket as the founder, past its signed hello: `call` is one JSON-RPC call and its frame. */
 const door = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
-    `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+    `${Str.replace("http", "ws")(String(instance.url))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
   const frames: Array<any> = [];
   let serial = 0;
@@ -232,9 +232,9 @@ const findTezgah = async (instance: Instance) => {
   const rows = await until(
     "tezgah's process in the table",
     () => calls(instance).info(),
-    (all) => all.some((row) => String(row.name).startsWith("tezgah:")),
+    (all) => all.some((row) => Str.startsWith("tezgah:")(String(row.name))),
   );
-  const found = rows.filter((row) => String(row.name).startsWith("tezgah:"));
+  const found = rows.filter((row) => Str.startsWith("tezgah:")(String(row.name)));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
   return { pid: String(found[0].process), name: String(found[0].name) };
 };

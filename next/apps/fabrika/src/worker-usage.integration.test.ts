@@ -5,7 +5,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
@@ -47,7 +47,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -104,7 +104,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
   const frames: Array<typeof Frame.Type> = [];
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data)));

@@ -38,6 +38,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
@@ -221,7 +222,7 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",
@@ -390,12 +391,16 @@ const faulting = (sql: Sql, fault: World["fault"]) => {
       if (/^\s*INSERT\b/i.test(query)) {
         const text = strings(params);
 
-        if (fault.mail && text.some((p) => p.endsWith("/mail"))) {
+        if (fault.mail && text.some((p) => Str.endsWith("/mail")(p))) {
           fault.mail = false;
           throw new Error("SQLITE_FULL planted at the mail save");
         }
 
-        if (fault.ack && text.some((p) => p.endsWith("/answer")) && text.some((p) => p.includes('"send_ok"'))) {
+        if (
+          fault.ack &&
+          text.some((p) => Str.endsWith("/answer")(p)) &&
+          text.some((p) => Str.includes('"send_ok"')(p))
+        ) {
           fault.ack = false;
           throw new Error("SQLITE_FULL planted at the send acknowledgement");
         }
@@ -766,7 +771,7 @@ const walk = (
             (current?.value ?? Number.NaN) + 1,
           );
           expect(
-            answers.some((a) => a.ref === state.ref && a.id.endsWith("/mail")),
+            answers.some((a) => a.ref === state.ref && Str.endsWith("/mail")(a.id)),
             "L2: a request completes only by its answer letter, never by `queued`",
           ).toBe(true);
         }
@@ -2057,8 +2062,10 @@ const repairLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   );
 
 const KIB = 1_024;
+
 /** Items of a chunked send, each tagged with its send's number and its index. */
-const tagged = (n: number, pads: ReadonlyArray<number>) => pads.map((pad, i) => ({ s: n, i, pad: "x".repeat(pad) }));
+const tagged = (n: number, pads: ReadonlyArray<number>) =>
+  pads.map((pad, i) => ({ s: n, i, pad: Str.repeat(pad)("x") }));
 
 type Sent =
   | { readonly kind: "letter" }

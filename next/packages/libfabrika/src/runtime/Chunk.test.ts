@@ -9,6 +9,7 @@
 // A chunk's size is the bytes of its encoded JSON, the letter the reader's inbox saves.
 import { describe, expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Chunk from "./Chunk.ts";
 
@@ -53,7 +54,8 @@ const Size = fc.integer({ min: 1_024, max: 8_192 });
 type Cut = ReadonlyArray<typeof Chunk.Chunk.Type>;
 
 /** Another send id of the same length: its last digit moved on by one. */
-const otherId = (id: string): string => `${id.slice(0, -1)}${(Number(id.at(-1)) + 1) % 10}`;
+const otherId = (id: string): string =>
+  `${Str.slice(0, -1)(id)}${(Number(Option.getOrUndefined(Str.at(id, -1))) + 1) % 10}`;
 
 describe("T1041: a large output is cut into chunk letters", () => {
   it("L1: every chunk fits the size, carries the send's id and type, runs seq 0 to n-1 with last on the final one, and the items come back in order; an item too big alone fails and nothing is cut", () => {

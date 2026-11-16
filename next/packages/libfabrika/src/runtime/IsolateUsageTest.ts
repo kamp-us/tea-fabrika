@@ -15,6 +15,7 @@ import {
   Tracer,
   type Scope,
 } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -64,7 +65,7 @@ export type Rig = {
   readonly health: (sql: Sql) => ReadonlyArray<unknown>;
 };
 
-const pid = (n: number) => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+const pid = (n: number) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 
 const Cell = fc.record({
   pick: fc.nat(),
@@ -390,7 +391,7 @@ export const suite = (rig: Rig) =>
 
                   expect(
                     JSON.stringify([logs, spans.map((span) => Object.fromEntries(span.attributes))]),
-                  ).not.toContain(JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1));
+                  ).not.toContain(Str.slice(1, -1)(JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`)));
                 }
 
                 yield* Fiber.interrupt(pending);

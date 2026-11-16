@@ -14,6 +14,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -52,7 +53,10 @@ const START = StartsTest.fixture(
     port: 18787,
     build: BRAIN_BUILD,
   },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  (algorithm, data) =>
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
 );
 
 /** A watch's fact on the processes stream, as the law reads it back. */

@@ -4,6 +4,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -317,7 +319,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             [...world.watches.entries()].filter(([, w]) => w.live),
             step.pick,
           );
-          const ref = key.slice(key.lastIndexOf("|") + 1);
+          const ref = Arr.lastNonEmpty(Str.split(key, "|"));
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
           expect(Result.isSuccess(answer), "a cancel of a live watch is placed").toBe(true);

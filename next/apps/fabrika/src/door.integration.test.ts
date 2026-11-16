@@ -49,7 +49,19 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Result,
+  Schema,
+  Stream,
+  String as Str,
+} from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -112,7 +124,7 @@ const armor = (bytes: Uint8Array) =>
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 const signedBytes = (text: string, space: string = SPACE) =>
   Buffer.concat([
@@ -370,7 +382,7 @@ const world = Effect.fnUntraced(function* (
     let p = partFiles.get(name);
 
     if (!p) {
-      p = open(join(dir, `${name.replaceAll("/", "_")}.db`));
+      p = open(join(dir, `${Str.replaceAll("/", "_")(name)}.db`));
       partFiles.set(name, p);
     }
 
@@ -708,7 +720,7 @@ describe("P13 selected input recording", () => {
                 ];
 
                 for (const value of bodies) {
-                  for (const form of [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value)]) {
+                  for (const form of [value, Str.slice(1, -1)(JSON.stringify(value)), encodeURIComponent(value)]) {
                     for (const output of outputs) {
                       expect(output).not.toContain(form);
                     }
@@ -789,7 +801,9 @@ const wire = Effect.fnUntraced(function* (
     getWebSocketAutoResponseTimestamp: () => null,
   };
   const input = StartsTest.fixture({ name: "t843-project", port: 8787 }, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
   );
   const env = {
     INSTANCE: JSON.stringify(input),
@@ -848,7 +862,7 @@ const failingTableWrites = (
 ): ReturnType<typeof nodeSql> => ({
   ...sql,
   exec: (query, ...params) => {
-    if (active() && query.includes(table) && /INSERT|UPDATE/u.test(query)) {
+    if (active() && Str.includes(table)(query) && /INSERT|UPDATE/u.test(query)) {
       throw cause;
     }
 
@@ -1419,8 +1433,8 @@ describe("T843 sender budget, next/", () => {
 
           for (const form of [
             markerValue,
-            JSON.stringify(markerValue).slice(1, -1),
-            JSON.stringify(JSON.stringify(markerValue).slice(1, -1)).slice(1, -1),
+            Str.slice(1, -1)(JSON.stringify(markerValue)),
+            Str.slice(1, -1)(JSON.stringify(Str.slice(1, -1)(JSON.stringify(markerValue)))),
             encodeURIComponent(markerValue),
             encodeURIComponent(JSON.stringify(markerValue)),
             Buffer.from(markerValue).toString("base64"),
@@ -1526,7 +1540,10 @@ const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, un
     db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
       .all()
-      .map(({ name }) => [String(name), db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`).all()]),
+      .map(({ name }) => [
+        String(name),
+        db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}"`).all(),
+      ]),
   );
 
 const online = Effect.fnUntraced(function* (
@@ -1808,7 +1825,7 @@ describe("P10 review regressions", () => {
               const reply = yield* d
                 .knock(pending.client, { label: "Code browser" })
                 .pipe(Effect.ensuring(Effect.sync(() => rng.mockRestore())));
-              const code = String(random % 1_000_000).padStart(6, "0");
+              const code = Str.padStart(6, "0")(String(random % 1_000_000));
               expect(code).toMatch(/^[0-9]{6}$/);
               expect((yield* d.watch(owner.client)).rows.map((r) => r.code)).toEqual([code]);
               expect(reply).toMatchObject({ _tag: "ok", result: { code } });
@@ -2154,7 +2171,7 @@ describe("P10 review regressions", () => {
                 const d = yield* Gateway;
                 yield* online(d, w);
                 const issued = yield* d.challenge(client);
-                const nonce = source === "forged" ? `${issued[0] === "a" ? "b" : "a"}${issued.slice(1)}` : foreign;
+                const nonce = source === "forged" ? `${issued[0] === "a" ? "b" : "a"}${Str.slice(1)(issued)}` : foreign;
                 expect(nonce).not.toBe(issued);
                 const signed = yield* w.window.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
                 expect(
@@ -2596,12 +2613,12 @@ describe("P10 door admission and waiting", () => {
         const text = grantText(grant);
         expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
         expect((yield* d.watch(client)).rows).toEqual([]);
-        expect(w.notices.some((n) => n.client === pending && JSON.stringify(n.news).includes("client.granted"))).toBe(
-          true,
-        );
-        expect(w.notices.some((n) => n.client === pending2 && JSON.stringify(n.news).includes("client.granted"))).toBe(
-          true,
-        );
+        expect(
+          w.notices.some((n) => n.client === pending && Str.includes("client.granted")(JSON.stringify(n.news))),
+        ).toBe(true);
+        expect(
+          w.notices.some((n) => n.client === pending2 && Str.includes("client.granted")(JSON.stringify(n.news))),
+        ).toBe(true);
         expect(
           (yield* d.initialize(pending, hello, {
             url: URL,
@@ -2765,7 +2782,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           const row = kept.find((r) => r.key === pick.k.raw);
           const told = w.notices
             .slice(before)
-            .filter((n) => JSON.stringify(n.news).includes("client.granted"))
+            .filter((n) => Str.includes("client.granted")(JSON.stringify(n.news)))
             .map((n) => n.client);
           // Every tab of the admitted key, and only those, is told once to answer a fresh nonce.
           expect(told.toSorted()).toEqual([...(row?.clients ?? [])].toSorted());
@@ -3430,9 +3447,9 @@ describe("P10 inputs, retries and signer", () => {
             expect(yield* stamped()).toEqual([]);
             const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
             expect(saved).not.toContain(`t844-forged:${write.marker}`);
-            expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
+            expect(saved).not.toContain(Str.slice(1, -1)(JSON.stringify(`t844-forged:${write.marker}`)));
             expect(saved).not.toContain(forged);
-            expect(saved).not.toContain(JSON.stringify(forged).slice(1, -1));
+            expect(saved).not.toContain(Str.slice(1, -1)(JSON.stringify(forged)));
           }
 
           yield* TestClock.adjust("16 days");
@@ -3445,7 +3462,7 @@ describe("P10 inputs, retries and signer", () => {
 
           for (const marker of [`t844-forged:${write.marker}`, forged]) {
             expect(saved).not.toContain(marker);
-            expect(saved).not.toContain(JSON.stringify(marker).slice(1, -1));
+            expect(saved).not.toContain(Str.slice(1, -1)(JSON.stringify(marker)));
           }
         }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
       }),
@@ -4051,10 +4068,10 @@ describe("P10 passkey roots and recovery", () => {
           const changes = {
             key: otherKey.line,
             window: w.otherWindow.raw,
-            for: `${PERSON.slice(0, -1)}p`,
+            for: `${Str.slice(0, -1)(PERSON)}p`,
             to: "project-b",
             id: "another-add",
-            nonce: (p.nonce.startsWith("a") ? "b" : "a") + p.nonce.slice(1),
+            nonce: (Str.startsWith("a")(p.nonce) ? "b" : "a") + Str.slice(1)(p.nonce),
           };
           const wrongBinding = { ...p.binding, nonce: p.nonce, [name]: changes[name] };
           const proof = yield* p.sk.sign(enrollmentText(wrongBinding));
@@ -4181,7 +4198,7 @@ describe("P10 revocation and append", () => {
               const members = yield* ClientManager.use((m) => m.members);
               expect(members.keys.get(w.otherRoot.line)?.live).toBe(true);
               expect(members.keys.get(w.sheet.line)?.live).toBe(true);
-              expect(w.notices.some((n) => JSON.stringify(n.news).includes("4003"))).toBe(true);
+              expect(w.notices.some((n) => Str.includes("4003")(JSON.stringify(n.news)))).toBe(true);
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -4580,7 +4597,7 @@ describe("P10 span reader and recording", () => {
               const rows = Array.from({ length: 257 }, (_, n) => ({
                 span: SpanRow.make({
                   traceId: TRACE,
-                  spanId: (n + 1).toString(16).padStart(16, "0"),
+                  spanId: Str.padStart(16, "0")((n + 1).toString(16)),
                   parentSpanId: null,
                   name: value,
                   kind: "internal",
@@ -4656,7 +4673,7 @@ describe("P10 span reader and recording", () => {
         for (let n = 0; n < 270; n++) {
           const span = SpanRow.make({
             traceId: TRACE,
-            spanId: n.toString(16).padStart(16, "0"),
+            spanId: Str.padStart(16, "0")(n.toString(16)),
             parentSpanId: null,
             name: `seed-${n}`,
             kind: "internal",
@@ -5427,7 +5444,9 @@ describe("P10 refusal records and checked writes", () => {
     "p27: an added person needs a supported public key before anything is written",
     {
       generated: Schema.String.check(
-        Schema.makeFilter((key) => !key.startsWith("ssh-") && !key.startsWith("ecdsa-") && !key.startsWith("sk-")),
+        Schema.makeFilter(
+          (key) => !Str.startsWith("ssh-")(key) && !Str.startsWith("ecdsa-")(key) && !Str.startsWith("sk-")(key),
+        ),
       ),
     },
     ({ generated }) =>
@@ -5847,7 +5866,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
     {
       // Refs of 0 to 300 characters: short ones, ones about the 256 bound, and each bound itself.
       ref: Schema.Union([
-        Schema.Literals(["", "r", "r".repeat(255), "r".repeat(256), "r".repeat(257)]),
+        Schema.Literals(["", "r", Str.repeat(255)("r"), Str.repeat(256)("r"), Str.repeat(257)("r")]),
         Schema.String.check(Schema.isMaxLength(24)),
         Schema.String.check(Schema.isMinLength(240), Schema.isMaxLength(300)),
       ]),

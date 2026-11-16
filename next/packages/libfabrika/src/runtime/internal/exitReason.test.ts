@@ -2,6 +2,7 @@
 // phase, keeping its captured class whole. The expected reason comes from the fixture's own schema.
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../../Id.test-support.ts";
 import { ERROR_CLASS_MAX, ExitReason, fcErrorClass } from "../../processes/Process.test-support.ts";
@@ -17,7 +18,7 @@ const attempt = fc.record({
 
 const error = fc.oneof(
   fcErrorClass,
-  fc.integer({ min: 1, max: ERROR_CLASS_MAX + 64 }).map((n) => "E".repeat(n)),
+  fc.integer({ min: 1, max: ERROR_CLASS_MAX + 64 }).map((n) => Str.repeat(n)("E")),
 );
 
 const failure = fc.oneof(

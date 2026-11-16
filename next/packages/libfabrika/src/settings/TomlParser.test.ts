@@ -10,6 +10,7 @@
 // - Broken TOML fails with `TomlError`, carrying the parser's `line` and its `cause`.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
@@ -197,7 +198,7 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
       fc.asyncProperty(doc, broken, fc.nat(), async (d, line, at) => {
         const w = write(d);
         const eol = d.crlf ? "\r\n" : "\n";
-        const lines = [`fabrika-version = "9.9.9"`, ...w.text.split(eol).slice(0, -1)];
+        const lines = [`fabrika-version = "9.9.9"`, ...Str.split(w.text, eol).slice(0, -1)];
         const n = 1 + (at % lines.length);
         lines.splice(n, 0, line);
         const exit = await parse(lines.join(eol) + eol);

@@ -26,6 +26,8 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -77,7 +79,7 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = open(`${name.replaceAll("/", "_")}.db`);
+      const made = open(`${Str.replaceAll("/", "_")(name)}.db`);
       parts.set(name, made);
       const sql = nodeSql(made);
       sqls.set(name, sql);
@@ -121,7 +123,7 @@ const places = (db: DatabaseSync, marker: string): Array<string> => {
   for (const { name } of tables) {
     for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
       for (const [column, value] of Object.entries(row)) {
-        if (typeof value === "string" && value.includes(marker)) {
+        if (typeof value === "string" && Str.includes(marker)(value)) {
           found.add(`${String(name)}.${column}`);
         }
       }
@@ -216,12 +218,12 @@ describe("T246, P37 decodes TypeID process ids", () => {
   // Plant: keep ProcessId as NonEmptyString. P37 must refuse a stored chain with a bad id.
   for (const [label, original] of [
     ["old eight-hex id", "3f9a0c21"],
-    ...["i", "l", "o", "u"].map((char) => [char, `process_0${char}${"0".repeat(24)}`] as const),
-    ["first character 8", `process_8${"0".repeat(25)}`],
-    ["uppercase suffix", `process_${P1.slice(8).toUpperCase()}`],
-    ["25 characters", `process_${"0".repeat(25)}`],
-    ["27 characters", `process_${"0".repeat(27)}`],
-    ["wrong prefix", `person_${P1.slice(8)}`],
+    ...["i", "l", "o", "u"].map((char) => [char, `process_0${char}${Str.repeat(24)("0")}`] as const),
+    ["first character 8", `process_8${Str.repeat(25)("0")}`],
+    ["uppercase suffix", `process_${Str.toUpperCase(Str.slice(8)(P1))}`],
+    ["25 characters", `process_${Str.repeat(25)("0")}`],
+    ["27 characters", `process_${Str.repeat(27)("0")}`],
+    ["wrong prefix", `person_${Str.slice(8)(P1)}`],
     ["leading space", ` ${P1}`],
     ["trailing space", `${P1} `],
     ["trailing newline", `${P1}\n`],
@@ -386,7 +388,7 @@ describe("p98, a span that ends is never dropped", () => {
         expect(
           outside
             .map((r) => r.resource)
-            .sort((x, y) => String(x.attributes["fab.object"]).localeCompare(String(y.attributes["fab.object"]))),
+            .sort((x, y) => Str.localeCompare(String(y.attributes["fab.object"]))(String(x.attributes["fab.object"]))),
         ).toEqual([{ attributes: { "fab.object": OBJECT } }, { attributes: { "fab.object": P2 } }]);
 
         for (const row of outside) {
@@ -613,7 +615,7 @@ describe("p98, a span that ends is never dropped", () => {
               const made = value;
 
               for (let n = 0; n < made; n++) {
-                yield* step("runner.step", { "fab.n": n, "fab.pad": "p".repeat(100) });
+                yield* step("runner.step", { "fab.n": n, "fab.pad": Str.repeat(100)("p") });
               }
 
               const error = yield* Effect.flip(flush);
@@ -920,18 +922,18 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Str.slice(1, -1)(JSON.stringify(sample.root)),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
-          expect(message.includes(root), "stored content copied a generated root").toBe(false);
+          expect(Str.includes(root)(message), "stored content copied a generated root").toBe(false);
         }
 
-        for (const line of message.split("\n").filter((line) => /^\s*at /.test(line))) {
-          const frame = line.trim();
-          const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
-          const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
-          const withoutNode = location.replace(/node:[^)]*/g, "");
+        for (const line of Str.split(message, "\n").filter((line) => /^\s*at /.test(line))) {
+          const frame = Str.trim(line);
+          const named = sample.slashed.find((name) => frame === `at ${name}` || Str.startsWith(`at ${name} (`)(frame));
+          const location = named === undefined ? frame : Str.slice(`at ${named}`.length)(frame);
+          const withoutNode = Str.replace(/node:[^)]*/g, "")(location);
           expect(withoutNode, "a stored frame names a folder").not.toMatch(/[/\\]/);
         }
       }),
@@ -944,8 +946,8 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
     ({ sample }) =>
       Effect.gen(function* () {
         const { pretty, message } = yield* storedFrames(sample);
-        const before = pretty.split("\n");
-        const after = message.split("\n");
+        const before = Str.split(pretty, "\n");
+        const after = Str.split(message, "\n");
         expect(after).toHaveLength(before.length);
 
         for (const [index, line] of before.entries()) {
@@ -1019,7 +1021,7 @@ const StrayInput = Schema.Struct({
 const strayCases = Arbitrary.schema(StrayInput).pipe(
   Arbitrary.map(({ word, rootKind, prefix, before, stray, breaker, after, ending, tail, frames }) => {
     const folder = `${before}${stray}${breaker}${after}`;
-    const separator = prefix.endsWith("\\") ? "\\" : "/";
+    const separator = Str.endsWith("\\")(prefix) ? "\\" : "/";
     const root = {
       posix: `/sink-${word}/${folder}/private`,
       url: `file:///sink-${word}/${folder}/private`,
@@ -1048,7 +1050,7 @@ const strayCases = Arbitrary.schema(StrayInput).pipe(
 );
 
 /** A text's lines and the breaks between them, every break kept: `\r\n`, `\r` and `\n`. */
-const pieces = (text: string) => text.split(/(\r\n|\r|\n)/);
+const pieces = (text: string) => Str.split(text, /(\r\n|\r|\n)/);
 
 describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
   it.effect.prop(
@@ -1060,19 +1062,19 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Str.slice(1, -1)(JSON.stringify(sample.root)),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
-          expect(message.includes(root), "stored content copied a generated root").toBe(false);
+          expect(Str.includes(root)(message), "stored content copied a generated root").toBe(false);
         }
 
-        for (const line of message.split(/\r\n|\r|\n/).filter((line) => /^\s*at /.test(line))) {
+        for (const line of Str.split(message, /\r\n|\r|\n/).filter((line) => /^\s*at /.test(line))) {
           // A third error gives the inner's last line ` {`, the mark of a cause that follows.
-          const frame = line.trim().replace(/ \{$/, "");
-          const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
-          const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
-          const withoutNode = location.replace(/node:[^)]*/g, "");
+          const frame = Str.replace(/ \{$/, "")(Str.trim(line));
+          const named = sample.slashed.find((name) => frame === `at ${name}` || Str.startsWith(`at ${name} (`)(frame));
+          const location = named === undefined ? frame : Str.slice(`at ${named}`.length)(frame);
+          const withoutNode = Str.replace(/node:[^)]*/g, "")(location);
           expect(withoutNode, `a stored frame names a folder: ${JSON.stringify(line)}`).not.toMatch(/[/\\]/);
         }
       }),
@@ -1135,7 +1137,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           ].join("\n"),
         },
       ]);
-      const lines = message.split("\n").map((line) => line.trim());
+      const lines = Str.split(message, "\n").map((line) => Str.trim(line));
       expect(lines.filter((line) => line === "at fn (c.ts:1:2)")).toHaveLength(7);
       expect(lines.filter((line) => line === "at eval (eval at g (c.ts:3:4), <anonymous>:1:1)")).toHaveLength(2);
       expect(lines).toContain("at c.ts:5:6");
@@ -1153,8 +1155,8 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           stack: "Error: m\r\n    at fn (/root/a/b/c.ts:1:2)\r\n    at g (/root/x.ts:3:4)\r",
         })),
       );
-      expect(message.match(/at fn \(c\.ts:1:2\)\r\n/g)).toHaveLength(3);
-      expect(message.match(/at g \(x\.ts:3:4\)\r/g)).toHaveLength(3);
+      expect(Option.getOrNull(Str.match(/at fn \(c\.ts:1:2\)\r\n/g)(message))).toHaveLength(3);
+      expect(Option.getOrNull(Str.match(/at g \(x\.ts:3:4\)\r/g)(message))).toHaveLength(3);
       expect(message).toContain("at g (x.ts:3:4)\r {");
       expect(message).not.toContain("/root");
     }).pipe(Effect.scoped),
@@ -1164,7 +1166,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 const SECRET = "sk-p99-secret";
 const NOTE = "note-body-p99";
 const NOTE_TWO = "note-two-p99";
-const a = (n: number) => "a".repeat(n);
+const a = (n: number) => Str.repeat(n)("a");
 
 class NoteError extends Error {
   override readonly name = "NoteError";
@@ -1240,7 +1242,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
 
           for (const [name, db] of h.parts) {
             for (const place of [...places(db, NOTE), ...places(db, NOTE_TWO)]) {
-              expect(place.startsWith("content."), `${name}: ${place}`).toBe(true);
+              expect(Str.startsWith("content.")(place), `${name}: ${place}`).toBe(true);
             }
           }
 
@@ -1279,7 +1281,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
                   if (v.length <= 128) {
                     expect(kept[k]).toBe(v);
                   } else {
-                    expect(v.startsWith(String(kept[k]))).toBe(true);
+                    expect(Str.startsWith(String(kept[k]))(v)).toBe(true);
                     expect(String(kept[k]).length).toBeLessThanOrEqual(128);
                     expect(kept[`${k}.length`]).toBe(v.length);
                   }
@@ -1398,7 +1400,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
         const full = Number(tail?.[1]);
         expect(full).toBeGreaterThan(1_100_000);
         expect(message.length).toBe(1_000_000 + (tail?.[0].length ?? 0));
-        expect(message.slice(0, 1_000_000)).toContain(`NoteError: ${a(1000)}`);
+        expect(Str.slice(0, 1_000_000)(message)).toContain(`NoteError: ${a(1000)}`);
       }).pipe(Effect.provide(world(sql)));
     }),
   );
@@ -1594,7 +1596,7 @@ const repoRoot = join(import.meta.dirname, "..", "..", "..", "..", "..");
 
 const rootForms = [
   repoRoot,
-  JSON.stringify(repoRoot).slice(1, -1),
+  Str.slice(1, -1)(JSON.stringify(repoRoot)),
   encodeURI(repoRoot),
   encodeURIComponent(repoRoot),
   pathToFileURL(repoRoot).href,
@@ -1603,7 +1605,7 @@ const rootForms = [
 /** A span frame of a generated `Effect.fn`, "at <span>[ (definition)] (<location>)", with its
  *  location cut to the last path segment by this test's own reading. */
 const spanFrames = (text: string) =>
-  text.split("\n").flatMap((line) => {
+  Str.split(text, "\n").flatMap((line) => {
     const frame = /^\s*at (typed\.[a-z]+\.\d+(?: \(definition\))?) \((.*)\)(?: \{)?$/.exec(line);
 
     if (frame === null) {
@@ -1611,7 +1613,7 @@ const spanFrames = (text: string) =>
     }
 
     const location = frame[2] ?? "";
-    return [`${frame[1]} (${location.slice(Math.max(location.lastIndexOf("/"), location.lastIndexOf("\\")) + 1)})`];
+    return [`${frame[1]} (${Arr.lastNonEmpty(Str.split(location, /[/\\]/))})`];
   });
 
 describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no machine folder", () => {
@@ -1639,7 +1641,7 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           const expected = spanFrames(Cause.pretty(exit.cause));
 
           for (const name of names) {
-            expect(expected.some((frame) => frame.startsWith(`${name} (`))).toBe(true);
+            expect(expected.some((frame) => Str.startsWith(`${name} (`)(frame))).toBe(true);
           }
 
           yield* flush;
@@ -1649,16 +1651,17 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           for (const row of rows) {
             const content = yield* RecordManager.use((records) => records.content(spans, row.spanId));
             const message = Option.isSome(content) && content.value._tag === "kept" ? content.value.message : "";
-            expect(message.includes(sample.tag) && message.includes(sample.reason), "tag and reason are kept").toBe(
-              true,
-            );
+            expect(
+              Str.includes(sample.tag)(message) && Str.includes(sample.reason)(message),
+              "tag and reason are kept",
+            ).toBe(true);
 
             for (const form of rootForms) {
-              expect(message.includes(form), `stored content copied the repo root: ${message}`).toBe(false);
+              expect(Str.includes(form)(message), `stored content copied the repo root: ${message}`).toBe(false);
             }
 
-            for (const line of message.split("\n").filter((line) => /^\s*at /.test(line))) {
-              expect(line.replace(/node:[^)]*/g, ""), "a stored frame names a folder").not.toMatch(/[/\\]/);
+            for (const line of Str.split(message, "\n").filter((line) => /^\s*at /.test(line))) {
+              expect(Str.replace(/node:[^)]*/g, "")(line), "a stored frame names a folder").not.toMatch(/[/\\]/);
             }
 
             expect(spanFrames(message), "each span frame keeps its name, file, line and column").toEqual(expected);

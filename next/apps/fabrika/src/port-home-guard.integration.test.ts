@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Option, Path, Schema, String as Str } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -71,7 +71,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       : plant.form === "plain"
         ? planted.full
         : plant.form === "json"
-          ? JSON.stringify(planted.full).slice(1, -1)
+          ? Str.slice(1, -1)(JSON.stringify(planted.full))
           : (yield* path.toFileUrl(planted.full)).href;
   let expected: typeof Hit.Type | null = null;
 
@@ -105,10 +105,10 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     );
 
     if (hit) {
-      const at = body.indexOf(JSON.stringify(value).slice(1, -1));
+      const at = Option.getOrElse(Str.indexOf(Str.slice(1, -1)(JSON.stringify(value)))(body), () => -1);
       expected = {
         file: name,
-        place: Place.cases.byte.make({ offset: encoder.encode(body.slice(0, at)).length }),
+        place: Place.cases.byte.make({ offset: encoder.encode(Str.slice(0, at)(body)).length }),
         root: planted.root,
       };
     }
@@ -131,14 +131,15 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       const insert = db.prepare(`INSERT INTO "${tableName}" (note, body, data) VALUES (?, ?, ?)`);
 
       for (const [row, word] of table.rows.entries()) {
-        const long = `${word} `.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)));
+        const long = Str.repeat(Math.ceil((PAGE + table.long * 8) / (word.length + 1)))(`${word} `);
         const target =
           here && plant !== null && planted !== null && plant.at % file.tables.length === t
             ? plant.at % table.rows.length === row
             : false;
         const cut = ((plant?.at ?? 0) * 37) % long.length;
         const note = target && plant?.place === "cell" ? `${word} ${text}` : word;
-        const body = target && plant?.place === "overflow" ? `${long.slice(0, cut)}${text}${long.slice(cut)}` : long;
+        const body =
+          target && plant?.place === "overflow" ? `${Str.slice(0, cut)(long)}${text}${Str.slice(cut)(long)}` : long;
         const data = encoder.encode(target && plant?.place === "blob" ? `${word} ${text}` : word);
         insert.run(note, body, data);
 

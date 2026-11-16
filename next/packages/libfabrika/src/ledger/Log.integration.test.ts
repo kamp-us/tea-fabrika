@@ -18,6 +18,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -63,13 +64,13 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 /** Texts one slip away from a good parent: none of them may pass. */
 const badParents = (good: string): ReadonlyArray<string> => [
   "",
-  good.toUpperCase(),
+  Str.toUpperCase(good),
   `${good} `,
   ` ${good}`,
   `x${good}`,
   `${good}\n`,
-  good.slice(0, 4) + good.slice(5),
-  good.replace(/-/g, "_"),
+  Str.slice(0, 4)(good) + Str.slice(5)(good),
+  Str.replace(/-/g, "_")(good),
   "in-3f9a0c21-41",
   "in-3f9a0c21-0",
   "in-3f9a0c21-01",
@@ -78,10 +79,10 @@ const badParents = (good: string): ReadonlyArray<string> => [
   `in-${PROCESS}-0`,
   `in-${PROCESS}-01`,
   `in-${PROCESS}-`,
-  ...["i", "l", "o", "u"].map((char) => `in-process_0${char}${"0".repeat(24)}-1`),
-  `in-process_8${"0".repeat(25)}-1`,
-  `in-process_0${"0".repeat(24)}-1`,
-  `in-process_0${"0".repeat(26)}-1`,
+  ...["i", "l", "o", "u"].map((char) => `in-process_0${char}${Str.repeat(24)("0")}-1`),
+  `in-process_8${Str.repeat(25)("0")}-1`,
+  `in-process_0${Str.repeat(24)("0")}-1`,
+  `in-process_0${Str.repeat(26)("0")}-1`,
 ];
 
 // Every ledger is a fresh node:sqlite file in its own temp folder. The layer's scope closes the
@@ -282,8 +283,8 @@ describe("p92, every entry has every field: at the referee", () => {
 
   it.effect("a line whose row would pass 2,000,000 bytes is refused too_big, as workerd would", () =>
     Effect.gen(function* () {
-      const big = "x".repeat(2_000_001);
-      const near = "x".repeat(1_900_000);
+      const big = Str.repeat(2_000_001)("x");
+      const near = Str.repeat(1_900_000)("x");
       const { answers, entries } = yield* handIn([
         { ...json(), body: { note: big } },
         { ...json(), body: { note: near } },
@@ -312,10 +313,10 @@ describe("p92, every entry has every field: at the referee", () => {
           JSON.stringify(line.body),
         ].reduce((n, text) => n + encoder.encode(text).length, 0);
       // A thousand two-byte letters, so a count of characters instead of bytes misses the limit.
-      const WIDE = "ü".repeat(1_000);
+      const WIDE = Str.repeat(1_000)("ü");
       const sized = (total: number): Line => {
         const rest = total - rowBytes({ ...full, body: { note: WIDE } });
-        return { ...full, body: { note: WIDE + "x".repeat(rest) } };
+        return { ...full, body: { note: WIDE + Str.repeat(rest)("x") } };
       };
       const atLimit = sized(2_000_000);
       const overLimit = sized(2_000_001);
@@ -405,11 +406,11 @@ describe("p68, an entry keeps its parent", () => {
 describe("p68b, an entry keeps a W3C trace id", () => {
   // Plants: drop the all-zeros guard, or allow uppercase hex.
   it.effect.each([
-    ["all zeros", "0".repeat(32)],
-    ["uppercase", TRACE.toUpperCase()],
-    ["31 characters", TRACE.slice(1)],
+    ["all zeros", Str.repeat(32)("0")],
+    ["uppercase", Str.toUpperCase(TRACE)],
+    ["31 characters", Str.slice(1)(TRACE)],
     ["33 characters", `a${TRACE}`],
-    ["not hex", `g${TRACE.slice(1)}`],
+    ["not hex", `g${Str.slice(1)(TRACE)}`],
     ["empty", ""],
     ["leading space", ` ${TRACE}`],
     ["trailing space", `${TRACE} `],

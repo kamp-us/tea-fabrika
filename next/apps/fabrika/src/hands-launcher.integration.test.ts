@@ -31,7 +31,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Option, Path, Queue, Schema, Stream, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -79,7 +79,7 @@ const person = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     sign: (value: string) => {
       const body = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -108,7 +108,7 @@ const person = () => {
 };
 
 const keyFingerprint = (x: string) =>
-  `SHA256:${createHash("sha256").update(Buffer.from(x, "base64url")).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(Buffer.from(x, "base64url")).digest("base64"))}`;
 
 /** A call on the brain's own local handle, by its method name on the fixture's Project. */
 const method = (project: object, name: keyof LauncherProject) => Reflect.get(project, name);
@@ -333,7 +333,7 @@ const flow = Effect.fnUntraced(
       .all()
       .map((row) => String(row["name"]));
     const journal = Object.fromEntries(
-      tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]),
+      tables.map((t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),
     );
     db.close();
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
@@ -363,9 +363,10 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
         const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
         expect(result?._tag, "E2: real git exits").toBe("exited");
         expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
-        expect(result?._tag === "exited" && result.version.startsWith("git version "), "E2: its version line").toBe(
-          true,
-        );
+        expect(
+          result?._tag === "exited" && Str.startsWith("git version ")(result.version),
+          "E2: its version line",
+        ).toBe(true);
         const [first, second] = seen.fingerprints;
         expect(second, "E2: a new start keeps the same key").toBe(first);
         expect(seen.taskAfterRestart, "E2: the restart runs nothing again").toEqual(seen.task);
@@ -412,7 +413,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                     const text = JSON.stringify(value, (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v));
 
                     for (const form of forms) {
-                      expect(text.includes(form), `S2: [secrets] the private half is not in ${name}`).toBe(false);
+                      expect(Str.includes(form)(text), `S2: [secrets] the private half is not in ${name}`).toBe(false);
                     }
                   }
                 }),

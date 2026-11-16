@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 // The connection must save attachments and release its turn before calling the Project.
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -33,7 +34,7 @@ const chosen = {
   rev: 4,
   session: "session-1",
   ping: 42,
-  ids: Array.from({ length: 12 }, (_, n) => `${n}${"x".repeat(2000)}`),
+  ids: Array.from({ length: 12 }, (_, n) => `${n}${Str.repeat(2000)("x")}`),
 };
 
 const law = (
@@ -313,7 +314,7 @@ describe("P12 Connection attachment laws", () => {
           expect(new TextEncoder().encode(JSON.stringify(f.saved())).length).toBeLessThanOrEqual(16384);
         }
 
-        expect(f.frames.some((frame) => JSON.stringify(frame).includes("too_many_waits"))).toBe(true);
+        expect(f.frames.some((frame) => Str.includes("too_many_waits")(JSON.stringify(frame)))).toBe(true);
 
         if (ids.length === 65) {
           expect(f.frames).toHaveLength(1);

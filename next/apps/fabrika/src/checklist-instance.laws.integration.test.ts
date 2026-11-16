@@ -37,7 +37,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -118,7 +118,7 @@ const identity = () => {
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -352,9 +352,9 @@ const world = (options: { readonly lacks?: string } = {}) =>
           get: (id: string) => ({
             getEntrypoint: () => {
               const Box = programBox(
-                id.startsWith(`${CODE.checklist.hash}/`)
+                Str.startsWith(`${CODE.checklist.hash}/`)(id)
                   ? checklist
-                  : id.startsWith(`${CODE.tezgah.hash}/`)
+                  : Str.startsWith(`${CODE.tezgah.hash}/`)(id)
                     ? tezgah
                     : counter,
                 id,
@@ -665,7 +665,7 @@ describe("L13: notices name their process", () => {
                         seen: 0,
                       }),
                     );
-                    const refused = JSON.stringify(answer).includes('"refused"');
+                    const refused = Str.includes('"refused"')(JSON.stringify(answer));
                     seen.refused += refused ? 1 : 0;
 
                     if (!refused) {
@@ -695,7 +695,7 @@ describe("L13: notices name their process", () => {
                     without(Object(theirs[i]!.news)),
                   );
                   seen[news.method === "view.whole" ? "whole" : "patch"]++;
-                  seen.arrays += JSON.stringify(news.params).includes('"/items/') ? 1 : 0;
+                  seen.arrays += Str.includes('"/items/')(JSON.stringify(news.params)) ? 1 : 0;
                 }
               }),
             ),

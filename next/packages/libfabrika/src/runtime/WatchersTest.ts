@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Str from "effect/String";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { type Update, WatcherManager } from "./Entry.ts";
 import { nth } from "./RepliesTest.ts";
@@ -165,7 +166,7 @@ export const suite = (database: Database) =>
                 const write = /^\s*(INSERT|UPDATE|REPLACE|DELETE)/i.test(query);
 
                 if (
-                  query.includes("process_watchers") &&
+                  Str.includes("process_watchers")(query) &&
                   ((armed === "read" && read) || ((armed === "save" || armed === "cleanup") && write))
                 ) {
                   armed = null;
@@ -209,7 +210,7 @@ export const suite = (database: Database) =>
               const [row] = rows(sql).filter((r) => r.name === "counter:fault");
               expect(row).toBeDefined();
               const column = Object.keys(row ?? {}).find(
-                (k) => typeof (row ?? {})[k] === "string" && String((row ?? {})[k]).startsWith("{"),
+                (k) => typeof (row ?? {})[k] === "string" && Str.startsWith("{")(String((row ?? {})[k])),
               );
               expect(column).toBeDefined();
               const original = String((row ?? {})[column ?? "value"]);

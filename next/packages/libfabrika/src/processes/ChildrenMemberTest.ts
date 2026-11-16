@@ -18,6 +18,7 @@
 // gateway's one signing service does (0262). The rows the oracle reads are the store's own.
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -47,7 +48,7 @@ const OTHER = "person_01jcother000000000000000000";
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00900${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00900${Str.padStart(10, "0")(String(n))}`,
 );
 
 const QUEUE = "queue";

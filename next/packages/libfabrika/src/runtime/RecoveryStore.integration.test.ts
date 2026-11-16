@@ -7,6 +7,7 @@
 import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { A, B, from, storage } from "../processes/Process.test-support.ts";
 import type { Sql } from "../Sql.ts";
@@ -175,7 +176,7 @@ describe("P34 recovery storage", () => {
                   ...snapshot,
                   receipts: [
                     ...snapshot.receipts,
-                    { ...terminal, letter: "other", input: { ...input, padding: "x".repeat(value) } },
+                    { ...terminal, letter: "other", input: { ...input, padding: Str.repeat(value)("x") } },
                   ],
                 };
                 expect(yield* Effect.flip(s.save(full))).toMatchObject({
@@ -217,7 +218,7 @@ describe("P34 recovery storage", () => {
             );
             // Find the actual saved JSON column, without prescribing the store's table names.
             let planted = 0;
-            const quote = (word: string) => `"${word.replaceAll('"', '""')}"`;
+            const quote = (word: string) => `"${Str.replaceAll('"', '""')(word)}"`;
 
             for (const { name } of disk.sql.exec(
               "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
@@ -226,7 +227,7 @@ describe("P34 recovery storage", () => {
 
               for (const row of disk.sql.exec(`SELECT rowid, * FROM ${table}`)) {
                 for (const [column, value] of Object.entries(row)) {
-                  if (typeof value === "string" && value.includes('"journal"')) {
+                  if (typeof value === "string" && Str.includes('"journal"')(value)) {
                     disk.sql.exec(
                       `UPDATE ${table} SET ${quote(column)}=? WHERE rowid=?`,
                       // An old saved shape fails explicitly too: it is never silently reset (P34c slice 2).

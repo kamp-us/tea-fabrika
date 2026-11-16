@@ -3,6 +3,7 @@
 import { expect, it } from "@effect/vitest";
 import { ByteSize, ConfigProvider, Effect, Exit, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
 import * as Snapshot from "./Snapshot.ts";
@@ -46,7 +47,7 @@ it.effect.prop(
         const d = declaration(path);
         expect(d.scope).toEqual(["person"]);
         expect(d.reload).toBe("restart");
-        expect(yield* d.parse(ConfigProvider.fromUnknown({ desktop: { [path.split(".")[1]!]: values[i] } }))).toBe(
+        expect(yield* d.parse(ConfigProvider.fromUnknown({ desktop: { [Str.split(path, ".")[1]!]: values[i] } }))).toBe(
           values[i],
         );
         expect(yield* d.parse(ConfigProvider.fromUnknown({}))).toBe(d.default);
@@ -69,11 +70,13 @@ it.effect.prop(
       const d = declaration(path);
       expect(
         Exit.isFailure(
-          yield* d.parse(ConfigProvider.fromUnknown({ desktop: { [path.split(".")[1]!]: bad } })).pipe(Effect.exit),
+          yield* d
+            .parse(ConfigProvider.fromUnknown({ desktop: { [Str.split(path, ".")[1]!]: bad } }))
+            .pipe(Effect.exit),
         ),
       ).toBe(true);
       const toml = yield* Toml;
-      const repo = yield* toml.parse(`[desktop]\n${path.split(".")[1]} = 1\n`);
+      const repo = yield* toml.parse(`[desktop]\n${Str.split(path, ".")[1]} = 1\n`);
       const own = yield* toml.parse("");
       const failed = yield* Files.validate(
         Declarations.all,

@@ -2,6 +2,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -50,11 +51,11 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
           exec: (query, ...args) => {
             const rows = real.exec(query, ...args);
 
-            if (corrupt && reader === "kept" && query.includes("SELECT * FROM content")) {
+            if (corrupt && reader === "kept" && Str.includes("SELECT * FROM content")(query)) {
               return rows.map((r) => ({ ...r, message: text.length }));
             }
 
-            return corrupt && reader === "seq" && query.includes("rowid AS seq")
+            return corrupt && reader === "seq" && Str.includes("rowid AS seq")(query)
               ? rows.map((r) => ({ ...r, seq: text }))
               : rows;
           },

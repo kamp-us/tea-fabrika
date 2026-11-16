@@ -8,6 +8,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import * as Str from "effect/String";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -343,12 +344,12 @@ const walk = (
     const expected = (patchesNow: number) => ({
       letters: accepted,
       patches: patchesNow,
-      view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => a.localeCompare(b))) },
+      view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => Str.localeCompare(b)(a))) },
       rev: accepted,
     });
     const sorted = (view: unknown) => {
       const notes = (view as Model).notes;
-      return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
+      return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => Str.localeCompare(b)(a))) };
     };
 
     const letter = (note: string, base: number, body: string, by = { key: "SHA256:writer", for: "person-writer" }) =>
@@ -542,7 +543,7 @@ const walk = (
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
         const cell =
           kind === "json"
-            ? `${value.slice(0, -1)}${step.secret}`
+            ? `${Str.slice(0, -1)(value)}${step.secret}`
             : kind === "missing"
               ? JSON.stringify(
                   Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),

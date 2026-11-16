@@ -5,7 +5,7 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -103,7 +103,7 @@ const pendingReply = Effect.fnUntraced(function* (
   expect(reply === undefined).toBe(move === "reply_write");
   const output = JSON.stringify([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
 
-  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+  for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
     expect(output).not.toContain(form);
   }
 });
@@ -164,7 +164,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }),
   );
   const project = instance.project("p13-recording");
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
   const from = {
     by: fingerprint,
     for: PERSON,
@@ -238,7 +238,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }
 
     if (move === "retry" || move === "lost_answer" || move === "refused_retry" || move === "refused_lost_answer") {
-      const history = move.startsWith("refused_") ? refused : accepted;
+      const history = Str.startsWith("refused_")(move) ? refused : accepted;
       const prior = history[Math.floor(entropy / choices.length) % history.length]!;
 
       if (move === "refused_lost_answer") {
@@ -304,7 +304,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     const output = JSON.stringify(rows);
 
     for (const body of bodies) {
-      for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+      for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
         expect(output).not.toContain(form);
       }
     }
@@ -332,7 +332,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
   const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
 
-  for (const form of [unknown.body, JSON.stringify(unknown.body).slice(1, -1), encodeURIComponent(unknown.body)]) {
+  for (const form of [unknown.body, Str.slice(1, -1)(JSON.stringify(unknown.body)), encodeURIComponent(unknown.body)]) {
     expect(JSON.stringify(rows)).not.toContain(form);
   }
 });

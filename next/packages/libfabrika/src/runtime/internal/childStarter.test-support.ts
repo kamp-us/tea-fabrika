@@ -6,6 +6,7 @@
 // in order, so a law reads what the program was told from the process's saved checkpoint.
 import { Machine } from "@demlik/tea/effect";
 import { Schema } from "effect";
+import * as Str from "effect/String";
 import { Program } from "../Program.ts";
 import { exit, startChild } from "../StartChild.ts";
 
@@ -63,7 +64,7 @@ const asked = (ask: typeof Ask.Type) => {
     program: ask.program,
     name: ask.name,
     ...(ask.input === undefined ? {} : { input: ask.input }),
-    ...(ask.inputBytes === undefined ? {} : { input: "x".repeat(ask.inputBytes) }),
+    ...(ask.inputBytes === undefined ? {} : { input: Str.repeat(ask.inputBytes)("x") }),
     ...ask.extra,
   };
 

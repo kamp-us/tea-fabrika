@@ -2,6 +2,7 @@
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -56,7 +57,7 @@ const examples =
 const nameInput = Start.cases.first.fields.name.check(Schema.isPattern(/^[a-z][a-z0-9._:-]{0,30}$/));
 
 const validName = Arbitrary.schema(nameInput).pipe(
-  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
+  Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !Str.startsWith("client:")(name)),
 );
 
 const textInput = Schema.NonEmptyString.check(Schema.isMaxLength(40));
@@ -66,7 +67,7 @@ const options = { arbitrary: { seed: 119120, runs: 20, size: 60 } };
 
 const POLICY = { reason: "crashed", crashes: 1, until: 0 };
 const toW = Recipient.cases.process.make({ process: W });
-const brainSide = (process: string) => process === "processes" || process.startsWith("processes/");
+const brainSide = (process: string) => process === "processes" || Str.startsWith("processes/")(process);
 
 const seed = (store: Storage, name = "counter:1") =>
   Effect.gen(function* () {
@@ -104,7 +105,7 @@ describe("P33, every process event lives on a stream only the brain may write", 
     [
       Arbitrary.schema(nameInput).pipe(
         Arbitrary.filter(
-          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !name.startsWith("client:"),
+          (name) => !["processes", "gateway", "watcher:1"].includes(name) && !Str.startsWith("client:")(name),
         ),
       ),
     ],
@@ -425,7 +426,7 @@ describe("P33, every brain-written line records who asked", () => {
     "asked is kept out of the trust check: another writer's line naming the brain counts for nothing",
     [
       Arbitrary.schema(nameInput).pipe(
-        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !name.startsWith("client:")),
+        Arbitrary.filter((name) => !["gateway", "processes"].includes(name) && !Str.startsWith("client:")(name)),
       ),
     ],
     examples([["counter:1"]], (name: string) => {

@@ -40,6 +40,7 @@ import {
   Tracer,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
+import * as Str from "effect/String";
 import { grantText, revokeText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { MailWakeups, MailWakeupsError } from "../runtime/MailWakeups.ts";
@@ -118,7 +119,7 @@ const key = Effect.fnUntraced(function* () {
     const bytes = new Uint8Array(value);
     // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes a generated public key
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", bytes), catch: fail });
-    return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
   return {
     stored,
@@ -147,9 +148,9 @@ const key = Effect.fnUntraced(function* () {
         field("sha512"),
         field(join(field("ssh-ed25519"), field(signed))),
       );
-      return `-----BEGIN SSH SIGNATURE-----\n${Base64.encode(packed)
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+      return `-----BEGIN SSH SIGNATURE-----\n${Option.getOrUndefined(
+        Option.map(Str.match(/.{1,70}/g)(Base64.encode(packed)), (lines) => lines.join("\n")),
+      )}\n-----END SSH SIGNATURE-----\n`;
     }),
   };
 });
@@ -427,7 +428,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
     const answer = yield* trace(d.route(c.client, method, params));
     calls.push({ method, answer, spans: spans.slice(spanned) });
 
-    if (method.startsWith("tasks.")) {
+    if (Str.startsWith("tasks.")(method)) {
       expect(inputRows()).toEqual(beforeInputs);
     }
 
@@ -573,7 +574,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
     });
     yield* add(tape.request.process, pick(tape.cells, 0));
     const beforeHello = JSON.stringify(saved.map((s) => s.task));
-    expect(w.notices.filter((n) => JSON.stringify(n).includes("tasks."))).toEqual([]);
+    expect(w.notices.filter((n) => Str.includes("tasks.")(JSON.stringify(n)))).toEqual([]);
     expect(JSON.stringify(yield* w.j((j) => j.read(pick(saved, 0).request.id)))).toBe(
       JSON.stringify(pick(saved, 0).task),
     );
@@ -635,7 +636,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
     };
     /** W2b: each tasks call that reaches the tasks branch has one `gateway.route` span, and it holds the answer's tag as its outcome. */
     const outcomes = (from: number) => {
-      for (const call of w.calls.slice(from).filter((call) => call.method.startsWith("tasks."))) {
+      for (const call of w.calls.slice(from).filter((call) => Str.startsWith("tasks.")(call.method))) {
         const routes = call.spans.filter((span) => span.name === "gateway.route");
         expect(routes, `W2b: ${call.method} opens one gateway.route span`).toHaveLength(1);
         expect(
@@ -1055,7 +1056,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       }
 
       yield* unchanged();
-      expect(w.notices.filter((n) => JSON.stringify(n).includes("tasks."))).toEqual([]);
+      expect(w.notices.filter((n) => Str.includes("tasks.")(JSON.stringify(n)))).toEqual([]);
     }
 
     if (focus === "W1") {
@@ -1102,7 +1103,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         .map((row) => String(row.name));
 
       for (const table of tables) {
-        const rows = w.store.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`);
+        const rows = w.store.sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`);
 
         if (table === "entries") {
           outputs.ledger = rows;
@@ -1141,7 +1142,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
             Base64.encode(text(sentinel)),
             Base64Url.encode(text(sentinel)),
           ]) {
-            expect(encoded.includes(form), name).toBe(false);
+            expect(Str.includes(form)(encoded), name).toBe(false);
           }
         }
       }
@@ -1283,7 +1284,8 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
     const list = Effect.fnUntraced(function* (c: Client) {
       const listed = Schema.decodeUnknownSync(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
       const wanted = mine(c).map((a) => ({ id: a.request.id, process: a.request.process }));
-      const order = (all: ReadonlyArray<{ readonly id: string }>) => [...all].sort((a, b) => a.id.localeCompare(b.id));
+      const order = (all: ReadonlyArray<{ readonly id: string }>) =>
+        [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
       expect(order(listed.tasks), "G1: tasks.list answers exactly the caller's open tasks, as pointers").toEqual(
         order(wanted),
       );

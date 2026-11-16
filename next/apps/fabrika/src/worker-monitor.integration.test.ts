@@ -15,7 +15,7 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Schema, Scope, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -44,7 +44,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -320,7 +320,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
                     Effect.sync(
                       () =>
                         new WebSocket(
-                          `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                          `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                         ),
                     ),
                     (socket) => Effect.sync(() => socket.close()),
@@ -329,7 +329,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = `m13/${name.split(":")[0]}`;
+              const program = `m13/${Str.split(name, ":")[0]}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
               const started = await Reflect.get(instance.project(PROJECT), "start")(

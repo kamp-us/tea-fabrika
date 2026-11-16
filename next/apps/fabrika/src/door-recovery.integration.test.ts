@@ -29,7 +29,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Schema, Stream, String as Str } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -107,7 +107,7 @@ const key = () => {
   const bytes = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
   const fingerprint = (value: Uint8Array) =>
-    `SHA256:${createHash("sha256").update(value).digest("base64").replace(/=+$/, "")}`;
+    `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(value).digest("base64"))}`;
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -340,8 +340,8 @@ const world = ({ disk }: Disks) => {
     exec: (query, ...args) => {
       if (
         controls.cutRecorded &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        args.some((arg) => typeof arg === "string" && Str.includes('"_tag":"recorded"')(arg))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -350,8 +350,8 @@ const world = ({ disk }: Disks) => {
 
       if (
         controls.cutRetryable &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        args.some((arg) => typeof arg === "string" && Str.includes('"_tag":"retryable"')(arg))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;

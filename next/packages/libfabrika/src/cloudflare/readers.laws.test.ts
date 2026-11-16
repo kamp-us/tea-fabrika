@@ -12,6 +12,7 @@ import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -682,7 +683,9 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
 
 function instanceFixture(config: StartsTest.Fixture) {
   return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
   );
 }
 
@@ -709,7 +712,7 @@ StartsTest.law(
       const row = (n: number) => ({
         span: {
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-          spanId: n.toString(16).padStart(16, "0"),
+          spanId: Str.padStart(16, "0")(n.toString(16)),
           parentSpanId: null,
           name: "settings-cap-fixture",
           kind: "internal" as const,

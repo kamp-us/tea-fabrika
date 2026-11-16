@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -30,7 +31,7 @@ export const PIDS: ReadonlyArray<string> = [
   B,
   W,
   X,
-  ...Array.from({ length: 36 }, (_, n) => `process_0000000000e00800${String(n + 4).padStart(10, "0")}`),
+  ...Array.from({ length: 36 }, (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n + 4))}`),
 ];
 
 export const CODE = { program: "counter", hash: "build-a" };
@@ -107,7 +108,7 @@ export const fcExitReason: fc.Arbitrary<ExitReason> = fc.oneof(
         phase: fc.constantFrom(...PHASES),
         error: fc.oneof(
           fcErrorClass,
-          fc.integer({ min: 1, max: ERROR_CLASS_MAX }).map((n) => "E".repeat(n)),
+          fc.integer({ min: 1, max: ERROR_CLASS_MAX }).map((n) => Str.repeat(n)("E")),
         ),
       },
       { requiredKeys: ["phase"] },
@@ -142,7 +143,7 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
     fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "" })),
     fc
       .integer({ min: ERROR_CLASS_MAX + 1, max: ERROR_CLASS_MAX + 64 })
-      .chain((n) => fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "E".repeat(n) }))),
+      .chain((n) => fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: Str.repeat(n)("E") }))),
     fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: 42 })),
   );
 

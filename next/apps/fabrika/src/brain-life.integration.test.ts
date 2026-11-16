@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, String as Str } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];
@@ -59,12 +59,12 @@ afterEach(async () => {
 });
 
 const tree = (parent: number) => {
-  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" })
-    .split("\n")
-    .flatMap((row) => {
+  const rows = Str.split(execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }), "\n").flatMap(
+    (row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
       return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
-    });
+    },
+  );
   const pids = new Set([parent]);
 
   for (let n = 0; n < rows.length; n++) {
@@ -145,7 +145,7 @@ const launch = async (startupGate = false) => {
   // while the instance still makes its startup calls, and a kill in that gap fails the startup.
   await new Promise<void>((done, fail) => {
     child.stdout!.on("data", () => {
-      if (output.includes('{"ready":')) {
+      if (Str.includes('{"ready":')(output)) {
         done();
       }
     });
@@ -236,7 +236,7 @@ describe("P12 local brain life", () => {
   it("scenario: instance group cleanup still reaches descendants after the leader exits", async () => {
     const s = await launch();
     const rows = tree(s.child.pid!),
-      leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
+      leader = rows.find((row) => row.parent === s.child.pid && Str.includes("--child")(row.command));
     expect(leader).toBeDefined();
     groups.push(leader!.pid);
     const descendants = tree(leader!.pid)

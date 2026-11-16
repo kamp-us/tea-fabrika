@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, Fiber, Schema, String as Str } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -41,7 +41,7 @@ it(
         const pid = resolveName(
           yield* first.read(`processes/${name}`),
           name,
-          (by) => by === "brain" || by.startsWith("brain:"),
+          (by) => by === "brain" || Str.startsWith("brain:")(by),
         );
         expect(pid).not.toBeNull();
         const View = Schema.Struct({ result: Schema.Struct({ rev: Schema.Int, view: checklistView }) });
@@ -65,7 +65,7 @@ it(
         }
 
         const inbox = yield* first.read(`${name}/inbox`);
-        expect(inbox.filter((row) => row.id.startsWith("progress_")).map((row) => row.id)).toEqual([
+        expect(inbox.filter((row) => Str.startsWith("progress_")(row.id)).map((row) => row.id)).toEqual([
           "progress_0",
           "progress_1",
         ]);
@@ -86,7 +86,7 @@ const identity = () => {
   const raw = pair.publicKey.export({ format: "jwk" }).x!;
   const bytes = Buffer.from(raw, "base64url");
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
   return {
     raw,
     fingerprint,
@@ -246,7 +246,7 @@ const launch = async (
     try {
       // The page is served while startup is still flushing the lifecycle outbox.
       // dev.ts emits ready only after that flush. Read history after its ready message.
-      if (output.includes(`{"ready":${JSON.stringify(url)},"build":`) && (await fetch(url)).ok) {
+      if (Str.includes(`{"ready":${JSON.stringify(url)},"build":`)(output) && (await fetch(url)).ok) {
         break;
       }
     } catch {
@@ -317,7 +317,7 @@ class Client {
     this.base = base;
     this.key = key;
     this.tab = tab;
-    this.ws = new WebSocket(`${base.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+    this.ws = new WebSocket(`${Str.replace("http", "ws")(base)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
     sockets.push(this.ws);
     this.ws.addEventListener("open", () => this.wake());
     this.ws.addEventListener("error", () => {
@@ -875,14 +875,14 @@ describe("P12 real dev.ts wire", () => {
     const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
     const connections = savedRows(s.home, "dev_clients").filter((row) =>
-      keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
+      keys.some((key) => Str.includes(encodeURIComponent(key.fingerprint))(String(row.connection))),
     );
     expect(connections).toHaveLength(3);
     const identities = [
       ...keys.flatMap((key) => [key.raw, key.fingerprint]),
       ...connections.map((row) => String(row.client)),
     ];
-    const attributed = (row: unknown) => identities.some((id) => JSON.stringify(row).includes(id));
+    const attributed = (row: unknown) => identities.some((id) => Str.includes(id)(JSON.stringify(row)));
     expect(after.result.spans.filter(attributed)).toEqual([]);
     // A planted unauthorized record with either identity must be found by this same predicate.
     expect(attributed({ attributes: { "fab.client": connections[0]!.client } })).toBe(true);
@@ -946,9 +946,9 @@ describe("P12 real dev.ts wire", () => {
   });
   it("scenario: dev.ts plant: hide the ready line, grant on any POST, or exit 0 when the instance child fails", async () => {
     const s = await instance();
-    const ready = `${JSON.stringify({ ready: s.url }).slice(0, -1)},"build":`;
+    const ready = `${Str.slice(0, -1)(JSON.stringify({ ready: s.url }))},"build":`;
 
-    for (let n = 0; !s.output().includes(ready); n++) {
+    for (let n = 0; !Str.includes(ready)(s.output()); n++) {
       expect(n, `no ready line on dev.ts stdout: ${s.output()}`).toBeLessThan(500);
       await pause();
     }

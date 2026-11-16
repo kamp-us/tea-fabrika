@@ -7,6 +7,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -173,7 +174,7 @@ const world = (
     id,
     envelope: {
       id: Schema.decodeUnknownSync(InputId)(
-        `input_0000000000e008${(controls.steps.length + 1).toString(16).padStart(12, "0")}`,
+        `input_0000000000e008${Str.padStart(12, "0")((controls.steps.length + 1).toString(16))}`,
       ),
       by: person,
       arrivedAt: 0,
@@ -1403,7 +1404,7 @@ describe("P34 runner supervision", () => {
             yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
             w.reopen();
             yield* recover(w);
-            const goodId = (n: number) => `good-${String(n).padStart(3, "0")}`;
+            const goodId = (n: number) => `good-${Str.padStart(3, "0")(String(n))}`;
             const good = (n: number) =>
               ProgramRunner.use((r) => r.msg(w.input(goodId(n), { type: "add", n: 1 }))).pipe(
                 Effect.tap((answer) => Effect.sync(() => expect(answer).toMatchObject({ _tag: "accepted", pos: n }))),
@@ -1412,7 +1413,7 @@ describe("P34 runner supervision", () => {
             yield* good(1);
             const recoveryTables = tables().filter((row) => !processTables.has(String(row.name)));
             expect(recoveryTables.length, "audit must cover real supervision storage").toBeGreaterThan(0);
-            const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
+            const quote = (name: string) => `"${Str.replaceAll('"', '""')(name)}"`;
             w.state.sql.exec("CREATE TEMP TABLE p34_supervision_writes (bytes INTEGER NOT NULL)");
 
             for (const [index, { name }] of recoveryTables.entries()) {
@@ -1645,7 +1646,7 @@ describe("P34 runner supervision", () => {
     {
       generated: Schema.NonEmptyString.check(
         Schema.isMaxLength(200),
-        Schema.makeFilter((s) => s !== "b" && !s.startsWith("good-")),
+        Schema.makeFilter((s) => s !== "b" && !Str.startsWith("good-")(s)),
       ),
     },
     ({ generated }) =>
@@ -2203,7 +2204,9 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
           );
           // L8: the message stays in deletable trace content, never in a lifecycle fact or signal.
           const serialized = JSON.stringify([rows, signals, w.ledger.rows().filter((row) => row._tag === "send")]);
-          expect(serialized.includes(SENTINEL), "no exception message in exit facts or monitor payloads").toBe(false);
+          expect(Str.includes(SENTINEL)(serialized), "no exception message in exit facts or monitor payloads").toBe(
+            false,
+          );
         }
       }).pipe(Effect.provide(TestClock.layer()));
 

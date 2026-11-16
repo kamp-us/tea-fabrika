@@ -9,7 +9,7 @@
 // may still write a `-shm` file, so it opens the copy.
 // edge: Effect SQL has no read-only open of a SQLite file, and the guard reads every cell of one
 import { DatabaseSync } from "node:sqlite";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Schema, String as Str } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -51,7 +51,7 @@ const startsWith = (bytes: Uint8Array, head: Uint8Array) =>
 const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
-  return [...new Set([root, JSON.stringify(root).slice(1, -1), url.href])].map((text) => ({
+  return [...new Set([root, Str.slice(1, -1)(JSON.stringify(root)), url.href])].map((text) => ({
     text,
     bytes: encoder.encode(text),
   }));
@@ -101,14 +101,14 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
 
           for (const { name } of tables) {
             const table = String(name);
-            const rows = db.prepare(`SELECT * FROM "${table.replaceAll('"', '""')}"`).all();
+            const rows = db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(table)}"`).all();
 
             for (const [row, cells] of rows.entries()) {
               for (const [column, value] of Object.entries(cells)) {
                 for (const { root, forms } of roots) {
                   const holds =
                     typeof value === "string"
-                      ? forms.some(({ text }) => value.includes(text))
+                      ? forms.some(({ text }) => Str.includes(text)(value))
                       : value instanceof Uint8Array && forms.some(({ bytes }) => offsets(value, bytes).length > 0);
 
                   if (holds) {

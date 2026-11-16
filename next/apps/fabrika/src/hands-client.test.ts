@@ -58,7 +58,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
+import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer, String as Str } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as RateLimiter from "effect/persistence/RateLimiter";
@@ -95,7 +95,7 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
   return out;
 };
 
-const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) => [...bytes].map((b) => Str.padStart(2, "0")(b.toString(16))).join("");
 
 // A shared test's failures are tagged like product code's, never thrown.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
@@ -123,7 +123,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
   const blob = join(field(text("ssh-ed25519")), field(raw));
   const fingerprint = Effect.fnUntraced(function* (bytes: Uint8Array) {
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", new Uint8Array(bytes)), catch: fail });
-    return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
   const sign = (bytes: Uint8Array) =>
     Effect.tryPromise({ try: () => s.sign("Ed25519", signer, new Uint8Array(bytes)), catch: fail }).pipe(
@@ -269,7 +269,9 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
   );
   const make = (url: string): MemorySocket => {
     // The client dials `<origin>/client/<fingerprint>/<tab>`, as the Worker's door reads it.
-    const [name = "", tab = ""] = (new URL(url).pathname.split("/client/")[1] ?? "").split("/").map(decodeURIComponent);
+    const [name = "", tab = ""] = Str.split(Str.split(new URL(url).pathname, "/client/")[1] ?? "", "/").map(
+      decodeURIComponent,
+    );
     // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
     const client: { id: ConnectionId | null } = { id: null };
     const connected = Effect.suspend(() =>
@@ -290,7 +292,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         attached = a;
       },
       send: (body) => {
-        if (lose.next > 0 && body.startsWith("{") && body.includes('"id"')) {
+        if (lose.next > 0 && Str.startsWith("{")(body) && Str.includes('"id"')(body)) {
           lose.next--;
           return;
         }
@@ -301,7 +303,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       wait: (stream, after, reader) =>
         Effect.gen(function* () {
           const id = yield* connected;
-          const answer = stream.startsWith("target:")
+          const answer = Str.startsWith("target:")(stream)
             ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
@@ -534,7 +536,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       "E1: every ring names the object the sockets live on",
     ).toEqual([]);
 
-    if (d.rung.some((r) => r.stream.startsWith("target:"))) {
+    if (d.rung.some((r) => Str.startsWith("target:")(r.stream))) {
       done.add("ring:target");
     }
 
@@ -545,7 +547,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     const outputs: Record<string, unknown> = {
       frames: d.sockets.map((socket) => socket.sent),
       journal: [...kept.values.entries()],
-      ledger: tables.map((table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),
+      ledger: tables.map((table) => b.sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`)),
       spans: spans.map((span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
@@ -554,7 +556,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
       for (const secret of hands.secrets) {
         for (const form of [secret, encodeURIComponent(secret), Base64.encode(text(secret))]) {
-          expect(encoded.includes(form), `S1: the hands key's private half is not in ${name}`).toBe(false);
+          expect(Str.includes(form)(encoded), `S1: the hands key's private half is not in ${name}`).toBe(false);
         }
       }
     }

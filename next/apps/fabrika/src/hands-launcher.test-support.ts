@@ -10,7 +10,7 @@
 // Every other request goes to the real `Control` untouched. The product's list gains nothing.
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Effect, Option, Schema, String as Str } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -34,7 +34,7 @@ const ControlCall = Schema.fromJsonString(
   Schema.Struct({ target: Schema.Literal("project"), project: Schema.String, ...Call.fields }),
 );
 
-const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => Str.padStart(2, "0")(byte.toString(16))).join("");
 
 export class Project extends RealProject {
   /** Asks the hands of `target` for `git --version`, as a started program would. */
@@ -90,7 +90,7 @@ export class Project extends RealProject {
       tables.map((table) => [
         table,
         sql
-          .exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)
+          .exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`)
           .toArray()
           .map((row) =>
             Object.fromEntries(

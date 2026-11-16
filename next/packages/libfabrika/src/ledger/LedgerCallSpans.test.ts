@@ -1,6 +1,7 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
 import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -16,7 +17,7 @@ const hex = (bytes: number) =>
 const context = fc.record({ traceId: hex(16), spanId: hex(8) });
 
 const cut = (key: string, value: string) =>
-  value.length <= 128 ? { [key]: value } : { [key]: value.slice(0, 128), [`${key}.length`]: value.length };
+  value.length <= 128 ? { [key]: value } : { [key]: Str.slice(0, 128)(value), [`${key}.length`]: value.length };
 
 const capture = () => {
   const spans: Array<Tracer.NativeSpan> = [];

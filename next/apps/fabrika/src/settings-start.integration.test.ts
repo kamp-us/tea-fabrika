@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream, String as Str } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -185,11 +185,11 @@ describe("L13, each process start keeps the exact settings and hash it began wit
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Str.slice(0, 3)(word)}`);
 
 /** Where the files hold the secret: nowhere, at an unknown key, or nested under a declared key. */
 const placed = (port: number, word: string) => {
@@ -528,7 +528,7 @@ describe("L12, startup uses the selected port, and a taken port stops naming ins
       const first = yield* dev(port, { UNRELATED_TOKEN: word });
       const ready = `{"ready":${JSON.stringify(`http://127.0.0.1:${port}`)},"build":`;
 
-      for (let n = 0; !(yield* first.output).includes(ready); n++) {
+      for (let n = 0; !Str.includes(ready)(yield* first.output); n++) {
         expect(yield* first.child.isRunning, `dev.ts stopped: ${yield* first.output}`).toBe(true);
         expect(n, `no ready line on port ${port}: ${yield* first.output}`).toBeLessThan(1200);
         yield* Effect.sleep("100 millis");

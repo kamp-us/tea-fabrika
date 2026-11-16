@@ -41,6 +41,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -144,7 +145,7 @@ const brainFrom = (): From => ({
   build: BUILD,
 });
 
-const inputId = (n: number) => `input_0000000000e008${n.toString(16).padStart(12, "0")}`;
+const inputId = (n: number) => `input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`;
 
 const letter = (n: number, input: unknown): Incoming => ({
   id: `letter-${n}`,
@@ -234,7 +235,7 @@ const letterCut = (sql: Sql, world: World): Sql => {
       if (
         world.fault.letter &&
         /^\s*INSERT\b/i.test(query) &&
-        text.some((p) => p.endsWith("/answer")) &&
+        text.some((p) => Str.endsWith("/answer")(p)) &&
         text.some((p) => /"hands_(ok|err)"/.test(p))
       ) {
         world.fault.letter = false;
@@ -532,11 +533,11 @@ const walk = (
     const register = Effect.fnUntraced(function* () {
       for (const name of names) {
         const inbox = yield* letters(name);
-        const answered = inbox.flatMap((l) => (l.id.endsWith("/answer") ? [l.id.slice(0, -7)] : []));
+        const answered = inbox.flatMap((l) => (Str.endsWith("/answer")(l.id) ? [Str.slice(0, -7)(l.id)] : []));
 
         for (const id of [...(yield* dispatched(name)), ...answered]) {
           if (!world.seen.has(id)) {
-            const [process = "", pos = ""] = id.split("/");
+            const [process = "", pos = ""] = Str.split(id, "/");
             const made = inbox.find((l) => l.pos === Number(pos));
             const replay = made !== undefined && world.sentBy.has(made.id) && world.sentBy.get(made.id) !== process;
             world.seen.set(id, { id, process, name, orphan: false, collectedAtEnd: false, letterAtEnd: false, replay });
@@ -641,7 +642,7 @@ const walk = (
         // each the task's result. A Cmd's id names its process, so a letter for another life's Cmd,
         // placed before or after this life started, never reaches this model.
         const delivered = folded.flatMap((l) =>
-          l.id.startsWith(`${current}/`) && l.id.endsWith("/answer")
+          Str.startsWith(`${current}/`)(l.id) && Str.endsWith("/answer")(l.id)
             ? Option.toArray(Option.map(decodeLetter(l.m), (body) => ({ id: l.id, body })))
             : [],
         );
@@ -653,7 +654,7 @@ const walk = (
         );
 
         for (const { id, body } of delivered) {
-          const d = world.seen.get(id.slice(0, -"/answer".length));
+          const d = world.seen.get(Str.slice(0, -"/answer".length)(id));
 
           if (body.type === "hands_ok") {
             // The letter carries the typed result the hands saved, and the Cmd it answers.
