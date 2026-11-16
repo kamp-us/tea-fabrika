@@ -33,10 +33,7 @@
 // Plants: bind the Connection class (S1) or the Process class (S2) under another class name in the
 // stack. For the table: a saved name under another process id, or one more boot entry than
 // `booted` names.
-// edge: crypto makes the fixture's own test key and signs with it; no person's key is read
-import { createHash, createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
-import { resolve } from "node:path";
 // edge: workerd writes a Durable Object's key-value rows with V8's serializer, and only node:v8 reads it
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
@@ -46,15 +43,21 @@ import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { Base64Url } from "effect/encoding";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
+import { personKeyFrom } from "./person-key.test-support.ts";
 import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { startupFixture } from "./record-wire.test-support.ts";
 
-const ROOT = resolve(import.meta.dirname, "../../../..");
+const { ROOT, FIXTURE } = Effect.runSync(
+  Path.Path.use((path) => {
+    const root = path.resolve(import.meta.dirname, "../../../..");
 
-const FIXTURE = resolve(ROOT, "fixtures/next/port-home");
+    return Effect.succeed({ ROOT: root, FIXTURE: path.resolve(root, "fixtures/next/port-home") });
+  }).pipe(Effect.provide(Path.layer)),
+);
 
 const NAME = "port-home";
 
@@ -91,53 +94,9 @@ const TestKey = Schema.Struct({
 /** What the build before the slice answered, with the founding values its home was started with. */
 const Saved = Schema.fromJsonString(Schema.Struct({ founding: Founding, key: TestKey, seen: Seen }));
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-/** A client identity from the test key: its raw key, its fingerprint and an SSH signature of a text. */
-const identity = (key: typeof TestKey.Type) => {
-  const bytes = Buffer.from(key.jwk.x, "base64url");
-  const privateKey = createPrivateKey({ key: { ...key.jwk }, format: "jwk" });
-
-  return {
-    raw: key.jwk.x,
-    line: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-      const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
+/** A client identity from the test key: an Ed25519 JWK's private half `d` is the key's seed. */
+const identity = (key: typeof TestKey.Type) =>
+  Effect.fromResult(Base64Url.decode(key.jwk.d)).pipe(Effect.orDie, Effect.flatMap(personKeyFrom));
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Finite),
@@ -158,7 +117,7 @@ const press = Effect.fnUntraced(function* (
   letter: string,
   m: { readonly type: string; readonly name?: string },
 ) {
-  const id = identity(key);
+  const id = yield* identity(key);
   const url: string = instance.url;
   const tab = `port-home-${letter}`;
   const frames: Array<typeof Frame.Type> = [];
@@ -217,7 +176,7 @@ const press = Effect.fnUntraced(function* (
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: id.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* id.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
 
   expect(hello.error, "the test key is admitted").toBeUndefined();
@@ -308,7 +267,7 @@ const open = Effect.fnUntraced(function* <A, E, R>(
       }
     }),
   );
-  const instance = yield* localInstance(built, startupFixture({ home, name: NAME, ...founding, port: at.port }));
+  const instance = yield* localInstance(built, yield* startupFixture({ home, name: NAME, ...founding, port: at.port }));
 
   return yield* use(instance, dists, built);
 }, Effect.scoped);
@@ -439,16 +398,18 @@ const written = Effect.gen(function* () {
   const path = yield* Path.Path;
   // A test key made fresh for this fixture, saved whole so a law can sign in with it. It founds
   // only this saved home and is never read from or written to anyone's machine.
-  const jwk = generateKeyPairSync("ed25519").privateKey.export({ format: "jwk" });
+  // An Ed25519 JWK's `d` is the key's 32-byte seed and `x` its public half (RFC 8037).
+  const seed = yield* SecureRandom.SecureRandom.use((random) => random.randomBytes(32));
+  const made = yield* personKeyFrom(seed);
 
-  const key = yield* Schema.decodeUnknownEffect(TestKey)({
+  const key = yield* Schema.decodeEffect(TestKey)({
     note: "test key: made fresh for this fixture by its writer in port-home.laws.test.ts; it guards nothing",
-    jwk: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, d: jwk.d },
+    jwk: { kty: "OKP", crv: "Ed25519", x: made.raw, d: Base64Url.encode(seed) },
   });
 
   const founding: typeof Founding.Type = {
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-    founder: identity(key).line,
+    founder: made.line,
     window: key.jwk.x,
   };
 

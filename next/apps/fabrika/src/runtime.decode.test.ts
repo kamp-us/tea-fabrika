@@ -66,7 +66,7 @@ StartsTest.law(
 /** The `inputs.name` callback, as the runtime composes it. */
 const composedName = async (): Promise<(m: unknown) => string | undefined> => {
   const ctx: unknown = { id: { name: "project-a" } };
-  const input = RecordWireTest.settingsFixture(settings);
+  const input = await Effect.runPromise(RecordWireTest.settingsFixture(settings));
   const env = { INSTANCE: JSON.stringify(input) };
   const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
   await runtime.runPromise(Effect.void);

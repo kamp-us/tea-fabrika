@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
 import * as fc from "fast-check";
@@ -207,15 +206,15 @@ const objectState = (name: unknown, saved: unknown = undefined): DurableObjectSt
     },
   });
 
+const INSTANCE = await Effect.runPromise(StartsTest.fixture({ name: "p", port: 8787 }));
+
 const env: Env = fake({
-  INSTANCE: JSON.stringify(instanceFixture({ name: "p", port: 8787 })),
+  INSTANCE: JSON.stringify(INSTANCE),
   PROJECT: {
     getByName: () =>
       new Proxy(rejecting<object>(new Error("no project in this law")), {
         get: (target, key) =>
-          key === "settingsStart"
-            ? async () => StartsTest.reply(instanceFixture({ name: "p", port: 8787 }))
-            : Reflect.get(target, key),
+          key === "settingsStart" ? async () => StartsTest.reply(INSTANCE) : Reflect.get(target, key),
       }),
   },
   RECORD: { getByName: () => rejecting(new Error("no record in this law")) },
@@ -225,7 +224,7 @@ const env: Env = fake({
   LOADER: loader(() => Promise.resolve(null)),
 });
 
-const config: BrainOptions = fake(instanceFixture({ name: "p", port: 8787 }));
+const config: BrainOptions = fake(INSTANCE);
 
 describe("T695, the object adapters keep what failed", () => {
   // C3, record.ts:22. Plant: `Effect.mapError(() => new SinkError({ reason: "bad_row", held: 0 }))`.
@@ -357,9 +356,3 @@ describe("T695, the public route keeps what failed", () => {
       }),
   );
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}

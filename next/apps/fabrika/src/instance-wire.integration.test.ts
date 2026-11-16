@@ -2,26 +2,44 @@
 // Every wire law starts the real dev.ts, never a raw Miniflare substitute.
 // CLI fixture contract: --name, --person, --founder (public SSH line), --window (public raw key),
 // and the plan's --port. These are bootstrap settings, never a public signing capability.
-import { spawn, type ChildProcess } from "node:child_process";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { request } from "node:http";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { NodeHttpClient, NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, FileSystem, Fiber, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
+import { HttpClient } from "effect/http";
+import { ChildProcess } from "effect/process";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
+import { type Child, start } from "./dev-child.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
-const APP = resolve(import.meta.dirname, "..");
+/** One step on the real disk, through Effect's FileSystem and Path. */
+const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* use(yield* FileSystem.FileSystem, yield* Path.Path);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+const path = await disk((_fs, path) => Effect.succeed(path));
+
+const APP = path.resolve(import.meta.dirname, "..");
+
+/** The SHA-256 of a text in hex, as the brain writes an ETag. */
+const hash = (text: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -80,74 +98,31 @@ it(
     ),
 );
 
-const field = (a: string | Buffer) => {
-  const bytes = typeof a === "string" ? Buffer.from(a) : a;
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(bytes.length);
-
-  return Buffer.concat([size, bytes]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x!;
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
-
-  return {
-    raw,
-    fingerprint,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    proof: (text: string) => {
-      const digest = createHash("sha512").update(text).digest();
-
-      const signed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(digest),
-      ]);
-
-      const signature = Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, pair.privateKey))]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(signature),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
 
 // Node's fetch drops a custom Host header (a forbidden header in the Fetch spec), so the
-// wrong-host check sends its request with node:http, which sends the header as given.
+// wrong-host check sends its request with Effect's node:http client, which sends the header as given.
 const statusWithHost = (url: string, host: string) =>
-  new Promise<number>((done, fail) => {
-    const sent = request(url, { headers: { host } }, (response) => {
-      response.resume();
-      done(response.statusCode ?? 0);
-    });
+  Effect.runPromise(
+    HttpClient.get(url, { headers: { host } }).pipe(
+      Effect.map((response) => response.status),
+      Effect.provide(NodeHttpClient.layerNodeHttp),
+    ),
+  );
 
-    sent.once("error", fail);
-    sent.end();
-  });
+/** The environment a dev.ts child runs with: this one's, with its own home and no key or foreground. */
+const devEnv = (home: string) => {
+  const env: Record<string, string | undefined> = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
+  delete env.TYPESAFE_API_KEY;
+  delete env.FABRIKA_FOREGROUND;
+  delete env.CLOUDFLARE_API_TOKEN;
+  delete env.FABRIKA_GATEWAY_LIMIT;
+  delete env.FABRIKA_GATEWAY_WINDOW;
 
-const children: Array<ChildProcess> = [];
+  return env;
+};
+
+const children: Array<Child> = [];
 
 const homes: Array<string> = [];
 
@@ -157,22 +132,17 @@ const sockets: Array<WebSocket> = [];
 
 // What one instance holds: its dev.ts children, its homes and its held ports. The older cases share one
 // set that `afterEach` gives back; a case written with `Effect.acquireRelease` owns its own.
-type Held = { children: Array<ChildProcess>; homes: Array<string>; ports: Array<Effect.Effect<void>> };
+type Held = { children: Array<Child>; homes: Array<string>; ports: Array<Effect.Effect<void>> };
 
 const shared: Held = { children, homes, ports };
 
 const giveBack = async (held: Held) => {
   for (const child of held.children.splice(0)) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      continue;
-    }
-
-    child.kill("SIGTERM");
-    await new Promise<void>((done) => child.once("exit", () => done()));
+    await Effect.runPromise(child.stop);
   }
 
   for (const h of held.homes.splice(0)) {
-    rmSync(h, { recursive: true, force: true });
+    await disk((fs) => fs.remove(h, { recursive: true, force: true }));
   }
 
   // Last, so the pair stays held until every instance that used its port is gone.
@@ -196,7 +166,7 @@ const unusedPort = async (held: Held) => {
   return port.port;
 };
 
-type Saved = { key: ReturnType<typeof identity>; home: string; port: number };
+type Saved = { key: PersonKey; home: string; port: number };
 
 const launch = async (
   held: Held,
@@ -204,18 +174,12 @@ const launch = async (
   rateLimit = { limit: 100_000, window: 60_000 },
   source: "flags" | "env" | "file" = "flags",
 ) => {
-  readFileSync(join(APP, "dev.ts"), "utf8");
-  const key = saved?.key ?? identity();
-  const home = saved?.home ?? mkdtempSync(join(tmpdir(), "p12-w-"));
+  const key = saved?.key ?? (await Effect.runPromise(personKey));
+  const home = saved?.home ?? (await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" })));
   held.homes.push(home);
   const port = saved?.port ?? (await unusedPort(held));
   const url = `http://127.0.0.1:${port}`;
-  const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
-  delete env.TYPESAFE_API_KEY;
-  delete env.FABRIKA_FOREGROUND;
-  delete env.CLOUDFLARE_API_TOKEN;
-  delete env.FABRIKA_GATEWAY_LIMIT;
-  delete env.FABRIKA_GATEWAY_WINDOW;
+  const env = devEnv(home);
 
   if (source === "env") {
     env.FABRIKA_GATEWAY_LIMIT = String(rateLimit.limit);
@@ -223,41 +187,48 @@ const launch = async (
   }
 
   if (source === "file") {
-    writeFileSync(join(home, "fabrika.toml"), `[gateway]\nlimit = ${rateLimit.limit}\nwindow = ${rateLimit.window}\n`);
+    await disk((fs) =>
+      fs.writeFileString(
+        path.join(home, "fabrika.toml"),
+        `[gateway]\nlimit = ${rateLimit.limit}\nwindow = ${rateLimit.window}\n`,
+      ),
+    );
   }
 
-  const child = spawn(
-    process.execPath,
-    [
-      join(APP, "dev.ts"),
-      "--port",
-      String(port),
-      "--name",
-      "p12-wire",
-      "--person",
-      PERSON,
-      "--founder",
-      key.line,
-      "--window",
-      key.raw,
-      ...(source === "flags"
-        ? ["--gateway.limit", String(rateLimit.limit), "--gateway.window", String(rateLimit.window)]
-        : []),
-    ],
-    { cwd: APP, env, stdio: ["ignore", "pipe", "pipe"] },
+  let output = "";
+
+  const child = await Effect.runPromise(
+    start(
+      ChildProcess.make(
+        process.execPath,
+        [
+          path.join(APP, "dev.ts"),
+          "--port",
+          String(port),
+          "--name",
+          "p12-wire",
+          "--person",
+          PERSON,
+          "--founder",
+          key.line,
+          "--window",
+          key.raw,
+          ...(source === "flags"
+            ? ["--gateway.limit", String(rateLimit.limit), "--gateway.window", String(rateLimit.window)]
+            : []),
+        ],
+        { cwd: APP, env, extendEnv: false, stdin: "ignore" },
+      ),
+      (text) => {
+        output += text;
+      },
+    ),
   );
 
   held.children.push(child);
-  let output = "";
-  child.stdout!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
-  child.stderr!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
 
   for (;;) {
-    if (child.exitCode !== null) {
+    if (!(await Effect.runPromise(child.running))) {
       throw new Error(`P12 dev.ts did not start: ${output}`);
     }
 
@@ -281,35 +252,40 @@ const instance = (saved?: Saved) => launch(shared, saved);
 
 // Read only the named public metadata tables. Never inspect general storage or key rows. The crash cases
 // read two more rows through `killedMoment`: the name's `process_recovery` row and its object's `activity` row.
-const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") => {
-  const rows: Array<Record<string, unknown>> = [];
+const savedRows = (home: string, table: "gateway_bindings" | "dev_clients") =>
+  disk((fs, path) =>
+    Effect.gen(function* () {
+      const rows: Array<Record<string, unknown>> = [];
 
-  for (const entry of readdirSync(home, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile() || !/\.(sqlite|db)$/.test(entry.name)) {
-      continue;
-    }
+      for (const name of yield* fs.readDirectory(home, { recursive: true })) {
+        const file = path.join(home, name);
 
-    // The instance is running, so its own writes may hold the lock this read waits for.
-    const read = instanceDatabase(join(entry.parentPath, entry.name), { readOnly: true }).pipe(
-      Effect.map((db) =>
-        db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)
-          ? db
-              .prepare(
-                table === "gateway_bindings"
-                  ? "SELECT letter,value FROM gateway_bindings"
-                  : "SELECT client,connection FROM dev_clients",
-              )
-              .all()
-          : [],
-      ),
-      Effect.scoped,
-    );
+        if (!/\.(sqlite|db)$/.test(name) || (yield* fs.stat(file)).type !== "File") {
+          continue;
+        }
 
-    rows.push(...Effect.runSync(read));
-  }
+        // The instance is running, so its own writes may hold the lock this read waits for.
+        const read = instanceDatabase(file, { readOnly: true }).pipe(
+          Effect.map((db) =>
+            db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table)
+              ? db
+                  .prepare(
+                    table === "gateway_bindings"
+                      ? "SELECT letter,value FROM gateway_bindings"
+                      : "SELECT client,connection FROM dev_clients",
+                  )
+                  .all()
+              : [],
+          ),
+          Effect.scoped,
+        );
 
-  return rows;
-};
+        rows.push(...(yield* read));
+      }
+
+      return rows;
+    }),
+  );
 
 type Frame = {
   id?: string | number;
@@ -329,10 +305,10 @@ class Client {
   private readonly waiting: Array<() => void> = [];
   private readonly ws: WebSocket;
   private readonly base: string;
-  private readonly key: ReturnType<typeof identity>;
+  private readonly key: PersonKey;
   private readonly tab: string;
 
-  constructor(base: string, key: ReturnType<typeof identity>, tab: string) {
+  constructor(base: string, key: PersonKey, tab: string) {
     this.base = base;
     this.key = key;
     this.tab = tab;
@@ -389,20 +365,24 @@ class Client {
 
     return challenge.pipe(
       Effect.flatMap((n) =>
-        Effect.promise(() =>
-          this.call("initialize", {
-            versions: [1],
-            has: ["seal"],
-            ping: "30s",
-            key: this.key.raw,
-            tab: this.tab,
-            nonce: n,
-            platform: "headless",
-            os: "linux",
-            sentAt: SENT,
-            signed: this.key.proof(`fabrika-hello\n${this.base}\n${this.tab}\n${n}`),
-            ...overrides,
-          }),
+        this.key.proof(`fabrika-hello\n${this.base}\n${this.tab}\n${n}`).pipe(
+          Effect.flatMap((signed) =>
+            Effect.promise(() =>
+              this.call("initialize", {
+                versions: [1],
+                has: ["seal"],
+                ping: "30s",
+                key: this.key.raw,
+                tab: this.tab,
+                nonce: n,
+                platform: "headless",
+                os: "linux",
+                sentAt: SENT,
+                signed,
+                ...overrides,
+              }),
+            ),
+          ),
         ),
       ),
     );
@@ -765,8 +745,7 @@ describe("P12 real dev.ts wire", () => {
     const starts = (await read(c, "gateway/brain")).filter((row) => row._tag === "started");
     expect(starts).toHaveLength(1);
     c.close();
-    first.child.kill("SIGTERM");
-    await new Promise<void>((done) => first.child.once("exit", () => done()));
+    await Effect.runPromise(first.child.stop);
 
     const second = await instance(first),
       reopened = await connected(second, "reopened");
@@ -789,7 +768,7 @@ describe("P12 real dev.ts wire", () => {
     expect(rows[0]).toMatchObject({ id: "once", rev: first.rev, pos: first.pos });
     expect((await view(c, pid)).view).toEqual({ count: 1 });
 
-    const otherKey = identity(),
+    const otherKey = await Effect.runPromise(personKey),
       other = new Client(s.url, otherKey, "other-key");
 
     expect((await Effect.runPromise(other.hello())).error?.data?.reason).toBe("not_granted");
@@ -816,7 +795,7 @@ describe("P12 real dev.ts wire", () => {
     const granted = await fetch(`${s.url}/grant`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, armored: s.key.proof(text) }),
+      body: JSON.stringify({ text, armored: await Effect.runPromise(s.key.proof(text)) }),
     });
 
     expect(granted.ok).toBe(true);
@@ -925,9 +904,9 @@ describe("P12 real dev.ts wire", () => {
     const before = await read(c, "gateway/inputs");
     const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
 
-    const strangerKey = identity(),
-      unknownKey = identity(),
-      badKey = identity();
+    const strangerKey = await Effect.runPromise(personKey),
+      unknownKey = await Effect.runPromise(personKey),
+      badKey = await Effect.runPromise(personKey);
 
     const stranger = new Client(s.url, strangerKey, "pre-hello");
     await stranger.challenge();
@@ -947,7 +926,7 @@ describe("P12 real dev.ts wire", () => {
     const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
 
-    const connections = savedRows(s.home, "dev_clients").filter((row) =>
+    const connections = (await savedRows(s.home, "dev_clients")).filter((row) =>
       keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
     );
 
@@ -974,7 +953,7 @@ describe("P12 real dev.ts wire", () => {
     const seen = placing(await send(c, pid, "seed")).rev;
     expect(seen).toBeGreaterThan(0);
     const accepted = placing(await send(c, pid, "metadata", { type: "inc" }, seen));
-    const original = savedRows(s.home, "gateway_bindings").find((row) => row.letter === `${pid}/metadata`);
+    const original = (await savedRows(s.home, "gateway_bindings")).find((row) => row.letter === `${pid}/metadata`);
     expect(original).toBeDefined();
     const binding = JSON.parse(String(original!.value));
     // P17a saves the completed answer before replying; a retry reuses this settled binding.
@@ -987,7 +966,9 @@ describe("P12 real dev.ts wire", () => {
     });
     await send(c, pid, "later", { type: "dec" });
     expect(placing(await send(c, pid, "metadata", { type: "inc" }, seen))).toEqual(accepted);
-    expect(savedRows(s.home, "gateway_bindings").find((row) => row.letter === `${pid}/metadata`)).toEqual(original);
+    expect((await savedRows(s.home, "gateway_bindings")).find((row) => row.letter === `${pid}/metadata`)).toEqual(
+      original,
+    );
     const rows = await read(c, "counter:1/inbox");
     const row = rows.find((r) => r.id === "metadata")!;
     expect(row).toMatchObject({
@@ -1041,46 +1022,49 @@ describe("P12 real dev.ts wire", () => {
     expect(root.headers.get("content-type")).toBe("text/html; charset=utf-8");
     const page = await root.text();
     expect(page, "/ is the tab's page").toContain('<script type="module" src="/window.js"></script>');
-    expect(root.headers.get("etag")).toBe(`"${createHash("sha256").update(page).digest("hex")}"`);
+    expect(root.headers.get("etag")).toBe(`"${await hash(page)}"`);
     const script = await fetch(`${s.url}/window.js`);
     expect(script.status).toBe(200);
     expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
     const scriptBody = await script.text();
-    expect(script.headers.get("etag")).toBe(`"${createHash("sha256").update(scriptBody).digest("hex")}"`);
+    const scriptHash = await hash(scriptBody);
+    expect(script.headers.get("etag")).toBe(`"${scriptHash}"`);
     expect(page, "the page names the script it loads by its build").toContain(
-      `<meta name="fabrika-build" content="${createHash("sha256").update(scriptBody).digest("hex")}">`,
+      `<meta name="fabrika-build" content="${scriptHash}">`,
     );
     const posted = await fetch(`${s.url}/elsewhere`, { method: "POST", body: "{}" });
     expect(await posted.text()).toBe("fabrika");
-    const home = mkdtempSync(join(tmpdir(), "p12-w-"));
+    const home = await disk((fs) => fs.makeTempDirectory({ prefix: "p12-w-" }));
     homes.push(home);
-    const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: home, DO_NOT_TRACK: "1" };
-    delete env.TYPESAFE_API_KEY;
-    delete env.FABRIKA_FOREGROUND;
-    delete env.CLOUDFLARE_API_TOKEN;
-    const key = identity();
+    const key = await Effect.runPromise(personKey);
 
     // Port 0 is outside the settings range, so the instance child fails before it builds.
-    const failed = spawn(
-      process.execPath,
-      [
-        join(APP, "dev.ts"),
-        "--port",
-        "0",
-        "--name",
-        "p12-wire",
-        "--person",
-        PERSON,
-        "--founder",
-        key.line,
-        "--window",
-        key.raw,
-      ],
-      { cwd: APP, env, stdio: ["ignore", "ignore", "ignore"] },
+    const code = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const failed = yield* ChildProcess.make(
+            process.execPath,
+            [
+              path.join(APP, "dev.ts"),
+              "--port",
+              "0",
+              "--name",
+              "p12-wire",
+              "--person",
+              PERSON,
+              "--founder",
+              key.line,
+              "--window",
+              key.raw,
+            ],
+            { cwd: APP, env: devEnv(home), extendEnv: false, stdin: "ignore", stdout: "ignore", stderr: "ignore" },
+          );
+
+          return yield* failed.exitCode;
+        }),
+      ).pipe(Effect.provide(NodeServices.layer)),
     );
 
-    children.push(failed);
-    const code = await new Promise<number | null>((done) => failed.once("exit", (c) => done(c)));
     expect(code).not.toBe(0);
   });
   it.effect(
@@ -1104,7 +1088,7 @@ describe("P12 real dev.ts wire", () => {
             sendPlaced(c, pid, `kill-${n}`).pipe(Effect.tap((p) => Effect.sync(() => accepted.set(`kill-${n}`, p)))),
           { concurrency: "unbounded" },
         );
-        yield* killWorkerd(s.child.pid!);
+        yield* killWorkerd(s.child.pid);
         const resumed = yield* reconnected(s, "after-crash");
         // Every answer was in before the kill, so the rows the wake reads say no step was cut.
         expect(yield* killedMoment(s.home, "counter:1", pid)).toEqual({ _tag: "between" });
@@ -1160,7 +1144,7 @@ describe("P12 real dev.ts wire", () => {
         );
 
         yield* Deferred.await(firstAnswer);
-        yield* killWorkerd(s.child.pid!);
+        yield* killWorkerd(s.child.pid);
         const before = yield* Effect.forEach(fibers, Fiber.join, { concurrency: "unbounded" });
         const resumed = yield* reconnected(s, "after-crash");
         // The old workerd is gone and nothing has called the object yet: read where the kill landed, from the

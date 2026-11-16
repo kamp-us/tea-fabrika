@@ -1,5 +1,4 @@
 // Ticket 866, next/. Exercise the real Cloudflare Alarm through processRuntime.
-import { createHash } from "node:crypto";
 import {
   DurableObjectState as ObjectState,
   fromDurableObjectState,
@@ -73,9 +72,7 @@ const checkAlarmTime = (at: number) => {
 
 // The process records its start with the Project object before it runs (T753), so the law's
 // environment carries a start's input, and its Project answers that one call and no other.
-const start = StartsTest.fixture({ name: "alarm-project", port: 8787 }, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-);
+const start = await Effect.runPromise(StartsTest.fixture({ name: "alarm-project", port: 8787 }));
 
 const categories = ["zero", "negative", "past", "now", "future", "far", "clear"] as const;
 type Move = (typeof categories)[number] | "replace" | "repeat" | "advance" | "clear-again";

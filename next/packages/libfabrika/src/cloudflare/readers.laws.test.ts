@@ -1,7 +1,6 @@
 // P12, next/. Saved and wire values enter the real services over in-memory platform handles.
 // The settings entry flows (L10, L16) are in entry-flows.laws.test.ts, split out unchanged so each
 // file stays under about 60 s on a CI leg.
-import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   DurableObjectState as ObjectState,
@@ -11,7 +10,8 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime
 import { Recorder, runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Cause, Effect, Exit, Layer, Option, Redacted, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import { Digest, SecureRandom, Signature } from "effect/crypto";
+import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -70,14 +70,26 @@ vi.mock("effect", async (original) => {
   return { ...actual, Effect: { ...actual.Effect } };
 });
 
-const config = instanceFixture({
-  name: "parse-test",
-  person: "person-test",
-  founder: "public-test",
-  window: null,
-  port: 18787,
-  build: "test",
-});
+const config = await Effect.runPromise(
+  StartsTest.fixture({
+    name: "parse-test",
+    person: "person-test",
+    founder: "public-test",
+    window: null,
+    port: 18787,
+    build: "test",
+  }),
+);
+
+/** A fresh Ed25519 public key in JWK's `x` form (base64url), from Effect's Signature on WebCrypto. */
+const freshPublicKey = Signature.Signature.use((signature) => signature.generateKeyPair(Signature.ed25519)).pipe(
+  Effect.flatMap(({ publicKey }) => Signature.toBytes(publicKey)),
+  Effect.map(Base64Url.encode),
+  Effect.provide(Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto))),
+);
+
+/** SHA-256 of no bytes (FIPS 180-2's empty-message digest). */
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 const malformed = (schema: Schema.Top) => fc.jsonValue().filter((value) => !Schema.is(schema)(value));
 
@@ -186,14 +198,12 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
               }),
             };
 
-            const publicKey = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x;
-
             const local = {
               ...config,
               name: "settings-law",
               port: recipe.port,
               person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-              founder: publicKey ?? "missing-public-key",
+              founder: yield* freshPublicKey,
               window: config.founding.window,
             };
 
@@ -581,8 +591,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
         );
 
         try {
-          const args: Array<unknown> =
-            field === "head key" ? [raw] : ["key", [], createHash("sha256").update("").digest("hex")];
+          const args: Array<unknown> = field === "head key" ? [raw] : ["key", [], EMPTY_SHA256];
 
           if (field === "put key") {
             args[0] = raw;
@@ -731,12 +740,6 @@ it("Connection rejects missing or malformed URL segments with a typed error", as
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["/ws"], ["/ws/%/tab"], ["/ws/key/%"]] },
   );
 });
-
-function instanceFixture(config: StartsTest.Fixture) {
-  return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
-}
 
 StartsTest.law(
   "T753 L19 the legacy cap, fallback, resend and rollover behavior remain intact",

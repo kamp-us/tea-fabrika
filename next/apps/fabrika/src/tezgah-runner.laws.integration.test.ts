@@ -18,7 +18,6 @@
 //   `processes/tezgah:<person>` once admitted, with the person from the door's admission, opens
 //   tezgah's view, attaches its workspace itself, and shows the workspace's tiles, each tile's
 //   process view opened, in place of a fixed list.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
@@ -33,6 +32,7 @@ import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -61,56 +61,8 @@ const typeId = (prefix: string, n: number): string => {
   return `${prefix}_${suffix}`;
 };
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
 /** A fresh SSH identity: its public line and raw key, its fingerprint, its door proof and its signer. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    sign: (data: Uint8Array) => new Uint8Array(sign(null, data, pair.privateKey)),
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
-
-      return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = PersonKey;
 
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Record<string, any>;
@@ -183,7 +135,7 @@ const door = async (instance: Instance, key: Key, tab: string) => {
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+    signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
   });
 
   expect(hello.error, "the founder's hello is admitted").toBeUndefined();
@@ -222,11 +174,11 @@ const startInstance = Effect.fnUntraced(
     yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
     const built = yield* build({ out: path.join(home, "dist") });
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    const key = identity();
+    const key = yield* personKey;
 
     const instance: Instance = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: PROJECT,
         person: PERSON,
@@ -331,7 +283,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             raw: key.raw,
             line: Schema.decodeSync(KeyLine)(key.line),
             found: "reused",
-            sign: (bytes) => Effect.sync(() => key.sign(bytes)),
+            sign: key.sign,
           };
 
           const window = windowMachineFor({

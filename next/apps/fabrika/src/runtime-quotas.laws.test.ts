@@ -3,7 +3,6 @@
 // the loader's transport are supplied here; no quota decision is made in this file.
 // The accounts are read with the public quota services from the two stores the objects wrote, and
 // the oracle is the committed entries themselves, measured with the ledger's own encoder.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 // edge: Effect has no synchronous SQLite handle for the object stores
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
@@ -35,9 +34,11 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
+import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -64,48 +65,6 @@ const ACKS: ReadonlyArray<string> = NAMES.map(acked);
 const programFor = (name: string) => (name.startsWith("alpha:") ? "quota/alpha" : "quota/beta");
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 const live = TestClock.withLive;
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-  return Buffer.concat([size, body]);
-};
-
-/** A fresh SSH identity for this test's own door: its key, its fingerprint and a signer for the hello. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-      const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
-      return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 // One program under two identities. It counts `inc`, throws on `throw`, on `tell` mails an `inc`
 // to another registered name, and on `ask` asks the hands for a task; `told` and `failed` record
@@ -170,12 +129,19 @@ const worker = (name: string) => ({
 const View = Schema.Struct({ view: Model });
 
 /** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
-const counterCode = built("counter");
-const checklistCode = built("checklist");
-const tezgahCode = built("tezgah");
-const alphaCode = built("alpha");
-const betaCode = built("beta");
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
+
+const counterCode = await built("counter");
+const checklistCode = await built("checklist");
+const tezgahCode = await built("tezgah");
+const alphaCode = await built("alpha");
+const betaCode = await built("beta");
 
 /** A recovery allowance as the recovery setting's value holds it once decoded. */
 const allowance = (limits: Limits["recovery"]["project"]) => ({
@@ -243,9 +209,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   table.programs["fabrika/tezgah"] = tezgahCode;
   table.programs["quota/alpha"] = alphaCode;
   table.programs["quota/beta"] = betaCode;
-  const key = identity();
+  const key = yield* personKey;
   // A hands key the person named, which never connects: a hands Cmd's task stays waiting.
-  const handsKey = identity();
+  const handsKey = yield* personKey;
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
@@ -282,23 +248,22 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     );
   /** The start's whole input, as `INSTANCE` carries it, with these limits under its own start id. */
   const instance = (values: Limits, start?: string) =>
-    JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: PROJECT,
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "quota-laws",
-        ...(start === undefined ? {} : { start }),
-        mail: { grants: everyone },
-        limits: { recordBytes: 1_000_000_000 },
-        values: { ...declared(values), handsTarget: handsKey.fingerprint },
-      }),
-    );
+    RecordWireTest.settingsFixture({
+      name: PROJECT,
+      person: PERSON,
+      founder: key.line,
+      window: key.raw,
+      port: 18787,
+      build: "quota-laws",
+      ...(start === undefined ? {} : { start }),
+      mail: { grants: everyone },
+      limits: { recordBytes: 1_000_000_000 },
+      values: { ...declared(values), handsTarget: handsKey.fingerprint },
+    }).pipe(Effect.map((input) => JSON.stringify(input)));
+  const started = yield* instance(limits);
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
   const env = {
-    INSTANCE: instance(limits),
+    INSTANCE: started,
     // Every Project RPC a Process makes reaches the real service, with the two typed replies the class adds.
     PROJECT: {
       getByName: () =>
@@ -509,6 +474,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   const client = yield* project((p) => p.connect());
   const nonce = yield* project((p) => p.challenge(client));
   const tab = "quota-laws";
+  const signed = yield* key.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`);
   expect(
     yield* project((p) =>
       p.initialize(
@@ -523,7 +489,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+          signed,
         },
         { url: URL, tab, name: key.fingerprint },
       ),
@@ -657,7 +623,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     /** A platform restart into a new start whose program storage wall is the decided ceiling. */
     widen: Effect.gen(function* () {
       yield* halt;
-      Reflect.set(env, "INSTANCE", instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened"));
+      Reflect.set(env, "INSTANCE", yield* instance({ ...limits, storage: 1_000_000_000 }, "quota-laws-widened"));
       yield* boot;
       yield* project((p) => p.info);
     }),

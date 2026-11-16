@@ -1,16 +1,13 @@
 // Ticket 402 (P34 on the Worker path), next/. Outside only: real workerd, sockets, object storage,
 // alarms and the private local instance capability, set up the way P12's instance-records test is.
 // No directly constructed runner and no raw Miniflare stands in for the instance.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
@@ -31,57 +28,7 @@ const LIMIT = 2;
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = PersonKey;
 
 // A small program that throws a TypeError on "throw" and counts on "inc". It declares
 // maxDeliveries, so the box's declaration must carry the program's own limit.
@@ -108,32 +55,30 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
 
-  // A short home: a socket path has a 103-byte limit.
-  const home = mkdtempSync(join(tmpdir(), "p34w-")),
-    key = identity();
-
   const previousHome = process.env.FABRIKA_HOME;
-  process.env.FABRIKA_HOME = home;
 
   try {
-    symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-    const poison = join(home, "poison.ts");
-    writeFileSync(poison, poisonSource);
-
-    const built = await Effect.runPromise(
-      build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(Effect.provide(NodeServices.layer)),
-    );
-
-    const code = built.programs[PROGRAM];
-    expect(code, "the fixture program must be built").toBeDefined();
     await Effect.runPromise(
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        // A short home: a socket path has a 103-byte limit. It is acquired first, so it goes last:
+        // localInstance closes with its scope before its durable files go.
+        const home = yield* fs.makeTempDirectoryScoped({ prefix: "p34w-" });
+        const key = yield* personKey;
+        process.env.FABRIKA_HOME = home;
+        yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+        const poison = path.join(home, "poison.ts");
+        yield* fs.writeFileString(poison, poisonSource);
+        const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: poison } });
+        const code = built.programs[PROGRAM];
+        expect(code, "the fixture program must be built").toBeDefined();
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
         const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
         const instance = yield* localInstance(
           built,
-          RecordWireTest.startupFixture({
+          yield* RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -180,9 +125,6 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
       ),
     );
   } finally {
-    // localInstance closed with its scope before its durable files go.
-    rmSync(home, { recursive: true, force: true });
-
     if (previousHome === undefined) {
       delete process.env.FABRIKA_HOME;
     } else {
@@ -283,7 +225,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+          signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
         })
       ).error,
     ).toBeUndefined();
@@ -324,10 +266,9 @@ const range = (n: number) => Array.from({ length: n }, (_, at) => at);
  *  FABRIKA_HOME, a held port, the platform layers and the local instance. They are given back in the
  *  opposite order, so the instance closes before its port and its durable files go. */
 const worldScoped = Effect.gen(function* () {
-  const home = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "p34w-"))),
-    (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
-  );
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const home = yield* fs.makeTempDirectoryScoped({ prefix: "p34w-" });
 
   yield* Effect.acquireRelease(
     Effect.sync(() => {
@@ -349,16 +290,14 @@ const worldScoped = Effect.gen(function* () {
   const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
   const { build } = yield* Effect.promise(() => import("./build.ts"));
   const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-  const key = identity();
+  const key = yield* personKey;
   // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
   const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-  symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-  const poison = join(home, "poison.ts");
-  writeFileSync(poison, poisonSource);
+  yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+  const poison = path.join(home, "poison.ts");
+  yield* fs.writeFileString(poison, poisonSource);
 
-  const built = yield* build({ out: join(home, "dist"), programs: { [PROGRAM]: poison } }).pipe(
-    Effect.provide(NodeServices.layer),
-  );
+  const built = yield* build({ out: path.join(home, "dist"), programs: { [PROGRAM]: poison } });
 
   const code = built.programs[PROGRAM];
   expect(code, "the fixture program must be built").toBeDefined();
@@ -369,7 +308,7 @@ const worldScoped = Effect.gen(function* () {
 
   const instance: Instance = yield* localInstance(
     built,
-    RecordWireTest.startupFixture({
+    yield* RecordWireTest.startupFixture({
       home,
       name: PROJECT,
       person: PERSON,
@@ -403,7 +342,7 @@ const worldScoped = Effect.gen(function* () {
   };
 
   return { instance, key, fixture, home };
-});
+}).pipe(Effect.provide(NodeServices.layer));
 
 /** A real WebSocket client at the door, closed when the test's scope closes. */
 const wired = (instance: Instance, key: Key, tab: string) =>

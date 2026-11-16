@@ -1,7 +1,7 @@
 // next/, U9. Host/container only: only workerd can deliver loader tail events. This file must not
 // replace a zero CPU reading with a weaker assertion. The build's probe runs before this scenario.
-// edge: crypto supplies an ephemeral public identity; no person's key is read
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// The person's key is a fresh one from Effect's Signature (person-key.test-support.ts); no person's
+// own key is read.
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
@@ -11,6 +11,7 @@ import { expect } from "vitest";
 import { build } from "./build.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -26,59 +27,6 @@ const FROM = {
   parent: null,
   traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
   build: "fixture",
-};
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x;
-
-  if (raw === undefined) {
-    throw new Error("no public identity");
-  }
-
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
 };
 
 const Frame = Schema.Struct({
@@ -105,7 +53,7 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
   });
 
 // A real client signs the challenge and sends through the door, which creates the inbox envelope.
-const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof identity>) {
+const wire = Effect.fnUntraced(function* (url: string, key: PersonKey) {
   const tab = "usage";
   const frames: Array<typeof Frame.Type> = [];
 
@@ -163,7 +111,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     platform: "headless",
     os: "linux",
     sentAt: FROM.sentAt,
-    signed: key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
 
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
@@ -219,12 +167,12 @@ const world = Effect.gen(function* () {
     programs: { "usage/spin": file, "fabrika/checklist": checklist },
   });
 
-  const key = identity();
+  const key = yield* personKey;
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
   const instance = yield* localInstance(
     built,
-    RecordWireTest.settingsFixture({
+    yield* RecordWireTest.settingsFixture({
       home,
       name: PROJECT,
       person: PERSON,

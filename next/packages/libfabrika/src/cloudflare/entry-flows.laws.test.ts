@@ -1,7 +1,6 @@
 // P12, next/. The settings entry flows (L10, L16): saved and wire values enter the five real
 // entries over in-memory platform handles. Split out of readers.laws.test.ts unchanged so each file
 // stays under about 60 s on a CI leg.
-import { createHash, generateKeyPairSync } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   DurableObjectState as ObjectState,
@@ -9,7 +8,8 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
-import { Digest } from "effect/crypto";
+import { Digest, SecureRandom, Signature } from "effect/crypto";
+import { Base64Url } from "effect/encoding";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -44,7 +44,21 @@ const recordConstructor = vi.hoisted(() => {
 });
 
 // The Project keeps each built-in program by its hash, the SHA-256 of its source (`BuiltProgram`).
-const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), source: "fixture" };
+const FIXTURE = {
+  hash: await Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode("fixture"))).pipe(
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  ),
+  source: "fixture",
+};
+
+/** A fresh Ed25519 public key in JWK's `x` form (base64url), from Effect's Signature on WebCrypto. */
+const freshPublicKey = Signature.Signature.use((signature) => signature.generateKeyPair(Signature.ed25519)).pipe(
+  Effect.flatMap(({ publicKey }) => Signature.toBytes(publicKey)),
+  Effect.map(Base64Url.encode),
+  Effect.provide(Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto))),
+);
 
 // SQL drivers throw at the synchronous platform boundary, before the service translates them.
 const settingsExec =
@@ -114,7 +128,7 @@ SettingsTest.suite((recipe, secret) =>
     let appends = 0;
     let consumers = 0;
     const databases: DatabaseSync[] = [];
-    const key = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" }).x!;
+    const key = yield* freshPublicKey;
 
     let input = {
       ...(yield* StartsTest.input(recipe)),

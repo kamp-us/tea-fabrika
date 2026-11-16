@@ -1,6 +1,5 @@
 // T285, PR 1, next/. These laws keep the five partial door spans at their current scope.
 // Plants: widen initialize, rename a span, lose its parent/link/tags, or recover inside it.
-import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Id } from "@kampus/libfabrika";
 import { Saw } from "@kampus/libfabrika/access/Access";
@@ -26,6 +25,7 @@ import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
+import { type PersonKey, personKeyFrom } from "./person-key.test-support.ts";
 
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }), endOnFailure: true };
 
@@ -90,71 +90,9 @@ const sample = fc.record({
 
 type Sample = typeof sample extends fc.Arbitrary<infer A> ? A : never;
 
-const u32 = (n: number) => {
-  const b = Buffer.alloc(4);
-  b.writeUInt32BE(n);
-
-  return b;
-};
-
-const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
-
-  return Buffer.concat([u32(bytes.length), bytes]);
-};
-
-const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
-
-// Generated Ed25519 seeds stay in memory. No key file is read or written.
-const key = (seed: Uint8Array, salt: number) => {
-  const privateKey = createPrivateKey({
-    key: Buffer.concat([
-      Buffer.from("302e020100300506032b657004220420", "hex"),
-      Buffer.from(seed.map((b) => b ^ salt)),
-    ]),
-    format: "der",
-    type: "pkcs8",
-  });
-
-  const raw = createPublicKey(privateKey).export({ format: "der", type: "spki" }).subarray(-32);
-  const blob = Buffer.concat([field("ssh-ed25519"), field(raw)]);
-
-  return {
-    raw: raw.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fingerprint(raw),
-    sshFingerprint: fingerprint(blob),
-    sign: (text: string) => {
-      const space = "fabrika-client";
-
-      const signed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field(space),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const signature = Buffer.concat([field("ssh-ed25519"), field(sign(null, signed, privateKey))]);
-
-      const bytes = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        u32(1),
-        field(blob),
-        field(space),
-        field(""),
-        field("sha512"),
-        field(signature),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${bytes
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
+// Generated Ed25519 seeds stay in memory. No key file is read or written. Each salt gives a
+// different key from the sample's one seed.
+const key = (seed: Uint8Array, salt: number) => personKeyFrom(seed.map((b) => b ^ salt));
 
 const fixture = Effect.fnUntraced(function* (a: Sample) {
   const databases: Array<DatabaseSync> = [];
@@ -187,9 +125,9 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
   );
   const sql = open();
 
-  const root = key(a.seed, 0),
-    window = key(a.seed, 1),
-    stranger = key(a.seed, 2);
+  const root = yield* key(a.seed, 0),
+    window = yield* key(a.seed, 1),
+    stranger = yield* key(a.seed, 2);
 
   const controls = { fail: "", deliveryFails: false, audit: "ok", selections: 0, deliveries: 0 };
 
@@ -513,7 +451,7 @@ const checkSpan = (span: Tracer.Span, a: Sample, ok: boolean, attributes: Record
   }
 };
 
-const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnType<typeof key>, tab: string) {
+const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: PersonKey, tab: string) {
   const client = yield* d.connect(),
     nonce = yield* d.challenge(client);
 
@@ -529,7 +467,7 @@ const hello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: ReturnT
       platform: "browser",
       os: "unknown",
       sentAt: SENT,
-      signed: k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+      signed: yield* k.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
     },
     trusted: { url: URL, tab, name: k.fingerprint },
   };
@@ -685,7 +623,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
 
                 const result = yield* Effect.exit(
                   d
-                    .grant({ text, armored: w.root.sign(text) })
+                    .grant({ text, armored: yield* w.root.proof(text) })
                     .pipe(Effect.withParentSpan(parent(a)), Effect.withTracer(c.tracer)),
                 );
 

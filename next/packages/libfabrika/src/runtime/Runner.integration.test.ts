@@ -5,11 +5,9 @@
 // A whole has {type:"whole", rev, view}; a patch has {type:"patch", base, rev, patch}.
 // CheckedWriter.append(Incoming) saves delivery; commit(id, session, stream, event) and
 // own(id, stream, event) are the checked door edges. The runner, not these adapters, signs.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { applyCell, Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
@@ -21,8 +19,10 @@ import {
   Effect,
   Exit,
   Fiber,
+  FileSystem,
   Layer,
   Option,
+  Path,
   Result,
   Schema,
   Scope,
@@ -295,12 +295,11 @@ type Update =
 // disks: that scope closes the connections, last opened first, then removes the folder (0061).
 const disks = Effect.gen(function* () {
   const scope = yield* Effect.scope;
-  const folder = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "p11-runner-"))),
-    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-  );
-  return { folder, scope, files: 0 };
-});
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p11-runner-" });
+  return { at: (file: string) => path.join(folder, file), scope, files: 0 };
+}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 type Disks = Effect.Success<typeof disks>;
 
@@ -310,7 +309,7 @@ type Disks = Effect.Success<typeof disks>;
 const connect = ({ scope }: Disks, path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
 
 const disk = (disks: Disks) => {
-  const path = join(disks.folder, `${++disks.files}.db`);
+  const path = disks.at(`${++disks.files}.db`);
   let db = connect(disks, path);
   let inner = nodeSql(db);
   const fault = { query: (_q: string) => false, once: false };

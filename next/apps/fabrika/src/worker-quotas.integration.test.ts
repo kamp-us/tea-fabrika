@@ -1,7 +1,6 @@
 // next/, Q13. Lead host/container run: real workerd and object RPC are required.
 // This scenario is intentionally not replaced by a Node-only runner.
-// edge: create only an ephemeral signing identity for this private test instance
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// It signs in with a fresh test identity from Effect's Signature (person-key.test-support.ts).
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
@@ -13,6 +12,7 @@ import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -40,54 +40,6 @@ const declaredRecovery = {
   process: { writes: 290, bytes: ByteSize.bytes(207_410), message: { writes: 50, bytes: ByteSize.bytes(18_790) } },
 };
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x;
-
-  if (raw === undefined) {
-    throw new Error("no public identity");
-  }
-
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Finite),
   method: Schema.optionalKey(Schema.String),
@@ -112,7 +64,7 @@ const until = <A, E, R>(look: Effect.Effect<A, E, R>, done: (value: A) => boolea
   });
 
 // A real client signs the challenge and sends through the door, which creates the inbox envelope.
-const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof identity>) {
+const wire = Effect.fnUntraced(function* (url: string, key: PersonKey) {
   const tab = "quotas";
   const frames: Array<typeof Frame.Type> = [];
   const socket = yield* Effect.acquireRelease(
@@ -159,7 +111,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
     platform: "headless",
     os: "linux",
     sentAt: FROM.sentAt,
-    signed: key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
   // `letter` is the door's own key for the message id (0547 keeps wire names).
@@ -229,7 +181,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   }
 
   const built = yield* build({ out: path.join(home, "dist"), programs: files });
-  const key = identity();
+  const key = yield* personKey;
   const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
   // The quota settings ride in the start's settings snapshot; the fixture names the ones it tightens.
   const limits = {
@@ -245,7 +197,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
   };
   const instance = yield* localInstance(
     built,
-    RecordWireTest.startupFixture({
+    yield* RecordWireTest.startupFixture({
       home,
       name: PROJECT,
       person: PERSON,

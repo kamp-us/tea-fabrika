@@ -1,5 +1,4 @@
 // T502 PR 2, next/. Lead runs this outside the box; no sibling patch is installed.
-import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -39,7 +38,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           yield* env("ALCHEMY_HOME", path.join(home, "alchemy"));
           const port = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
           yield* env("T502_PORT", String(port.port));
-          yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+          yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
           yield* fs.writeFileString(path.join(home, "package.json"), JSON.stringify({ type: "module" }));
           const file = path.join(home, "objects.ts");
           yield* fs.writeFileString(

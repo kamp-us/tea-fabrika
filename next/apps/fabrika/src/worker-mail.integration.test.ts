@@ -1,16 +1,13 @@
 // P41 slice 2, next/. Real workerd, sockets, object storage,
 // alarms and the private local instance capability, set up the way P12's instance-records test is.
 // No directly constructed runner and no raw Miniflare stands in for the instance.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, FileSystem, Path, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -25,57 +22,7 @@ const PROJECT = "p41-workers";
 // Bounded waits tied to observable facts. Backoff is 100 to 800 ms, so this is generous.
 const WAIT = 25_000;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = PersonKey;
 
 // The fixtures use the same Send/ref exchange as slice 1. Source is bundled by the real app build.
 const source = (role: "requester" | "responder", pair: number, braked = false) => `
@@ -109,9 +56,10 @@ export const program = Program.make({name: "p41/${role}-${pair}", machine, state
 type Instance = any;
 
 // Private control only. Reading these rows must not load the runner or deliver mail.
-const instrumentMailBrain = async (brain: string, home: string) => {
-  const entry = join(home, "mail-diagnostics.mjs");
-  writeFileSync(
+const instrumentMailBrain = Effect.fnUntraced(function* (brain: string, home: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const entry = (yield* Path.Path).join(home, "mail-diagnostics.mjs");
+  yield* fs.writeFileString(
     entry,
     `
 import * as Brain from ${JSON.stringify(brain)};
@@ -150,27 +98,23 @@ export class Control extends Brain.Control {
   }
 }`,
   );
-  await Effect.runPromise(
-    Effect.acquireRelease(
-      Effect.promise(() => rolldown({ input: entry, platform: "browser", external: ["cloudflare:workers"] })),
-      (bundle) => Effect.promise(() => bundle.close()),
-    ).pipe(
-      Effect.flatMap((bundle) => Effect.promise(() => bundle.generate({ format: "esm", codeSplitting: false }))),
-      Effect.tap((out) =>
-        Effect.sync(() =>
-          writeFileSync(
-            brain,
-            out.output
-              .filter((item) => item.type === "chunk")
-              .map((item) => item.code)
-              .join("\n"),
-          ),
-        ),
+  yield* Effect.acquireRelease(
+    Effect.promise(() => rolldown({ input: entry, platform: "browser", external: ["cloudflare:workers"] })),
+    (bundle) => Effect.promise(() => bundle.close()),
+  ).pipe(
+    Effect.flatMap((bundle) => Effect.promise(() => bundle.generate({ format: "esm", codeSplitting: false }))),
+    Effect.flatMap((out) =>
+      fs.writeFileString(
+        brain,
+        out.output
+          .filter((item) => item.type === "chunk")
+          .map((item) => item.code)
+          .join("\n"),
       ),
-      Effect.scoped,
     ),
+    Effect.scoped,
   );
-};
+});
 
 const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
@@ -269,12 +213,11 @@ const world = async (
 
   return Effect.runPromise(
     Effect.gen(function* () {
-      const home = yield* Effect.acquireRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "p41w-"))),
-        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-      );
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "p41w-" });
 
-      const key = identity();
+      const key = yield* personKey;
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
@@ -291,24 +234,24 @@ const world = async (
             }
           }),
       );
-      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
       for (const pair of [1, 2]) {
         for (const role of ["requester", "responder"] as const) {
           const name = `${role}-${pair}`;
-          const path = join(home, `${name}.ts`);
-          writeFileSync(path, source(role, pair, braked && role === "responder" && pair === 1));
-          selections[`p41/${name}`] = path;
+          const file = path.join(home, `${name}.ts`);
+          yield* fs.writeFileString(file, source(role, pair, braked && role === "responder" && pair === 1));
+          selections[`p41/${name}`] = file;
         }
       }
 
-      const built = yield* build({ out: join(home, "dist"), programs: selections });
+      const built = yield* build({ out: path.join(home, "dist"), programs: selections });
       let diagnostics: ReturnType<typeof mailDiagnostics> | undefined;
 
       if (diagnose) {
         diagnostics = mailDiagnostics();
-        yield* Effect.promise(() => instrumentMailBrain(built.brain, home));
+        yield* instrumentMailBrain(built.brain, home);
       }
 
       yield* Effect.gen(function* () {
@@ -317,7 +260,7 @@ const world = async (
 
         const instance = yield* localInstance(
           built,
-          RecordWireTest.startupFixture({
+          yield* RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,
@@ -510,7 +453,7 @@ const wire = async (
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       })
     ).error,
   ).toBeUndefined();
@@ -723,13 +666,13 @@ const checklistWorld = async (
     readonly connect: () => ReturnType<typeof wire>;
   }) => Promise<void>,
 ) => {
-  const { FileSystem } = await import("effect");
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
   await Effect.runPromise(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "alarm866-" });
       yield* Effect.acquireRelease(
         Effect.sync(() => {
@@ -747,19 +690,19 @@ const checklistWorld = async (
             }
           }),
       );
-      yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-      const wrapper = join(home, "checklist.ts");
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+      const wrapper = path.join(home, "checklist.ts");
       yield* fs.writeFileString(
         wrapper,
-        `export { checklist as program } from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
+        `export { checklist as program } from ${JSON.stringify(path.resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
       );
-      const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
-      const key = identity();
+      const built = yield* build({ out: path.join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
+      const key = yield* personKey;
       const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
 
       const instance = yield* localInstance(
         built,
-        RecordWireTest.startupFixture({
+        yield* RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,
@@ -916,10 +859,9 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
   const { Digest } = await import("effect/crypto");
   await Effect.runPromise(
     Effect.gen(function* () {
-      const home = yield* Effect.acquireRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "t1041-"))),
-        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-      );
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "t1041-" });
 
       yield* Effect.acquireRelease(
         Effect.sync(() => {
@@ -937,17 +879,17 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
             }
           }),
       );
-      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
       for (const role of ["writer", "reader"] as const) {
-        const path = join(home, `${role}.ts`);
-        writeFileSync(path, capSource(role));
-        selections[`t1041/${role}`] = path;
+        const file = path.join(home, `${role}.ts`);
+        yield* fs.writeFileString(file, capSource(role));
+        selections[`t1041/${role}`] = file;
       }
 
-      const built = yield* build({ out: join(home, "dist"), programs: selections });
-      const key = identity();
+      const built = yield* build({ out: path.join(home, "dist"), programs: selections });
+      const key = yield* personKey;
       const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
       // The repo's own file, `[mail] unread = 2`, as its parse gives it (only the settings module
@@ -974,7 +916,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       expect(resolved.values.mailUnread, "the repo file's value is read").toBe(2);
 
       const instance = yield* localInstance(built, {
-        ...RecordWireTest.startupFixture({
+        ...(yield* RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,
@@ -982,7 +924,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
           window: key.raw,
           port: at.port,
           mail: { grants: { "writer:1": ["reader:1"] } },
-        }),
+        })),
         settings: loaded.snapshot,
       });
 

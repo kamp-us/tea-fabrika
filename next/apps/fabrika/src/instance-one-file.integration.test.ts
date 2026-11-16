@@ -3,39 +3,52 @@
 // Builder contract: the app's `build(options)` (src/build.ts) needs FileSystem and Path and
 // returns `{build, brain, programs, assets}`; the stack runs `built.brain` with `bundle: false`.
 import assert from "node:assert/strict";
-import childProcess, { spawn } from "node:child_process";
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { createServer as httpServer } from "node:http";
-import { syncBuiltinESMExports } from "node:module";
-import { dirname, isAbsolute, join, resolve } from "node:path";
-import { NodeServices } from "@effect/platform-node";
+import { NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Scope } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
+import { HttpServer, HttpServerResponse } from "effect/http";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
-const APP = resolve(import.meta.dirname, "..");
+/** One step on the real disk, through Effect's FileSystem and Path. */
+const disk = <A, E>(use: (fs: FileSystem.FileSystem, path: Path.Path) => Effect.Effect<A, E>) =>
+  Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* use(yield* FileSystem.FileSystem, yield* Path.Path);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
+
+const path = await disk((_fs, path) => Effect.succeed(path));
+
+const APP = path.resolve(import.meta.dirname, "..");
 
 const homes: string[] = [];
 
 const runs = { seed: 119120, numRuns: 3 };
 
-const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+/** The SHA-256 of some text or bytes, in hex, as the builder writes a hash. */
+const hash = (value: string | Uint8Array) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) =>
+      digest.digestHex(Digest.sha256, typeof value === "string" ? new TextEncoder().encode(value) : value),
+    ).pipe(Effect.provide(Digest.layerWebCrypto)),
+  );
 
 // The platform's loader and stub types come from the code under test, never by their ambient
 // names (0042, tests included).
 type Platform = Parameters<typeof workerLoader>[0];
 
-const home = () => {
-  const h = mkdtempSync("/tmp/fh.");
+const home = async () => {
+  const h = await disk((fs) => fs.makeTempDirectory({ directory: "/tmp", prefix: "fh." }));
   homes.push(h);
   vi.stubEnv("FABRIKA_HOME", h);
   vi.stubEnv("TYPESAFE_API_KEY", undefined);
@@ -44,31 +57,52 @@ const home = () => {
   return h;
 };
 
-// Alchemy sends SIGKILL when its scope closes, but the child can still hold its port.
-// Await the real close events before reusing that same port and saved state. No fixed sleep.
+// Alchemy starts its children through Effect's ChildProcessSpawner and sends SIGKILL when its scope
+// closes, but the child can still hold its port. So `task` runs with a spawner that notes every
+// child it starts, and this waits for each one's real exit before the next instance reuses that
+// same port and saved state, whether `task` failed or not. No fixed sleep.
 // The fixed brain port itself is Alchemy's in-process worker proxy, not workerd. Its 30-second
 // port reservation outlived the proxy until the local patch made a closed proxy drop it.
-const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
-  const spawn = childProcess.spawn,
-    closed: Promise<void>[] = [];
+const afterChildrenStop = <A, E, R>(task: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const exits: Array<Effect.Effect<void>> = [];
 
-  const spy = vi.spyOn(childProcess, "spawn").mockImplementation((...args) => {
-    const child = spawn(...args);
-    closed.push(new Promise<void>((done) => child.once("close", () => done())));
+    const watched = ChildProcessSpawner.make((command) =>
+      real.spawn(command).pipe(
+        Effect.tap((child) =>
+          Effect.sync(() => {
+            exits.push(Effect.ignore(child.exitCode));
+          }),
+        ),
+      ),
+    );
 
-    return child;
+    return yield* task.pipe(
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, watched),
+      Effect.ensuring(Effect.suspend(() => Effect.all(exits, { concurrency: "unbounded", discard: true }))),
+    );
   });
 
-  syncBuiltinESMExports();
+/** A real HTTP target on an open port, which counts each request it answers, open until `scope` closes. */
+const probeServer = (scope: Scope.Scope, hit: () => void) =>
+  Effect.gen(function* () {
+    const server = Context.get(yield* Layer.build(NodeHttpServer.layerTest), HttpServer.HttpServer);
 
-  try {
-    return await task();
-  } finally {
-    spy.mockRestore();
-    syncBuiltinESMExports();
-    await Promise.all(closed);
-  }
-};
+    yield* server.serve(
+      Effect.sync(() => {
+        hit();
+
+        return HttpServerResponse.text("reachable");
+      }),
+    );
+
+    if (!("port" in server.address)) {
+      return yield* Effect.die("the probe server has no port");
+    }
+
+    return server.address.port;
+  }).pipe(Effect.provideService(Scope.Scope, scope));
 
 // Runs `use` on a brain port held for the whole call, so nobody else is given it between two instances
 // on it. The scope gives the port back only after `use`, and every instance it opened, has closed.
@@ -161,19 +195,13 @@ afterEach(() => {
   vi.resetModules();
   vi.unstubAllEnvs();
 
-  for (const h of homes.splice(0)) {
-    rmSync(h, { recursive: true, force: true });
-  }
+  return disk((fs) =>
+    Effect.forEach(homes.splice(0), (h) => fs.remove(h, { recursive: true, force: true }), {
+      concurrency: 1,
+      discard: true,
+    }),
+  );
 });
-
-const field = (value: string | Buffer) => {
-  const b = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(b.length);
-
-  return Buffer.concat([n, b]);
-};
 
 // P12's driver field names. Experiment 238's driver on branch fabrikalfa/exp241-script gives
 // lostLinkMs and writes the caps: experiment 241's guess from its sitting's four base runs.
@@ -234,28 +262,40 @@ const readings = (s: typeof Sample.Type) => ({
 
 // Whether any selected program's package exports "./window", read from the same package.json
 // files libfabrika's build reads: node_modules/<package> from `from` upward. A path has none.
-const findManifest = (from: string, name: string): string | undefined => {
-  const file = join(from, "node_modules", name, "package.json");
+const findManifest = Effect.fnUntraced(function* (fs: FileSystem.FileSystem, from: string, name: string) {
+  for (let at = from; ; at = path.dirname(at)) {
+    const file = path.join(at, "node_modules", name, "package.json");
 
-  if (existsSync(file)) {
-    return file;
-  }
-
-  return dirname(from) === from ? undefined : findManifest(dirname(from), name);
-};
-
-const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package: string }>) =>
-  selected.some(({ package: name }) => {
-    const file = name.startsWith(".") || isAbsolute(name) ? undefined : findManifest(from, name);
-
-    if (file === undefined) {
-      return false;
+    if (yield* fs.exists(file)) {
+      return file;
     }
 
-    const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
+    if (path.dirname(at) === at) {
+      return undefined;
+    }
+  }
+});
 
-    return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
-  });
+const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package: string }>) =>
+  disk((fs) =>
+    Effect.gen(function* () {
+      for (const { package: name } of selected) {
+        const file = name.startsWith(".") || path.isAbsolute(name) ? undefined : yield* findManifest(fs, from, name);
+
+        if (file === undefined) {
+          continue;
+        }
+
+        const exports: unknown = JSON.parse(yield* fs.readFileString(file)).exports;
+
+        if (typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window")) {
+          return true;
+        }
+      }
+
+      return false;
+    }),
+  );
 
 const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean) => {
   // oxlint-disable-next-line fabrika/no-stage-word -- saved speed-bar results name experiment 238's driver exactly
@@ -302,44 +342,6 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
   }
 };
 
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const blob = Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(Buffer.from(raw, "base64url")).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ])
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
 describe("P16 stack and sealed loader", () => {
   it("p33 environment and declarations: actual stack selects completed bytes, no rebundle, byte-limited code-free env", async () => {
     await fc.assert(
@@ -365,25 +367,27 @@ describe("P16 stack and sealed loader", () => {
         vi.resetModules();
 
         const { stack } = await import("../alchemy.run.ts"),
-          h = home();
+          h = await home();
 
         const built = {
-          brain: join(h, "brain.mjs"),
-          build: hash("brain"),
-          programs: { counter: { hash: hash("program-marker"), source: "program-marker" } },
+          brain: path.join(h, "brain.mjs"),
+          build: await hash("brain"),
+          programs: { counter: { hash: await hash("program-marker"), source: "program-marker" } },
         };
 
         let accepted = 0;
 
         for (const name of ["local", "cloud"]) {
-          const settings = RecordWireTest.settingsFixture({
-            name,
-            port: 18787,
-            person: "person-test",
-            founder: (multibyte ? "雪" : "a").repeat(length),
-            window: null,
-            build: built.build,
-          });
+          const settings = await Effect.runPromise(
+            RecordWireTest.settingsFixture({
+              name,
+              port: 18787,
+              person: "person-test",
+              founder: (multibyte ? "雪" : "a").repeat(length),
+              window: null,
+              build: built.build,
+            }),
+          );
 
           const checked = await Effect.runPromise(readSettings({ INSTANCE: JSON.stringify(settings) }));
           const result = await Effect.runPromise(Effect.result(stack(built, checked)));
@@ -427,7 +431,7 @@ describe("P16 stack and sealed loader", () => {
             { ...real, env: { ...real.env, WINDOW_JS: "export const x = 1;" } },
             { ...real, env: { ...real.env, CODE: "program-marker" } },
             { ...real, env: { ...real.env, WIDE: "雪".repeat(1800) } },
-            { ...real, main: join(APP, "src/brain.ts") },
+            { ...real, main: path.join(APP, "src/brain.ts") },
             { ...real, bundle: true },
           ]) {
             expect("雪".repeat(1800).length).toBeLessThan(5 * 1024);
@@ -482,19 +486,20 @@ describe("P16 stack and sealed loader", () => {
           // P40, L4: lookups use the whole qualified name. Another pack's `counter` sits beside it
           // with other code, and the bare short name finds neither.
           const other = `${source}-other-pack`;
+          const sourceHash = await hash(source);
 
           const loader = workerLoader(platform, {
-            "fabrika/counter": { hash: hash(source), source },
-            "other/counter": { hash: hash(other), source: other },
+            "fabrika/counter": { hash: sourceHash, source },
+            "other/counter": { hash: await hash(other), source: other },
           });
 
           const bare = await Effect.runPromise(Effect.result(loader.load("counter", process)));
           expect(bare).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown", reason: "no_program" } });
           const loaded = await Effect.runPromise(loader.load("fabrika/counter", process));
-          expect(loaded.hash).toBe(hash(source));
+          expect(loaded.hash).toBe(sourceHash);
           expect(calls).toEqual([
             {
-              key: `${hash(source)}/${process}`,
+              key: `${sourceHash}/${process}`,
               config: {
                 compatibilityDate: "2026-10-12",
                 mainModule: "program.js",
@@ -532,11 +537,11 @@ class Client {
   readonly frames: any[] = [];
   readonly ws: WebSocket;
   readonly url: string;
-  readonly key: ReturnType<typeof identity>;
+  readonly key: PersonKey;
   readonly tab: string;
   serial = 0;
 
-  constructor(url: string, key: ReturnType<typeof identity>, tab: string) {
+  constructor(url: string, key: PersonKey, tab: string) {
     this.url = url;
     this.key = key;
     this.tab = tab;
@@ -584,7 +589,7 @@ class Client {
       platform: "headless",
       os: "linux",
       sentAt: "2026-11-08T04:00:00.000Z",
-      signed: this.key.proof(`fabrika-hello\n${this.url}\n${this.tab}\n${nonce}`),
+      signed: await Effect.runPromise(this.key.proof(`fabrika-hello\n${this.url}\n${this.tab}\n${nonce}`)),
     });
   }
 }
@@ -593,33 +598,44 @@ describe("P16 copied-file real instance, serial", () => {
   it("shutdown: a stopped child closes before the next instance, including when the prior instance fails", async () => {
     await fc.assert(
       fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
-        let closed = false;
+        // The task leaves its child running in a scope it never closes, as a SIGKILLed child can
+        // outlive the instance that started it. Only afterChildrenStop waits for its exit.
+        const left = await Effect.runPromise(Scope.make());
+        let child: ChildProcessSpawner.ChildProcessHandle | undefined;
 
-        const task = afterChildrenStop(async () => {
-          const child = spawn(process.execPath, ["-e", ""]);
-          child.once("close", () => {
-            closed = true;
-          });
-          await new Promise<void>((done, reject) => {
-            child.once("spawn", done);
-            child.once("error", reject);
-          });
-          child.kill("SIGKILL");
+        const task = Effect.runPromise(
+          afterChildrenStop(
+            Effect.gen(function* () {
+              const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
+              child = yield* spawner
+                .spawn(ChildProcess.make(process.execPath, ["-e", "setTimeout(() => {}, 500)"]))
+                .pipe(Effect.provideService(Scope.Scope, left));
+
+              if (fail) {
+                return yield* Effect.fail(new Error(`planted instance failure ${value}`));
+              }
+
+              return value;
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        );
+
+        try {
           if (fail) {
-            throw new Error(`planted instance failure ${value}`);
+            await expect(task).rejects.toThrow(`planted instance failure ${value}`);
+          } else {
+            expect(await task).toBe(value);
           }
 
-          return value;
-        });
-
-        if (fail) {
-          await expect(task).rejects.toThrow(`planted instance failure ${value}`);
-        } else {
-          expect(await task).toBe(value);
+          assert(child, "the task started its child");
+          expect(
+            await Effect.runPromise(child.isRunning.pipe(Effect.orDie)),
+            "next instance must wait for the real child exit",
+          ).toBe(false);
+        } finally {
+          await Effect.runPromise(Scope.close(left, Exit.void));
         }
-
-        expect(closed, "next instance must wait for the real child close event").toBe(true);
       }),
       { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
     );
@@ -627,14 +643,14 @@ describe("P16 copied-file real instance, serial", () => {
   it("isolation plants reach the actual compiled loader policy before a real-instance run", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
-        const h = home(),
+        const h = await home(),
           { build } = await import("./build.ts");
 
         const built = await Effect.runPromise(
-          build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
+          build({ out: path.join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
         );
 
-        const source = readFileSync(built.brain, "utf8");
+        const source = await disk((fs) => fs.readFileString(built.brain));
 
         for (const mode of ["binding", "outbound"] as const) {
           expect(plantPolicy(source, mode, `P16_${n}`, String(n))).not.toBe(source);
@@ -646,37 +662,33 @@ describe("P16 copied-file real instance, serial", () => {
   it("p33 real isolation: a selected program sees no planted binding and cannot reach a controlled HTTP target", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
-        const h = home(),
-          key = identity();
+        const h = await home(),
+          key = await Effect.runPromise(personKey);
 
         let hits = 0;
 
-        const probe = httpServer((_request, response) => {
-          hits++;
-          response.end("reachable");
-        });
+        const probe = await Effect.runPromise(Scope.make());
 
         try {
-          const port = await new Promise<number>((done, fail) => {
-            probe.once("error", fail);
-            probe.listen(0, "127.0.0.1", () => {
-              const at = probe.address();
-              assert(at && typeof at !== "string");
-              done(at.port);
-            });
-          });
+          const port = await Effect.runPromise(
+            probeServer(probe, () => {
+              hits++;
+            }),
+          );
 
           const target = `http://127.0.0.1:${port}/probe-${n}`;
           expect((await fetch(target)).ok).toBe(true);
           hits = 0;
-          symlinkSync(join(APP, "node_modules"), join(h, "node_modules"));
-          const file = join(h, "sealed.ts");
-          writeFileSync(
-            file,
-            // workerd refuses I/O at module scope whatever the policy, so a top-level fetch proves nothing.
-            // The program fetches inside the init call and keeps it alive with waitUntil, as a hostile
-            // program would; only the loader's own refusal counts as denied.
-            `import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
+          const file = path.join(h, "sealed.ts");
+          await disk((fs) => fs.symlink(path.join(APP, "node_modules"), path.join(h, "node_modules")));
+          await disk((fs) =>
+            fs.writeFileString(
+              file,
+              // workerd refuses I/O at module scope whatever the policy, so a top-level fetch proves nothing.
+              // The program fetches inside the init call and keeps it alive with waitUntil, as a hostile
+              // program would; only the loader's own refusal counts as denied.
+              `import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
+            ),
           );
 
           const { build } = await import("./build.ts"),
@@ -685,35 +697,43 @@ describe("P16 copied-file real instance, serial", () => {
 
           const built = await Effect.runPromise(
             build({
-              out: join(h, "dist"),
+              out: path.join(h, "dist"),
               files: [],
               ledger: [],
               programs: Object.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
             }).pipe(Effect.provide(NodeServices.layer)),
           );
 
-          const alone = join(h, "alone");
-          mkdirSync(alone);
-          cpSync(built.brain, join(alone, "brain.mjs"));
-          const bytes = readFileSync(join(alone, "brain.mjs"), "utf8");
-          rmSync(join(h, "dist"), { recursive: true });
-          rmSync(file);
+          const alone = path.join(h, "alone");
+          const bytes = await disk((fs) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(alone);
+              yield* fs.copyFile(built.brain, path.join(alone, "brain.mjs"));
+              const bytes = yield* fs.readFileString(path.join(alone, "brain.mjs"));
+              yield* fs.remove(path.join(h, "dist"), { recursive: true });
+              yield* fs.remove(file);
+
+              return bytes;
+            }),
+          );
 
           // The three modes start one instance each on one brain port, held across all three.
           await onHeldPort(async (brainPort) => {
             for (const mode of ["sealed", "binding", "outbound"] as const) {
-              writeFileSync(
-                join(alone, "brain.mjs"),
-                mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
+              await disk((fs) =>
+                fs.writeFileString(
+                  path.join(alone, "brain.mjs"),
+                  mode === "sealed" ? bytes : plantPolicy(bytes, mode, `P16_${n}`, String(n)),
+                ),
               );
               hits = 0;
-              await afterChildrenStop(() =>
-                Effect.runPromise(
+              await Effect.runPromise(
+                afterChildrenStop(
                   Effect.scoped(
                     Effect.gen(function* () {
                       const instance = yield* localInstance(
-                        { ...built, brain: join(alone, "brain.mjs") },
-                        RecordWireTest.startupFixture({
+                        { ...built, brain: path.join(alone, "brain.mjs") },
+                        yield* RecordWireTest.startupFixture({
                           home: h,
                           name: "p16-isolation",
                           person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
@@ -782,19 +802,17 @@ describe("P16 copied-file real instance, serial", () => {
                         catch: (error) => new Error("P16 isolation check failed", { cause: error }),
                       });
                     }),
-                  ).pipe(
-                    Effect.provide(localState()),
-                    Effect.provide(SecureRandom.layerWebCrypto),
-                    Effect.provide(NodeServices.layer),
                   ),
+                ).pipe(
+                  Effect.provide(localState()),
+                  Effect.provide(SecureRandom.layerWebCrypto),
+                  Effect.provide(NodeServices.layer),
                 ),
               );
             }
           });
         } finally {
-          if (probe.listening) {
-            await new Promise<void>((done) => probe.close(() => done()));
-          }
+          await Effect.runPromise(Scope.close(probe, Exit.void));
         }
       }),
       { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
@@ -805,20 +823,24 @@ describe("P16 copied-file real instance, serial", () => {
       fc.asyncProperty(
         fc.array(fc.constantFrom("inc", "dec", "reset"), { minLength: 1, maxLength: 4 }),
         async (messages) => {
-          const h = home(),
-            key = identity();
+          const h = await home(),
+            key = await Effect.runPromise(personKey);
 
           const { build } = await import("./build.ts"),
             { localInstance } = await import("./local-instance.ts");
 
           const built = await Effect.runPromise(
-            build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
+            build({ out: path.join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
           );
 
-          const alone = join(h, "alone");
-          mkdirSync(alone);
-          cpSync(built.brain, join(alone, "brain.mjs"));
-          rmSync(join(h, "dist"), { recursive: true });
+          const alone = path.join(h, "alone");
+          await disk((fs) =>
+            Effect.gen(function* () {
+              yield* fs.makeDirectory(alone);
+              yield* fs.copyFile(built.brain, path.join(alone, "brain.mjs"));
+              yield* fs.remove(path.join(h, "dist"), { recursive: true });
+            }),
+          );
 
           const options = (port: number) => ({
             home: h,
@@ -829,7 +851,7 @@ describe("P16 copied-file real instance, serial", () => {
             port,
           });
 
-          const copied = { ...built, brain: join(alone, "brain.mjs") };
+          const copied = { ...built, brain: path.join(alone, "brain.mjs") };
 
           let pid = "",
             first: unknown,
@@ -837,11 +859,11 @@ describe("P16 copied-file real instance, serial", () => {
             total = 0;
 
           const instance = async (port: number, again: boolean) =>
-            afterChildrenStop(async () =>
-              Effect.runPromise(
+            Effect.runPromise(
+              afterChildrenStop(
                 Effect.scoped(
                   Effect.gen(function* () {
-                    const runtime = yield* localInstance(copied, RecordWireTest.startupFixture(options(port)));
+                    const runtime = yield* localInstance(copied, yield* RecordWireTest.startupFixture(options(port)));
                     yield* Effect.tryPromise({
                       try: async () => {
                         const a = new Client(runtime.url, key, "a"),
@@ -968,11 +990,11 @@ describe("P16 copied-file real instance, serial", () => {
                       catch: (error) => new Error("P16 recovery check failed", { cause: error }),
                     });
                   }),
-                ).pipe(
-                  Effect.provide((await import("alchemy/State/LocalState")).localState()),
-                  Effect.provide(SecureRandom.layerWebCrypto),
-                  Effect.provide(NodeServices.layer),
                 ),
+              ).pipe(
+                Effect.provide((await import("alchemy/State/LocalState")).localState()),
+                Effect.provide(SecureRandom.layerWebCrypto),
+                Effect.provide(NodeServices.layer),
               ),
             );
 
@@ -988,9 +1010,9 @@ describe("P16 copied-file real instance, serial", () => {
   });
   // scenario: a fixed base/head benchmark, because it measures real laptop performance.
   it("scenario: T10 timing checks experiment 241's four base and five head readings on the laptop; without a bar file it skips the cap check", async () => {
-    const path = process.env.P16_LOCAL_BAR;
+    const barFile = process.env.P16_LOCAL_BAR;
 
-    if (!path) {
+    if (!barFile) {
       console.log(
         "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
       );
@@ -998,12 +1020,12 @@ describe("P16 copied-file real instance, serial", () => {
       return;
     }
 
-    const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
+    const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(await disk((fs) => fs.readFileString(barFile)));
     const brain = process.env.P16_BRAIN;
     assert(brain, "final brain path missing");
-    const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");
+    const digest = await hash(await disk((fs) => fs.readFile(brain)));
     const { programs } = await import("./table.ts");
-    const windowed = exportsWindow(join(APP, "src"), programs);
+    const windowed = await exportsWindow(path.join(APP, "src"), programs);
     localBar(bar, digest, !process.env.CI, windowed);
     console.log(
       JSON.stringify({
@@ -1042,22 +1064,22 @@ describe("P16 copied-file real instance, serial", () => {
     }
 
     // A program whose package.json exports "./window", read the way the build reads it.
-    const planted = home();
-    mkdirSync(join(planted, "src"));
-    mkdirSync(join(planted, "node_modules/@p16/windowed"), { recursive: true });
-    writeFileSync(
-      join(planted, "node_modules/@p16/windowed/package.json"),
-      JSON.stringify({ exports: { ".": "./program.ts", "./window": "./window.tsx" } }),
+    const planted = await home();
+    await disk((fs) =>
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(path.join(planted, "src"));
+        yield* fs.makeDirectory(path.join(planted, "node_modules/@p16/windowed"), { recursive: true });
+        yield* fs.writeFileString(
+          path.join(planted, "node_modules/@p16/windowed/package.json"),
+          JSON.stringify({ exports: { ".": "./program.ts", "./window": "./window.tsx" } }),
+        );
+      }),
     );
     const withWindow = [...programs, { name: "windowed", package: "@p16/windowed" }];
-    expect(exportsWindow(join(planted, "src"), withWindow)).toBe(true);
-    expect(() =>
-      localBar(
-        { ...bar, sizes: { ...bar.sizes, window: 0 } },
-        digest,
-        false,
-        exportsWindow(join(planted, "src"), withWindow),
-      ),
-    ).toThrow("window bytes missing");
+    const plantedWindow = await exportsWindow(path.join(planted, "src"), withWindow);
+    expect(plantedWindow).toBe(true);
+    expect(() => localBar({ ...bar, sizes: { ...bar.sizes, window: 0 } }, digest, false, plantedWindow)).toThrow(
+      "window bytes missing",
+    );
   });
 });

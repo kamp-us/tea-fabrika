@@ -8,7 +8,6 @@
 //   replay reads that saved value back, never the files as they are now.
 // - dev.ts takes the port as `--instance.port` (settings.md S5's words), keeps the founding flags
 //   it has, listens on that port, and stops naming `instance.port` when the port is taken.
-import { generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Load from "@kampus/libfabrika/node/settings/Load";
@@ -25,6 +24,7 @@ import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
+import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killWorkerd } from "./workerd.test-support.ts";
 
@@ -269,15 +269,6 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
 // Each one, its home and its held port are acquired in the test's scope, which gives them back
 // (decision 0061).
 
-const founding = () => {
-  const { publicKey } = generateKeyPairSync("ed25519");
-  const der = publicKey.export({ format: "der", type: "spki" });
-  const raw = der.subarray(-32);
-  const blob = Buffer.concat([Buffer.from([0, 0, 0, 11]), Buffer.from("ssh-ed25519"), Buffer.from([0, 0, 0, 32]), raw]);
-
-  return { line: `ssh-ed25519 ${blob.toString("base64")}`, raw: raw.toString("base64url") };
-};
-
 /** A port nobody else is given while the scope is open. */
 const held = Effect.acquireRelease(heldPort(), (h) => h.release);
 
@@ -293,7 +284,7 @@ const instrumented = Effect.fnUntraced(function* (
   const path = yield* Path.Path;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t753-worker-" });
   const port = yield* held;
-  const key = founding();
+  const key = yield* personKey;
   const built = yield* build({ out: path.join(home, "dist") });
 
   const input = {
@@ -508,7 +499,7 @@ const dev = Effect.fnUntraced(function* (port: number, extra: Readonly<Record<st
 
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "t664-dev-" });
   const app = path.resolve(import.meta.dirname, "..");
-  const key = founding();
+  const key = yield* personKey;
 
   const child = yield* ChildProcess.make(
     process.execPath,

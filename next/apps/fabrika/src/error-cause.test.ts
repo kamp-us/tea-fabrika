@@ -31,14 +31,16 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-const valid = RecordWireTest.settingsFixture({
-  name: "instance",
-  person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-  founder: "ssh-ed25519 AAAA",
-  window: null,
-  port: 8787,
-  build: "b-1",
-});
+const valid = await Effect.runPromise(
+  RecordWireTest.settingsFixture({
+    name: "instance",
+    person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+    founder: "ssh-ed25519 AAAA",
+    window: null,
+    port: 8787,
+    build: "b-1",
+  }),
+);
 
 describe("T695, the app's wiring keeps what failed", () => {
   // C1, build.ts:34. Plant: `Effect.mapError(() => new BuildError({ reason: "read" }))`.

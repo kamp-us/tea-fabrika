@@ -12,7 +12,6 @@
 // - `src/table.ts` lists `fabrika/checklist`.
 // - Every `view.whole` and `view.patch` the brain sends a client for `checklist:1` carries `pid`, the
 //   process it is about, beside the update its Process published, which reaches the client unchanged.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { applyCell } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -41,6 +40,7 @@ import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -118,54 +118,6 @@ type ProjectCalls = (typeof ProjectService)["Service"];
 
 type ProcessCalls = (typeof ProcessService)["Service"];
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    size = Buffer.alloc(4);
-
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw: bytes.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
 const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
   const sql = nodeSql(db),
     values = new Map<string, unknown>();
@@ -223,7 +175,7 @@ type Heard = { readonly client: string; readonly news: unknown };
 /** One brain on fresh stores: the real Project, a real Process per started name, and the loader. */
 const world = (options: { readonly lacks?: string } = {}) =>
   Effect.acquireRelease(
-    Effect.sync(() => {
+    Effect.gen(function* () {
       // In place: the mocked modules hold this very object, so a new one would never reach them.
       Object.assign(table.programs, {
         "fabrika/counter": CODE.counter,
@@ -235,7 +187,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         delete table.programs[options.lacks];
       }
 
-      const key = identity(),
+      const key = yield* personKey,
         db = new DatabaseSync(":memory:");
 
       const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
@@ -285,7 +237,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
       const env = {
         INSTANCE: JSON.stringify(
-          RecordWireTest.settingsFixture({
+          yield* RecordWireTest.settingsFixture({
             name: "project-test",
             person: PERSON,
             founder: key.line,
@@ -474,6 +426,7 @@ const admit = (w: World) =>
     yield* call(w, (p) => p.register(client, "test-connection", "test-session"));
     const nonce = yield* call(w, (p) => p.challenge(client));
     const tab = "checklist-instance";
+    const signed = yield* w.key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`);
 
     const admitted = yield* call(w, (p) =>
       p.initialize(
@@ -488,7 +441,7 @@ const admit = (w: World) =>
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: w.key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+          signed,
         },
         { url: "http://127.0.0.1:18787", tab, name: w.key.fingerprint },
       ),

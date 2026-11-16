@@ -1,5 +1,4 @@
 // P13 slice 2, next/. The real build, Alchemy and local instance run under plain vitest.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
@@ -12,6 +11,7 @@ import { expect, it } from "vitest";
 import { build } from "./build.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
+import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -55,13 +55,6 @@ const Msg=Schema.Struct({type:Schema.Literal("save"),note:Schema.String,base:Sch
 const Metadata=Schema.Struct({type:Schema.Literal("save"),note:Schema.String,base:Schema.Int,reason:Schema.String});
 export const program={name:"p13/recording",machine:Machine.make({model:Model,msg:Msg,cmds:[],init:s=>[s??{count:0},[]],update:{save:s=>[{count:s.count+1},[]]}}),state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:(s,m)=>m.base===s.count?null:{reason:"changed_elsewhere",now:s.count},inputs:{save:{_tag:"write",schema:Msg,description:"Save",personOnly:false}},outputs:{},writes:{},wake:()=>null,audit:{data:Metadata,select:m=>{if(m.note==="fail")throw new Error(m.body);return {type:m.type,note:m.note,base:m.base,reason:m.reason};}}};
 `;
-
-const field = (bytes: Uint8Array) => {
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(bytes.length);
-
-  return Buffer.concat([n, bytes]);
-};
 
 const recovery = Effect.fnUntraced(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -139,12 +132,8 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   yield* fs.writeFileString(file, program);
   const built = yield* build({ out: path.join(home, "dist"), files: [], ledger: [], programs: { [PROGRAM]: file } });
   const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-
-  const line = Schema.decodeSync(KeyLine)(
-    `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
-  );
+  const key = yield* personKey;
+  const line = Schema.decodeSync(KeyLine)(key.line);
 
   yield* Effect.acquireRelease(
     Effect.sync(() => {
@@ -171,18 +160,18 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
 
   const instance = yield* localInstance(
     built,
-    RecordWireTest.startupFixture({
+    yield* RecordWireTest.startupFixture({
       home,
       name: "p13-recording",
       person: PERSON,
       founder: line,
-      window: raw.toString("base64url"),
+      window: key.raw,
       port: held.port,
     }),
   );
 
   const project = instance.project("p13-recording");
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fingerprint = key.fingerprint;
 
   const from = {
     by: fingerprint,
@@ -214,7 +203,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       text: `fabrika-hello\n${instance.url}\n${tab}\n${nonce}`,
       line,
       space: "fabrika-client",
-      sign: (bytes) => Effect.sync(() => sign(null, bytes, pair.privateKey)),
+      sign: key.sign,
     });
 
     const answer = yield* invoke(project, "initialize", [
@@ -223,7 +212,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         versions: [1, 2],
         has: ["seal"],
         ping: "30s",
-        key: raw.toString("base64url"),
+        key: key.raw,
         tab,
         nonce,
         signed,

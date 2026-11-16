@@ -1,6 +1,5 @@
 // P12, next/. Project and Connection use their real composition and SQLite services.
 // Only platform handles are supplied here. No sockets or substitute authority rules.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
 import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
@@ -20,8 +19,10 @@ import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
@@ -40,71 +41,28 @@ vi.mock("effect", async (importOriginal) => {
   return { ...actual, Layer: { ...actual.Layer } };
 });
 
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
+/** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
 
-const counterCode = built("counter");
+const counterCode = await built("counter");
 
-const checklistCode = built("checklist");
+const checklistCode = await built("checklist");
 
-const tezgahCode = built("tezgah");
+const tezgahCode = await built("tezgah");
 
-const approvalCode = built("approvals");
+const approvalCode = await built("approvals");
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 const SENT = "2026-11-08T04:00:00.000Z";
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    size = Buffer.alloc(4);
-
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const generated = fc.record({
   letter: fc.uuid(),
@@ -217,7 +175,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
   table.programs["fabrika/tezgah"] = tezgahCode;
   table.programs["p12/approvals"] = approvalCode;
-  const key = identity();
+  const key = await Effect.runPromise(personKey);
   // The ledger is in memory: a file would sync every commit to disk, which took half of L4's time
   // on a laptop, and no law reads the file. A reopen keeps this same handle.
   const db = new DatabaseSync(":memory:");
@@ -246,15 +204,17 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: "project-test",
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "brain-test",
-        ...(options.starts === undefined ? {} : { starts: options.starts }),
-      }),
+      await Effect.runPromise(
+        RecordWireTest.settingsFixture({
+          name: "project-test",
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: 18787,
+          build: "brain-test",
+          ...(options.starts === undefined ? {} : { starts: options.starts }),
+        }),
+      ),
     ),
     PROCESS: {
       // Ticket 402 keys a Process object by its registered name, so the stub key may be a
@@ -389,7 +349,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\ntab-a\n${nonce}`),
+          signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\ntab-a\n${nonce}`)),
         },
         { url: "http://127.0.0.1:18787", tab: "tab-a", name: key.fingerprint },
       ),
@@ -426,7 +386,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       ).process,
     send: (pid: string, type: string, letter = type) =>
       run(p.route(client, "process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 })),
-    revoke: () => {
+    revoke: async () => {
       const text = revokeText({
         id: "revoke-1",
         key: key.raw,
@@ -436,7 +396,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         sentAt: SENT,
       });
 
-      return run(p.grant({ text, armored: key.proof(text) }));
+      return run(p.grant({ text, armored: await Effect.runPromise(key.proof(text)) }));
     },
     message: (f: typeof onMessage) => {
       onMessage = f;
@@ -446,7 +406,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     },
     reopen: async () => {
       await runtime.dispose();
-      table.programs["fabrika/counter"] = built(`changed counter:${build}`);
+      table.programs["fabrika/counter"] = await built(`changed counter:${build}`);
       runtime = projectRuntime(ctx, env);
       const reopened = await run(ProjectService);
       await settled(db);

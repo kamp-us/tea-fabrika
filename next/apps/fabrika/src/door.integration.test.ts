@@ -5,12 +5,9 @@
 // Each test names the plant it guards. The builder implements door.ts and does not edit this file.
 // Every hello echoes the issued nonce. Its existing signature binds that nonce, the URL and tab.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
+import { NodeServices } from "@effect/platform-node";
 import { afterAll, beforeEach, describe, expect, it } from "@effect/vitest";
 import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
@@ -50,7 +47,24 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Schema, Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Logger,
+  Option,
+  Path,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
+import { Digest } from "effect/crypto";
+import { Base64 } from "effect/encoding";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -128,17 +142,17 @@ const armor = (bytes: Uint8Array) =>
     .match(/.{1,70}/g)
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
+/** One digest of some bytes, on Effect's Digest over WebCrypto. */
+const hashed = (algorithm: typeof Digest.sha256 | typeof Digest.sha512, bytes: Uint8Array) =>
+  Digest.Digest.use((digest) => digest.digest(algorithm, bytes)).pipe(Effect.provide(Digest.layerWebCrypto));
+
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  hashed(Digest.sha256, bytes).pipe(Effect.map((sum) => `SHA256:${Base64.encode(sum).replace(/=+$/, "")}`));
 
 const signedBytes = (text: string, space: string = SPACE) =>
-  Buffer.concat([
-    Buffer.from("SSHSIG"),
-    field(space),
-    field(""),
-    field("sha512"),
-    field(createHash("sha512").update(text).digest()),
-  ]);
+  hashed(Digest.sha512, utf8(text)).pipe(
+    Effect.map((sum) => Buffer.concat([Buffer.from("SSHSIG"), field(space), field(""), field("sha512"), field(sum)])),
+  );
 
 const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
   armor(
@@ -164,10 +178,11 @@ const key = Effect.fn("test.key")(function* () {
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: fingerprint(bytes),
-    sshFingerprint: fingerprint(blob),
+    fingerprint: yield* fingerprint(bytes),
+    sshFingerprint: yield* fingerprint(blob),
     sign: (text: string, space: string = SPACE) =>
-      web(() => crypto.subtle.sign("Ed25519", pair.privateKey, signedBytes(text, space))).pipe(
+      signedBytes(text, space).pipe(
+        Effect.flatMap((signed) => web(() => crypto.subtle.sign("Ed25519", pair.privateKey, signed))),
         Effect.map((raw) => pack(blob, Buffer.concat([field("ssh-ed25519"), field(new Uint8Array(raw))]), space)),
       ),
   };
@@ -199,7 +214,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
 
   return {
     line: `sk-ecdsa-sha2-nistp256@openssh.com ${blob.toString("base64")}`,
-    fingerprint: fingerprint(blob),
+    fingerprint: yield* fingerprint(blob),
     sign: Effect.fnUntraced(function* (
       text: string,
       over: {
@@ -217,10 +232,12 @@ const passkey = Effect.fn("test.passkey")(function* () {
         counter = over.counter ?? 0,
         space = over.space ?? SPACE;
 
+      const challenge = over.challenge ?? (yield* signedBytes(text, space));
+
       const clientDataJSON = utf8(
         JSON.stringify({
           type: over.type ?? "webauthn.get",
-          challenge: Buffer.from(over.challenge ?? signedBytes(text, space)).toString("base64url"),
+          challenge: Buffer.from(challenge).toString("base64url"),
           origin: over.origin ?? origin,
           crossOrigin: over.crossOrigin ?? false,
         }),
@@ -229,13 +246,13 @@ const passkey = Effect.fn("test.passkey")(function* () {
       const extensions = over.extensions ?? new Uint8Array();
 
       const authenticatorData = Buffer.concat([
-        createHash("sha256").update(rp).digest(),
+        yield* hashed(Digest.sha256, utf8(rp)),
         Buffer.from([flags]),
         u32(counter),
         extensions,
       ]);
 
-      const bytes = Buffer.concat([authenticatorData, createHash("sha256").update(clientDataJSON).digest()]);
+      const bytes = Buffer.concat([authenticatorData, yield* hashed(Digest.sha256, clientDataJSON)]);
 
       const raw = new Uint8Array(
         yield* web(() => crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, bytes)),
@@ -299,7 +316,12 @@ beforeEach(async () => {
   ));
 });
 
-const top = mkdtempSync(join(tmpdir(), "p10-door-"));
+// The real disk and paths, through Effect's FileSystem and Path.
+const disk = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)));
+
+const { join } = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+
+const top = await Effect.runPromise(disk.makeTempDirectory({ prefix: "p10-door-" }));
 // A world opens its files with plain calls, so each is acquired into this one scope, which the
 // file's last hook closes before it removes the folder.
 const files = Scope.makeUnsafe();
@@ -308,7 +330,7 @@ afterAll(() => {
   // The connections close first, then the folder goes. Closing hundreds of them may yield, so the
   // hook hands Vitest the run as a Promise.
   const teardown = Scope.close(files, Exit.void).pipe(
-    Effect.andThen(Effect.sync(() => rmSync(top, { recursive: true, force: true }))),
+    Effect.andThen(disk.remove(top, { recursive: true, force: true })),
   );
 
   return Effect.runPromise(teardown);
@@ -359,7 +381,7 @@ const world = Effect.fnUntraced(function* (
     monitor?: boolean;
   } = {},
 ) {
-  const dir = mkdtempSync(join(top, "w-"));
+  const dir = yield* disk.makeTempDirectory({ directory: top, prefix: "w-" }).pipe(Effect.orDie);
   const db = open(join(dir, "project.db"));
   const sql = nodeSql(db);
   // Every stream an append rang a parked wait on, through the brain's own turns.
@@ -612,7 +634,14 @@ const world = Effect.fnUntraced(function* (
     processesFor,
     databases: () => new Map([["object", db], ...partFiles]),
     partCount: () => partFiles.size,
-    bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
+    /** Every file of this world, as bytes, read now. */
+    bytes: disk.readDirectory(dir).pipe(
+      Effect.flatMap((names) =>
+        Effect.forEach(names, (name) => disk.readFile(join(dir, name)), { concurrency: "unbounded" }),
+      ),
+      Effect.map((all) => all.map((bytes) => Buffer.from(bytes))),
+      Effect.orDie,
+    ),
   };
 });
 
@@ -855,9 +884,7 @@ const wire = Effect.fnUntraced(function* (
     getWebSocketAutoResponseTimestamp: () => null,
   };
 
-  const input = StartsTest.fixture({ name: "t843-project", port: 8787 }, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
+  const input = yield* StartsTest.fixture({ name: "t843-project", port: 8787 });
 
   const env = {
     INSTANCE: JSON.stringify(input),
@@ -5292,12 +5319,12 @@ describe("P10 span reader and recording", () => {
             expect(visible).not.toContain(marker);
           }
 
-          for (const bytes of w.bytes()) {
+          for (const bytes of yield* w.bytes) {
             expect(bytes.includes("nested-redacted-marker")).toBe(false);
           }
 
           // Raw input bodies have no allowed durable home here: the test handoff skips raw keys.
-          for (const bytes of w.bytes()) {
+          for (const bytes of yield* w.bytes) {
             for (const marker of [
               "raw-key-marker",
               "terminal-byte-marker",

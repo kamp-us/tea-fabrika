@@ -97,7 +97,7 @@ export const instance = (copy: Effect.Success<typeof fixture>) =>
 
     const handle = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: "p15-reload",
         person: PERSON,

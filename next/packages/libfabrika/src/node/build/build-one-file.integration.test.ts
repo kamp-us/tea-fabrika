@@ -1220,9 +1220,8 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             const port = 8787;
 
             // A file route reaches no object: each binding answers nothing but the name lookup.
-            const config = StartsTest.fixture(
-              { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
-              (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+            const config = await Effect.runPromise(
+              StartsTest.fixture({ name: "p14", port, person: "p", founder: "f", window: null, build: built.build }),
             );
 
             const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };

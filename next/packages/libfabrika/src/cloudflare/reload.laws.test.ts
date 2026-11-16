@@ -18,7 +18,6 @@
 // selected spec, the hashes that failed, the live processes) to pick the next move and its
 // parameters: an install generated from the current source, one of the five failures made from it,
 // a repeat, a new process, or a Project restart.
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
@@ -74,8 +73,8 @@ const BRAIN_BUILD = "brain-build-test";
 const TOKEN = "control-token-test";
 
 // Main's T753: the Project reads its start from the INSTANCE binding and records it in its own ledger.
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     // A public key line made from 32 fixed bytes: no private key exists for it.
@@ -83,8 +82,7 @@ const START = StartsTest.fixture(
     window: null,
     port: 18787,
     build: BRAIN_BUILD,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 /** Cloudflare's SQLite row limit, from the plan: a source over it is refused as too large. */

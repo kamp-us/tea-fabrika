@@ -1,7 +1,7 @@
 // A14, next/. Host-only under 0045: real sockets, workerd and persistent object storage are the subject.
 // This scenario executes no child command. The isolated local instance uses generated keys only.
-// edge: Node crypto creates test identities; these keys never touch a file or an account.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
+// Effect's Signature makes the test identities (person-key.test-support.ts); these keys never touch a
+// file or an account.
 import { NodeServices } from "@effect/platform-node";
 import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
@@ -10,6 +10,7 @@ import { Task, Result } from "@kampus/libfabrika/tasks/Task";
 import { Effect, FileSystem, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
@@ -20,59 +21,6 @@ const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
 
 const SENT = "2026-11-12T10:00:00.000Z";
-
-const field = (v: string | Uint8Array) => {
-  const b = Buffer.from(v);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(b.length);
-
-  return Buffer.concat([n, b]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x;
-
-  if (raw === undefined) {
-    throw new Error("test public key has no x coordinate");
-  }
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    sign: (value: string) => {
-      const body = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(value).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, body, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packed
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const Frame = Schema.Struct({
   id: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
@@ -86,12 +34,7 @@ type Frame = typeof Frame.Type;
 
 class Closed extends Schema.TaggedError<Closed>()("Closed", { code: Schema.Int }) {}
 
-const socket = Effect.fnUntraced(function* (
-  url: string,
-  key: ReturnType<typeof identity>,
-  tab: string,
-  authorized = true,
-) {
+const socket = Effect.fnUntraced(function* (url: string, key: PersonKey, tab: string, authorized = true) {
   const inbox = yield* Queue.unbounded<Frame | Closed>();
   const frames: Array<Frame> = [];
   let closed: Closed | undefined;
@@ -162,7 +105,7 @@ const socket = Effect.fnUntraced(function* (
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: key.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+    signed: yield* key.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
   });
 
   expect(answer.error === undefined).toBe(authorized);
@@ -190,9 +133,9 @@ it.live(
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "tasks-wire-" });
       const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
 
-      const root = identity(),
-        hands = identity(),
-        other = identity();
+      const root = yield* personKey,
+        hands = yield* personKey,
+        other = yield* personKey;
 
       const selected: typeof SeededProject.selected = hands.fingerprint;
       const app = path.resolve(import.meta.dirname, "..");
@@ -232,7 +175,7 @@ it.live(
       const running = yield* localInstance(
         built,
         // The settings fixture names the same gateway budget, 100,000 a minute.
-        RecordWireTest.startupFixture({
+        yield* RecordWireTest.startupFixture({
           home,
           name: "tasks-wire",
           person: PERSON,
@@ -271,7 +214,7 @@ it.live(
 
       expect(requester).toMatchObject({ process: expect.any(String) });
 
-      const grant = Effect.fnUntraced(function* (key: ReturnType<typeof identity>, id: string) {
+      const grant = Effect.fnUntraced(function* (key: PersonKey, id: string) {
         const value = grantText({
           id,
           key: key.raw,
@@ -281,13 +224,14 @@ it.live(
           sentAt: SENT,
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
         });
+        const armored = yield* root.proof(value);
 
         const reply = yield* Effect.tryPromise({
           try: () =>
             fetch(`${url}/grant`, {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ text: value, armored: root.sign(value) }),
+              body: JSON.stringify({ text: value, armored }),
             }),
           catch: (cause: unknown) => new Error("grant failed", { cause }),
         });
@@ -351,13 +295,14 @@ it.live(
         sentAt: SENT,
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
+      const armored = yield* root.proof(revoke);
 
       yield* Effect.tryPromise({
         try: () =>
           fetch(`${url}/grant`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: revoke, armored: root.sign(revoke) }),
+            body: JSON.stringify({ text: revoke, armored }),
           }),
         catch: (cause: unknown) => new Error("revoke failed", { cause }),
       });

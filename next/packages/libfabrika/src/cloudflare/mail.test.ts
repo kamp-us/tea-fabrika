@@ -4,7 +4,6 @@
 // `full: { unread, cap }` case that `mailLayer` answers as `ProgramMailError { reason: "full" }`
 // after it wakes the target, and the Project gets `processAck(process, pos, from)`, which binds the
 // name from the live process it is given and takes no name of its own.
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 // R2 (sev1 of 2026-11-15): the gateway wakes a finished task's requester outside any span. A wake that
@@ -424,8 +423,8 @@ const COUNTER = "fabrika/counter";
 
 const BRAIN_BUILD = "brain-build-test";
 
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     // A public key line made from 32 fixed bytes: no private key exists for it.
@@ -433,8 +432,7 @@ const START = StartsTest.fixture(
     window: null,
     port: 18787,
     build: BRAIN_BUILD,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 const counter = () => {

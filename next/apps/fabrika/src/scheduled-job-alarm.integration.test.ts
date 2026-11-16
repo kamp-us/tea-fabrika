@@ -1,11 +1,11 @@
 // next/, L5: real workerd storage and alarms cannot be exercised by the pure machine laws.
-// Edge: Effect has no SSH public-key generation API.
-import { createHash, generateKeyPairSync } from "node:crypto";
+// The founder's key comes from person-key.test-support.ts, on Effect's Signature.
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Clock, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
+import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -19,14 +19,6 @@ const PROGRAM = "schedules/beat";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 const WAIT = 25_000;
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-
-  return Buffer.concat([size, body]);
-};
 
 const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: A) => boolean) =>
   Effect.gen(function* () {
@@ -103,11 +95,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
       const { build } = yield* Effect.promise(() => import("./build.ts"));
       const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-      const pair = generateKeyPairSync("ed25519");
-      const raw = pair.publicKey.export({ format: "jwk" }).x!;
-      const bytes = Buffer.from(raw, "base64url");
-      const founder = `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`;
-      const fingerprint = `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+      const { raw, line: founder, fingerprint } = yield* personKey;
       yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const module = path.join(home, "beat.ts");
       const fixture = path.resolve(import.meta.dirname, "../../../../fixtures/next/packs/schedules/beat.ts");
@@ -120,7 +108,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       yield* Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
 
-        const options = RecordWireTest.startupFixture({
+        const options = yield* RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,

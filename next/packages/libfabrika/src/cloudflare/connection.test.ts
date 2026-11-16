@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 // next/, 0140. Only the platform and project answer are fake. The call handler and sink are real.
 // node:sqlite is the edge: Effect has no synchronous in-memory SQLite handle.
 import { DatabaseSync } from "node:sqlite";
@@ -55,6 +54,8 @@ const database = Effect.acquireRelease(
   (db) => Effect.sync(() => db.close()),
 );
 
+const INPUT = await Effect.runPromise(StartsTest.fixture({ name: "test-project", port: 8787 }));
+
 const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "unreachable") => {
   const base = nodeSql(db);
   let settingsReads = 0;
@@ -70,9 +71,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     },
   };
 
-  const input = StartsTest.fixture({ name: "test-project", port: 8787 }, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
+  const input = INPUT;
 
   let attached: typeof Attached.Type = Attached.cases.online.make({
     client: "test-client",

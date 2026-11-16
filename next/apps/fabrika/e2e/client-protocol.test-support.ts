@@ -288,7 +288,7 @@ export const served = (h: Home) =>
 
     const instance = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home: h.dir,
         name: PROJECT,
         person: PERSON,

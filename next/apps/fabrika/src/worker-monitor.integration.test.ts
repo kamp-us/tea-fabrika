@@ -7,17 +7,14 @@
 // the watched program exits and when its parent stops it with `stop_child`.
 // Host-only: it starts a real instance, so it runs in CI's full run only, never on the laptop
 // (0536, 0178).
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, FileSystem, Path, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
@@ -32,58 +29,8 @@ const PROJECT = "m13-watch";
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
 /** The founder's key, and its signature over the door's hello. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = PersonKey;
 
 // The two programs, as source the real app build bundles. The reader watches the name it is told,
 // ends the watch it is told to forget, and keeps every answer and DOWN it folds, in order; the writer
@@ -248,7 +195,7 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       })
     ).error,
   ).toBeUndefined();
@@ -270,12 +217,11 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
 
   return Effect.runPromise(
     Effect.gen(function* () {
-      const home = yield* Effect.acquireRelease(
-        Effect.sync(() => mkdtempSync(join(tmpdir(), "m13w-"))),
-        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-      );
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "m13w-" });
 
-      const key = identity();
+      const key = yield* personKey;
       yield* Effect.acquireRelease(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_HOME;
@@ -292,7 +238,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
             }
           }),
       );
-      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
       const selections: Record<string, string> = {};
 
       for (const [role, source] of [
@@ -300,12 +246,12 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
         ["writer", WRITER],
         ["parent", PARENT],
       ] as const) {
-        const path = join(home, `${role}.ts`);
-        writeFileSync(path, source);
-        selections[`m13/${role}`] = path;
+        const file = path.join(home, `${role}.ts`);
+        yield* fs.writeFileString(file, source);
+        selections[`m13/${role}`] = file;
       }
 
-      const built = yield* build({ out: join(home, "dist"), programs: selections });
+      const built = yield* build({ out: path.join(home, "dist"), programs: selections });
 
       yield* Effect.gen(function* () {
         // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
@@ -313,7 +259,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
 
         const instance = yield* localInstance(
           built,
-          RecordWireTest.startupFixture({
+          yield* RecordWireTest.startupFixture({
             home,
             name: PROJECT,
             person: PERSON,

@@ -6,16 +6,13 @@
 // only process the laws look at is the workerd pid their own instance's `started` fact names, and
 // they look with `ps`, never with a signal. These are host-only laws (0045, 0178): they run in the
 // step's container, never on the owner's Mac.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Predicate, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
@@ -41,58 +38,8 @@ const START = 30_000;
 // How often the poller asks for `info`, and how often a fact or a process is looked at.
 const POLL = 50;
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    n = Buffer.alloc(4);
-
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
 // The founder's key, as an SSH public key line and a signer for the door's hello.
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    raw = pair.publicKey.export({ format: "jwk" }).x!;
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-type Key = ReturnType<typeof identity>;
+type Key = PersonKey;
 
 type Instance = any;
 
@@ -154,7 +101,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
         platform: "headless",
         os: "linux",
         sentAt: SENT,
-        signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+        signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
       },
     }),
   );
@@ -233,10 +180,9 @@ const outcome = async (instance: Instance): Promise<Outcome> => {
 /** One real local instance with no programs, its `ps -o rss=` answered by `kib`. */
 const world = (kib: (pid: number) => number | null) =>
   Effect.gen(function* () {
-    const home = yield* Effect.acquireRelease(
-      Effect.sync(() => mkdtempSync(join(tmpdir(), "mrw-"))),
-      (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
-    );
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "mrw-" });
 
     yield* Effect.acquireRelease(
       Effect.sync(() => {
@@ -258,11 +204,11 @@ const world = (kib: (pid: number) => number | null) =>
     const { localState } = yield* Effect.promise(() => import("alchemy/State/LocalState"));
     const { build } = yield* Effect.promise(() => import("./build.ts"));
     const { localInstance } = yield* Effect.promise(() => import("./local-instance.ts"));
-    const key = identity();
+    const key = yield* personKey;
     // Held until the scope closes, after the instance that binds it (finalizers run in reverse).
     const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
-    const built = yield* build({ out: join(home, "dist") }).pipe(Effect.provide(NodeServices.layer));
+    yield* fs.symlink(path.resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
+    const built = yield* build({ out: path.join(home, "dist") });
 
     const platform = Layer.mergeAll(
       rssStandIn(kib).pipe(Layer.provide(NodeServices.layer)),
@@ -274,7 +220,7 @@ const world = (kib: (pid: number) => number | null) =>
 
     const instance: Instance = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: PROJECT,
         person: PERSON,
@@ -285,7 +231,7 @@ const world = (kib: (pid: number) => number | null) =>
     ).pipe(Effect.provideContext(context));
 
     return { instance, key };
-  });
+  }).pipe(Effect.provide(NodeServices.layer));
 
 /** The facts of one start, in the order the brain wrote them. */
 const sequence = (facts: ReadonlyArray<Fact>, start: unknown) =>

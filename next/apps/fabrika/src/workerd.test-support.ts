@@ -15,6 +15,32 @@ const processes = Effect.gen(function* () {
   return yield* ps.stdout.pipe(Stream.decodeText(), Stream.mkString);
 }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
 
+/** One row of `ps`: a process, its parent's pid, and its command line. */
+type Row = { readonly pid: number; readonly parent: number; readonly command: string };
+
+/** `parent` and every process below it, from one `ps` read. */
+export const tree = Effect.fn("workerd.tree")(function* (parent: number) {
+  const rows = (yield* processes).split("\n").flatMap((row): Array<Row> => {
+    const [, pid, ppid, command] = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row) ?? [];
+
+    return pid === undefined || ppid === undefined || command === undefined
+      ? []
+      : [{ pid: Number(pid), parent: Number(ppid), command }];
+  });
+
+  const pids = new Set([parent]);
+
+  for (let n = 0; n < rows.length; n++) {
+    for (const row of rows) {
+      if (pids.has(row.parent)) {
+        pids.add(row.pid);
+      }
+    }
+  }
+
+  return rows.filter((row) => pids.has(row.pid));
+});
+
 /** The pid of the one `workerd` among `parent`'s descendants. More or fewer than one fails the test. */
 const workerd = Effect.fn("workerd.find")(function* (parent: number) {
   const rows = (yield* processes).split("\n");

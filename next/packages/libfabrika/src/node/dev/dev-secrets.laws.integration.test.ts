@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 // P12, next/. [secrets] Generated flows through the real instance, control route, Connection and sinks.
 // Only platform deployment, HTTP/RPC transport, child RSS and Cloudflare handles are supplied.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -53,9 +52,7 @@ const config = {
   rateLimit: { limit: 100_000, window: 60_000 },
 };
 
-const connectionInput = StartsTest.fixture(config, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-);
+const connectionInput = await Effect.runPromise(StartsTest.fixture(config));
 
 const destinations = ["spans", "logs", "journal", "measurements", "outbox"] as const;
 

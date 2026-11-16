@@ -1,6 +1,3 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -69,9 +66,9 @@ const filesWithoutSync = Layer.effect(
 
 // A test's folder, its stubbed home and its fetch spy all go back through the test's scope (0061).
 const sandbox = Effect.gen(function* () {
-  const folder = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "p12-m-"))),
-    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  const folder = yield* FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p12-m-" })).pipe(
+    Effect.provide(NodeServices.layer),
+    Effect.orDie,
   );
   yield* Effect.acquireRelease(
     Effect.sync(() => vi.stubEnv("FABRIKA_HOME", folder)),
@@ -128,7 +125,7 @@ it.live.prop(
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       const folder = yield* sandbox;
       const fetched = yield* spyOnFetch(async () => Response.json({ value: null }));
-      const fixture = RecordWireTest.startupFixture({
+      const fixture = yield* RecordWireTest.startupFixture({
         home: folder,
         name: "quota-start",
         person: "person-test",
@@ -217,9 +214,9 @@ it.live.prop(
           };
 
           for (const build of builds) {
-            yield* Effect.scoped(
-              startDev({ build, brain: "unused.mjs", programs: {} }, RecordWireTest.startupFixture(config)),
-            ).pipe(
+            const fixture = yield* RecordWireTest.startupFixture(config);
+
+            yield* Effect.scoped(startDev({ build, brain: "unused.mjs", programs: {} }, fixture)).pipe(
               Effect.provide(fetchClient),
               Effect.provide(ProcessIdGenerator.layer),
               Effect.provide(SecureRandom.layerWebCrypto),
@@ -265,19 +262,15 @@ it.live.prop(
       const kill = yield* spyOnKill;
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
       yield* Effect.gen(function* () {
-        const starting = yield* Effect.forkChild(
-          startDev(
-            { build, brain: "unused.mjs", programs: {} },
-            RecordWireTest.startupFixture({
-              home: folder,
-              name: "life-contract",
-              person: "person-test",
-              founder: "public-test",
-              window: null,
-              port: 18787,
-            }),
-          ),
-        );
+        const fixture = yield* RecordWireTest.startupFixture({
+          home: folder,
+          name: "life-contract",
+          person: "person-test",
+          founder: "public-test",
+          window: null,
+          port: 18787,
+        });
+        const starting = yield* Effect.forkChild(startDev({ build, brain: "unused.mjs", programs: {} }, fixture));
         yield* Deferred.await(reached);
         yield* Effect.yieldNow;
         expect(starting.pollUnsafe()).toBeUndefined();

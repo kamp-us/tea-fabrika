@@ -1,27 +1,37 @@
 // P12, next/. Unit checks own the outbox and memory sampling. Child cleanup uses the real dev.ts.
-import { spawn, execFileSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, FileSystem, Path } from "effect";
+import { ChildProcess } from "effect/process";
+import { type Child, start } from "./dev-child.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
+import { tree as descendants } from "./workerd.test-support.ts";
+
+// The real disk and paths, through Effect's FileSystem and Path.
+const disk = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)));
+
+const { join, resolve } = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
 
 const homes: Array<string> = [];
 
-const children: Array<ChildProcess> = [];
+const children: Array<Child> = [];
 
 const groups: Array<number> = [];
 
 const ports: Array<Effect.Effect<void>> = [];
 
-const home = () => {
-  const h = mkdtempSync(join(tmpdir(), "p12-l-"));
+const home = async () => {
+  const h = await Effect.runPromise(disk.makeTempDirectory({ prefix: "p12-l-" }));
   homes.push(h);
 
   return h;
 };
+
+/** `parent` and every process below it, read from the real `ps` now. */
+const tree = (parent: number) => Effect.runPromise(descendants(parent));
+
+/** Whether a started child still runs, asked now. */
+const running = (child: Child) => Effect.runPromise(child.running);
 
 const pause = () => new Promise<void>((done) => setTimeout(done, 25));
 
@@ -36,13 +46,9 @@ const living = (pid: number) => {
 };
 
 afterEach(async () => {
-  for (const child of children.splice(0))
-  // A child killed by a signal keeps `exitCode` null; `signalCode` says it already ended.
-  {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGTERM");
-      await new Promise<void>((done) => child.once("exit", () => done()));
-    }
+  // A child that already ended is only waited for; a running one gets SIGTERM first.
+  for (const child of children.splice(0)) {
+    await Effect.runPromise(child.stop);
   }
 
   for (const pid of groups.splice(0)) {
@@ -54,7 +60,7 @@ afterEach(async () => {
   }
 
   for (const h of homes.splice(0)) {
-    rmSync(h, { recursive: true, force: true });
+    await Effect.runPromise(disk.remove(h, { recursive: true, force: true }));
   }
 
   // Last, so the pair stays held until the instance that used its port is gone.
@@ -63,34 +69,11 @@ afterEach(async () => {
   }
 });
 
-const tree = (parent: number) => {
-  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" })
-    .split("\n")
-    .flatMap((row) => {
-      const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
-
-      return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
-    });
-
-  const pids = new Set([parent]);
-
-  for (let n = 0; n < rows.length; n++) {
-    for (const row of rows) {
-      if (pids.has(row.parent)) {
-        pids.add(row.pid);
-      }
-    }
-  }
-
-  return rows.filter((r) => pids.has(r.pid));
-};
-
 const launch = async (startupGate = false) => {
-  readFileSync(resolve(import.meta.dirname, "../dev.ts"), "utf8");
-  const folder = home();
+  const folder = await home();
   const at = await Effect.runPromise(heldPort());
   ports.push(at.release);
-  const env: NodeJS.ProcessEnv = { ...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1" };
+  const env: Record<string, string | undefined> = { ...process.env, FABRIKA_HOME: folder, DO_NOT_TRACK: "1" };
   delete env.TYPESAFE_API_KEY;
   delete env.FABRIKA_FOREGROUND;
   delete env.CLOUDFLARE_API_TOKEN;
@@ -99,48 +82,52 @@ const launch = async (startupGate = false) => {
     const preload = join(folder, "startup.mjs");
     // Delay only the detached child. Kill its parent before startup can finish.
     // This is a test-only Node import, not a product startup flag.
-    writeFileSync(
-      preload,
-      `import {existsSync,writeFileSync} from "node:fs"; if (process.argv.includes("--child")) {writeFileSync(${JSON.stringify(join(folder, "starting"))}, String(process.pid)); while (!existsSync(${JSON.stringify(join(folder, "startup-release"))})) await new Promise(done => setTimeout(done, 25));}`,
+    await Effect.runPromise(
+      disk.writeFileString(
+        preload,
+        `import {existsSync,writeFileSync} from "node:fs"; if (process.argv.includes("--child")) {writeFileSync(${JSON.stringify(join(folder, "starting"))}, String(process.pid)); while (!existsSync(${JSON.stringify(join(folder, "startup-release"))})) await new Promise(done => setTimeout(done, 25));}`,
+      ),
     );
     env.NODE_OPTIONS = `${env.NODE_OPTIONS ?? ""} --import=${preload}`;
   }
 
   const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  let output = "";
 
-  const child = spawn(
-    process.execPath,
-    [
-      resolve(import.meta.dirname, "../dev.ts"),
-      "--port",
-      String(at.port),
-      "--name",
-      "p12-life",
-      "--person",
-      "person_01m6v5270hf3c8x2q7w9z4k5mn",
-      "--founder",
-      key,
-      "--window",
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-    ],
-    { env, detached: true, stdio: ["ignore", "pipe", "pipe"] },
+  // Detached, as before: dev.ts leads a process group of its own.
+  const child = await Effect.runPromise(
+    start(
+      ChildProcess.make(
+        process.execPath,
+        [
+          resolve(import.meta.dirname, "../dev.ts"),
+          "--port",
+          String(at.port),
+          "--name",
+          "p12-life",
+          "--person",
+          "person_01m6v5270hf3c8x2q7w9z4k5mn",
+          "--founder",
+          key,
+          "--window",
+          "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ],
+        { env, extendEnv: false, detached: true, stdin: "ignore" },
+      ),
+      (text) => {
+        output += text;
+      },
+    ),
   );
 
   children.push(child);
-  groups.push(child.pid!);
-  let output = "";
-  child.stdout!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
-  child.stderr!.on("data", (b: Buffer) => {
-    output += b.toString();
-  });
+  groups.push(child.pid);
   const url = `http://127.0.0.1:${at.port}`;
   const observed: Array<{ at: number; pids: number[]; ready: boolean }> = [];
 
   if (startupGate) {
-    while (!existsSync(join(folder, "starting"))) {
-      if (child.exitCode !== null || child.signalCode !== null) {
+    while (!(await Effect.runPromise(disk.exists(join(folder, "starting"))))) {
+      if (!(await running(child))) {
         throw new Error("instance ended before startup gate");
       }
 
@@ -152,16 +139,24 @@ const launch = async (startupGate = false) => {
 
   // Wait for the instance's own ready line, not for the first HTTP answer. workerd answers HTTP
   // while the instance still makes its startup calls, and a kill in that gap fails the startup.
-  await new Promise<void>((done, fail) => {
-    child.stdout!.on("data", () => {
-      if (output.includes('{"ready":')) {
-        done();
-      }
-    });
-    child.once("exit", () => fail(new Error(`P12 dev.ts did not start: ${output}`)));
-  });
+  while (!output.includes('{"ready":')) {
+    if (!(await running(child))) {
+      throw new Error(`P12 dev.ts did not start: ${output}`);
+    }
+
+    await pause();
+  }
 
   return { child, folder, url, output: () => output, observed };
+};
+
+/** Sends `signal` to dev.ts alone, never its group, and waits until it has ended. */
+const signalNode = async (child: Child, signal: NodeJS.Signals) => {
+  process.kill(child.pid, signal);
+
+  while (await running(child)) {
+    await pause();
+  }
 };
 
 const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding = 0) => {
@@ -181,17 +176,15 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
       throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
     }
 
-    if (instance.child.exitCode !== null || instance.child.signalCode !== null) {
-      throw new Error(
-        `P12 dev.ts exited while waiting for workerd: exitCode=${instance.child.exitCode}, signal=${instance.child.signalCode}\n${details()}`,
-      );
+    if (!(await running(instance.child))) {
+      throw new Error(`P12 dev.ts exited while waiting for workerd\n${details()}`);
     }
 
     if (performance.now() >= until) {
       throw new Error(`P12 workerd did not become ready within 10 seconds\n${details()}`);
     }
 
-    const children = tree(instance.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+    const children = (await tree(instance.child.pid)).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
     const observation = { at: performance.now(), pids: children.map((row) => row.pid), ready: false };
     instance.observed.push(observation);
 
@@ -212,7 +205,7 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
       /* Spawn attempt has not reached its listener. */
     }
 
-    const current = tree(instance.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+    const current = (await tree(instance.child.pid)).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
 
     if (observation.ready && current.length === 1 && current[0]!.pid === children[0]!.pid) {
       return children[0]!.pid;
@@ -226,13 +219,12 @@ describe("P12 local brain life", () => {
   // Outside only: real dev.ts, process groups and TCP. This sandbox cannot bind sockets.
   it("scenario: parent death before listener readiness leaves no instance group", async () => {
     const s = await launch(true);
-    const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
+    const leader = Number(await Effect.runPromise(disk.readFileString(join(s.folder, "starting"))));
     groups.push(leader);
     expect(living(leader)).toBe(true);
     await expect(fetch(s.url)).rejects.toThrow();
-    s.child.kill("SIGKILL");
-    await new Promise<void>((done) => s.child.once("exit", () => done()));
-    writeFileSync(join(s.folder, "startup-release"), "");
+    await signalNode(s.child, "SIGKILL");
+    await Effect.runPromise(disk.writeFileString(join(s.folder, "startup-release"), ""));
     const until = performance.now() + 10_000;
 
     while (living(leader) && performance.now() < until) {
@@ -240,32 +232,30 @@ describe("P12 local brain life", () => {
     }
 
     expect(living(leader), "the detached child must notice its original parent died during startup").toBe(false);
-    expect(tree(leader).filter((row) => living(row.pid))).toEqual([]);
+    expect((await tree(leader)).filter((row) => living(row.pid))).toEqual([]);
     await expect(fetch(s.url)).rejects.toThrow();
   });
   // Outside only: cleanup must address the process group after its leader already exited.
   it("scenario: instance group cleanup still reaches descendants after the leader exits", async () => {
     const s = await launch();
 
-    const rows = tree(s.child.pid!),
+    const rows = await tree(s.child.pid),
       leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
 
     expect(leader).toBeDefined();
     groups.push(leader!.pid);
 
-    const descendants = tree(leader!.pid)
-      .filter((row) => row.pid !== leader!.pid)
-      .map((row) => row.pid);
+    const below = (await tree(leader!.pid)).filter((row) => row.pid !== leader!.pid).map((row) => row.pid);
 
-    expect(descendants.length).toBeGreaterThan(0);
+    expect(below.length).toBeGreaterThan(0);
     process.kill(leader!.pid, "SIGKILL");
     const until = performance.now() + 5_000;
 
-    while (descendants.some(living) && performance.now() < until) {
+    while (below.some(living) && performance.now() < until) {
       await pause();
     }
 
-    expect(descendants.filter(living)).toEqual([]);
+    expect(below.filter(living)).toEqual([]);
     await expect(fetch(s.url)).rejects.toThrow();
   });
   it("scenario: p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
@@ -300,7 +290,7 @@ describe("P12 local brain life", () => {
 
       await pause();
       expect(
-        tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
+        (await tree(s.child.pid)).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
         details(),
       ).toEqual([]);
       const { brainOutbox } = await import("@kampus/libfabrika/node/local-dev");
@@ -324,7 +314,7 @@ describe("P12 local brain life", () => {
       // Wait past every installed backoff. No new child or outer HTTP restart is allowed.
       await new Promise<void>((done) => setTimeout(done, 2000));
       expect(
-        tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
+        (await tree(s.child.pid)).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
         details(),
       ).toEqual([]);
     } catch (cause) {
@@ -336,11 +326,12 @@ describe("P12 local brain life", () => {
     async (signal) => {
       const s = await launch();
       await workerd(s);
-      const descendants = tree(s.child.pid!).map((r) => r.pid);
-      s.child.kill(signal);
+      const below = (await tree(s.child.pid)).map((r) => r.pid);
+      // Node alone gets the signal, as a person's kill of the dev command does.
+      process.kill(s.child.pid, signal);
 
       for (;;) {
-        if (descendants.every((pid) => !living(pid))) {
+        if (below.every((pid) => !living(pid))) {
           break;
         }
 
@@ -349,7 +340,7 @@ describe("P12 local brain life", () => {
 
       await expect(fetch(s.url)).rejects.toThrow();
       await new Promise<void>((done) => setTimeout(done, 1100));
-      expect(descendants.filter(living)).toEqual([]);
+      expect(below.filter(living)).toEqual([]);
     },
   );
 });

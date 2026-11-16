@@ -3,7 +3,6 @@
 // start a child with the built-in `start_child`, and `child` counts `inc` and throws on `throw`. The
 // instance takes its start grants from its caller (`starts`), as the app's own wiring hands in its
 // empty list. Real workerd, sockets, object storage and alarms; no raw platform object stands in.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
@@ -21,6 +20,7 @@ import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
+import { type PersonKey, personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
@@ -33,55 +33,7 @@ const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 export const PROJECT = "p42-children";
 
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(body.length);
-
-  return Buffer.concat([n, body]);
-};
-
-/** A fresh SSH identity: its public line and key, its fingerprint, and a signer for the door's hello. */
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-  const bytes = Buffer.from(raw, "base64url");
-  const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-
-      const v = Buffer.alloc(4);
-      v.writeUInt32BE(1);
-
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        v,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-
-      const lines = packet.toString("base64").match(/.{1,70}/g) ?? [];
-
-      return `-----BEGIN SSH SIGNATURE-----\n${lines.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-export type Key = ReturnType<typeof identity>;
+export type Key = PersonKey;
 
 /** Asks the host for a child on `start`, and keeps every answer it was told. */
 const starterSource = [
@@ -151,7 +103,7 @@ export const childHome = Effect.fnUntraced(
       child: built.programs["p42/child"]?.hash ?? "",
     };
 
-    const key = identity();
+    const key = yield* personKey;
 
     const boot = Effect.gen(function* () {
       // Held until the scope closes, after the instance that binds it (finalizers run in reverse). Each
@@ -160,7 +112,7 @@ export const childHome = Effect.fnUntraced(
 
       return yield* localInstance(
         built,
-        RecordWireTest.startupFixture({
+        yield* RecordWireTest.startupFixture({
           home,
           name: PROJECT,
           person: PERSON,
@@ -230,7 +182,8 @@ export const childProject = Effect.fnUntraced(function* () {
   );
 
   const sql = nodeSql(db);
-  const key = identity();
+  const key = yield* personKey;
+  const agent = yield* personKey;
   const delivered: Array<unknown> = [];
   const configured: Array<{ descriptor: Descriptor; wake: boolean }> = [];
   const descriptors = new Map<string, Descriptor>();
@@ -336,7 +289,7 @@ export const childProject = Effect.fnUntraced(function* () {
   // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
   const env = {
     INSTANCE: JSON.stringify(
-      RecordWireTest.settingsFixture({
+      yield* RecordWireTest.settingsFixture({
         name: PROJECT,
         person: PERSON,
         founder: key.line,
@@ -447,7 +400,7 @@ export const childProject = Effect.fnUntraced(function* () {
     /** The founding key: it signs the project's grants and revokes (T953, L18). */
     founder: key,
     /** A second key, for an agent the founder lets in and later removes (T953, L18). */
-    agent: identity(),
+    agent,
     /** Every letter the door delivered to a process, as the process received it. */
     delivered,
     configured,

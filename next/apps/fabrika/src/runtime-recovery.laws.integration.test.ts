@@ -1,7 +1,6 @@
 // P12, next/. The real Project and Process services, Gateway and runner on SQLite.
 // Only Cloudflare's handles and Worker Loader transport are supplied by this Node fixture.
 // No class from brain.ts, and the only fake is the box's platform base class: the services are what the classes hand off to.
-import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { inspect } from "node:util";
 import { Cmd, Machine } from "@demlik/tea/effect";
@@ -35,9 +34,11 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { personKey } from "./person-key.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
@@ -129,14 +130,22 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
 
 type ProcessObject = ReturnType<typeof processObject>;
 
-const built = (source: string) => ({ hash: createHash("sha256").update(source).digest("hex"), source });
-const counterCode = built("counter");
-const checklistCode = built("checklist");
-const tezgahCode = built("tezgah");
-const approvalCode = built("approvals");
-const poisonCode = built("poison");
-const requesterCode = built("requester");
-const responderCode = built("responder");
+/** A built program's table row: its hash is the SHA-256 of its source, as the builder's is. */
+const built = (source: string) =>
+  Effect.runPromise(
+    Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(source))).pipe(
+      Effect.map((hash) => ({ hash, source })),
+      Effect.provide(Digest.layerWebCrypto),
+    ),
+  );
+
+const counterCode = await built("counter");
+const checklistCode = await built("checklist");
+const tezgahCode = await built("tezgah");
+const approvalCode = await built("approvals");
+const poisonCode = await built("poison");
+const requesterCode = await built("requester");
+const responderCode = await built("responder");
 
 /** A call on a Durable Object stub rejected. */
 class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
@@ -144,48 +153,6 @@ class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cau
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
-
-const field = (value: Buffer | string) => {
-  const body = Buffer.from(value),
-    size = Buffer.alloc(4);
-  size.writeUInt32BE(body.length);
-  return Buffer.concat([size, body]);
-};
-
-const identity = () => {
-  const pair = generateKeyPairSync("ed25519"),
-    bytes = Buffer.from(pair.publicKey.export({ format: "jwk" }).x!, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  return {
-    raw: bytes.toString("base64url"),
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    proof: (text: string) => {
-      const payload = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(text).digest()),
-      ]);
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-      const packet = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
-      ]);
-      return `-----BEGIN SSH SIGNATURE-----\n${packet
-        .toString("base64")
-        .match(/.{1,70}/g)!
-        .join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
 
 const Model = Schema.Struct({
   count: Schema.Int,
@@ -471,13 +438,14 @@ type Entry = {
 
 type Lost = { readonly at: number; readonly side: "before" | "after" } | null;
 
-const world = (
+const world = async (
   fault: "failed" | "interrupted" | "healthy" = "healthy",
   flow: { readonly limit: number | null; readonly lost: Lost } = { limit: null, lost: null },
   settingsCounts = { calls: 0, reads: 0, appends: 0 },
   // The quota settings ride in the start's settings snapshot; a law names only the values it changes.
   values: StartsTest.Values = {},
 ) => {
+  const key = await Effect.runPromise(personKey);
   // P40: the core counter's code is `fabrika/counter`; its registered name stays `counter:1`.
   table.programs["fabrika/counter"] = counterCode;
   table.programs["fabrika/checklist"] = checklistCode;
@@ -487,8 +455,7 @@ const world = (
   table.programs["p34/poison-fixture"] = poisonCode;
   table.programs[requestProgram.name] = requesterCode;
   table.programs[mailResponder.name] = responderCode;
-  const key = identity(),
-    db = new DatabaseSync(":memory:");
+  const db = new DatabaseSync(":memory:");
   const handles = storage(db);
   const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles used by the real Project service
@@ -598,16 +565,18 @@ const world = (
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but do not have workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(
-      RecordWireTest.settingsFixture({
-        name: "project-test",
-        person: PERSON,
-        founder: key.line,
-        window: key.raw,
-        port: 18787,
-        build: "brain-test",
-        mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
-        values,
-      }),
+      await Effect.runPromise(
+        RecordWireTest.settingsFixture({
+          name: "project-test",
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: 18787,
+          build: "brain-test",
+          mail: { grants: { "requester:1": ["responder:1"], "responder:1": ["requester:1"] } },
+          values,
+        }),
+      ),
     ),
     // Every Project RPC the real class hands off, so new Project calls reach the real service too.
     PROJECT: {
@@ -1003,7 +972,7 @@ const world = (
     },
     reopen: async () => {
       await project.runtime.dispose();
-      table.programs["fabrika/counter"] = built("changed counter");
+      table.programs["fabrika/counter"] = await built("changed counter");
       project = projectObject(ctx, env);
       return project.info();
     },
@@ -1024,7 +993,7 @@ const world = (
             platform: "headless",
             os: "linux",
             sentAt: SENT,
-            signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+            signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`)),
           },
           { url: "http://127.0.0.1:18787", tab, name: key.fingerprint },
         ),
@@ -1092,7 +1061,7 @@ const world = (
           platform: "headless",
           os: "linux",
           sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+          signed: await Effect.runPromise(key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`)),
         }),
       ).toMatchObject({ _tag: "ok" });
       return {
@@ -1131,7 +1100,7 @@ const world = (
           saw: { label: "fixture", location: "local", method: "command", check: "none" },
           sentAt: SENT,
         });
-        expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
+        expect(await project.grant({ text, armored: await Effect.runPromise(key.proof(text)) })).toMatchObject({
           _tag: "applied",
         });
       };
@@ -1147,7 +1116,7 @@ StartsTest.law(
     Effect.gen(function* () {
       const costs = { calls: 0, reads: 0, appends: 0 };
       const w = yield* Effect.acquireRelease(
-        Effect.sync(() => world("healthy", { limit: null, lost: null }, costs)),
+        Effect.promise(() => world("healthy", { limit: null, lost: null }, costs)),
         (owned) => Effect.promise(() => owned.close()),
       );
       // A first start pays the gate at configure: the Project's build sends it, and configureProcess
@@ -1269,7 +1238,7 @@ describe("P12 Project configure recovery", () => {
     it(`pinned: ${fault} configure restores the descriptor after an interrupted start`, async () => {
       // A2/A4: the build never waits on its bootstrap's delivery, so it answers whatever the delivery does.
       const logged = [vi.spyOn(console, "log"), vi.spyOn(console, "error"), vi.spyOn(console, "warn")];
-      const w = world(fault);
+      const w = await world(fault);
       const first = w.project.info().then(
         (value) => ({ value }),
         (error: unknown) => ({ error }),
@@ -1351,7 +1320,7 @@ describe("P12 Project configure recovery", () => {
 describe("P12 Process RPC refusal answers", () => {
   for (const reason of ["person_only", "not_granted"] as const) {
     it(`pinned: ${reason} refusal survives the Process RPC adapter as a saved typed answer`, async () => {
-      const w = world();
+      const w = await world();
       await w.project.info();
       const { process: pid } = await w.start(),
         client = await w.admit();
@@ -1449,7 +1418,7 @@ const NAME = "poison:1";
 
 /** Runs one flow and checks what must hold after it. */
 const runFlow = async (flow: RecoveryFlow) => {
-  const w = world("healthy", { limit: flow.limit, lost: flow.lost });
+  const w = await world("healthy", { limit: flow.limit, lost: flow.lost });
   await w.project.info();
   const original = await w.startPoison(NAME);
   const client = await w.admit();
@@ -1705,7 +1674,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
     const done = new Set<Move>();
     await fc.assert(
       fc.asyncProperty(fc.array(Cell, { minLength: 4, maxLength: 9 }), async (tape) => {
-        const w = world("healthy");
+        const w = await world("healthy");
         await w.project.info();
         const client = await w.admit();
         // The fold's own record: each name's process chain and each ended process's reason.
@@ -1800,7 +1769,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
   }, 600_000);
 });
 
-const mailModel = (w: ReturnType<typeof world>, pid: string) => {
+const mailModel = (w: Awaited<ReturnType<typeof world>>, pid: string) => {
   const db = w.process(pid).db;
   const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='process_state'").get();
 
@@ -1820,7 +1789,7 @@ const mailRequest = (pid: string, ref: string) => ({
   seen: 0,
 });
 
-const oneExchange = async (w: ReturnType<typeof world>, requester: string, responder: string, ref: string) => {
+const oneExchange = async (w: Awaited<ReturnType<typeof world>>, requester: string, responder: string, ref: string) => {
   await until(
     "the saved requester answers without a view call",
     async () => mailModel(w, requester),
@@ -1841,7 +1810,7 @@ const oneExchange = async (w: ReturnType<typeof world>, requester: string, respo
 
 // scenario: only a test-owned platform alarm holds eviction strictly before the target's drain.
 it("scenario: W2h, a target reopened before its alarm fires drains the saved letter once", async () => {
-  const w = world();
+  const w = await world();
   const requester = await w.startMail("requester");
   const responder = await w.startMail("responder");
   const client = await w.admit();
@@ -1860,7 +1829,7 @@ it("scenario: W2h, a target reopened before its alarm fires drains the saved let
 
 // scenario: a held Project RPC puts eviction after the receipt save and before queued reaches the sender.
 it("scenario: W3, an evicted sender retries its owed Send from its alarm and adds no receipt or letter", async () => {
-  const w = world();
+  const w = await world();
   const requester = await w.startMail("requester");
   const responder = await w.startMail("responder");
   const client = await w.admit();
@@ -1918,7 +1887,7 @@ describe("P34c live object accounting", () => {
             () => Effect.sync(() => vi.useRealTimers()),
           );
           const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            Effect.promise(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
           yield* Effect.promise(() => w.project.info());
@@ -2049,7 +2018,7 @@ describe("P34c live object accounting", () => {
             () => Effect.sync(() => vi.useRealTimers()),
           );
           const w = yield* Effect.acquireRelease(
-            Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
+            Effect.promise(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
           yield* Effect.promise(() => w.project.info());

@@ -23,7 +23,6 @@
 //
 // Plants, each run once and undone (recorded in the tests step's field row): E2, open a fresh key
 // file on every start. S2, print the stored JWK in the `online` line.
-import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Node crypto makes the test person's key; it never touches a file or an account
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
@@ -32,11 +31,13 @@ import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
-import { SecureRandom } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
+import { Base64, Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
 import { localInstance } from "./local-instance.ts";
+import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
@@ -69,58 +70,17 @@ const Stored = Schema.fromJsonString(
   Schema.Struct({ jwk: Schema.Struct({ kty: Schema.String, crv: Schema.String, d: Schema.String, x: Schema.String }) }),
 );
 
-const field = (v: string | Uint8Array) => {
-  const b = Buffer.from(v);
-  const n = Buffer.alloc(4);
-  n.writeUInt32BE(b.length);
+/** `SHA256:` and the unpadded base64 SHA-256 of a JWK's `x`, worked out here, not by the launcher. */
+const keyFingerprint = Effect.fnUntraced(
+  function* (x: string) {
+    const bytes = yield* Effect.fromResult(Base64Url.decode(x));
+    const hashed = yield* Digest.Digest.use((digest) => digest.digest(Digest.sha256, bytes));
 
-  return Buffer.concat([n, b]);
-};
-
-/** The test person's key: a generated Ed25519 pair, as `tasks-wire.integration.test.ts` makes it. */
-const person = () => {
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "jwk" }).x ?? "";
-
-  const bytes = Buffer.from(raw, "base64url"),
-    blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-
-  return {
-    raw,
-    line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
-    sign: (value: string) => {
-      const body = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(createHash("sha512").update(value).digest()),
-      ]);
-
-      const version = Buffer.alloc(4);
-      version.writeUInt32BE(1);
-
-      const packed = Buffer.concat([
-        Buffer.from("SSHSIG"),
-        version,
-        field(blob),
-        field("fabrika-client"),
-        field(""),
-        field("sha512"),
-        field(Buffer.concat([field("ssh-ed25519"), field(sign(null, body, pair.privateKey))])),
-      ]);
-
-      return `-----BEGIN SSH SIGNATURE-----\n${packed
-        .toString("base64")
-        .match(/.{1,70}/g)
-        ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
-    },
-  };
-};
-
-const keyFingerprint = (x: string) =>
-  `SHA256:${createHash("sha256").update(Buffer.from(x, "base64url")).digest("base64").replace(/=+$/, "")}`;
+    return `SHA256:${Base64.encode(hashed).replace(/=+$/, "")}`;
+  },
+  Effect.provide(Digest.layerWebCrypto),
+  Effect.orDie,
+);
 
 /** A call on the brain's own local handle, by its method name on the fixture's Project. */
 const method = (project: object, name: keyof LauncherProject) => Reflect.get(project, name);
@@ -202,7 +162,7 @@ const flow = Effect.fnUntraced(
     const hands = path.join(home, "hands-home");
     yield* fs.makeDirectory(hands);
     const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
-    const root = person();
+    const root = yield* personKey;
     const app = path.resolve(import.meta.dirname, "..");
     const entry = path.join(home, "hands-entry.ts");
     yield* fs.symlink(path.join(app, "node_modules"), path.join(home, "node_modules"));
@@ -237,7 +197,7 @@ const flow = Effect.fnUntraced(
 
     const running = yield* localInstance(
       built,
-      RecordWireTest.startupFixture({
+      yield* RecordWireTest.startupFixture({
         home,
         name: NAME,
         person: PERSON,
@@ -283,7 +243,7 @@ const flow = Effect.fnUntraced(
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
         const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
-        expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
+        expect(yield* keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );
 
@@ -304,11 +264,13 @@ const flow = Effect.fnUntraced(
           },
         });
 
+        const armored = yield* root.proof(value);
+
         const reply = yield* call("grant failed", () =>
           fetch(`${url}/grant`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: value, armored: root.sign(value) }),
+            body: JSON.stringify({ text: value, armored }),
           }),
         );
 

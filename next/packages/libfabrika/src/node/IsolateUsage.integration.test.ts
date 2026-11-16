@@ -1,5 +1,4 @@
 // next/. The driver owns SQLite; runtime's suite owns the laws (0062).
-import { createHash } from "node:crypto";
 import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -71,16 +70,15 @@ const FROM = {
 };
 
 // T753: each object reads its start from INSTANCE and confirms it with its Project.
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: FROM.for,
     founder: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     window: null,
     port: 18787,
     build: CODE.hash,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 const settingsStart = () => Promise.resolve(StartsTest.reply(START));

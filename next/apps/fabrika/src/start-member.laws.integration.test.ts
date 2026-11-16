@@ -120,7 +120,7 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     platform: "headless",
     os: "linux",
     sentAt: SENT,
-    signed: key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`),
+    signed: await Effect.runPromise(key.proof(`fabrika-hello\n${instance.url}\n${tab}\n${nonce}`)),
   });
 
   expect(hello.error).toBeUndefined();
@@ -239,32 +239,30 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const person = fixture.from.for;
           const url = "http://127.0.0.1:18787";
           const saw = { label: "agent", location: "test", method: "command", check: "touch" } as const;
-          const signed = (text: string) => ({ text, armored: fixture.founder.proof(text) });
+          const signed = (text: string) =>
+            fixture.founder.proof(text).pipe(Effect.map((armored) => ({ text, armored })));
 
           // The founder lets the agent in.
-          const granted = yield* call(
-            ProjectService.use((p) =>
-              p.grant(
-                signed(
-                  grantText({
-                    id: "grant-agent",
-                    key: fixture.agent.raw,
-                    for: person,
-                    to: PROJECT,
-                    as: "agent",
-                    sentAt: SENT,
-                    saw: { ...saw, code: "1234", has: [] },
-                  }),
-                ),
-              ),
-            ),
+          const grant = yield* signed(
+            grantText({
+              id: "grant-agent",
+              key: fixture.agent.raw,
+              for: person,
+              to: PROJECT,
+              as: "agent",
+              sentAt: SENT,
+              saw: { ...saw, code: "1234", has: [] },
+            }),
           );
+
+          const granted = yield* call(ProjectService.use((p) => p.grant(grant)));
 
           expect(granted, "the founder's grant lets the agent in").toMatchObject({ _tag: "applied" });
           // The agent comes online and sends an input to the boot's process.
           const agent = yield* call(ProjectService.use((p) => p.connect()));
           const nonce = yield* call(ProjectService.use((p) => p.challenge(agent)));
           const tab = "agent";
+          const hello = yield* fixture.agent.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`);
 
           const online = yield* call(
             ProjectService.use((p) =>
@@ -280,7 +278,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
                   platform: "headless",
                   os: "linux",
                   sentAt: SENT,
-                  signed: fixture.agent.proof(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
+                  signed: hello,
                 },
                 { url, tab, name: fixture.agent.fingerprint },
               ),
@@ -301,22 +299,18 @@ describe("T953: a start is checked against the member who caused it, end to end"
           )(fixture.delivered.at(-1));
 
           // The founder removes the agent before the step that the input causes runs.
-          const revoked = yield* call(
-            ProjectService.use((p) =>
-              p.grant(
-                signed(
-                  revokeText({
-                    id: "revoke-agent",
-                    key: fixture.agent.raw,
-                    for: person,
-                    to: PROJECT,
-                    sentAt: SENT,
-                    saw,
-                  }),
-                ),
-              ),
-            ),
+          const revoke = yield* signed(
+            revokeText({
+              id: "revoke-agent",
+              key: fixture.agent.raw,
+              for: person,
+              to: PROJECT,
+              sentAt: SENT,
+              saw,
+            }),
           );
+
+          const revoked = yield* call(ProjectService.use((p) => p.grant(revoke)));
 
           expect(revoked, "the founder's revoke removes the agent").toMatchObject({ _tag: "applied" });
 

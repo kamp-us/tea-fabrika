@@ -148,17 +148,15 @@ describe("P16 real browser from a copied one-file build", () => {
             const { localState } = await import("alchemy/State/LocalState");
 
             const instance = await Effect.runPromise(
-              localInstance(
-                { ...built, brain: join(alone, "brain.mjs") },
-                RecordWireTest.startupFixture({
-                  home,
-                  name: "p16-browser",
-                  person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-                  founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
-                  window: null,
-                  port,
-                }),
-              ).pipe(
+              RecordWireTest.startupFixture({
+                home,
+                name: "p16-browser",
+                person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+                founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+                window: null,
+                port,
+              }).pipe(
+                Effect.flatMap((fixture) => localInstance({ ...built, brain: join(alone, "brain.mjs") }, fixture)),
                 Effect.provideService(Scope.Scope, scope),
                 Effect.provide(localState()),
                 Effect.provide(SecureRandom.layerWebCrypto),
@@ -411,17 +409,15 @@ const servedCounter = Effect.gen(function* () {
 
   const instance = yield* owned(
     "server",
-    localInstance(
-      built,
-      RecordWireTest.startupFixture({
-        home,
-        name: "p14-browser",
-        person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
-        founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
-        window: null,
-        port,
-      }),
-    ).pipe(
+    RecordWireTest.startupFixture({
+      home,
+      name: "p14-browser",
+      person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
+      founder: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]).toString("base64")}`,
+      window: null,
+      port,
+    }).pipe(
+      Effect.flatMap((fixture) => localInstance(built, fixture)),
       Effect.provide(localState()),
       Effect.provide(SecureRandom.layerWebCrypto),
       Effect.provide(NodeServices.layer),

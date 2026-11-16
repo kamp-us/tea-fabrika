@@ -1,8 +1,6 @@
 // P12, next/. Run the real build and dev command with a recorded FileSystem and Path layer.
-import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative, resolve } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
@@ -26,6 +24,18 @@ import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { build } from "./build.ts";
 import { Row } from "./exam/compiler.ts";
+
+// The real disk, through Effect's FileSystem, holds each law's own temp folder and source files;
+// the recorded layer below is what the build and dev command see.
+const disk = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeServices.layer)));
+
+const { join, relative, resolve } = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
+
+const tempFolder = (prefix: string) => Effect.runPromise(disk.makeTempDirectory({ prefix }));
+
+const removeFolder = (folder: string) => Effect.runPromise(disk.remove(folder, { recursive: true, force: true }));
+
+const writeText = (file: string, text: string) => Effect.runPromise(disk.writeFileString(file, text));
 
 const cli = vi.hoisted(() => ({
   work: undefined as Effect.Effect<unknown, unknown> | undefined,
@@ -168,7 +178,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
     await fc.assert(
       fc.asyncProperty(fc.uuid(), async (name) => {
         const argv = process.argv;
-        const folder = mkdtempSync(join(tmpdir(), "p12-dev-error-"));
+        const folder = await tempFolder("p12-dev-error-");
 
         const failure = PlatformError.systemError({
           module: "FileSystem",
@@ -206,7 +216,7 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
           cli.layer = undefined;
           cli.work = undefined;
           vi.unstubAllEnvs();
-          rmSync(folder, { recursive: true, force: true });
+          await removeFolder(folder);
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
@@ -215,12 +225,16 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
 }
 
 // Bundler output is platform input here. Compiler behavior has its own real-build laws.
-// P16's table check refuses a program whose hash is not its source's own SHA-256 hex.
+// P16's table check refuses a program whose hash is not its source's own SHA-256 hex: this one is
+// `printf counter | shasum -a 256`.
 vi.mock("@kampus/libfabrika/node/build", async (original) => ({
   ...(await original<typeof import("@kampus/libfabrika/node/build")>()),
   bundlePrograms: () =>
     Effect.succeed({
-      "fabrika/counter": { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
+      "fabrika/counter": {
+        hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698",
+        source: "counter",
+      },
     }),
   bundle: (_input: unknown, _plugins: unknown, options: { readonly phase?: string }) =>
     Effect.succeed({
@@ -391,15 +405,15 @@ for (const failed of [false, true]) {
   it(`build reads and publishes through FileSystem, preserving write and rollback order: ${failed ? "rename fails" : "success"}`, async () => {
     await fc.assert(
       fc.asyncProperty(generated, async ({ name, label }) => {
-        const folder = mkdtempSync(join(tmpdir(), "p12-build-fs-")),
+        const folder = await tempFolder("p12-build-fs-"),
           source = join(folder, `${name}.tsx`);
 
         const text = `export const label = ${JSON.stringify(label)};`;
         const w = recorded(folder, source, text, failed);
         // HEAD has real paths too, so ignoring the supplied service fails an assertion, not setup.
-        mkdirSync(w.out);
-        writeFileSync(join(w.out, "brain.mjs"), "last good");
-        writeFileSync(source, text);
+        await Effect.runPromise(disk.makeDirectory(w.out));
+        await writeText(join(w.out, "brain.mjs"), "last good");
+        await writeText(source, text);
 
         try {
           const result = await Effect.runPromiseExit(
@@ -457,7 +471,7 @@ for (const failed of [false, true]) {
             });
           }
         } finally {
-          rmSync(folder, { recursive: true, force: true });
+          await removeFolder(folder);
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), examples: [[boundary]] },
@@ -480,7 +494,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         savedWindow: fc.option(fc.uuid(), { nil: null }),
       }),
       async ({ name, port }, choices) => {
-        const folder = mkdtempSync(join(tmpdir(), "p12-dev-fs-")),
+        const folder = await tempFolder("p12-dev-fs-"),
           file = join(folder, "instance.json"),
           source = join(folder, "view.tsx");
 
@@ -500,7 +514,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           w.files.set(file, JSON.stringify(saved));
         }
 
-        writeFileSync(source, "export const view = 1;");
+        await writeText(source, "export const view = 1;");
         const argv = process.argv;
         vi.stubEnv("FABRIKA_HOME", folder);
         vi.stubEnv("FABRIKA_INSTANCE_PORT", undefined);
@@ -570,7 +584,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           cli.layer = undefined;
           cli.work = undefined;
           vi.unstubAllEnvs();
-          rmSync(folder, { recursive: true, force: true });
+          await removeFolder(folder);
         }
       },
     ),
@@ -615,10 +629,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
         Effect.scoped(
           Effect.gen(function* () {
             // The temp folder and the process state this law changes are given back by its scope (0061).
-            const folder = yield* Effect.acquireRelease(
-              Effect.sync(() => mkdtempSync(join(tmpdir(), "t664-dev-load-"))),
-              (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-            );
+            const folder = yield* disk.makeTempDirectoryScoped({ prefix: "t664-dev-load-" });
 
             const argv = process.argv;
             yield* Effect.addFinalizer(() =>
@@ -688,7 +699,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
 it("dev without saved settings reports settings for each missing required value", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), fc.constantFrom("name", "person", "founder"), async (name, missing) => {
-      const folder = mkdtempSync(join(tmpdir(), "p12-empty-"));
+      const folder = await tempFolder("p12-empty-");
       const source = join(folder, "view.tsx");
       const w = recorded(folder, source, "export const view = 1;", false);
       const argv = process.argv;
@@ -712,7 +723,7 @@ it("dev without saved settings reports settings for each missing required value"
         cli.layer = undefined;
         cli.work = undefined;
         vi.unstubAllEnvs();
-        rmSync(folder, { recursive: true, force: true });
+        await removeFolder(folder);
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 15 }) },
@@ -731,12 +742,12 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
 
   await fc.assert(
     fc.asyncProperty(invalid, async (raw) => {
-      const folder = mkdtempSync(join(tmpdir(), "p12-ledger-fs-")),
+      const folder = await tempFolder("p12-ledger-fs-"),
         source = join(folder, "view.tsx");
 
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(join(root, "compiler-ledger.json"), raw);
-      writeFileSync(source, "export const view = 1;");
+      await writeText(source, "export const view = 1;");
 
       try {
         const exit = await Effect.runPromiseExit(build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)));
@@ -750,7 +761,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
         });
         expect(w.calls.filter(([call]) => call === "write" || call === "rename")).toEqual([]);
       } finally {
-        rmSync(folder, { recursive: true, force: true });
+        await removeFolder(folder);
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["null"], ['[{"file":17}]']] },
@@ -775,13 +786,13 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
 
   await fc.assert(
     fc.asyncProperty(invalid, async (raw) => {
-      const folder = mkdtempSync(join(tmpdir(), "p12-settings-fs-")),
+      const folder = await tempFolder("p12-settings-fs-"),
         source = join(folder, "view.tsx"),
         file = join(folder, "instance.json");
 
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(file, raw);
-      writeFileSync(file, raw);
+      await writeText(file, raw);
       const argv = process.argv;
       vi.stubEnv("FABRIKA_HOME", folder);
       cli.layer = w.layer;
@@ -807,7 +818,7 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
         cli.layer = undefined;
         cli.work = undefined;
         vi.unstubAllEnvs();
-        rmSync(folder, { recursive: true, force: true });
+        await removeFolder(folder);
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [["{"], ["null"], ["{}"]] },

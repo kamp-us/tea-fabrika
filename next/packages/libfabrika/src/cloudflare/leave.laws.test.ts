@@ -8,7 +8,6 @@
 // Generator contract: each run boots one Project and walks it. Every move reads the watches the walk
 // holds: a new watch for a session, a repeat of a held one, the one exit of the watched process,
 // or the close of a session that holds watches or of one that holds none.
-import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
@@ -49,8 +48,8 @@ const REFS = ["watch-a", "watch-b", "watch-c"];
  * sessions that never held a watch take them from here on, so the two never meet. */
 const NONE = 20;
 
-const START = StartsTest.fixture(
-  {
+const START = await Effect.runPromise(
+  StartsTest.fixture({
     name: "project-test",
     person: "person_01m6v5270hf3c8x2q7w9z4k5mn",
     // A public key line made from 32 fixed bytes: no private key exists for it.
@@ -58,8 +57,7 @@ const START = StartsTest.fixture(
     window: null,
     port: 18787,
     build: BRAIN_BUILD,
-  },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  }),
 );
 
 /** A watch's fact on the processes stream, as the law reads it back. */

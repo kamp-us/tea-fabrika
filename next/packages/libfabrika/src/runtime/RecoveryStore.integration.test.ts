@@ -4,7 +4,6 @@
 // No test implements recovery or supplies a fake store. SQL corruption is planted after save.
 // Ticket 921 slice 1: the store fails with its own `RecoveryStoreError`, whose tagged reason keeps
 // the fault from below (0043 rule 12, 0055, 0119). This file names no ledger file.
-import { existsSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import { type Context, Effect, Exit, type Layer, Schema } from "effect";
 import * as fc from "fast-check";
@@ -36,11 +35,7 @@ type Subject = {
 
 const modulePath = "./RecoveryStore.ts";
 
-const subject = async (): Promise<Subject> => {
-  expect(existsSync(new URL(modulePath, import.meta.url)), "P34 durable RecoveryStore is missing").toBe(true);
-
-  return await import(modulePath);
-};
+const subject = async (): Promise<Subject> => await import(modulePath);
 
 const policy = {
   maxDeliveries: 3,

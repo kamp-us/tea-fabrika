@@ -1,6 +1,5 @@
 // T878, next/, L11. Lead runs this scenario on the host: it needs workerd, sockets and a PTY.
 // No substitute for the real dev subprocess or private append transport is used.
-import { generateKeyPairSync } from "node:crypto"; // edge: the founder uses SSH's public-key packet format
 import { stripVTControlCharacters } from "node:util"; // edge: decode script's terminal output before reading JSON lines
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
@@ -9,6 +8,7 @@ import type { Entry } from "@kampus/libfabrika/ledger/Log";
 import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
+import { personKey } from "./person-key.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
@@ -106,15 +106,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
       const commit = yield* git(repo, ["rev-parse", "HEAD"]);
       yield* git(repo, ["checkout", "-b", "feature"]);
       yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), '[pack.trap]\nfrom = "./packs/trap"\n');
-      const { publicKey } = generateKeyPairSync("ed25519");
-      const raw = publicKey.export({ format: "der", type: "spki" }).subarray(-32);
-
-      const blob = Buffer.concat([
-        Buffer.from([0, 0, 0, 11]),
-        Buffer.from("ssh-ed25519"),
-        Buffer.from([0, 0, 0, 32]),
-        raw,
-      ]);
+      const founder = yield* personKey;
 
       const operator = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
@@ -133,9 +125,9 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
           "--person",
           operator,
           "--founder",
-          `ssh-ed25519 ${blob.toString("base64")}`,
+          founder.line,
           "--window",
-          raw.toString("base64url"),
+          founder.raw,
         ];
 
         const input = yield* Queue.unbounded<Uint8Array>();

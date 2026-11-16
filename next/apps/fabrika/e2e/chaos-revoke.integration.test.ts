@@ -348,7 +348,7 @@ const served = Effect.gen(function* () {
 
   const instance = yield* localInstance(
     built,
-    RecordWireTest.settingsFixture({
+    yield* RecordWireTest.settingsFixture({
       home,
       name: PROJECT,
       person: PERSON,

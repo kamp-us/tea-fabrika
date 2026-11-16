@@ -1,7 +1,8 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
-import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Digest, SecureRandom, Signature } from "effect/crypto";
+import { Base64, Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -30,7 +31,11 @@ const PROGRAM = "test/counter";
 
 const SOURCE = "";
 
-const CODE = { hash: createHash("sha256").update(SOURCE).digest("hex"), source: SOURCE };
+// The walk's keys, signatures and hashes: Effect's Signature and Digest on WebCrypto.
+const keys = Layer.mergeAll(
+  Digest.layerWebCrypto,
+  Signature.layerWebCrypto.pipe(Layer.provide(SecureRandom.layerWebCrypto)),
+);
 
 const Model = Schema.Struct({ count: Schema.Int });
 
@@ -80,6 +85,9 @@ const projectWalk = Effect.fnUntraced(function* (
   selector: Selector = "plain",
   usage: boolean = false,
 ) {
+  const digest = yield* Digest.Digest;
+  const signature = yield* Signature.Signature;
+  const CODE = { hash: yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(SOURCE)), source: SOURCE };
   const sql = yield* harness.open;
 
   const ledger = yield* Ledger.pipe(
@@ -90,8 +98,8 @@ const projectWalk = Effect.fnUntraced(function* (
     ),
   );
 
-  const pair = generateKeyPairSync("ed25519");
-  const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
+  const pair = yield* signature.generateKeyPair(Signature.ed25519);
+  const raw = yield* Signature.toBytes(pair.publicKey);
 
   const field = (bytes: Uint8Array) => {
     const n = Buffer.alloc(4);
@@ -104,7 +112,7 @@ const projectWalk = Effect.fnUntraced(function* (
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
 
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${Base64.encode(yield* digest.digest(Digest.sha256, raw)).replace(/=+$/, "")}`;
   const message = selector === "plain" ? Msg : StampedMsg;
 
   const program = {
@@ -208,17 +216,14 @@ const projectWalk = Effect.fnUntraced(function* (
 
   const url = "https://fabrika.test/p13-project";
 
-  const instance = StartsTest.fixture(
-    {
-      name: "p13-project",
-      person: from().for,
-      founder: line,
-      window: raw.toString("base64url"),
-      port: 18787,
-      build: BUILD,
-    },
-    (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-  );
+  const instance = yield* StartsTest.fixture({
+    name: "p13-project",
+    person: from().for,
+    founder: line,
+    window: Base64Url.encode(raw),
+    port: 18787,
+    build: BUILD,
+  });
 
   const project = yield* ProjectService.pipe(
     Effect.provide(
@@ -242,7 +247,7 @@ const projectWalk = Effect.fnUntraced(function* (
     text: `fabrika-hello\n${url}\n${tab}\n${nonce}`,
     line,
     space: "fabrika-client",
-    sign: (bytes: Uint8Array) => Effect.sync(() => sign(null, bytes, pair.privateKey)),
+    sign: (bytes: Uint8Array) => signature.sign(pair.privateKey, bytes),
   });
 
   expect(
@@ -252,7 +257,7 @@ const projectWalk = Effect.fnUntraced(function* (
         versions: [1],
         has: [],
         ping: "30s",
-        key: raw.toString("base64url"),
+        key: Base64Url.encode(raw),
         tab,
         nonce,
         signed,
@@ -362,7 +367,7 @@ const projectWalk = Effect.fnUntraced(function* (
       }
     }
   }
-});
+}, Effect.provide(keys));
 
 /** Registers A13's project walk without choosing a database driver. */
 export const suite = (harness: Harness, register: Register) => {
