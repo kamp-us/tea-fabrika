@@ -164,34 +164,61 @@ const isQuestStep = (s: string): s is QuestStep => (QUEST_STEPS as readonly stri
 // ---------------------------------------------------------------- the limits
 
 /** Minutes between two tries of a step drive refused for a full laptop. */
-export const WaitMinutes = Context.Reference<number>("chain/WaitMinutes", { defaultValue: () => 5 });
+export const WaitMinutes = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/WaitMinutes", {
+  defaultValue: () => 5,
+});
+
 /** How many times such a step is tried again before `RetriesExhausted`. */
-export const MaxWaits = Context.Reference<number>("chain/MaxWaits", { defaultValue: () => 6 });
+export const MaxWaits = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/MaxWaits", {
+  defaultValue: () => 6,
+});
+
 /** Stucks in a row on one step before the quest parks without asking. */
-export const MaxStucks = Context.Reference<number>("chain/MaxStucks", { defaultValue: () => 3 });
+export const MaxStucks = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/MaxStucks", {
+  defaultValue: () => 3,
+});
+
 /** Steps a quest may run before it parks, when its plan and brief give no estimate for a backstop. */
-export const MaxSteps = Context.Reference<number>("chain/MaxSteps", { defaultValue: () => 16 });
+export const MaxSteps = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/MaxSteps", {
+  defaultValue: () => 16,
+});
+
 /** The quest's intensity (0076): this many sends or work stucks... */
-export const IntensityCount = Context.Reference<number>("chain/IntensityCount", { defaultValue: () => 3 });
+export const IntensityCount = Context.Reference<number>(
+  "@tea-fabrika/agents/skills/lead/scripts/chain/IntensityCount",
+  { defaultValue: () => 3 },
+);
+
 /** ...within this many of its last steps stop the chain and ask a person. */
-export const IntensityWithin = Context.Reference<number>("chain/IntensityWithin", { defaultValue: () => 5 });
+export const IntensityWithin = Context.Reference<number>(
+  "@tea-fabrika/agents/skills/lead/scripts/chain/IntensityWithin",
+  { defaultValue: () => 5 },
+);
+
 /** The backstop is this many times the estimate the plan or the quest brief gives (0076). */
-export const BackstopTimes = Context.Reference<number>("chain/BackstopTimes", { defaultValue: () => 2 });
+export const BackstopTimes = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/BackstopTimes", {
+  defaultValue: () => 2,
+});
+
 /** Minutes each host command may run (./flow/host.ts says where the default comes from). */
-export const HostMinutes = Context.Reference<number>("chain/HostMinutes", { defaultValue: () => Host.MINUTES });
+export const HostMinutes = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/HostMinutes", {
+  defaultValue: () => Host.MINUTES,
+});
 
 /** Minutes the quest waits for CI's typecheck job at its pushed head to end (./ci/typecheck.ts). */
-export const TypecheckMinutes = Context.Reference<number>("chain/TypecheckMinutes", {
-  defaultValue: () => Typecheck.MINUTES,
-});
+export const TypecheckMinutes = Context.Reference<number>(
+  "@tea-fabrika/agents/skills/lead/scripts/chain/TypecheckMinutes",
+  { defaultValue: () => Typecheck.MINUTES },
+);
 
 /** Seconds between two reads of that job while it runs (./ci/typecheck.ts says why this many). */
-export const TypecheckEvery = Context.Reference<number>("chain/TypecheckEvery", {
-  defaultValue: () => Typecheck.EVERY,
-});
+export const TypecheckEvery = Context.Reference<number>(
+  "@tea-fabrika/agents/skills/lead/scripts/chain/TypecheckEvery",
+  { defaultValue: () => Typecheck.EVERY },
+);
 
 /** Minutes the quest waits for `ci-required` at its head to end before it asks for the merge queue. */
-export const QueueMinutes = Context.Reference<number>("chain/QueueMinutes", {
+export const QueueMinutes = Context.Reference<number>("@tea-fabrika/agents/skills/lead/scripts/chain/QueueMinutes", {
   defaultValue: () => Queue.QUEST_WAIT.minutes,
 });
 

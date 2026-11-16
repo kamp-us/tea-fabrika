@@ -361,7 +361,7 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
  * A reference with that default, so a test sets the wait to nothing.
  */
 export const CapacityRetry = Context.Reference<{ readonly tries: number; readonly waitSeconds: number }>(
-  "lead/agents/CapacityRetry",
+  "@tea-fabrika/agents/skills/lead/scripts/agents/CapacityRetry",
   { defaultValue: () => ({ tries: 6, waitSeconds: 60 }) },
 );
 

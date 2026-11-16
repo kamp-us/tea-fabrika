@@ -31,7 +31,7 @@ export const Model = Rebac.make("fabrika")
  * @category rights
  */
 export class StartProgram extends Rebac.Permission<StartProgram>()(
-  "@kampus/libfabrika/permissions/Model.StartProgram",
+  "@kampus/libfabrika/permissions/Model/StartProgram",
   {
     model: Model,
     on: "fabrika",
@@ -47,7 +47,7 @@ export class StartProgram extends Rebac.Permission<StartProgram>()(
  * @category rights
  */
 export class WatchProcess extends Rebac.Permission<WatchProcess>()(
-  "@kampus/libfabrika/permissions/Model.WatchProcess",
+  "@kampus/libfabrika/permissions/Model/WatchProcess",
   {
     model: Model,
     on: "fabrika",

@@ -196,7 +196,7 @@ permissions: {
   watch: (p) => p.union("owner", "admin", "member"),     // new: 0170's first rule, applied to a watch
 },
 export class WatchProcess extends Rebac.Permission<WatchProcess>()(
-  "@kampus/libfabrika/permissions/Model.WatchProcess",
+  "@kampus/libfabrika/permissions/Model/WatchProcess",
   { model: Model, on: "fabrika", permission: "watch" },
 ) {}
 ```
