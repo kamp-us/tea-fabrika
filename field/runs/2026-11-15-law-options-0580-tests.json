@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-law-options-0580-tests",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-15T22:14:03-08:00",
+  "ended": "2026-11-15T22:42:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 1 of docs/plan/quests/law-options-0580-PLAN.md (0580, 0579), next/ and tooling. Wrote every slice-1 law. Tests-owned code written with its laws: .github/ci/plant-check.ts (new, blocks), changes.mjs's lawFile and the field flag, field-schema.ts's Plant gains an optional file, check.yaml's plant check step, and law-shape.ts reading the option label in a file whose it comes from @kampus/vitest or @kalfa/vitest. Laws on the build's files, red now because the module does not exist: next/packages/vitest/src/Law.test.ts (toTestOptions, the five members' meta, a Scope per fast-check case), Law.integration.test.ts (counterexample, timeout, seed; each runs src/fixtures/Law.fixture.ts in a vitest of its own through the Node API), Plants.test.ts (Plants.records), Law.types.test.ts (red only in a typecheck), and .agents/skills/tests/scripts/plant.test.ts (plant.ts's records and refusals, on fixtures/plant/laws.fixture.ts). Plan gap: check.yaml's new step cannot pass the workflow wiring lint unless .github/ci/workflow-lint/check-job.ts learns it, and the Files table does not name that file, its test or wiring.test-support.ts; they were changed here with the step, with plants.",
+  "plants": [
+    {
+      "file": ".github/ci/field-check.test.ts",
+      "law": "vector: every saved run row's plants still decode with the widened Plant, and a record with a file does too",
+      "plant": "make file required in field-schema.ts Plant",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/changes.test.ts",
+      "law": "property: a changed test file or shared suite in next/ or a tooling folder sets field, and today's version's does not",
+      "plant": "drop the *Test.ts suffix from lawFile in changes.mjs",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check's refusals equal a model's: no plant, not recorded, green and unclaimed, and an untouched or moved-only law gives none",
+      "plant": "compare a row's plant to the law's by prefix",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: a file still on @effect/vitest or vitest gets one notice and no refusal, and a file on the package's it is held",
+      "plant": "refuse every changed law, whatever its import",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: a law whose body changes only in formatting or comments is no changed law, and a one-token change to its code is",
+      "plant": "compare the bodies' source text, not their parsed trees",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "property: the check prints one ::error per refusal at its file and line, one ::notice per notice, and exits 1 exactly when it refused",
+      "plant": "print refusals as ::warning and exit 0",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/plant-check.test.ts",
+      "law": "scenario: a law file moved with git mv keeps its laws, and its unchanged bodies give no refusal",
+      "plant": "read the pair as a delete and an add (git diff --no-renames)",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/workflow-lint/check-job.test.ts",
+      "law": "rejects isolated wiring plant: the plant check ignores failure",
+      "plant": "delete the plant check's own require in check-job.ts",
+      "result": "red"
+    },
+    {
+      "file": ".github/ci/workflow-lint/check-job.test.ts",
+      "law": "rejects isolated wiring plant: the plant check without its head",
+      "plant": "delete the plant check's own require in check-job.ts",
+      "result": "red"
+    },
+    {
+      "file": "oxlint-plugins/law-shape.test.ts",
+      "law": "accepts an option label in a file on the package's it, and refuses a title label there with a message that names the option",
+      "plant": "read the title prefix in every file (no file counts as on the package's it)",
+      "result": "red"
+    },
+    {
+      "file": "oxlint-plugins/law-shape.test.ts",
+      "law": "holds 0527's body rule on the type option in a file on the package's it",
+      "plant": "skip the body rule when the label is an option",
+      "result": "red"
+    },
+    {
+      "file": "oxlint-plugins/law-shape.test.ts",
+      "law": "keeps the title label in a file still on vitest or @effect/vitest, where an option label is not read",
+      "plant": "report every title label as an error",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 28,
+  "note": "Plants were recorded by hand this once, with file, since plant.ts is the build's. Each plant on tests-owned code ran once on a saved copy and was restored by copy and cmp. The laws on the build's files cannot be planted on product code that does not exist yet, so they are after build and run at review. To check those laws can pass and fail, a throwaway Law.ts, Plants.ts and plant.ts were written in the worktree, never committed and deleted before the commit: on them every package law and the plant.ts law went green, and each planned plant turned its law red (drop retry; meta left off in it.effect.prop; one scope around the whole run; catch the failure and pass; delete stopOnAbort; remove Arbitrary.configureGlobal; green for a failed law; pick the first of two matches; Labeled as one plain record, red under tsc). Those are not the build's plants and are not listed in plants. Tests run in this box at the step's head, one file at a time with --maxWorkers=1: field-check, changes, plant-check, workflow-lint, check-job, required, law-shape, and the five new package and script files (red as expected). Not run: pnpm typecheck (lead), --changed (lead). No law was refused by the 0178 guard.",
+  "step": "tests"
+}

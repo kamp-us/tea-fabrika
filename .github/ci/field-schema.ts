@@ -45,8 +45,18 @@ const Note = Schema.Struct({
   links: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-/** One plant a step ran once (0093): the law, the break, and `red` if the law caught it, else `green`. */
-const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
+/**
+ * One plant a step ran once (0093): the law, the break, and `red` if the law caught it, else `green`.
+ * `file` is the law's file (0580), so a record names its law by path and exact title; rows written
+ * before it have none and still read. The plant check (plant-check.ts) holds only records with one.
+ */
+export const Plant = Schema.Struct({
+  file: Schema.optionalKey(Schema.String),
+  law: Schema.String,
+  plant: Schema.String,
+  result: Schema.Literals(["red", "green"]),
+});
+export type Plant = typeof Plant.Type;
 
 const Run = Schema.Struct({
   date: Day,

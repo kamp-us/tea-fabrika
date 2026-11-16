@@ -35,7 +35,7 @@ import { dirname, join, resolve } from "node:path";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
-import { MESSAGE, TYPE_MESSAGE } from "./law-shape.ts";
+import { MESSAGE, optionMessage, TYPE_MESSAGE } from "./law-shape.ts";
 
 const CODE = "fabrika(law-shape)";
 const ROOT = resolve(import.meta.dirname, "..");
@@ -44,7 +44,7 @@ const LABELS = ["vector", "format", "pinned", "scenario", "type"] as const;
 
 /** A fire's line and what it says, or the message a planted line should fire with: `null` for none. */
 type Fire = readonly [number, string];
-type Fires = typeof MESSAGE | typeof TYPE_MESSAGE | null;
+type Fires = string | null;
 
 /** Lints planted files as `pnpm lint` does, and answers the law-shape fires in one of them, each as its line and message. */
 const linted = async (files: Readonly<Record<string, string>>): Promise<(file: string) => readonly Fire[]> => {
@@ -348,6 +348,116 @@ it("reads next/ and .agents/ tests and shared suites, and leaves today's tests a
         expect(result(path), path).toEqual([]);
       }
     }),
+    { ...runs, numRuns: 2 },
+  );
+}, 120_000);
+
+// 0580: in a file whose `it` comes from the package, the label is an option of the declaration.
+/** The import lines of a file on the package's `it`, named or beside other names, and its two spellings. */
+const ours = fc.constantFrom(
+  'import { expectTypeOf, it } from "@kampus/vitest";',
+  'import { assertType, expectTypeOf, it, runsFor } from "@kampus/vitest";',
+  'import { expectTypeOf, it } from "@kalfa/vitest";',
+);
+
+/** A file still on vitest or @effect/vitest, even beside a name from the package. */
+const theirs = fc.constantFrom(
+  'import { expectTypeOf, it } from "@effect/vitest";',
+  'import { expectTypeOf, it } from "vitest";',
+  'import { runsFor } from "@kampus/vitest";\nimport { expectTypeOf, it } from "@effect/vitest";',
+  'import type { it as T } from "@kampus/vitest";\nimport { expectTypeOf, it } from "vitest";',
+);
+
+const member = fc.constantFrom("it", "it.effect", "it.live");
+/** An option label's value: a reason, or a ticket for pinned. */
+const why = (label: string, reason: string) => (label === "pinned" ? "1497" : `"${reason}"`);
+
+/** Lints one file per label, each holding every line, and checks each line's fire in each file. */
+const each = async (head: string, lines: readonly ((label: string) => readonly [string, Fires])[]): Promise<void> => {
+  const files = LABELS.map((label) => {
+    const made = lines.map((line) => line(label));
+    const top = head.split("\n");
+    const text = [...top, 'const opts = { plant: "a break" };', ...made.map(([line]) => line)].join("\n");
+    const expected = made.flatMap(([, fires], i): Fire[] => (fires === null ? [] : [[top.length + 2 + i, fires]]));
+    return { path: `next/packages/libfabrika/src/options/${label}.test.ts`, text, expected };
+  });
+  const result = await linted(Object.fromEntries(files.map(({ path, text }) => [path, text])));
+
+  for (const { path, text, expected } of files) {
+    expect(result(path), text).toEqual(expected);
+  }
+};
+
+// Plant, run once on law-shape.ts and restored: read the title prefix in every file.
+it("accepts an option label in a file on the package's it, and refuses a title label there with a message that names the option", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({ head: ours, m: member, id, title: words, reason: words }),
+      async ({ head, m, id, title, reason }) => {
+        await each(head, [
+          (label) => [
+            `${m}("${title}", () => ${ok(label, "Effect.void")}, { ${label}: ${why(label, reason)} });`,
+            null,
+          ],
+          (label) => [
+            `${m}("${title}", () => ${ok(label, "Effect.void")}, { plant: "a break", ${label}: ${why(label, reason)} });`,
+            null,
+          ],
+          (label) => [`it(${JSON.stringify(`${label}: ${reason}`)}, () => ${ok(label)});`, optionMessage(label)],
+          (label) => [
+            `${m}("${id} ${label}: ${reason}", () => ${ok(label)}, { ${label}: ${why(label, reason)} });`,
+            optionMessage(label),
+          ],
+          (label) => [`it(\`${label}: \${x}\`, () => ${ok(label)});`, optionMessage(label)],
+          () => [`${m}("${title}", () => Effect.void, { plant: "a break" });`, MESSAGE],
+          () => [`it("${title}", () => {}, opts);`, MESSAGE],
+          (label) => [`it("${title}", { ${label}: ${why(label, reason)} }, () => {});`, MESSAGE],
+          () => [`it.effect.prop("${title}", { n: N }, ({ n }) => Effect.void, { plant: "a break" });`, null],
+          () => [`it(\`the ${title} \${x}\`, () => {});`, MESSAGE],
+          () => [`it(\`\${x} ${title}\`, () => {});`, null],
+        ]);
+      },
+    ),
+    { ...runs, numRuns: 2 },
+  );
+}, 120_000);
+
+// Plant, run once on law-shape.ts and restored: skip the body rule when the label is an option.
+it("holds 0527's body rule on the type option in a file on the package's it", async () => {
+  await fc.assert(
+    fc.asyncProperty(fc.record({ head: ours, title: words, reason: words }), async ({ head, title, reason }) => {
+      const type = `{ type: "${reason}" }`;
+      await each(head, [
+        () => [`it("${title}", () => { expectTypeOf<1>().toEqualTypeOf<1>(); }, ${type});`, null],
+        () => [
+          `it("${title}", () => { type T = 1; expectTypeOf<T>().toBeNumber(); }, { plant: "a break", type: "${reason}" });`,
+          null,
+        ],
+        () => [`it("${title}", () => { expectTypeOf<1>().toBeNumber(); expect(1).toBe(1); }, ${type});`, TYPE_MESSAGE],
+        () => [`it("${title}", () => {}, ${type});`, TYPE_MESSAGE],
+        () => [`it.prop("${title}", { n: N }, ({ n }) => n >= 0, ${type});`, TYPE_MESSAGE],
+        () => [`it("${title}", () => { expectTypeOf(read()).toBeNumber(); }, ${type});`, TYPE_MESSAGE],
+      ]);
+    }),
+    { ...runs, numRuns: 2 },
+  );
+}, 120_000);
+
+// Plant, run once on law-shape.ts and restored: report every title label as an error.
+it("keeps the title label in a file still on vitest or @effect/vitest, where an option label is not read", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.record({ head: theirs, id, title: words, reason: words }),
+      async ({ head, id, title, reason }) => {
+        await each(head, [
+          (label) => [`it("${label}: ${reason}", () => ${ok(label)});`, null],
+          (label) => [`it.effect("${id} ${label}: ${reason}", () => ${ok(label, "Effect.void")});`, null],
+          (label) => [`it("${title}", () => ${ok(label)}, { ${label}: ${why(label, reason)} });`, MESSAGE],
+          () => [`it("type: ${reason}", () => { expect(1).toBe(1); });`, TYPE_MESSAGE],
+          () => [`it("${title}", () => {}, { plant: "a break" });`, MESSAGE],
+        ]);
+      },
+    ),
     { ...runs, numRuns: 2 },
   );
 }, 120_000);

@@ -352,6 +352,7 @@ const valid = (label: string, extra: string) => ({
         { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", if: checkFlag, env: testEnv, run: ratchet },
         { name: "field rows", if: rowsFlag, env, run: "node .github/ci/field-check.ts" },
+        { name: "plant check", if: rowsFlag, env: { ...env }, run: "node .github/ci/plant-check.ts" },
       ] as Record<string, unknown>[],
     },
     typecheck: {

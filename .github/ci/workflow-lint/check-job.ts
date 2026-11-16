@@ -1,5 +1,5 @@
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
-// flag, the field rows last, and the one ratchet step that holds every list file to shrinking (0524).
+// flag, the field rows and the plant check (0580) last, and the one ratchet step that holds every list file to shrinking (0524).
 import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
@@ -22,25 +22,42 @@ export const checkJob: Rule = ({ jobs }, require) => {
   // row check last, after any failure, on the field flag, so a red lint never hides red rows.
   const checkSteps = steps(map(jobs["check"]));
   const rows = checkSteps.filter((s) => s["run"] === "node .github/ci/field-check.ts");
+  // 0580: the plant check runs beside the row check, on the same flag and inputs, right after it.
+  const plants = checkSteps.filter((s) => s["run"] === "node .github/ci/plant-check.ts");
   const rowInstall = checkSteps.filter((s) => s["run"] === ROW_INSTALL);
 
   for (const step of checkSteps) {
     const slow = step["run"] === "pnpm build";
     const setup = typeof step["uses"] === "string";
-    const expected = slow ? BUILD : rows.includes(step) ? ROWS : rowInstall.includes(step) ? ROWS_ALONE : CHECK;
+    const expected = slow
+      ? BUILD
+      : rows.includes(step) || plants.includes(step)
+        ? ROWS
+        : rowInstall.includes(step)
+          ? ROWS_ALONE
+          : CHECK;
     require(setup
       ? !("if" in step)
       : compact(step["if"]) ===
           expected, "F1: check's lint steps run on the check flag, the build on build, the rows on field, its setup on every run");
   }
 
+  require(plants.length === 1 &&
+    rows.length === 1 &&
+    plants[0] === checkSteps.at(-1) &&
+    rows[0] === checkSteps.at(-2) &&
+    plants[0]?.["continue-on-error"] === undefined &&
+    JSON.stringify(plants[0]?.["env"]) ===
+      JSON.stringify(
+        env,
+      ), "0580: check runs the plant check once, last, right after the row check, with the run's base, head and event, and its failure blocks");
   require(rows.length === 1 &&
-    rows[0] === checkSteps.at(-1) &&
+    rows[0] === checkSteps.at(-2) &&
     rows[0]?.["continue-on-error"] === undefined &&
     JSON.stringify(rows[0]?.["env"]) ===
       JSON.stringify(
         env,
-      ), "F1: check runs the row check once, last, with the run's base, head and event, and its failure blocks");
+      ), "F1: check runs the row check once, before only the plant check, with the run's base, head and event, and its failure blocks");
   require(rowInstall.length === 1 &&
     checkSteps.some(
       (s) => s["run"] === "pnpm install --frozen-lockfile",

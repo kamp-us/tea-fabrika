@@ -610,7 +610,8 @@ it("property: CI's own files alone run check and typecheck, and none of next/", 
       expect(ci.jobs(paths, event, false)).toEqual({
         ...heavy,
         next: false,
-        field: false,
+        // 0580: a CI test file is a law file, so the plant check runs.
+        field: paths.some((p) => p.startsWith(".github/ci/") && p.endsWith(".test.ts")),
         ...off,
       });
     }),
@@ -1944,6 +1945,66 @@ it("property: on every event, for any paths and either draft flag, no flag and n
         [["apps/fabrika/src/a.ts"], "push", false],
         // pinned: a hand-started run, which ran every job.
         [null, "workflow_dispatch", false],
+      ],
+    },
+  );
+});
+
+// 0580: a changed law file sets `field`, so a code pull request runs the plant check beside the row
+// check. A law file is a test file or a shared suite in next/ or one of the three tooling folders;
+// today's version's tests and any other name are not, and set `field` only beside a row. Written
+// apart from changes.mjs. Plant, run once on changes.mjs and restored: drop the `*Test.ts` suffix.
+const roots = fc.constantFrom(
+  "next/packages/vitest/src",
+  "next/apps/fabrika/src/exam",
+  ".agents/skills/lead/scripts",
+  ".github/ci",
+  "oxlint-plugins",
+  "packages/fabrika/src",
+  "apps/fabrika/src",
+  "programs/inbox/src",
+  "docs/plan",
+  "nextish",
+);
+
+const names = fc.constantFrom(
+  "Law.test.ts",
+  "Window.test.tsx",
+  "SinkTest.ts",
+  "Store.integration.test.ts",
+  "Law.ts",
+  "Test.ts",
+  "Law.test-support.ts",
+  "notes.md",
+  "Law.test.mjs",
+);
+
+const law = (p: string) =>
+  ["next/", ".agents/", ".github/ci/", "oxlint-plugins/"].some((root) => p.startsWith(root)) &&
+  (p.endsWith(".test.ts") || p.endsWith(".test.tsx") || (p.endsWith("Test.ts") && !p.endsWith("/Test.ts")));
+
+it("property: a changed test file or shared suite in next/ or a tooling folder sets field, and today's version's does not", () => {
+  const row = "field/runs/2026-11-16-a-row.json";
+  fc.assert(
+    fc.property(
+      fc.array(
+        fc.tuple(roots, names).map(([root, name]) => `${root}/${name}`),
+        { minLength: 1, maxLength: 6 },
+      ),
+      fc.boolean(),
+      scopedEvent,
+      (paths, withRow, event) => {
+        const all = withRow ? [...paths, row] : paths;
+        expect(paths.map(ci.lawFile)).toEqual(paths.map(law));
+        expect(ci.classify(all, event).field).toBe(withRow || paths.some(law));
+      },
+    ),
+    {
+      ...options,
+      numRuns: 200,
+      examples: [
+        [["next/packages/libfabrika/src/processes/ProgramMailReadsTest.ts"], false, "pull_request"],
+        [["packages/fabrika/src/a.test.ts"], false, "pull_request"],
       ],
     },
   );

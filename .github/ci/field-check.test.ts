@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Arbitrary, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
+import * as schema from "./field-schema.ts";
 
 // Today's field records. Covers field-schema.ts and field-check.ts, including added-row
 // selection, optional facts, advisory drift and annotations. No network; the only real rows read
@@ -46,7 +47,13 @@ const noteCore = {
 const Note = Schema.Struct({ ...noteCore, quests: Schema.Array(Schema.Unknown) });
 const OldNote = Schema.Struct({ ...noteCore, lanes: Schema.Array(Schema.Unknown) });
 
-const Plant = Schema.Struct({ law: Schema.String, plant: Schema.String, result: Schema.Literals(["red", "green"]) });
+// A plant record names its law's file since 0580; a row written before has none.
+const Plant = Schema.Struct({
+  file: Schema.optionalKey(Schema.String),
+  law: Schema.String,
+  plant: Schema.String,
+  result: Schema.Literals(["red", "green"]),
+});
 
 const Run = Schema.Struct({
   date: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/)),
@@ -808,6 +815,36 @@ it("real notes written before the rename pass whole, as they are saved", () => {
     expect(report.findings.filter((f) => f._tag === "error")).toEqual([]);
     expect(report.exitCode).toBe(0);
   }
+});
+
+// vector: every run row in field/runs/ as saved, read whole. 0580 adds `file` to a plant record, and a
+// row is never edited, so each old record, with no `file`, must still decode, as must every new one
+// with it. Plant, run once on field-schema.ts and restored: make `file` required.
+it("vector: every saved run row's plants still decode with the widened Plant, and a record with a file does too", () => {
+  const dir = new URL("../../field/runs/", import.meta.url);
+  const rows = readdirSync(dir).filter((name) => name.endsWith(".json"));
+  const decode = Schema.decodeUnknownExit(Schema.Array(schema.Plant));
+  let records = 0;
+  let filed = 0;
+
+  for (const name of rows) {
+    const row: unknown = JSON.parse(readFileSync(new URL(name, dir), "utf8"));
+    const plants = typeof row === "object" && row !== null && "plants" in row ? row.plants : undefined;
+
+    if (plants === undefined) {
+      continue;
+    }
+
+    expect(decode(plants)._tag, name).toBe("Success");
+    records += Array.isArray(plants) ? plants.length : 0;
+    filed += Array.isArray(plants)
+      ? plants.filter((p) => typeof p === "object" && p !== null && "file" in p).length
+      : 0;
+  }
+
+  // Coverage: the saved rows hold old records without a file, so the law reads the case it guards.
+  expect(records - filed).toBeGreaterThan(0);
+  expect(decode([{ file: "next/a.test.ts", law: "a law", plant: "a break", result: "red" }])._tag).toBe("Success");
 });
 
 // vector: which changed paths the field job reads. Old direct .jsonl files and anything in a

@@ -21,6 +21,17 @@ const trees = ["apps/", "programs/", "packs/", "wip/", "legacy/", "packages/"];
  * @param {string} path
  */
 const rows = (path) => /^field\/[^/]+\.jsonl$/.test(path) || /^field\/(?:notes|runs|findings)\//.test(path);
+
+/**
+ * A law file the plant check reads (0580): a test file or a shared suite (`SinkTest.ts`, 0062) in
+ * next/ or a tooling folder (`.agents/`, `.github/ci/`, `oxlint-plugins/`). Today's version is not
+ * one: 0093 covers next/, and the tooling follows next/'s rules (0033). Its change sets `field`, so
+ * a code pull request runs the plant check beside the row check.
+ * @param {string} path
+ */
+export const lawFile = (path) =>
+  /^(?:next|\.agents|\.github\/ci|oxlint-plugins)\//.test(path) && /(?:\.test\.tsx?|[^/]Test\.ts)$/.test(path);
+
 const readTrees = ["programs/", "fixtures/", "packages/", "next/"];
 const skillTrees = [".agents/skills/", ".claude/skills/"];
 /** @param {string} path */
@@ -218,7 +229,7 @@ export const classify = (paths, event, _proven = []) => {
   const touched = paths.some(todays);
 
   if (paths.some(reads)) {
-    return { ...all, field: paths.some(rows), build: touched };
+    return { ...all, field: paths.some(rows) || paths.some(lawFile), build: touched };
   }
 
   // The typecheck is its own job so it answers at once, beside lint and build. It reads what check
@@ -227,7 +238,7 @@ export const classify = (paths, event, _proven = []) => {
     check: !paths.every(quiet),
     typecheck: !paths.every((path) => quiet(path) || experiment(path)),
     next: scope(paths, event) !== "none",
-    field: paths.some(rows),
+    field: paths.some(rows) || paths.some(lawFile),
     build: touched,
   };
 };

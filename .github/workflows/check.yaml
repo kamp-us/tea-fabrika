@@ -331,6 +331,16 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
           EVENT: ${{ github.event_name }}
         run: node .github/ci/field-check.ts
+      # 0580: every law the change adds or changes, in a file on @kampus/vitest's `it`, names its
+      # plant, and a run row it adds records that plant red (0093). It blocks. `field` is on for a
+      # changed law file too (changes.mjs's `lawFile`), so a code pull request runs it.
+      - name: plant check
+        if: ${{ !cancelled() && needs.changes.outputs.field != 'false' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT: ${{ github.event_name }}
+        run: node .github/ci/plant-check.ts
       - *stop
 
   # `pnpm typecheck` alone, beside check (0133): it starts at once, a red typecheck no longer hides

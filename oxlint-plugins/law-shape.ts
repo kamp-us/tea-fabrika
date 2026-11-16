@@ -28,6 +28,14 @@
 // or `@effect/vitest`, under any local name or through a namespace. A `type:` title on `it.prop`, or
 // on a body that calls `fc.assert`, fails too: a property is a runtime check.
 //
+// In a file whose `it` (or `test`) comes from the package, `@kampus/vitest` (`@kalfa/vitest` once
+// renamed, 0585), the label is an option of the declaration (0580): `{ scenario: "<why>" }` and the
+// other four, read from an options object written at the call as its last argument, after the body.
+// A title that starts with a label is an error there, with its own message, and a `type` option takes
+// 0527's body rule. A file still on `vitest` or `@effect/vitest` keeps the title label until the
+// sweep moves it, and an option label there is not read. An options value passed by name is not
+// read, so the law reads as unlabeled: the safe side.
+//
 // A title is read only when it is written out: a string, or a template whose text before its first
 // `${}` already decides it. Any other title (a helper's parameter, `name + x`) is not judged, so a
 // helper that wraps `it` is read at its own `it` only when that one is a property. Under-reporting
@@ -47,7 +55,9 @@ const SHARED_RUNNER = "property";
 
 /** Vitest's two compile-time checks, and the modules that give them. */
 const CHECKS = new Set(["expectTypeOf", "assertType"]);
-const VITEST = new Set(["vitest", "@effect/vitest"]);
+const VITEST = new Set(["vitest", "@effect/vitest", "@kampus/vitest", "@kalfa/vitest"]);
+/** The package whose `it` takes the label as an option (0580). */
+const OURS = new Set(["@kampus/vitest", "@kalfa/vitest"]);
 
 /** What runs code with no call of its own written in the body. */
 const RUNS = new Set([
@@ -65,6 +75,10 @@ export const MESSAGE = `A law here is a property (it.prop, it.effect.prop, a bod
 
 export const TYPE_MESSAGE =
   "A law titled type: holds only compile-time checks: expectTypeOf or assertType from vitest, and type declarations, with no other call. A runtime check makes it a property or one of the other four labels (0527).";
+
+/** The message for a title label in a file on the package's `it`: the label moved to an option (0580). */
+export const optionMessage = (label: string) =>
+  `In a file on @kampus/vitest's it, the label is the option { ${label}: ${label === "pinned" ? "<ticket>" : '"<why>"'} }, not the title (0580).`;
 
 type Fn = ESTree.ArrowFunctionExpression | ESTree.Function;
 
@@ -139,6 +153,35 @@ const labelOf = (title: Node | undefined): Label | "none" | null => {
   return LABELS.some((label) => `${label}:`.startsWith(head) || `${label}:`.startsWith(rest)) ? null : "none";
 };
 
+/** The label an options object written as the call's last argument, after its body, names, or `"none"`. */
+const optionLabel = (args: readonly Node[]): Label | "none" => {
+  const last = args.at(-1);
+
+  if (args.length < 3 || last?.type !== "ObjectExpression") {
+    return "none";
+  }
+
+  for (const property of last.properties) {
+    if (property.type !== "Property" || property.computed) {
+      continue;
+    }
+
+    const key =
+      property.key.type === "Identifier"
+        ? property.key.name
+        : property.key.type === "Literal" && typeof property.key.value === "string"
+          ? property.key.value
+          : null;
+    const found = LABELS.find((label) => label === key);
+
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  return "none";
+};
+
 /** The calls of one `expectTypeOf(...)...` or `assertType(...)` chain, or `null` for any other expression. */
 const assertion = (expression: Node, checks: ReadonlySet<string>): ReadonlySet<Node> | null => {
   const calls = new Set<Node>();
@@ -211,6 +254,7 @@ export const lawShape: CreateRule = {
         const runners = new Set<string>();
         const checks = new Set<string>();
         const local = new Map<string, Fn[]>();
+        let ours = false;
 
         for (const statement of program.body) {
           if (statement.type !== "ImportDeclaration" || statement.importKind === "type") {
@@ -222,6 +266,19 @@ export const lawShape: CreateRule = {
           const pbt = from === "@demlik/tea/pbt";
           const shared = SHARED.test(from);
           const vitest = VITEST.has(from);
+
+          if (
+            OURS.has(from) &&
+            statement.specifiers.some(
+              (spec) =>
+                spec.type === "ImportSpecifier" &&
+                spec.importKind !== "type" &&
+                spec.imported.type === "Identifier" &&
+                (spec.imported.name === "it" || spec.imported.name === "test"),
+            )
+          ) {
+            ours = true;
+          }
 
           for (const spec of statement.specifiers) {
             const name = spec.local.name;
@@ -319,7 +376,16 @@ export const lawShape: CreateRule = {
           }
 
           const title = node.arguments[0];
-          const label = labelOf(title);
+          const titled = labelOf(title);
+
+          if (ours && titled !== "none" && titled !== null) {
+            context.report({ node: title ?? node, message: optionMessage(titled) });
+            continue;
+          }
+
+          const option = optionLabel(node.arguments);
+          // A title the source does not decide stays unjudged in either kind of file.
+          const label = !ours ? titled : option === "none" && titled === null ? null : option;
           const bodies = node.arguments.flatMap((arg): Fn[] =>
             isFn(arg) ? [arg] : arg.type === "Identifier" ? (local.get(arg.name) ?? []) : [],
           );

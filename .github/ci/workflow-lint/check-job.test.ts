@@ -100,6 +100,20 @@ const plants: Plant[] = [
       ],
       ["the row check bypassed", (w) => (step(w, "check", "field rows")["run"] = "echo passed")],
       ["the row check twice", (w) => w.jobs.check.steps.push({ ...step(w, "check", "field rows") })],
+      // 0580: the plant check, beside the row check. Source plant, run once on check-job.ts and
+      // restored: its own require deleted (red: a muted plant check and one without its head pass;
+      // the other three are still caught by the flag and order requires).
+      ["the plant check is gone", (w) => w.jobs.check.steps.splice(place(w, "check", "plant check"), 1)],
+      [
+        "the plant check ignores failure",
+        (w) => Object.assign(step(w, "check", "plant check"), { "continue-on-error": true }),
+      ],
+      ["the plant check runs on the check flag", (w) => (step(w, "check", "plant check")["if"] = checkFlag)],
+      ["the plant check bypassed", (w) => (step(w, "check", "plant check")["run"] = "echo passed")],
+      [
+        "the plant check without its head",
+        (w) => Reflect.deleteProperty(step(w, "check", "plant check")["env"] as Record<string, string>, "HEAD"),
+      ],
       ["check runs only on the check flag", (w) => (w.jobs.check.if = guard("check"))],
       [
         "rows alone install everything",
