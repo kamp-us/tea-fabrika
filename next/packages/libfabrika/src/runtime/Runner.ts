@@ -16,6 +16,7 @@ import {
   DateTime,
   Effect,
   Exit,
+  Formatter,
   Layer,
   Option,
   Result,
@@ -392,7 +393,7 @@ const decodeDown = Schema.decodeUnknownOption(Down);
 
 const inputDigest = Effect.fnUntraced(function* (input: Delivery) {
   return yield* sha256(
-    new TextEncoder().encode(JSON.stringify([input.envelope.by, input.envelope.input, input.sentAt, input.seen])),
+    new TextEncoder().encode(Formatter.formatJson([input.envelope.by, input.envelope.input, input.sentAt, input.seen])),
   );
 });
 
@@ -2527,9 +2528,9 @@ export class ProgramRunner extends Context.Service<
 
                 if (placed !== null) {
                   const letter = yield* Stream.runHead(mailbox.read(process.name, placed.rev - 1));
-                  const asked = JSON.stringify(input.envelope.input);
+                  const asked = Formatter.formatJson(input.envelope.input);
 
-                  if (Option.exists(letter, (l) => l.id === input.id && JSON.stringify(l.m) !== asked)) {
+                  if (Option.exists(letter, (l) => l.id === input.id && Formatter.formatJson(l.m) !== asked)) {
                     return { answer: Sent.cases.refused.make({ reason: "id_reused" }), jobs: [] };
                   }
 

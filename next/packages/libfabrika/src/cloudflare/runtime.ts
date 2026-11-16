@@ -14,6 +14,7 @@ import {
   Equal,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Option,
   Result,
@@ -949,7 +950,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   // table lives as long as the session, never folded again from rev 0 for each call.
   const windows = new Map<string, { readonly session: string; readonly manager: typeof ProcessManager.Service }>();
   const windowManager = Effect.fnUntraced(function* (to: typeof Recipient.cases.client.Type) {
-    const key = JSON.stringify([to.client, to.session]);
+    const key = Formatter.formatJson([to.client, to.session]);
     const kept = windows.get(key);
 
     if (kept !== undefined) {
@@ -1148,7 +1149,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       sql.exec(
         "INSERT INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
         process.process,
-        JSON.stringify({ ...descriptor, id: process.process, build: process.build }),
+        Formatter.formatJson({ ...descriptor, id: process.process, build: process.build }),
         requester?._tag === "process" ? 2 : 0,
       );
     }
@@ -1175,7 +1176,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     sql.exec(
       "INSERT INTO dev_descriptors (process,value) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET value=excluded.value",
       process.process,
-      JSON.stringify(descriptor),
+      Formatter.formatJson(descriptor),
     );
   }
 
@@ -1381,7 +1382,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           sql.exec(
             "INSERT OR IGNORE INTO dev_starts (id,request,hash) VALUES (?,?,?)",
             request.id,
-            JSON.stringify(request),
+            Formatter.formatJson(request),
             chosen.code.hash,
           );
         }
@@ -1413,7 +1414,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         sql.exec(
           "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,?)",
           result.process,
-          JSON.stringify(descriptor),
+          Formatter.formatJson(descriptor),
           request._tag === "first" ? 1 : 0,
         );
         return result;
@@ -1446,7 +1447,11 @@ const projectLogic = Effect.fn("project.init")(function* (
 
     const current = yield* loader.load(program, "check", undefined, hash);
     remember(descriptor.name, current.declaration);
-    sql.exec("UPDATE dev_descriptors SET value=? WHERE process=?", JSON.stringify({ ...descriptor, build: hash }), pid);
+    sql.exec(
+      "UPDATE dev_descriptors SET value=? WHERE process=?",
+      Formatter.formatJson({ ...descriptor, build: hash }),
+      pid,
+    );
   });
   // A swap publishes its running build before releasing the Process permit. Its durable fact
   // also repairs a lost reply; re-reading the newest fact cannot undo a later swap on a retry.
@@ -1495,7 +1500,7 @@ const projectLogic = Effect.fn("project.init")(function* (
           sql.exec(
             "INSERT OR IGNORE INTO dev_descriptors (process,value,pending) VALUES (?,?,2)",
             answer.process,
-            JSON.stringify(descriptor),
+            Formatter.formatJson(descriptor),
           );
         }
 
