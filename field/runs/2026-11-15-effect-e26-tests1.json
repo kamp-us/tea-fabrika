@@ -2,7 +2,7 @@
   "date": "2026-11-15",
   "run": "2026-11-15-effect-e26-tests1",
   "ticket": "1075",
-  "pr": null,
+  "pr": "kamp-us/tea-fabrika#1482",
   "started": "2026-11-15T20:32:11-08:00",
   "ended": "2026-11-15T20:46:48-08:00",
   "parent": null,
@@ -15,7 +15,7 @@
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "Tests ran at the uncommitted tree on origin/main f7169af: the 14 touched test files (139 tests), --changed origin/main (19 files, 168 tests), and three integration laws these files reach (pipeline queue and runner, libfabrika's BrainControlLaunchd on its stand-in spawner), all green. effect-tsgo tsc on libfabrika and pipeline, with the check on for these folders in a temporary base override that was restored before the commit, showed no error but the 150 product hits. No pnpm typecheck was run. No plant: this step adds no new law and changes none.",
+  "note": "Tests ran at the uncommitted tree on origin/main f7169af: the 14 touched test files (139 tests), --changed origin/main (19 files, 168 tests), and three integration laws these files reach (pipeline queue and runner, libfabrika's BrainControlLaunchd on its stand-in spawner), all green. effect-tsgo tsc on libfabrika and pipeline, with the check on for these folders in a temporary base override that was restored before the commit, showed no error but the 150 product hits. No pnpm typecheck was run. No plant: this step adds no new law and changes none. Draft pull request 1482 was opened before the coordinator's ruling that a slice opens none; it is left as it is. Product hits left for the build, by file: client/WindowMachine.ts 91, desktop/Menu.ts 13, pipeline Change.ts 11, client/Tezgah.ts 10, pipeline Queue.ts 8, client/Keys.ts 6, client/HandsMachine.ts 5, desktop/BrainSpec.ts 2, repositories/Repositories.ts 2, inbox program.ts 1, pipeline Merger.ts 1, pipeline handlers.ts 1 (libfabrika files under next/packages/libfabrika/src, programs under next/programs). Waiting on 1366: none.",
   "plants": [],
   "step": "tests"
 }
