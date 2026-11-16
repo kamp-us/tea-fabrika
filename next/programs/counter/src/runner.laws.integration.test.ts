@@ -1,9 +1,7 @@
 // p22's real counter belongs here: the library's exam forbids importing a program from a library test.
 // Uses P11's same injected contracts, actual Ledger.sql and ProcessStore.sql, and no Cmd handlers.
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
@@ -16,7 +14,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import { Effect, FileSystem, Layer, Path, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
 const PROCESS: string = Effect.runSync(
@@ -130,10 +128,10 @@ describe("p22 real counter in the runner", () => {
       const A: typeof import("@kampus/libfabrika") = yield* Effect.promise(() => import(LIBRARY));
       const C = yield* Effect.promise(() => import("@kampus/libfabrika/runtime/ProcessStore"));
       const folder = yield* scopedFolder;
-      let ledgerDb = yield* scopedDb(join(folder, "ledger.db"));
-      let storeDb = yield* scopedDb(join(folder, "process.db"));
+      let ledgerDb = yield* scopedDb(yield* fileIn(folder, "ledger.db"));
+      let storeDb = yield* scopedDb(yield* fileIn(folder, "process.db"));
       // Ticket 402: the brain's process table, in its own ledger, survives the wake too.
-      let managerDb = yield* scopedDb(join(folder, "manager.db"));
+      let managerDb = yield* scopedDb(yield* fileIn(folder, "manager.db"));
       const seen = new Map<string, { rev: number; view: unknown }>();
       const expected = Schema.Struct({ count: Schema.Int });
       const data = () =>
@@ -267,9 +265,9 @@ describe("p22 real counter in the runner", () => {
       ledgerDb.close();
       storeDb.close();
       managerDb.close();
-      ledgerDb = yield* scopedDb(join(folder, "ledger.db"));
-      storeDb = yield* scopedDb(join(folder, "process.db"));
-      managerDb = yield* scopedDb(join(folder, "manager.db"));
+      ledgerDb = yield* scopedDb(yield* fileIn(folder, "ledger.db"));
+      storeDb = yield* scopedDb(yield* fileIn(folder, "process.db"));
+      managerDb = yield* scopedDb(yield* fileIn(folder, "manager.db"));
       yield* Effect.gen(function* () {
         const r: Runner = yield* A.ProgramRunner;
         expect((yield* r.open("after-wake")).view).toEqual({ count: 12 });
@@ -304,10 +302,14 @@ describe("p22 real counter in the runner", () => {
 // P40 slice 1. The counter runs under its declared identity: the loader's key and every recorded
 // process fact name `counter.name`, which is `fabrika/counter`, while its registered name stays a
 // process name. The folders and databases below are opened in a scope and given back by it.
-const scopedFolder = Effect.acquireRelease(
-  Effect.sync(() => mkdtempSync(join(tmpdir(), "p40-counter-"))),
-  (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
+const scopedFolder = FileSystem.FileSystem.use((fs) => fs.makeTempDirectoryScoped({ prefix: "p40-counter-" })).pipe(
+  Effect.provide(NodeServices.layer),
+  Effect.orDie,
 );
+
+/** A file's path inside a folder, joined by the Path service. */
+const fileIn = (folder: string, name: string) =>
+  Path.Path.useSync((path) => path.join(folder, name)).pipe(Effect.provide(NodeServices.layer));
 
 const scopedDb = (file: string) =>
   Effect.acquireRelease(
@@ -353,9 +355,9 @@ describe("P40 the counter under its qualified identity", () => {
     // loader serves and what the process is started with, as the brain's bootstrap does.
     const session = (folder: string) =>
       Effect.gen(function* () {
-        const ledgerDb = yield* scopedDb(join(folder, "ledger.db"));
-        const storeDb = yield* scopedDb(join(folder, "process.db"));
-        const managerDb = yield* scopedDb(join(folder, "manager.db"));
+        const ledgerDb = yield* scopedDb(yield* fileIn(folder, "ledger.db"));
+        const storeDb = yield* scopedDb(yield* fileIn(folder, "process.db"));
+        const managerDb = yield* scopedDb(yield* fileIn(folder, "manager.db"));
         const checked = Layer.effect(
           A.CheckedWriter,
           Effect.gen(function* () {

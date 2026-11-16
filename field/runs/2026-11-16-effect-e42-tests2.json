@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e42-tests2",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T02:05:25-08:00",
+  "ended": "2026-11-16T02:17:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E42 of the Effect-checker sweep, check nodeBuiltinImport, folder next/programs/counter only (merge session's Q8 ruling: split E42 by folder), in next/, with no lock line and no pull request. @effect/platform-node joins next/programs/counter's devDependencies as catalog:, as next/programs/pipeline has it, and pnpm install wrote its one importer entry (3 lines) into pnpm-lock.yaml; the lockfile was not edited by hand. Counted with only nodeBuiltinImport at error through --lspconfig over next/programs/counter/tsconfig.json: 2 hits, both in runner.laws.integration.test.ts (an exam path), line 3 (node:fs) and line 5 (node:path); 0 in product files, 0 in pull request 1366's files. Fixed 2, both by hand edits: the scoped temp folder is now FileSystem.makeTempDirectoryScoped with the same prefix, and each database path is joined by the Path service, both from @effect/platform-node/NodeServices by its subpath, not the barrel; the node:os import went with them, and node:sqlite stays, since Effect has no SQLite driver here. Recount: 0 by project and 0 by --file on the changed file. The same file's unstableApiUsage warnings went from 68 to 72 for the new FileSystem and Path uses, a warning-level check this slice does not own. Left 0 in this folder. Every law keeps its assertions and its behavior: the folders and databases are still opened in a scope and given back by it, databases close before the folder goes.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Tests run at the tree of this commit, on base 0765059: next/programs/counter's three test files one at a time and together (3 files, 13 tests, all passing), runner.laws.integration.test.ts included, which the 0178 guard did not refuse. vitest --changed was not run: a lockfile change makes it the full suite, so the narrow paths ran instead, as AGENTS.md says. pnpm format clean; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed every part but lint:dead, which died with EPIPE as the box's memory limit kills it, and passed when run alone; lint:versions passed. The ratchet exits 0, and one pnpm typecheck at the end passed.",
+  "plants": [
+    {
+      "law": "L7: the counter keeps its inputs and count across every reopen, recorded as fabrika/counter, now on a FileSystem temp folder and Path-joined files",
+      "plant": "program.ts init ignores the loaded model and starts at count 0: the saved count comes back: expected { count: +0 } to deeply equal { count: 1 }",
+      "result": "red"
+    },
+    {
+      "law": "plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter, reopening the same Path-joined files after the wake",
+      "plant": "the same init plant: expected { count: +0 } to deeply equal { count: 12 }",
+      "result": "red"
+    }
+  ],
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "tests"
+}
