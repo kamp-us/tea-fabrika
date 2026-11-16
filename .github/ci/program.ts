@@ -2,6 +2,7 @@
 // comment-only change under next/ runs only the reader tests (the plan for CI paths, slice 2).
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
+import { Array as Arr, Result, Option } from "effect";
 import { parseSync } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */
@@ -34,7 +35,7 @@ const tools: readonly RegExp[] = [
 const declares = /^[\s*]*(?:global|globals|exported)\b/;
 
 const tool = (comment: Comment) =>
-  tools.some((pattern) => pattern.test(comment.value)) ||
+  Arr.some(tools, (pattern) => pattern.test(comment.value)) ||
   // `/// <reference ... />` and its kin: TypeScript reads a triple-slash line as a directive.
   (comment.type === "Line" && comment.value.startsWith("/")) ||
   (comment.type === "Block" && declares.test(comment.value));
@@ -58,7 +59,7 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
     left.set(key, (left.get(key) ?? 0) + 1);
   }
 
-  return from.filter((comment) => {
+  return Arr.filter(from, (comment) => {
     const key = `${comment.type}:${comment.value}`;
     const count = left.get(key) ?? 0;
     left.set(key, count - 1);
@@ -73,15 +74,14 @@ const unmatched = (from: readonly Comment[], to: readonly Comment[]) => {
  */
 const refusal = (name: string, before: string, after: string, parse: typeof parseSync): string | undefined => {
   const options = { lang: name.endsWith(".tsx") ? "tsx" : "ts", sourceType: "module" } as const;
-  let old;
-  let fresh;
+  const parsed = Result.try(() => ({ old: parse(name, before, options), fresh: parse(name, after, options) }));
 
-  try {
-    old = parse(name, before, options);
-    fresh = parse(name, after, options);
-  } catch (error) {
+  if (Result.isFailure(parsed)) {
+    const error = parsed.failure;
     return `the parser threw: ${error instanceof Error ? error.message : String(error)}`;
   }
+
+  const { old, fresh } = parsed.success;
 
   if (old.errors.length > 0 || fresh.errors.length > 0) {
     return `a parse error on the ${old.errors.length > 0 ? "old" : "new"} side`;
@@ -92,8 +92,10 @@ const refusal = (name: string, before: string, after: string, parse: typeof pars
   }
 
   const changed = [...unmatched(old.comments, fresh.comments), ...unmatched(fresh.comments, old.comments)];
-  const found = changed.find(tool);
-  return found === undefined ? undefined : `a tool comment changed: ${JSON.stringify(found.value.trim())}`;
+  return Option.match(Arr.findFirst(changed, tool), {
+    onNone: () => undefined,
+    onSome: (found) => `a tool comment changed: ${JSON.stringify(found.value.trim())}`,
+  });
 };
 
 /**
@@ -134,7 +136,7 @@ export const samePaths = (
   run: Runner,
   note: (path: string, verdict: string) => void = () => {},
 ): string[] =>
-  paths.filter((path) => {
+  Arr.filter(paths, (path) => {
     const verdict = judge(base, head, path, run);
     note(path, verdict ?? "same program");
     return verdict === undefined;

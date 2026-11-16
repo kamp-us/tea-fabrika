@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { Array as Arr, pipe, Order } from "effect";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
@@ -17,32 +18,36 @@ import { vitestLegs } from "./workflow-lint.ts";
 // vitest.config.ts plugin that hands them to Vitest: every script alone then selects no test.
 const root = join(import.meta.dirname, "../..");
 
-const files = readdirSync(join(root, ".agents/skills"), { recursive: true, withFileTypes: true })
-  .filter((entry) => entry.isFile())
-  .map((entry) => relative(root, join(entry.parentPath, entry.name)));
+const files = pipe(
+  readdirSync(join(root, ".agents/skills"), { recursive: true, withFileTypes: true }),
+  Arr.filter((entry) => entry.isFile()),
+  Arr.map((entry) => relative(root, join(entry.parentPath, entry.name))),
+);
 
 // A `fixtures/` folder under a skill's scripts holds data, not scripts. vitest.config.ts leaves it
 // out of the tests (`EXCLUDE`) and makes any change to it select every test (`**/fixtures/**` in
 // `forceRerunTriggers`), so its files are never held to "exactly their declaring tests". The
 // fixture law below holds them to that rule instead.
 const FIXTURE = /\/scripts\/(?:.+\/)?fixtures\//;
-const fixtures = files.filter((path) => FIXTURE.test(path));
+const fixtures = Arr.filter(files, (path) => FIXTURE.test(path));
 
 // Any depth under `scripts/`, as vitest.config.ts includes tests there (the flow runner's `flow/`).
 const tree = new Map(
-  files
-    .filter((path) => /\/scripts\/.+$/.test(path) && !FIXTURE.test(path))
-    .map((path) => [path, readFileSync(join(root, path), "utf8")]),
+  pipe(
+    files,
+    Arr.filter((path) => /\/scripts\/.+$/.test(path) && !FIXTURE.test(path)),
+    Arr.map((path) => [path, readFileSync(join(root, path), "utf8")]),
+  ),
 );
 
-const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
-const tests = [...tree.keys()].filter((path) => path.endsWith(".test.ts"));
+const scripts = Arr.filter([...tree.keys()], (path) => !path.endsWith(".test.ts"));
+const tests = Arr.filter([...tree.keys()], (path) => path.endsWith(".test.ts"));
 
 // Independent expected readers: follow source names, not the derivation under test.
 // This intentionally shares its over-match of names in comments and fixture strings. A name may
 // hold a dot, as `catchup.test-support.ts` does.
 const readers = new Map(
-  tests.map((test) => {
+  Arr.map(tests, (test) => {
     const reached = new Set<string>();
     const queue = [test];
 
@@ -62,9 +67,9 @@ const readers = new Map(
 );
 
 // Unreferenced scripts have no reader, as the plan's final limits section says.
-const readScripts = scripts.filter((script) => [...readers.values()].some((paths) => paths.has(script)));
+const readScripts = Arr.filter(scripts, (script) => Arr.some([...readers.values()], (paths) => paths.has(script)));
 
-const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("/scripts/"));
+const markdown = Arr.filter(files, (path) => path.endsWith(".md") && !path.includes("/scripts/"));
 const options = { seed: 119120, numRuns: 20 };
 let vitest: Vitest;
 
@@ -77,12 +82,12 @@ afterAll(async () => {
 });
 
 const affected = async (paths: string[]) => {
-  vitest.config.related = paths.map((path) => join(root, path));
-  return (await vitest.getRelevantTestSpecifications()).map((spec) => relative(root, spec.moduleId)).sort();
+  vitest.config.related = Arr.map(paths, (path) => join(root, path));
+  return Arr.map(await vitest.getRelevantTestSpecifications(), (spec) => relative(root, spec.moduleId)).sort();
 };
 
 const declaring = (changed: ReadonlyArray<string>) =>
-  tests.filter((test) => changed.some((path) => readers.get(test)!.has(path))).sort();
+  Arr.filter(tests, (test) => Arr.some(changed, (path) => readers.get(test)!.has(path))).sort();
 
 it("real script subsets select exactly their declaring tests, never an empty set", async () => {
   await fc.assert(
@@ -148,19 +153,19 @@ describe("next workflow coverage", () => {
 
     for (const context of contexts.slice(1)) {
       const Sequencer = context.config.sequence.sequencer;
-      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
+      kept.push(Arr.map(await new Sequencer(context).shard(specs), repoPath));
     }
 
     return kept;
   };
   const complete = (kept: string[][], universe: string[]) => {
-    expect(kept.flat().toSorted()).toEqual(universe.toSorted());
+    expect(Arr.sort(kept.flat(), Order.String)).toEqual(Arr.sort(universe, Order.String));
     expect(new Set(kept.flat()).size).toBe(kept.flat().length);
   };
   beforeAll(async () => {
     const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
     contexts.push(baseline);
-    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) => repoPath(spec).startsWith("next/"));
+    nextSpecs = Arr.filter(await baseline.globTestSpecifications(), (spec) => repoPath(spec).startsWith("next/"));
 
     for (const index of indices) {
       contexts.push(
@@ -182,10 +187,10 @@ describe("next workflow coverage", () => {
   it("scenario: workflow shards partition every config-discovered next file exactly once", async () => {
     // Real config discovery and each configured sequencer run without executing a test.
     expect(Number.isInteger(denominator)).toBe(true);
-    expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
+    expect(Arr.sort(indices, Order.mapInput(Order.Number, Number))).toEqual(
       Array.from({ length: denominator }, (_, i) => String(i + 1)),
     );
-    const universe = nextSpecs.map(repoPath);
+    const universe = Arr.map(nextSpecs, repoPath);
     expect(universe.length).toBeGreaterThan(0);
     expect(new Set(universe).size).toBe(universe.length);
     const kept: string[][] = [];
@@ -193,7 +198,7 @@ describe("next workflow coverage", () => {
     for (const context of contexts.slice(1)) {
       const specs = await context.globTestSpecifications(["next/"]);
       const Sequencer = context.config.sequence.sequencer;
-      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
+      kept.push(Arr.map(await new Sequencer(context).shard(specs), repoPath));
     }
 
     complete(kept, universe);
@@ -208,7 +213,7 @@ describe("next workflow coverage", () => {
         fc.stringMatching(/^[a-z]{1,16}$/),
         async (subset, order, suffix) => {
           const project = nextSpecs[0]!.project;
-          const unknown = ["a", "b"].map((letter) =>
+          const unknown = Arr.map(["a", "b"], (letter) =>
             project.createSpecification(join(root, `next/apps/fabrika/src/unmeasured-${suffix}-${letter}.test.ts`)),
           );
 
@@ -217,17 +222,22 @@ describe("next workflow coverage", () => {
           }
 
           const files = [...subset, ...unknown];
-          const shuffled = files
-            .map((spec, i) => ({ spec, rank: order[i]! }))
-            .toSorted((a, b) => a.rank - b.rank)
-            .map(({ spec }) => spec);
+          const shuffled = Arr.map(
+            Arr.sort(
+              Arr.map(files, (spec, i) => ({ spec, rank: order[i]! })),
+              Order.mapInput(Order.Number, ({ rank }: { readonly rank: number }) => rank),
+            ),
+            ({ spec }) => spec,
+          );
           const first = await partition(files);
-          complete(first, files.map(repoPath));
+          complete(first, Arr.map(files, repoPath));
 
-          for (const permutation of [shuffled, files.toReversed()]) {
+          for (const permutation of [shuffled, Arr.reverse(files)]) {
             const kept = await partition(permutation);
-            complete(kept, files.map(repoPath));
-            expect(kept.map((paths) => paths.toSorted())).toEqual(first.map((paths) => paths.toSorted()));
+            complete(kept, Arr.map(files, repoPath));
+            expect(Arr.map(kept, (paths) => Arr.sort(paths, Order.String))).toEqual(
+              Arr.map(first, (paths) => Arr.sort(paths, Order.String)),
+            );
           }
         },
       ),

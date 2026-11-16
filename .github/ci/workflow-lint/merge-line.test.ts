@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr, Option } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { projects } from "../../../vitest.config.ts";
@@ -26,14 +27,17 @@ import {
 
 // The test job's one test step before 0539, the tooling tests on two machines: the `tooling`
 // project, since next/ and today's trees are projects of their own and a project ignores `--exclude`.
-const tooling = [
-  'if [ -n "$BASE" ]; then',
-  '  pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
-  "else",
-  '  pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
-  "fi",
-  "",
-].join("\n");
+const tooling = Arr.join(
+  [
+    'if [ -n "$BASE" ]; then',
+    '  pnpm exec vitest run --project tooling --changed "$BASE" --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
+    "else",
+    '  pnpm exec vitest run --project tooling --shard "$SHARD" --passWithNoTests --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/tooling.json"',
+    "fi",
+    "",
+  ],
+  "\n",
+);
 
 // What changes exposed before 0533 and 0539: the flags that started today's tests, its app end to
 // end, and the tooling tests.
@@ -53,20 +57,23 @@ const plants: Plant[] = [
   // flag. Source plant, run once on workflow-lint.ts and restored: drop T6's check (red: the five
   // check plants with no `if`, and the real-file scenario below). The one on the build flag and the
   // next job's are also held by the build-flag law and next's own command law.
-  ...[
-    { name: "promises", if: build, run: "pnpm promises gate" },
-    { name: "promises", run: 'pnpm promises gate --base "$BASE"' },
-    { name: "promises", run: "pnpm -s promises gate" },
-    { name: "promises", run: "pnpm run promises confirm ship" },
-    { name: "promises", run: "node packages/promises/src/main.ts gate" },
-    { name: "promises", run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nfi\n' },
-  ].map((planted): [string, (w: Workflow) => void] => [
-    `T6: check runs today's promise checks again: ${planted.run.split("\n")[0]}`,
-    (w) => {
-      // Before the stop step, which stays last (F1).
-      w.jobs.check.steps.splice(-1, 0, planted);
-    },
-  ]),
+  ...Arr.map(
+    [
+      { name: "promises", if: build, run: "pnpm promises gate" },
+      { name: "promises", run: 'pnpm promises gate --base "$BASE"' },
+      { name: "promises", run: "pnpm -s promises gate" },
+      { name: "promises", run: "pnpm run promises confirm ship" },
+      { name: "promises", run: "node packages/promises/src/main.ts gate" },
+      { name: "promises", run: 'if [ -n "$BASE" ]; then\n  pnpm promises gate --base "$BASE"\nfi\n' },
+    ],
+    (planted): [string, (w: Workflow) => void] => [
+      `T6: check runs today's promise checks again: ${planted.run.split("\n")[0]}`,
+      (w) => {
+        // Before the stop step, which stays last (F1).
+        w.jobs.check.steps.splice(-1, 0, planted);
+      },
+    ],
+  ),
   [
     "T6: the next job runs today's promise checks",
     (w) => {
@@ -80,7 +87,7 @@ const plants: Plant[] = [
   // outputs check (red: the today, e2e and test flags back), drop T2's loop (red: every e2e plant),
   // drop T1's vitest loop (red: the old test job and each typecheck plant below; next's step plants
   // stay held by next's own command law).
-  ...goneFlags.map((flag): [string, (w: Workflow) => void] => [
+  ...Arr.map(goneFlags, (flag): [string, (w: Workflow) => void] => [
     `T1: changes exposes the ${flag} flag again`,
     (w) => {
       w.jobs.changes.outputs[flag] = `\${{ steps.diff.outputs.${flag} }}`;
@@ -107,7 +114,7 @@ const plants: Plant[] = [
   ],
   // In the typecheck job, before its stop step (F1): no other law lists its steps whole, so T1 alone
   // rejects these. In check, its own command law would hold them too.
-  ...(
+  ...Arr.map(
     [
       ["today's tests are back, on the today flag", "pnpm exec vitest run --shard \"$SHARD\" --exclude 'next/**'"],
       [
@@ -164,14 +171,15 @@ const plants: Plant[] = [
         { SHARD: "--project tooling" },
       ],
       ["next's filter variable read where no step sets it", "pnpm exec vitest run --project next $FILTER"],
-    ] as const
-  ).map((planted): [string, (w: Workflow) => void] => [
-    `T1: ${planted[0]}`,
-    (w) => {
-      const env = planted.length === 3 ? { env: planted[2] } : {};
-      stepsOf(w, "typecheck").splice(-1, 0, { name: "planted", run: planted[1], ...env });
-    },
-  ]),
+    ] as const,
+    (planted): [string, (w: Workflow) => void] => [
+      `T1: ${planted[0]}`,
+      (w) => {
+        const env = planted.length === 3 ? { env: planted[2] } : {};
+        stepsOf(w, "typecheck").splice(-1, 0, { name: "planted", run: planted[1], ...env });
+      },
+    ],
+  ),
   [
     "T1: the job's env sets the runner's temp folder that a vitest call reads",
     (w) => {
@@ -180,7 +188,7 @@ const plants: Plant[] = [
   ],
   // 0536: today's tests and the tooling tests are projects of their own, so a second `--project`, or
   // none at all, runs them in next's vitest step. next's own command law holds these too.
-  ...["today", "tooling"].map((project): [string, (w: Workflow) => void] => [
+  ...Arr.map(["today", "tooling"], (project): [string, (w: Workflow) => void] => [
     `T1: next's vitest step runs the ${project} project's tests too`,
     (w) => {
       const found = step(w, "next", "vitest");
@@ -279,10 +287,10 @@ it("T1 (0536): the tooling project, the schedule's tooling job's one project, ho
   // A project ignores `--exclude`, so the project's own globs are what keeps today's tests and next/'s
   // out of scheduled.yaml's tooling job (SC8). Plant, run once on vitest.config.ts and restored: add
   // "apps/*/src/**/*.test.ts" to the tooling project (red).
-  const tooling = projects.find((project) => project.test.name === "tooling");
+  const tooling = Option.getOrUndefined(Arr.findFirst(projects, (project) => project.test.name === "tooling"));
   expect(tooling).toBeDefined();
   expect(tooling!.test.include.length).toBeGreaterThan(0);
-  expect(tooling!.test.include.filter((glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
+  expect(Arr.filter(tooling!.test.include, (glob) => /^(?:apps|packages|programs|next)\//.test(glob))).toEqual([]);
 });
 
 // T1 (0539) holds every workflow a pull request or the merge queue starts, host.yaml among them: its

@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
+import { Array as Arr, Result } from "effect";
 import { parse } from "yaml";
 
 /** A parsed check.yaml, cut into the parts every rule reads. */
@@ -16,13 +17,13 @@ export type Require = (holds: boolean, reason: string) => void;
 export type Rule = (workflow: Workflow, require: Require) => void;
 
 export const isMap = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+  typeof value === "object" && value !== null && !Arr.isArray(value);
 
 export const map = (value: unknown): Record<string, unknown> => (isMap(value) ? value : {});
 
 /** Every step of a job, in order, the stop step included. */
 export const allSteps = (job: Record<string, unknown>): Record<string, unknown>[] =>
-  Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : [];
+  Arr.isArray(job["steps"]) ? Arr.filter(job["steps"], isMap) : [];
 
 // Fail fast (ticket 990): every job but ci-required ends with this step. Once an earlier step
 // failed, on a pull request or a merge queue group, it cancels the job's own run, so the jobs still
@@ -53,11 +54,11 @@ export const cancels = (step: Record<string, unknown>) =>
 
 /** A job's own work: its steps less the stop step, which the fail-fast law judges alone. */
 export const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
-  allSteps(job).filter((step) => !isStop(step));
+  Arr.filter(allSteps(job), (step) => !isStop(step));
 
 export const commands = (job: Record<string, unknown>) =>
-  steps(job).flatMap((step) =>
-    typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
+  Arr.flatMap(steps(job), (step) =>
+    typeof step["run"] === "string" ? Arr.map(step["run"].split("\n"), (line) => line.trim()) : [],
   );
 
 export const compact = (value: unknown) => {
@@ -93,7 +94,7 @@ export const TOKEN = `\${{ github.token }}`;
 /** Two lists of key and value pairs hold the same pairs, in any order. */
 export const sameEntries = (left: readonly [string, unknown][], right: readonly [string, unknown][]) =>
   left.length === right.length &&
-  right.every(([key, value]) => left.some(([other, held]) => other === key && held === value));
+  Arr.every(right, ([key, value]) => Arr.some(left, ([other, held]) => other === key && held === value));
 
 export const uses = (step: Record<string, unknown>, action: string) =>
   typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
@@ -115,12 +116,8 @@ export const VISUAL_FILES = "hashFiles('next/**/*.visual.test.ts', 'next/**/*.vi
 const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\|\|'(.*)'\)\)$/s;
 
 const parsed = (text: string | undefined): unknown[] => {
-  try {
-    const value: unknown = JSON.parse(text ?? "");
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
+  const value = Result.getOrUndefined(Result.try((): unknown => JSON.parse(text ?? "")));
+  return Arr.isArray(value) ? value : [];
 };
 
 /**
@@ -137,11 +134,11 @@ export const legs = (job: Record<string, unknown>): unknown[] => fallbacks(job).
 
 /** The legs that run vitest: the ones written as a quoted whole number. */
 export const numbered = (all: readonly unknown[]): string[] =>
-  all.filter((leg): leg is string => typeof leg === "string" && /^[1-9]\d*$/.test(leg));
+  Arr.filter(all, (leg): leg is string => typeof leg === "string" && /^[1-9]\d*$/.test(leg));
 
 /** The legs that run the end-to-end files: the ones written as `e2e-` and a whole number. */
 export const ends = (all: readonly unknown[]): string[] =>
-  all.filter((leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
+  Arr.filter(all, (leg): leg is string => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg));
 
 export const nextJob = (text: string) => map(map(map(parse(text))["jobs"])["next"]);
 

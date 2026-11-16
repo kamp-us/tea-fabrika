@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr } from "effect";
 import { expect, it, onTestFinished } from "vitest";
 
 // Today's CI. Covers apt.sh, the apt step of next's chromium step. No root
@@ -16,20 +17,23 @@ const mirrors =
   "https://archive.ubuntu.com/ubuntu/\tpriority:2\n" +
   "https://security.ubuntu.com/ubuntu/\tpriority:3\n";
 
-const deb822 = [
-  "Types: deb",
-  "URIs: http://azure.archive.ubuntu.com/ubuntu/",
-  "Suites: noble noble-updates noble-backports",
-  "Components: main universe restricted multiverse",
-  "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
-  "",
-  "Types: deb",
-  "URIs: http://security.ubuntu.com/ubuntu/",
-  "Suites: noble-security",
-  "Components: main universe restricted multiverse",
-  "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
-  "",
-].join("\n");
+const deb822 = Arr.join(
+  [
+    "Types: deb",
+    "URIs: http://azure.archive.ubuntu.com/ubuntu/",
+    "Suites: noble noble-updates noble-backports",
+    "Components: main universe restricted multiverse",
+    "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+    "",
+    "Types: deb",
+    "URIs: http://security.ubuntu.com/ubuntu/",
+    "Suites: noble-security",
+    "Components: main universe restricted multiverse",
+    "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+    "",
+  ],
+  "\n",
+);
 
 const oneLine =
   "deb http://azure.archive.ubuntu.com/ubuntu/ jammy main restricted\n" +
@@ -108,13 +112,13 @@ const box = (files: Files, release = "noble") => {
         OS_RELEASE: osRelease,
         CODENAME: release,
         LOG: log,
-        DEAD: dead.join(" "),
-        DOWN: down.join(" "),
+        DEAD: Arr.join(dead, " "),
+        DOWN: Arr.join(down, " "),
       },
     });
   const read = (name: keyof Files) => readFileSync(join(etc, name), "utf8");
   const has = (name: keyof Files) => existsSync(join(etc, name));
-  const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
+  const calls = () => Arr.filter(readFileSync(log, "utf8").split("\n"), Boolean);
   const list = `mirror+file:${join(etc, "apt-mirrors.txt")}`;
   return { run, read, has, calls, list };
 };
@@ -218,14 +222,17 @@ it("scenario: no mirror list, one-line sources.list reads a list written from th
 
 // The deb822 file the fallback writes when no source names Ubuntu's archive.
 const written = (list: string) =>
-  [
-    "Types: deb",
-    `URIs: ${list}`,
-    "Suites: resolute resolute-updates resolute-backports resolute-security",
-    "Components: main restricted universe multiverse",
-    "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
-    "",
-  ].join("\n");
+  Arr.join(
+    [
+      "Types: deb",
+      `URIs: ${list}`,
+      "Suites: resolute resolute-updates resolute-backports resolute-security",
+      "Components: main restricted universe multiverse",
+      "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+      "",
+    ],
+    "\n",
+  );
 
 it("scenario: no Ubuntu source, update passes on Microsoft's lists alone, so try 1 fails and try 2 reads written sources", () => {
   const apt = box({}, "resolute");

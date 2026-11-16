@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr, pipe, Order, Option } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as scheduled from "./scheduled.mjs";
@@ -111,11 +112,11 @@ it("property: with no failed step, job, test or time-out: red on a failed need, 
   // issue); green past a canceled leg (red: a run stopped by hand closed the issue).
   fc.assert(
     fc.property(fc.option(needs, { nil: null }), calmJobs, (given, jobs) => {
-      const results = given === null ? [] : Object.values(given).map((job) => job.result);
-      const canceled = jobs.some((job) => job.status === "completed" && job.conclusion === "cancelled");
+      const results = given === null ? [] : Arr.map(Object.values(given), (job) => job.result);
+      const canceled = Arr.some(jobs, (job) => job.status === "completed" && job.conclusion === "cancelled");
       const expected = results.includes("failure")
         ? "red"
-        : !canceled && results.length > 0 && results.every((r) => r === "success")
+        : !canceled && results.length > 0 && Arr.every(results, (r) => r === "success")
           ? "green"
           : "stopped";
       expect(scheduled.verdict({ needs: given, jobs, failed: [], limits: LIMITS })).toBe(expected);
@@ -155,7 +156,7 @@ it("property: any set of legs with one that neither passed, was skipped nor was 
     fc.property(fc.option(needs, { nil: null }), calmJobs, notPassed, fc.nat(), (given, jobs, bad, place) => {
       const all: Jobs = (jobs as Jobs).toSpliced(place % (jobs.length + 1), 0, bad);
       expect(scheduled.verdict({ needs: given, jobs: all, failed: [], limits: LIMITS })).toBe("red");
-      expect(scheduled.causes(all, LIMITS).map((c) => c.leg)).toContain(bad.name);
+      expect(Arr.map(scheduled.causes(all, LIMITS), (c) => c.leg)).toContain(bad.name);
     }),
     options,
   );
@@ -319,7 +320,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
       fc.nat(),
       run,
       (fails, cancels, others, seed, r) => {
-        const red = fails.map((ms, i) => ({
+        const red = Arr.map(fails, (ms, i) => ({
           name: `tests (${i + 1})`,
           status: "completed",
           // A cancel can land on a red leg too (run 43703058643, from when a red leg's last step
@@ -337,7 +338,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
             },
           ],
         }));
-        const stopped = cancels.map((ms, i) => ({
+        const stopped = Arr.map(cancels, (ms, i) => ({
           name: `tests (e2e-${i + 1})`,
           status: "completed",
           conclusion: "cancelled",
@@ -355,9 +356,12 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
             numRuns: 1,
           },
         )[0]!;
-        const first = red.toSorted((a, b) => Date.parse(a.steps[0]!.end) - Date.parse(b.steps[0]!.end));
+        const first = Arr.sort(
+          red,
+          Order.mapInput(Order.Number, (run: (typeof red)[number]) => Date.parse(run.steps[0]!.end)),
+        );
         const found = scheduled.causes(jobs, LIMITS);
-        expect(found).toEqual(first.map((job) => ({ _tag: "failed", leg: job.name })));
+        expect(found).toEqual(Arr.map(first, (job) => ({ _tag: "failed", leg: job.name })));
         expect(scheduled.verdict({ needs: { next: { result: "cancelled" } }, jobs, failed: [], limits: LIMITS })).toBe(
           "red",
         );
@@ -386,11 +390,11 @@ it("property: the limits are each LIMIT_ variable's positive number, by its job 
       fc.dictionary(fc.stringMatching(/^[A-Z_]{1,8}$/), fc.string()),
       (given, other) => {
         const env = {
-          ...Object.fromEntries(Object.entries(other).filter(([key]) => !key.startsWith("LIMIT_"))),
-          ...Object.fromEntries(Object.entries(given).map(([id, value]) => [`LIMIT_${id}`, value])),
+          ...Object.fromEntries(Arr.filter(Object.entries(other), ([key]) => !key.startsWith("LIMIT_"))),
+          ...Object.fromEntries(Arr.map(Object.entries(given), ([id, value]) => [`LIMIT_${id}`, value])),
         };
         const expected = Object.fromEntries(
-          Object.entries(given).flatMap(([id, value]) =>
+          Arr.flatMap(Object.entries(given), ([id, value]) =>
             Number(value) > 0 ? [[id.toLowerCase(), Number(value)]] : [],
           ),
         );
@@ -476,10 +480,13 @@ it("pinned: run 43723335863's report opens the issue and names both legs as time
   });
   expect(result).toBe("red");
   expect(action._tag).toBe("open");
-  expect(calls.filter((c) => c.method === "POST").map((c) => c.url.split("/repos/owner/repo/")[1])).toEqual([
-    "labels",
-    "issues",
-  ]);
+  expect(
+    pipe(
+      calls,
+      Arr.filter((c) => c.method === "POST"),
+      Arr.map((c) => c.url.split("/repos/owner/repo/")[1]),
+    ),
+  ).toEqual(["labels", "issues"]);
 
   if (action._tag === "open") {
     expect(action.body).toContain("- `next (4)` timed out: it ran into its 17-minute limit");
@@ -504,13 +511,13 @@ it("property: the jobs API's answer reads as each job's name, status, conclusion
     fc.property(calmJobs, fc.nat(), (jobs, id) => {
       const answer = {
         total_count: jobs.length,
-        jobs: jobs.map(({ start, end, steps: list, ...job }, i) => ({
+        jobs: Arr.map(jobs, ({ start, end, steps: list, ...job }, i) => ({
           id: id + i,
           ...job,
           created_at: at(-1000),
           started_at: start,
           completed_at: end,
-          steps: list.map(({ start: begun, end: done, ...step }, n) => ({
+          steps: Arr.map(list, ({ start: begun, end: done, ...step }, n) => ({
             number: n + 1,
             status: "completed",
             ...step,
@@ -562,8 +569,8 @@ it("property: the failures are each failed test as file > name, each once, and a
       for (const report of given) {
         for (const f of report.testResults) {
           const path = f.name.replace("/work/repo/", "");
-          const failed = f.assertionResults.filter((t) => t.status === "failed");
-          expected.push(...failed.map((t) => `${path} > ${t.fullName}`));
+          const failed = Arr.filter(f.assertionResults, (t) => t.status === "failed");
+          expected.push(...Arr.map(failed, (t) => `${path} > ${t.fullName}`));
 
           if (failed.length === 0 && f.status === "failed") {
             expected.push(path);
@@ -640,7 +647,7 @@ it("format: a red run's body names the commit range since the last green run, th
         expect(text).toContain(`- \`${test}\``);
       }
 
-      for (const test of r.failed.slice(scheduled.SHOWN).filter((t) => !shown.includes(t))) {
+      for (const test of Arr.filter(r.failed.slice(scheduled.SHOWN), (t) => !shown.includes(t))) {
         expect(text).not.toContain(`- \`${test}\``);
       }
 
@@ -676,7 +683,7 @@ const fake = (
       auth: init.headers["authorization"],
     });
     const path = url.replace("https://api.example/repos/owner/repo/", "");
-    const fail = failing.some((prefix) => path.startsWith(prefix));
+    const fail = Arr.some(failing, (prefix) => path.startsWith(prefix));
     const json = path.startsWith("issues?")
       ? [
           // A pull request with the label is in the issues list too, and is never the report's.
@@ -713,11 +720,15 @@ const env = {
 /** The jobs API's answer for this run's jobs, in its own keys. */
 const answer = (jobs: Jobs) => ({
   total_count: jobs.length,
-  jobs: jobs.map(({ start, end, steps: list, ...job }) => ({
+  jobs: Arr.map(jobs, ({ start, end, steps: list, ...job }) => ({
     ...job,
     started_at: start,
     completed_at: end,
-    steps: list.map(({ start: begun, end: done, ...step }) => ({ ...step, started_at: begun, completed_at: done })),
+    steps: Arr.map(list, ({ start: begun, end: done, ...step }) => ({
+      ...step,
+      started_at: begun,
+      completed_at: done,
+    })),
   })),
 });
 
@@ -746,13 +757,15 @@ it("property: the report reads the run's jobs first, then makes exactly the call
         const api = scheduled.github(env, send)!;
         const { result, action } = await scheduled.report({ needs: given, reports: results, env, api });
         const failed = scheduled.failures(results, "/work/repo");
-        const writes = calls
-          .filter((c) => c.method !== "GET")
-          .map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`);
+        const writes = pipe(
+          calls,
+          Arr.filter((c) => c.method !== "GET"),
+          Arr.map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`),
+        );
 
         expect(result).toBe(scheduled.verdict({ needs: given, jobs, failed, limits: LIMITS }));
-        expect(calls.every((c) => c.auth === "Bearer token-made-up")).toBe(true);
-        expect(calls.map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`)[0]).toBe(JOBS_CALL);
+        expect(Arr.every(calls, (c) => c.auth === "Bearer token-made-up")).toBe(true);
+        expect(Arr.map(calls, (c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`)[0]).toBe(JOBS_CALL);
 
         if (result === "stopped") {
           expect(calls).toHaveLength(1);
@@ -762,7 +775,9 @@ it("property: the report reads the run's jobs first, then makes exactly the call
 
         if (result === "red" && open === null) {
           expect(writes).toEqual(["POST labels", "POST issues"]);
-          expect(calls.find((c) => c.url.endsWith("/issues") && c.method === "POST")?.body).toMatchObject({
+          expect(
+            Option.getOrUndefined(Arr.findFirst(calls, (c) => c.url.endsWith("/issues") && c.method === "POST"))?.body,
+          ).toMatchObject({
             title: scheduled.TITLE,
             labels: [scheduled.LABEL],
           });
@@ -777,7 +792,7 @@ it("property: the report reads the run's jobs first, then makes exactly the call
 
         // Only a red run needs the range, so only it asks for the last green run.
         expect(
-          calls.some((c) => c.url.includes("/actions/workflows/scheduled.yaml/runs?branch=main&status=success")),
+          Arr.some(calls, (c) => c.url.includes("/actions/workflows/scheduled.yaml/runs?branch=main&status=success")),
         ).toBe(result === "red");
 
         if (action._tag === "open" || action._tag === "comment") {
@@ -810,10 +825,13 @@ it("pinned: run 43673342835's report opens the issue, naming its failing test, a
     const { result, action } = await scheduled.report({ needs: run43673342835.needs, reports, env, api });
     expect(result).toBe("red");
     expect(action._tag).toBe("open");
-    expect(calls.filter((c) => c.method === "POST").map((c) => c.url.split("/repos/owner/repo/")[1])).toEqual([
-      "labels",
-      "issues",
-    ]);
+    expect(
+      pipe(
+        calls,
+        Arr.filter((c) => c.method === "POST"),
+        Arr.map((c) => c.url.split("/repos/owner/repo/")[1]),
+      ),
+    ).toEqual(["labels", "issues"]);
 
     if (action._tag === "open") {
       expect(action.body.includes("ProgramMailReads.integration.test.ts")).toBe(reports.length > 0);
@@ -870,7 +888,7 @@ it("property: on any ref but main the report judges the run the same and writes 
 
         expect(result).toBe(scheduled.verdict({ needs: given, jobs, failed, limits: LIMITS }));
         expect(action._tag).toBe("none");
-        expect(calls.map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`)).toEqual([JOBS_CALL]);
+        expect(Arr.map(calls, (c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`)).toEqual([JOBS_CALL]);
       },
     ),
     options,
@@ -947,12 +965,14 @@ it("property: the report acts only on the open issue with its own title, never o
         const api = scheduled.github(env, send)!;
         const needed = { next: { result: given === "red" ? "failure" : "success" } };
         const { result, action } = await scheduled.report({ needs: needed, reports: [], env, api });
-        const writes = calls
-          .filter((c) => c.method !== "GET")
-          .map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`);
+        const writes = pipe(
+          calls,
+          Arr.filter((c) => c.method !== "GET"),
+          Arr.map((c) => `${c.method} ${c.url.split("/repos/owner/repo/")[1]}`),
+        );
 
         expect(result).toBe(given);
-        expect(writes.some((w) => w.split(" ")[1]?.split("/")[1] === String(speed))).toBe(false);
+        expect(Arr.some(writes, (w) => w.split(" ")[1]?.split("/")[1] === String(speed))).toBe(false);
 
         if (given === "red" && own === null) {
           expect(action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
@@ -985,7 +1005,9 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
     api: scheduled.github(env, red.send)!,
   });
   expect(opened.action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
-  expect(red.calls.find((c) => c.method === "POST" && c.url.endsWith("/issues"))?.body).toMatchObject({
+  expect(
+    Option.getOrUndefined(Arr.findFirst(red.calls, (c) => c.method === "POST" && c.url.endsWith("/issues")))?.body,
+  ).toMatchObject({
     title: scheduled.TITLE,
     labels: [scheduled.LABEL],
   });
@@ -998,7 +1020,7 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
     api: scheduled.github(env, green.send)!,
   });
   expect(closed).toEqual({ result: "green", action: { _tag: "none" } });
-  expect(green.calls.filter((c) => c.method !== "GET")).toEqual([]);
+  expect(Arr.filter(green.calls, (c) => c.method !== "GET")).toEqual([]);
 });
 
 it("scenario: with no token, repository, workflow file or run id, no GitHub reader is made", () => {

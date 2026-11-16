@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr, Option } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -27,7 +28,7 @@ it("F1 scenario: in the checked-in check.yaml every job but ci-required ends wit
   // The YAML anchor `&stop` in changes and its aliases elsewhere, read as GitHub reads them. Each
   // job's last step taken off gives that job's one error, so each alias lands where the law looks.
   const real = () => parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
-  const jobs = Object.keys(real().jobs).filter((job) => job !== "ci-required");
+  const jobs = Arr.filter(Object.keys(real().jobs), (job) => job !== "ci-required");
   expect(jobs.length).toBeGreaterThan(0);
 
   for (const job of jobs) {
@@ -45,7 +46,7 @@ const plants: Plant[] = [
   // to the end after it failed, as merge queue group 1199 did (run 43633120187).
   // Plants, each run once on workflow-lint.ts and restored, each red on its plant below: F1's
   // last-step check dropped; F1's one-cancel count dropped; F2 dropped; F3's per-job check dropped.
-  ...stopping.map((job): [string, (w: Workflow) => void] => [
+  ...Arr.map(stopping, (job): [string, (w: Workflow) => void] => [
     `F1: ${job} drops its stop step`,
     (w) => {
       stepsOf(w, job).pop();
@@ -120,10 +121,12 @@ const plants: Plant[] = [
   // F4: a checkout that keeps the token in .git/config hands the `actions: write` token to every
   // test and install script after it. One plant per job with a checkout, and one that sets it true.
   // Plant, run once on workflow-lint.ts and restored: F4 dropped (red on each of these).
-  ...(["changes", "check", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
+  ...Arr.map(["changes", "check", "ci-required"] as const, (job): [string, (w: Workflow) => void] => [
     `F4: ${job}'s checkout keeps the token in .git/config`,
     (w) => {
-      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
+      const checkout = Option.getOrThrow(
+        Arr.findFirst(stepsOf(w, job), (s) => String(s["uses"]).startsWith("actions/checkout@")),
+      );
       Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
     },
   ]),

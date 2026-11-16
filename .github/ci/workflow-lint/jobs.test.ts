@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import { type Plant, rejects, type Workflow } from "./wiring.test-support.ts";
 
 // Today's CI, serving both versions. Covers jobs.ts: when each gated job runs, the jobs that may
@@ -24,12 +25,15 @@ const plants: Plant[] = [
     },
   ],
   // T496: a job with no time limit, one plant per job, and one limit past GitHub's default.
-  ...(["changes", "check", "typecheck", "next", "ci-required"] as const).map((job): [string, (w: Workflow) => void] => [
-    `${job} without a time limit`,
-    (w) => {
-      Object.assign(w.jobs[job], { "timeout-minutes": undefined });
-    },
-  ]),
+  ...Arr.map(
+    ["changes", "check", "typecheck", "next", "ci-required"] as const,
+    (job): [string, (w: Workflow) => void] => [
+      `${job} without a time limit`,
+      (w) => {
+        Object.assign(w.jobs[job], { "timeout-minutes": undefined });
+      },
+    ],
+  ),
   [
     "a time limit past the default",
     (w) => {

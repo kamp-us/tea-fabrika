@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -52,13 +53,13 @@ it.each(extraCommands)("pinned: T376 review extra command in real workflow: $run
 });
 
 const plants: Plant[] = [
-  ...extraCommands.map((added): [string, (w: Workflow) => void] => [
+  ...Arr.map(extraCommands, (added): [string, (w: Workflow) => void] => [
     `review2 extra command: ${added.run}`,
     (w) => {
       w.jobs.next.steps.push(added);
     },
   ]),
-  ...["missing", "duplicate"].map((fault): [string, (w: Workflow) => void] => [
+  ...Arr.map(["missing", "duplicate"], (fault): [string, (w: Workflow) => void] => [
     `next ${fault} install`,
     (w) => {
       if (fault === "missing") {
@@ -75,54 +76,59 @@ const plants: Plant[] = [
       w.jobs.next.steps.push({ ...vitest, run: `exec ${vitest.run}` });
     },
   ],
-  ...[
-    "vitest run next/",
-    "pnpm vitest run next/",
-    "npx vitest run next/",
-    "./node_modules/.bin/vitest run next/",
-    'pnpm exec "vitest" run next/',
-    'env CI=true pnpm exec vitest run next/ --shard "$SHARD"',
-    'echo before; pnpm exec vitest run next/ --shard "$SHARD"; echo after',
-    'echo before\npnpm exec vitest run next/ --shard "$SHARD"\necho after',
-    "pnpm exec vitest run next/; pnpm exec vitest run next/",
-  ].map((run): [string, (w: Workflow) => void] => [
-    `extra Vitest spelling: ${run}`,
-    (w) => {
-      w.jobs.next.steps.push({ ...step(w, "next", "vitest"), run });
-    },
-  ]),
-  ...(
+  ...Arr.map(
+    [
+      "vitest run next/",
+      "pnpm vitest run next/",
+      "npx vitest run next/",
+      "./node_modules/.bin/vitest run next/",
+      'pnpm exec "vitest" run next/',
+      'env CI=true pnpm exec vitest run next/ --shard "$SHARD"',
+      'echo before; pnpm exec vitest run next/ --shard "$SHARD"; echo after',
+      'echo before\npnpm exec vitest run next/ --shard "$SHARD"\necho after',
+      "pnpm exec vitest run next/; pnpm exec vitest run next/",
+    ],
+    (run): [string, (w: Workflow) => void] => [
+      `extra Vitest spelling: ${run}`,
+      (w) => {
+        w.jobs.next.steps.push({ ...step(w, "next", "vitest"), run });
+      },
+    ],
+  ),
+  ...Arr.map(
     [
       ["chromium", "Chromium"],
       ["end to end", "e2e"],
       ["edges", "edges"],
-    ] as const
-  ).map(([named, label]): [string, (w: Workflow) => void] => [
-    `review: extra multiline ${label} invocation`,
-    (w) => {
-      const found = step(w, "next", named);
-      w.jobs.next.steps.push({ ...found, run: `echo before\n${found.run}\necho after` });
-    },
-  ]),
+    ] as const,
+    ([named, label]): [string, (w: Workflow) => void] => [
+      `review: extra multiline ${label} invocation`,
+      (w) => {
+        const found = step(w, "next", named);
+        w.jobs.next.steps.push({ ...found, run: `echo before\n${found.run}\necho after` });
+      },
+    ],
+  ),
   [
     "review: SHARD matrix.sha rd",
     (w) => {
       step(w, "next", "vitest").env!.SHARD = vitestShard().replace("matrix.shard", "matrix.sha rd");
     },
   ],
-  ...(
+  ...Arr.map(
     [
       ["chromium", "Chromium"],
       ["end to end", "e2e"],
       ["edges", "edges"],
-    ] as const
-  ).map(([named, label]): [string, (w: Workflow) => void] => [
-    `review: ${label} guard matrix.sha rd`,
-    (w) => {
-      const found = step(w, "next", named);
-      found.if = found.if!.replace("matrix.shard", "matrix.sha rd");
-    },
-  ]),
+    ] as const,
+    ([named, label]): [string, (w: Workflow) => void] => [
+      `review: ${label} guard matrix.sha rd`,
+      (w) => {
+        const found = step(w, "next", named);
+        found.if = found.if!.replace("matrix.shard", "matrix.sha rd");
+      },
+    ],
+  ),
   [
     "review: Chromium path next/ **",
     (w) => {
@@ -206,7 +212,7 @@ const plants: Plant[] = [
   // for strings. Source plants, each run once on workflow-lint.ts and restored: accept any end-to-end
   // `/N` (red: the e2e leg added or dropped, the denominators 1, -1 and 0, and LE2's one-more case);
   // drop the advice-after-the-end-to-end-step check (red: both advice-before cases).
-  ...(
+  ...Arr.map(
     [
       ["drops leg 5", ["e2e-1", "e2e-2", "1", "2", "3", "4"]],
       ["drops every e2e leg", ["1", "2", "3", "4", "5"]],
@@ -222,24 +228,28 @@ const plants: Plant[] = [
       ["skips e2e-2", ["e2e-1", "e2e-3", "1", "2", "3", "4", "5"]],
       ["repeats e2e-1", ["e2e-1", "e2e-1", "1", "2", "3", "4", "5"]],
       ["puts a vitest leg between its e2e legs", ["e2e-1", "1", "e2e-2", "2", "3", "4", "5"]],
-    ] as const
-  ).map(([fault, legs]): [string, (w: Workflow) => void] => [
-    `next ${fault}`,
-    (w) => {
-      setLegs(w, legs);
-      const count = legs.filter((leg) => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg)).length;
-      step(w, "next", "end to end").env!.SHARD = e2eShard(count);
-    },
-  ]),
+    ] as const,
+    ([fault, legs]): [string, (w: Workflow) => void] => [
+      `next ${fault}`,
+      (w) => {
+        setLegs(w, legs);
+        const count = Arr.filter<string | number>(
+          legs,
+          (leg) => typeof leg === "string" && /^e2e-[1-9]\d*$/.test(leg),
+        ).length;
+        step(w, "next", "end to end").env!.SHARD = e2eShard(count);
+      },
+    ],
+  ),
   // E1 and E2: one e2e leg fewer or more than the end-to-end step's `/N`.
   [
     "next drops its last e2e leg and keeps its /N",
     (w) => {
+      const legs = legsOf(w);
+      const last = Arr.filter(legs, (l) => typeof l === "string" && l.startsWith("e2e-")).at(-1);
       setLegs(
         w,
-        legsOf(w).filter(
-          (leg, _, all) => leg !== all.filter((l) => typeof l === "string" && l.startsWith("e2e-")).at(-1),
-        ),
+        Arr.filter(legs, (leg) => leg !== last),
       );
     },
   ],
@@ -247,7 +257,7 @@ const plants: Plant[] = [
     "next adds an e2e leg and keeps its /N",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      const count = Arr.filter(legs, (leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
       legs.splice(count, 0, `e2e-${count + 1}`);
       setLegs(w, legs);
     },
@@ -255,7 +265,8 @@ const plants: Plant[] = [
   // E2's denominator, the end-to-end step's own: its full count one more or one fewer than its legs,
   // or not a count; no denominator. S1: the plain full count, which ignores a sized run's own count;
   // the sized count with no full count for a run that is not sized; the vitest legs' count.
-  ...([1, -1, "", "x", "0", "plain", "sized only", "vitest's"] as const).map(
+  ...Arr.map(
+    [1, -1, "", "x", "0", "plain", "sized only", "vitest's"] as const,
     (fault): [string, (w: Workflow) => void] => [
       `next end-to-end denominator ${fault === "" ? "absent" : fault}`,
       (w) => {
@@ -280,19 +291,22 @@ const plants: Plant[] = [
     },
   ],
   // E2's command: each part the leg needs, dropped alone, so the run is no longer the pinned one.
-  ...[
-    ` --shard "\${SHARD#e2e-}"`,
-    " --reporter=verbose",
-    " --reporter=json",
-    " --reporter=github-actions",
-    ' --outputFile.json="$RUNNER_TEMP/next.json"',
-  ].map((flag): [string, (w: Workflow) => void] => [
-    `next end-to-end step loses ${flag}`,
-    (w) => {
-      const e2e = step(w, "next", "end to end");
-      e2e.run = e2e.run.replace(flag, "");
-    },
-  ]),
+  ...Arr.map(
+    [
+      ` --shard "\${SHARD#e2e-}"`,
+      " --reporter=verbose",
+      " --reporter=json",
+      " --reporter=github-actions",
+      ' --outputFile.json="$RUNNER_TEMP/next.json"',
+    ],
+    (flag): [string, (w: Workflow) => void] => [
+      `next end-to-end step loses ${flag}`,
+      (w) => {
+        const e2e = step(w, "next", "end to end");
+        e2e.run = e2e.run.replace(flag, "");
+      },
+    ],
+  ),
   [
     "next end-to-end step passes the whole leg name",
     (w) => {
@@ -307,7 +321,8 @@ const plants: Plant[] = [
       Reflect.deleteProperty(step(w, "next", "end to end"), "if");
     },
   ],
-  ...["matrix.shard == 'e2e-1'", "matrix.shard == 'e2e'", `${onE2e} && false`, `${onE2e} || true`].map(
+  ...Arr.map(
+    ["matrix.shard == 'e2e-1'", "matrix.shard == 'e2e'", `${onE2e} && false`, `${onE2e} || true`],
     (condition): [string, (w: Workflow) => void] => [
       `next end-to-end guard ${condition}`,
       (w) => {
@@ -331,22 +346,25 @@ const plants: Plant[] = [
   ],
   // LE1's denominator: `/6` leaves a sixth of the files on no machine, and a smaller one fails a leg.
   // S1: the plain `/5`, which ignores a sized run's own count; the sized count alone; the e2e count.
-  ...[
-    `/\${{ needs.legs.outputs.vitest || 6 }}`,
-    `/\${{ needs.legs.outputs.vitest || 3 }}`,
-    `/\${{ needs.legs.outputs.vitest || 4 }}`,
-    "",
-    `/\${{ needs.legs.outputs.vitest || 05 }}`,
-    `/\${{ needs.legs.outputs.vitest || 5 }} `,
-    "/5",
-    `/\${{ needs.legs.outputs.vitest }}`,
-    `/\${{ needs.legs.outputs.e2e || 5 }}`,
-  ].map((denominator): [string, (w: Workflow) => void] => [
-    `next wrong denominator ${denominator || "absent"}`,
-    (w) => {
-      step(w, "next", "vitest").env!.SHARD = `\${{ matrix.shard }}${denominator}`;
-    },
-  ]),
+  ...Arr.map(
+    [
+      `/\${{ needs.legs.outputs.vitest || 6 }}`,
+      `/\${{ needs.legs.outputs.vitest || 3 }}`,
+      `/\${{ needs.legs.outputs.vitest || 4 }}`,
+      "",
+      `/\${{ needs.legs.outputs.vitest || 05 }}`,
+      `/\${{ needs.legs.outputs.vitest || 5 }} `,
+      "/5",
+      `/\${{ needs.legs.outputs.vitest }}`,
+      `/\${{ needs.legs.outputs.e2e || 5 }}`,
+    ],
+    (denominator): [string, (w: Workflow) => void] => [
+      `next wrong denominator ${denominator || "absent"}`,
+      (w) => {
+        step(w, "next", "vitest").env!.SHARD = `\${{ matrix.shard }}${denominator}`;
+      },
+    ],
+  ),
   // E3's vitest guard (after LE1): exactly one `if`, and it is `!startsWith(matrix.shard, 'e2e-')`.
   [
     "next vitest step loses its guard",
@@ -354,21 +372,24 @@ const plants: Plant[] = [
       Reflect.deleteProperty(step(w, "next", "vitest"), "if");
     },
   ],
-  ...[
-    `!${onE2e} && false`,
-    onE2e,
-    `!${onE2e} || true`,
-    "matrix.shard != 'e2e'",
-    "matrix.shard != 'e2e-1'",
-    "matrix.shard != 1",
-  ].map((condition): [string, (w: Workflow) => void] => [
-    `next vitest guard ${condition}`,
-    (w) => {
-      step(w, "next", "vitest").if = condition;
-    },
-  ]),
+  ...Arr.map(
+    [
+      `!${onE2e} && false`,
+      onE2e,
+      `!${onE2e} || true`,
+      "matrix.shard != 'e2e'",
+      "matrix.shard != 'e2e-1'",
+      "matrix.shard != 1",
+    ],
+    (condition): [string, (w: Workflow) => void] => [
+      `next vitest guard ${condition}`,
+      (w) => {
+        step(w, "next", "vitest").if = condition;
+      },
+    ],
+  ),
   // E2 and E3's leg steps: chromium and the end-to-end runner only on the e2e legs, edges only on 1.
-  ...(
+  ...Arr.map(
     [
       [
         "Chromium back on leg 1",
@@ -385,13 +406,14 @@ const plants: Plant[] = [
       ["e2e on every numbered leg", "end to end", `!${onE2e}`],
       ["edges on the e2e legs", "edges", `${onE2e} && github.event_name == 'pull_request'`],
       ["edges on the number 1", "edges", "matrix.shard == 1 && github.event_name == 'pull_request'"],
-    ] as const
-  ).map(([fault, named, condition]): [string, (w: Workflow) => void] => [
-    `next ${fault}`,
-    (w) => {
-      step(w, "next", named).if = condition;
-    },
-  ]),
+    ] as const,
+    ([fault, named, condition]): [string, (w: Workflow) => void] => [
+      `next ${fault}`,
+      (w) => {
+        step(w, "next", named).if = condition;
+      },
+    ],
+  ),
   [
     "next fail fast",
     (w) => {
@@ -428,19 +450,22 @@ const plants: Plant[] = [
       w.jobs.next.steps.push({ ...step(w, "next", "vitest") });
     },
   ],
-  ...[
-    " --reporter=verbose",
-    " --reporter=json",
-    " --reporter=github-actions",
-    ' --outputFile.json="$RUNNER_TEMP/next.json"',
-  ].map((flag): [string, (w: Workflow) => void] => [
-    `next loses ${flag}`,
-    (w) => {
-      const vitest = step(w, "next", "vitest");
-      vitest.run = vitest.run.replace(flag, "");
-    },
-  ]),
-  ...["missing", "duplicate", "before tests", "wrong report"].map((fault): [string, (w: Workflow) => void] => [
+  ...Arr.map(
+    [
+      " --reporter=verbose",
+      " --reporter=json",
+      " --reporter=github-actions",
+      ' --outputFile.json="$RUNNER_TEMP/next.json"',
+    ],
+    (flag): [string, (w: Workflow) => void] => [
+      `next loses ${flag}`,
+      (w) => {
+        const vitest = step(w, "next", "vitest");
+        vitest.run = vitest.run.replace(flag, "");
+      },
+    ],
+  ),
+  ...Arr.map(["missing", "duplicate", "before tests", "wrong report"], (fault): [string, (w: Workflow) => void] => [
     `next timing advice ${fault}`,
     (w) => {
       const advice = step(w, "next", "shard times");
@@ -457,21 +482,16 @@ const plants: Plant[] = [
       }
     },
   ]),
-  ...[
-    "",
-    "success()",
-    "always()",
-    "false",
-    "matrix.shard == '1' && !cancelled()",
-    "matrix.shard != 'e2e'",
-    `!${onE2e}`,
-  ].map((condition): [string, (w: Workflow) => void] => [
-    `next timing advice condition ${condition || "absent"}`,
-    (w) => {
-      step(w, "next", "shard times").if = condition;
-    },
-  ]),
-  ...[" --changed main", " --passWithNoTests", " file.test.ts"].map((suffix): [string, (w: Workflow) => void] => [
+  ...Arr.map(
+    ["", "success()", "always()", "false", "matrix.shard == '1' && !cancelled()", "matrix.shard != 'e2e'", `!${onE2e}`],
+    (condition): [string, (w: Workflow) => void] => [
+      `next timing advice condition ${condition || "absent"}`,
+      (w) => {
+        step(w, "next", "shard times").if = condition;
+      },
+    ],
+  ),
+  ...Arr.map([" --changed main", " --passWithNoTests", " file.test.ts"], (suffix): [string, (w: Workflow) => void] => [
     suffix,
     (w) => {
       step(w, "next", "vitest").run += suffix;
@@ -495,7 +515,7 @@ const plants: Plant[] = [
       Object.assign(step(w, "next", "vitest"), { if: "false" });
     },
   ],
-  ...["chromium", "end to end", "edges"].flatMap((named, at): [string, (w: Workflow) => void][] => [
+  ...Arr.flatMap(["chromium", "end to end", "edges"], (named, at): [string, (w: Workflow) => void][] => [
     [
       `next missing step ${at + 1}`,
       (w) => {
@@ -686,8 +706,8 @@ const faults: [string, (workflow: Workflow) => void, string][] = [
     "the e2e legs written out of order",
     (w) => {
       const legs = legsOf(w);
-      const count = legs.filter((leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
-      legs.splice(0, count, ...legs.slice(0, count).toReversed());
+      const count = Arr.filter(legs, (leg) => typeof leg === "string" && leg.startsWith("e2e-")).length;
+      legs.splice(0, count, ...Arr.reverse(legs.slice(0, count)));
 
       // One e2e leg cannot be out of order, so a second one comes first.
       if (count === 1) {

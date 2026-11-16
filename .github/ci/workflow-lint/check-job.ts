@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
 // flag, the field rows last, and the one ratchet step that holds every list file to shrinking (0524).
+import { Array as Arr, Option } from "effect";
 import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
@@ -21,8 +22,8 @@ export const checkJob: Rule = ({ jobs }, require) => {
   // install and lint on the check flag, the CI package's install when only rows changed, and the
   // row check last, after any failure, on the field flag, so a red lint never hides red rows.
   const checkSteps = steps(map(jobs["check"]));
-  const rows = checkSteps.filter((s) => s["run"] === "node .github/ci/field-check.ts");
-  const rowInstall = checkSteps.filter((s) => s["run"] === ROW_INSTALL);
+  const rows = Arr.filter(checkSteps, (s) => s["run"] === "node .github/ci/field-check.ts");
+  const rowInstall = Arr.filter(checkSteps, (s) => s["run"] === ROW_INSTALL);
 
   for (const step of checkSteps) {
     const slow = step["run"] === "pnpm build";
@@ -42,15 +43,19 @@ export const checkJob: Rule = ({ jobs }, require) => {
         env,
       ), "F1: check runs the row check once, last, with the run's base, head and event, and its failure blocks");
   require(rowInstall.length === 1 &&
-    checkSteps.some(
+    Arr.some(
+      checkSteps,
       (s) => s["run"] === "pnpm install --frozen-lockfile",
     ), "F1: check installs everything for lint, and only the CI package for rows alone");
-  const checkout = checkSteps.find((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  const checkout = Option.getOrUndefined(
+    Arr.findFirst(checkSteps, (s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@")),
+  );
   require(map(checkout?.["with"])["fetch-depth"] === 0, "F1: check checks out history, which the row check diffs");
 
   // 0524: a list file only shrinks. Without its one step a pull request could drop the ratchet and
   // pass with a grown list; a first push's zeros map to no base, as for the test steps.
-  const ratchets = checkSteps.filter(
+  const ratchets = Arr.filter(
+    checkSteps,
     (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
   );
   require(ratchets.length === 1 &&

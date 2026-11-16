@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
+import { Array as Arr, Order, Option } from "effect";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
@@ -16,12 +17,10 @@ const options = { seed: 119120, numRuns: 100 };
 
 /** A project's globs from vitest.config.ts, by its name: the arrays themselves, so a push is seen. */
 const globsOf = (name: string) => {
-  const project = projects.find((each) => each.test.name === name);
-
-  if (project === undefined) {
-    throw new Error(`no project ${name}`);
-  }
-
+  const project = Option.getOrThrowWith(
+    Arr.findFirst(projects, (each) => each.test.name === name),
+    () => new Error(`no project ${name}`),
+  );
   return project.test;
 };
 
@@ -34,13 +33,15 @@ const selectedBy = async (folder: string, names: readonly string[]) => {
     const vitest = await createVitest("test", { root: folder, config: false, watch: false, include, exclude });
 
     try {
-      files.push(...(await vitest.globTestSpecifications()).map((spec) => relative(vitest.config.root, spec.moduleId)));
+      files.push(
+        ...Arr.map(await vitest.globTestSpecifications(), (spec) => relative(vitest.config.root, spec.moduleId)),
+      );
     } finally {
       await vitest.close();
     }
   }
 
-  return files.toSorted();
+  return Arr.sort(files, Order.String);
 };
 
 // fast-check supplies dependent subarrays and unique strings; no domain schema describes paths here.
@@ -55,7 +56,7 @@ const rows = fc
   .chain((paths) =>
     fc
       .tuple(fc.subarray(paths), fc.subarray(paths))
-      .map(([keys, files]) => ({ table: Object.fromEntries(keys.map((path) => [path, 0])), files })),
+      .map(([keys, files]) => ({ table: Object.fromEntries(Arr.map(keys, (path) => [path, 0])), files })),
   );
 
 // L2. Plants, each run once on shard-rows.ts and restored: return [] always (red); list the
@@ -64,11 +65,12 @@ const rows = fc
 it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sorted in either input order", () => {
   fc.assert(
     fc.property(rows, ({ table, files }) => {
-      const expected = Object.keys(table)
-        .filter((path) => path.startsWith("next/") && !files.includes(path))
-        .toSorted();
+      const expected = Arr.sort(
+        Arr.filter(Object.keys(table), (path) => path.startsWith("next/") && !files.includes(path)),
+        Order.String,
+      );
       expect(stale(table, files)).toEqual(expected);
-      expect(stale(table, files.toReversed())).toEqual(expected);
+      expect(stale(table, Arr.reverse(files))).toEqual(expected);
     }),
     {
       ...options,
@@ -94,9 +96,9 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
   // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
   const files = await nextFiles(root);
   expect(files.length).toBeGreaterThan(0);
-  expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
-  expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
-  expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
+  expect(Arr.every(files, (path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
+  expect(Arr.filter(files, (path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
+  expect(Arr.filter(files, (path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
   const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
   const selected = [
     "next/apps/toy/e2e/stored.integration.test.ts",
@@ -129,7 +131,7 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
     globsOf("next").include.push("next/extra/*.test.tsx");
 
     try {
-      expect(await nextFiles(folder)).toEqual([...selected, added].toSorted());
+      expect(await nextFiles(folder)).toEqual(Arr.sort([...selected, added], Order.String));
     } finally {
       globsOf("next").include.pop();
     }
@@ -145,12 +147,15 @@ it("scenario: E8 the end-to-end files are next/'s visual tests and nothing else,
   // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
   // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
   const folder = mkdtempSync(join(tmpdir(), "t967-e2e-"));
-  const selected = [
-    "next/apps/fabrika/e2e/a.visual.test.ts",
-    "next/apps/fabrika/e2e/node/b.visual.test.ts",
-    "next/apps/other/e2e/e.visual.test.tsx",
-    "next/packages/tuval/src/browser/key.laws.visual.test.ts",
-  ].toSorted();
+  const selected = Arr.sort(
+    [
+      "next/apps/fabrika/e2e/a.visual.test.ts",
+      "next/apps/fabrika/e2e/node/b.visual.test.ts",
+      "next/apps/other/e2e/e.visual.test.tsx",
+      "next/packages/tuval/src/browser/key.laws.visual.test.ts",
+    ],
+    Order.String,
+  );
   const left = [
     "next/apps/fabrika/e2e/stored.integration.test.ts",
     "next/apps/fabrika/e2e/d.test.ts",
@@ -189,7 +194,7 @@ const testPath = fc
     fc.stringMatching(/^\.?[a-z]{1,4}$/),
     fc.constantFrom(".test.ts", ".test.tsx", ".ts", ".integration.test.ts", ".visual.test.ts"),
   )
-  .map(([top, name, src, folders, file, end]) => [top, name, src, ...folders, file + end].join("/"));
+  .map(([top, name, src, folders, file, end]) => Arr.join([top, name, src, ...folders, file + end], "/"));
 
 // L3, the class: the file set is Vitest's own selection on any tree, the `next` and
 // `next-integration` projects' together (0536), and a new exclude in the config is read on every call. Plants, each run once on shard-rows.ts and restored: the reviewed
@@ -219,7 +224,7 @@ it("L3: next files equal Vitest's own selection on generated trees, new excludes
           holder.push(gone);
 
           try {
-            expect(await nextFiles(folder)).toEqual(selected.filter((path) => path !== gone));
+            expect(await nextFiles(folder)).toEqual(Arr.filter(selected, (path) => path !== gone));
           } finally {
             holder.pop();
           }
@@ -246,7 +251,8 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
         const lines: string[] = [];
         expect(main(rows, (line) => lines.push(line))).toBe(rows.length === 0 ? 0 : 1);
         expect(lines).toEqual(
-          rows.map(
+          Arr.map(
+            rows,
             (path) =>
               `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`,
           ),
@@ -254,7 +260,9 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
         // The full-depth table's rows are named with their own file.
         const other: string[] = [];
         expect(main(rows, (line) => other.push(line), "vitest.shards.full.json")).toBe(rows.length === 0 ? 0 : 1);
-        expect(other).toEqual(lines.map((line) => line.replace(/vitest\.shards\.json$/, "vitest.shards.full.json")));
+        expect(other).toEqual(
+          Arr.map(lines, (line) => line.replace(/vitest\.shards\.json$/, "vitest.shards.full.json")),
+        );
         const silent: string[] = [];
         expect(main([], (line) => silent.push(line))).toBe(0);
         expect(silent).toEqual([]);
@@ -278,11 +286,12 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
   expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
   expect(result.stdout).toBe("");
   const lines = (stale: readonly string[], table: string) =>
-    stale.map(
+    Arr.map(
+      stale,
       (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
     );
   expect(result.stderr).toBe(
-    [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
+    Arr.join([...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")], ""),
   );
 });
 
@@ -290,17 +299,18 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
 // restored: drop the integration glob from the `next` project's exclude (red: every integration file
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
 it("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", async () => {
-  const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
-    .stdout.split("\0")
-    .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
+  const tracked = Arr.filter(
+    spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" }).stdout.split("\0"),
+    (path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path),
+  );
   const [memory, integration, visual] = await Promise.all(
-    ["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name])),
+    Arr.map(["next", "next-integration", "next-visual"], (name) => selectedBy(root, [name])),
   );
   const all = [...memory!, ...integration!, ...visual!];
   expect(new Set(all).size, "a file in two projects").toBe(all.length);
-  expect(all.toSorted()).toEqual(tracked.toSorted());
+  expect(Arr.sort(all, Order.String)).toEqual(Arr.sort(tracked, Order.String));
   expect(
-    integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
+    Arr.every(integration!, (path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
   ).toBe(true);
-  expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
+  expect(Arr.every(visual!, (path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
 });

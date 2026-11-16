@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";
@@ -17,9 +18,9 @@ const flag = fc.constantFrom("true", "false", "", undefined);
 const result = fc.constantFrom("success", "skipped", "failure", "cancelled", "");
 
 // A workflow's needs where every job passed; gated jobs skip when their flag is "false".
-const green = fc.tuple(...gated.map(() => fc.constantFrom("true", "false"))).map((flags) => {
+const green = fc.tuple(...Arr.map(gated, () => fc.constantFrom("true", "false"))).map((flags) => {
   const outputs: Record<string, string | undefined> = Object.fromEntries(
-    gated.flatMap((name, i) => gates[name].map((flag) => [flag, flags[i]])),
+    Arr.flatMap(gated, (name, i) => Arr.map(gates[name], (flag) => [flag, flags[i]])),
   );
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
@@ -60,10 +61,10 @@ it("2, 3, 4: a gated skip passes only when changes succeeded and said exactly fa
         }
 
         needs[name]!.result = "skipped";
-        const others = gated.filter((other) => other !== name && needs[other]!.result === "skipped");
+        const others = Arr.filter(gated, (other) => other !== name && needs[other]!.result === "skipped");
         const meant = (job: (typeof gated)[number]) =>
-          changes === "success" && gates[job].every((own) => needs["changes"]!.outputs![own] === "false");
-        const expected = changes === "success" && meant(name) && others.every(meant);
+          changes === "success" && Arr.every(gates[job], (own) => needs["changes"]!.outputs![own] === "false");
+        const expected = changes === "success" && meant(name) && Arr.every(others, meant);
         expect(judge(needs).pass).toBe(expected);
       },
     ),
@@ -79,9 +80,9 @@ it("10: check, which also holds the field row check, skips only when check and f
       needs["changes"]!.outputs!["check"] = check;
       needs["changes"]!.outputs!["field"] = rows;
       needs["check"] = { result: "skipped", outputs: {} };
-      const others = gated.filter((other) => other !== "check" && needs[other]!.result === "skipped");
+      const others = Arr.filter(gated, (other) => other !== "check" && needs[other]!.result === "skipped");
       const meant = check === "false" && rows === "false";
-      expect(judge(needs).pass).toBe(meant && others.every((job) => needs["changes"]!.outputs![job] === "false"));
+      expect(judge(needs).pass).toBe(meant && Arr.every(others, (job) => needs["changes"]!.outputs![job] === "false"));
       expect(judge(needs).lines).toContain(
         meant ? "check: skipped, as changes said, pass" : "check: skipped, but it should have run, fail",
       );
@@ -139,15 +140,15 @@ it("the verdict passes exactly when every job passes on its own", () => {
   fc.assert(
     fc.property(
       fc.record({ changes: result, field: flag }),
-      fc.tuple(...gated.map(() => fc.tuple(result, flag))),
+      fc.tuple(...Arr.map(gated, () => fc.tuple(result, flag))),
       (top, rows) => {
         const outputs: Record<string, string | undefined> = {
-          ...Object.fromEntries(gated.map((name, i) => [name, rows[i]![1]])),
+          ...Object.fromEntries(Arr.map(gated, (name, i) => [name, rows[i]![1]])),
           field: top.field,
         };
         const needs: Record<string, Job> = {
           changes: { result: top.changes, outputs },
-          ...Object.fromEntries(gated.map((name, i) => [name, { result: rows[i]![0] }])),
+          ...Object.fromEntries(Arr.map(gated, (name, i) => [name, { result: rows[i]![0] }])),
         };
         const passes = (name: string) =>
           needs[name]!.result === "success" ||
@@ -156,7 +157,7 @@ it("the verdict passes exactly when every job passes on its own", () => {
             top.changes === "success" &&
             outputs[name] === "false" &&
             (name !== "check" || top.field === "false"));
-        expect(judge(needs).pass).toBe(Object.keys(needs).every(passes));
+        expect(judge(needs).pass).toBe(Arr.every(Object.keys(needs), passes));
       },
     ),
     options,
@@ -204,12 +205,12 @@ const paths = fc.option(
 
 /** The needs one run gives when every job its flags turned on passed, from changes.mjs's own flags. */
 const ran = (flags: Record<string, boolean>): Record<string, Job> => {
-  const outputs = Object.fromEntries(Object.entries(flags).map(([name, on]) => [name, String(on)]));
+  const outputs = Object.fromEntries(Arr.map(Object.entries(flags), ([name, on]) => [name, String(on)]));
   const needs: Record<string, Job> = { changes: { result: "success", outputs } };
 
   // A job runs when any of its flags is on: check for lint or for field rows.
   for (const name of gated) {
-    needs[name] = { result: gates[name].some((flag) => flags[flag]) ? "success" : "skipped" };
+    needs[name] = { result: Arr.some(gates[name], (flag) => flags[flag] === true) ? "success" : "skipped" };
   }
 
   return needs;
@@ -328,7 +329,7 @@ it("property: a draft passes with its heavy jobs skipped; a ready PR fails when 
 // the others ended as, such a run never passes: a leg canceled because a sibling failed is no pass.
 it("property: a run stopped at its first red job never passes", () => {
   const succeeded = (needs: Record<string, Job>) =>
-    Object.keys(needs).filter((name) => needs[name]!.result === "success");
+    Arr.filter(Object.keys(needs), (name) => needs[name]!.result === "success");
   fc.assert(
     fc.property(
       paths,
@@ -341,7 +342,7 @@ it("property: a run stopped at its first red job never passes", () => {
         const started = succeeded(needs);
         const red = started[pick % started.length]!;
 
-        for (const [i, name] of started.filter((name) => name !== red).entries()) {
+        for (const [i, name] of Arr.filter(started, (name) => name !== red).entries()) {
           needs[name]!.result = ends[i % ends.length];
         }
 

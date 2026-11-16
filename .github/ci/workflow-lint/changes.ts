@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
+import { Array as Arr, Order, Option } from "effect";
 import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";
 
 // When changes' size step sizes next: any run next tests, all of next/ or the reader tests alone, as
@@ -54,12 +55,12 @@ export const changesJob: Rule = ({ jobs }, require) => {
     require(compact(outputs[name]) === `steps.size.outputs.${from}`, `S1: changes exposes ${name} from the size step`);
   }
 
-  const exposed = [...FLAGS, "next", "filter", ...LEGS_OUTPUTS.map(([name]) => name)].toSorted();
-  require(JSON.stringify(Object.keys(outputs).toSorted()) ===
+  const exposed = Arr.sort([...FLAGS, "next", "filter", ...Arr.map(LEGS_OUTPUTS, ([name]) => name)], Order.String);
+  require(JSON.stringify(Arr.sort(Object.keys(outputs), Order.String)) ===
     JSON.stringify(exposed), "S1: changes exposes its flags, filter and the size step's outputs, and nothing else");
 
   const changeSteps = steps(changes);
-  const same = changeSteps.find((s) => s["id"] === "same");
+  const same = Option.getOrUndefined(Arr.findFirst(changeSteps, (s) => s["id"] === "same"));
   require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
     same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
 
@@ -67,9 +68,10 @@ export const changesJob: Rule = ({ jobs }, require) => {
     require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
   }
 
-  const sizing = changeSteps.find((s) => s["id"] === "size");
+  const sizing = Option.getOrUndefined(Arr.findFirst(changeSteps, (s) => s["id"] === "size"));
 
-  for (const step of changeSteps.filter(
+  for (const step of Arr.filter(
+    changeSteps,
     (s) =>
       (typeof s["uses"] === "string" && /^(pnpm\/action-setup|actions\/setup-node)@/.test(s["uses"])) ||
       (typeof s["run"] === "string" && s["run"].startsWith("pnpm install")),
@@ -115,7 +117,8 @@ export const changesJob: Rule = ({ jobs }, require) => {
 
   // The parser's own install: sizing's full install comes after the parser's pass, so it cannot
   // stand in for it.
-  require(changeSteps.some(
+  require(Arr.some(
+    changeSteps,
     (s) => s["run"] === ROW_INSTALL && compact(s["if"]) === PROBE,
   ), "changes installs the parser for its pass");
 };

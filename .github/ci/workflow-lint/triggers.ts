@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
+import { Array as Arr } from "effect";
 import { ignored } from "../changes.mjs";
 import { compact, map, type Rule } from "./shared.ts";
 
@@ -29,7 +30,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   // A pull request's one exclusion is changes.mjs's `ignored`: plan files and rows alone start no
   // run. GitHub compares the whole pull request with its base, so one more path starts it again.
   for (const trigger of [on, push, pr, queue]) {
-    require(!["paths", "branches-ignore", "tags", "tags-ignore"].some((key) => key in trigger) &&
+    require(!Arr.some(["paths", "branches-ignore", "tags", "tags-ignore"], (key) => key in trigger) &&
       (trigger === pr || !("paths-ignore" in trigger)), "no workflow path or branch exclusions");
   }
 
@@ -38,8 +39,9 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   // Each `*` is a name without a `/`, and no other wildcard is used, so the test's reading of a
   // pattern is GitHub's (its filter pattern cheat sheet).
   const skipped = pr["paths-ignore"];
-  require(Array.isArray(skipped) &&
-    skipped.every(
+  require(Arr.isArray(skipped) &&
+    Arr.every(
+      skipped,
       (pattern) => typeof pattern === "string" && /^[\w.-]+(?:\/[\w.*-]+)+$/.test(pattern) && !pattern.includes("**"),
     ), "ignored paths use no wildcard but a single *");
 
@@ -48,9 +50,9 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
   // `ci-required` never reports there and nothing can merge.
   require(JSON.stringify(queue["types"]) === '["checks_requested"]', "the merge queue's group runs the checks");
   const types = pr["types"];
-  require(Array.isArray(types) &&
+  require(Arr.isArray(types) &&
     types.length === TYPES.length &&
-    TYPES.every((type) => types.includes(type)), "pull requests run on open, push, reopen and ready for review");
+    Arr.every(TYPES, (type) => types.includes(type)), "pull requests run on open, push, reopen and ready for review");
   require(compact(map(workflow["concurrency"])["cancel-in-progress"]) === CANCEL, "only a new head cancels a run");
 
   for (const [job, expected] of Object.entries(DRAFT_NAMES)) {

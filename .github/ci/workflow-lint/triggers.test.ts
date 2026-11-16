@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";
@@ -18,25 +19,27 @@ import { options, type Plant, rejects, type Workflow } from "./wiring.test-suppo
 // changes.mjs and restored: `plan` as a folder a program reads (red); `docs/` as a read tree (red).
 const globOf = (glob: string) =>
   new RegExp(
-    `^${glob
-      .split("*")
-      .map((part) => part.replace(/[.^$+?()[\]{}|\\]/g, String.raw`\$&`))
-      .join("[^/]*")}$`,
+    `^${pipe(
+      glob.split("*"),
+      Arr.map((part) => part.replace(/[.^$+?()[\]{}|\\]/g, String.raw`\$&`)),
+      Arr.join("[^/]*"),
+    )}$`,
   );
 
-const ignoredBy = (path: string) => ignored.some((glob) => globOf(glob).test(path));
+const ignoredBy = (path: string) => Arr.some(ignored, (glob) => globOf(glob).test(path));
 const fill = fc.string({ maxLength: 12 }).filter((text) => !text.includes("/") && !text.includes("\0"));
 
 const fromGlob = fc.constantFrom(...ignored).chain((glob) => {
   const [first = "", ...rest] = glob.split("*");
   return fc
     .array(fill, { minLength: rest.length, maxLength: rest.length })
-    .map((fills) => rest.reduce((path, part, i) => `${path}${fills[i]}${part}`, first));
+    .map((fills) => Arr.reduce(rest, first, (path, part, i) => `${path}${fills[i]}${part}`));
 });
 
-const tracked = spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" })
-  .stdout.split("\0")
-  .filter((path) => path !== "" && ignoredBy(path));
+const tracked = Arr.filter(
+  spawnSync("git", ["ls-files", "-z"], { encoding: "utf8" }).stdout.split("\0"),
+  (path) => path !== "" && ignoredBy(path),
+);
 
 it("ticket 988: every path a pull request ignores runs no heavy job in changes.mjs, on a draft and a ready one", () => {
   expect(tracked.length).toBeGreaterThan(0);
@@ -45,12 +48,12 @@ it("ticket 988: every path a pull request ignores runs no heavy job in changes.m
       fc.array(fc.oneof(fromGlob, fc.constantFrom(...tracked)), { minLength: 1, maxLength: 4 }),
       fc.boolean(),
       (paths, draft) => {
-        expect(paths.every(ignoredBy)).toBe(true);
+        expect(Arr.every(paths, ignoredBy)).toBe(true);
         // Every job but the field rows' is off, whatever jobs changes.mjs grows or drops.
         const { field, ...heavy } = jobs(paths, "pull_request", draft);
         expect(Object.keys(heavy).length).toBeGreaterThan(0);
-        expect(Object.entries(heavy).filter(([, on]) => on)).toEqual([]);
-        expect(field).toBe(paths.some(isFieldPath));
+        expect(Arr.filter(Object.entries(heavy), ([, on]) => on)).toEqual([]);
+        expect(field).toBe(Arr.some(paths, isFieldPath));
       },
     ),
     {
@@ -80,7 +83,7 @@ it("0546: a quest plan is ignored in docs/plan/quests/ and, for a pull request s
 
     for (const draft of [true, false]) {
       const { field, ...heavy } = jobs([plan], "pull_request", draft);
-      expect(Object.entries(heavy).filter(([, on]) => on)).toEqual([]);
+      expect(Arr.filter(Object.entries(heavy), ([, on]) => on)).toEqual([]);
       expect(field).toBe(false);
     }
   }
@@ -107,11 +110,12 @@ it("pinned: ticket 988's list leaves out what changes.mjs or a reader still chec
 const plants: Plant[] = [
   // 0134's amendment (2026-11-11): a draft runs the fast jobs, and marking it ready runs the rest.
   // 0536: `labeled` is how the `visual` label starts the visual legs.
-  ...["opened", "synchronize", "reopened", "ready_for_review", "labeled"].map(
+  ...Arr.map(
+    ["opened", "synchronize", "reopened", "ready_for_review", "labeled"],
     (type): [string, (w: Workflow) => void] => [
       `pull requests lose the ${type} trigger`,
       (w) => {
-        w.on.pull_request.types = w.on.pull_request.types.filter((t) => t !== type);
+        w.on.pull_request.types = Arr.filter(w.on.pull_request.types, (t) => t !== type);
       },
     ],
   ),
@@ -139,7 +143,10 @@ const plants: Plant[] = [
   [
     "pull requests ignore every plan file, a brief folder's included",
     (w) => {
-      w.on.pull_request["paths-ignore"] = ["docs/plan/**", ...ignored.filter((glob) => !glob.startsWith("docs/plan/"))];
+      w.on.pull_request["paths-ignore"] = [
+        "docs/plan/**",
+        ...Arr.filter(ignored, (glob) => !glob.startsWith("docs/plan/")),
+      ];
     },
   ],
   [

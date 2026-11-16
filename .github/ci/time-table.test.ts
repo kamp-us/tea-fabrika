@@ -1,5 +1,5 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect } from "effect";
+import { type Duration, Effect, Array as Arr, Option } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import {
@@ -93,9 +93,9 @@ const leg = { run: "1", attempt: "1", workflow: "check", event: "push", sha: "s"
 /** A table's body rows under `heading`, the header and its rule left out. */
 const rowsUnder = (text: string, heading: string): string[] => {
   const after = text.slice(text.indexOf(heading));
-  const lines = after.split("\n").filter((line) => line.startsWith("| "));
-  const end = lines.findIndex((line, i) => i > 1 && line === "| File | Seconds | Tests | Result |");
-  return lines.slice(2, end < 0 ? undefined : end);
+  const lines = Arr.filter(after.split("\n"), (line) => line.startsWith("| "));
+  const end = Arr.findFirstIndex(lines, (line, i) => i > 1 && line === "| File | Seconds | Tests | Result |");
+  return lines.slice(2, Option.getOrUndefined(end));
 };
 
 // A time as the jobs API writes it, to the second: 2026-11-14T10:00:00Z.
@@ -135,16 +135,16 @@ it("TT1: a jobs API answer gives each step's result, start and end, a table of t
       const steps = readSteps(job);
       expect(steps).toEqual({
         _tag: "read",
-        rows: job.steps.map((s) => ({
+        rows: Arr.map(job.steps, (s) => ({
           name: s.name,
           result: s.conclusion ?? s.status,
           start: s.started_at,
           end: s.completed_at,
         })),
       });
-      const started = job.steps.filter((s) => s.started_at !== null);
+      const started = Arr.filter(job.steps, (s) => s.started_at !== null);
       expect(rowsUnder(markdown({ ...leg, steps, files: { _tag: "read", rows: [] } }), "### Steps")).toEqual(
-        started.map((s) => {
+        Arr.map(started, (s) => {
           const took =
             s.completed_at === null
               ? "-"
@@ -152,9 +152,10 @@ it("TT1: a jobs API answer gives each step's result, start and end, a table of t
           return `| ${s.name} | ${s.conclusion ?? s.status} | ${took} |`;
         }),
       );
-      const self = job.steps.findIndex((s) => s.name === STEP);
+      const self = Arr.findFirstIndex(job.steps, (s) => s.name === STEP);
       expect(settled(steps)).toBe(
-        self >= 0 && job.steps.slice(0, self).every((s) => s.started_at === null || s.completed_at !== null),
+        Option.isSome(self) &&
+          Arr.every(job.steps.slice(0, self.value), (s) => s.started_at === null || s.completed_at !== null),
       );
     }),
     options,
@@ -174,8 +175,8 @@ const vitestReport = fc
     { selector: (file) => file.path, maxLength: 25 },
   )
   .map((files) => ({
-    numTotalTests: files.reduce((sum, file) => sum + file.tests, 0),
-    testResults: files.map((file) => testFile(file.path, file.start, file.ms, file.tests, file.status)),
+    numTotalTests: Arr.reduce(files, 0, (sum, file) => sum + file.tests),
+    testResults: Arr.map(files, (file) => testFile(file.path, file.start, file.ms, file.tests, file.status)),
   }));
 
 it("TT2: a Vitest report gives every file to the artifact and the slowest ten, slowest first, to the summary", () => {
@@ -183,7 +184,7 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
   fc.assert(
     fc.property(vitestReport, (given) => {
       const files = readFiles(given, root);
-      const rows = given.testResults.map((file) => ({
+      const rows = Arr.map(given.testResults, (file) => ({
         path: relative(root, file.name),
         seconds: (file.endTime - file.startTime) / 1000,
         tests: file.assertionResults.length,
@@ -191,11 +192,11 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
       }));
       expect(files).toEqual({ _tag: "read", rows });
       const text = markdown({ ...leg, steps: { _tag: "read", rows: [] }, files });
-      const total = rows.reduce((sum, file) => sum + file.seconds, 0);
+      const total = Arr.reduce(rows, 0, (sum, file) => sum + file.seconds);
       const count = Math.min(rows.length, SLOWEST);
       expect(text).toContain(`${rows.length} files, ${total.toFixed(1)} s in all. The ${count} slowest:`);
-      const byPath = new Map(rows.map((file) => [file.path, file]));
-      const listed = rowsUnder(text, "### Slowest test files").map((line) =>
+      const byPath = new Map(Arr.map(rows, (file) => [file.path, file]));
+      const listed = Arr.map(rowsUnder(text, "### Slowest test files"), (line) =>
         byPath.get(line.split(" | ")[0]!.slice(2))!,
       );
       expect(listed).toHaveLength(count);
@@ -207,8 +208,8 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
         expect(i === 0 || listed[i - 1]!.seconds >= file.seconds).toBe(true);
       }
 
-      const left = rows.filter((file) => !listed.includes(file));
-      expect(left.every((file) => listed.every((shown) => shown.seconds >= file.seconds))).toBe(true);
+      const left = Arr.filter(rows, (file) => !listed.includes(file));
+      expect(Arr.every(left, (file) => Arr.every(listed, (shown) => shown.seconds >= file.seconds))).toBe(true);
     }),
     options,
   );
@@ -259,8 +260,8 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
   // Plant: let readFiles skip a broken entry and call the rest read, as shard-times.ts does.
   fc.assert(
     fc.property(broken, broken, (steps, files) => {
-      const isJob = Array.isArray((steps as { steps?: unknown } | null)?.steps);
-      const isReport = Array.isArray((files as { testResults?: unknown } | null)?.testResults);
+      const isJob = Arr.isArray((steps as { steps?: unknown } | null)?.steps);
+      const isReport = Arr.isArray((files as { testResults?: unknown } | null)?.testResults);
       fc.pre(!isJob || readSteps(steps)._tag === "unavailable");
       fc.pre(!isReport || readFiles(files, root)._tag === "unavailable");
       const read = readSteps(job);
@@ -291,7 +292,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
       fc.oneof(fc.string(), fc.constant("{}"), fc.constant('{"testResults":[]}')),
       fc.boolean(),
       async (dropped, answer, apiThrows, report, readThrows) => {
-        const partial = Object.fromEntries(Object.entries(env).filter(([name]) => !dropped.includes(name)));
+        const partial = Object.fromEntries(Arr.filter(Object.entries(env), ([name]) => !dropped.includes(name)));
         const timings = await timingsOf(partial, {
           job: () =>
             apiThrows ? Effect.fail(new Unread({ cause: new Error("socket hang up") })) : Effect.succeed(answer),
@@ -358,7 +359,7 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
   // Plant: write names into the table as they are.
   fc.assert(
     fc.property(fc.array(fc.string(), { minLength: 1, maxLength: 5 }), (names) => {
-      const rows: Step[] = names.map((name) => ({
+      const rows: Step[] = Arr.map(names, (name) => ({
         name,
         result: "success",
         start: "2026-11-14T10:00:00Z",
@@ -367,11 +368,12 @@ it("TT7: a step or file name with a pipe or a line break stays in its own cell",
       const text = markdown({
         ...{ run: "", attempt: "", workflow: "", event: "", sha: "", job: "a|b", leg: "1\n2" },
         steps: { _tag: "read", rows },
-        files: { _tag: "read", rows: names.map((path) => ({ path, seconds: 1, tests: 1, result: "passed" })) },
+        files: { _tag: "read", rows: Arr.map(names, (path) => ({ path, seconds: 1, tests: 1, result: "passed" })) },
       });
-      const lines = text
-        .split("\n")
-        .filter((line) => line.startsWith("| ") && !/^\| ---:?(?: \| ---:?)* \|$/.test(line));
+      const lines = Arr.filter(
+        text.split("\n"),
+        (line) => line.startsWith("| ") && !/^\| ---:?(?: \| ---:?)* \|$/.test(line),
+      );
       expect(lines).toHaveLength(2 + names.length + Math.min(names.length, SLOWEST));
 
       for (const line of lines) {

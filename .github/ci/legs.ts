@@ -28,6 +28,7 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Array as Arr, Order, Option } from "effect";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -95,18 +96,18 @@ const rowOf = (table: Readonly<Record<string, number>>, path: string) =>
 /** Each leg's files when `assign` splits `files` over `count` legs, as `Shards` keeps them. */
 export const split = (files: readonly string[], count: number, table = measured): string[][] => {
   const placed = assign(
-    files.map((path) => ({ path, seconds: rowOf(table, path) })),
+    Arr.map(files, (path) => ({ path, seconds: rowOf(table, path) })),
     count,
     [],
     median(Object.values(table)),
   );
-  return Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg));
+  return Array.from({ length: count }, (_, leg) => Arr.filter(files, (_, i) => placed[i] === leg));
 };
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
 const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
   const unmeasured = median(Object.values(table));
-  return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
+  return Arr.reduce(files, 0, (sum, path) => sum + (rowOf(table, path) ?? unmeasured));
 };
 
 /**
@@ -116,13 +117,19 @@ const seconds = (files: readonly string[], table: Readonly<Record<string, number
 export const fewest = (files: readonly string[], most: number, limit: number, table = measured): number => {
   const tried = Array.from({ length: Math.min(most, files.length) }, (_, i) => {
     const count = i + 1;
-    return { count, longest: Math.max(...split(files, count, table).map((leg) => seconds(leg, table))) };
+    return { count, longest: Math.max(...Arr.map(split(files, count, table), (leg) => seconds(leg, table))) };
   });
-  const shortest = tried.reduce<(typeof tried)[number] | undefined>(
-    (best, next) => (best === undefined || next.longest < best.longest ? next : best),
+  const shortest = Arr.reduce<(typeof tried)[number], (typeof tried)[number] | undefined>(
+    tried,
     undefined,
+    (best, next) => (best === undefined || next.longest < best.longest ? next : best),
   );
-  return (tried.find((next) => next.longest <= limit) ?? shortest)?.count ?? 0;
+  return (
+    Option.getOrElse(
+      Arr.findFirst(tried, (next) => next.longest <= limit),
+      () => shortest,
+    )?.count ?? 0
+  );
 };
 
 /** The events on the merge line, each of which runs only what its change reaches (0534). */
@@ -167,7 +174,7 @@ export const shards = (legs: Legs): string[] => [
  * reach. Each once, in path order, so a reader `--changed` picked too runs once.
  */
 export const withReaders = (changed: readonly string[], readerFiles: readonly string[]): string[] =>
-  [...new Set([...changed, ...readerFiles])].toSorted();
+  Arr.sort([...new Set([...changed, ...readerFiles])], Order.String);
 
 /**
  * What the size step prints. On a sized run with a vitest leg, `files` is the vitest legs' one
@@ -185,13 +192,13 @@ export const outputs = (run: Run, legs: Legs, selected: Selected): string[] => {
   const listed = sizes(run) && legs.vitest > 0;
   const narrowed = sizes(run) && run.scope === "all" && legs.e2e > 0;
 
-  if (listed && selected.vitest.some((path) => /\s/.test(path))) {
+  if (listed && Arr.some(selected.vitest, (path) => /\s/.test(path))) {
     throw new Error("legs: a vitest file's path holds a space, so it cannot be one word of `files`");
   }
 
   return [
     ...(some ? [`shards=${JSON.stringify(shards(legs))}`] : []),
-    ...(listed ? [`files=${selected.vitest.join(" ")}`] : []),
+    ...(listed ? [`files=${Arr.join(selected.vitest, " ")}`] : []),
     ...(narrowed ? [`base=${run.base}`] : []),
     `vitest=${legs.vitest}`,
     `e2e=${legs.e2e}`,
@@ -210,17 +217,18 @@ const list = (root: string, args: readonly string[]): string[] => {
   );
 
   if (done.status !== 0) {
-    throw new Error(`legs: vitest list ${args.join(" ")} exited ${done.status}`);
+    throw new Error(`legs: vitest list ${Arr.join(args, " ")} exited ${done.status}`);
   }
 
   const files: unknown = JSON.parse(readFileSync(out, "utf8"));
-  return (Array.isArray(files) ? files : [])
-    .flatMap((entry: unknown) =>
+  return Arr.sort(
+    Arr.flatMap(Arr.isArray(files) ? files : [], (entry: unknown) =>
       typeof entry === "object" && entry !== null && "file" in entry && typeof entry.file === "string"
         ? [relative(root, entry.file)]
         : [],
-    )
-    .toSorted();
+    ),
+    Order.String,
+  );
 };
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
@@ -260,11 +268,11 @@ if (import.meta.main) {
     ? `legs: ${vitestNote} on ${legs.vitest} legs of at most ${limit.vitest} s, ${selected.e2e.length} end-to-end files (${seconds(selected.e2e, measured).toFixed(1)} s) on ${legs.e2e} legs`
     : `legs: the full matrix, on ${run.event || "an unknown event"} with all of next/${validSha(run.base) ? "" : " and no base commit"}`;
   console.log(note);
-  console.log(lines.join("\n"));
+  console.log(Arr.join(lines, "\n"));
   const output = process.env["GITHUB_OUTPUT"];
 
   if (output !== undefined && output !== "") {
-    appendFileSync(output, `${lines.join("\n")}\n`);
+    appendFileSync(output, `${Arr.join(lines, "\n")}\n`);
   }
 
   const summary = process.env["GITHUB_STEP_SUMMARY"];

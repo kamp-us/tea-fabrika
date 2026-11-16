@@ -1,10 +1,11 @@
 // Today's CI, serving both versions. check.yaml's changes job, its own work: the small scans that
 // run after any failure, the full-history checkout, and the classify step with the run's event.
+import { Array as Arr, Option } from "effect";
 import { classifier, commands, compact, map, type Rule, steps } from "./shared.ts";
 
 export const classifyStep: Rule = ({ jobs }, require) => {
   const changes = map(jobs["changes"]);
-  const classify = steps(changes).find((s) => s["id"] === "diff");
+  const classify = Option.getOrUndefined(Arr.findFirst(steps(changes), (s) => s["id"] === "diff"));
 
   require(commands(changes).includes("sh .agents/skills/lead/scripts/skillscheck.sh"), "changes runs the skills check");
   require(commands(changes).includes(
@@ -12,13 +13,15 @@ export const classifyStep: Rule = ({ jobs }, require) => {
   ), "changes runs the shared tracked-file check");
 
   for (const command of ["sh .agents/skills/lead/scripts/skillscheck.sh", "node oxlint-plugins/gitignore.mjs"]) {
-    require(steps(changes).some(
+    require(Arr.some(
+      steps(changes),
       (s) => s["run"] === command && compact(s["if"]) === "!cancelled()",
     ), "small scans still run after classifier failure");
   }
 
   const list = steps(changes);
-  require(list.some(
+  require(Arr.some(
+    list,
     (s) =>
       typeof s["uses"] === "string" &&
       s["uses"].startsWith("actions/checkout@") &&

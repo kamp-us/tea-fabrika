@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { LIMIT, reportRows, staleRows, rowLine, type Row } from "./shard-times.ts";
@@ -21,21 +22,21 @@ it("L10: report times advise exactly for stale rows, including unmeasured files"
       (entries) => {
         const root = resolve("timing-fixture");
         const report = {
-          testResults: Object.entries(entries).map(([path, value]) => ({
+          testResults: Arr.map(Object.entries(entries), ([path, value]) => ({
             name: resolve(root, path),
             startTime: value.start,
             endTime: value.start + value.real * 1000,
           })),
         };
-        const rows: Row[] = Object.entries(entries).map(([path, value]) => ({ path, seconds: value.real }));
+        const rows: Row[] = Arr.map(Object.entries(entries), ([path, value]) => ({ path, seconds: value.real }));
         expect(reportRows(report, root)).toEqual(rows);
         const table = Object.fromEntries(
-          Object.entries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
+          Arr.flatMap(Object.entries(entries), ([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
         );
         table["not-run.test.ts"] = 10000;
-        const expected = rows
-          .filter((row) => Math.abs(row.seconds - (entries[row.path]!.row ?? 1)) > LIMIT)
-          .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+        const expected = Arr.filter(rows, (row) => Math.abs(row.seconds - (entries[row.path]!.row ?? 1)) > LIMIT).sort(
+          (a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0),
+        );
         expect(staleRows(table, rows)).toEqual(expected);
       },
     ),

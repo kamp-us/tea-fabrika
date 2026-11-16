@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's fail fast (ticket 990): every job but ci-required
 // ends with the stop step (F1), only ci-required runs on always() (F2), the token may cancel the run
 // and no job sets its own (F3), and no checkout keeps the token in .git/config (F4).
+import { Array as Arr } from "effect";
 import { allSteps, compact, isStop, map, type Rule } from "./shared.ts";
 
 export const failFast: Rule = ({ workflow, jobs }, require) => {
@@ -14,9 +15,9 @@ export const failFast: Rule = ({ workflow, jobs }, require) => {
   require(JSON.stringify(map(jobs["ci-required"])["permissions"]) ===
     JSON.stringify({ contents: "read" }), "F3: ci-required's token reads contents alone");
 
-  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== "ci-required")) {
+  for (const [name, job] of Arr.filter(Object.entries(jobs), ([name]) => name !== "ci-required")) {
     const list = allSteps(map(job));
-    const cancels = list.filter((step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
+    const cancels = Arr.filter(list, (step) => typeof step["run"] === "string" && step["run"].includes("run cancel"));
     // F1. Last, so `failure()` has seen every other step of the job. The one step that cancels, so
     // no second one can stop a push to main.
     require(list.length > 0 &&
@@ -35,7 +36,8 @@ export const failFast: Rule = ({ workflow, jobs }, require) => {
   // script could read it, and that token may cancel and re-run this workflow. No job pushes, and the
   // fetches read a public repository, so no checkout needs it.
   for (const [name, job] of Object.entries(jobs)) {
-    for (const step of allSteps(map(job)).filter(
+    for (const step of Arr.filter(
+      allSteps(map(job)),
       (s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"),
     )) {
       require(map(step["with"])["persist-credentials"] ===

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr, Option } from "effect";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
@@ -22,9 +23,9 @@ import {
 const plants: Plant[] = [
   // TT1 and TT2: every test leg writes its time table and uploads its timings file. Each plant was
   // also run once on workflow-lint.ts with its rule dropped, and that turned it red.
-  ...(["next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+  ...Arr.flatMap(["next"] as const, (job): [string, (w: Workflow) => void][] => {
     const steps = (w: Workflow) => stepsOf(w, job) as Timed[];
-    const named = (w: Workflow, name: string) => steps(w).find((s) => s["name"] === name)!;
+    const named = (w: Workflow, name: string) => Option.getOrThrow(Arr.findFirst(steps(w), (s) => s["name"] === name));
     const table = (w: Workflow) => named(w, "time table");
     const upload = (w: Workflow) => named(w, "timings");
     return [

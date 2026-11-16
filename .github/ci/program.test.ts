@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr, pipe } from "effect";
 import { transformSync } from "esbuild";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -102,7 +103,7 @@ const words = fc
     ),
     { maxLength: 4 },
   )
-  .map((list) => list.join(" "));
+  .map((list) => Arr.join(list, " "));
 
 const comment = fc.oneof(
   words.map((w) => ` // ${w}\n`),
@@ -117,7 +118,12 @@ const gap = fc.oneof({ weight: 3, arbitrary: fc.constantFrom(" ", "\n", "\n\n  "
 const preamble = fc.constantFrom("", "// oxlint-disable-next-line no-console\nconsole.log(0);\n");
 
 const join = (head: string, list: readonly Token[], gaps: readonly string[]) =>
-  head + list.map((token, i) => `${token.text}${gaps[i] ?? " "}`).join("");
+  head +
+  pipe(
+    list,
+    Arr.map((token, i) => `${token.text}${gaps[i] ?? " "}`),
+    Arr.join(""),
+  );
 
 const gaps = (count: number) => fc.array(gap, { minLength: count, maxLength: count });
 
@@ -163,7 +169,7 @@ const swap = (token: Token): string => {
 
 /** A pair from law 9 with one token swapped on the new side. */
 const swapped = pair.chain(([head, list, before, after]) => {
-  const open = list.flatMap((token, i) => (swap(token) === token.text ? [] : [i]));
+  const open = Arr.flatMap(list, (token, i) => (swap(token) === token.text ? [] : [i]));
   return fc
     .constantFrom(...open)
     .map(
@@ -171,7 +177,7 @@ const swapped = pair.chain(([head, list, before, after]) => {
         [
           head,
           list,
-          list.map((token, i) => (i === at ? { ...token, text: swap(token) } : token)),
+          Arr.map(list, (token, i) => (i === at ? { ...token, text: swap(token) } : token)),
           before,
           after,
         ] as const,
@@ -291,7 +297,7 @@ it("property: a tool comment that was added, removed or changed is refused, in a
       name,
       ([head, list, before], [body, form], how, at, file) => {
         const place = at % list.length;
-        const put = (text: string) => before.map((g, i) => (i === place ? `${text}${g}` : g));
+        const put = (text: string) => Arr.map(before, (g, i) => (i === place ? `${text}${g}` : g));
         const old = how === "added" ? before : how === "removed" ? put(write(form, body)) : put(write(form, body));
         const fresh =
           how === "added" ? put(write(form, body)) : how === "removed" ? before : put(write(form, `${body} b`));
@@ -419,14 +425,16 @@ it("property: samePaths leaves out a file that was added or deleted, is not .ts 
 
         return { status: 128, stdout: "" };
       };
-      const kept = list
-        .filter((file) => file.status === "modified" && /\.tsx?$/.test(file.path))
-        .map((file) => file.path);
+      const kept = pipe(
+        list,
+        Arr.filter((file) => file.status === "modified" && /\.tsx?$/.test(file.path)),
+        Arr.map((file) => file.path),
+      );
       expect(
         samePaths(
           base,
           head,
-          list.map((file) => file.path),
+          Arr.map(list, (file) => file.path),
           run,
         ),
       ).toEqual(kept);

@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Array as Arr, pipe, Result, Order } from "effect";
 import { readPaths, validSha } from "./changes.mjs";
 import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
@@ -17,7 +18,7 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
     counts.set(text, (counts.get(text) ?? 0) + 1);
   }
 
-  return lines(head).flatMap((text, i) => {
+  return Arr.flatMap(lines(head), (text, i) => {
     const count = counts.get(text) ?? 0;
 
     if (count === 0) {
@@ -29,13 +30,7 @@ export const selectAdded = (base: string, head: string): { line: number; text: s
   });
 };
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-};
+const parse = (text: string): unknown => Result.getOrUndefined(Result.try((): unknown => JSON.parse(text)));
 
 // GitHub annotation escaping applies to property values as well as message text.
 const escape = (text: string) =>
@@ -53,8 +48,8 @@ type Report = { findings: Finding[]; annotations: string[]; exitCode: 0 | 1; add
 
 const report = (findings: Finding[], added: number): Report => ({
   findings,
-  annotations: findings.map(annotation),
-  exitCode: findings.some((f) => f._tag === "error") ? 1 : 0,
+  annotations: Arr.map(findings, annotation),
+  exitCode: Arr.some(findings, (f) => f._tag === "error") ? 1 : 0,
   added,
 });
 
@@ -65,7 +60,7 @@ const report = (findings: Finding[], added: number): Report => ({
 const checkLines = (file: string, base: string, head: string): Report => {
   const added = selectAdded(base, head);
   const log = logOf(file);
-  const findings = added.flatMap(({ line, text }) => {
+  const findings = Arr.flatMap(added, ({ line, text }) => {
     if (log !== null) {
       return [
         Finding.cases.error.make({
@@ -178,14 +173,18 @@ export const readFieldFiles = (base: string, head: string, event: string, run: R
   const tree = (ref: string) => new Set(read(["ls-tree", "-r", "--name-only", "-z", ref, "--", "field/"]).split("\0"));
   const before = tree(from),
     after = tree(head);
-  return paths.filter(isFieldPath).map((file) => ({
-    file,
-    base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
-    head: after.has(file) ? read(["show", `${head}:${file}`]) : "",
-  }));
+  return pipe(
+    paths,
+    Arr.filter(isFieldPath),
+    Arr.map((file) => ({
+      file,
+      base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
+      head: after.has(file) ? read(["show", `${head}:${file}`]) : "",
+    })),
+  );
 };
 
-const names = (text: string) => text.split("\0").filter((name) => name !== "");
+const names = (text: string) => Arr.filter(text.split("\0"), (name) => name !== "");
 
 /**
  * The writer's copy of the field job: the rows this checkout adds to `main`, as they stand on disk,
@@ -218,14 +217,11 @@ export const readLocalFieldFiles = (main: string, run: Runner = git) => {
     const path = join(root, file);
     return existsSync(path) ? readFileSync(path, "utf8") : "";
   };
-  return [...new Set([...changed, ...added])]
-    .filter(isFieldPath)
-    .toSorted()
-    .map((file) => ({
-      file,
-      base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
-      head: disk(file),
-    }));
+  return Arr.map(Arr.sort(Arr.filter([...new Set([...changed, ...added])], isFieldPath), Order.String), (file) => ({
+    file,
+    base: before.has(file) ? read(["show", `${from}:${file}`]) : "",
+    head: disk(file),
+  }));
 };
 
 const main = (local: boolean) => {
@@ -258,9 +254,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (local && process.env["GITHUB_ACTIONS"] === "true") {
     console.log("field: this CI run's field job checks the added rows");
   } else {
-    try {
-      main(local);
-    } catch {
+    if (Result.isFailure(Result.try(() => main(local)))) {
       console.error(
         local
           ? "field: origin/main or this checkout could not be read; fetch origin main and run it again"

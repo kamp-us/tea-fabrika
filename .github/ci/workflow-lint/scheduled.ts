@@ -1,4 +1,5 @@
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC13).
+import { Array as Arr, Result, Order, Option } from "effect";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -74,8 +75,11 @@ const BACKSTOP = 3;
  */
 const limitOf = (jobs: Record<string, unknown>, suite: keyof typeof SUITES): unknown => {
   const commands: readonly string[] = SUITES[suite];
-  const found = steps(map(jobs[TESTS_JOB])).filter((s) => typeof s["run"] === "string" && commands.includes(s["run"]));
-  const limits = new Set(found.map((s) => s["timeout-minutes"]));
+  const found = Arr.filter(
+    steps(map(jobs[TESTS_JOB])),
+    (s) => typeof s["run"] === "string" && commands.includes(s["run"]),
+  );
+  const limits = new Set(Arr.map(found, (s) => s["timeout-minutes"]));
   return found.length > 0 && limits.size === 1 ? [...limits][0] : undefined;
 };
 
@@ -86,7 +90,7 @@ const backstop = (next: number, tooling: number) =>
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
 const listed = (job: Record<string, unknown>): unknown[] => {
   const shard = map(map(job["strategy"])["matrix"])["shard"];
-  return Array.isArray(shard) ? shard : [];
+  return Arr.isArray(shard) ? shard : [];
 };
 
 /**
@@ -94,15 +98,13 @@ const listed = (job: Record<string, unknown>): unknown[] => {
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(source.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
   const errors: string[] = [];
@@ -114,8 +116,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC1. A schedule and a hand start, nothing else: no pull request, queue or push runs the whole
   // suite (0534's binding constraint). The cron line is the interval, a setting.
-  const crons = Array.isArray(on["schedule"]) ? on["schedule"] : [];
-  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+  const crons = Arr.isArray(on["schedule"]) ? on["schedule"] : [];
+  require(JSON.stringify(Arr.sort(Object.keys(on), Order.String)) ===
+    JSON.stringify(["schedule", "workflow_dispatch"]) &&
     crons.length === 1 &&
     typeof map(crons[0])["cron"] === "string", "SC1: it runs on one schedule and by hand, on no other event");
   // SC2. One run at a time, and a running one is never cut short.
@@ -136,7 +139,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       issues: "write",
     }), "SC3: the report job's token reads actions and contents and writes issues, nothing more");
 
-  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== VERDICT)) {
+  for (const [name, job] of Arr.filter(Object.entries(jobs), ([name]) => name !== VERDICT)) {
     require(!("permissions" in map(job)), `SC3: ${name} keeps the workflow's token, which cannot cancel a run`);
   }
 
@@ -149,12 +152,13 @@ export const lintScheduled = (text: string, check: string): string[] => {
     require((typeof limit === "number" && limit > 0 && limit < 360) ||
       (name === TESTS_JOB && typeof limit === "string"), `SC4: ${name} sets timeout-minutes`);
 
-    for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
+    for (const step of Arr.filter(steps(map(job)), (s) => uses(s, "actions/checkout"))) {
       require(map(step["with"])["persist-credentials"] ===
         false, `SC4: ${name}'s checkout sets persist-credentials: false, so the token stays out of .git/config`);
     }
 
-    require(!allSteps(map(job)).some(
+    require(!Arr.some(
+      allSteps(map(job)),
       cancels,
     ), `SC4: no step of ${name} cancels the run: a canceled run ends cancelled, never failure`);
 
@@ -171,26 +175,27 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // and its failure shows: it is the job that fails for a red run. It and the time tables are the
   // steps that get the token.
   const report = map(jobs[VERDICT]),
-    others = Object.keys(jobs).filter((name) => name !== VERDICT);
-  const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
+    others = Arr.filter(Object.keys(jobs), (name) => name !== VERDICT);
+  const needed = Arr.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
-    others.every((name) => needed.includes(name)) &&
+    Arr.every(others, (name) => needed.includes(name)) &&
     compact(report["if"]) ===
       REPORT_IF, "SC5: the report needs every other job, and runs after any result, on every branch");
-  const judged = steps(report).filter((s) => "run" in s);
+  const judged = Arr.filter(steps(report), (s) => "run" in s);
   // Each suite's limit, as `LIMIT_<SUITE>`, equal to its test steps' `timeout-minutes` (SC13):
   // scheduled.mjs tells a timed-out leg from a red or a canceled one by it, and reads a leg's suite
   // from its name's shard, so no job sets a `name` of its own.
   const env = {
     ...REPORT_ENV,
     ...Object.fromEntries(
-      (Object.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
+      Arr.map(Object.keys(SUITES) as (keyof typeof SUITES)[], (suite) => [
         `LIMIT_${suite.toUpperCase()}`,
         limitOf(jobs, suite),
       ]),
     ),
   };
-  require(Object.values(jobs).every(
+  require(Arr.every(
+    Object.values(jobs),
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");
   require(judged.length === 1 &&
@@ -200,8 +205,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
     judged[0]?.["continue-on-error"] ===
       undefined, `SC5: the report runs ${REPORT} once, with the needs, the results, the token and each suite's time limit, and its failure shows`);
   // The legs' time tables read their own job's steps with it too (TT1 pins their env).
-  require(Object.values(jobs).every((job) =>
-    steps(map(job)).every(
+  require(Arr.every(Object.values(jobs), (job) =>
+    Arr.every(
+      steps(map(job)),
       (s) => s === judged[0] || s["run"] === TIME_TABLE || !/github\.token|secrets\./.test(JSON.stringify(s)),
     ),
   ), "SC5: only the report step and the time tables get the token, and no step a secret");
@@ -213,12 +219,13 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // more at once than it has legs, and stops its other legs once one failed, which leaves the run's
   // conclusion `failure`.
   require(JSON.stringify(others) === JSON.stringify([TESTS_JOB]) &&
-    Object.entries(jobs).every(
+    Arr.every(
+      Object.entries(jobs),
       ([name, job]) => name === TESTS_JOB || !("strategy" in map(job)),
     ), `SC6: every test leg is in one matrix, the ${TESTS_JOB} job, so its first red leg stops all the others`);
   let machines = 0;
 
-  for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
+  for (const [name, job] of Arr.map(Object.entries(jobs), ([name, job]) => [name, map(job)] as const)) {
     const strategy = map(job["strategy"]);
     const most = strategy["max-parallel"];
 
@@ -242,8 +249,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const tests = map(jobs[TESTS_JOB]),
     testSteps = steps(tests),
     shards = listed(tests),
-    toolingLegs = shards.filter((shard) => typeof shard === "string" && shard.startsWith(TOOLING_LEG)),
-    nextLegs = shards.filter((shard) => !toolingLegs.includes(shard)),
+    toolingLegs = Arr.filter(shards, (shard) => typeof shard === "string" && shard.startsWith(TOOLING_LEG)),
+    nextLegs = Arr.filter(shards, (shard) => !toolingLegs.includes(shard)),
     legsOfCheck = legs(nextJob(check)),
     e2eCount = ends(legsOfCheck).length,
     vitestCount = numbered(legsOfCheck).length;
@@ -251,8 +258,8 @@ export const lintScheduled = (text: string, check: string): string[] => {
     JSON.stringify(shards.slice(0, nextLegs.length)) === JSON.stringify(nextLegs) &&
     JSON.stringify(nextLegs) ===
       JSON.stringify(legsOfCheck), "SC7: the test job's next legs are check.yaml's full matrix of next legs, first");
-  const vitest = testSteps.filter((s) => s["run"] === WHOLE_NEXT);
-  const e2e = testSteps.filter((s) => s["run"] === WHOLE_E2E);
+  const vitest = Arr.filter(testSteps, (s) => s["run"] === WHOLE_NEXT);
+  const e2e = Arr.filter(testSteps, (s) => s["run"] === WHOLE_E2E);
   require(vitest.length === 1 &&
     compact(vitest[0]?.["if"]) === compact(`!${ON_E2E} && !${ON_TOOLING}`) &&
     map(vitest[0]?.["env"])["SHARD"] ===
@@ -261,13 +268,14 @@ export const lintScheduled = (text: string, check: string): string[] => {
     compact(e2e[0]?.["if"]) === ON_E2E &&
     map(e2e[0]?.["env"])["SHARD"] ===
       `\${{ matrix.shard }}/${e2eCount}`, "SC7: next runs every visual file once, on the e2e legs, each its share of them");
-  require(testSteps.some(
+  require(Arr.some(
+    testSteps,
     (s) => s["run"] === chromium && compact(s["if"]) === compact(`${ON_E2E} && ${VISUAL_FILES}`),
   ), "SC7: next fetches chromium on the e2e legs, once a visual file exists");
 
   // SC8. Every tooling test on the tooling legs, `tooling-1` to `tooling-N` after the next legs,
   // nothing narrowed.
-  const toolingRuns = testSteps.filter((s) => s["run"] === WHOLE_TOOLING);
+  const toolingRuns = Arr.filter(testSteps, (s) => s["run"] === WHOLE_TOOLING);
   require(toolingRuns.length === 1 &&
     compact(toolingRuns[0]?.["if"]) === ON_TOOLING &&
     map(toolingRuns[0]?.["env"])["SHARD"] === `\${{ matrix.shard }}/${toolingLegs.length}` &&
@@ -279,31 +287,39 @@ export const lintScheduled = (text: string, check: string): string[] => {
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
   const commandsOf = (job: Record<string, unknown>) =>
-    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
-  require(JSON.stringify(commandsOf(tests).toSorted()) ===
+    Arr.flatMap(steps(job), (s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+  require(JSON.stringify(Arr.sort(commandsOf(tests), Order.String)) ===
     JSON.stringify(
-      ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),
+      Arr.sort(
+        ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE],
+        Order.String,
+      ),
     ), "SC9: the test job runs only its install, its whole-suite commands and its time table");
 
   // SC10. The test job keeps each leg's Vitest report after a red step, so the report job can name
   // the failing tests.
-  const kept = testSteps.filter(
+  const kept = Arr.filter(
+    testSteps,
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
-  const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
+  const last = Option.getOrElse(
+    Arr.findLastIndex(testSteps, (s) => typeof s["run"] === "string" && s["run"].includes(RESULTS)),
+    () => -1,
+  );
   require(kept.length === 1 &&
     compact(kept[0]?.["if"]) === "!cancelled()" &&
     testSteps.indexOf(kept[0] ?? {}) >
       last, `SC10: ${TESTS_JOB} uploads its report after its tests, even after a red one`);
   // TT1 and TT2, as in check.yaml.
-  errors.push(...timed(TESTS_JOB, tests, "results.json").map((reason) => `scheduled.yaml: ${reason}`));
+  errors.push(...Arr.map(timed(TESTS_JOB, tests, "results.json"), (reason) => `scheduled.yaml: ${reason}`));
 
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
   // count here, and unset means `fast`, as on the merge line (pull request 1274).
   for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
-    const found = Object.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
+    const found = Arr.flatMap(Object.values(jobs), (job) => Arr.filter(steps(map(job)), (s) => s["run"] === command));
     require(found.length > 0 &&
-      found.every(
+      Arr.every(
+        found,
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
       ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
   }

@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
+import { Array as Arr, pipe, Option, Order } from "effect";
 import {
   CHANGED_FROM_BASE,
   chromium,
@@ -85,12 +86,17 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     'node next/apps/fabrika/src/exam/edges.ts --base "$BASE"',
     TIME_TABLE,
   ];
-  const nextRuns = nextSteps.filter((s) => "run" in s).map((s) => s["run"]);
+  const nextRuns = pipe(
+    nextSteps,
+    Arr.filter((s) => "run" in s),
+    Arr.map((s) => s["run"]),
+  );
   require(nextRuns.length === allowed.length &&
-    allowed.every(
-      (command) => nextRuns.filter((run) => run === command).length === 1,
+    Arr.every(
+      allowed,
+      (command) => Arr.filter(nextRuns, (run) => run === command).length === 1,
     ), "next runs exactly its install and six approved commands once each");
-  const testStep = nextSteps.find((s) => s["run"] === nextCommand);
+  const testStep = Option.getOrUndefined(Arr.findFirst(nextSteps, (s) => s["run"] === nextCommand));
   require(testStep !==
     undefined, "E11: next's vitest step runs the next project alone, with --shard and no exclusions");
   const shard = map(testStep?.["env"])["SHARD"];
@@ -107,10 +113,10 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
-  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
+  require(JSON.stringify(Arr.sort(Object.keys(map(testStep?.["env"])), Order.String)) ===
     JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
-  const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);
+  const e2eStep = Option.getOrUndefined(Arr.findFirst(nextSteps, (s) => s["run"] === e2eCommand));
   const e2eShard = map(e2eStep?.["env"])["SHARD"];
   require(typeof e2eShard === "string" &&
     new RegExp(`^${SHARD_OF}/${denominator("e2e", e2eCount)}$`).test(
@@ -124,7 +130,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
     CHANGED_FROM_BASE, "next's end-to-end step narrows with --changed from changes' base alone");
 
   // E3. Both kinds of leg write next.json, so the advice comes after both test steps.
-  const advice = nextSteps.find((s) => s["run"] === adviceCommand);
+  const advice = Option.getOrUndefined(Arr.findFirst(nextSteps, (s) => s["run"] === adviceCommand));
   require(testStep !== undefined &&
     e2eStep !== undefined &&
     advice !== undefined &&
@@ -143,7 +149,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
       "matrix.shard == '1' && github.event_name == 'pull_request'",
     ],
   ] as const) {
-    const matches = nextSteps.filter((s) => s["run"] === command);
+    const matches = Arr.filter(nextSteps, (s) => s["run"] === command);
     require(matches.length === 1 &&
       compact(matches[0]?.["if"]) ===
         compact(condition), `next runs ${command} once, only on ${leg}, with its pinned condition`);

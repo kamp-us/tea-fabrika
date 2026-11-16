@@ -1,3 +1,4 @@
+import { Array as Arr, Option } from "effect";
 import {
   env,
   place,
@@ -86,21 +87,24 @@ const plants: Plant[] = [
   // Q1: every job tests the tree the record names, `github.sha`'s, so no checkout is told another
   // commit or repository; and the record's upload is the only upload, since `matched` trusts any
   // artifact of the record's name.
-  ...(
+  ...Arr.map(
     [
       ["changes", "ref", `\${{ github.event.pull_request.head.sha }}`],
       ["check", "ref", `\${{ github.event.pull_request.head.ref }}`],
       ["check", "repository", `\${{ github.event.pull_request.head.repo.full_name }}`],
       ["ci-required", "ref", "main"],
-    ] as const
-  ).map(([job, key, value]): [string, (w: Workflow) => void] => [
-    `Q1: ${job}'s checkout is told its ${key}`,
-    (w) => {
-      const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
-      (checkout["with"] as Record<string, unknown>)[key] = value;
-    },
-  ]),
-  ...(["typecheck", "next"] as const).map((job): [string, (w: Workflow) => void] => [
+    ] as const,
+    ([job, key, value]): [string, (w: Workflow) => void] => [
+      `Q1: ${job}'s checkout is told its ${key}`,
+      (w) => {
+        const checkout = Option.getOrThrow(
+          Arr.findFirst(stepsOf(w, job), (s) => String(s["uses"]).startsWith("actions/checkout@")),
+        );
+        (checkout["with"] as Record<string, unknown>)[key] = value;
+      },
+    ],
+  ),
+  ...Arr.map(["typecheck", "next"] as const, (job): [string, (w: Workflow) => void] => [
     `Q1: ${job} checks out the branch's head`,
     (w) => {
       stepsOf(w, job).unshift({
@@ -137,8 +141,9 @@ const plants: Plant[] = [
     "Q1: typecheck uploads a timings file, outside the test jobs",
     (w) => stepsOf(w, "typecheck").splice(-1, 0, timings()),
   ],
-  ...(["next"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
-    const upload = (w: Workflow) => (stepsOf(w, job) as Timed[]).find((s) => s["name"] === "timings")!;
+  ...Arr.flatMap(["next"] as const, (job): [string, (w: Workflow) => void][] => {
+    const upload = (w: Workflow) =>
+      Option.getOrThrow(Arr.findFirst(stepsOf(w, job) as Timed[], (s) => s["name"] === "timings"));
     return [
       [
         `Q1: ${job}'s timings upload is named as a tested-tree record`,

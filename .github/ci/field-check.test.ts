@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, Effect, Schema, Array as Arr, pipe, Order } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
@@ -128,9 +128,9 @@ it("added rows preserve occurrence counts and head line numbers", () => {
   const line = fc.string({ maxLength: 24 }).map((s) => JSON.stringify(s));
   fc.assert(
     fc.property(fc.array(line, { maxLength: 15 }), fc.array(line, { minLength: 1, maxLength: 15 }), (base, extra) => {
-      const head = [...base.toReversed(), ...extra, ...(base.length ? [base[0]!] : [])];
+      const head = [...Arr.reverse(base), ...extra, ...(base.length ? [base[0]!] : [])];
       const remaining = [...base];
-      const expected = head.flatMap((text, i) => {
+      const expected = Arr.flatMap(head, (text, i) => {
         const old = remaining.indexOf(text);
 
         if (old < 0) {
@@ -140,9 +140,11 @@ it("added rows preserve occurrence counts and head line numbers", () => {
         remaining.splice(old, 1);
         return [];
       });
-      expect(checker.selectAdded(base.length ? `${base.join("\n")}\n` : "", `${head.join("\n")}\n`)).toEqual(expected);
+      expect(checker.selectAdded(base.length ? `${Arr.join(base, "\n")}\n` : "", `${Arr.join(head, "\n")}\n`)).toEqual(
+        expected,
+      );
       expect(checker.selectAdded("", "\n")).toEqual([{ line: 1, text: "" }]);
-      expect(checker.selectAdded(`${head.join("\n")}\n`, `${head.join("\n")}\n`)).toEqual([]);
+      expect(checker.selectAdded(`${Arr.join(head, "\n")}\n`, `${Arr.join(head, "\n")}\n`)).toEqual([]);
     }),
     options,
   );
@@ -172,7 +174,7 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
       expect(checker.readFieldFiles(base, head, "push", run)).toEqual([
         { file, base: existed ? baseText : "", head: remains ? headText : "" },
       ]);
-      expect(calls.some((args) => args[0] === "merge-base")).toBe(false);
+      expect(Arr.some(calls, (args) => args[0] === "merge-base")).toBe(false);
       const reads = calls.length;
 
       for (let at = 0; at < reads; at++) {
@@ -200,7 +202,12 @@ const gitIn =
       { encoding: "utf8", env: gitEnv },
     );
 
-const text = (rows: readonly string[]) => rows.map((row) => `${row}\n`).join("");
+const text = (rows: readonly string[]) =>
+  pipe(
+    rows,
+    Arr.map((row) => `${row}\n`),
+    Arr.join(""),
+  );
 
 it("a PR's field rows compare to the merge base while main moves ahead", () => {
   const row = fc.stringMatching(/^[ -~]{0,20}$/);
@@ -243,7 +250,7 @@ it("a PR's field rows compare to the merge base while main moves ahead", () => {
           );
 
           for (const input of files) {
-            expect(checker.selectAdded(input.base, input.head).map((added) => added.text)).toEqual(mine);
+            expect(Arr.map(checker.selectAdded(input.base, input.head), (added) => added.text)).toEqual(mine);
           }
         } finally {
           rmSync(dir, { recursive: true, force: true });
@@ -300,7 +307,7 @@ it("ticket 988: the local reader gives the field job's inputs once the tree is c
           }
 
           const plan = [
-            ...changes.map((how, i) => [files[i]!, how] as const),
+            ...Arr.map(changes, (how, i) => [files[i]!, how] as const),
             ["field/runs/2026-11-13-c.json", newRow],
           ];
 
@@ -323,7 +330,10 @@ it("ticket 988: the local reader gives the field job's inputs once the tree is c
           const base = git(["rev-parse", "main"]).stdout.trim();
           const head = commit("the writer commits");
           const sorted = <A extends { file: string }>(inputs: readonly A[]) =>
-            inputs.toSorted((a, b) => (a.file < b.file ? -1 : 1));
+            Arr.sort(
+              inputs,
+              Order.mapInput(Order.String, (input: A) => input.file),
+            );
           expect(local).toEqual(sorted(checker.readFieldFiles(base, head, "pull_request", git)));
         } finally {
           rmSync(dir, { recursive: true, force: true });
@@ -358,9 +368,11 @@ it("a run row written before the plan change passes without note", () => {
       Arbitrary.all([Arbitrary.schema(Run), daysBack]),
       ([row, back]) => {
         const date = new Date(Date.UTC(2026, 10, 8) - back * 86_400_000).toISOString().slice(0, 10);
-        const old = Object.fromEntries(Object.entries(own({ ...row, date }, "run")).filter(([key]) => key !== "note"));
+        const old = Object.fromEntries(
+          Arr.filter(Object.entries(own({ ...row, date }, "run")), ([key]) => key !== "note"),
+        );
         const report = checker.checkFile(fileOf("runs"), "", `${JSON.stringify(old)}\n`);
-        return report.exitCode === 0 && report.findings.every((f) => f._tag !== "error") && report.added === 1;
+        return report.exitCode === 0 && Arr.every(report.findings, (f) => f._tag !== "error") && report.added === 1;
       },
       schemaOptions,
     ),
@@ -385,7 +397,7 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
 
   for (const [schema, file, fields, key, required] of [
     [Note, fileOf("notes"), noteFields, "id", noteRequired],
-    [OldNote, fileOf("notes"), noteFields.map(beforeRename), "id", noteRequired.map(beforeRename)],
+    [OldNote, fileOf("notes"), Arr.map(noteFields, beforeRename), "id", Arr.map(noteRequired, beforeRename)],
     [Run, fileOf("runs"), runFields, "run", runRequired],
   ] as const) {
     const result = Effect.runSync(
@@ -394,16 +406,17 @@ it("valid cores pass, each blocking field rejects bad types, optional facts stay
         (row) => {
           const text = JSON.stringify({ ...row, extra: { future: true }, ticket: 342, pr: null });
           const good = checker.checkFile(file, "", `${text}\n`);
-          const broken = fields.every((field) => {
+          const broken = Arr.every(fields, (field) => {
             const bad = checker.checkFile(file, "", `${JSON.stringify({ ...row, [field]: { bad: true } })}\n`);
-            return bad.exitCode !== 0 && bad.findings.some((f) => f._tag === "error" && f.field === field);
+            return bad.exitCode !== 0 && Arr.some(bad.findings, (f) => f._tag === "error" && f.field === field);
           });
-          const missing = required.every(
+          const missing = Arr.every(
+            required,
             (field) =>
               checker.checkFile(
                 file,
                 "",
-                JSON.stringify(Object.fromEntries(Object.entries(row).filter(([key]) => key !== field))),
+                JSON.stringify(Object.fromEntries(Arr.filter(Object.entries(row), ([key]) => key !== field))),
               ).exitCode !== 0,
           );
           return good.exitCode === 0 && good.added === 1 && broken && missing;
@@ -421,27 +434,34 @@ it("negative and nonfinite counts, missing cores and wrong dates fail without co
       Arbitrary.map(Arbitrary.schema(Run), (row) => own(row, "run")),
       (row) => {
         const errors = [
-          ...[
-            "tokens",
-            "tools",
-            "minutes",
-            "active",
-            "costUsd",
-            "listUsd",
-            "billed",
-            "inputTokens",
-            "cachedTokens",
-            "outputTokens",
-          ].flatMap((field) => [-1, "0", true].map((bad) => ({ ...row, [field]: bad }))),
-          ...Object.keys(Run.fields)
-            .slice(0, 10)
+          ...Arr.flatMap(
+            [
+              "tokens",
+              "tools",
+              "minutes",
+              "active",
+              "costUsd",
+              "listUsd",
+              "billed",
+              "inputTokens",
+              "cachedTokens",
+              "outputTokens",
+            ],
+            (field) => Arr.map([-1, "0", true], (bad) => ({ ...row, [field]: bad })),
+          ),
+          ...pipe(
+            Object.keys(Run.fields).slice(0, 10),
             // `note` is optional for rows written before the plan change.
-            .filter((field) => field !== "note")
-            .map((field) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== field))),
+            Arr.filter((field) => field !== "note"),
+            Arr.map((field) => Object.fromEntries(Arr.filter(Object.entries(row), ([key]) => key !== field))),
+          ),
           { ...row, date: "yesterday" },
         ];
         return (
-          errors.every((bad) => checker.checkFile(fileOf("runs"), "", `${JSON.stringify(bad)}\n`).exitCode !== 0) &&
+          Arr.every(
+            errors,
+            (bad) => checker.checkFile(fileOf("runs"), "", `${JSON.stringify(bad)}\n`).exitCode !== 0,
+          ) &&
           checker.checkFile(fileOf("runs"), "", JSON.stringify(row).replace(/"tokens":[^,}]*/, '"tokens":1e999'))
             .exitCode !== 0
         );
@@ -464,7 +484,7 @@ it("a run row's plants pass whole, and one plant with a result outside red and g
     ]),
     ([plant, word, key, drop]) =>
       drop
-        ? Object.fromEntries(Object.entries(plant).filter(([k]) => k !== key))
+        ? Object.fromEntries(Arr.filter(Object.entries(plant), ([k]) => k !== key))
         : { ...plant, result: word === "red" || word === "green" ? `${word}!` : word },
   );
   const result = Effect.runSync(
@@ -482,7 +502,7 @@ it("a run row's plants pass whole, and one plant with a result outside red and g
         return (
           check(plants).exitCode === 0 &&
           report.exitCode !== 0 &&
-          report.findings.some((f) => f._tag === "error" && f.field === "plants")
+          Arr.some(report.findings, (f) => f._tag === "error" && f.field === "plants")
         );
       },
       schemaOptions,
@@ -494,7 +514,10 @@ it("a run row's plants pass whole, and one plant with a result outside red and g
 it("advice warns with exit zero; errors identify head lines without row content", () => {
   fc.assert(
     fc.property(fc.integer({ min: 1, max: 12 }), fc.string({ minLength: 1, maxLength: 30 }), (old, payload) => {
-      const base = `${Array.from({ length: old }, () => "old malformed row").join("\n")}\n`;
+      const base = `${Arr.join(
+        Array.from({ length: old }, () => "old malformed row"),
+        "\n",
+      )}\n`;
       const marker = `private-${JSON.stringify(payload)}-end\r\n%`;
       const row = {
         id: named,
@@ -508,17 +531,17 @@ it("advice warns with exit zero; errors identify head lines without row content"
       const report = checker.checkFile(fileOf("notes"), "", JSON.stringify(row));
       expect(report.exitCode).toBe(0);
       expect(report.added).toBe(1);
-      expect(report.findings.some((f) => f._tag === "warning")).toBe(true);
-      expect(report.findings.every((f) => f.line === 1 && f.file === fileOf("notes"))).toBe(true);
+      expect(Arr.some(report.findings, (f) => f._tag === "warning")).toBe(true);
+      expect(Arr.every(report.findings, (f) => f.line === 1 && f.file === fileOf("notes"))).toBe(true);
       const bad = checker.checkFile(fileOf("notes"), "", JSON.stringify({ ...row, what: 42 }));
       expect(bad.exitCode).not.toBe(0);
-      expect(bad.findings.some((f) => f._tag === "error" && f.line === 1 && f.field === "what")).toBe(true);
+      expect(Arr.some(bad.findings, (f) => f._tag === "error" && f.line === 1 && f.field === "what")).toBe(true);
       // An old log names the head line of each line added to it, never the line's text.
       const history = checker.checkFile("field/notes.jsonl", base, `${base}${JSON.stringify(row)}\n${marker}\n`);
       expect(history.exitCode).not.toBe(0);
       expect(history.findings.length).toBeGreaterThanOrEqual(2);
       expect(history.findings[0]?.line).toBe(old + 1);
-      expect(history.findings.every((f) => f._tag === "error" && f.field === "row" && f.line > old)).toBe(true);
+      expect(Arr.every(history.findings, (f) => f._tag === "error" && f.field === "row" && f.line > old)).toBe(true);
 
       for (const annotation of [...report.annotations, ...bad.annotations, ...history.annotations]) {
         expect(annotation).not.toContain(marker);
@@ -528,7 +551,7 @@ it("advice warns with exit zero; errors identify head lines without row content"
 
       const unknown = checker.checkFile("field/future.jsonl", "", `${JSON.stringify({ text: marker })}\n`);
       expect(unknown.exitCode).toBe(0);
-      expect(unknown.findings.some((f) => f._tag === "warning")).toBe(true);
+      expect(Arr.some(unknown.findings, (f) => f._tag === "warning")).toBe(true);
 
       for (const text of ["null", "[]", '"text"', "1", "{", "\n"]) {
         expect(checker.checkFile("field/future.jsonl", "", text).exitCode).not.toBe(0);
@@ -577,12 +600,16 @@ const errorsOf = (row: unknown) => {
   const report = checker.checkFile(fileOf("findings"), "", `${JSON.stringify(row)}\n`);
   return {
     exitCode: report.exitCode,
-    fields: report.findings.filter((f) => f._tag === "error").map((f) => f.field),
+    fields: pipe(
+      report.findings,
+      Arr.filter((f) => f._tag === "error"),
+      Arr.map((f) => f.field),
+    ),
   };
 };
 
 const without = (row: object, field: string) =>
-  Object.fromEntries(Object.entries(row).filter(([key]) => key !== field));
+  Object.fromEntries(Arr.filter(Object.entries(row), ([key]) => key !== field));
 
 it("a finding or rated row passes whole, and each core field blocks when wrong or missing", () => {
   for (const schema of [Found, Rated]) {
@@ -592,7 +619,7 @@ it("a finding or rated row passes whole, and each core field blocks when wrong o
         Arbitrary.map(Arbitrary.schema(schema), (row) => ("id" in row ? own(row, "id") : row)),
         (row) => {
           const good = errorsOf({ ...row, extra: { future: true } });
-          const each = Object.keys(schema.fields).every((field) => {
+          const each = Arr.every(Object.keys(schema.fields), (field) => {
             const bad = errorsOf({ ...row, [field]: { bad: true } });
             const gone = errorsOf(without(row, field));
             // A row with no readable `_tag` is refused as a whole.
@@ -627,10 +654,10 @@ it("a finding blocks on a rule outside the closed list, on `at`, and on empty pr
           errorsOf({ ...row, at: row.location }).fields.includes("at") &&
           place.fields.includes("at") &&
           place.fields.includes("location") &&
-          ["says", "proof", "cost", "by"].every((field) =>
+          Arr.every(["says", "proof", "cost", "by"], (field) =>
             errorsOf({ ...row, [field]: empty }).fields.includes(field),
           ) &&
-          [0, -1, 1.5, "3", null].every((line) =>
+          Arr.every([0, -1, 1.5, "3", null], (line) =>
             errorsOf({ ...row, location: { ...row.location, line } }).fields.includes("location"),
           ) &&
           errorsOf({ ...row, location: { line: row.location.line, path: empty } }).fields.includes("location") &&
@@ -663,17 +690,17 @@ it("a finding's unusual sha, references and path, and a rating's unusual finding
         const found = checker.checkFile(fileOf("findings"), "", JSON.stringify(odd));
         const rating = checker.checkFile(fileOf("findings"), "", JSON.stringify({ ...rated, finding: `id ${row.id}` }));
         // A rating may point at an old counter id or a new file's name.
-        const pointed = ["2026-11-10-f36", named].map((finding) =>
+        const pointed = Arr.map(["2026-11-10-f36", named], (finding) =>
           checker.checkFile(fileOf("findings"), "", JSON.stringify({ ...rated, finding, date: "2026-11-11" })),
         );
-        const warned = (report: typeof found) => report.findings.map((f) => f.field);
+        const warned = (report: typeof found) => Arr.map(report.findings, (f) => f.field);
         return (
-          [found, rating].every((report) => report.exitCode === 0 && report.added === 1) &&
-          [...found.findings, ...rating.findings].every((f) => f._tag === "warning") &&
-          ["head", "ticket", "pr", "location"].every((field) => warned(found).includes(field)) &&
+          Arr.every([found, rating], (report) => report.exitCode === 0 && report.added === 1) &&
+          Arr.every([...found.findings, ...rating.findings], (f) => f._tag === "warning") &&
+          Arr.every(["head", "ticket", "pr", "location"], (field) => warned(found).includes(field)) &&
           warned(rating).includes("finding") &&
-          pointed.every((report) => report.exitCode === 0 && !warned(report).includes("finding")) &&
-          found.annotations.every((a) => !a.includes(marker))
+          Arr.every(pointed, (report) => report.exitCode === 0 && !warned(report).includes("finding")) &&
+          Arr.every(found.annotations, (a) => !a.includes(marker))
         );
       },
       schemaOptions,
@@ -699,10 +726,10 @@ it("every line added to an old log fails at its head line, and an untouched one 
         const report = checker.checkFile(file, text(base), text([...base, ...extra]));
         expect(report.exitCode).toBe(1);
         expect(report.added).toBe(extra.length);
-        expect(report.findings.map((f) => [f._tag, f.field, f.line])).toEqual(
-          extra.map((_, i) => ["error", "row", base.length + i + 1]),
+        expect(Arr.map(report.findings, (f) => [f._tag, f.field, f.line])).toEqual(
+          Arr.map(extra, (_, i) => ["error", "row", base.length + i + 1]),
         );
-        expect(report.annotations.every((a) => a.includes(`field/${log}/<date>-<slug>.json`))).toBe(true);
+        expect(Arr.every(report.annotations, (a) => a.includes(`field/${log}/<date>-<slug>.json`))).toBe(true);
         expect(checker.checkFile(file, text(base), text(base))).toMatchObject({ exitCode: 0, added: 0, findings: [] });
       },
     ),
@@ -719,25 +746,29 @@ it("a row file is named by its date and a slug, and its id is that name", () => 
       ([note, run, name]) => {
         const stem = `2026-11-11-${name}`;
         const errors = (file: string, row: object) =>
-          checker
-            .checkFile(file, "", JSON.stringify(row))
-            .findings.filter((f) => f._tag === "error")
-            .map((f) => f.field);
+          pipe(
+            checker.checkFile(file, "", JSON.stringify(row)).findings,
+            Arr.filter((f) => f._tag === "error"),
+            Arr.map((f) => f.field),
+          );
         const good = [
           errors(`field/notes/${stem}.json`, { ...note, id: stem }),
           errors(`field/runs/${stem}.json`, { ...run, run: stem }),
         ];
-        const misnamed = [
-          `field/notes/${name}.json`,
-          `field/notes/${stem}X.json`,
-          `field/notes/${stem}.jsonl`,
-          `field/notes/${stem}`,
-          `field/notes/2026-11/${stem}.json`,
-          `field/notes/2026-11-11_${name}.json`,
-        ].map((file) => errors(file, { ...note, id: stem }));
+        const misnamed = Arr.map(
+          [
+            `field/notes/${name}.json`,
+            `field/notes/${stem}X.json`,
+            `field/notes/${stem}.jsonl`,
+            `field/notes/${stem}`,
+            `field/notes/2026-11/${stem}.json`,
+            `field/notes/2026-11-11_${name}.json`,
+          ],
+          (file) => errors(file, { ...note, id: stem }),
+        );
         return (
-          good.every((fields) => fields.length === 0) &&
-          misnamed.every((fields) => fields.includes("file")) &&
+          Arr.every(good, (fields) => fields.length === 0) &&
+          Arr.every(misnamed, (fields) => fields.includes("file")) &&
           errors(`field/notes/${stem}.json`, { ...note, id: `${stem}-x` }).includes("id") &&
           errors(`field/runs/${stem}.json`, { ...run, run: `${stem}-x` }).includes("run") &&
           errors(`field/runs/${stem}.json`, without(run, "run")).includes("run")
@@ -765,7 +796,13 @@ it("a row file is never edited or deleted", () => {
       fc.pre(base !== good);
       const report = checker.checkFile(fileOf("notes"), base, deleted ? "" : good);
       expect(report.exitCode).toBe(1);
-      expect(report.findings.filter((f) => f._tag === "error").map((f) => f.field)).toEqual(["row"]);
+      expect(
+        pipe(
+          report.findings,
+          Arr.filter((f) => f._tag === "error"),
+          Arr.map((f) => f.field),
+        ),
+      ).toEqual(["row"]);
       expect(checker.checkFile(fileOf("notes"), "", good).exitCode).toBe(0);
     }),
     options,
@@ -777,20 +814,22 @@ it("a row file is never edited or deleted", () => {
 it("a note lists its quests under `quests` or the old `lanes`, never both and never neither", () => {
   const note = { id: named, date: "2026-11-15", stage: "harness", kind: "success", what: "w", fix: null };
   const errors = (row: object) =>
-    checker
-      .checkFile(fileOf("notes"), "", JSON.stringify(row))
-      .findings.filter((f) => f._tag === "error")
-      .map((f) => f.field);
+    pipe(
+      checker.checkFile(fileOf("notes"), "", JSON.stringify(row)).findings,
+      Arr.filter((f) => f._tag === "error"),
+      Arr.map((f) => f.field),
+    );
   expect(errors({ ...note, quests: ["t1"] })).toEqual([]);
   expect(errors({ ...note, lanes: ["t1"] })).toEqual([]);
   expect(errors({ ...note, quests: ["t1"], lanes: ["t1"] })).toEqual(["quests"]);
   expect(errors(note)).toEqual(["quests"]);
   expect(errors({ ...note, lanes: "t1" })).toEqual(["lanes"]);
   const advice = (row: object) =>
-    checker
-      .checkFile(fileOf("notes"), "", JSON.stringify(row))
-      .findings.filter((f) => f.reason === "quest member is not text")
-      .map((f) => f.field);
+    pipe(
+      checker.checkFile(fileOf("notes"), "", JSON.stringify(row)).findings,
+      Arr.filter((f) => f.reason === "quest member is not text"),
+      Arr.map((f) => f.field),
+    );
   expect(advice({ ...note, quests: [42] })).toEqual(["quests"]);
   expect(advice({ ...note, lanes: [42] })).toEqual(["lanes"]);
 });
@@ -805,7 +844,7 @@ it("real notes written before the rename pass whole, as they are saved", () => {
     const text = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
     expect(Object.keys(JSON.parse(text))).toContain("lanes");
     const report = checker.checkFile(file, "", text);
-    expect(report.findings.filter((f) => f._tag === "error")).toEqual([]);
+    expect(Arr.filter(report.findings, (f) => f._tag === "error")).toEqual([]);
     expect(report.exitCode).toBe(0);
   }
 });
@@ -825,22 +864,26 @@ it("the field job reads the old logs and every path in a log's folder", () => {
     ["field/nested/a.jsonl", false],
     ["tools/field/runs/2026-11-11-a.json", false],
   ];
-  const paths = vectors.map(([path]) => path);
+  const paths = Arr.map(vectors, ([path]) => path);
   const base = "b".repeat(40),
     head = "c".repeat(40);
   const run = (args: string[]) => ({
     status: 0,
     stdout:
       args[0] === "diff"
-        ? `${paths.join("\0")}\0`
+        ? `${Arr.join(paths, "\0")}\0`
         : args[0] === "ls-tree"
           ? args[4] === head
-            ? `${paths.join("\0")}\0`
+            ? `${Arr.join(paths, "\0")}\0`
             : ""
           : "{}",
   });
-  expect(checker.readFieldFiles(base, head, "push", run).map((input) => input.file)).toEqual(
-    vectors.filter(([, read]) => read).map(([path]) => path),
+  expect(Arr.map(checker.readFieldFiles(base, head, "push", run), (input) => input.file)).toEqual(
+    pipe(
+      vectors,
+      Arr.filter(([, read]) => read),
+      Arr.map(([path]) => path),
+    ),
   );
 });
 
@@ -848,7 +891,11 @@ it("the field job reads the old logs and every path in a log's folder", () => {
 const day = Arbitrary.schema(Schema.Literals(["2026-11-09", "2026-11-10", "2026-11-11", "2025-01-31"]));
 
 const fieldsOf = (report: ReturnType<typeof checker.checkFile>, tag: "error" | "warning") =>
-  report.findings.filter((f) => f._tag === tag).map((f) => [f.field, f.reason]);
+  pipe(
+    report.findings,
+    Arr.filter((f) => f._tag === tag),
+    Arr.map((f) => [f.field, f.reason]),
+  );
 
 it("a row file warns on its date exactly when the row's date differs from the file name's, and only warns", () => {
   const result = Effect.runSync(
@@ -856,14 +903,15 @@ it("a row file warns on its date exactly when the row's date differs from the fi
       Arbitrary.all([Arbitrary.schema(Note), Arbitrary.schema(Run), slug, day, day]),
       ([note, run, name, fileDay, rowDay]) => {
         const stem = `${fileDay}-${name}`;
-        return [
-          checker.checkFile(`field/notes/${stem}.json`, "", JSON.stringify({ ...note, id: stem, date: rowDay })),
-          checker.checkFile(`field/runs/${stem}.json`, "", JSON.stringify({ ...run, run: stem, date: rowDay })),
-        ].every(
+        return Arr.every(
+          [
+            checker.checkFile(`field/notes/${stem}.json`, "", JSON.stringify({ ...note, id: stem, date: rowDay })),
+            checker.checkFile(`field/runs/${stem}.json`, "", JSON.stringify({ ...run, run: stem, date: rowDay })),
+          ],
           (report) =>
             report.exitCode === 0 &&
             fieldsOf(report, "error").length === 0 &&
-            fieldsOf(report, "warning").some(([field]) => field === "date") === (rowDay !== fileDay),
+            Arr.some(fieldsOf(report, "warning"), ([field]) => field === "date") === (rowDay !== fileDay),
         );
       },
       schemaOptions,
@@ -883,7 +931,7 @@ it("a run row file blocks on its run id exactly when the id is not its file name
         const value = mine ? stem : id;
         const row = value === undefined ? without(run, "run") : { ...run, run: value };
         const report = checker.checkFile(`field/runs/${stem}.json`, "", JSON.stringify(row));
-        const blocked = fieldsOf(report, "error").some(([field]) => field === "run");
+        const blocked = Arr.some(fieldsOf(report, "error"), ([field]) => field === "run");
         return blocked === (value !== stem) && report.exitCode === (value === stem ? 0 : 1);
       },
       schemaOptions,
@@ -904,12 +952,16 @@ it("each added line that is not JSON is an invalid-JSON error at its own line, a
   );
   fc.assert(
     fc.property(fc.uniqueArray(line, { minLength: 1, maxLength: 8, selector: (l) => l.text }), (lines) => {
-      const report = checker.checkFile("field/future.jsonl", "", text(lines.map((l) => l.text)));
-      const invalid = report.findings.filter((f) => f.reason === "invalid JSON").map((f) => [f._tag, f.field, f.line]);
-      expect(invalid).toEqual(lines.flatMap((l, i) => (l.json ? [] : [["error", "row", i + 1]])));
-      expect(report.exitCode).toBe(lines.every((l) => l.json) ? 0 : 1);
+      const report = checker.checkFile("field/future.jsonl", "", text(Arr.map(lines, (l) => l.text)));
+      const invalid = pipe(
+        report.findings,
+        Arr.filter((f) => f.reason === "invalid JSON"),
+        Arr.map((f) => [f._tag, f.field, f.line]),
+      );
+      expect(invalid).toEqual(Arr.flatMap(lines, (l, i) => (l.json ? [] : [["error", "row", i + 1]])));
+      expect(report.exitCode).toBe(Arr.every(lines, (l) => l.json) ? 0 : 1);
       const file = checker.checkFile(fileOf("notes"), "", lines[0]!.text);
-      expect(fieldsOf(file, "error").some(([, reason]) => reason === "invalid JSON")).toBe(!lines[0]!.json);
+      expect(Arr.some(fieldsOf(file, "error"), ([, reason]) => reason === "invalid JSON")).toBe(!lines[0]!.json);
     }),
     options,
   );

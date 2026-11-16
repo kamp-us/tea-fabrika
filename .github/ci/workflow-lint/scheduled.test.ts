@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -39,9 +40,9 @@ const split = (w: Workflow, leaves: (shard: string) => boolean) => {
   const tests = w.jobs["tests"]!;
   const all = tests.strategy!.matrix.shard as string[];
   const apart = structuredClone(tests);
-  apart.strategy!.matrix.shard = all.filter(leaves);
+  apart.strategy!.matrix.shard = Arr.filter(all, leaves);
   apart.strategy!["max-parallel"] = 1;
-  tests.strategy!.matrix.shard = all.filter((shard) => !leaves(shard));
+  tests.strategy!.matrix.shard = Arr.filter(all, (shard) => !leaves(shard));
   tests.strategy!["max-parallel"] = 1;
   w.jobs["split"] = apart;
   (w.jobs["report"]!.needs as string[]).push("split");
@@ -49,7 +50,7 @@ const split = (w: Workflow, leaves: (shard: string) => boolean) => {
 
 /** The one step of `job` named `name`, so a plant never depends on where a step sits. */
 const step = (w: Workflow, job: string, name: string): Step => {
-  const found = w.jobs[job]!.steps.filter((s) => s["name"] === name);
+  const found = Arr.filter(w.jobs[job]!.steps, (s) => s["name"] === name);
 
   if (found.length !== 1) {
     throw new Error(`${job} has ${found.length} steps named "${name}"`);
@@ -442,7 +443,7 @@ const plants: [string, (w: Workflow) => void][] = [
   ],
   // TT1 and TT2, as in check.yaml: each leg's time table and its timings file. A leg's steps are
   // copied before a plant, so a plant on one leg leaves the other's alias as it was.
-  ...(["tests"] as const).flatMap((job): [string, (w: Workflow) => void][] => {
+  ...Arr.flatMap(["tests"] as const, (job): [string, (w: Workflow) => void][] => {
     const own = (w: Workflow, name: string) => {
       const list = w.jobs[job]!.steps;
       const at = list.indexOf(step(w, job, name));

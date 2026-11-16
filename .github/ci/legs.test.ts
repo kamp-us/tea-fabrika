@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Array as Arr, Order } from "effect";
 import * as fc from "fast-check";
 import { beforeAll, expect, it } from "vitest";
 import { readers } from "./changes.mjs";
@@ -78,9 +79,9 @@ const picked = () =>
 
 /** A file's seconds as legs.ts counts them: its row, else the table's median. */
 const total = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const rows = Object.values(table).toSorted((a, b) => a - b);
+  const rows = Arr.sort(Object.values(table), Order.Number);
   const unmeasured = rows[Math.floor((rows.length - 1) / 2)] ?? 1;
-  return files.reduce((sum, path) => sum + (Object.hasOwn(table, path) ? table[path]! : unmeasured), 0);
+  return Arr.reduce(files, 0, (sum, path) => sum + (Object.hasOwn(table, path) ? table[path]! : unmeasured));
 };
 
 it("property: no selection gives no legs, so next skips", () => {
@@ -114,7 +115,7 @@ it("property: a selection whose seconds fit the budget gives one leg", () => {
       const most = (kind === "vitest" ? limit.vitest : limit.e2e) / 6;
       const files = Array.from(new Set(Array.from({ length: count }, (_, i) => pool[(at + i * 7) % pool.length]!)));
       const table = Object.fromEntries(
-        files.flatMap((path, i) => (shares[i] === undefined ? [] : [[path, shares[i] * most]])),
+        Arr.flatMap(files, (path, i) => (shares[i] === undefined ? [] : [[path, shares[i] * most]])),
       );
       return { kind, files, table };
     });
@@ -226,7 +227,7 @@ it("property: a sized pull request without the visual label starts no end-to-end
       const legs = size(plainPr, selected, full, limit, table);
       expect(legs.e2e).toBe(0);
       expect(legs.vitest).toBe(size(pr, selected, full, limit, table).vitest);
-      expect(shards(legs).some((leg) => leg.startsWith("e2e-"))).toBe(false);
+      expect(Arr.some(shards(legs), (leg) => leg.startsWith("e2e-"))).toBe(false);
     }),
     options,
   );
@@ -240,9 +241,11 @@ it("property: every selected file lands on exactly one leg, on any count up to t
       const files = [...selected.vitest, ...selected.e2e];
       const legs = split(files, count, table);
       expect(legs).toHaveLength(count);
-      expect(legs.flat().toSorted()).toEqual(files.toSorted());
+      expect(Arr.sort(legs.flat(), Order.String)).toEqual(Arr.sort(files, Order.String));
       const sized = fewest(selected.vitest, full.vitest, limit.vitest, table);
-      expect(split(selected.vitest, sized, table).flat().toSorted()).toEqual(selected.vitest.toSorted());
+      expect(Arr.sort(split(selected.vitest, sized, table).flat(), Order.String)).toEqual(
+        Arr.sort(selected.vitest, Order.String),
+      );
     }),
     options,
   );
@@ -260,7 +263,7 @@ const budgets = fc.double({ min: 1, max: 1200, noNaN: true }).map((seconds) => (
 
 /** The longest of `count` legs' table seconds when `split` cuts `files`. */
 const longestOf = (files: readonly string[], count: number, table: Readonly<Record<string, number>>) =>
-  Math.max(0, ...split(files, count, table).map((leg) => total(leg, table)));
+  Math.max(0, ...Arr.map(split(files, count, table), (leg) => total(leg, table)));
 
 /**
  * A budget, and either some of the real files with a scratch table, or up to 12 real vitest files
@@ -280,8 +283,8 @@ const budgeted = () =>
             fc.array(fc.integer({ min: 0, max: 120 }), { minLength: 12, maxLength: 12 }),
           )
           .map(([at, shares]) => {
-            const files = at.map((i) => vitest[i]!);
-            const table = Object.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
+            const files = Arr.map(at, (i) => vitest[i]!);
+            const table = Object.fromEntries(Arr.map(files, (path, i) => [path, (shares[i]! / 100) * budget.limit]));
             return { selected: { vitest: files, e2e: [] }, table };
           }),
       ),
@@ -328,7 +331,7 @@ it("property: a sized run's vitest legs pass the budget by at most its longest f
     fc.property(budgeted(), ([{ seconds, limit: most }, { selected, table }]) => {
       fc.pre(total(selected.vitest, table) <= full.vitest * most);
       const legs = size(pr, selected, full, limits(nextMinutes(workflow), seconds), table);
-      const heaviest = Math.max(0, ...selected.vitest.map((path) => total([path], table)));
+      const heaviest = Math.max(0, ...Arr.map(selected.vitest, (path) => total([path], table)));
       expect(longestOf(selected.vitest, legs.vitest, table)).toBeLessThanOrEqual(most + heaviest + 1e-9);
     }),
     options,
@@ -374,7 +377,7 @@ it("property: a run of the reader tests alone is sized as a run of all of next/ 
 it("scenario: the reader tests alone, with today's table and budget, start one vitest leg", () => {
   // The real reader files and table: a queue group of them started all five legs, four for 12 s of
   // tests or less (run 43656691809). Plant: the scope check back in `sizes` (red: five legs).
-  const files = readerFiles().filter((path) => !/\.(?:integration|visual)\.test\.tsx?$/.test(path));
+  const files = Arr.filter(readerFiles(), (path) => !/\.(?:integration|visual)\.test\.tsx?$/.test(path));
   expect(files.length).toBeGreaterThan(0);
   const run: Run = { event: "merge_group", scope: "readers", base: "", visual: false };
   expect(size(run, { vitest: files, e2e: [] }, full, limit)).toEqual({ vitest: 1, e2e: 0 });
@@ -418,7 +421,7 @@ it("scenario: the main prints the full matrix to GITHUB_OUTPUT in the merge queu
 // Each plant was run once on legs.ts and restored; each turned its law red.
 
 /** The real reader test files, as Vitest matches changes' paths: the file's path holds one. */
-const readerFiles = () => vitest.filter((path) => readers.some((reader) => path.includes(reader)));
+const readerFiles = () => Arr.filter(vitest, (path) => Arr.some(readers, (reader) => path.includes(reader)));
 
 it("property: a sized run's vitest files are what --changed picked and every reader test, each once", () => {
   // Plants: `[...changed].toSorted()` (red: a reader --changed missed is gone); the two lists joined
@@ -428,7 +431,7 @@ it("property: a sized run's vitest files are what --changed picked and every rea
     fc.property(fc.subarray(vitest), (changed) => {
       const files = withReaders(changed, readerFiles());
       expect(new Set(files).size).toBe(files.length);
-      expect(files).toEqual([...new Set([...changed, ...readerFiles()])].toSorted());
+      expect(files).toEqual(Arr.sort([...new Set([...changed, ...readerFiles()])], Order.String));
     }),
     options,
   );
@@ -445,7 +448,7 @@ it("property: on a sized run each reader test lands on exactly one leg, whatever
       const placed = split(files, legs.vitest, table);
 
       for (const reader of readerFiles()) {
-        expect(placed.flat().filter((path) => path === reader)).toHaveLength(1);
+        expect(Arr.filter(placed.flat(), (path) => path === reader)).toHaveLength(1);
       }
     }),
     options,
@@ -456,7 +459,7 @@ it("scenario: a change that picks every next/ file runs each reader once, on tod
   // A forceRerunTrigger (a .github/ change, as 1235's own run) picks every file: the readers add
   // nothing, so no file runs twice and the legs are today's five. Plant: no Set (red: 40 more files).
   const files = withReaders(vitest, readerFiles());
-  expect(files).toEqual(vitest.toSorted());
+  expect(files).toEqual(Arr.sort(vitest, Order.String));
   expect(size(pr, { vitest: files, e2e: [] }, full, limit).vitest).toBe(full.vitest);
 });
 
@@ -483,13 +486,13 @@ it("property: the size step prints files only on a sized run with a vitest leg, 
     fc.property(picked(), fc.oneof(line, unsized, readersRun), ({ selected, table }, run) => {
       const legs = size(run, selected, full, limit, table);
       const lines = outputs(run, legs, selected);
-      const files = lines.filter((line) => line.startsWith("files="));
+      const files = Arr.filter(lines, (line) => line.startsWith("files="));
       const onLine = ["pull_request", "merge_group", "push"].includes(run.event);
       const listed =
         onLine &&
         (run.scope === "readers" || (/^[a-f0-9]{40}$/.test(run.base) && !/^0+$/.test(run.base))) &&
         legs.vitest > 0;
-      expect(files).toEqual(listed ? [`files=${selected.vitest.join(" ")}`] : []);
+      expect(files).toEqual(listed ? [`files=${Arr.join(selected.vitest, " ")}`] : []);
     }),
     options,
   );
@@ -504,7 +507,7 @@ it("property: the size step prints the base only on a sized run with an end-to-e
   fc.assert(
     fc.property(picked(), fc.oneof(line, unsized, readersRun), ({ selected, table }, run) => {
       const legs = size(run, selected, full, limit, table);
-      const printed = outputs(run, legs, selected).filter((out) => out.startsWith("base="));
+      const printed = Arr.filter(outputs(run, legs, selected), (out) => out.startsWith("base="));
       const sized = run.scope === "all" && /^[a-f0-9]{40}$/.test(run.base) && !/^0+$/.test(run.base);
       expect(printed).toEqual(sized && legs.e2e > 0 ? [`base=${run.base}`] : []);
     }),

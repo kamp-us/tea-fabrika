@@ -1,3 +1,4 @@
+import { Array as Arr, Option } from "effect";
 import {
   loader,
   type Plant,
@@ -43,7 +44,10 @@ const plants: Plant[] = [
   ],
   [
     "M1: next's time table carries a loader beside the token",
-    (w) => ((stepsOf(w, "next").find((s) => s["name"] === "time table") as Timed).env!["NODE_OPTIONS"] = loader),
+    (w) =>
+      ((Option.getOrUndefined(Arr.findFirst(stepsOf(w, "next"), (s) => s["name"] === "time table")) as Timed).env![
+        "NODE_OPTIONS"
+      ] = loader),
   ],
 ];
 

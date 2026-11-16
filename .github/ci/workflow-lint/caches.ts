@@ -2,15 +2,17 @@
 // never saves, full-history checkouts are blobless, and the typecheck's buildinfo cache.
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { Array as Arr, pipe, Result, Option, Order } from "effect";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
 
 const lines = (value: unknown) =>
   typeof value === "string"
-    ? value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line !== "")
+    ? pipe(
+        value.split("\n"),
+        Arr.map((line) => line.trim()),
+        Arr.filter((line) => line !== ""),
+      )
     : [];
 
 /** The files the cache lint reads, each as its text. */
@@ -44,33 +46,34 @@ export const lintCaches = (files: CacheFiles): string[] => {
       errors.push(reason);
     }
   };
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
+  const read = Result.try(() => ({
+    action: map(parse(files.action)),
+    workspace: map(parse(files.workspace)),
+    workflows: Arr.map(Object.entries(files.workflows), ([path, text]): [string, Record<string, unknown>] => [
+      path,
+      map(parse(text)),
+    ]),
+  }));
 
-  try {
-    action = map(parse(files.action));
-    workspace = map(parse(files.workspace));
-
-    for (const [path, text] of Object.entries(files.workflows)) {
-      workflows.push([path, map(parse(text))]);
-    }
-  } catch {
+  if (Result.isFailure(read)) {
     return ["cache lint: a file is not valid YAML"];
   }
 
+  const { action, workspace, workflows } = read.success;
+
   const actionSteps = steps(map(action["runs"]));
   // Only a workflow that runs for a pull request or a merge queue group saves on a ref of its own.
-  const perRef = workflows.filter(([, workflow]) => {
+  const perRef = Arr.filter(workflows, ([, workflow]) => {
     const on = workflow["on"];
-    return ["pull_request", "merge_group"].some((event) =>
-      Array.isArray(on) ? on.includes(event) : on === event || event in map(on),
+    return Arr.some(["pull_request", "merge_group"], (event) =>
+      Arr.isArray(on) ? on.includes(event) : on === event || event in map(on),
     );
   });
   const everyStep: [string, Record<string, unknown>][] = [
-    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
-    ...perRef.flatMap(([path, workflow]) =>
-      Object.values(map(workflow["jobs"])).flatMap((job) =>
-        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
+    ...Arr.map(actionSteps, (step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
+    ...Arr.flatMap(perRef, ([path, workflow]) =>
+      Arr.flatMap(Object.values(map(workflow["jobs"])), (job) =>
+        Arr.map(steps(map(job)), (step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),
   ];
@@ -84,10 +87,10 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // so no workflow keeps one: not setup-node's own cache, not pnpm/action-setup's, and no cache
   // step whose path is the store.
   const allSteps: [string, Record<string, unknown>][] = [
-    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
-    ...workflows.flatMap(([path, workflow]) =>
-      Object.values(map(workflow["jobs"])).flatMap((job) =>
-        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
+    ...Arr.map(actionSteps, (step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
+    ...Arr.flatMap(workflows, ([path, workflow]) =>
+      Arr.flatMap(Object.values(map(workflow["jobs"])), (job) =>
+        Arr.map(steps(map(job)), (step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),
   ];
@@ -102,8 +105,10 @@ export const lintCaches = (files: CacheFiles): string[] => {
   }
 
   // The shared setup's own cache steps are C2's: it caches nothing at all.
-  for (const [path, step] of allSteps.filter(([at]) => at !== ".github/actions/pnpm/action.yml")) {
-    const cache = ["actions/cache", "actions/cache/save", "actions/cache/restore"].some((name) => uses(step, name));
+  for (const [path, step] of Arr.filter(allSteps, ([at]) => at !== ".github/actions/pnpm/action.yml")) {
+    const cache = Arr.some(["actions/cache", "actions/cache/save", "actions/cache/restore"], (name) =>
+      uses(step, name),
+    );
     require(!(
       cache && PNPM_STORE.test(String(map(step["with"])["path"] ?? ""))
     ), `${path}: a cache of the pnpm store did not pay; use .github/actions/pnpm`);
@@ -111,22 +116,22 @@ export const lintCaches = (files: CacheFiles): string[] => {
 
   // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
   // (action.yml gives the seconds). Each save anywhere is on main.
-  require(!actionSteps.some((step) =>
+  require(!Arr.some(actionSteps, (step) =>
     String(step["uses"]).startsWith("actions/cache"),
   ), "the pnpm action caches nothing: a restored pnpm store cost more than its download");
 
-  for (const [path, step] of everyStep.filter(([, s]) => uses(s, "actions/cache/save"))) {
+  for (const [path, step] of Arr.filter(everyStep, ([, s]) => uses(s, "actions/cache/save"))) {
     const condition = compact(step["if"]);
     require(condition === ON_MAIN ||
       condition.startsWith(`${ON_MAIN}&&`), `${path}: a cache save runs on main only, its if starting ${ON_MAIN}`);
   }
 
-  const check = map(workflows.find(([path]) => path.endsWith("check.yaml"))?.[1]),
+  const check = map(Option.getOrUndefined(Arr.findFirst(workflows, ([path]) => path.endsWith("check.yaml")))?.[1]),
     jobs = map(check["jobs"]);
 
   // C3. A full-history checkout fetches every commit and tree, and only the head's files.
   for (const [name, job] of Object.entries(jobs)) {
-    for (const step of steps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
+    for (const step of Arr.filter(steps(map(job)), (s) => uses(s, "actions/checkout"))) {
       const options = map(step["with"]);
       require(options["fetch-depth"] !== 0 ||
         options["filter"] ===
@@ -140,14 +145,18 @@ export const lintCaches = (files: CacheFiles): string[] => {
   const typecheckSteps = steps(map(jobs["typecheck"]));
   const buildinfo = BUILDINFO.exec(files.typecheck)?.[1];
   const folder = buildinfo?.slice(0, buildinfo.lastIndexOf("/"));
-  const globs = Array.isArray(workspace["packages"]) ? workspace["packages"] : [];
-  const paths = globs.map((glob) => `${String(glob)}/${folder}`);
-  const keyStep = typecheckSteps.find((s) => s["id"] === "tsc-key");
-  const restore = typecheckSteps.find((s) => s["id"] === "tsc");
-  const save = typecheckSteps.find((s) => uses(s, "actions/cache/save") && map(s["with"])["key"] === TSC_SAVED);
+  const globs = Arr.isArray(workspace["packages"]) ? workspace["packages"] : [];
+  const paths = Arr.map(globs, (glob) => `${String(glob)}/${folder}`);
+  const keyStep = Option.getOrUndefined(Arr.findFirst(typecheckSteps, (s) => s["id"] === "tsc-key"));
+  const restore = Option.getOrUndefined(Arr.findFirst(typecheckSteps, (s) => s["id"] === "tsc"));
+  const save = Option.getOrUndefined(
+    Arr.findFirst(typecheckSteps, (s) => uses(s, "actions/cache/save") && map(s["with"])["key"] === TSC_SAVED),
+  );
   const at = (step: Record<string, unknown> | undefined) => (step === undefined ? -1 : typecheckSteps.indexOf(step));
-  const install = typecheckSteps.find((s) => s["run"] === "pnpm install --frozen-lockfile");
-  const run = typecheckSteps.find((s) => s["run"] === "pnpm typecheck");
+  const install = Option.getOrUndefined(
+    Arr.findFirst(typecheckSteps, (s) => s["run"] === "pnpm install --frozen-lockfile"),
+  );
+  const run = Option.getOrUndefined(Arr.findFirst(typecheckSteps, (s) => s["run"] === "pnpm typecheck"));
   require(folder !== undefined && folder !== "", "scripts/typecheck.sh passes --tsBuildInfoFile under a folder");
   require(keyStep?.["run"] ===
     `echo "hash=$(${TSC_HASH})" >> "$GITHUB_OUTPUT"`, `check.yaml: the typecheck job's tsc-key step hashes ${TSC_HASH}`);
@@ -173,11 +182,15 @@ export const lintCaches = (files: CacheFiles): string[] => {
 /** The checked-in files lintCaches reads, through a reader of repo-relative paths. */
 export const cacheFiles = (read: (path: string) => string): CacheFiles => ({
   workflows: Object.fromEntries(
-    globSync([".github/workflows/*.yaml", ".github/workflows/*.yml"], {
-      cwd: fileURLToPath(new URL("../../../", import.meta.url)),
-    })
-      .toSorted()
-      .map((path) => [path, read(path)]),
+    Arr.map(
+      Arr.sort(
+        globSync([".github/workflows/*.yaml", ".github/workflows/*.yml"], {
+          cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+        }),
+        Order.String,
+      ),
+      (path) => [path, read(path)],
+    ),
   ),
   action: read(".github/actions/pnpm/action.yml"),
   workspace: read("pnpm-workspace.yaml"),

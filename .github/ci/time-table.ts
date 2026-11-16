@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { type Duration, Effect, Result, Schedule, Schema, Array as Arr, pipe, Order, Option } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -95,7 +95,7 @@ export const readSteps = (input: unknown): Section<Step> => {
   return Result.isSuccess(decoded)
     ? {
         _tag: "read",
-        rows: decoded.success.steps.map((step) => ({
+        rows: Arr.map(decoded.success.steps, (step) => ({
           name: step.name,
           result: step.conclusion ?? step.status,
           start: step.started_at ?? null,
@@ -111,7 +111,7 @@ export const readFiles = (input: unknown, root: string): Section<TestFile> => {
   return Result.isSuccess(decoded)
     ? {
         _tag: "read",
-        rows: decoded.success.testResults.map((file) => ({
+        rows: Arr.map(decoded.success.testResults, (file) => ({
           path: relative(root, file.name),
           seconds: Math.max(0, file.endTime - file.startTime) / 1000,
           tests: file.assertionResults.length,
@@ -130,8 +130,11 @@ export const settled = (steps: Section<Step>): boolean => {
     return false;
   }
 
-  const self = steps.rows.findIndex((step) => step.name === STEP);
-  return self >= 0 && steps.rows.slice(0, self).every((step) => step.start === null || step.end !== null);
+  const self = Arr.findFirstIndex(steps.rows, (step) => step.name === STEP);
+  return (
+    Option.isSome(self) &&
+    Arr.every(steps.rows.slice(0, self.value), (step) => step.start === null || step.end !== null)
+  );
 };
 
 /** The artifact's file name, beside the leg's report: `timings-<job>-<leg>.json`. */
@@ -143,11 +146,18 @@ const seconds = (step: Step): number | null =>
 const cell = (text: string) => text.replaceAll("|", "\\|").replaceAll(/\s+/g, " ").trim();
 
 const table = (header: readonly string[], right: readonly number[], rows: readonly (readonly string[])[]) =>
-  [
-    `| ${header.join(" | ")} |`,
-    `| ${header.map((_, i) => (right.includes(i) ? "---:" : "---")).join(" | ")} |`,
-    ...rows.map((row) => `| ${row.map(cell).join(" | ")} |`),
-  ].join("\n");
+  Arr.join(
+    [
+      `| ${Arr.join(header, " | ")} |`,
+      `| ${pipe(
+        header,
+        Arr.map((_, i) => (right.includes(i) ? "---:" : "---")),
+        Arr.join(" | "),
+      )} |`,
+      ...Arr.map(rows, (row) => `| ${pipe(row, Arr.map(cell), Arr.join(" | "))} |`),
+    ],
+    "\n",
+  );
 
 const section = <A>(title: string, read: Section<A>, render: (rows: readonly A[]) => string) =>
   `### ${title}\n\n${read._tag === "read" ? render(read.rows) : `Unavailable: ${cell(read.reason)}`}`;
@@ -156,40 +166,54 @@ const stepTable = (rows: readonly Step[]) =>
   table(
     ["Step", "Result", "Seconds"],
     [2],
-    rows
-      .filter((step) => step.start !== null)
-      .map((step) => {
+    pipe(
+      rows,
+      Arr.filter((step) => step.start !== null),
+      Arr.map((step) => {
         const took = seconds(step);
         return [step.name, step.result, took === null ? "-" : String(Math.round(took))];
       }),
+    ),
   );
 
 /** The slowest files first; files that took the same time, by path. */
 export const slowest = (rows: readonly TestFile[]): TestFile[] =>
-  rows.toSorted((a, b) => b.seconds - a.seconds || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)).slice(0, SLOWEST);
+  Arr.sort(
+    rows,
+    Order.combine(
+      Order.flip(Order.mapInput(Order.Number, (row: TestFile) => row.seconds)),
+      Order.mapInput(Order.String, (row: TestFile) => row.path),
+    ),
+  ).slice(0, SLOWEST);
 
 const fileTable = (rows: readonly TestFile[]) => {
-  const total = rows.reduce((sum, file) => sum + file.seconds, 0);
+  const total = Arr.reduce(rows, 0, (sum, file) => sum + file.seconds);
   const listed = slowest(rows);
-  return [
-    `${rows.length} files, ${total.toFixed(1)} s in all. The ${listed.length} slowest:`,
-    "",
-    table(
-      ["File", "Seconds", "Tests", "Result"],
-      [1, 2],
-      listed.map((file) => [file.path, file.seconds.toFixed(1), String(file.tests), file.result]),
-    ),
-  ].join("\n");
+  return Arr.join(
+    [
+      `${rows.length} files, ${total.toFixed(1)} s in all. The ${listed.length} slowest:`,
+      "",
+      table(
+        ["File", "Seconds", "Tests", "Result"],
+        [1, 2],
+        Arr.map(listed, (file) => [file.path, file.seconds.toFixed(1), String(file.tests), file.result]),
+      ),
+    ],
+    "\n",
+  );
 };
 
 /** The job summary's Markdown for one leg. */
 export const markdown = (timings: Timings): string =>
-  [
-    `## Time table: ${cell(timings.job)}, leg ${cell(timings.leg)}`,
-    section("Steps", timings.steps, stepTable),
-    section("Slowest test files", timings.files, fileTable),
-    "",
-  ].join("\n\n");
+  Arr.join(
+    [
+      `## Time table: ${cell(timings.job)}, leg ${cell(timings.leg)}`,
+      section("Steps", timings.steps, stepTable),
+      section("Slowest test files", timings.files, fileTable),
+      "",
+    ],
+    "\n\n",
+  );
 
 /**
  * What the program reads beyond its environment, so a law can hand it any answer or failure: the

@@ -1,5 +1,6 @@
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
+import { Array as Arr } from "effect";
 import { fileName, STEP } from "../time-table.ts";
 import { compact, env, map, type Rule, sameEntries, steps, TOKEN, uses } from "./shared.ts";
 
@@ -36,7 +37,7 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
   return (
     uses(step, "actions/upload-artifact") &&
     sameEntries(
-      Object.entries(given).filter(([key]) => key !== "retention-days"),
+      Arr.filter(Object.entries(given), ([key]) => key !== "retention-days"),
       Object.entries(TIMINGS),
     ) &&
     typeof kept === "number" &&
@@ -51,8 +52,11 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
  */
 export const timed = (name: string, job: Record<string, unknown>, report: string): string[] => {
   const list = steps(job);
-  const tables = list.filter((s) => s["run"] === TIME_TABLE);
-  const uploads = list.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === TIMINGS.path);
+  const tables = Arr.filter(list, (s) => s["run"] === TIME_TABLE);
+  const uploads = Arr.filter(
+    list,
+    (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === TIMINGS.path,
+  );
   const [table] = tables,
     [upload] = uploads;
   const errors: string[] = [];
@@ -65,7 +69,7 @@ export const timed = (name: string, job: Record<string, unknown>, report: string
       table["continue-on-error"] === true &&
       table["timeout-minutes"] === 1 &&
       JSON.stringify(table["env"]) === JSON.stringify(timeTableEnv(report)) &&
-      list.filter((s) => "run" in s).at(-1) === table
+      Arr.filter(list, (s) => "run" in s).at(-1) === table
     )
   ) {
     errors.push(

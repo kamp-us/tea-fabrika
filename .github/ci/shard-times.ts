@@ -2,22 +2,18 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Array as Arr, Result, Order } from "effect";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;
 export type Row = { readonly path: string; readonly seconds: number };
 
 export const reportRows = (report: unknown, root: string): Row[] => {
-  if (
-    typeof report !== "object" ||
-    report === null ||
-    !("testResults" in report) ||
-    !Array.isArray(report.testResults)
-  ) {
+  if (typeof report !== "object" || report === null || !("testResults" in report) || !Arr.isArray(report.testResults)) {
     return [];
   }
 
-  return report.testResults.flatMap((file: unknown) => {
+  return Arr.flatMap(report.testResults, (file: unknown) => {
     if (
       typeof file !== "object" ||
       file === null ||
@@ -37,15 +33,16 @@ export const reportRows = (report: unknown, root: string): Row[] => {
 };
 
 export const staleRows = (table: Readonly<Record<string, number>>, real: readonly Row[]): Row[] =>
-  real
-    .filter((row) => Math.abs(row.seconds - (table[row.path] ?? 1)) > LIMIT)
-    .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  Arr.sort(
+    Arr.filter(real, (row) => Math.abs(row.seconds - (table[row.path] ?? 1)) > LIMIT),
+    Order.mapInput(Order.String, (row: Row) => row.path),
+  );
 
 export const rowLine = (row: Row): string => `  ${JSON.stringify(row.path)}: ${row.seconds.toFixed(1)},`;
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   for (const path of process.argv.slice(2)) {
-    try {
+    const ran = Result.try(() => {
       const rows = reportRows(JSON.parse(readFileSync(path, "utf8")), process.cwd());
 
       for (const row of staleRows(measured, rows)) {
@@ -54,7 +51,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
         );
         console.log(rowLine(row));
       }
-    } catch {
+    });
+
+    if (Result.isFailure(ran)) {
       console.log("shard-times: report unavailable; no timing advice for this report");
     }
   }

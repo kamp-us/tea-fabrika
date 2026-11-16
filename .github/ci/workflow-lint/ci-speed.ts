@@ -1,4 +1,5 @@
 // Today's CI, serving both versions. ci-speed.yaml's shape (K1 to K7), the daily speed measure.
+import { Array as Arr, pipe, Result, Order, Option } from "effect";
 import { parse } from "yaml";
 import { allSteps, compact, isMap, map } from "./shared.ts";
 
@@ -29,17 +30,18 @@ export const lintCiSpeed = (text: string): string[] => {
       errors.push(`ci-speed.yaml: ${reason}`);
     }
   };
-  let workflow: Record<string, unknown>;
+  const read = Result.try(() => map(parse(text)));
 
-  try {
-    workflow = map(parse(text));
-  } catch {
+  if (Result.isFailure(read)) {
     return ["ci-speed.yaml: not valid YAML"];
   }
 
+  const workflow = read.success;
+
   const on = map(workflow["on"]);
-  const crons = Array.isArray(on["schedule"]) ? on["schedule"].filter(isMap) : [];
-  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["schedule", "workflow_dispatch"]) &&
+  const crons = Arr.isArray(on["schedule"]) ? Arr.filter(on["schedule"], isMap) : [];
+  require(JSON.stringify(Arr.sort(Object.keys(on), Order.String)) ===
+    JSON.stringify(["schedule", "workflow_dispatch"]) &&
     crons.length === 1 &&
     /^\d+ \d+ \* \* \*$/.test(
       String(crons[0]?.["cron"]),
@@ -59,13 +61,14 @@ export const lintCiSpeed = (text: string): string[] => {
     ), "K3: the job's token reads actions, contents and pull requests and writes issues, nothing more");
 
   const list = allSteps(job);
-  const checkouts = list.filter((s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
+  const checkouts = Arr.filter(list, (s) => typeof s["uses"] === "string" && s["uses"].startsWith("actions/checkout@"));
   require(checkouts.length > 0 &&
-    checkouts.every(
+    Arr.every(
+      checkouts,
       (s) => map(s["with"])["persist-credentials"] === false,
     ), "K4: its checkout sets persist-credentials: false");
 
-  const measure = list.find((s) => s["name"] === "measure");
+  const measure = Option.getOrUndefined(Arr.findFirst(list, (s) => s["name"] === "measure"));
   require(measure?.["run"] === CI_SPEED_RUN &&
     measure["shell"] === "bash" &&
     JSON.stringify(measure["env"]) ===
@@ -73,21 +76,23 @@ export const lintCiSpeed = (text: string): string[] => {
         GH_TOKEN: `\${{ github.token }}`,
       }), "K5: the measure step runs ci-speed.ts --issue into the job summary, with the job's token, under bash");
 
-  const cancels = list.filter((s) => typeof s["run"] === "string" && s["run"].includes("run cancel"));
+  const cancels = Arr.filter(list, (s) => typeof s["run"] === "string" && s["run"].includes("run cancel"));
   require(cancels.length === 0, "K6: no step cancels the run: one job has nothing to cancel");
 
   // K7 (0541): it reads runs and writes its summary and its one issue, so its steps are the
   // checkout, the pnpm setup, the install and the measure, and no other: no test, no other action.
   // A cancel step is K6's alone, and the measure step's command K5's, so here it is only its name.
-  const work = list
-    .filter((s) => !cancels.includes(s))
-    .map((s) => {
+  const work = pipe(
+    list,
+    Arr.filter((s) => !cancels.includes(s)),
+    Arr.map((s) => {
       if (s === measure) {
         return "measure";
       }
 
       return typeof s["run"] === "string" ? s["run"] : String(s["uses"]).replace(/@.*$/, "@");
-    });
+    }),
+  );
   require(JSON.stringify(work) ===
     JSON.stringify([
       "actions/checkout@",

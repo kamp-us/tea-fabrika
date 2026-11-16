@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import {
   changedOnPullRequests,
   env,
@@ -39,7 +40,7 @@ const plants: Plant[] = [
   // merge queue and main. Source plants, each run once on workflow-lint.ts and restored: drop the
   // rule that the size step follows the parser's pass (red: sizing, install and all, before it);
   // each gated job on its own flag alone (red: every generated workflow).
-  ...(
+  ...Arr.map(
     [
       ["next needs legs too", (w) => (w.jobs.next.needs = ["changes", "legs"])],
       [
@@ -215,13 +216,14 @@ const plants: Plant[] = [
           w.jobs["ci-required"].needs.push("legs");
         },
       ],
-    ] as [string, (w: Workflow) => unknown][]
-  ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
-    fault,
-    (w) => {
-      mutate(w);
-    },
-  ]),
+    ] as [string, (w: Workflow) => unknown][],
+    ([fault, mutate]): [string, (w: Workflow) => void] => [
+      fault,
+      (w) => {
+        mutate(w);
+      },
+    ],
+  ),
   [
     "changes skips",
     (w) => {
@@ -239,7 +241,7 @@ const plants: Plant[] = [
     "changes takes its files from another step",
     (w) => (w.jobs.changes.outputs["files"] = `\${{ steps.diff.outputs.files }}`),
   ],
-  ...(["next", "filter"] as const).flatMap((key): [string, (w: Workflow) => void][] => [
+  ...Arr.flatMap(["next", "filter"] as const, (key): [string, (w: Workflow) => void][] => [
     [
       `changes exposes ${key} from the first pass alone`,
       (w) => {
@@ -259,7 +261,8 @@ const plants: Plant[] = [
       },
     ],
   ]),
-  ...["parser pnpm", "parser node", "parser install", "parser pass"].map(
+  ...Arr.map(
+    ["parser pnpm", "parser node", "parser install", "parser pass"],
     (named, at): [string, (w: Workflow) => void] => [
       `the parser's step ${at + 5} fails changes`,
       (w) => {

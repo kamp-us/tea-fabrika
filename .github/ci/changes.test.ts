@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Array as Arr, pipe, Option, Order } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -63,7 +64,7 @@ const skillName = fc
 const prose = fc.oneof(
   fc
     .tuple(skillName, fc.array(skillName, { maxLength: 2 }), skillName)
-    .map(([skill, dirs, name]) => [".agents/skills", skill, ...dirs, `${name}.md`].join("/")),
+    .map(([skill, dirs, name]) => Arr.join([".agents/skills", skill, ...dirs, `${name}.md`], "/")),
   skillName.map((skill) => `.claude/skills/${skill}`),
 );
 
@@ -80,7 +81,7 @@ const script = fc
 // .claude/skills/<name>/ still runs everything.
 const agentsSkill = fc
   .tuple(skillName, fc.array(skillName, { maxLength: 2 }), skillName, fc.constantFrom("json", "ts", "txt"))
-  .map(([skill, dirs, name, ext]) => [".agents/skills", skill, ...dirs, `${name}.${ext}`].join("/"));
+  .map(([skill, dirs, name, ext]) => Arr.join([".agents/skills", skill, ...dirs, `${name}.${ext}`], "/"));
 
 const claudeSkill = fc
   .tuple(skillName, skillName, fc.constantFrom("md", "json", "ts"))
@@ -105,7 +106,7 @@ const list = fc.array(path, { maxLength: 12 });
 // on every event; its tests and e2e start on none (0525, 0533). No generator above makes a quiet path,
 // plain Markdown or a field row, under these trees; the scenario near the end pins that case.
 const todays = (p: string) => /^(?:apps|programs|packs|wip|legacy|packages|fixtures)\//.test(p);
-const touched = (paths: readonly string[]) => paths.some(todays);
+const touched = (paths: readonly string[]) => Arr.some(paths, todays);
 
 // 0174 narrowed this law: a merge queue's group left it, and follows its paths (below).
 // 0175 narrowed it again: a push to main left it too. What stays is every event that has no
@@ -159,7 +160,7 @@ it("skill prose and safe paths skip heavy jobs; field follows rows", () => {
         check: false,
         typecheck: false,
         next: false,
-        field: paths.some((p) => /^field\/[^/]+\.jsonl$/.test(p) || /^field\/(?:notes|runs|findings)\//.test(p)),
+        field: Arr.some(paths, (p) => /^field\/[^/]+\.jsonl$/.test(p) || /^field\/(?:notes|runs|findings)\//.test(p)),
         build: false,
       });
     }),
@@ -182,7 +183,7 @@ it("skill scripts run check and typecheck; other version flags follow their read
         // A Markdown file beside a script is still script input, even though prose is quiet.
         expect(
           ci.classify(
-            scripts.map((path) => path.replace(/\.[^.]+$/, ".md")),
+            Arr.map(scripts, (path) => path.replace(/\.[^.]+$/, ".md")),
             "pull_request",
           ),
         ).toEqual({ ...heavy, next: false, field: false, build: false });
@@ -190,9 +191,9 @@ it("skill scripts run check and typecheck; other version flags follow their read
         expect(flags).toEqual({
           check: true,
           typecheck: true,
-          next: others.some((p) => p.startsWith("next/")),
+          next: Arr.some(others, (p) => p.startsWith("next/")),
           field: false,
-          build: others.some((p) => !p.startsWith("next/")),
+          build: Arr.some(others, (p) => !p.startsWith("next/")),
         });
       },
     ),
@@ -211,7 +212,7 @@ it("other skill-tree paths still run check and typecheck, next only for .claude/
       expect(ci.classify(paths, "pull_request")).toMatchObject({
         check: true,
         typecheck: true,
-        ...(paths.some((p) => p.startsWith(".claude/skills/")) ? { next: true } : {}),
+        ...(Arr.some(paths, (p) => p.startsWith(".claude/skills/")) ? { next: true } : {}),
         build: false,
       });
     }),
@@ -228,10 +229,10 @@ const folder = fc.constantFrom("brief", "briefs", "prompt", "prompts");
 const readMarkdown = fc.oneof(
   fc
     .tuple(fc.constantFrom("programs", "fixtures", "packages", "next"), fc.array(word, { maxLength: 3 }), word)
-    .map(([root, dirs, name]) => [root, ...dirs, `${name}.md`].join("/")),
+    .map(([root, dirs, name]) => Arr.join([root, ...dirs, `${name}.md`], "/")),
   fc
     .tuple(fc.array(word, { maxLength: 3 }), folder, fc.array(word, { maxLength: 2 }), word)
-    .map(([above, dir, below, name]) => [...above, dir, ...below, `${name}.md`].join("/")),
+    .map(([above, dir, below, name]) => Arr.join([...above, dir, ...below, `${name}.md`], "/")),
 );
 
 // 0175 narrowed this law: today's build starts only when the Markdown is under today's trees.
@@ -316,7 +317,7 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
           calls.push(args);
           return {
             status: 0,
-            stdout: args[0] === "merge-base" ? `${"a".repeat(40)}\n` : `${paths.join("\0")}\0`,
+            stdout: args[0] === "merge-base" ? `${"a".repeat(40)}\n` : `${Arr.join(paths, "\0")}\0`,
           };
         };
         expect(ci.readPaths("b".repeat(40), "c".repeat(40), "pull_request", run)).toEqual(paths);
@@ -367,7 +368,7 @@ it("NUL diff keeps both move names and unusual paths; failed reads cannot skip",
         const answer = (stdout: string) =>
           ci.readPaths("b".repeat(40), "c".repeat(40), "push", () => ({ status: 0, stdout }));
         expect(answer("")).toEqual([]);
-        expect(answer(paths.join("\0"))).toBeNull();
+        expect(answer(Arr.join(paths, "\0"))).toBeNull();
       },
     ),
     options,
@@ -401,7 +402,7 @@ it("shared tracked-file check agrees with Git, including command errors", () => 
 it("skill script and prose rules apply only at the repo root", () => {
   fc.assert(
     fc.property(fc.array(skillName, { maxLength: 2 }), script, skillName, (dirs, script, skill) => {
-      const prefix = ["next", ...dirs].join("/");
+      const prefix = Arr.join(["next", ...dirs], "/");
       expect(ci.classify([`${prefix}/${script}`], "pull_request")).toEqual({
         ...heavy,
         field: false,
@@ -409,7 +410,7 @@ it("skill script and prose rules apply only at the repo root", () => {
       });
 
       for (const root of ["next", "docs"]) {
-        expect(ci.classify([[root, ...dirs, ".claude/skills", skill].join("/")], "pull_request")).toEqual({
+        expect(ci.classify([Arr.join([root, ...dirs, ".claude/skills", skill], "/")], "pull_request")).toEqual({
           ...heavy,
           field: false,
           // 0175: neither root is today's version, so the build stays off for both.
@@ -486,8 +487,8 @@ it("property: unreadable history, no path at all, or an event with no paths of i
       fc.constantFrom("workflow_dispatch", "schedule", ""),
       fc.boolean(),
       (event, none, paths, other, draft) => {
-        expect(Object.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
-        expect(Object.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
+        expect(Arr.every(Object.values(ci.jobs(none, event, false)), Boolean)).toBe(true);
+        expect(Arr.every(Object.values(ci.jobs(paths, other, draft)), Boolean)).toBe(true);
       },
     ),
     options,
@@ -503,7 +504,7 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
   for (const base of ["0".repeat(40), ""]) {
     const read = ci.readPaths(base, "c".repeat(40), "push", run);
     expect(read).toBeNull();
-    expect(Object.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
+    expect(Arr.every(Object.values(ci.jobs(read, "push", false)), Boolean)).toBe(true);
   }
 });
 
@@ -699,7 +700,7 @@ const experimentFile = fc
     word,
     fc.constantFrom("ts", "mjs", "json", "txt", "tsx"),
   )
-  .map(([dirs, name, ext]) => ["experiments", ...dirs, `${name}.${ext}`].join("/"))
+  .map(([dirs, name, ext]) => Arr.join(["experiments", ...dirs, `${name}.${ext}`], "/"))
   .filter((p) => !p.startsWith("experiments/177-themes/schemes/"));
 
 it("property: experiments files alone run check, and no typecheck or next", () => {
@@ -717,7 +718,7 @@ it("property: experiments files alone run check, and no typecheck or next", () =
           ...off,
         });
         // The same files under another root still type-check and start next.
-        const moved = paths.map((p) => p.replace(/^experiments\//, `${root}/`));
+        const moved = Arr.map(paths, (p) => p.replace(/^experiments\//, `${root}/`));
         expect(ci.jobs(moved, event, false)).toMatchObject({ check: true, typecheck: true, next: true });
       },
     ),
@@ -746,7 +747,7 @@ const lintFile = fc.oneof(
   fc.constant(".oxlintrc.json"),
   fc
     .tuple(fc.array(word, { maxLength: 2 }), word, fc.constantFrom("mjs", "ts", "json"))
-    .map(([dirs, name, ext]) => ["oxlint-plugins", ...dirs, `${name}.${ext}`].join("/")),
+    .map(([dirs, name, ext]) => Arr.join(["oxlint-plugins", ...dirs, `${name}.${ext}`], "/")),
 );
 
 // Paths nobody listed: today's shared generator and unusual names.
@@ -819,10 +820,10 @@ it("property: proven counts only for a next/ path that is in paths", () => {
       (paths, same, outside, event) => {
         // Every path of the run is offered as proven, with paths that are not in the run at all.
         const offered = [...same, ...outside, ...paths];
-        const counted = offered.filter((p) => p.startsWith("next/") && paths.includes(p));
+        const counted = Arr.filter(offered, (p) => p.startsWith("next/") && paths.includes(p));
         expect(ci.scope(paths, event, offered)).toBe(ci.scope(paths, event, counted));
         // A non-next/ path that needs everything still needs everything when it is offered.
-        const old = paths.filter((p) => !p.startsWith("next/"));
+        const old = Arr.filter(paths, (p) => !p.startsWith("next/"));
         expect(ci.scope(old, event, old)).toBe(ci.scope(old, event));
       },
     ),
@@ -869,7 +870,7 @@ it("format: each entry of readers is a tracked path that holds a test file", () 
   // format: the next job's path argument is this list, so a renamed folder would leave the reader
   // run empty. The six entries the plan and experiment 288 found are all on it, and build.test.ts, the
   // format law split from build.integration.test.ts (0536).
-  expect(Array.isArray(ci.readers)).toBe(true);
+  expect(Arr.isArray(ci.readers)).toBe(true);
   expect(ci.readers).toEqual(
     expect.arrayContaining([
       "next/apps/fabrika/src/exam/",
@@ -885,10 +886,10 @@ it("format: each entry of readers is a tracked path that holds a test file", () 
   for (const entry of ci.readers) {
     const listed = spawnSync("git", ["ls-files", "--", entry], { encoding: "utf8" });
     expect(listed.status, entry).toBe(0);
-    const tracked = listed.stdout.split("\n").filter(Boolean);
+    const tracked = Arr.filter(listed.stdout.split("\n"), Boolean);
     expect(entry.startsWith("next/"), entry).toBe(true);
     expect(
-      entry.endsWith("/") ? tracked.some((file) => /\.test\.tsx?$/.test(file)) : tracked.includes(entry),
+      entry.endsWith("/") ? Arr.some(tracked, (file) => /\.test\.tsx?$/.test(file)) : tracked.includes(entry),
       entry,
     ).toBe(true);
     expect(entry.endsWith("/") || /\.test\.tsx?$/.test(entry), entry).toBe(true);
@@ -907,7 +908,7 @@ const git =
     }
 
     if (args[0] === "diff" && args.includes("--name-only")) {
-      return { status: 0, stdout: paths.length === 0 ? "" : `${paths.join("\0")}\0` };
+      return { status: 0, stdout: paths.length === 0 ? "" : `${Arr.join(paths, "\0")}\0` };
     }
 
     return args[0] === "diff" ? { status: 0, stdout: diff } : { status: 128, stdout: "" };
@@ -921,7 +922,7 @@ const envOf = (event: string, draft: boolean) => ({
 });
 
 /** What a run prints for a scope: the reader paths, or all of next/. */
-const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
+const filterOf = (scope: Scope) => (scope === "readers" ? Arr.join(ci.readers, " ") : "next/");
 
 it("property: probe changes no flag: the first pass prints the same flags for any diff text", async () => {
   await fc.assert(
@@ -929,14 +930,14 @@ it("property: probe changes no flag: the first pass prints the same flags for an
       // A NUL ends a path in git's output, so no path holds one.
       fc
         .array(fc.oneof(known, next), { minLength: 1, maxLength: 10 })
-        .filter((list) => list.every((p) => !p.includes("\0"))),
+        .filter((list) => Arr.every(list, (p) => !p.includes("\0"))),
       fc.oneof(
         fc.string(),
         fc
           .array(fc.constantFrom("+// a note", "-// old", "+ * @since 1.0", "+", "+const a = 1;", "@@ -1 +1 @@"), {
             maxLength: 6,
           })
-          .map((lines) => lines.join("\n")),
+          .map((lines) => Arr.join(lines, "\n")),
       ),
       scopedEvent,
       fc.boolean(),
@@ -964,7 +965,7 @@ it("scenario: with no parser to import, --same prints what the first pass printe
   // a parser that proves every path, and one that proves all but one, for the same runs.
   const rejects = () => Promise.reject(new Error("Cannot find package 'oxc-parser'"));
   const proves = (keep: (path: string) => boolean) => () =>
-    Promise.resolve({ samePaths: (_base: string, _head: string, paths: readonly string[]) => paths.filter(keep) });
+    Promise.resolve({ samePaths: (_base: string, _head: string, paths: readonly string[]) => Arr.filter(paths, keep) });
   const nextPaths = [
     "next/packages/libfabrika/src/transport/Hello.ts",
     "next/packages/libfabrika/src/transport/Wire.ts",
@@ -1086,7 +1087,7 @@ const pushEnv = envOf("push", false);
 
 const changedPaths = fc
   .array(known, { minLength: 1, maxLength: 10 })
-  .filter((list) => list.every((p) => !p.includes("\0")));
+  .filter((list) => Arr.every(list, (p) => !p.includes("\0")));
 
 /** What a push prints, through `outputs`, with the fake git and a fake GitHub. */
 const pushed = (paths: readonly string[], fake: Fake, env: Record<string, string> = pushEnv) => {
@@ -1357,10 +1358,12 @@ const scopes: readonly ci.Selection["scope"][] = ["none", "readers", "all"];
  */
 const narrowed = (needed: ci.Selection, pick: number): ci.Selection | null => {
   const cuts: ci.Selection[] = [
-    ...(["check", "typecheck", "field", "build", "next"] as const)
-      .filter((job) => needed[job])
-      .map((job) => ({ ...needed, [job]: false })),
-    ...(needed.next ? scopes.slice(0, scopes.indexOf(needed.scope)).map((scope) => ({ ...needed, scope })) : []),
+    ...pipe(
+      ["check", "typecheck", "field", "build", "next"] as const,
+      Arr.filter((job) => needed[job]),
+      Arr.map((job) => ({ ...needed, [job]: false })),
+    ),
+    ...(needed.next ? Arr.map(scopes.slice(0, scopes.indexOf(needed.scope)), (scope) => ({ ...needed, scope })) : []),
   ];
   return cuts.length === 0 ? null : cuts[pick % cuts.length]!;
 };
@@ -1455,8 +1458,8 @@ it("scenario: a group whose tree and base tree a ready pull request run tested g
   prints(printed, noJob);
   expect(printed["tested"]).toBe("11");
   expect(printed["probe"]).toBe("false");
-  expect(notes.join("\n")).toContain("https://github.com/owner/repo/actions/runs/11");
-  expect(notes.join("\n")).toContain(tree.head);
+  expect(Arr.join(notes, "\n")).toContain("https://github.com/owner/repo/actions/runs/11");
+  expect(Arr.join(notes, "\n")).toContain(tree.head);
 });
 
 it("scenario: main moved after the pull request run, so the group's base tree has no record and it runs its tests", async () => {
@@ -1480,12 +1483,12 @@ const flagText = fc.oneof(
 const filterText = fc.oneof(
   fc.constantFrom(
     "next/",
-    ci.readers.join(" "),
+    Arr.join(ci.readers, " "),
     "",
     "next",
     "next/ ",
     ci.readers[0]!,
-    ci.readers.toReversed().join(" "),
+    pipe(ci.readers, Arr.reverse, Arr.join(" ")),
   ),
   fc.string(),
 );
@@ -1508,7 +1511,8 @@ it("property: a printed flag counts as a job that ran only when it is exactly tr
         expect(read[job], job).toBe(printed[job] === "true");
       }
 
-      const scope = printed.filter === "next/" ? "all" : printed.filter === ci.readers.join(" ") ? "readers" : "none";
+      const scope =
+        printed.filter === "next/" ? "all" : printed.filter === Arr.join(ci.readers, " ") ? "readers" : "none";
       expect(read.scope).toBe(scope);
     }),
     options,
@@ -1573,7 +1577,7 @@ it("property: a run records its trees only on a ready pull request whose printed
       // Not past bugs: a covering ready run that records, then that run with one thing changed
       // (each draft value that is not "false", another event, an unreadable merge commit), so each
       // check meets a run that would otherwise record on every run.
-      examples: (
+      examples: Arr.map(
         [
           ["pull_request", "false", true],
           ["pull_request", "true", true],
@@ -1582,14 +1586,15 @@ it("property: a run records its trees only on a ready pull request whose printed
           ["merge_group", "false", true],
           ["push", "false", true],
           ["pull_request", "false", false],
-        ] as const
-      ).map(([event, draft, readable]): [string[], { more: ci.Selection }, RecordEvent, RecordDraft, boolean] => [
-        ["next/packages/libfabrika/src/b.ts"],
-        { more: { ...noJob, scope: "none" } },
-        event,
-        draft,
-        readable,
-      ]),
+        ] as const,
+        ([event, draft, readable]): [string[], { more: ci.Selection }, RecordEvent, RecordDraft, boolean] => [
+          ["next/packages/libfabrika/src/b.ts"],
+          { more: { ...noJob, scope: "none" } },
+          event,
+          draft,
+          readable,
+        ],
+      ),
     },
   );
 });
@@ -1631,7 +1636,7 @@ it("property: a group passes at once only when a green ready pull request run of
       ...options,
       // Not a past bug: each fault is tried once on a next/ file on every run, with the pull request
       // run selecting exactly what the group needs, so no fault depends on the generator reaching it.
-      examples: faults.map((fault): [string[], Fault, ci.Selection, number] => [
+      examples: Arr.map(faults, (fault): [string[], Fault, ci.Selection, number] => [
         ["next/packages/libfabrika/src/b.ts"],
         fault,
         { ...noJob, scope: "none" },
@@ -1706,7 +1711,7 @@ it("property: a run vouches only when it is a completed, successful pull request
           conclusion === "success" &&
           path === ".github/workflows/check.yaml" &&
           head === "same" &&
-          list.some((job) => job.name === "ci-required" && job.conclusion === "success");
+          Arr.some(list, (job) => job.name === "ci-required" && job.conclusion === "success");
         expect(ci.vouches(found, list, "check.yaml")).toBe(holds);
       },
     ),
@@ -1848,14 +1853,17 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
       });
       // Run 12 is not one GitHub knows here, so asking for it rejects and the group runs its tests,
       // unless a good record came before it.
-      const first = listed.find(
-        (a) =>
-          a.name === name &&
-          !a.expired &&
-          typeof a.workflow_run === "object" &&
-          a.workflow_run !== null &&
-          "id" in a.workflow_run &&
-          typeof a.workflow_run.id === "number",
+      const first = Option.getOrUndefined(
+        Arr.findFirst(
+          listed,
+          (a) =>
+            a.name === name &&
+            !a.expired &&
+            typeof a.workflow_run === "object" &&
+            a.workflow_run !== null &&
+            "id" in a.workflow_run &&
+            typeof a.workflow_run.id === "number",
+        ),
       );
       const vouched = first !== undefined && (first.workflow_run as { id: number }).id === 11;
       prints(printed, vouched ? noJob : ci.jobs(paths, "merge_group", false));
@@ -1890,7 +1898,7 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   };
   const api = ci.github(runEnv, (url, init) => {
     asked.push({ url, auth: init.headers["authorization"] });
-    const kind = Object.keys(answers).find((key) => url.includes(`/${key}`));
+    const kind = Option.getOrUndefined(Arr.findFirst(Object.keys(answers), (key) => url.includes(`/${key}`)));
     return Promise.resolve({
       ok: kind !== undefined,
       status: kind === undefined ? 404 : 200,
@@ -1905,14 +1913,14 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   expect(await api?.artifacts(artifact.name)).toEqual([artifact]);
   expect(await api?.run(11)).toEqual({ event: "pull_request" });
   expect(await api?.jobs(11)).toEqual([job]);
-  expect(asked.map((a) => a.url)).toEqual([
+  expect(Arr.map(asked, (a) => a.url)).toEqual([
     "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
     `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
     `https://api.example/repos/owner/repo/actions/artifacts?name=${artifact.name}&per_page=20`,
     "https://api.example/repos/owner/repo/actions/runs/11",
     "https://api.example/repos/owner/repo/actions/runs/11/jobs?per_page=100",
   ]);
-  expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
+  expect(Arr.every(asked, (a) => a.auth === "Bearer token")).toBe(true);
 
   const refused = ci.github(runEnv, () => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }));
   await expect(refused?.runs()).rejects.toThrow("403");
@@ -1930,12 +1938,14 @@ const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflo
 it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", async () => {
   await fc.assert(
     fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
-      expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
-      expect(Object.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
+      expect(Arr.sort(Object.keys(ci.classify(paths, event)), Order.String)).toEqual(flagNames);
+      expect(Arr.sort(Object.keys(ci.jobs(paths, event, draft)), Order.String)).toEqual(flagNames);
       // Unreadable history is the fallback that runs every job.
       const run: Runner = paths === null ? () => ({ status: 128, stdout: "" }) : git(paths, "");
       const printed = await ci.outputs({ same: false, env: envOf(event, draft), run });
-      expect(Object.keys(printed).toSorted()).toEqual([...flagNames, "filter", "probe", "tested"].toSorted());
+      expect(Arr.sort(Object.keys(printed), Order.String)).toEqual(
+        Arr.sort([...flagNames, "filter", "probe", "tested"], Order.String),
+      );
     }),
     {
       ...options,

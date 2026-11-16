@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
+import { Array as Arr, pipe } from "effect";
 import { parse } from "yaml";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 
@@ -34,11 +35,11 @@ const ELSEWHERE = /(?:^|\s)(?:--config|-c|--root|-r|--dir|--workspace)(?:[=\s]|$
 
 /** A step's script as shell commands: `\`-continued lines joined, then cut at every separator. */
 const shellCommands = (script: string) =>
-  script
-    .replace(/\\\r?\n/g, " ")
-    .split(/\n|&&|\|\||[;&|]/)
-    .map((part) => part.trim())
-    .filter((part) => part !== "");
+  pipe(
+    script.replace(/\\\r?\n/g, " ").split(/\n|&&|\|\||[;&|]/),
+    Arr.map((part) => part.trim()),
+    Arr.filter((part) => part !== ""),
+  );
 
 /**
  * T1 (0539): the jobs of a pull request or merge queue workflow that run a tooling test. A vitest
@@ -50,9 +51,10 @@ const shellCommands = (script: string) =>
  */
 const toolingJobs = (workflow: Record<string, unknown>): string[] => {
   const outer = { ...map(workflow["env"]) };
-  return Object.entries(map(workflow["jobs"]))
-    .filter(([, job]) =>
-      steps(map(job)).some((step) => {
+  return pipe(
+    Object.entries(map(workflow["jobs"])),
+    Arr.filter(([, job]) =>
+      Arr.some(steps(map(job)), (step) => {
         if (typeof step["run"] !== "string") {
           return false;
         }
@@ -64,34 +66,39 @@ const toolingJobs = (workflow: Record<string, unknown>): string[] => {
         const inside =
           /^next\//.test(folder) &&
           !folder.split("/").includes("..") &&
-          !parts.some((part) => /^(?:cd|pushd)\b/.test(part));
-        return parts
-          .filter((part) => VITEST_CALL.test(part))
-          .some((part) => {
+          !Arr.some(parts, (part) => /^(?:cd|pushd)\b/.test(part));
+        return pipe(
+          parts,
+          Arr.filter((part) => VITEST_CALL.test(part)),
+          Arr.some((part) => {
             const bare = part.replace(/\$\{(\w+)(?:#e2e-)?\}|\$(\w+)\b/g, (whole, braced?: string, plain?: string) => {
               const name = braced ?? plain ?? "";
               const pinned = VITEST_VARS[name];
               const runner = name === "RUNNER_TEMP" && !(name in set);
               return runner || (pinned !== undefined && pinned(env[name])) ? "" : whole;
             });
-            const projects = [...part.matchAll(/--project(?:=|\s+)(\S+)/g)].map((found) => found[1] ?? "");
+            const projects = Arr.map([...part.matchAll(/--project(?:=|\s+)(\S+)/g)], (found) => found[1] ?? "");
             const named =
-              projects.length > 0 && projects.every((project) => /^next(?:-|$)/.test(project)) && !ELSEWHERE.test(part);
-            const kept = inside && !part.split(/\s+/).some((word) => /(?:^|[="'/])\.\.|^["']?[/~]/.test(word));
+              projects.length > 0 &&
+              Arr.every(projects, (project) => /^next(?:-|$)/.test(project)) &&
+              !ELSEWHERE.test(part);
+            const kept = inside && !Arr.some(part.split(/\s+/), (word) => /(?:^|[="'/])\.\.|^["']?[/~]/.test(word));
             return /[$`]/.test(bare) || !(named || kept);
-          });
+          }),
+        );
       }),
-    )
-    .map(([name]) => name);
+    ),
+    Arr.map(([name]) => name),
+  );
 };
 
 /** T1 for one more workflow: a pull request or merge queue one; any other runs no merge line. */
 export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
-  const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Object.keys(map(on));
+  const events = typeof on === "string" ? [on] : Arr.isArray(on) ? on : Object.keys(map(on));
   return events.includes("pull_request") || events.includes("merge_group")
-    ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
+    ? Arr.map(toolingJobs(workflow), (job) => `${path}: T1: ${job} runs no tooling test (0539)`)
     : [];
 };
 
@@ -107,7 +114,8 @@ export const mergeLine: Rule = ({ workflow, jobs }, require) => {
   // today's promise checks.
   for (const [name, job] of Object.entries(jobs)) {
     for (const step of steps(map(job))) {
-      require(![step["run"], step["working-directory"]].some(
+      require(!Arr.some(
+        [step["run"], step["working-directory"]],
         (text) => typeof text === "string" && TODAYS_APP.test(text),
       ), `T2: ${name} runs nothing of today's app`);
       require(!(

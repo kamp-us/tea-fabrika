@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -47,7 +48,7 @@ const other = fc.constantFrom(
 
 const realWorkflows = () =>
   Object.fromEntries(
-    ["check.yaml", "host.yaml", "mutation.yaml", "scheduled.yaml", "ci-speed.yaml"].map((name) => [
+    Arr.map(["check.yaml", "host.yaml", "mutation.yaml", "scheduled.yaml", "ci-speed.yaml"], (name) => [
       `.github/workflows/${name}`,
       read(name),
     ]),

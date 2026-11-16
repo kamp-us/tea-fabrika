@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -76,7 +77,7 @@ const plants: Plant[] = [
   ],
   // F1 to F3, the field row check inside check (ticket 985). Source plants, each run once on
   // workflow-lint.ts and restored: the rows anywhere in check (red: before lint); F3 dropped (red: a legs job, a field job comes back).
-  ...(
+  ...Arr.map(
     [
       [
         "the row check ignores failure",
@@ -119,13 +120,14 @@ const plants: Plant[] = [
           w.jobs["ci-required"].needs.push("field");
         },
       ],
-    ] as [string, (w: Workflow) => unknown][]
-  ).map(([fault, mutate]): [string, (w: Workflow) => void] => [
-    fault,
-    (w) => {
-      mutate(w);
-    },
-  ]),
+    ] as [string, (w: Workflow) => unknown][],
+    ([fault, mutate]): [string, (w: Workflow) => void] => [
+      fault,
+      (w) => {
+        mutate(w);
+      },
+    ],
+  ),
   // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
   [
     "L7: the ratchet step is deleted",

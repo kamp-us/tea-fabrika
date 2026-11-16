@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e34-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:19-08:00",
+  "ended": "2026-11-15T20:55:41-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for judgment slice E34 of the Effect-checker sweep (preferEffectArray in .github/ci), in our tooling, with no lock line. Counted 662 hits with only this check at error through --lspconfig: 601 in .ts scripts and tests, 61 in the three .mjs scripts. The checker offers no quick fix for this check, so two scratch codemods fixed 593 (522 map, filter, every, some, flatMap, join, reduce, toReversed and Array.isArray; 71 find and toSorted, each comparator turned into an Order) and 8 were hand edits (4 find that read better as an Option, 3 findIndex, 1 findLastIndex). The 61 .mjs hits are left: changes.mjs, required.mjs and scheduled.mjs run on the runner's bare Node before any install, so an effect import there breaks CI's first jobs. The new effect imports woke fabrika/no-raw-try-catch on 11 raw try/catch blocks, each turned into Result.try with the same answers.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 23,
+  "note": "The first codemod kept native reduce's argument order (Arr.reduce takes the start value second) and dropped one explicit type argument; typecheck caught both and they were fixed. The formatter's import sort moved the new import above 17 files' header comments; each was put back, and every comment line matches main. tsc on .github/ci is clean; 29 test files (900 tests) and vitest.shards.test.ts (34) passed; pnpm lint passed; program.ts loads under the CI package's filtered install in a scratch worktree. None of PR 1366's files is under .github/.",
+  "step": "tests"
+}

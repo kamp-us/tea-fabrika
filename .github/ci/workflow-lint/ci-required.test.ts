@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 import { type Plant, rejects, step, type Workflow } from "./wiring.test-support.ts";
 
 // Today's CI, serving both versions. Covers ci-required.ts, the one required check. Each plant is
@@ -6,10 +7,10 @@ import { type Plant, rejects, step, type Workflow } from "./wiring.test-support.
 
 const plants: Plant[] = [
   // The ci-required job: it waits on every job, never skips, and its judge cannot be bypassed.
-  ...(["changes", "check", "typecheck", "next"] as const).map((job): [string, (w: Workflow) => void] => [
+  ...Arr.map(["changes", "check", "typecheck", "next"] as const, (job): [string, (w: Workflow) => void] => [
     `ci-required does not need ${job}`,
     (w) => {
-      w.jobs["ci-required"].needs = w.jobs["ci-required"].needs.filter((name) => name !== job);
+      w.jobs["ci-required"].needs = Arr.filter(w.jobs["ci-required"].needs, (name) => name !== job);
     },
   ]),
   [
@@ -18,7 +19,7 @@ const plants: Plant[] = [
       Object.assign(w.jobs, { lint: { "timeout-minutes": 5, steps: [{ run: "pnpm lint" }] } });
     },
   ],
-  ...["!cancelled()", "success()", ""].map((condition): [string, (w: Workflow) => void] => [
+  ...Arr.map(["!cancelled()", "success()", ""], (condition): [string, (w: Workflow) => void] => [
     `ci-required runs only on ${condition || "no condition"}`,
     (w) => {
       w.jobs["ci-required"].if = condition;

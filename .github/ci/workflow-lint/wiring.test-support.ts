@@ -3,6 +3,7 @@
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored } from "../changes.mjs";
@@ -64,7 +65,7 @@ export const step = <W extends { jobs: object }, J extends keyof W["jobs"] & str
   name: string,
 ): StepOf<W["jobs"][J]> => {
   const steps = (w.jobs as Record<string, { steps: StepOf<W["jobs"][J]>[] } | undefined>)[job]?.steps ?? [];
-  const [found, ...more] = steps.filter((s) => (s as { name?: unknown }).name === name);
+  const [found, ...more] = Arr.filter(steps, (s) => (s as { name?: unknown }).name === name);
 
   if (found === undefined || more.length > 0) {
     throw new Error(
@@ -237,7 +238,7 @@ const valid = (label: string, extra: string) => ({
       "timeout-minutes": 5,
       outputs: {
         ...Object.fromEntries(
-          ["check", "typecheck", "field", "build"].map((key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
+          Arr.map(["check", "typecheck", "field", "build"], (key) => [key, `\${{ steps.diff.outputs.${key} }}`]),
         ),
         // The plan for CI paths, slice 2: the parser's pass prints these two again, and the size step
         // prints next once more.
@@ -314,7 +315,7 @@ const valid = (label: string, extra: string) => ({
             ...diff.env,
             TESTED: `\${{ github.sha }}`,
             ...Object.fromEntries(
-              ["check", "typecheck", "field", "build"].map((key) => [
+              Arr.map(["check", "typecheck", "field", "build"], (key) => [
                 key.toUpperCase(),
                 `\${{ steps.diff.outputs.${key} }}`,
               ]),
@@ -440,7 +441,7 @@ export const wiring = fc
       setShard(step(clean, "next", "end to end"), e2eShard(e2es, gap));
 
       // The vitest step's guard and the three leg conditions, respaced around each operator.
-      for (const guarded of ["vitest", "chromium", "end to end", "edges"].map((n) => step(clean, "next", n))) {
+      for (const guarded of Arr.map(["vitest", "chromium", "end to end", "edges"], (n) => step(clean, "next", n))) {
         guarded.if = `\${{${gap}${guarded.if?.replace(/ *(==|!=|&&) */g, `${gap}$1${gap}`)}${gap}}}`;
       }
 

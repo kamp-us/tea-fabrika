@@ -1,6 +1,7 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Array as Arr, Order, Option } from "effect";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -11,9 +12,10 @@ import { full, measured } from "../../vitest.shards.ts";
  */
 export const stale = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
   const selected = new Set(files);
-  return Object.keys(table)
-    .filter((path) => path.startsWith("next/") && !selected.has(path))
-    .toSorted();
+  return Arr.sort(
+    Arr.filter(Object.keys(table), (path) => path.startsWith("next/") && !selected.has(path)),
+    Order.String,
+  );
 };
 
 /**
@@ -22,19 +24,19 @@ export const stale = (table: Readonly<Record<string, number>>, files: readonly s
  * (`dist`, then dot folders), so Vitest does the selecting.
  */
 const selected = async (root: string, name: string): Promise<string[]> => {
-  const project = projects.find((each) => each.test.name === name);
-
-  if (project === undefined) {
-    throw new Error(`shard-rows: vitest.config.ts has no project ${name}`);
-  }
+  const project = Option.getOrThrowWith(
+    Arr.findFirst(projects, (each) => each.test.name === name),
+    () => new Error(`shard-rows: vitest.config.ts has no project ${name}`),
+  );
 
   const { include, exclude } = project.test;
   const vitest = await createVitest("test", { root, config: false, watch: false, include, exclude });
 
   try {
-    return (await vitest.globTestSpecifications())
-      .map((spec) => relative(vitest.config.root, spec.moduleId))
-      .toSorted();
+    return Arr.sort(
+      Arr.map(await vitest.globTestSpecifications(), (spec) => relative(vitest.config.root, spec.moduleId)),
+      Order.String,
+    );
   } finally {
     await vitest.close();
   }
@@ -45,7 +47,7 @@ const selected = async (root: string, name: string): Promise<string[]> => {
  * `next-integration`, which the schedule runs beside it (0536).
  */
 export const nextFiles = async (root: string) =>
-  [...(await selected(root, "next")), ...(await selected(root, "next-integration"))].toSorted();
+  Arr.sort([...(await selected(root, "next")), ...(await selected(root, "next-integration"))], Order.String);
 
 /** next/'s visual files, the `next-visual` project: the end-to-end legs run them. */
 export const visualFiles = (root: string) => selected(root, "next-visual");
