@@ -19,7 +19,7 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Array as Arr, Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -239,7 +239,8 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       getByName: (name: string) => {
         const [, storageKey] = JSON.parse(name) as [string, string];
         const owned = () =>
-          descriptors.get(storageKey) ?? [...descriptors.values()].findLast((d) => d.name === storageKey);
+          descriptors.get(storageKey) ??
+          Option.getOrUndefined(Arr.findLast([...descriptors.values()], (d) => d.name === storageKey));
         return {
           configure: async (descriptor: Descriptor) => {
             if (options.callback === true) {
@@ -269,7 +270,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     RECORD: {
       getByName: () => ({
         write: async (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
-          recorded.push(...rows.map((row) => row.span));
+          recorded.push(...Arr.map(rows, (row) => row.span));
           return { _tag: "written" };
         },
       }),
@@ -450,7 +451,7 @@ StartsTest.law(
       const start = (child: Child) => Effect.promise(() => w.run(project.processChild(child, w.from)));
       const checkSaved = Effect.fnUntraced(function* () {
         const rows = w.db.prepare("SELECT * FROM entries").all();
-        expect(rows.some((row) => row._tag === "instance_started")).toBe(true);
+        expect(Arr.some(rows, (row) => row._tag === "instance_started")).toBe(true);
 
         for (const row of rows) {
           const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
@@ -519,9 +520,12 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
   const byName = (list: ReadonlyArray<{ readonly name: string }>) =>
     [...list].sort((a, b) => (a.name < b.name ? -1 : 1));
   const others = (list: ReadonlyArray<{ readonly name: string; readonly program: string }>) =>
-    list.filter((p) => p.program !== "fabrika/counter").map((p) => ({ name: p.name, program: p.program }));
+    Arr.map(
+      Arr.filter(list, (p) => p.program !== "fabrika/counter"),
+      (p) => ({ name: p.name, program: p.program }),
+    );
   let refused = 0;
-  expect(w.configured.map((d) => ({ name: d.name, program: d.program }))).toEqual([
+  expect(Arr.map(w.configured, (d) => ({ name: d.name, program: d.program }))).toEqual([
     { name: "counter:1", program: "fabrika/counter" },
     ...boots,
   ]);
@@ -545,10 +549,10 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     }
 
     const info = await w.run(w.p.info);
-    expect(info.map((p) => p.name).sort()).toEqual([...names, ...boots.map((b) => b.name)].sort());
+    expect(Arr.map(info, (p) => p.name).sort()).toEqual([...names, ...Arr.map(boots, (b) => b.name)].sort());
     expect(byName(others(info))).toEqual(byName(boots));
     expect(byName(others(w.configured))).toEqual(byName(boots));
-    expect(w.configured.every((d) => !d.name.includes("/"))).toBe(true);
+    expect(Arr.every(w.configured, (d) => !d.name.includes("/"))).toBe(true);
   }
 
   expect(refused).toBeGreaterThan(0);
@@ -745,7 +749,7 @@ describe("P12 Project authority", () => {
       const built = await Effect.runPromise(Effect.promise(() => building).pipe(Effect.timeoutOption("3 seconds")));
       const w = await building;
       expect(Option.isSome(built), "the Project's build waited on its own bootstrap's configure").toBe(true);
-      expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
+      expect(Arr.filter(w.configured, (d) => d.id === w.p.boot.process)).toHaveLength(1);
       // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
       expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
         { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
@@ -968,10 +972,10 @@ describe("P12 Connection recording", () => {
                 : gateway.notify(letter, { method: "view.patch", params: {} });
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
-        expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);
+        expect(Arr.some(rows, (row) => row.name === `connection.${operation}`)).toBe(true);
 
         if (operation === "notify") {
-          expect(rows.some((row) => !row.ok)).toBe(true);
+          expect(Arr.some(rows, (row) => !row.ok)).toBe(true);
         }
       } finally {
         await runtime.dispose();
@@ -1056,7 +1060,7 @@ describe("P12 Connection recording", () => {
           owned(async (open) => {
             const { sent } = await refusedCall(open, kind.make(text));
             expect(sent).toEqual([FRAME]);
-            expect(sent.join("")).not.toContain(text);
+            expect(Arr.join(sent, "")).not.toContain(text);
           }, signal),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
@@ -1070,12 +1074,12 @@ describe("P12 Connection recording", () => {
       fc.asyncProperty(rejected, fc.string({ minLength: 8, maxLength: 64 }), (kind, text) =>
         owned(async (open) => {
           const { spans } = await refusedCall(open, kind.make(text));
-          const refused = spans.filter((row) => row.name === "gateway.refused");
+          const refused = Arr.filter(spans, (row) => row.name === "gateway.refused");
           expect(refused).toHaveLength(1);
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Object.values(refused[0]!.attributes).filter((tag) => typeof tag === "string" && tag.includes(text)),
+            Arr.filter(Object.values(refused[0]!.attributes), (tag) => typeof tag === "string" && tag.includes(text)),
           ).toEqual([]);
         }, signal),
       ),

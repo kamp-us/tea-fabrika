@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -230,7 +230,7 @@ const findManifest = (from: string, name: string): string | undefined => {
 };
 
 const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package: string }>) =>
-  selected.some(({ package: name }) => {
+  Arr.some(selected, ({ package: name }) => {
     const file = name.startsWith(".") || isAbsolute(name) ? undefined : findManifest(from, name);
 
     if (file === undefined) {
@@ -281,7 +281,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
     assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 
     if (enforce) {
-      assert(median(bar.head.map((s) => readings(s)[key])) <= bar.caps[key], `local bar regressed: ${key}`);
+      assert(median(Arr.map(bar.head, (s) => readings(s)[key])) <= bar.caps[key], `local bar regressed: ${key}`);
     }
   }
 };
@@ -514,13 +514,13 @@ class Client {
 
   async next(match: (x: any) => boolean): Promise<any> {
     for (;;) {
-      const at = this.frames.findIndex(match);
+      const at = Arr.findFirstIndex(this.frames, match);
 
-      if (at >= 0) {
-        return this.frames.splice(at, 1)[0];
+      if (Option.isSome(at)) {
+        return this.frames.splice(at.value, 1)[0];
       }
 
-      if (this.frames.some((x) => x.closed)) {
+      if (Arr.some(this.frames, (x) => x.closed)) {
         throw Error("wire closed");
       }
 
@@ -946,8 +946,8 @@ describe("P16 copied-file real instance, serial", () => {
     console.log(
       JSON.stringify({
         law: "T10",
-        base: bar.base.map(readings),
-        head: bar.head.map(readings),
+        base: Arr.map(bar.base, readings),
+        head: Arr.map(bar.head, readings),
         sizes: bar.sizes,
       }),
     );
@@ -955,9 +955,9 @@ describe("P16 copied-file real instance, serial", () => {
       localBar(
         {
           ...bar,
-          head: bar.head.map((s) => ({
+          head: Arr.map(bar.head, (s) => ({
             ...s,
-            sendMs: s.sendMs.map(() => bar.caps.acceptedSend + 1),
+            sendMs: Arr.map(s.sendMs, () => bar.caps.acceptedSend + 1),
           })),
         },
         digest,
@@ -966,7 +966,12 @@ describe("P16 copied-file real instance, serial", () => {
       ),
     ).toThrow("acceptedSend");
     expect(() =>
-      localBar({ ...bar, head: bar.head.map((s) => ({ ...s, error: "planted failure" })) }, digest, false, windowed),
+      localBar(
+        { ...bar, head: Arr.map(bar.head, (s) => ({ ...s, error: "planted failure" })) },
+        digest,
+        false,
+        windowed,
+      ),
     ).toThrow("failed run");
     expect(() => localBar(bar, "wrong digest", false, windowed)).toThrow("wrong built bytes");
     expect(() => localBar({ ...bar, capsFrom: "ticket-115's rule (a guess)" }, digest, false, windowed)).toThrow(

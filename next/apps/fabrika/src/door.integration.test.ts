@@ -49,7 +49,20 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import {
+  Arbitrary,
+  Array as Arr,
+  Deferred,
+  Effect,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Order,
+  Result,
+  Schema,
+  Stream,
+} from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -560,7 +573,7 @@ const world = Effect.fnUntraced(function* (
     processesFor,
     databases: () => new Map([["object", db], ...partFiles]),
     partCount: () => partFiles.size,
-    bytes: () => readdirSync(dir).map((file) => readFileSync(join(dir, file))),
+    bytes: () => Arr.map(readdirSync(dir), (file) => readFileSync(join(dir, file))),
   };
 });
 
@@ -655,7 +668,7 @@ describe("P13 selected input recording", () => {
                   const answer = yield* d.route(client, "process.send", request(prior.id, comment(prior.body)));
                   expect(answer._tag).toBe("ok");
                   expect(selections, "a recorded binding never reruns today's selector").toBe(before);
-                  expect(rawRows(w.db, "gateway/inputs").filter((row) => row._tag === "received")).toHaveLength(
+                  expect(Arr.filter(rawRows(w.db, "gateway/inputs"), (row) => row._tag === "received")).toHaveLength(
                     history.length,
                   );
                   continue;
@@ -692,7 +705,7 @@ describe("P13 selected input recording", () => {
                   history.push({ id, body, before: delivered });
                 }
 
-                const rows = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+                const rows = Arr.filter(rawRows(w.db, "gateway/inputs"), (r) => r._tag === "received");
                 expect(rows).toHaveLength(history.length);
 
                 for (const row of rows) {
@@ -992,9 +1005,9 @@ describe("T843 sender budget, next/", () => {
             Effect.provide(w.reopen(w.sql)),
           );
           const replies = yield* Effect.all(reverse ? [b, a] : [a, b], { concurrency: "unbounded" });
-          expect(replies.filter((answer) => answer._tag === "ok")).toHaveLength(1);
+          expect(Arr.filter(replies, (answer) => answer._tag === "ok")).toHaveLength(1);
           expect(
-            replies.filter((answer) => answer._tag === "refused" && answer.reason === "rate_limited"),
+            Arr.filter(replies, (answer) => answer._tag === "refused" && answer.reason === "rate_limited"),
           ).toHaveLength(1);
         }).pipe(w.provide);
       }),
@@ -1125,8 +1138,8 @@ describe("T843 sender budget, next/", () => {
       yield* projectSink.flush;
       const rows = () =>
         Object.fromEntries(
-          [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
-            Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+          Arr.flatMap([...w.databases(), ["connection", c.db] as const], ([name, db]) =>
+            Arr.map(Object.entries(allObjectRows(db)), ([table, values]) => [`${name}/${table}`, values.length]),
           ),
         );
       const before = rows();
@@ -1260,8 +1273,8 @@ describe("T843 sender budget, next/", () => {
             const archived = c.archives.length;
             const rows = () =>
               Object.fromEntries(
-                [...w.databases(), ["connection", c.db] as const].flatMap(([name, db]) =>
-                  Object.entries(allObjectRows(db)).map(([table, values]) => [`${name}/${table}`, values.length]),
+                Arr.flatMap([...w.databases(), ["connection", c.db] as const], ([name, db]) =>
+                  Arr.map(Object.entries(allObjectRows(db)), ([table, values]) => [`${name}/${table}`, values.length]),
                 ),
               );
             const before = rows();
@@ -1392,9 +1405,9 @@ describe("T843 sender budget, next/", () => {
                   };
             yield* c.send(method, params);
             expect(c.frames.at(-1)).toMatchObject({ error: { data: { reason: "rate_limited", retryAfter: 42_000 } } });
-            const counts = [...w.databases(), ["connection", c.db] as const].map(([name, db]) => [
+            const counts = Arr.map([...w.databases(), ["connection", c.db] as const], ([name, db]) => [
               name,
-              Object.entries(allObjectRows(db)).map(([table, rows]) => [table, rows.length]),
+              Arr.map(Object.entries(allObjectRows(db)), ([table, rows]) => [table, rows.length]),
             ]);
             first ??= counts;
             expect(counts).toEqual(first);
@@ -1409,7 +1422,7 @@ describe("T843 sender budget, next/", () => {
           yield* TestClock.adjust("16 days");
           yield* SpanSink.use((sink) => sink.summaries(REFUSED_HOUR, REFUSED_HOUR + HOUR));
           const outputs = JSON.stringify({
-            sql: [...w.databases(), ["connection", c.db] as const].map(([name, db]) => [name, allObjectRows(db)]),
+            sql: Arr.map([...w.databases(), ["connection", c.db] as const], ([name, db]) => [name, allObjectRows(db)]),
             batches,
             archives: [...archives, ...c.archives],
             connectionBatches: c.saved,
@@ -1433,10 +1446,12 @@ describe("T843 sender budget, next/", () => {
             { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
           ]);
           expect(
-            c.db
-              .prepare("SELECT piece,hour,refused,count FROM sums WHERE refused='rate_limited' ORDER BY piece")
-              .all()
-              .map((row) => ({ ...row })),
+            Arr.map(
+              c.db
+                .prepare("SELECT piece,hour,refused,count FROM sums WHERE refused='rate_limited' ORDER BY piece")
+                .all(),
+              (row) => ({ ...row }),
+            ),
           ).toEqual([
             { piece: "connection.frame", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
             { piece: "runtime.rpc", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
@@ -1523,10 +1538,10 @@ const spoofedParams = (write: typeof SpoofedWrite.Type, letter: string) => {
 
 const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, unknown>>> =>
   Object.fromEntries(
-    db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .all()
-      .map(({ name }) => [String(name), db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`).all()]),
+    Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all(), ({ name }) => [
+      String(name),
+      db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`).all(),
+    ]),
   );
 
 const online = Effect.fnUntraced(function* (
@@ -1744,8 +1759,8 @@ describe("P10 review regressions", () => {
 
                   const rows = (yield* d.watch(owner.client)).rows;
                   // One row per key: a second tab of a key joins that key's row, never a new one.
-                  expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
-                  const row = rows.find((r) => r.key === k.raw);
+                  expect(new Set(Arr.map(rows, (r) => r.key)).size).toBe(rows.length);
+                  const row = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.key === k.raw));
                   assert(row);
                   expect(reply).toEqual({ _tag: "ok", result: { code: row.code, until: row.until } });
                 }
@@ -1810,7 +1825,7 @@ describe("P10 review regressions", () => {
                 .pipe(Effect.ensuring(Effect.sync(() => rng.mockRestore())));
               const code = String(random % 1_000_000).padStart(6, "0");
               expect(code).toMatch(/^[0-9]{6}$/);
-              expect((yield* d.watch(owner.client)).rows.map((r) => r.code)).toEqual([code]);
+              expect(Arr.map((yield* d.watch(owner.client)).rows, (r) => r.code)).toEqual([code]);
               expect(reply).toMatchObject({ _tag: "ok", result: { code } });
             }).pipe(w.provide);
           }),
@@ -2398,7 +2413,7 @@ describe("P10 door admission and waiting", () => {
         expect(rawRows(w.db, "gateway/inputs")).toEqual(before);
         expect(w.db.prepare("SELECT count(*) n FROM measurements").get()?.n).toBe(healthBefore);
         const rows = (yield* d.watch(client)).rows;
-        expect(rows.map((r) => r.key)).toEqual(pending.slice(1).map((k) => k.raw));
+        expect(Arr.map(rows, (r) => r.key)).toEqual(Arr.map(pending.slice(1), (k) => k.raw));
         const restarted = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
         yield* Effect.gen(function* () {
           const next = yield* Gateway;
@@ -2596,12 +2611,12 @@ describe("P10 door admission and waiting", () => {
         const text = grantText(grant);
         expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
         expect((yield* d.watch(client)).rows).toEqual([]);
-        expect(w.notices.some((n) => n.client === pending && JSON.stringify(n.news).includes("client.granted"))).toBe(
-          true,
-        );
-        expect(w.notices.some((n) => n.client === pending2 && JSON.stringify(n.news).includes("client.granted"))).toBe(
-          true,
-        );
+        expect(
+          Arr.some(w.notices, (n) => n.client === pending && JSON.stringify(n.news).includes("client.granted")),
+        ).toBe(true);
+        expect(
+          Arr.some(w.notices, (n) => n.client === pending2 && JSON.stringify(n.news).includes("client.granted")),
+        ).toBe(true);
         expect(
           (yield* d.initialize(pending, hello, {
             url: URL,
@@ -2674,7 +2689,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
         assert(owner);
         const reply = yield* d.watch(owner);
         expect(reply._tag).toBe("watching");
-        const flat = reply.rows.map(savedRow);
+        const flat = Arr.map(reply.rows, savedRow);
         // format: watch replies and the saved value keep the stored row bytes, and the saved
         // value keeps its flat rows-and-settings shape under the same gateway_state key.
         expect(JSON.stringify(reply.rows)).toBe(JSON.stringify(flat));
@@ -2694,8 +2709,8 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
 
       while (index < moves.length) {
         const move = moves[index++]!;
-        const kept = rows.filter((r) => r.until > now);
-        const free = pool.filter((p) => !granted.has(p.k.raw));
+        const kept = Arr.filter(rows, (r) => r.until > now);
+        const free = Arr.filter(pool, (p) => !granted.has(p.k.raw));
 
         if (move.kind === "reopen") {
           if (cuts) {
@@ -2711,7 +2726,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           yield* TestClock.adjust(by);
           now += by;
           rows = yield* watch();
-          expect(rows).toEqual(kept.filter((r) => r.until > now));
+          expect(rows).toEqual(Arr.filter(kept, (r) => r.until > now));
           continue;
         }
 
@@ -2725,22 +2740,24 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           const saved = w.db.prepare("SELECT value FROM gateway_state WHERE name=?").get(`client/${connection.client}`);
           const attached = saved !== undefined && JSON.parse(String(saved.value))._tag === "waiting";
           yield* d.disconnect(connection.client);
-          connections = connections.filter((c) => c !== connection);
+          connections = Arr.filter(connections, (c) => c !== connection);
           rows = yield* watch();
-          const row = kept.find((r) => r.key === connection.key && r.clients.includes(connection.client));
-          const clients = row?.clients.filter((c) => c !== connection.client) ?? [];
+          const row = Option.getOrUndefined(
+            Arr.findFirst(kept, (r) => r.key === connection.key && r.clients.includes(connection.client)),
+          );
+          const clients = Arr.filter(row?.clients ?? [], (c) => c !== connection.client);
           expect(rows).toEqual(
             !attached || row === undefined
               ? kept
               : clients.length === 0
-                ? kept.filter((r) => r !== row)
-                : kept.map((r) => (r === row ? { ...row, clients, tabs: clients.length } : r)),
+                ? Arr.filter(kept, (r) => r !== row)
+                : Arr.map(kept, (r) => (r === row ? { ...row, clients, tabs: clients.length } : r)),
           );
           continue;
         }
 
         if (move.kind === "grant") {
-          const withRow = free.filter((p) => kept.some((r) => r.key === p.k.raw));
+          const withRow = Arr.filter(free, (p) => Arr.some(kept, (r) => r.key === p.k.raw));
           const pick =
             (move.other % 3 === 0 ? undefined : withRow[move.pick % Math.max(1, withRow.length)]) ??
             free[move.pick % Math.max(1, free.length)];
@@ -2761,16 +2778,16 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           });
           expect((yield* d.grant({ text, armored: yield* w.root.sign(text) }))._tag).toBe("applied");
           granted.add(pick.k.raw);
-          connections = connections.filter((c) => c.key !== pick.k.raw);
-          const row = kept.find((r) => r.key === pick.k.raw);
-          const told = w.notices
-            .slice(before)
-            .filter((n) => JSON.stringify(n.news).includes("client.granted"))
-            .map((n) => n.client);
+          connections = Arr.filter(connections, (c) => c.key !== pick.k.raw);
+          const row = Option.getOrUndefined(Arr.findFirst(kept, (r) => r.key === pick.k.raw));
+          const told = Arr.map(
+            Arr.filter(w.notices.slice(before), (n) => JSON.stringify(n.news).includes("client.granted")),
+            (n) => n.client,
+          );
           // Every tab of the admitted key, and only those, is told once to answer a fresh nonce.
-          expect(told.toSorted()).toEqual([...(row?.clients ?? [])].toSorted());
+          expect(Arr.sort(told, Order.String)).toEqual(Arr.sort(row?.clients ?? [], Order.String));
           rows = yield* watch();
-          expect(rows).toEqual(kept.filter((r) => r !== row));
+          expect(rows).toEqual(Arr.filter(kept, (r) => r !== row));
           continue;
         }
 
@@ -2821,14 +2838,14 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           continue;
         }
 
-        const old = kept.find((r) => r.key === connection.key);
-        const row = rows.find((r) => r.key === connection.key);
+        const old = Option.getOrUndefined(Arr.findFirst(kept, (r) => r.key === connection.key));
+        const row = Option.getOrUndefined(Arr.findFirst(rows, (r) => r.key === connection.key));
         assert(row);
         expect(reply).toEqual({ _tag: "ok", result: { code: row.code, until: row.until } });
 
         if (old !== undefined) {
           const clients = old.clients.includes(connection.client) ? old.clients : [...old.clients, connection.client];
-          expect(rows).toEqual(kept.map((r) => (r === old ? { ...old, clients, tabs: clients.length } : r)));
+          expect(rows).toEqual(Arr.map(kept, (r) => (r === old ? { ...old, clients, tabs: clients.length } : r)));
           continue;
         }
 
@@ -2862,7 +2879,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
     // An old row: the value as a door before ticket 707 wrote it, by hand, then a fresh door.
     w.db
       .prepare("UPDATE gateway_state SET value=? WHERE name='waiting'")
-      .run(JSON.stringify({ rows: rows.map(savedRow), most, ttl }));
+      .run(JSON.stringify({ rows: Arr.map(rows, savedRow), most, ttl }));
     layer = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
   }
 });
@@ -3255,7 +3272,7 @@ describe("P10 inputs, retries and signer", () => {
         expect((yield* d.route(client, "unknown.method", {}))._tag).toBe("refused");
         const rows = (yield* stamped()).slice(before);
         expect(rows).toHaveLength(3);
-        expect(new Set(rows.map((r) => r.id)).size).toBe(3);
+        expect(new Set(Arr.map(rows, (r) => r.id)).size).toBe(3);
 
         for (const [index, method] of ["ledger.read", "ledger.wait", "unknown.method"].entries()) {
           expect(rows[index]?._tag).toBe(index === 2 ? "refused" : "received");
@@ -3345,10 +3362,10 @@ describe("P10 inputs, retries and signer", () => {
               });
               expect(lose).toBe(false);
               expect(w.deliveries).toEqual([]);
-              const before = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+              const before = Arr.filter(rawRows(w.db, "gateway/inputs"), (r) => r._tag === "received");
               expect(before).toHaveLength(1);
               yield* d.route(client, "process.send", request(value));
-              const after = rawRows(w.db, "gateway/inputs").filter((r) => r._tag === "received");
+              const after = Arr.filter(rawRows(w.db, "gateway/inputs"), (r) => r._tag === "received");
               expect(after).toEqual(before);
               expect(w.deliveries[0]!.envelope.id).toBe(before[0]?.id);
               expect(w.deliveries[0]!.trace.traceId).toBe(before[0]?.traceId);
@@ -3428,7 +3445,7 @@ describe("P10 inputs, retries and signer", () => {
             expect(w.deliveries).toEqual([]);
             expect(w.usedInputs.length).toBe(before);
             expect(yield* stamped()).toEqual([]);
-            const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
+            const saved = JSON.stringify(Arr.map([...w.databases()], ([name, db]) => [name, allObjectRows(db)]));
             expect(saved).not.toContain(`t844-forged:${write.marker}`);
             expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
             expect(saved).not.toContain(forged);
@@ -3439,7 +3456,7 @@ describe("P10 inputs, retries and signer", () => {
           yield* d.route(client, "ledger.read", { stream: "x", after: 0 });
           yield* SpanSink.use((sink) => sink.flush);
           const saved = JSON.stringify({
-            databases: [...w.databases()].map(([name, db]) => [name, allObjectRows(db)]),
+            databases: Arr.map([...w.databases()], ([name, db]) => [name, allObjectRows(db)]),
             archives,
           });
 
@@ -3462,15 +3479,16 @@ describe("P10 inputs, retries and signer", () => {
     type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
       const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
-      const fields = Object.entries(state.schema.fields).filter(
+      const fields = Arr.filter(
+        Object.entries(state.schema.fields),
         ([key, field]) =>
           Object.hasOwn(state.m, key) &&
           (!missing || Schema.decodeUnknownResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
       );
       assert(fields.length > 0, "the current message must have a field that can be broken");
-      return Arbitrary.schema(Schema.Literals(fields.map(([key]) => key))).pipe(
+      return Arbitrary.schema(Schema.Literals(Arr.map(fields, ([key]) => key))).pipe(
         Arbitrary.flatMap((key) => {
-          const field = fields.find(([name]) => name === key)![1];
+          const field = Option.getOrThrow(Arr.findFirst(fields, ([name]) => name === key))[1];
           const replacement = missing
             ? Arbitrary.Constant(undefined)
             : Arbitrary.schema(SpoofedWrite.fields.value).pipe(
@@ -3514,12 +3532,9 @@ describe("P10 inputs, retries and signer", () => {
       value: Arbitrary.schema(SpoofedWrite.fields.value),
     }).pipe(
       Arbitrary.flatMap(({ m, edits, ...stamp }) =>
-        edits
-          .reduce(
-            (current, edit) => current.pipe(Arbitrary.flatMap((state) => editMessage(state, edit))),
-            Arbitrary.Constant<MessageState>({ schema, m }),
-          )
-          .pipe(Arbitrary.map((state) => ({ ...stamp, m: state.m }))),
+        Arr.reduce(edits, Arbitrary.Constant<MessageState>({ schema, m }), (current, edit) =>
+          current.pipe(Arbitrary.flatMap((state) => editMessage(state, edit))),
+        ).pipe(Arbitrary.map((state) => ({ ...stamp, m: state.m }))),
       ),
     );
   })();
@@ -3548,12 +3563,13 @@ describe("P10 inputs, retries and signer", () => {
           const { client } = yield* online(d, w);
           const sink = yield* SpanSink;
           yield* sink.flush;
-          const snapshot = () => [...w.databases()].map(([name, db]) => [name, allObjectRows(db)] as const);
+          const snapshot = () => Arr.map([...w.databases()], ([name, db]) => [name, allObjectRows(db)] as const);
           const unchangedRows = (databases: ReturnType<typeof snapshot>) =>
-            databases.map(([name, tables]) => [
+            Arr.map(databases, ([name, tables]) => [
               name,
               Object.fromEntries(
-                Object.entries(tables).filter(
+                Arr.filter(
+                  Object.entries(tables),
                   ([table]) => name !== "object" || (table !== "sums" && table !== "gateway_limits"),
                 ),
               ),
@@ -3562,15 +3578,18 @@ describe("P10 inputs, retries and signer", () => {
           const usedInputs = [...w.usedInputs];
           const deliveries = [...w.deliveries];
           const uploaded = [...archives];
-          const beforeSums = before.find(([name]) => name === "object")![1].sums!;
+          const beforeSums = Option.getOrThrow(Arr.findFirst(before, ([name]) => name === "object"))[1].sums!;
           const target = { piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved" };
-          const had = beforeSums.find(
-            (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
+          const had = Option.getOrUndefined(
+            Arr.findFirst(
+              beforeSums,
+              (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
+            ),
           );
           const expectedSums =
             had === undefined
               ? [...beforeSums, { ...target, count: 1 }]
-              : beforeSums.map((row) => (row === had ? { ...row, count: Number(row.count) + 1 } : row));
+              : Arr.map(beforeSums, (row) => (row === had ? { ...row, count: Number(row.count) + 1 } : row));
           const inner = { ...write.m, [write.key]: write.value };
           expect(Schema.decodeUnknownResult(w.settings.inputs.schema)(write.m)._tag).toBe("Failure");
           expect(Schema.decodeUnknownResult(w.settings.inputs.schema)(inner)._tag).toBe("Failure");
@@ -3584,7 +3603,7 @@ describe("P10 inputs, retries and signer", () => {
           expect(w.deliveries).toEqual(deliveries);
           const after = snapshot();
           expect(unchangedRows(after)).toEqual(unchangedRows(before));
-          const object = after.find(([name]) => name === "object")![1];
+          const object = Option.getOrThrow(Arr.findFirst(after, ([name]) => name === "object"))[1];
           const until = REFUSED_HOUR + w.settings.rateLimit.window;
           expect(object.gateway_limits).toEqual([{ sender: w.window.fingerprint, until, value: expect.any(String) }]);
           expect(
@@ -3630,8 +3649,8 @@ describe("P10 inputs, retries and signer", () => {
           for (const [i, write] of writes.entries()) {
             expect((yield* d.route(client, write.method, spoofedParams(write, `bound-${i}`)))._tag).toBe("refused");
             const counts = Object.fromEntries(
-              [...w.databases()].flatMap(([name, db]) =>
-                Object.entries(allObjectRows(db)).map(([table, rows]) => [`${name}/${table}`, rows.length]),
+              Arr.flatMap([...w.databases()], ([name, db]) =>
+                Arr.map(Object.entries(allObjectRows(db)), ([table, rows]) => [`${name}/${table}`, rows.length]),
               ),
             );
             first ??= counts;
@@ -3680,22 +3699,23 @@ describe("P10 inputs, retries and signer", () => {
           expect(sink.sums).toBeTypeOf("function");
           const openHour = REFUSED_HOUR + 3 * HOUR;
           yield* TestClock.setTime(openHour + 2000);
-          const expected = [...counts]
-            .sort(([a], [b]) => a - b)
-            .map(([hour, count]) => ({
+          const expected = Arr.map(
+            [...counts].sort(([a], [b]) => a - b),
+            ([hour, count]) => ({
               _tag: "sum",
               piece: "gateway.route",
               hour,
               refused: "reserved",
               count,
-            }));
+            }),
+          );
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(
-            expected.filter((point) => point.hour < openHour),
+            Arr.filter(expected, (point) => point.hour < openHour),
           );
           yield* TestClock.setTime(openHour + HOUR);
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(expected);
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR + HOUR, REFUSED_HOUR + 2 * HOUR)).toEqual(
-            expected.filter((point) => point.hour === REFUSED_HOUR + HOUR),
+            Arr.filter(expected, (point) => point.hour === REFUSED_HOUR + HOUR),
           );
         }).pipe(w.provide);
       }),
@@ -3726,8 +3746,8 @@ describe("P10 inputs, retries and signer", () => {
           expect(received[0]).toMatchObject({ _tag: "received", id: envelope.id });
           expect(w.db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='gateway.route'").get()?.n).toBe(1);
           const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
-          expect(rows.filter((row) => row.name === "gateway.route")).toHaveLength(1);
-          expect(rows.filter((row) => row.name === "gateway.input")).toHaveLength(1);
+          expect(Arr.filter(rows, (row) => row.name === "gateway.route")).toHaveLength(1);
+          expect(Arr.filter(rows, (row) => row.name === "gateway.input")).toHaveLength(1);
         }).pipe(w.provide);
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -3744,8 +3764,8 @@ describe("P10 inputs, retries and signer", () => {
         yield* d.route(client, "process.send", request("stable-letter"));
         const deliveries = w.deliveries;
         expect(deliveries.length).toBeGreaterThan(0);
-        expect(new Set(deliveries.map((x) => x.envelope.id)).size).toBe(1);
-        expect(new Set(deliveries.map((x) => x.trace.traceId)).size).toBe(1);
+        expect(new Set(Arr.map(deliveries, (x) => x.envelope.id)).size).toBe(1);
+        expect(new Set(Arr.map(deliveries, (x) => x.trace.traceId)).size).toBe(1);
         expect(yield* entries(`${PROCESS}/inbox`)).toHaveLength(1);
         expect((yield* d.route(client, "process.send", request("stable-letter", comment("changed"))))._tag).toBe(
           "refused",
@@ -3782,7 +3802,7 @@ describe("P10 inputs, retries and signer", () => {
         expect(id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
       }
 
-      expect(w.sql.exec("SELECT id FROM gateway_starts ORDER BY rowid").map((row) => row.id)).toEqual([
+      expect(Arr.map(w.sql.exec("SELECT id FROM gateway_starts ORDER BY rowid"), (row) => row.id)).toEqual([
         START,
         OTHER_PROCESS,
       ]);
@@ -3945,8 +3965,10 @@ describe("P10 passkey roots and recovery", () => {
               const proof = yield* sk.sign(text, { counter: value });
               expect((yield* d.grant({ text, armored: proof.armored }))._tag).toBe("applied");
               const rows = yield* entries("gateway/access");
-              expect(rows.map((row) => row._tag)).toEqual(["founded", "granted"]);
-              expect(rows.find((row) => row.id === "founding-passkey-approval")?.body).toMatchObject({
+              expect(Arr.map(rows, (row) => row._tag)).toEqual(["founded", "granted"]);
+              expect(
+                Option.getOrUndefined(Arr.findFirst(rows, (row) => row.id === "founding-passkey-approval"))?.body,
+              ).toMatchObject({
                 signed: {
                   signer: sk.line,
                   passkey: {
@@ -4014,7 +4036,7 @@ describe("P10 passkey roots and recovery", () => {
               const events = yield* entries("gateway/access");
 
               for (const id of [value, "remove-fresh"]) {
-                expect(events.find((row) => row.id === id)?.body).toMatchObject({
+                expect(Option.getOrUndefined(Arr.findFirst(events, (row) => row.id === id))?.body).toMatchObject({
                   signed: {
                     passkey: {
                       be: true,
@@ -4027,7 +4049,7 @@ describe("P10 passkey roots and recovery", () => {
                 });
               }
 
-              expect(events.find((row) => row.id === p.add.id)?.body).toMatchObject({
+              expect(Option.getOrUndefined(Arr.findFirst(events, (row) => row.id === p.add.id))?.body).toMatchObject({
                 add: {
                   adds: { passkey: { proof: p.proof.armored, nonce: p.nonce, be: true, bs: true } },
                 },
@@ -4181,7 +4203,7 @@ describe("P10 revocation and append", () => {
               const members = yield* ClientManager.use((m) => m.members);
               expect(members.keys.get(w.otherRoot.line)?.live).toBe(true);
               expect(members.keys.get(w.sheet.line)?.live).toBe(true);
-              expect(w.notices.some((n) => JSON.stringify(n.news).includes("4003"))).toBe(true);
+              expect(Arr.some(w.notices, (n) => JSON.stringify(n.news).includes("4003"))).toBe(true);
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -4472,7 +4494,7 @@ describe("P33 signal ids belong to the brain", () => {
               const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
                 Effect.provide(watcher),
               );
-              expect(letters.map((letter) => letter.m)).toEqual([
+              expect(Arr.map(letters, (letter) => letter.m)).toEqual([
                 { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED, to: toWatcher },
               ]);
             }).pipe(w.provide);
@@ -4532,7 +4554,7 @@ describe("P33 signal ids belong to the brain", () => {
               const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(TARGET, 0))).pipe(
                 Effect.provide(watcher),
               );
-              expect(letters.map((letter) => letter.m)).toEqual([{ _tag: "DOWN", ref: 5 }, value]);
+              expect(Arr.map(letters, (letter) => letter.m)).toEqual([{ _tag: "DOWN", ref: 5 }, value]);
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -4683,12 +4705,12 @@ describe("P10 span reader and recording", () => {
         const firstPage = yield* Schema.decodeUnknownEffect(SpanPage)(first.result);
         expect(firstPage.spans).toHaveLength(256);
         expect(firstPage.next).toBe(256);
-        expect(firstPage.spans.map((s) => s.spanId)).toEqual(baseline.slice(0, 256).map((s) => s.spanId));
+        expect(Arr.map(firstPage.spans, (s) => s.spanId)).toEqual(Arr.map(baseline.slice(0, 256), (s) => s.spanId));
         const second = yield* d.route(client, "spans.read", { chain, after: 256 });
         assert(second._tag === "ok");
         const secondPage = yield* Schema.decodeUnknownEffect(SpanPage)(second.result);
-        expect(secondPage.spans.slice(0, baseline.length - 256).map((s) => s.spanId)).toEqual(
-          baseline.slice(256).map((s) => s.spanId),
+        expect(Arr.map(secondPage.spans.slice(0, baseline.length - 256), (s) => s.spanId)).toEqual(
+          Arr.map(baseline.slice(256), (s) => s.spanId),
         );
         expect(secondPage.spans.length).toBeLessThanOrEqual(256);
         expect(secondPage.next).toBe(256 + secondPage.spans.length);
@@ -4784,7 +4806,7 @@ describe("P10 span reader and recording", () => {
                 by: w.window.fingerprint,
                 reason: value,
               });
-              expect((yield* Stream.runCollect(r.read(chain))).some((s) => s.spanId === span.spanId)).toBe(true);
+              expect(Arr.some(yield* Stream.runCollect(r.read(chain)), (s) => s.spanId === span.spanId)).toBe(true);
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -4800,23 +4822,26 @@ describe("P10 span reader and recording", () => {
         w.controls.deliver = ({ envelope, trace }) =>
           Effect.gen(function* () {
             const rows = yield* stamped();
-            expect(rows.some((r) => r.id === envelope.id)).toBe(true);
+            expect(Arr.some(rows, (r) => r.id === envelope.id)).toBe(true);
             const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
               Stream.runCollect(r.read(Chain.cases.spans.make({}))),
             );
             expect(
-              spans.some((s) => s.name === "gateway.input" && s.spanId === trace.spanId && s.traceId === trace.traceId),
+              Arr.some(
+                spans,
+                (s) => s.name === "gateway.input" && s.spanId === trace.spanId && s.traceId === trace.traceId,
+              ),
             ).toBe(true);
           });
         yield* d.route(client, "process.send", request("recorded"));
         const rows = yield* stamped();
-        const received = rows.find((r) => r.id === w.deliveries[0]!.envelope.id)!;
+        const received = Option.getOrThrow(Arr.findFirst(rows, (r) => r.id === w.deliveries[0]!.envelope.id));
         expect(received.parent).toBeNull();
         expect(received.by).toBe(w.window.fingerprint);
         const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
           Stream.runCollect(r.read(Chain.cases.spans.make({}))),
         );
-        const route = spans.find((s) => s.name === "gateway.route");
+        const route = Option.getOrUndefined(Arr.findFirst(spans, (s) => s.name === "gateway.route"));
         expect(route?.links).toContainEqual(
           expect.objectContaining({
             traceId: w.deliveries[0]!.trace.traceId,
@@ -4896,7 +4921,7 @@ describe("P10 span reader and recording", () => {
               const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
                 Stream.runCollect(r.read(Chain.cases.spans.make({}))),
               );
-              expect(spans.some((s) => s.name === "gateway.route" && !s.ok)).toBe(true);
+              expect(Arr.some(spans, (s) => s.name === "gateway.route" && !s.ok)).toBe(true);
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -4960,7 +4985,7 @@ describe("P10 span reader and recording", () => {
             log,
             inputRows,
             spans,
-            archives: archives.map((a) => Buffer.from(a).toString()),
+            archives: Arr.map(archives, (a) => Buffer.from(a).toString()),
           });
           expect(inputRows.length).toBeGreaterThan(0);
           expect(spans.length).toBeGreaterThan(0);
@@ -5551,7 +5576,7 @@ describe("P10 refusal records and checked writes", () => {
               const answers = yield* Effect.all([initialize, initialize], {
                 concurrency: "unbounded",
               });
-              expect(answers.map((a) => a._tag).sort()).toEqual(["online", "refused"]);
+              expect(Arr.map(answers, (a) => a._tag).sort()).toEqual(["online", "refused"]);
               expect(yield* d.knock(client, { label: "Already online" })).toMatchObject({
                 _tag: "refused",
                 reason: "not_waiting",
@@ -5673,7 +5698,7 @@ describe("P10 refusal records and checked writes", () => {
 // the session's own process and whose recipient is the `to` the door built.
 describe("P18 slice 2 D1 to D3: a window monitors a process through the door", () => {
   const processRows = () => entries("processes");
-  const monitoredRows = () => Effect.map(processRows(), (rows) => rows.filter((row) => row._tag === "monitored"));
+  const monitoredRows = () => Effect.map(processRows(), (rows) => Arr.filter(rows, (row) => row._tag === "monitored"));
   const inboxRows = (tab: string) => entries(clientInbox(tab));
   /** A key granted as hands, online on its own connection with a session. */
   const handsOnline = Effect.fnUntraced(function* (d: typeof Gateway.Service, w: World, session: string) {
@@ -5711,7 +5736,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
         const call = {
           ref: generated.ref,
           pid: processId(),
-          extra: Object.fromEntries(generated.extra.map((e) => [e.key, e.value])),
+          extra: Object.fromEntries(Arr.map(generated.extra, (e) => [e.key, e.value])),
         };
         yield* Effect.gen(function* () {
           const d = yield* Gateway;
@@ -5725,7 +5750,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           });
           const added = (yield* processRows()).slice(before.length);
           expect(
-            added.map((row) => [row._tag, row.by, row.body]),
+            Arr.map(added, (row) => [row._tag, row.by, row.body]),
             "one monitored line for the checked connection",
           ).toEqual([["monitored", BRAIN_KEY, { ref: call.ref, process: call.pid, to, asked: w.window.fingerprint }]]);
           const once = yield* processRows();
@@ -5739,7 +5764,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const extra = { ...call.extra, ref: `${call.ref}:x`, pid: call.pid };
           // A key every door call reserves (`id`, `by`, `for`, `arrivedAt`) keeps the door's own
           // `reserved` refusal; any other key is this method's `bad_input`.
-          const reserved = ["id", "by", "for", "arrivedAt"].some((k) => Object.hasOwn(extra, k));
+          const reserved = Arr.some(["id", "by", "for", "arrivedAt"], (k) => Object.hasOwn(extra, k));
           expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Object.keys(extra))).toMatchObject({
             _tag: "refused",
             reason: reserved ? "reserved" : "bad_input",
@@ -5810,7 +5835,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           yield* ProcessManager.use((p) => p.exit(counter, CRASHED, brainFrom)).pipe(Effect.provide(brain));
           const exited = yield* inboxRows(tab);
           const letter = (row: (typeof exited)[number]) => [row.id, row.by, Reflect.get(Object(row.body), "m")];
-          expect(exited.map(letter), "the exit's DOWN in the window's own inbox").toEqual([
+          expect(Arr.map(exited, letter), "the exit's DOWN in the window's own inbox").toEqual([
             [signalId(to, "w9", 1), BRAIN_KEY, Down.make({ ref: "w9", process: counter, reason: CRASHED, to })],
           ]);
           expect(w.rings.slice(rang), "the exit rang the parked wait on the window's inbox").toContain(inbox);
@@ -5825,14 +5850,14 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const before = w.rings.length;
           expect((yield* d.route(client, "process.monitor", { ref: "w10", pid: counter }))._tag).toBe("ok");
           const gone = (yield* inboxRows(tab)).slice(exited.length);
-          expect(gone.map(letter), "a gone pid's monitor wrote its noproc DOWN in the same call").toEqual([
+          expect(Arr.map(gone, letter), "a gone pid's monitor wrote its noproc DOWN in the same call").toEqual([
             [
               signalId(to, "w10", 1),
               BRAIN_KEY,
               Down.make({ ref: "w10", process: counter, reason: { _tag: "noproc" }, to }),
             ],
           ]);
-          expect((yield* monitoredRows()).map((row) => Reflect.get(Object(row.body), "ref"))).toEqual(["w9", "w10"]);
+          expect(Arr.map(yield* monitoredRows(), (row) => Reflect.get(Object(row.body), "ref"))).toEqual(["w9", "w10"]);
           expect(w.rings.slice(before), "the noproc DOWN rang the parked wait").toContain(inbox);
           expect(
             yield* d.route(client, "ledger.wait", { stream: inbox, after }),

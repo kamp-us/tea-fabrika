@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, Layer, Redacted, Result, Schema, Stream } from "effect";
+import { Array as Arr, Deferred, Effect, Fiber, Layer, Option, Redacted, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -517,7 +517,7 @@ describe("P17a, revoke stops writes at the final door", () => {
           Effect.gen(function* () {
             const w = yield* world(),
               d = yield* setup(w);
-            const before = (yield* rows(w, "gateway/hellos")).filter((row) => row.by === w.old.fingerprint).length;
+            const before = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint).length;
             const entered = yield* Deferred.make<void>(),
               release = yield* Deferred.make<void>();
             // Pause both write services before their real SQLite transaction. This also
@@ -540,7 +540,7 @@ describe("P17a, revoke stops writes at the final door", () => {
 
             const revoke = (yield* rows(w, "gateway/access")).at(-1);
             expect(revoke?._tag).toBe("revoked");
-            const hellos = (yield* rows(w, "gateway/hellos")).filter((row) => row.by === w.old.fingerprint);
+            const hellos = Arr.filter(yield* rows(w, "gateway/hellos"), (row) => row.by === w.old.fingerprint);
             const answer = Result.isFailure(result)
               ? Schema.is(NotGranted)(result.failure)
                 ? "not_granted"
@@ -552,7 +552,7 @@ describe("P17a, revoke stops writes at the final door", () => {
             expect({
               answer,
               hellos: hellos.length - before,
-              afterRevoke: hellos.filter((row) => row.rev > (revoke?.rev ?? 0)).length,
+              afterRevoke: Arr.filter(hellos, (row) => row.rev > (revoke?.rev ?? 0)).length,
             }).toEqual({
               answer: revokeFirst ? "not_granted" : "online",
               hellos: revokeFirst ? 0 : 1,
@@ -589,7 +589,9 @@ describe("P17a, revoke stops writes at the final door", () => {
             const incoming = last(w);
             expect(incoming.envelope.input).toEqual({ _tag: "add", n });
             // Mutation regression: safe transformed input must stay in the authenticated log.
-            const recorded = (yield* rows(w, "gateway/inputs")).find((row) => row.id === incoming.envelope.id);
+            const recorded = Option.getOrUndefined(
+              Arr.findFirst(yield* rows(w, "gateway/inputs"), (row) => row.id === incoming.envelope.id),
+            );
             expect(recorded).toMatchObject({
               _tag: "received",
               body: { input: { _tag: "add", n: String(n) } },
@@ -913,7 +915,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                 });
               }
 
-              expect((yield* rows(w, `${processes[target]}/inbox`)).map((row) => row.id)).toEqual(
+              expect(Arr.map(yield* rows(w, `${processes[target]}/inbox`), (row) => row.id)).toEqual(
                 Array.from({ length: before }, (_, n) => `before-${n}`),
               );
               expect((yield* send(d.b, d.other, w, target, "other-live", text))._tag).toBe("ok");

@@ -31,7 +31,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -191,11 +191,14 @@ const flow = Effect.fnUntraced(
     yield* fs.symlink(path.join(app, "node_modules"), path.join(home, "node_modules"));
     yield* fs.writeFileString(
       entry,
-      [
-        `export { default, Connection, Process, RecordPart, IsolateTail } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
-        // The fixture's Control lets the three test calls past the control door's closed list.
-        `export { Project, Control } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
-      ].join("\n"),
+      Arr.join(
+        [
+          `export { default, Connection, Process, RecordPart, IsolateTail } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
+          // The fixture's Control lets the three test calls past the control door's closed list.
+          `export { Project, Control } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
+        ],
+        "\n",
+      ),
     );
     const built = yield* build({
       out: path.join(home, "dist"),
@@ -328,12 +331,11 @@ const flow = Effect.fnUntraced(
     );
 
     const db = new DatabaseSync(path.join(hands, "hands", "journal.sqlite"), { readOnly: true });
-    const tables = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-      .all()
-      .map((row) => String(row["name"]));
+    const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
+      String(row["name"]),
+    );
     const journal = Object.fromEntries(
-      tables.map((t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]),
+      Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]),
     );
     db.close();
     const brain: unknown = yield* call("rows read failed", () => method(project, "allRows")());
@@ -370,7 +372,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
         expect(second, "E2: a new start keeps the same key").toBe(first);
         expect(seen.taskAfterRestart, "E2: the restart runs nothing again").toEqual(seen.task);
         expect(
-          seen.task.events.map((e) => e.event),
+          Arr.map(seen.task.events, (e) => e.event),
           "E2: the task was taken, started and finished once",
         ).toEqual(["requested", "taken", "started", "finished"]);
         expect(seen.task.state._tag === "finished" && seen.task.state.request.id).toBe(TASK);

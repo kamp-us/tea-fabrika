@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
@@ -75,25 +75,31 @@ const identity = () => {
 export type Key = ReturnType<typeof identity>;
 
 /** Asks the host for a child on `start`, and keeps every answer it was told. */
-const starterSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  'import {startChild} from "@kampus/libfabrika/runtime/StartChild";',
-  "const Model = Schema.Struct({asked: Schema.Int, told: Schema.Array(Schema.Json)});",
-  'const Msg = Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String, input: Schema.optionalKey(Schema.Json)});',
-  "const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild], init: (loaded) => [loaded ?? {asked: 0, told: []}, []], update: {start: (s, m) => [{...s, asked: s.asked + 1}, [startChild({program: m.program, name: m.name, ...(m.input === undefined ? {} : {input: m.input})})]], start_child_ok: (s, m) => [{...s, told: [...s.told, m.value]}, []], start_child_err: (s, m) => [{...s, told: [...s.told, m.reason]}, []]}});",
-  'export const program = {name: "p42/starter", machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {start: {_tag: "write", schema: Msg, description: "Start a child", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
-].join("\n");
+const starterSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    'import {startChild} from "@kampus/libfabrika/runtime/StartChild";',
+    "const Model = Schema.Struct({asked: Schema.Int, told: Schema.Array(Schema.Json)});",
+    'const Msg = Schema.Struct({type: Schema.Literal("start"), program: Schema.String, name: Schema.String, input: Schema.optionalKey(Schema.Json)});',
+    "const machine = Machine.make({model: Model, msg: Msg, cmds: [startChild], init: (loaded) => [loaded ?? {asked: 0, told: []}, []], update: {start: (s, m) => [{...s, asked: s.asked + 1}, [startChild({program: m.program, name: m.name, ...(m.input === undefined ? {} : {input: m.input})})]], start_child_ok: (s, m) => [{...s, told: [...s.told, m.value]}, []], start_child_err: (s, m) => [{...s, told: [...s.told, m.reason]}, []]}});",
+    'export const program = {name: "p42/starter", machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {start: {_tag: "write", schema: Msg, description: "Start a child", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
+  ],
+  "\n",
+);
 
 /** Counts `inc` and throws on `throw`: the supervision the boot's child has must restart it. */
-const childSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model = Schema.Struct({count: Schema.Int});",
-  'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
-  'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("child failure P42");}, inc: (s) => [{count: s.count + 1}, []]}});',
-  'export const program = {name: "p42/child", maxDeliveries: 2, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
-].join("\n");
+const childSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model = Schema.Struct({count: Schema.Int});",
+    'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
+    'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("child failure P42");}, inc: (s) => [{count: s.count + 1}, []]}});',
+    'export const program = {name: "p42/child", maxDeliveries: 2, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};',
+  ],
+  "\n",
+);
 
 /** Sets one env value for the scope; the release puts the old value back, or deletes it when unset. */
 const env = (key: string, value: string) =>
@@ -436,11 +442,9 @@ export const childProject = Effect.fnUntraced(function* () {
         ),
       ),
     rows: () =>
-      sql
-        .exec("SELECT name FROM sqlite_master WHERE type='table'")
-        .flatMap(({ name }) =>
-          typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
-        ),
+      Arr.flatMap(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), ({ name }) =>
+        typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
+      ),
     observe: (operation?: number, error?: Error) => {
       operations = [];
       observing = true;

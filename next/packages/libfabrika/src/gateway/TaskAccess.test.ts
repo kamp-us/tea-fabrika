@@ -4,7 +4,7 @@
 // P39 slice 3 (ticket 1040), J1's select half: a collected task is never offered, as a finished one
 // is not. Plant (after build): let select keep `collected` tasks.
 import { expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Array as Arr, Result, Schema } from "effect";
 import * as Id from "../Id.ts";
 import { type Task, Request, Executor, Result as TaskResult, State } from "../tasks/Task.ts";
 
@@ -59,14 +59,15 @@ it.prop(
     process: Schema.String,
   },
   ({ items, key, process }) => {
-    const tasks = items.map((item) => taskFor({ ...item, matching: true }));
-    const subjects = tasks.flatMap((j) =>
+    const tasks = Arr.map(items, (item) => taskFor({ ...item, matching: true }));
+    const subjects = Arr.flatMap(tasks, (j) =>
       j.state._tag === "absent" ? [] : [{ process: j.state.request.process, key: j.state.request.target }],
     );
 
     for (const subject of [{ key, process }, ...subjects]) {
       for (const values of [tasks, [...tasks, ...tasks]]) {
-        const wanted = values.filter(
+        const wanted = Arr.filter(
+          values,
           (j) =>
             j.state._tag !== "absent" &&
             OPEN.includes(j.state._tag) &&

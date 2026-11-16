@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Layer, Schema } from "effect";
+import { Array as Arr, Effect, Layer, Option, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -72,14 +72,17 @@ type Key = ReturnType<typeof identity>;
 
 // A small program that throws a TypeError on "throw" and counts on "inc". It declares
 // maxDeliveries, so the box's declaration must carry the program's own limit.
-const poisonSource = [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model = Schema.Struct({count: Schema.Int});",
-  'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
-  'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
-  `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
-].join("\n");
+const poisonSource = Arr.join(
+  [
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model = Schema.Struct({count: Schema.Int});",
+    'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
+    'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
+    `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
+  ],
+  "\n",
+);
 
 type Instance = any;
 
@@ -222,10 +225,10 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
     const end = Date.now() + WAIT;
 
     while (Date.now() < end) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -270,16 +273,18 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
 };
 
 const facts = async (instance: Instance, stream: string) =>
-  ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
+  Arr.map((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>, (row) => ({
     ...row.body,
     _tag: row._tag,
   }));
 
 const restarts = async (instance: Instance, name: string) =>
-  (await facts(instance, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
+  Arr.filter(await facts(instance, `processes/${name}`), (fact) => fact._tag === "restarted");
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
-  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+  Option.getOrUndefined(
+    Arr.findFirst((await instance.project(PROJECT).info()) as Array<any>, (row) => row.name === name),
+  )?.process;
 
 const send = (pid: string, letter: string, type: "throw" | "inc") => ({
   pid,
@@ -402,8 +407,11 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
     while (Date.now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
-      const found = (read.result.entries as Array<any>).find(
-        (entry) => entry._tag === "restarted" && entry.body.after === after,
+      const found = Option.getOrUndefined(
+        Arr.findFirst(
+          read.result.entries as Array<any>,
+          (entry) => entry._tag === "restarted" && entry.body.after === after,
+        ),
       );
 
       if (found !== undefined) {
@@ -694,7 +702,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(restarted).toMatchObject({ _tag: "restarted", body: { after: first, name } });
         expect(second).not.toBe(first);
 
-        for (const n of range(10).map((at) => at + 10)) {
+        for (const n of Arr.map(range(10), (at) => at + 10)) {
           expect(
             yield* Effect.promise(() => after.call("process.send", letter(n))),
             `k-${n} after the restart`,
@@ -705,7 +713,7 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 
         const inbox = yield* Effect.promise(() => rows(instance, `${name}/inbox`));
         expect(inbox).toHaveLength(20);
-        expect(new Set(inbox.map((row) => row.id)).size).toBe(20);
+        expect(new Set(Arr.map(inbox, (row) => row.id)).size).toBe(20);
         expect(yield* Effect.promise(() => restarts(instance, name))).toHaveLength(1);
         expect(yield* Effect.promise(() => livePid(instance, name))).toBe(second);
         expect(yield* Effect.promise(() => after.call("view.open", { pid: second }))).toMatchObject({

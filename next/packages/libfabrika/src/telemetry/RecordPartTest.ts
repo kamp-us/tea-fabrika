@@ -3,7 +3,7 @@
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
 // `RecordPartTest.suite(open)`, and `open` acquires each store in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, type PlatformError, type Scope } from "effect";
+import { Array as Arr, Effect, type PlatformError, type Scope } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import type { SpanRow } from "./Trace.ts";
@@ -79,12 +79,12 @@ const reopen = (open: Open, total: number, content: string, at: number) =>
         Effect.gen(function* () {
           const part: Part = recordPart(sql, { _tag: "spans" }, 0, 1_000_000_000);
           // T641: the reopened file already holds the first write, before the retry writes again.
-          expect((yield* part.read(0)).spans).toEqual(rows.slice(0, 500).map((r) => r.span));
+          expect((yield* part.read(0)).spans).toEqual(Arr.map(rows.slice(0, 500), (r) => r.span));
           expect(yield* part.write(rows)).toEqual({ _tag: "written" });
           const first = yield* part.read(0);
           const last = yield* part.read(first.after);
-          expect(first.spans).toEqual(rows.slice(0, 500).map((r) => r.span));
-          expect(last.spans).toEqual(rows.slice(500).map((r) => r.span));
+          expect(first.spans).toEqual(Arr.map(rows.slice(0, 500), (r) => r.span));
+          expect(last.spans).toEqual(Arr.map(rows.slice(500), (r) => r.span));
           expect(yield* part.content(span(total - 1).spanId)).toMatchObject({
             _tag: "found",
             content: { _tag: "kept", message: content },

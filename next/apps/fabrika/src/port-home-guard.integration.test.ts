@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Array as Arr, Effect, FileSystem, Path, Schema } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -63,7 +63,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
   };
   const plant = input.plant;
   const planted =
-    plant === null ? null : { root: roots[plant.kind], full: [roots[plant.kind], ...plant.tail].join("/") };
+    plant === null ? null : { root: roots[plant.kind], full: Arr.join([roots[plant.kind], ...plant.tail], "/") };
   // The plant as it lands in a text or a cell, in its generated form.
   const text =
     plant === null || planted === null
@@ -77,12 +77,12 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
 
   for (const [n, file] of input.texts.entries()) {
     const name = `${file.name}-${n}.txt`;
-    let words = file.words.join(" ");
+    let words = Arr.join(file.words, " ");
 
     if (plant !== null && planted !== null && plant.place === "text" && plant.pick % input.texts.length === n) {
       const before = file.words.slice(0, plant.at % (file.words.length + 1));
-      const prefix = before.length === 0 ? "" : `${before.join(" ")} `;
-      words = [...before, text, ...file.words.slice(before.length)].join(" ");
+      const prefix = before.length === 0 ? "" : `${Arr.join(before, " ")} `;
+      words = Arr.join([...before, text, ...file.words.slice(before.length)], " ");
       expected = {
         file: name,
         place: Place.cases.byte.make({ offset: encoder.encode(prefix).length }),
@@ -99,7 +99,10 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     // A JSON file holds the path as a value, so its file holds it JSON-escaped; a URL stays a URL.
     const value = hit ? (plant.form === "url" ? text : planted.full) : file.value;
     const body = JSON.stringify(
-      file.keys.reduceRight<unknown>((inner, key) => ({ [key]: inner, _note: file.value }), value),
+      Arr.reduceRight<(typeof file.keys)[number], unknown>(file.keys, value, (inner, key) => ({
+        [key]: inner,
+        _note: file.value,
+      })),
       null,
       2,
     );
@@ -165,7 +168,9 @@ const snapshot = Effect.fnUntraced(function* (folder: string) {
   return yield* Effect.forEach(
     files,
     (file) =>
-      fs.readFile(path.join(folder, file)).pipe(Effect.map((bytes) => [file, Array.from(bytes).join(",")] as const)),
+      fs
+        .readFile(path.join(folder, file))
+        .pipe(Effect.map((bytes) => [file, Arr.join(Arr.map(Array.from(bytes), String), ",")] as const)),
     { concurrency: 1 },
   );
 });

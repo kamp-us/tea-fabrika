@@ -5,7 +5,7 @@
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { Activity } from "@kampus/libfabrika/processes/Process";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Array as Arr, Effect, FileSystem, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 
@@ -33,10 +33,13 @@ const workerd = Effect.fn("workerd.find")(function* (parent: number) {
     }
   }
 
-  const pids = rows
-    .filter((row) => /\/workerd(?:\s|$)/.test(row))
-    .map((row) => Number(row.trim().split(/\s+/)[0]))
-    .filter((pid) => found.has(pid));
+  const pids = Arr.filter(
+    Arr.map(
+      Arr.filter(rows, (row) => /\/workerd(?:\s|$)/.test(row)),
+      (row) => Number(row.trim().split(/\s+/)[0]),
+    ),
+    (pid) => found.has(pid),
+  );
 
   const [only] = pids;
 

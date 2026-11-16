@@ -7,7 +7,7 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { Array as Arr, Effect, Exit, Option, Schema, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -83,10 +83,10 @@ const client = async (instance: Instance, key: Key, tab: string) => {
     const end = Date.now() + WAIT;
 
     while (Date.now() < end) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closed) {
@@ -133,7 +133,9 @@ const rows = async (instance: Instance, stream: string): Promise<Array<any>> =>
   (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>;
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
-  ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
+  Option.getOrUndefined(
+    Arr.findFirst((await instance.project(PROJECT).info()) as Array<any>, (row) => row.name === name),
+  )?.process;
 
 describe("T953: a start is checked against the member who caused it, end to end", () => {
   // scenario: L17. Only a real instance proves the brain's wiring: the gateway answers who sent the
@@ -171,8 +173,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 () => livePid(instance, "child:1"),
                 (pid) => pid !== undefined,
               );
-              const line = (await rows(instance, "processes/child:1")).find(
-                (row) => row._tag === "started" && row.body.process === child,
+              const line = Option.getOrUndefined(
+                Arr.findFirst(
+                  await rows(instance, "processes/child:1"),
+                  (row) => row._tag === "started" && row.body.process === child,
+                ),
               );
               expect(line?.body.member, "L17: the started line names the person whose input caused it").toEqual({
                 _tag: "person",
@@ -188,10 +193,12 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const again: Instance = yield* Scope.provide(second)(home.boot);
           yield* Effect.promise(async () => {
             const relations = await rows(again, "permissions/relations");
-            const brain = (await rows(again, "processes/starter:1")).find((row) => row._tag === "started")?.by;
+            const brain = Option.getOrUndefined(
+              Arr.findFirst(await rows(again, "processes/starter:1"), (row) => row._tag === "started"),
+            )?.by;
             expect(brain, "the brain signed the starter's started line").toBeDefined();
             expect(
-              relations.map((row) => ({ by: row.by, _tag: row._tag, body: row.body })),
+              Arr.map(relations, (row) => ({ by: row.by, _tag: row._tag, body: row.body })),
               "L17: after two boots the stream holds one owner row, by the brain",
             ).toEqual([
               {

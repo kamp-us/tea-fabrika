@@ -5,7 +5,7 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -299,7 +299,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
 
     const page = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-check"]);
     const rows = Schema.decodeUnknownSync(Schema.Array(Stored))(page);
-    const selected = rows.map((row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input);
+    const selected = Arr.map(
+      rows,
+      (row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input,
+    );
     expect(selected).toEqual(received);
     const output = JSON.stringify(rows);
 

@@ -29,7 +29,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Array as Arr, Effect, Layer, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -341,7 +341,7 @@ const world = ({ disk }: Disks) => {
       if (
         controls.cutRecorded &&
         query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        Arr.some(args, (arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -351,7 +351,7 @@ const world = ({ disk }: Disks) => {
       if (
         controls.cutRetryable &&
         query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        Arr.some(args, (arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;

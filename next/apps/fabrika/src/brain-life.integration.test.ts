@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
-import { Effect } from "effect";
+import { Array as Arr, Effect, Option } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];
@@ -59,12 +59,13 @@ afterEach(async () => {
 });
 
 const tree = (parent: number) => {
-  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" })
-    .split("\n")
-    .flatMap((row) => {
+  const rows = Arr.flatMap(
+    execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }).split("\n"),
+    (row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
       return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
-    });
+    },
+  );
   const pids = new Set([parent]);
 
   for (let n = 0; n < rows.length; n++) {
@@ -75,7 +76,7 @@ const tree = (parent: number) => {
     }
   }
 
-  return rows.filter((r) => pids.has(r.pid));
+  return Arr.filter(rows, (r) => pids.has(r.pid));
 };
 
 const launch = async (startupGate = false) => {
@@ -164,7 +165,7 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
 
   for (;;) {
     const pending = await Effect.runPromise(outbox.pending.pipe(Effect.provide(NodeServices.layer)));
-    const stopped = pending.find((event) => event._tag === "braked");
+    const stopped = Option.getOrUndefined(Arr.findFirst(pending, (event) => event._tag === "braked"));
 
     if (stopped !== undefined) {
       throw new Error(`P12 workerd unavailable: ${stopped._tag} (${stopped.reason})\n${details()}`);
@@ -180,8 +181,8 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
       throw new Error(`P12 workerd did not become ready within 10 seconds\n${details()}`);
     }
 
-    const children = tree(instance.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
-    const observation = { at: performance.now(), pids: children.map((row) => row.pid), ready: false };
+    const children = Arr.filter(tree(instance.child.pid!), (r) => /\/workerd(?:\s|$)/.test(r.command));
+    const observation = { at: performance.now(), pids: Arr.map(children, (row) => row.pid), ready: false };
     instance.observed.push(observation);
 
     if (children.length === 0 || children[0]!.pid === excluding) {
@@ -201,7 +202,7 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
       /* Spawn attempt has not reached its listener. */
     }
 
-    const current = tree(instance.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command));
+    const current = Arr.filter(tree(instance.child.pid!), (r) => /\/workerd(?:\s|$)/.test(r.command));
 
     if (observation.ready && current.length === 1 && current[0]!.pid === children[0]!.pid) {
       return children[0]!.pid;
@@ -229,28 +230,31 @@ describe("P12 local brain life", () => {
     }
 
     expect(living(leader), "the detached child must notice its original parent died during startup").toBe(false);
-    expect(tree(leader).filter((row) => living(row.pid))).toEqual([]);
+    expect(Arr.filter(tree(leader), (row) => living(row.pid))).toEqual([]);
     await expect(fetch(s.url)).rejects.toThrow();
   });
   // Outside only: cleanup must address the process group after its leader already exited.
   it("scenario: instance group cleanup still reaches descendants after the leader exits", async () => {
     const s = await launch();
     const rows = tree(s.child.pid!),
-      leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
+      leader = Option.getOrUndefined(
+        Arr.findFirst(rows, (row) => row.parent === s.child.pid && row.command.includes("--child")),
+      );
     expect(leader).toBeDefined();
     groups.push(leader!.pid);
-    const descendants = tree(leader!.pid)
-      .filter((row) => row.pid !== leader!.pid)
-      .map((row) => row.pid);
+    const descendants = Arr.map(
+      Arr.filter(tree(leader!.pid), (row) => row.pid !== leader!.pid),
+      (row) => row.pid,
+    );
     expect(descendants.length).toBeGreaterThan(0);
     process.kill(leader!.pid, "SIGKILL");
     const until = performance.now() + 5_000;
 
-    while (descendants.some(living) && performance.now() < until) {
+    while (Arr.some(descendants, living) && performance.now() < until) {
       await pause();
     }
 
-    expect(descendants.filter(living)).toEqual([]);
+    expect(Arr.filter(descendants, living)).toEqual([]);
     await expect(fetch(s.url)).rejects.toThrow();
   });
   it("scenario: p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
@@ -284,7 +288,7 @@ describe("P12 local brain life", () => {
 
       await pause();
       expect(
-        tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
+        Arr.filter(tree(s.child.pid!), (r) => /\/workerd(?:\s|$)/.test(r.command)),
         details(),
       ).toEqual([]);
       const { brainOutbox } = await import("@kampus/libfabrika/node/local-dev");
@@ -297,7 +301,7 @@ describe("P12 local brain life", () => {
       const until = performance.now() + 10_000;
       let pending = await read();
 
-      while (!pending.some((event) => event._tag === "braked") && performance.now() < until) {
+      while (!Arr.some(pending, (event) => event._tag === "braked") && performance.now() < until) {
         await pause();
         pending = await read();
       }
@@ -306,7 +310,7 @@ describe("P12 local brain life", () => {
       // Wait past every installed backoff. No new child or outer HTTP restart is allowed.
       await new Promise<void>((done) => setTimeout(done, 2000));
       expect(
-        tree(s.child.pid!).filter((r) => /\/workerd(?:\s|$)/.test(r.command)),
+        Arr.filter(tree(s.child.pid!), (r) => /\/workerd(?:\s|$)/.test(r.command)),
         details(),
       ).toEqual([]);
     } catch (cause) {
@@ -318,11 +322,11 @@ describe("P12 local brain life", () => {
     async (signal) => {
       const s = await launch();
       await workerd(s);
-      const descendants = tree(s.child.pid!).map((r) => r.pid);
+      const descendants = Arr.map(tree(s.child.pid!), (r) => r.pid);
       s.child.kill(signal);
 
       for (;;) {
-        if (descendants.every((pid) => !living(pid))) {
+        if (Arr.every(descendants, (pid) => !living(pid))) {
           break;
         }
 
@@ -331,7 +335,7 @@ describe("P12 local brain life", () => {
 
       await expect(fetch(s.url)).rejects.toThrow();
       await new Promise<void>((done) => setTimeout(done, 1100));
-      expect(descendants.filter(living)).toEqual([]);
+      expect(Arr.filter(descendants, living)).toEqual([]);
     },
   );
 });

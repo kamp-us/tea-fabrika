@@ -10,7 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Array as Arr, Context, Effect, Layer, Option, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -80,13 +80,13 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
       return value.replace(/\p{Cs}/gu, "�");
     }
 
-    if (Array.isArray(value)) {
-      return value.map(repair);
+    if (Arr.isArray(value)) {
+      return Arr.map(value, repair);
     }
 
     if (value !== null && typeof value === "object") {
       return Object.fromEntries(
-        Object.entries(value).map(([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
+        Arr.map(Object.entries(value), ([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
       );
     }
 
@@ -154,7 +154,7 @@ for (const [kind, live] of [
           const { driver } = yield* Wire;
           const actual = yield* driver(name, cap),
             oracle = yield* node(name, cap);
-          const rows = input.rows.map((r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
+          const rows = Arr.map(input.rows, (r, index) => ({ ...r, span: { ...r.span, spanId: String(index) } }));
           const exercise = (part: Part) =>
             Effect.gen(function* () {
               // The cap is checked before a batch: this first batch lands whole,
@@ -175,7 +175,7 @@ for (const [kind, live] of [
           expect(result).toEqual(yield* exercise(oracle));
           expect(result.write).toEqual({ _tag: "written" });
           expect(result.read).toMatchObject({
-            spans: rows.slice(input.after).map((r) => ({ spanId: r.span.spanId })),
+            spans: Arr.map(rows.slice(input.after), (r) => ({ spanId: r.span.spanId })),
             after: Math.max(input.after, rows.length),
             rolled: false,
           });
@@ -193,7 +193,7 @@ for (const [kind, live] of [
           const input = wellFormed(generated);
           const chain = Chain.cases.spans.make({});
           const name = JSON.stringify([`full-${sequence++}`, partName(chain, input.at)]);
-          const rows = input.rows.map((row, index) => ({
+          const rows = Arr.map(input.rows, (row, index) => ({
             ...row,
             span: { ...row.span, spanId: String(index) },
             content: "x".repeat(cap) + (row.content ?? ""),
@@ -213,10 +213,10 @@ for (const [kind, live] of [
           expect(actual.written).toEqual({
             _tag: "rolled",
             next: partName(chain, input.at + 1),
-            had: rows.map((row) => row.span.spanId),
+            had: Arr.map(rows, (row) => row.span.spanId),
           });
           expect(actual.page).toMatchObject({
-            spans: rows.map((row) => ({ spanId: row.span.spanId })),
+            spans: Arr.map(rows, (row) => ({ spanId: row.span.spanId })),
             after: rows.length,
             rolled: true,
           });

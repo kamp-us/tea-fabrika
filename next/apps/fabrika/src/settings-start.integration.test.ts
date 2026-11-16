@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import { Array as Arr, Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -463,7 +463,7 @@ it.live("scenario: requests that reach a fresh Worker while its first read of th
     );
     const request = HttpClient.get(`${instance.url}/`);
     const answers = yield* Effect.forEach(Array.from({ length: 24 }), () => request, { concurrency: "unbounded" });
-    expect(answers.map((response) => response.status)).toEqual(answers.map(() => 200));
+    expect(Arr.map(answers, (response) => response.status)).toEqual(Arr.map(answers, () => 200));
     // A read has finished, so a later request answers from it.
     expect((yield* request).status).toBe(200);
   }).pipe(
