@@ -6,7 +6,9 @@ import { arbGuidedSequence, arbMsgSequence, propertyInvariant } from "@demlik/te
 import { expect, it } from "@effect/vitest";
 import * as Fabrika from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Array as Arr, Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";
@@ -28,7 +30,7 @@ type Command = ReturnType<
 >;
 
 const id = (n: number) =>
-  Schema.decodeSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeSync(Fabrika.Chaos.ExperimentId)(`chaos_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const process = Schema.decodeSync(Fabrika.Id.Process)("process_0000000000e008000000000000");
 
@@ -50,7 +52,7 @@ const starts = fc.record({
       name: `checklist:${n}`,
       client: `client:${n}`,
       key: `public:${n}`,
-      process: Schema.decodeSync(Fabrika.Id.Process)(`process_0000000000e008${n.toString(16).padStart(12, "0")}`),
+      process: Schema.decodeSync(Fabrika.Id.Process)(`process_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`),
     }),
   ),
   most: fc.integer({ min: 1, max: 12 }),
@@ -262,7 +264,7 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
         const [stopped, out] = applyCell(chaos.machine, model, { type: "stop" });
         expect(out).toEqual([]);
         expect(chaos.wake(stopped)).toBeNull();
-        const replies = Arr.filter(run.msgs, (m) => m.type.endsWith("_ok") || m.type.endsWith("_err"));
+        const replies = Arr.filter(run.msgs, (m) => Str.endsWith("_ok")(m.type) || Str.endsWith("_err")(m.type));
         const tail = arbMsgSequence(
           fc.constantFrom<Msg>({ type: "timer", at: 10_000_000 }, { type: "stop" }, ...replies),
           { minLength: 10, maxLength: 20 },
@@ -366,7 +368,7 @@ it("a previous experiment or duplicate reply cannot consume a new request", () =
 
         [current] = applyCell(chaos.machine, current, msg);
 
-        if (msg.type.endsWith("_ok") || msg.type.endsWith("_err")) {
+        if (Str.endsWith("_ok")(msg.type) || Str.endsWith("_err")(msg.type)) {
           const [again, extra] = applyCell(chaos.machine, current, msg);
           expect(again).toEqual(current);
           expect(extra).toEqual([]);

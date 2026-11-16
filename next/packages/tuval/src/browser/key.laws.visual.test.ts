@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Rec from "effect/Record";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -89,7 +90,7 @@ const profile = (b: Browser, script: string) =>
     Effect.tap((context) =>
       Effect.promise(() =>
         context.route(`${ORIGIN}/**`, (route) =>
-          route.request().url().endsWith("/key.js")
+          Str.endsWith("/key.js")(route.request().url())
             ? route.fulfill({ contentType: "text/javascript", body: script })
             : route.fulfill({
                 contentType: "text/html",
@@ -330,7 +331,10 @@ describe("L3: the browser key store", () => {
                             v.kind === "key:private" ? [v.extractable, v.exported] : [false, false],
                             "a private key can leave",
                           ).toEqual([false, false]);
-                          expect(v.hex?.includes(PKCS8_ED25519) ?? false, "private bytes are stored").toBe(false);
+                          expect(
+                            v.hex !== undefined && Str.includes(PKCS8_ED25519)(v.hex),
+                            "private bytes are stored",
+                          ).toBe(false);
                         }
                       }),
                     ),

@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Arr from "effect/Array";
 import * as Equivalence from "effect/Equivalence";
+import { String as Str } from "effect";
 import type { BrainControl, BrainControlError } from "./BrainControl.ts";
 import type { BrainSpec } from "./BrainSpec.ts";
 
@@ -148,7 +149,7 @@ export const suite = (open: Open) =>
             expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
             const swapped = yield* disk.swapped;
             const typed = { defect: false, error: "BrainControlError" };
-            const held = Effect.map(disk.entries, (names) => Arr.filter(names, (name) => name.startsWith(".brain-")));
+            const held = Effect.map(disk.entries, (names) => Arr.filter(names, (name) => Str.startsWith(".brain-")(name)));
 
             if (competing._tag === "copy") {
               // A 0600 file with our exact bytes is our plist: an existing matching file is reusable.
@@ -174,7 +175,7 @@ export const suite = (open: Open) =>
             // The swap really put the generated kind at the path.
             if (competing._tag === "symlink") {
               expect(
-                swapped?._tag === "symlink" && swapped.target.startsWith("/") === (competing.path === "absolute"),
+                swapped?._tag === "symlink" && Str.startsWith("/")(swapped.target) === (competing.path === "absolute"),
               ).toBe(true);
             } else {
               expect(swapped).toEqual(
@@ -316,8 +317,8 @@ export const suite = (open: Open) =>
           expect(publish).toBeGreaterThan(sync);
 
           for (const [at, event] of disk.events.entries()) {
-            if (event.startsWith("publish:")) {
-              const synced = disk.events.indexOf(`sync:${event.slice("publish:".length)}`);
+            if (Str.startsWith("publish:")(event)) {
+              const synced = disk.events.indexOf(`sync:${Str.slice("publish:".length)(event)}`);
               expect(synced >= 0 && synced < at).toBe(true);
             }
           }

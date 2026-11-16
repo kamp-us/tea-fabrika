@@ -2,6 +2,7 @@
 // strings catch omitted tags, saw fields or reordered signing text. No crypto belongs here.
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
+import { String as Str } from "effect";
 import { Adds, Grant } from "./Access.ts";
 import { grantText, revokeText, addText, enrollmentText } from "./Text.ts";
 
@@ -100,7 +101,7 @@ it.prop(
       _tag: "granted",
       grant: signed,
     });
-    expect(text.endsWith("\n")).toBe(true);
+    expect(Str.endsWith("\n")(text)).toBe(true);
   },
   { arbitrary: { seed: 119120, runs: 100 } },
 );

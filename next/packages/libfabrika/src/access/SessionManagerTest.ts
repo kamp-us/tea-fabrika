@@ -16,6 +16,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Formatter from "effect/Formatter";
 import * as Arr from "effect/Array";
+import { String as Str } from "effect";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
@@ -614,7 +615,7 @@ const signalLaws = (open: Open) => {
       kind === 0
         ? JSON.stringify(["DOWN", ...rest])
         : kind === 1
-          ? `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`
+          ? `[${space}${Str.slice(1)(JSON.stringify(["DOWN", ...rest]))}`
           : `["DOWN"${tail}`,
     ),
     Arbitrary.filter(inSignalSpace),

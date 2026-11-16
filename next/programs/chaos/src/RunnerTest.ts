@@ -13,7 +13,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Formatter from "effect/Formatter";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
@@ -391,7 +391,7 @@ export const suite = (open: Open, checklist: unknown) =>
             for (const [index, answer] of answers.entries()) {
               const timer = timers[index];
               expect(timer).toBeDefined();
-              expect(answer.id.endsWith(`/${timer?.pos}/0/answer`)).toBe(true);
+              expect(Str.endsWith(`/${timer?.pos}/0/answer`)(answer.id)).toBe(true);
               expect(answer.parent).toBe(timer?.parent);
             }
 
@@ -850,10 +850,8 @@ export const suite = (open: Open, checklist: unknown) =>
         ([input, text, mode]) =>
           Effect.scoped(
             Effect.gen(function* () {
-              const marker = `private-${Arr.join(
-                Array.from(new TextEncoder().encode(text), (b) => b.toString(16).padStart(2, "0")),
-                "",
-              ).slice(0, 80)}-end ?/+=%`;
+              const hex = Array.from(new TextEncoder().encode(text), (b) => Str.padStart(2, "0")(b.toString(16)));
+              const marker = `private-${Str.slice(0, 80)(Arr.join(hex, ""))}-end ?/+=%`;
               const world = yield* open;
               const binding = yield* startTarget(world, checklist);
               const body = yield* world.session(TARGET, "fabrika/checklist", checklist, {});

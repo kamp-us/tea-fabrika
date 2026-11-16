@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";
@@ -311,7 +312,7 @@ it.effect.prop(
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
           return Arr.every(outputs, (output) =>
-            Arr.every([secret, encoded, JSON.stringify(secret).slice(1, -1)], (form) => !output.includes(form)),
+            Arr.every([secret, encoded, Str.slice(1, -1)(JSON.stringify(secret))], (form) => !Str.includes(form)(output)),
           );
         },
         { seed, numRuns: 1 },

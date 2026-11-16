@@ -16,6 +16,7 @@ import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { String as Str } from "effect";
 import { errorClass } from "./index.ts";
 
 const DB = "fabrika";
@@ -177,7 +178,7 @@ const makeKey = Effect.gen(function* () {
   return {
     pair,
     raw: Base64Url.encode(raw),
-    fingerprint: `SHA256:${Base64.encode(new Uint8Array(digest)).replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(digest)))}`,
   } satisfies Stored;
 });
 

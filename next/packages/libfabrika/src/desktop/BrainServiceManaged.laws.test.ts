@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
+import { String as Str } from "effect";
 import * as Outside from "./BrainControl.test-support.ts";
 import { BrainService } from "./BrainService.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
@@ -444,8 +445,8 @@ it.effect.prop(
           for (const form of [
             secret,
             encodeURIComponent(secret),
-            Formatter.formatJson(secret).slice(1, -1),
-            Formatter.formatJson([...new TextEncoder().encode(secret)]),
+            Str.slice(1, -1)(JSON.stringify(secret)),
+            JSON.stringify([...new TextEncoder().encode(secret)]),
           ]) {
             expect(output).not.toContain(form);
           }

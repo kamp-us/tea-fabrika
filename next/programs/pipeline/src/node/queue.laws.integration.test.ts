@@ -50,6 +50,7 @@ import {
   Scope,
   Stream,
   Array as Arr,
+  String as Str,
 } from "effect";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
@@ -79,9 +80,8 @@ const from = {
   build: BUILD,
 };
 
-const base = CodeHostTest.commit("d".repeat(40));
-
-const moved = CodeHostTest.commit("c".repeat(40));
+const base = CodeHostTest.commit(Str.repeat(40)("d"));
+const moved = CodeHostTest.commit(Str.repeat(40)("c"));
 
 const settings = Effect.runSync(
   Settings.all.parse(
@@ -337,7 +337,7 @@ const open = Effect.fnUntraced(function* (
             const found = yield* host.read(change);
 
             if (found !== undefined) {
-              yield* host.put({ ...found, tree: CodeHostTest.tree("9".repeat(40)) });
+              yield* host.put({ ...found, tree: CodeHostTest.tree(Str.repeat(40)("9")) });
             }
           }
 
@@ -352,17 +352,17 @@ const open = Effect.fnUntraced(function* (
     yield* host.put({
       ...Schema.TaggedStruct("found", {}).make({}),
       change,
-      head: CodeHostTest.commit(change.toString(16).repeat(40)),
+      head: CodeHostTest.commit(Str.repeat(40)(change.toString(16))),
       state: "open",
       paths: ["src/a.ts"],
       base,
-      tree: CodeHostTest.tree((change + 6).toString(16).repeat(40)),
+      tree: CodeHostTest.tree(Str.repeat(40)((change + 6).toString(16))),
       conflict: null,
     });
   }
 
   let serial = 0;
-  const ids = Effect.sync(() => `process_0000000000e008${(++serial).toString(16).padStart(12, "0")}`);
+  const ids = Effect.sync(() => `process_0000000000e008${Str.padStart(12, "0")((++serial).toString(16))}`);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   const grants: Array<typeof StartGrant.Type> = [{ source: "pipeline/queue", to: "pipeline/merger" }];
@@ -376,7 +376,7 @@ const open = Effect.fnUntraced(function* (
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
-        id: Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`),
         by: owner,
         arrivedAt: n,
         input,

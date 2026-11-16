@@ -20,6 +20,7 @@ import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -56,12 +57,14 @@ const TAG = /<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:="[^"]*")?)*)\s*(\/?)
 const ATTR = /([^\s=>/]+)(?:="([^"]*)")?/g;
 
 const unescape = (text: string) =>
-  text
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+  pipe(
+    text,
+    Str.replace(/&quot;/g, '"'),
+    Str.replace(/&#x27;/g, "'"),
+    Str.replace(/&lt;/g, "<"),
+    Str.replace(/&gt;/g, ">"),
+    Str.replace(/&amp;/g, "&"),
+  );
 
 /** React's static markup as a tree: every element with its attributes, and its text. */
 const parse = (html: string): Node => {
@@ -70,16 +73,16 @@ const parse = (html: string): Node => {
   let last = 0;
 
   for (const m of html.matchAll(TAG)) {
-    const text = html.slice(last, m.index);
+    const text = Str.slice(last, m.index)(html);
     last = m.index + m[0].length;
 
     if (text !== "") {
       stack.at(-1)!.children.push(unescape(text));
     }
 
-    const tag = m[1]!.toLowerCase();
+    const tag = Str.toLowerCase(m[1]!);
 
-    if (m[0].startsWith("</")) {
+    if (Str.startsWith("</")(m[0])) {
       const open = Arr.map(stack, (n) => n.tag).lastIndexOf(tag);
 
       if (open > 0) {
@@ -91,8 +94,8 @@ const parse = (html: string): Node => {
 
     const attrs: Record<string, string> = {};
 
-    for (const a of (m[2] ?? "").matchAll(ATTR)) {
-      attrs[a[1]!.toLowerCase()] = unescape(a[2] ?? "");
+    for (const a of Str.matchAll(ATTR)(m[2] ?? "")) {
+      attrs[Str.toLowerCase(a[1]!)] = unescape(a[2] ?? "");
     }
 
     const node: Node = { tag, attrs, children: [] };
@@ -124,11 +127,11 @@ const nameIn = (root: Node, node: Node): string | null => {
 
   if (by !== undefined) {
     return Function.pipe(
-      by.split(/\s+/),
+      Str.split(by, /\s+/),
       Arr.map((id) =>
         Option.match(
           Arr.findFirst(all(root), (n) => n.attrs["id"] === id),
-          { onNone: () => "", onSome: (n) => text(n).trim() },
+          { onNone: () => "", onSome: (n) => Str.trim(text(n)) },
         ),
       ),
       Arr.join(" "),
@@ -153,6 +156,10 @@ const current = (n: Node) => n.attrs["aria-current"] !== undefined && n.attrs["a
 type Desk = { w: Workspace; tiles: Array<Tile>; next: number };
 
 const PROGRAMS = ["fabrika/checklist", "fabrika/counter", "acme/notes", "fabrika/inbox"] as const;
+
+/** A program's name after its owner: `fabrika/checklist` is shown as `checklist`. */
+const shortName = (program: string) =>
+  Option.match(Str.indexOf("/")(program), { onNone: () => program, onSome: (at) => Str.slice(at + 1)(program) });
 
 const draw = (d: Desk) =>
   renderToStaticMarkup(
@@ -224,7 +231,7 @@ class Split implements fc.Command<Desk, Desk> {
     d.tiles.push({
       id,
       n: d.next,
-      shows: `${this.program.slice(this.program.indexOf("/") + 1)}:t${d.next}`,
+      shows: `${shortName(this.program)}:t${d.next}`,
       program: this.program,
       child: true,
       keep: "failed",
@@ -439,7 +446,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           tiles.push({
             id,
             n: k + 2,
-            shows: `${program.slice(program.indexOf("/") + 1)}:t${k + 2}`,
+            shows: `${shortName(program)}:t${k + 2}`,
             program,
             child: true,
             keep: "failed",
@@ -479,7 +486,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           ),
           "L31: aria-current is on the focused tile's region only",
         ).toEqual([tileName(byId.get(w.focus)!)]);
-        const buttons = Arr.filter(all(root), (n) => isButton(n) && (nameIn(root, n) ?? "").startsWith("open "));
+        const buttons = Arr.filter(all(root), (n) => isButton(n) && Str.startsWith("open ")(nameIn(root, n) ?? ""));
         expect(
           Arr.map(buttons, (b) => nameIn(root, b)),
           `L31: at ${width}x${height} each strip is one button named open <program>, t<n>, in reading order`,

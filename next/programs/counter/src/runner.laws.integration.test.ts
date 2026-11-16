@@ -23,7 +23,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Array as Arr } from "effect";
+import { Array as Arr, pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -76,7 +76,9 @@ const reconstruct = (before: unknown, change: Update): unknown => {
       continue;
     }
 
-    const keys = Arr.map(p.path.slice(1).split("/"), (k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const keys = Arr.map(pipe(p.path, Str.slice(1), Str.split("/")), (k) =>
+      pipe(k, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")),
+    );
     let target: unknown = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -283,7 +285,7 @@ describe("p22 real counter in the runner", () => {
           yield* r.msg({
             id: `counter-${n}`,
             envelope: {
-              id: `input_0000000000e0080000000000${n.toString(16).padStart(2, "0")}`,
+              id: `input_0000000000e0080000000000${Str.padStart(2, "0")(n.toString(16))}`,
               by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
               arrivedAt: n,
               input: { type: "inc" },
@@ -503,7 +505,7 @@ describe("P40 the counter under its qualified identity", () => {
                       yield* r.msg({
                         id: `p40-${sent}`,
                         envelope: {
-                          id: `input_0000000000e0080000000000${sent.toString(16).padStart(2, "0")}`,
+                          id: `input_0000000000e0080000000000${Str.padStart(2, "0")(sent.toString(16))}`,
                           by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
                           arrivedAt: sent,
                           input: { type },
@@ -521,7 +523,7 @@ describe("P40 the counter under its qualified identity", () => {
                       yield* r.msg({
                         id: `p40-${sent}`,
                         envelope: {
-                          id: `input_0000000000e0080000000000${sent.toString(16).padStart(2, "0")}`,
+                          id: `input_0000000000e0080000000000${Str.padStart(2, "0")(sent.toString(16))}`,
                           by: Writer.cases.person.make({ key: "SHA256:person", for: "person" }),
                           arrivedAt: sent,
                           input: { type: "inc" },
@@ -564,7 +566,7 @@ describe("P40 the counter under its qualified identity", () => {
       () => PROGRAM,
       (name) => `fabrika/${name}`,
       (name) => `${name}/x`,
-      (name) => name.replace(/[:.]/, "/"),
+      (name) => Str.replace(/[:.]/, "/")(name),
       () => `${counter.name}:1`,
     ];
 

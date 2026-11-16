@@ -7,6 +7,7 @@ import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";
@@ -189,9 +190,8 @@ const at = <A>(list: ReadonlyArray<A>, pick: number) => list[pick % list.length]
 const sized = (size: number, unit: string) => {
   const width = new TextEncoder().encode(unit).length;
   const count = Math.max(0, Math.floor(size / width) - 1);
-  const head = unit.repeat(count);
-
-  return head + "x".repeat(Math.max(0, size - count * width));
+  const head = Str.repeat(count)(unit);
+  return head + Str.repeat(Math.max(0, size - count * width))("x");
 };
 
 /** A wait whose candidate attachment lands `shift` bytes off the encoded limit. */

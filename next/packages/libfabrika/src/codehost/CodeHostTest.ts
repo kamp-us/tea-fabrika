@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import {
   Change,
@@ -68,7 +69,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
       const merges = new Map<string, typeof Merged.cases.merged.Type>();
       const faults: Record<Method, Array<Fault>> = { change: [], update: [], merge: [] };
       const calls: Array<Call> = [];
-      let main = commit("0".repeat(40));
+      let main = commit(Str.repeat(40)("0"));
       let serial = 1;
       const used = new Set<string>([main]);
       let crash = false;
@@ -77,7 +78,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
         let id: string;
 
         do {
-          id = (serial++).toString(16).padStart(size, "f");
+          id = Str.padStart(size, "f")((serial++).toString(16));
         } while (used.has(id));
 
         used.add(id);
@@ -267,13 +268,13 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
           const id = (cell.pick % 4) + 1;
           const found = m.changes.get(id);
           m.serial++;
-          const hex = (salt: number) => (m.serial * 16 + salt + 10).toString(16).padStart(m.size, "0");
+          const hex = (salt: number) => Str.padStart(m.size, "0")((m.serial * 16 + salt + 10).toString(16));
 
           if (found === undefined || cell.move % 7 === 0) {
             const data: ChangeData = {
               ...Change.cases.found.make({
                 change: id,
-                head: commit(found === undefined ? cell.head.slice(-m.size) : hex(1)),
+                head: commit(found === undefined ? Str.slice(-m.size)(cell.head) : hex(1)),
                 state: cell.state,
                 paths: ["src/a.ts"],
               }),
@@ -383,14 +384,14 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
             fc
               .array(fc.constantFrom(..."0123456789abcdef"), { minLength: 64, maxLength: 64 })
               .map((digits) => Arr.join(digits, "")),
-            fc.integer({ min: 1, max: 32 }).map((n) => n.toString(16).padStart(64, "f")),
+            fc.integer({ min: 1, max: 32 }).map((n) => Str.padStart(64, "f")(n.toString(16))),
           ),
           conflict: fc.option(fc.array(fc.constantFrom("a b", "dir/[x]", ".dot")), { nil: null }),
         })
         .map(command);
 
       // pinned: the host's first generated head used to equal an f-padded input in either hash format.
-      const collision = { move: 0, pick: 1, state: "open", head: "1".padStart(64, "f"), conflict: null } as const;
+      const collision = { move: 0, pick: 1, state: "open", head: Str.padStart(64, "f")("1"), conflict: null } as const;
       const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
       fc.assert(
         fc.property(fc.commands([commandArb], { maxCommands: 70, size: "max" }), (commands) => {
@@ -400,7 +401,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
                 const context = yield* Layer.build(testLayer);
                 const real = { host: Context.get(context, CodeHost), control: Context.get(context, Control) };
                 expect(yield* real.host.change(1)).toEqual(Change.cases.missing.make({ change: 1 }));
-                const main = commit("0".repeat(size));
+                const main = commit(Str.repeat(size)("0"));
                 yield* real.control.main(main);
                 fc.modelRun(
                   () => ({

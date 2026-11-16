@@ -4,7 +4,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Array as Arr, Effect, Option, Schema, type Scope } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import { Array as Arr, String as Str } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -63,8 +68,7 @@ const View = Schema.Struct({
 
 const shown = (raw: unknown) => {
   const view = Schema.decodeUnknownSync(View)(raw);
-
-  return { ...view, items: [...view.items].sort((a, b) => a.name.localeCompare(b.name)) };
+  return { ...view, items: [...view.items].sort((a, b) => Str.localeCompare(b.name)(a.name)) };
 };
 
 const Controller = Schema.TaggedStruct("armed", {
@@ -85,11 +89,8 @@ export const suite = (open: Open, checklist: unknown) =>
             let serial = 0;
 
             const expected = () => ({
-              items: Arr.map([...items], ([name, kept]) => ({
-                name,
-                state: kept === null ? "new" : "checked",
-                note: kept,
-              })).sort((a, b) => a.name.localeCompare(b.name)),
+              items: Arr.map([...items], ([name, kept]) => ({ name, state: kept === null ? "new" : "checked", note: kept,
+              })).sort((a, b) => Str.localeCompare(b.name)(a.name)),
               left: Arr.filter([...items.values()], (kept) => kept === null).length,
             });
 

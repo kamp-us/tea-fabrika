@@ -24,6 +24,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
@@ -71,8 +72,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
-
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent => ({
   _tag: "founded",

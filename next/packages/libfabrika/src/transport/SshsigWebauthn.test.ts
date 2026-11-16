@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
 import * as Arr from "effect/Array";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -36,7 +37,7 @@ const armor = (bytes: Uint8Array) =>
     ?.join("\n")}\n-----END SSH SIGNATURE-----\n`;
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 const signedBytes = (text: string, space: string = SPACE) =>
   Buffer.concat([
@@ -207,7 +208,8 @@ const check = (armored: string, signer: string = line, body: string = text, over
 
 const refused = { _tag: "refused", reason: "bad_signature" };
 
-const blob = (armored = realArmor) => Buffer.from(Arr.join(armored.trim().split("\n").slice(1, -1), ""), "base64");
+const blob = (armored = realArmor) =>
+  Buffer.from(Arr.join(pipe(armored, Str.trim, Str.split("\n")).slice(1, -1), ""), "base64");
 
 const runs = { seed: 119120, numRuns: 40 };
 
@@ -249,7 +251,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         passkeyLineArb,
         fc.integer({ min: 0, max: 255 }).filter((n) => n !== 4),
         (line, prefix) => {
-          const bytes = Buffer.from(line.split(" ")[1]!, "base64");
+          const bytes = Buffer.from(Str.split(line, " ")[1]!, "base64");
           let at = 0;
 
           for (let i = 0; i < 2; i++) {
@@ -257,7 +259,7 @@ describe("P10 WebAuthn SSHSIG", () => {
           }
 
           bytes[at + 4] = prefix;
-          expect(Schema.is(PasskeyLine)(`${line.split(" ")[0]} ${bytes.toString("base64")}`)).toBe(false);
+          expect(Schema.is(PasskeyLine)(`${Str.split(line, " ")[0]} ${bytes.toString("base64")}`)).toBe(false);
         },
       ),
       { ...runs, examples: [[line, 3]] },
@@ -347,7 +349,7 @@ describe("P10 WebAuthn SSHSIG", () => {
             const scalar = BigInt(`0x${s.toString("hex")}`);
 
             const low = Buffer.from(
-              (scalar < order - scalar ? scalar : order - scalar).toString(16).padStart(64, "0"),
+              Str.padStart(64, "0")((scalar < order - scalar ? scalar : order - scalar).toString(16)),
               "hex",
             );
 
@@ -391,8 +393,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     Effect.gen(function* () {
       const read = (file: string) =>
         readFileSync(new URL(`../../../../../fixtures/next/sshsig/${file}`, import.meta.url), "utf8");
-
-      expect(yield* check(read("ecdsa.sig"), read("ecdsa.pub").trim(), read("text.txt"))).toEqual(refused);
+      expect(yield* check(read("ecdsa.sig"), Str.trim(read("ecdsa.pub")), read("text.txt"))).toEqual(refused);
     }),
   );
   it.effect("vector: p27: the exact real assertion passes, with signed backup flags and counter zero", () =>
@@ -596,7 +597,8 @@ describe("P10 WebAuthn SSHSIG", () => {
                 at += 4 + bytes.readUInt32BE(at);
               }
 
-              bytes[at + 4 + 5] = change % 2 === 0 ? "3".charCodeAt(0) : "4".charCodeAt(0);
+              // 0x33 and 0x34 are "3" and "4".
+              bytes[at + 4 + 5] = change % 2 === 0 ? 0x33 : 0x34;
             }
 
             if (kind === "signature algorithm") {
@@ -608,7 +610,8 @@ describe("P10 WebAuthn SSHSIG", () => {
 
               at += 4;
               const size = bytes.readUInt32BE(at);
-              bytes[at + 4 + size - 1] = ("m".charCodeAt(0) + 1 + (change % 127)) % 256;
+              // 0x6d is "m".
+              bytes[at + 4 + size - 1] = (0x6d + 1 + (change % 127)) % 256;
             }
 
             if (kind === "signature byte") {
@@ -675,7 +678,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     fc.assert(
       fc.property(passkeyLineArb, (line) => {
         expect(Schema.decodeSync(PasskeyLine)(line)).toBe(line);
-        expect(() => Schema.decodeSync(PasskeyLine)(line.replace("sk-ecdsa", "ecdsa"))).toThrow();
+        expect(() => Schema.decodeSync(PasskeyLine)(Str.replace("sk-ecdsa", "ecdsa")(line))).toThrow();
       }),
       { ...runs, examples: [[line]] },
     );

@@ -46,7 +46,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
-import { Array as Arr, pipe, Record as Rec } from "effect";
+import { Array as Arr, pipe, Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -520,7 +520,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
           ]);
 
           for (const e of events) {
-            if (e.move.startsWith("split") && e.waiting !== undefined) {
+            if (Str.startsWith("split")(e.move) && e.waiting !== undefined) {
               seen.asked++;
               expect(e.result._tag, `L6: ${e.move} is taken`).toBe("stepped");
               expect(e.after, `L6: ${e.move} changes no view before its start answers`).toEqual(e.before);
@@ -643,7 +643,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
         tape(["close", "close", "close_waiting", "split_right", "split_down", "answer", "answer", "attach"], 40),
         (cmds) => {
           for (const e of walk(p, cmds)) {
-            if (!e.move.startsWith("close") || e.from === undefined) {
+            if (!Str.startsWith("close")(e.move) || e.from === undefined) {
               continue;
             }
 
@@ -701,7 +701,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
           for (const e of walk(p, cmds)) {
             const stops = Arr.filter(e.cmds, (c) => c.type === "stop_child");
 
-            if (!e.move.startsWith("close") || e.from === undefined || e.result._tag !== "stepped") {
+            if (!Str.startsWith("close")(e.move) || e.from === undefined || e.result._tag !== "stepped") {
               expect(stops, `L8: ${e.move} stops nothing`).toEqual([]);
               continue;
             }
@@ -790,7 +790,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
             }
 
             if (e !== null && kind === "attach_reused") {
-              const which = e.move.includes("reusing live") ? "attach_live" : "attach_waiting";
+              const which = Str.includes("reusing live")(e.move) ? "attach_live" : "attach_waiting";
               seen[which] = (seen[which] ?? 0) + 1;
               expect(e.result, `L9: ${e.move}`).toEqual({ _tag: "refused", reason: "id_reused" });
               expect(e.after, "L9: a refused attach changes no view").toEqual(e.before);
@@ -982,7 +982,7 @@ const focusCommands = Effect.fnUntraced(function* () {
     ...pipe(
       commands,
       Arr.map((c) => c.does as string),
-      Arr.filter((d) => d.startsWith("tezgah.focus_")),
+      Arr.filter((d) => Str.startsWith("tezgah.focus_")(d)),
     ),
     CLICK,
   ];

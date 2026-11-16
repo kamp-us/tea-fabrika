@@ -2,6 +2,7 @@ import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -20,11 +21,11 @@ const encodeProcess = (at: number, random: ReadonlyArray<number>): string => {
 
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
   const bits = `00${Arr.join(
-    Arr.map([...bytes], (byte) => byte.toString(2).padStart(8, "0")),
+    Arr.map([...bytes], (byte) => Str.padStart(8, "0")(byte.toString(2))),
     "",
   )}`;
   const suffix = Arr.join(
-    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)] ?? ""),
+    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)] ?? ""),
     "",
   );
 

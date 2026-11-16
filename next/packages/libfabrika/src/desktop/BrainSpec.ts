@@ -3,6 +3,7 @@
  */
 import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 
 const Text = Schema.NonEmptyString.check(Schema.isPattern(/^[^\p{Cc}]+$/u));
 
@@ -12,7 +13,7 @@ const Home = Absolute.check(
   Schema.makeFilter(
     (value) =>
       value === "/" ||
-      (!value.endsWith("/") && !Arr.some(value.split("/").slice(1), (s) => s === "" || s === "." || s === "..")),
+      (!Str.endsWith("/")(value) && !Arr.some(Str.split("/")(value).slice(1), (s) => s === "" || s === "." || s === "..")),
     { expected: "a canonical absolute home" },
   ),
 );

@@ -15,6 +15,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
@@ -57,7 +58,7 @@ const prefixShapes = fc
     longest,
     `${first}_${last}`,
     `${first}__${last}`,
-    first + "_".repeat(61) + last,
+    first + Str.repeat(61)("_") + last,
   ]);
 
 const badPrefixShapes = fc
@@ -67,7 +68,7 @@ const badPrefixShapes = fc
     "_",
     `_${word}`,
     `${word}_`,
-    word.toUpperCase(),
+    Str.toUpperCase(word),
     long,
     // A bad character is refused in the middle and at both ends, so `${word}1` stays refused.
     `${word}${bad}${word}`,
@@ -94,37 +95,39 @@ const uuid = fc.tuple(clock, fc.uint8Array({ minLength: 10, maxLength: 10 })).ma
 // Independent oracle: follow the spec's bit-string recipe, not the generator's shift loop.
 const referenceEncode = (bytes: Uint8Array): string => {
   const bits = `00${Arr.join(
-    Arr.map([...bytes], (byte) => byte.toString(2).padStart(8, "0")),
+    Arr.map([...bytes], (byte) => Str.padStart(8, "0")(byte.toString(2))),
     "",
   )}`;
   return Arr.join(
-    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(bits.slice(i * 5, i * 5 + 5), 2)] ?? ""),
+    Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)] ?? ""),
     "",
   );
 };
 
 const referenceDecode = (suffix: string): Uint8Array => {
-  const bits = Arr.join(
-    Arr.map([...suffix], (char) => alphabet.indexOf(char).toString(2).padStart(5, "0")),
-    "",
-  ).slice(2);
-  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(bits.slice(i * 8, i * 8 + 8), 2));
+  const bits = Str.slice(2)(
+    Arr.join(
+      Arr.map([...suffix], (char) => Str.padStart(5, "0")(Option.getOrThrow(Str.indexOf(char)(alphabet)).toString(2))),
+      "",
+    ),
+  );
+  return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(Str.slice(i * 8, i * 8 + 8)(bits), 2));
 };
 
 const wire = (type: string, bytes: Uint8Array): string => (type === "" ? "" : `${type}_`) + referenceEncode(bytes);
 
-const split = (value: string): readonly [string, string] => {
-  const separator = value.lastIndexOf("_");
-
-  return separator < 0 ? ["", value] : [value.slice(0, separator), value.slice(separator + 1)];
-};
+const split = (value: string): readonly [string, string] =>
+  Option.match(Str.lastIndexOf("_")(value), {
+    onNone: (): readonly [string, string] => ["", value],
+    onSome: (separator): readonly [string, string] => [Str.slice(0, separator)(value), Str.slice(separator + 1)(value)],
+  });
 
 const validPrefix = (type: string): boolean =>
   type.length > 0 &&
   type.length <= 63 &&
   /^[a-z]$/.test(type[0]!) &&
-  /^[a-z]$/.test(type.at(-1)!) &&
-  Arr.every([...type], (char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
+  Option.exists(Str.at(type, -1), (last) => /^[a-z]$/.test(last)) &&
+  Arr.every([...type], (char) => Str.includes(char)("abcdefghijklmnopqrstuvwxyz_"));
 
 const accepts = (input: unknown, type?: string): boolean => {
   if (typeof input !== "string") {
@@ -137,15 +140,15 @@ const accepts = (input: unknown, type?: string): boolean => {
     return false;
   }
 
-  if (found === "" && input.includes("_")) {
+  if (found === "" && Str.includes("_")(input)) {
     return false;
   }
 
-  if (suffix.length !== 26 || !Arr.every([...suffix], (char) => alphabet.includes(char))) {
+  if (suffix.length !== 26 || !Arr.every([...suffix], (char) => Str.includes(char)(alphabet))) {
     return false;
   }
 
-  if (alphabet.indexOf(suffix[0]!) > 7) {
+  if (Option.exists(Str.indexOf(suffix[0]!)(alphabet), (index) => index > 7)) {
     return false;
   }
 
@@ -393,21 +396,21 @@ describe("T518 Id format", () => {
           wrongVariant[8] = (bytes[8]! & 63) | (variant << 6);
 
           const bad = [
-            raw.toUpperCase(),
-            head + suffix.toUpperCase(),
-            head + suffix.slice(0, index) + suffix.slice(index + 1),
-            `${head + suffix.slice(0, index)}0${suffix.slice(index)}`,
+            Str.toUpperCase(raw),
+            head + Str.toUpperCase(suffix),
+            head + Str.slice(0, index)(suffix) + Str.slice(index + 1)(suffix),
+            `${head + Str.slice(0, index)(suffix)}0${Str.slice(index)(suffix)}`,
             `${raw}0`,
             // A count is never an id: an id is not derived from how many came before it.
             `${head}${count}`,
             `${raw}-${count}`,
-            head + alphabet[overflow] + suffix.slice(1),
+            head + alphabet[overflow] + Str.slice(1)(suffix),
             wire(type, wrongVersion),
             wire(type, wrongVariant),
             ...Arr.flatMap([" ", "\t", "\n", "\r\n", "\u00a0"], (space) => [space + raw, raw + space]),
             ...Arr.map(
               ["i", "l", "o", "u", "A", "-", "_", "é", "\0"],
-              (char) => head + suffix.slice(0, index) + char + suffix.slice(index + 1),
+              (char) => head + Str.slice(0, index)(suffix) + char + Str.slice(index + 1)(suffix),
             ),
             ...(type === "" ? [`_${suffix}`] : [type + suffix, `${type}__${suffix}`]),
           ];
@@ -664,7 +667,7 @@ describe("T518 Id order and generation", () => {
 
           for (const id of ids) {
             expect(accepts(id, type)).toBe(true);
-            expect(id.startsWith(`${type}_`)).toBe(true);
+            expect(Str.startsWith(`${type}_`)(id)).toBe(true);
             expect(Schema.decodeSync(Specific)(id)).toBe(id);
             expect(timestamp(id)).toBe(at);
           }

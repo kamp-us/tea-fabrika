@@ -4,7 +4,9 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { pipe } from "effect/Function";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
 
@@ -142,16 +144,16 @@ export const Item = Schema.TaggedUnion({
   action: { id: Schema.Literals(["open_window", "open_browser", "quit"]), words: Schema.String },
 });
 
-const safe = (text: string) => text.replace(/[\uD800-\uDFFF]/gu, "\uFFFD").replace(/[\p{Cc}\p{Cf}]/gu, "");
+const safe = (text: string) =>
+  pipe(text, Str.replace(/[\uD800-\uDFFF]/gu, "\uFFFD"), Str.replace(/[\p{Cc}\p{Cf}]/gu, ""));
 
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {
-  const cut = safe(text).slice(0, 256);
-
-  return /[\uD800-\uDBFF]$/.test(cut) ? cut.slice(0, -1) : cut;
+  const cut = Str.slice(0, 256)(safe(text));
+  return /[\uD800-\uDBFF]$/.test(cut) ? Str.slice(0, -1)(cut) : cut;
 };
 
-const code = (text: string) => safe(text).replace(/^(\d{3})(\d{3})$/, "$1 $2");
+const code = (text: string) => Str.replace(/^(\d{3})(\d{3})$/, "$1 $2")(safe(text));
 
 const named = (row: { readonly label: string; readonly location: string }) =>
   `${label(row.label)} on ${safe(row.location)}`;

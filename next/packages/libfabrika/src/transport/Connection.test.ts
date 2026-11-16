@@ -10,6 +10,7 @@ import * as Tracer from "effect/Tracer";
 import * as Formatter from "effect/Formatter";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -706,8 +707,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
-
-  const [change, value] = r.mutation.split(":");
+  const [change, value] = Str.split(r.mutation, ":");
 
   if (change === "drop") {
     delete base[value!];
@@ -723,7 +723,7 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
 
   switch (r.mutation) {
     case "truncate":
-      return text.slice(0, -1);
+      return Str.slice(0, -1)(text);
     case "garbage":
       return `${text}}`;
     case "empty":

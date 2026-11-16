@@ -13,7 +13,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
-import { Array as Arr, pipe, Record as Rec } from "effect";
+import { Array as Arr, pipe, Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -71,7 +71,7 @@ const MOST = 256;
 const Note = fc.option(
   fc.oneof(
     fc.constant("n"),
-    fc.constant("m".repeat(MOST)),
+    fc.constant(Str.repeat(MOST)("m")),
     fc.string({ unit: "grapheme", minLength: 1, maxLength: 64 }).filter((s) => s.length <= MOST),
     fc.string({ minLength: 2, maxLength: MOST - 1 }),
   ),
@@ -80,7 +80,7 @@ const Note = fc.option(
 
 /** Four names per run, the 1 and 80 character edges among them. */
 const Pool = fc.uniqueArray(
-  fc.oneof(fc.string({ minLength: 1, maxLength: 80 }), fc.constant("x"), fc.constant("n".repeat(80))),
+  fc.oneof(fc.string({ minLength: 1, maxLength: 80 }), fc.constant("x"), fc.constant(Str.repeat(80)("n"))),
   { minLength: 4, maxLength: 4 },
 );
 
@@ -284,7 +284,7 @@ const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
  *  that is no integer, a note that is no string. */
 const Broken = fc.constantFrom(
   (i: Item): unknown => ({ ...i, name: "" }),
-  (i: Item): unknown => ({ ...i, name: "x".repeat(81) }),
+  (i: Item): unknown => ({ ...i, name: Str.repeat(81)("x") }),
   (i: Item): unknown => ({ ...i, state: { _tag: "gone" } }),
   (i: Item): unknown => ({ ...i, state: { _tag: "open", since: 1.5 } }),
   (i: Item): unknown => ({ ...i, state: { _tag: "checked", note: 7 } }),
@@ -293,9 +293,9 @@ const Broken = fc.constantFrom(
 
 /** A Msg one field outside the plan's shape, on an otherwise good `check` or `rename`. */
 const Bad = fc.oneof(
-  fc.constantFrom("", "x".repeat(81)).map((name) => ({ type: "check", name })),
-  fc.constantFrom("", "x".repeat(81)).map((to) => ({ type: "rename", name: "a", to })),
-  fc.constantFrom("", "x".repeat(MOST + 1)).map((note) => ({ type: "check", name: "a", note })),
+  fc.constantFrom("", Str.repeat(81)("x")).map((name) => ({ type: "check", name })),
+  fc.constantFrom("", Str.repeat(81)("x")).map((to) => ({ type: "rename", name: "a", to })),
+  fc.constantFrom("", Str.repeat(MOST + 1)("x")).map((note) => ({ type: "check", name: "a", note })),
   fc
     .oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string(), { maxLength: 2 }), fc.object())
     .map((note) => ({ type: "check", name: "a", note })),
@@ -565,7 +565,7 @@ describe("ticket 806 the checklist's laws", () => {
       { seed: SEED, numRuns: RUNS },
     );
 
-    for (const note of ["", "o".repeat(MOST + 44), null]) {
+    for (const note of ["", Str.repeat(MOST + 44)("o"), null]) {
       // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
       // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
       const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };

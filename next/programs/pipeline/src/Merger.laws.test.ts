@@ -11,7 +11,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { Array as Arr, Record as Rec } from "effect";
+import { Array as Arr, Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -82,9 +82,8 @@ const settingsFor = (w: World) =>
     ),
   );
 
-const id = (w: World, char: string) => Schema.decodeSync(Commit)(char.repeat(w.size));
-
-const tree = (w: World, char: string) => Schema.decodeSync(Tree)(char.repeat(w.size));
+const id = (w: World, char: string) => Schema.decodeSync(Commit)(Str.repeat(w.size)(char));
+const tree = (w: World, char: string) => Schema.decodeSync(Tree)(Str.repeat(w.size)(char));
 
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
 
@@ -557,7 +556,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           : null;
 
       const fault =
-        (taken && msg.type.endsWith("_err")) ||
+        (taken && Str.endsWith("_err")(msg.type)) ||
         verdict === "lost" ||
         (verdict === "pending" && prev._tag === "checking" && at !== null && at >= prev.until);
 
@@ -849,7 +848,7 @@ const roundWalk = (p: Program, w: World) => {
               cmd,
               moved
                 ? Updated.cases.updated.make({
-                    head: Schema.decodeSync(Commit)((cmd.attempt + 16).toString(16).padStart(w.size, "0")),
+                    head: Schema.decodeSync(Commit)(Str.padStart(w.size, "0")((cmd.attempt + 16).toString(16))),
                     tree: tree(w, "e"),
                     main: id(w, "d"),
                   })

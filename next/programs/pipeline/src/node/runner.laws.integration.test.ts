@@ -39,7 +39,7 @@ import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import type { Redacted } from "effect";
 import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -85,11 +85,9 @@ const from = {
   build: BUILD,
 };
 
-const head = CodeHostTest.commit("a".repeat(40));
-
-const base = CodeHostTest.commit("d".repeat(40));
-
-const checked = CodeHostTest.tree("e".repeat(40));
+const head = CodeHostTest.commit(Str.repeat(40)("a"));
+const base = CodeHostTest.commit(Str.repeat(40)("d"));
+const checked = CodeHostTest.tree(Str.repeat(40)("e"));
 
 const settings = Effect.runSync(
   Settings.all.parse(
@@ -243,7 +241,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
     current.runner.msg({
       id: `incoming-${++serial}`,
       envelope: {
-        id: Schema.decodeSync(InputId)(`input_0000000000e008${serial.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(serial.toString(16))}`),
         by: owner,
         arrivedAt: serial,
         input,

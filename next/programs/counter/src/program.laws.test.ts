@@ -2,7 +2,7 @@
 // No window export exists until P14. No copied counter implementation lives in the library.
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -32,7 +32,7 @@ describe("P11 real counter laws", () => {
         expect(counter.wake({ count })).toBeNull();
         const port = counter.inputs[type];
         expect(port.personOnly).toBe(false);
-        expect(port.description.trim().length).toBeGreaterThan(0);
+        expect(Str.trim(port.description).length).toBeGreaterThan(0);
         expect(Schema.decodeSync(port.schema)({ type })).toEqual({ type });
       }),
       { seed: SEED, numRuns: 100 },

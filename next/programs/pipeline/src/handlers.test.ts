@@ -12,7 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
-import { Record as Rec } from "effect";
+import { Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -29,7 +29,7 @@ describe("L12: handlers map faults", () => {
         }),
         (cell) => {
           expect.hasAssertions();
-          const head = Schema.decodeSync(CodeHost.Commit)("a".repeat(40));
+          const head = Schema.decodeSync(CodeHost.Commit)(Str.repeat(40)("a"));
           const reason = cell.method === "checks" && cell.reason === "refused" ? "unavailable" : cell.reason;
           const cause = cell.cause === undefined ? undefined : new Error(cell.cause);
 
@@ -124,10 +124,12 @@ it.effect.prop(
       );
 
       yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
-
-      const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
-        Effect.provide(services),
-      );
+      const outcome = yield* handlers.update!({
+        type: "update",
+        attempt: 1,
+        change: 1,
+        head: Str.repeat(40)("a"),
+      }).pipe(Effect.provide(services));
       RepliesTest.unleaked([Formatter.formatJson(outcome)], [token]);
       expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
     }),

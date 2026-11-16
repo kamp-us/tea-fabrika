@@ -25,6 +25,7 @@ import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
 import * as Tuple from "effect/Tuple";
+import { String as Str } from "effect";
 import type { ReactElement } from "react";
 
 /**
@@ -33,7 +34,10 @@ import type { ReactElement } from "react";
  * uses (the tile guidelines' "Program name" and "Tile id").
  */
 export const tileWords = (tile: Pick<Tile, "program" | "n">) => ({
-  program: tile.program.slice(tile.program.lastIndexOf("/") + 1),
+  program: Option.match(Str.lastIndexOf("/")(tile.program), {
+    onNone: () => tile.program,
+    onSome: (slash) => Str.slice(slash + 1)(tile.program),
+  }),
   handle: `t${tile.n}`,
 });
 
@@ -144,7 +148,7 @@ const TileRegion = ({
       <span className="tile-mark" aria-hidden="true">
         ·
       </span>
-      <span className="tile-name">{tile.program.slice(tile.program.lastIndexOf("/") + 1)}</span>
+      <span className="tile-name">{tileWords(tile).program}</span>
       {asking ? (
         <span className="tile-state question">{question(tile)}</span>
       ) : state.word === "" ? null : (

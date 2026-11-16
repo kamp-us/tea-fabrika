@@ -32,6 +32,7 @@ import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Rec from "effect/Record";
+import { String as Str } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -165,8 +166,8 @@ const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
   Arr.flatMap(table.rows, (row) => {
     const keys = Function.pipe(
       row.keys,
-      Arr.filter((k) => k.startsWith("<prefix>")),
-      Arr.map((k) => k.slice("<prefix>".length)),
+      Arr.filter(Str.startsWith("<prefix>")),
+      Arr.map(Str.slice("<prefix>".length)),
       Arr.map((k) => PRINTED[k] ?? k),
     );
     return keys.length === 0 ? [] : [`${Arr.join(keys, " ")} ${row.word}`];

@@ -16,6 +16,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import { pipe, String as Str } from "effect";
 import * as fc from "fast-check";
 import {
   SPACE,
@@ -184,9 +186,9 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
       armor(build({ ...good, signature: join8(str("ssh-rsa"), str(goodRaw)) })),
       [signer],
     ],
-    ["armor with its END line cut", goodSig.replace("-----END SSH SIGNATURE-----\n", ""), [signer]],
-    ["armor with its BEGIN line cut", goodSig.replace("-----BEGIN SSH SIGNATURE-----\n", ""), [signer]],
-    ["a body that is not base64", goodSig.replace("U1NIU0lH", "U1NIU0l!"), [signer]],
+    ["armor with its END line cut", Str.replace("-----END SSH SIGNATURE-----\n", "")(goodSig), [signer]],
+    ["armor with its BEGIN line cut", Str.replace("-----BEGIN SSH SIGNATURE-----\n", "")(goodSig), [signer]],
+    ["a body that is not base64", Str.replace("U1NIU0lH", "U1NIU0l!")(goodSig), [signer]],
     ["an empty text", "", [signer]],
   ];
   it("refuses malformed blobs and armor with the same answer", () => {
@@ -317,7 +319,7 @@ describe("KeyLine", () => {
     ["an empty line", ""],
     ["a line with no key", "ssh-ed25519"],
     ["a line whose key is not base64", "ssh-ed25519 !!!notbase64 x@fabrika.test"],
-    ["an ssh-ed25519 line holding an ECDSA blob", `ssh-ed25519 ${ecdsa.split(" ")[1] ?? ""}`],
+    ["an ssh-ed25519 line holding an ECDSA blob", `ssh-ed25519 ${Str.split(ecdsa, " ")[1] ?? ""}`],
     ["a key of 31 bytes", lineFor(keyBlob(goodKey.slice(0, 31)))],
     ["a key blob with a byte after it", lineFor(join8(good.key, Uint8Array.of(0)))],
   ];
@@ -510,13 +512,17 @@ describe("p27, the armor's own words", () => {
 
   // Each the same length as the line it stands in for, so only its words differ.
   const cases: ReadonlyArray<readonly [string, string]> = [
-    ["a bad BEGIN line and a good END line", goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----")],
-    ["another kind's BEGIN line", goodSig.replace(BEGIN, "-----BEGIN PGP SIGNATURE-----")],
-    ["a good BEGIN line and a bad END line", goodSig.replace(END, "-----END SSH SIGNATURX-----")],
-    ["another kind's END line", goodSig.replace(END, "-----END PGP SIGNATURE-----")],
+    ["a bad BEGIN line and a good END line", Str.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----")(goodSig)],
+    ["another kind's BEGIN line", Str.replace(BEGIN, "-----BEGIN PGP SIGNATURE-----")(goodSig)],
+    ["a good BEGIN line and a bad END line", Str.replace(END, "-----END SSH SIGNATURX-----")(goodSig)],
+    ["another kind's END line", Str.replace(END, "-----END PGP SIGNATURE-----")(goodSig)],
     [
       "both lines bad",
-      goodSig.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----").replace(END, "-----END SSH SIGNATURX-----"),
+      pipe(
+        goodSig,
+        Str.replace(BEGIN, "-----BEGIN SSH SIGNATURX-----"),
+        Str.replace(END, "-----END SSH SIGNATURX-----"),
+      ),
     ],
   ];
   it("refuses changed armor words of the same length", () => {
@@ -524,9 +530,8 @@ describe("p27, the armor's own words", () => {
     const changed = fc.tuple(fc.nat(), fc.integer({ min: 1, max: 127 }), fc.boolean()).map(([place, delta, begin]) => {
       const word = begin ? BEGIN : END;
       const at = place % word.length;
-      const swap = String.fromCharCode((word.charCodeAt(at) + delta) % 128);
-
-      return goodSig.replace(word, `${word.slice(0, at)}${swap}${word.slice(at + 1)}`);
+      const swap = String.fromCharCode((Option.getOrThrow(Str.charCodeAt(word, at)) + delta) % 128);
+      return Str.replace(word, `${Str.slice(0, at)(word)}${swap}${Str.slice(at + 1)(word)}`)(goodSig);
     });
     return fc.assert(
       fc.asyncProperty(changed, (armored) =>
@@ -546,7 +551,7 @@ describe("p27, the armor's own words", () => {
 // A key line is `<type> <base64> [comment]`. Between its parts it takes a run of spaces or tabs,
 // as OpenSSH's own reader does (the lead's call on P7), and the key is the same one.
 describe("a key line's parts and its type", () => {
-  const [type = "", key = "", comment = ""] = signer.split(" ");
+  const [type = "", key = "", comment = ""] = Str.split(signer, " ");
   it("KeyLine takes runs of spaces and tabs and matches the same key", () => {
     // Plant: normalize the returned signer to two space-separated words. Exact equality fails.
     const gap = fc.array(fc.constantFrom(" ", "\t"), { minLength: 1 }).map((chars) => Arr.join(chars, ""));
@@ -651,7 +656,7 @@ describe("properties", () => {
 
   it("any one changed base64 character that changes the blob refuses", () => {
     // Plant: accept even when Ed25519 verification is false. The changed-blob refusal must fail.
-    const lines = goodSig.split("\n");
+    const lines = Str.split(goodSig, "\n");
     const body = lines.slice(1, -2); // the rows between BEGIN and END
     const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     return fc.assert(
@@ -659,7 +664,7 @@ describe("properties", () => {
         const r = row % body.length;
         const line = body[r] ?? "";
         const c = col % line.length;
-        const changedRow = `${line.slice(0, c)}${swap}${line.slice(c + 1)}`;
+        const changedRow = `${Str.slice(0, c)(line)}${swap}${Str.slice(c + 1)(line)}`;
         const changed = [lines[0] ?? "", ...Arr.map(body, (x, i) => (i === r ? changedRow : x)), ...lines.slice(-2)];
         const armored = Arr.join(changed, "\n");
         fc.pre(Buffer.compare(Buffer.from(unarmor(armored)), Buffer.from(unarmor(goodSig))) !== 0);

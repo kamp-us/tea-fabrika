@@ -3,6 +3,7 @@ import * as Base64 from "effect/encoding/Base64";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { String as Str } from "effect";
 
 /** @internal */
 export type Bytes = Uint8Array<ArrayBuffer>;
@@ -70,7 +71,7 @@ export const holds = (ok: boolean): Option.Option<true> => (ok ? Option.some(tru
 /** @internal */
 export const armor = (blob: Uint8Array): string => {
   const body = Base64.encode(blob);
-  const rows = Array.from({ length: Math.ceil(body.length / 70) }, (_, i) => body.slice(i * 70, (i + 1) * 70));
+  const rows = Array.from({ length: Math.ceil(body.length / 70) }, (_, i) => Str.slice(i * 70, (i + 1) * 70)(body));
   return `-----BEGIN SSH SIGNATURE-----\n${Arr.join(rows, "\n")}\n-----END SSH SIGNATURE-----\n`;
 };
 

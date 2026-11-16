@@ -7,7 +7,9 @@
 // shared with every window; a program's box takes them from the library's root, as every name.
 import { Machine } from "@demlik/tea/effect";
 import { Layout, Program, type Refusal, StartChild, type Started, Workspace } from "@kampus/libfabrika";
-import { Array as Arr, Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str } from "effect";
 
 /** The program a new tile shows. A constant until programs read pack settings (P38 slice 5); then
  *  it is the pack's `tezgah.new`, and `fabrika/fabsh` its default once the shell lands. */
@@ -138,8 +140,12 @@ const placed = (m: Model, s: Starting, answer: Started): Model => {
       return rest;
     }
 
+    const body = Option.match(Str.lastIndexOf("_")(s.tile), {
+      onNone: () => s.tile,
+      onSome: (underscore) => Str.slice(underscore + 1)(s.tile),
+    });
     const space = Workspace.Workspace.make({
-      id: workspaceId(`workspace_${s.tile.slice(s.tile.lastIndexOf("_") + 1)}`),
+      id: workspaceId(`workspace_${body}`),
       n: s.workspace,
       layout: s.tile,
       focus: s.tile,

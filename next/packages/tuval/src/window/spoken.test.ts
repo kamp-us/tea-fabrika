@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import { String as Str } from "effect";
 import { spoken } from "./spoken.ts";
 
 const SEED = 119120;
@@ -56,7 +57,8 @@ const lookup =
     );
 
 /** What the test expects an end to be said as: the guideline's words, written out here by hand. */
-const endLine = (t: DeskTile) => `${t.program.slice(t.program.indexOf("/") + 1)} in t${t.n} ended`;
+const endLine = (t: DeskTile) =>
+  `${Option.match(Str.indexOf("/")(t.program), { onNone: () => t.program, onSome: (at) => Str.slice(at + 1)(t.program) })} in t${t.n} ended`;
 
 describe("the polite region says the current burst as one line", () => {
   it.prop(
@@ -74,7 +76,7 @@ describe("the polite region says the current burst as one line", () => {
       );
 
       for (const t of Arr.filter(p.desk, (t) => !ends.has(t.id))) {
-        expect(words.includes(endLine(t)), `${endLine(t)} was said, and no end of it is in the burst`).toBe(false);
+        expect(Str.includes(endLine(t))(words), `${endLine(t)} was said, and no end of it is in the burst`).toBe(false);
       }
 
       if (p.m.said.messages.length === 0) {
@@ -88,17 +90,19 @@ describe("the polite region says the current burst as one line", () => {
         spoken({ ...p.m, said: { id: p.m.said.id, messages: [x] } }, lookup(p), () => null),
       );
       expect(words, "the burst as one line, in order").toBe(Arr.join(parts, ", "));
-      expect(words.includes("\n"), "the burst is one line").toBe(false);
+      expect(Str.includes("\n")(words), "the burst is one line").toBe(false);
 
       for (const [x, part] of Arr.map(p.m.said.messages, (x, i) => [x, parts[i]!] as const)) {
         const tile = lookup(p)(x.tile)!;
 
         if (x._tag === "ended") {
           expect(part, "an end is said in the tile guideline's words").toBe(endLine(tile));
-          expect(part.includes(x.reason._tag) || part.includes("("), "an end says no exit reason").toBe(false);
+          expect(Str.includes(x.reason._tag)(part) || Str.includes("(")(part), "an end says no exit reason").toBe(
+            false,
+          );
         } else {
           expect(
-            part !== "" && !part.includes(` in t${tile.n} `),
+            part !== "" && !Str.includes(` in t${tile.n} `)(part),
             "a refusal's words are the frame's, with no tile name",
           ).toBe(true);
         }

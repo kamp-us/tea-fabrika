@@ -33,6 +33,7 @@ import * as Tracer from "effect/Tracer";
 import * as Formatter from "effect/Formatter";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import { String as Str } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -190,8 +191,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
-
-const nextId = (prefix: string): string => `${prefix}_${String(++made).padStart(26, "0")}`;
+const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const granted = (
   signer: string,
