@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body 8762aacb2d47
+
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
@@ -663,8 +663,9 @@ moved.
 6. `programs/pipeline`: about 8 test lines. 0 product lines.
 7. `programs/counter`: about 10 test lines. 0 product lines.
 8. The shared stub: 31 product lines, about 60 test lines.
-9. `node`, with the typed dev client: 115 product lines, about 80 test lines (amendment of
-   2026-11-15: the new `runtime/ObjectCalls.ts` and the edit of `cloudflare/bindings.ts`).
+9. `node`, with the typed dev client: 115 product lines, about 140 test lines (amendment of
+   2026-11-15: the new `runtime/ObjectCalls.ts` and the edit of `cloudflare/bindings.ts`; point 6
+   adds about 60 test lines in five app tests).
 10. `cloudflare`, with the control table: 60 product lines, about 250 test lines.
 11. `runtime`: about 80 test lines. 0 product lines.
 12. `client`: about 300 test lines. 0 product lines.
@@ -676,9 +677,9 @@ Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15, at list pric
 averages $5.78, a build $4.78, a review $2.71 and a fix round $4.18. The six small cold slices are
 priced at $4 each for tests and review. The others: slice 1 $9, slice 8 $13, slice 9 $16, slice 10
 $16, slice 11 $10, slice 12 $14, slice 13 $8, slice 14 $14, slice 15 $5, and four send-backs at $7.
-That is 33 steps and 4 send-backs.
+That is 33 steps and 4 send-backs. Amendment point 6 adds slice 9's second tests step, at $6.
 
-Estimate: 37 steps, $157
+Estimate: 38 steps, $163
 
 ## Records
 
@@ -929,11 +930,176 @@ Slices 11 and 12 are a check only: their tests steps are done on `fabrikalfa/ref
 
 - The sketch's `gateways: Pick<DevProject, "join" | "leave" | "online">` refers to the type it sits in; `gateways` gets its own named type for the three calls, which `DevProject` also includes, and L7 reads it as `DevProject["gateways"]`.
 
+#### 6. Five app tests that slice 9's typed client turns red, 2026-11-16 (lead)
+
+**The answer first.** Slice 9's tests step takes five more test files. Each one called the dev
+client as the old bare record of functions. With `DevProject` and `DevProcess` typed (point 1),
+`pnpm typecheck` is red with 13 errors in them, and the build may not touch a test. Each fix makes
+the call a plain typed call, kind 6 of "What replaces each kind of call". No `Reflect.get`,
+`Reflect.set` or `Reflect.has` fire is removed or added, so the counts of slices 13 and 14 stay as
+point 3 gives them. This reassigns files inside the signed plan and makes no new design call.
+
+Read on `fabrikalfa/reflect-rest` at `3897bced3`, slice 9's build (row
+`field/runs/2026-11-15-reflect-ban-s9-build1.json`). `tsc --noEmit -p next/apps/fabrika` at that
+head gives exactly these 13 errors, and no other:
+
+| File | Owner | Product lines expected | Change |
+|---|---|---|---|
+| next/apps/fabrika/e2e/chaos-revoke.integration.test.ts | tests | tests | slice 9: 5 errors (TS2345) at :343, :354, :423, :438, :509; `invoke` takes a thunk; the `route` call's `"p90-control"` gets a kind 10 `@ts-expect-error`; 0 fires before and after |
+| next/apps/fabrika/e2e/client-protocol.test-support.ts | tests | tests | slice 9: 2 errors (TS2345) at :365, :373; `invoke` takes a thunk; its 5 fires (:125, :213, :250) stay for slice 13 |
+| next/apps/fabrika/src/worker-usage.integration.test.ts | tests | tests | slice 9: 4 errors (TS2345) at :278, :292, :381, :386; the four calls go through the file's own `call`; `invoke` stays for `instance.record(...)`; 0 fires |
+| next/apps/fabrika/src/start-child.laws.integration.test.ts | tests | tests | slice 9: 1 error (TS7053) at :207; the string-keyed `call` helper goes, its three callers call `project()` plainly; 0 fires |
+| next/apps/fabrika/src/worker-mail.integration.test.ts | tests | tests | slice 9: 1 error (TS2345) at :951; the local `start` takes `Start`, not `object`; its 3 fires (:355, :748, :951) stay for slice 14 |
+
+**The cause, one for four files.** Each file keeps a local copy of the old client type,
+`Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>`, and looks a
+method up by a string. `DevProject` has no index signature (point 2 rules one out), so it is not
+assignable to that record, and `target[method]` with `method: string` has no type.
+
+**Why a thunk, and not a lookup typed by a union of method names (85%).** A helper typed as
+`<M extends "start" | "read">(project: DevProject, method: M, args: Parameters<DevProject[M]>)`
+cannot call `project[method](...args)`: TypeScript widens `DevProject[M]` to a union of functions
+and refuses the spread (the correlated-union limit, microsoft/TypeScript#30581, not fetched for this
+plan). Getting past it takes a cast, which `fabrika/no-type-assertions` refuses, or `Reflect.apply`,
+which answers `any`. A thunk is a plain typed call with no lookup at all, the shape point 1 gives
+every kind 6 call. What the old helpers also did, refuse a missing method at run time, a typed call
+does at compile time, so nothing a law checked is lost.
+
+The fixes, a sketch, not compiled:
+
+```ts
+// next/apps/fabrika/e2e/chaos-revoke.integration.test.ts:246, before
+type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
+const invoke = Effect.fn("RevokeTest.control")(function* (binding: Binding, method: string, args: ReadonlyArray<unknown>) {
+  const target = binding[method];
+  if (target === undefined) {
+    return yield* new WireFailure({ cause: new Error(`the binding has no ${method} call`) });
+  }
+  return yield* Effect.tryPromise({ try: () => Reflect.apply(target, binding, args), catch: (cause) => new WireFailure({ cause }) });
+});
+
+// after: `Binding` goes, and the helper runs one typed call
+const invoke = Effect.fn("RevokeTest.control")(function* <A>(call: () => Promise<A>) {
+  return yield* Effect.tryPromise({ try: call, catch: (cause) => new WireFailure({ cause }) });
+});
+
+// :343 and :354
+const started = yield* invoke(() => instance.project(PROJECT).start(Start.cases.first.make({ /* as today */ }), from));
+const read = (stream: string) => invoke(() => instance.project(PROJECT).read(stream, 0, "p17b-audit"));
+
+// :423 and :509: the proof is made before the thunk, since a `yield*` cannot sit inside an arrow
+const armored = yield* root.proof(grant);
+expect(yield* RevokeTest.invoke(() => project.grant({ text: grant, armored }))).toMatchObject({ _tag: "applied" });
+
+// :438: the one value the type refuses on purpose, kind 10 (the plan's call on @ts-expect-error)
+const hold = (method: string, params: unknown = {}) =>
+  RevokeTest.invoke(() =>
+    // @ts-expect-error p90-control is no ConnectionId: only the test's control binding takes it (chaos-revoke.worker.test-support.ts:90)
+    project.route("p90-control", method, params, "p90-control"),
+  );
+```
+
+```ts
+// next/apps/fabrika/e2e/client-protocol.test-support.ts:318, after: `Binding` goes; the label keeps the failure's words
+const invoke = Effect.fnUntraced(function* <A>(method: string, call: () => Promise<A>) {
+  // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance's Durable Object RPC answers a Promise
+  return yield* Effect.tryPromise({
+    try: call,
+    catch: () => new SuiteError({ waited: `the control endpoint's ${method}` }),
+  });
+});
+
+// :365 and :373
+yield* invoke("exit", () => s.control.exit(first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()));
+const started = yield* invoke("start", () => s.control.start(Start.cases.again.make({ /* as today */ }), s.from()));
+// `field`, :125 and :213 are not touched: their 5 fires are slice 13's
+```
+
+```ts
+// next/apps/fabrika/src/worker-usage.integration.test.ts, after: the file's own `call` (:250) runs each typed call
+const start = (world: World["Service"], name: string, program: string) =>
+  call(() =>
+    world.instance.project(PROJECT).start(
+      { _tag: "first", id: `start-${name}`, name, code: { program, hash: world.built.programs[program]?.hash ?? "missing" } },
+      world.from,
+    ),
+  ).pipe(Effect.map((reply) => Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(reply).process));
+
+yield* call(() => world.instance.process(process).open("usage-probe")); // :292
+yield* call(() => instance.process(checklist).restart({ id: "replay", build: /* as today */ })); // :381
+call(() => instance.project(PROJECT).read("processes/checklist:2", 0, "usage-probe")); // :386
+// `invoke` stays, typed as today, for `instance.record(...)` only: dev.ts:788 still answers the bare
+// record there, and this plan does not type the record client. If `world.from` is refused as a
+// `From`, `FROM` (:20) gets the annotation `From`, as start-child.test-support.ts:159 has it.
+```
+
+```ts
+// next/apps/fabrika/src/start-child.laws.integration.test.ts:203, after: `call` goes
+const helpers = ({ instance, hashes, from }: Fixture) => {
+  const project = () => (instance as Instance).project(PROJECT);
+  return {
+    start: async (name: string, program: "starter" | "child") => {
+      const started = await project().start(
+        { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
+        from,
+      );
+      return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+    },
+    facts: async (stream: string) =>
+      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+    live: async (name: string): Promise<string | undefined> =>
+      ((await project().info()) as Array<any>).find((row) => row.name === name)?.process,
+  };
+};
+// The `as Instance` and `as Array<any>` lines are as they are on main; this point does not touch them.
+```
+
+```ts
+// next/apps/fabrika/src/worker-mail.integration.test.ts:949, after: only the parameter's type changes
+import type { Start } from "@kampus/libfabrika/processes/Process";
+const start = async (request: Start) =>
+  Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(
+    await Reflect.get(project, "start")(request, from),
+  ).process;
+```
+
+**What slice 9 edits in the two files slices 13 and 14 also own.** Only the type errors.
+
+- `client-protocol.test-support.ts`: `Binding`, `invoke` and its two callers, lines 318 to 333,
+  365 and 373. The 5 fires at :125 (2), :213 (2) and :250 (1) stay for slice 13. They are
+  `Reflect.get`, not `Reflect.apply`, and the fix does not reach them.
+- `worker-mail.integration.test.ts`: one import line and the parameter type at :949. The fire at
+  :951 stays, with the two at :355 and :748, for slice 14. The plainer fix,
+  `await project.start(request, from)`, would also remove the fire at :951. It is left to slice 14
+  on purpose, so that its three fires go as one kind 6 change and slice 14's count does not move.
+- Recount: slice 13 stays 15 fires in 5 files, slice 14 stays 37 in 12, and slices 9 to 14 stay 154
+  in 32. The other three files have no fire, and none is in a slice's table until now.
+  `start-child.laws.integration.test.ts` and `worker-usage.integration.test.ts` are in slice 14's
+  folder and `chaos-revoke.integration.test.ts` in slice 13's, and each is already at zero.
+- Slices 13 and 14 start from these files as slice 9 leaves them. Their line numbers move by a few
+  lines, and point 3's rule holds: the lead takes the counts again before their tests steps.
+
+**Clashes with the open pull requests.** None. Read with the GitHub tool, all files of each:
+https://github.com/kamp-us/tea-fabrika/pull/1099 (16 files) and
+https://github.com/kamp-us/tea-fabrika/pull/1312 (50 files) edit none of the five files and not
+`next/packages/libfabrika/src/node/dev/dev.ts`. Pull request 1312 edits `next/apps/fabrika/dev.ts`,
+a different file, and adds no `instance.project(` or `instance.process(` call. It adds one
+`Reflect.get` in `next/packages/libfabrika/src/client/WindowMachine.laws.test.ts`, which is slice
+12's and point 4's wait already names.
+
+**The steps.** Slice 9's tests step runs once more for these five rows. Then the build's
+typecheck is run again with no build change, then the review. The new laws are none: L7 already
+holds the client's type, and these files only follow it. All five are `.integration.` or
+`.test-support.` files; `tsc` proves the fix, and the tests step lists which laws ran in the box
+under the 0178 guard.
+
 #### What this amendment cannot tell us
 
 - Whether `ObjectCalls.ts` and `DevProject` compile as sketched. Nothing was compiled; slice 9's
   typecheck tells.
 - Whether the merge session takes (C) for the Project half. Its signature or its send-back tells.
+- Whether point 6's sketches compile as written, `world.from` as a `From` above all. The tests
+  step's `tsc --noEmit -p next/apps/fabrika` tells; a refusal there is a test edit in the same files.
 - The counts move again if a branch lands in these folders before a slice's tests step. Pull
   requests 1099, 1232 and 1312 edit files of slices 11, 12 and 13.
 
