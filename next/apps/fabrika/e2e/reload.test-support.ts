@@ -251,6 +251,7 @@ export const spanOutputs = Effect.fnUntraced(function* (home: string) {
         Effect.gen(function* () {
           // The real instance's persisted span output, which it owns: opened read-only, with nothing set.
           const db = yield* TestDatabase.open(`${home}/${file}`, { readOnly: true }).pipe(Effect.orDie);
+
           const tables = new Set(
             db
               .prepare("SELECT name FROM sqlite_master WHERE type='table'")

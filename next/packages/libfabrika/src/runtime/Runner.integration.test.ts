@@ -311,10 +311,12 @@ type Update =
 // disks: that scope closes the connections, last opened first, then removes the folder (0061).
 const disks = Effect.gen(function* () {
   const scope = yield* Effect.scope;
+
   const folder = yield* Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p11-runner-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   return { folder, scope, files: 0 };
 });
 

@@ -169,6 +169,7 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
     deliver: (_: Incoming): Effect.Effect<void | Sent, LedgerError | NotGranted | ProcessError | GatewayError> =>
       Effect.void,
   };
+
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen.
   const storage = () => TestDatabase.make(path).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));

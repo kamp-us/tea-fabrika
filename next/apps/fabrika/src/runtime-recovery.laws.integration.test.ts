@@ -2179,21 +2179,26 @@ describe("P34c live object accounting", () => {
             }),
             () => Effect.sync(() => vi.useRealTimers()),
           );
+
           const w = yield* Effect.acquireRelease(
             Effect.sync(() => world("healthy", { limit: null, lost: null }, undefined, { writes: 2 })),
             (w) => Effect.promise(() => w.close()),
           );
+
           yield* Effect.promise(() => w.project.info());
           const pid = yield* Effect.promise(() => w.startPoison("quota:1"));
+
           const door = yield* Effect.acquireRelease(
             Effect.promise(() => w.door()),
             (door) => Effect.promise(() => door.close()),
           );
+
           // `letter` is the door's own key for the message id (0547 keeps wire names).
           const send = (id: string) =>
             Effect.promise(() =>
               door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
             );
+
           expect(yield* send("paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
             view: { count: 1 },
@@ -2205,11 +2210,13 @@ describe("P34c live object accounting", () => {
           // window has passed, and its program pays for that write. This law moves the clock less
           // than that window, so any write it sees is the refusal's or the hour's.
           const [journal] = w.process(pid).db.prepare("SELECT value FROM process_recovery").all();
+
           const { policy } = Schema.decodeUnknownSync(
             Schema.fromJsonString(
               Schema.Struct({ policy: Schema.Struct({ backoff: Schema.Struct({ resetAfterMs: Schema.Finite }) }) }),
             ),
           )(journal?.value);
+
           expect(early + late, "the law moves the clock past the healthy mark's window").toBeLessThan(
             policy.backoff.resetAfterMs,
           );
@@ -2220,6 +2227,7 @@ describe("P34c live object accounting", () => {
               .prepare("SELECT count FROM sums WHERE hour=?")
               .all(at)
               .reduce((sum, row) => sum + Number(row.count), 0);
+
           let turned: number | null = null;
 
           for (const [n, c] of tape.entries()) {

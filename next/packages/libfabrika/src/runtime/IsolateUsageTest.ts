@@ -247,6 +247,7 @@ export const suite = (rig: Rig) =>
                 },
                 size: () => store.sql.size(),
               };
+
               const service = yield* rig.telemetry(sql, "checklist:1");
 
               if (warm) {
@@ -261,6 +262,7 @@ export const suite = (rig: Rig) =>
                 // A fresh sink first loses its table creation in the failed transaction.
                 const moves =
                   held > 0 || owed ? ["flush", "recover"] : committed === 0 ? ["cut"] : ["batch", "cut", "reopen"];
+
                 const move = moves[cell.pick % moves.length];
 
                 if (move === "reopen") {

@@ -49,11 +49,14 @@ type Row = SpanRow;
  *  one, last opened first, then removes the folder (0061). */
 const folder = Effect.gen(function* () {
   const scope = yield* Effect.scope;
+
   const dir = yield* Effect.acquireRelease(
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-sink-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const connect = (file: string): DatabaseSync => Effect.runSync(Scope.provide(scope)(TestDatabase.make(file)));
+
   return { dir, connect };
 });
 
@@ -1520,7 +1523,9 @@ const walkHome = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "t705-sink-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const db = yield* TestDatabase.make(join(dir, "object.db"));
+
   return { dir, db, sql: nodeSql(db) };
 });
 
@@ -1674,6 +1679,7 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
             reason: Schema.String,
           }) {}
+
           const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
 
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {
