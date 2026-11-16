@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@kampus/fabrika-old": "workspace:*",
     "@manti-ui/react": "catalog:",
     "@pierre/highlights": "catalog:",

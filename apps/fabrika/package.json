@@ -21,7 +21,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "catalog:",
     "@anthropic-ai/sandbox-runtime": "catalog:",
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@effect/platform-node": "catalog:",
     "@kampus/fabrika-design": "workspace:*",
     "@kampus/fabrika-old": "workspace:*",
