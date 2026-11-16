@@ -202,9 +202,11 @@ const world = (
       Effect.gen(function* () {
         const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
+        // `test` is a plain async function, so `connect` runs with this world's services.
+        const context = yield* Effect.context();
 
         const connect = (tab: string) =>
-          Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
+          Effect.runPromiseWith(context)(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
 
         yield* Effect.promise(() => test(fixture, connect));
       }),
@@ -702,13 +704,15 @@ const storageSecrets = Effect.fnUntraced(function* () {
   const reached = new Set<string>();
   const leaks = new Set<string>();
   const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
+  // fast-check calls back with plain Promises, so each walk and each move runs with this law's services.
+  const context = yield* Effect.context();
 
   const tape = fc
     .commands(
       [
         SecretPick.map((pick): fc.AsyncCommand<object, SecretWalk> => ({
           check: () => true,
-          run: (_model, real) => Effect.runPromise(real.step(pick)),
+          run: (_model, real) => Effect.runPromiseWith(context)(real.step(pick)),
           toString: () => JSON.stringify(pick),
         })),
       ],
@@ -792,7 +796,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
   yield* Effect.promise(() =>
     fc.assert(
-      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
+      fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromiseWith(context)(law(secret, commands))),
       // Every storage operation in every flow must be cut once, which takes all 100 walks at this seed.
       { seed: 119120, numRuns: runsFor({ fast: 100, full: 100 }), endOnFailure: true },
     ),
@@ -954,17 +958,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             (runtime: ManagedRuntime.ManagedRuntime<ProcessService, never>) => runtime.disposeEffect,
           );
 
-          yield* Effect.promise(async () => {
-            const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, runtime, true)));
-            expect(first._tag).toBe("Failure");
-            const wake = await Effect.runPromise(savedAlarm(ctx));
-            expect(wake).toBeTypeOf("number");
-            expect(armed).toBeUndefined();
-            await Effect.runPromise(configureProcess(ctx, descriptor, runtime, true));
-            expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
-            expect(values.get("descriptor")).toEqual(descriptor);
-            expect(await Effect.runPromise(savedAlarm(ctx))).toBe(wake);
-          });
+          const first = yield* Effect.result(configureProcess(ctx, descriptor, runtime, true));
+          expect(first._tag).toBe("Failure");
+          const wake = yield* savedAlarm(ctx);
+          expect(wake).toBeTypeOf("number");
+          expect(armed).toBeUndefined();
+          yield* configureProcess(ctx, descriptor, runtime, true);
+          expect(armed, "L10: retry arms the first wake even though its saved value already exists").toBe(wake);
+          expect(values.get("descriptor")).toEqual(descriptor);
+          expect(yield* savedAlarm(ctx)).toBe(wake);
         }),
       ),
     );

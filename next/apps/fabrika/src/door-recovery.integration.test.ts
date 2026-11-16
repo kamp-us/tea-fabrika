@@ -59,11 +59,14 @@ const disks = Effect.gen(function* () {
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
   let file = 0;
+  // `open` is a plain call (a disk reopens its file outside any Effect), so it runs with the
+  // services this Effect already has.
+  const context = yield* Effect.context();
 
   // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
   // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
   // decision 0052).
-  const open = (path: string) => Effect.runSync(Scope.provide(scope)(TestDatabase.make(path)));
+  const open = (path: string) => Effect.runSyncWith(context)(Scope.provide(scope)(TestDatabase.make(path)));
 
   const disk = () => {
     const path = join(top, `${++file}.db`);

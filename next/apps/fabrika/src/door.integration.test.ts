@@ -865,7 +865,7 @@ const wire = Effect.fnUntraced(function* (
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(input),
         route: (_client: string, method: string, params: unknown) =>
-          Effect.runPromise(d.route(client, method, params).pipe(Effect.provideContext(projectContext))),
+          Effect.runPromiseWith(projectContext)(d.route(client, method, params)),
       }),
     },
     RECORD: {
@@ -5444,9 +5444,10 @@ describe("P10 refusal records and checked writes", () => {
                     release = Deferred.makeUnsafe<void>();
 
                   const verify = crypto.subtle.verify.bind(crypto.subtle);
+                  const context = yield* Effect.context();
 
                   const spy = vi.spyOn(crypto.subtle, "verify").mockImplementationOnce((...args) =>
-                    Effect.runPromise(
+                    Effect.runPromiseWith(context)(
                       Effect.gen(function* () {
                         yield* Deferred.succeed(entered, undefined);
                         yield* Deferred.await(release);

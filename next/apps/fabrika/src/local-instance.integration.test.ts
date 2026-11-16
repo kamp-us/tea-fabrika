@@ -248,6 +248,8 @@ it.live.prop(
       const reached = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
       const events: Array<typeof BrainEvent.Type> = [];
+      // The fetch stand-in is a plain async callback, so it runs with this law's services.
+      const context = yield* Effect.context();
       yield* spyOnFetch(async (_url, options) => {
         const call = JSON.parse(bodyText(options)) as {
           method: string;
@@ -256,8 +258,8 @@ it.live.prop(
 
         if (call.method === "brain") {
           events.push(call.args[0]!);
-          Effect.runSync(Deferred.succeed(reached, undefined));
-          await Effect.runPromise(Deferred.await(release));
+          Effect.runSyncWith(context)(Deferred.succeed(reached, undefined));
+          await Effect.runPromiseWith(context)(Deferred.await(release));
         }
 
         return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
