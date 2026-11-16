@@ -1,4 +1,3 @@
-import * as Predicate from "effect/Predicate";
 /**
  * The React Compiler's one compile step, and the check on what it skipped
  * (docs/direction/react-compiler.md).
@@ -18,6 +17,7 @@ import * as Predicate from "effect/Predicate";
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
