@@ -8,6 +8,7 @@
  * @stability unstable
  */
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Str from "effect/String";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
@@ -195,7 +196,7 @@ const explain = (
 type Files = Readonly<Record<Setting.File, Place>>;
 
 const triple = (version: string) => {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+  const [major = 0, minor = 0, patch = 0] = Str.split(version, ".").map(Number);
   return [major, minor, patch] as const;
 };
 

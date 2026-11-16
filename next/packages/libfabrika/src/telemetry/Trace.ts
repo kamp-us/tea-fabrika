@@ -8,7 +8,8 @@
  *
  * @stability unstable
  */
-import { Cause, Schema } from "effect";
+import { Cause, Option, Schema } from "effect";
+import * as Str from "effect/String";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -339,8 +340,8 @@ const MOST_CHARS = 128;
 
 /** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
 const cut = (text: string): string => {
-  const last = text.charCodeAt(MOST_CHARS - 1);
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
+  const highSurrogate = Option.exists(Str.charCodeAt(text, MOST_CHARS - 1), (code) => code >= 0xd800 && code <= 0xdbff);
+  return Str.slice(0, highSurrogate ? MOST_CHARS - 1 : MOST_CHARS)(text);
 };
 
 /**

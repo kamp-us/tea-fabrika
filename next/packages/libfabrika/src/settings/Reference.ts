@@ -7,7 +7,8 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { pipe, Schema } from "effect";
+import * as Str from "effect/String";
 import * as Codec from "./Codec.ts";
 import { newer } from "./Files.ts";
 import type * as Setting from "./Setting.ts";
@@ -101,7 +102,8 @@ export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warni
     .map((row) => ({ path: row.path, since: row.since, minimum }));
 
 /** Words as Markdown shows them as written: every character Markdown reads is escaped. */
-const escape = (text: string) => text.replace(/[\\`*_[\]<>#|&~+!-]/g, "\\$&").replace(/^(\s*\d+)\./gm, "$1\\.");
+const escape = (text: string) =>
+  pipe(text, Str.replace(/[\\`*_[\]<>#|&~+!-]/g, "\\$&"), Str.replace(/^(\s*\d+)\./gm, "$1\\."));
 
 const code = (text: string) => `\`${text}\``;
 

@@ -8,6 +8,7 @@
 import { type AnyCmdDef, type Tagged } from "@demlik/tea";
 import { Cause, Effect, Option, Result, Schema } from "effect";
 import * as Redacted from "effect/Redacted";
+import * as Str from "effect/String";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
 import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
@@ -71,7 +72,7 @@ export const executionFailure = (error: ProgramDown) =>
   ExecutionFailure.make({
     reason: error.reason,
     error: error.errorClass,
-    content: Cause.pretty(Cause.fail(shown(error))).slice(0, MOST_CONTENT),
+    content: Str.slice(0, MOST_CONTENT)(Cause.pretty(Cause.fail(shown(error)))),
   });
 
 const programFailure = (failure: typeof ExecutionFailure.Type) => {

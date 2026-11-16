@@ -4,7 +4,8 @@
  *
  * @stability unstable
  */
-import { Result, Schema } from "effect";
+import { pipe, Result, Schema } from "effect";
+import * as Str from "effect/String";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -18,7 +19,7 @@ export type Patch =
   | { readonly op: "replace"; readonly path: string; readonly value: unknown };
 
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
-const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
+const token = (key: string | number): string => pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
 
 type Plain = { [key: string]: unknown };
 
@@ -130,17 +131,17 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
   let root = structuredClone(json.success);
 
   for (const op of decoded.success) {
-    if (op.path !== "" && !op.path.startsWith("/")) {
+    if (op.path !== "" && !Str.startsWith("/")(op.path)) {
       return invalid();
     }
 
-    const encoded = op.path === "" ? [] : op.path.slice(1).split("/");
+    const encoded: ReadonlyArray<string> = op.path === "" ? [] : Str.split(Str.slice(1)(op.path), "/");
 
     if (encoded.some((p) => /~(?![01])/.test(p))) {
       return invalid();
     }
 
-    const path = encoded.map((p) => p.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const path = encoded.map((p) => pipe(p, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")));
 
     if (path.some((p) => unsafe.has(p))) {
       return invalid();

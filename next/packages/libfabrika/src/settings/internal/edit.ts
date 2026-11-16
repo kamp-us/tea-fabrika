@@ -1,4 +1,5 @@
-import { Equal, Predicate, Result } from "effect";
+import { Equal, Option, Predicate, Result } from "effect";
+import * as Str from "effect/String";
 
 /** @internal */
 export type Path = ReadonlyArray<string | number>;
@@ -85,18 +86,26 @@ const equal = (left: unknown, right: unknown): boolean => {
 };
 
 const ending = (text: string): string => /\r?\n/.exec(text)?.[0] ?? "\n";
-const lineStart = (text: string, at: number): number => text.lastIndexOf("\n", at - 1) + 1;
+
+/**
+ * Where the line holding offset `at` starts. The text before `at` holds that line's newline, so a
+ * line that starts at `at` itself is found.
+ *
+ * @internal
+ */
+export const lineStart = (text: string, at: number): number =>
+  Option.match(Str.lastIndexOf("\n")(Str.slice(0, at)(text)), { onNone: () => 0, onSome: (newline) => newline + 1 });
 
 const apply = (text: string, edits: ReadonlyArray<Splice>): string =>
   [...edits]
     .sort((a, b) => b.start - a.start || b.end - a.end)
-    .reduce((source, edit) => source.slice(0, edit.start) + edit.text + source.slice(edit.end), text);
+    .reduce((source, edit) => Str.slice(0, edit.start)(source) + edit.text + Str.slice(edit.end)(source), text);
 
 // Comments are parser ranges, including the #, never text guessed from a string's contents.
 const retained = (text: string, index: Index, range: Range): string =>
   index.comments
     .filter((comment) => comment.start >= range.start && comment.end <= range.end)
-    .map((comment) => text.slice(comment.start, comment.end) + ending(text))
+    .map((comment) => Str.slice(comment.start, comment.end)(text) + ending(text))
     .join("");
 
 /** @internal */
@@ -171,13 +180,13 @@ export const remove = (text: string, index: Index, path: ReadonlyArray<string>):
 
   const candidate = apply(text, edits);
   // Removing the last assignment must not turn its preceding separator into a final newline.
-  return Result.succeed(!text.endsWith("\n") && candidate.endsWith("\n") ? `${candidate} ` : candidate);
+  return Result.succeed(!Str.endsWith("\n")(text) && Str.endsWith("\n")(candidate) ? `${candidate} ` : candidate);
 };
 
 const insertLine = (text: string, at: number, content: string): string => {
   const eol = ending(text);
   const before = at > 0 && text[at - 1] !== "\n" ? eol : "";
-  const after = at < text.length || text.endsWith("\n") ? eol : "";
+  const after = at < text.length || Str.endsWith("\n")(text) ? eol : "";
   return apply(text, [{ start: at, end: at, text: before + content + after }]);
 };
 

@@ -9,8 +9,9 @@ import type { RpcCallError } from "@alchemy.run/cloudflare/Bridge";
 import { makeRpcStub } from "@alchemy.run/cloudflare/Bridge";
 import type { Fetcher } from "@alchemy.run/cloudflare/Fetcher";
 import type { WorkerEvent } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Predicate, Schema } from "effect";
+import { Context, Effect, Option, Predicate, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding } from "./bindings.ts";
@@ -85,8 +86,11 @@ export const rejected = (error: unknown): unknown => {
     return error;
   }
 
-  const at = error.message.indexOf(": ");
-  return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
+  const message = error.message;
+  return Option.match(Str.indexOf(": ")(message), {
+    onNone: () => error,
+    onSome: (at) => Object.assign(new Error(Str.slice(at + 2)(message)), { name: Str.slice(0, at)(message) }),
+  });
 };
 
 /**

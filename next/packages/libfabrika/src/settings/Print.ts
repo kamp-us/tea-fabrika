@@ -7,6 +7,7 @@
  *
  * @stability unstable
  */
+import * as Str from "effect/String";
 import type { Row, Warning } from "./Reference.ts";
 import type { Origin } from "./Sources.ts";
 
@@ -17,7 +18,7 @@ const from = (origin: Origin) =>
       ? "the default"
       : origin.name;
 
-const indent = (text: string) => text.replace(/\n/g, "\n  ");
+const indent = (text: string) => Str.replace(/\n/g, "\n  ")(text);
 
 /**
  * Formats rows as the report text: one block per shown row, then a count of the hidden ones.

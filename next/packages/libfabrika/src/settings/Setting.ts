@@ -95,7 +95,7 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
   },
 ): Setting<C["Type"], S, C> => {
   // Effect reads a string path as one key, so the dotted path is split here.
-  const segments = path.split(".");
+  const segments = Str.split(path, ".");
   const env = ["FABRIKA", ...segments.map(Str.configCase)].join("_");
   // Config treats a container supplied to a scalar schema as absent. Before defaulting,
   // check every provider shape so a present value, including [], stays a failure.

@@ -6,7 +6,7 @@
  */
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, String as Str } from "effect";
 import { programs as selected } from "./table.ts";
 
 export type {
@@ -58,7 +58,7 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
   const files =
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
-      Effect.map((found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test."))),
+      Effect.map((found) => found.filter((p) => !Str.includes("node_modules")(p) && !Str.includes(".test.")(p))),
       Effect.mapError((cause) => new BuildError({ reason: "read", cause })),
     ));
   const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {

@@ -4,7 +4,8 @@
  * @stability unstable
  */
 import type { Machine } from "@demlik/tea/effect";
-import type { Schema } from "effect";
+import { Option, pipe, type Schema } from "effect";
+import * as Str from "effect/String";
 import type { Program } from "./Program.ts";
 
 // --- A program's window -------------------------------------------------------------------------
@@ -119,7 +120,10 @@ export const defineWindow = <P extends AnyProgram, View, T extends AnyTile = nev
  * @stability unstable
  * @category combinators
  */
-export const commandMsg = (command: string): { readonly type: string } | null => {
-  const dot = command.indexOf(".");
-  return dot <= 0 || dot === command.length - 1 ? null : { type: command.slice(dot + 1) };
-};
+export const commandMsg = (command: string): { readonly type: string } | null =>
+  pipe(
+    Str.indexOf(".")(command),
+    Option.filter((dot) => dot > 0 && dot < command.length - 1),
+    Option.map((dot) => ({ type: Str.slice(dot + 1)(command) })),
+    Option.getOrNull,
+  );

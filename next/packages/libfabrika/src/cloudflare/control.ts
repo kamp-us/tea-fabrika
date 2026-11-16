@@ -4,7 +4,8 @@
  *
  * @stability unstable
  */
-import { Effect, Equal, Redacted, Result, Schema } from "effect";
+import { Effect, Equal, Option, pipe, Redacted, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { httpContext } from "./fetch.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
@@ -145,7 +146,14 @@ export const control = Effect.fn("runtime.control")(function* (
   token: Redacted.Redacted<string>,
   programs: Readonly<Record<string, ProgramSource>>,
 ) {
-  const bearer = Redacted.make(request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1]);
+  const bearer = Redacted.make(
+    pipe(
+      request.headers.get("authorization") ?? "",
+      Str.match(/^Bearer (.+)$/),
+      Option.map((found) => found[1]),
+      Option.getOrUndefined,
+    ),
+  );
 
   if (!Equal.equals(token, bearer)) {
     return new Response(null, { status: 403 });
