@@ -10,6 +10,7 @@
 // These start workerd, a port, Chromium and a file watcher, so the file is a visual test (0536): the
 // `next-visual` project runs it one file at a time, on the schedule or a `visual` pull request.
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
@@ -27,7 +28,7 @@ import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
 import {
   APP,
   cli,
@@ -300,8 +301,8 @@ const edited = (source: string, k: number, more: (s: string) => string = (s) => 
 
 describe("P15 slice 1: hot reload on the real instance", () => {
   // L17: the real build's warning printer, including importers outside the project root.
-  it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", async () => {
-    await fc.assert(
+  it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           folder: fc.stringMatching(/^[a-z][a-z0-9 -]{1,24}$/),
@@ -389,15 +390,19 @@ describe("P15 slice 1: hot reload on the real instance", () => {
           ),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
-    );
-  });
+    ));
 
   // L16. Plant: rebuild the brain file instead of installing (workerd restarts, the T421 watch fires).
-  it("scenario: L16, the real path: a fitting save keeps the count and the next press runs the new code; a refused save and a syntax error leave it running; a later good save swaps", async () => {
-    await scoped(
+  it.live(
+    "scenario: L16, the real path: a fitting save keeps the count and the next press runs the new code; a refused save and a syntax error leave it running; a later good save swaps",
+    () =>
+      Effect.promise(() =>
+        scoped(
       Effect.gen(function* () {
         const source = yield* counterSource;
-        expect(source, "the counter's inc this scenario edits").toContain("inc: (s) => [{ count: s.count + 1 }, []]");
+            expect(source, "the counter's inc this scenario edits").toContain(
+              "inc: (s) => [{ count: s.count + 1 }, []]",
+            );
         const copy = yield* fixture;
         const run = yield* instance(copy);
         // The watcher's first build is the boot's own bytes: nothing to swap.
@@ -458,12 +463,16 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 12 });
       }),
+        ),
+      ),
+    600_000,
     );
-  }, 600_000);
 
   // L17 [secrets]. Plant: put the compiler's message in code.failed; print the token in the install line.
-  it("L17: no code fact, answer or error copies program source or an absolute path, and code.failed's path is relative, for generated sentinels in the source and its error", async () => {
-    await fc.assert(
+  it(
+    "L17: no code fact, answer or error copies program source or an absolute path, and code.failed's path is relative, for generated sentinels in the source and its error",
+    () =>
+      fc.assert(
       fc.asyncProperty(
         fc.record({
           word: fc.stringMatching(/^[A-Z]{12}$/),
@@ -522,18 +531,25 @@ describe("P15 slice 1: hot reload on the real instance", () => {
           ),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
+      ),
+    1_800_000,
     );
-  }, 1_800_000);
 
-  it("L17: generated save flows keep source, made-up bearer and absolute paths out of dev's actual printed lines, errors and persisted spans", async () => {
+  it.live(
+    "L17: generated save flows keep source, made-up bearer and absolute paths out of dev's actual printed lines, errors and persisted spans",
+    () =>
+      Effect.gen(function* () {
     const cliMoves = new Set<string>();
-    await fc.assert(
+        yield* Effect.promise(() =>
+          fc.assert(
       fc.asyncProperty(fc.gen(), (g) =>
         scoped(
           Effect.gen(function* () {
             const word = g(() => fc.stringMatching(/^[A-Z]{12}$/));
             const sentinel = `P15SECRET${word}"/+`;
-            const fakeBytes = g(() => fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 32, maxLength: 32 }));
+                  const fakeBytes = g(() =>
+                    fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 32, maxLength: 32 }),
+                  );
             const fakeBearer = Base64Url.encode(Uint8Array.from(fakeBytes));
             const source = yield* counterSource;
             const copy = yield* fixture;
@@ -564,7 +580,12 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const message = `${sentinel} ${fakeBearer} ${copy.file}`;
               // L12's real door path: even a granted person cannot invoke the control-only calls.
               const method = g(() => fc.constantFrom("codeInstall", "codeFailed"));
-              const denied = yield* s.call(method, { program: PROGRAM, source: message, hash: null, reason: "load" });
+                    const denied = yield* s.call(method, {
+                      program: PROGRAM,
+                      source: message,
+                      hash: null,
+                      reason: "load",
+                    });
               expect(denied.error?.data?.reason).toBe("unknown_method");
 
               let text = edited(
@@ -681,7 +702,10 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         ),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
+          ),
     );
     expect(cliMoves).toEqual(new Set(["fit", "shape", "syntax", "load", "compiler"]));
-  }, 1_800_000);
+      }),
+    1_800_000,
+  );
 });

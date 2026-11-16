@@ -18,8 +18,9 @@ const msgs = fc.array(fc.constantFrom({ type: "inc" }, { type: "dec" }, { type: 
 });
 
 describe("P11 real counter laws", () => {
-  it("Program.make keeps the exported machine and uses its own schemas", async () => {
-    const { counter, counterMachine } = await import("./program.ts");
+  it.live("Program.make keeps the exported machine and uses its own schemas", () =>
+    Effect.gen(function* () {
+      const { counter, counterMachine } = yield* Effect.promise(() => import("./program.ts"));
     fc.assert(
       fc.property(fc.integer(), fc.constantFrom("inc", "dec", "reset"), (count, type) => {
         expect(counter.machine).toBe(counterMachine);
@@ -36,10 +37,12 @@ describe("P11 real counter laws", () => {
       }),
       { seed: SEED, numRuns: 100 },
     );
-  });
-  it("S2 plant, lose saved count: every JSON cut preserves every later model and Cmd", async () => {
-    const { counter } = await import("./program.ts");
-    const { syncTest }: typeof import("@kampus/libfabrika/testing") = await import(TESTING);
+    }),
+  );
+  it.live("S2 plant, lose saved count: every JSON cut preserves every later model and Cmd", () =>
+    Effect.gen(function* () {
+      const { counter } = yield* Effect.promise(() => import("./program.ts"));
+      const { syncTest }: typeof import("@kampus/libfabrika/testing") = yield* Effect.promise(() => import(TESTING));
     fc.assert(
       fc.property(msgs, (list) => {
         syncTest(
@@ -56,9 +59,11 @@ describe("P11 real counter laws", () => {
       }),
       { seed: SEED, numRuns: 100 },
     );
-  });
-  it("plant, break an update: inc, dec and reset obey arithmetic at every tea step", async () => {
-    const { counter } = await import("./program.ts");
+    }),
+  );
+  it.live("plant, break an update: inc, dec and reset obey arithmetic at every tea step", () =>
+    Effect.gen(function* () {
+      const { counter } = yield* Effect.promise(() => import("./program.ts"));
     propertyInvariant(
       counter.machine,
       {},
@@ -80,7 +85,8 @@ describe("P11 real counter laws", () => {
       },
       { seed: SEED, numRuns: 100 },
     );
-  });
+    }),
+  );
   it.effect.prop(
     "plant, leave a declaration out: real program declares saved state, ports, view and event policy",
     { generated: Schema.Int },
@@ -88,22 +94,20 @@ describe("P11 real counter laws", () => {
       Effect.forEach(
         [0, generated],
         (value) =>
-          Effect.promise(async () => {
-            const { counter } = await import("./program.ts");
-            const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+          Effect.gen(function* () {
+            const { counter } = yield* Effect.promise(() => import("./program.ts"));
+            const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = yield* Effect.promise(
+              () => import(LIBRARY),
+            );
             // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
             expect(Schema.decodeSync(Program.schema)(counter)).toMatchObject({
               name: "fabrika/counter",
               state: { v: 1 },
               writes: {},
             });
-
-            const p = Effect.runSync(
-              Effect.gen(function* () {
+            const p = yield* Effect.gen(function* () {
                 return (yield* (yield* ProgramLoader).load("fabrika/counter")).stepper;
-              }).pipe(Effect.provide(ProgramLoader.layer({ "fabrika/counter": counter }, {}))),
-            );
-
+            }).pipe(Effect.provide(ProgramLoader.layer({ "fabrika/counter": counter }, {})));
             const boot = p.init(null);
             expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
 

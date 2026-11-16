@@ -1,8 +1,18 @@
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { it } from "@effect/vitest";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { type Finding, fingerprint, LEDGERS, outside, settle } from "./ledger.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const options = { seed: 119120, numRuns: 200 };
 
@@ -107,13 +117,15 @@ describe("`.agents/` code is held to next/'s rules, 0033", () => {
 
   // scenario: one script and its test, since the config is what is under test. Only next/'s tests
   // may turn an edge rule off (edge-comment.test.ts), so `no-promises` fires in an `.agents/` test.
-  it("scenario: the rules fire in a script, and its test keeps the edge rules on", async () => {
-    const fires = await plant({ [script]: body, [test]: body });
+  it.live("scenario: the rules fire in a script, and its test keeps the edge rules on", () =>
+    Effect.gen(function* () {
+      const fires = yield* promised(() => plant({ [script]: body, [test]: body }));
     expect(fires("fabrika(no-node-imports)", script)).toEqual([1]);
     expect(fires("fabrika(no-promises)", script).length).toBeGreaterThan(0);
     expect(fires("fabrika(no-of)", script)).toEqual([3]);
     expect(fires("fabrika(no-promises)", test).length).toBeGreaterThan(0);
     expect(fires("fabrika(no-node-imports)", test)).toEqual([]);
     expect(fires("fabrika(no-of)", test)).toEqual([3]);
-  });
+    }),
+  );
 });

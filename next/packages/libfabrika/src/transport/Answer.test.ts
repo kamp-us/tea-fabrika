@@ -227,8 +227,8 @@ describe("P10 JSON-RPC", () => {
   // is a waiting client's gateway.knock: its handler runs once with the params, and its answer is
   // the one reply. Plants: drop the request silently; let waiting reach any method; answer
   // no_hello to a waiting knock; pass a third argument to the knock handler.
-  it("d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed", async () => {
-    await fc.assert(
+  it("d2: for any unauthenticated state, method and id, only a waiting gateway.knock is routed", () =>
+    fc.assert(
       fc.asyncProperty(
         unauthenticated,
         fc.oneof(fc.constant("gateway.knock"), fc.constantFrom(...METHODS), fc.string()),
@@ -266,12 +266,11 @@ describe("P10 JSON-RPC", () => {
           ),
       ),
       { seed: SEED, endOnFailure: true, numRuns: 300 },
-    );
-  });
+    ));
   // d2: a waiting knock whose handler parks sends nothing and the client stays waiting, as it
   // was. Only an online client keeps a parked wait. Plant: treat every parked answer as online.
-  it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", async () => {
-    await fc.assert(
+  it("d2: for any waiting state, a knock that parks sends nothing and leaves it waiting", () =>
+    fc.assert(
       fc.asyncProperty(
         unauthenticated.filter((a) => a._tag === "waiting"),
         fc.oneof(fc.string(), fc.integer()),
@@ -289,8 +288,7 @@ describe("P10 JSON-RPC", () => {
           ),
       ),
       { seed: SEED, endOnFailure: true, numRuns: 100 },
-    );
-  });
+    ));
 
   for (const id of ["r1", 0]) {
     it.effect(`p23: parked wait retains reply id ${id} and cursor, with no unresolved work`, () =>

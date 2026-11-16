@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Predicate from "effect/Predicate";
 import type * as Scope from "effect/Scope";
@@ -30,6 +31,13 @@ import { Sent } from "../runtime/Runner.ts";
 import * as RunnerAdmissionTest from "../runtime/RunnerAdmissionTest.ts";
 import { BRAIN, type Harness } from "../runtime/RunnerRepliesTest.ts";
 import { Written } from "../telemetry/Records.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
@@ -67,17 +75,20 @@ const register = <A>(
   reached: Set<string>,
   required: ReadonlyArray<string>,
 ) => {
-  it(
+  it.live(
     name,
-    async () => {
-      await fc.assert(
+    () =>
+      Effect.gen(function* () {
+        yield* promised(() =>
+          fc.assert(
         fc.asyncProperty(tape, (cells: Array<A>) =>
           Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
         ),
         options,
+          ),
       );
       expect([...reached]).toEqual(expect.arrayContaining([...required]));
-    },
+      }),
     600_000,
   );
 };
@@ -116,8 +127,8 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     },
     PROCESS: namespace(
       vi.fn().mockImplementation((object: string) => ({
-        configure: async () => undefined,
-        usage: async (rows: Parameters<typeof usage>[1]) => usage(object, rows),
+        configure: () => Promise.resolve(undefined),
+        usage: (rows: Parameters<typeof usage>[1]) => Promise.resolve(usage(object, rows)),
         msg: async (input: Incoming) => {
           const message = input.envelope.input;
           const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
@@ -132,7 +143,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
         },
       })),
     ),
-    RECORD: namespace(vi.fn().mockReturnValue({ write: async () => Written.cases.written.make({}) })),
+    RECORD: namespace(vi.fn().mockReturnValue({ write: () => Promise.resolve(Written.cases.written.make({})) })),
     MEASUREMENTS: {
       head: unused,
       get: unused,

@@ -23,7 +23,7 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import { String as Str, pipe, Array as Arr } from "effect";
 import fc from "fast-check";
-import { rolldown, type Plugin } from "rolldown";
+import { rolldown, type Plugin, type RolldownBuild } from "rolldown";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -420,8 +420,23 @@ const browserEntries = (
     });
   });
 
+/** Rolldown refused or failed: the bundle's own failure, with Rolldown's error as its cause. */
+class BundleFailure extends Schema.TaggedError<BundleFailure>()("BundleFailure", { cause: Schema.Unknown }) {}
+
+/** One call of Rolldown's Promise API, as `Effect.tryPromise` in its object form. */
+const bundling = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new BundleFailure({ cause }) });
+
+/** A Rolldown bundle of `file` for a browser, closed when `use` ends, however it ends. */
+const bundled = <A, E>(file: string, plugin: Plugin, use: (bundle: RolldownBuild) => Effect.Effect<A, E>) =>
+  Effect.acquireUseRelease(
+    bundling(() => rolldown({ input: file, platform: "browser", logLevel: "silent", plugins: [plugin] })),
+    use,
+    (bundle) => bundling(() => bundle.close()).pipe(Effect.orDie),
+  );
+
 /** Bundles `file` for a browser with no Node shims and lists each forbidden module it reaches. */
-const reach = async (next: string, label: string, file: string): Promise<ReadonlyArray<string>> => {
+const reach = Effect.fnUntraced(function* (next: string, label: string, file: string) {
   const hits: Array<string> = [];
 
   const watch: Plugin = {
@@ -438,38 +453,24 @@ const reach = async (next: string, label: string, file: string): Promise<Readonl
     },
   };
 
-  let bundle: Awaited<ReturnType<typeof rolldown>> | undefined;
-
-  try {
-    bundle = await rolldown({
-      input: file,
-      platform: "browser",
-      logLevel: "silent",
-      plugins: [watch],
-    });
-    await bundle.generate({ format: "esm" });
-
-    return hits;
-  } catch (error) {
-    return [...hits, `${label} does not bundle: ${String(error)}`];
-  } finally {
-    await bundle?.close();
-  }
-};
-
-const bundleFaults = async (next: string): Promise<ReadonlyArray<string>> => {
-  const all = await Promise.all(
-    Arr.map(browserEntries(packagesIn(next)), ({ label, file }) => reach(next, label, file)),
+  return yield* bundled(file, watch, (bundle) => bundling(() => bundle.generate({ format: "esm" }))).pipe(
+    Effect.as<ReadonlyArray<string>>(hits),
+    Effect.catchTag("BundleFailure", (error) =>
+      Effect.succeed([...hits, `${label} does not bundle: ${String(error.cause)}`]),
+    ),
   );
+});
+
+const bundleFaults = Effect.fnUntraced(function* (next: string) {
+  const all = yield* Effect.forEach(browserEntries(packagesIn(next)), ({ label, file }) => reach(next, label, file), {
+    concurrency: "unbounded",
+    });
   return all.flat();
-};
+});
 
 /** What a browser bundle of `file` loads, and what its output keeps, each relative to `next`. Tree
- *  shaking drops a module from the output, never from the loaded list. A bundle that fails throws. */
-const bundleContents = async (
-  next: string,
-  file: string,
-): Promise<{ readonly loaded: ReadonlyArray<string>; readonly output: ReadonlyArray<string> }> => {
+ *  shaking drops a module from the output, never from the loaded list. A bundle that fails fails. */
+const bundleContents = Effect.fnUntraced(function* (next: string, file: string) {
   const loaded: Array<string> = [];
 
   const watch: Plugin = {
@@ -480,17 +481,10 @@ const bundleContents = async (
       return null;
     },
   };
-
-  const bundle = await rolldown({ input: file, platform: "browser", logLevel: "silent", plugins: [watch] });
-
-  try {
-    const { output } = await bundle.generate({ format: "esm" });
-    const kept = Arr.flatMap(output, (chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
-    return { loaded, output: Arr.map(kept, (id) => shown(next, id)) };
-  } finally {
-    await bundle.close();
-  }
-};
+  const { output } = yield* bundled(file, watch, (bundle) => bundling(() => bundle.generate({ format: "esm" })));
+  const kept = Arr.flatMap(output, (chunk) => (chunk.type === "chunk" ? chunk.moduleIds : []));
+  return { loaded, output: Arr.map(kept, (id) => shown(next, id)) };
+});
 
 /** The Ledger contract's implementation: its two layers, their helpers, the referee and its store
  *  (ticket 702's plan: `Ledger.ts` imports neither implementation, nor either helper, nor `Referee`). */
@@ -504,24 +498,28 @@ const LEDGER_IMPLEMENTATION: ReadonlyArray<string> = [
 ];
 
 describe("the real next/", () => {
-  it("P17a: the public door exists and bundles for a browser", async () => {
-    const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
-    expect(Option.isSome(found)).toBe(true);
-    const library = Option.getOrThrow(found);
+  it.live("P17a: the public door exists and bundles for a browser", () =>
+    Effect.gen(function* () {
+      const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
+      expect(Option.isSome(found)).toBe(true);
+      const library = Option.getOrThrow(found);
     const entry = exportAt(exportMap(library), "./gateway/Gateway");
     expect(entry.kind, "P17a exports the library gateway front").toBe("file");
-    expect(await reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : "")).toEqual(
+      expect(yield* reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : "")).toEqual(
       [],
     );
-  });
-  it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
-    const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
-    expect(Option.isSome(found)).toBe(true);
-    const library = Option.getOrThrow(found);
+    }),
+  );
+  it.live("P11: libfabrika exports its required browser entry instead of silently skipping it", () =>
+    Effect.gen(function* () {
+      const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
+      expect(Option.isSome(found)).toBe(true);
+      const library = Option.getOrThrow(found);
     const entry = exportMap(library).get(".");
     expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
-    expect(await reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
-  });
+      expect(yield* reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
+    }),
+  );
   it("P11: every front file the browser check lists is exported and exists, so none is silently skipped", () => {
     const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
     expect(Option.isSome(found)).toBe(true);
@@ -536,20 +534,22 @@ describe("the real next/", () => {
   // pinned: one named public contract (0095, ticket 702). Bundled alone for a browser, the Ledger
   // contract loads none of its implementation, so a tab that yields `Ledger` never carries SQL.
   // The entry must exist and the bundle must build: a missing entry or a failed bundle is red.
-  it("pinned: contract only Ledger reaches no store", async () => {
-    const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
-    expect(Option.isSome(found)).toBe(true);
-    const library = Option.getOrThrow(found);
+  it.live("pinned: contract only Ledger reaches no store", () =>
+    Effect.gen(function* () {
+      const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
+      expect(Option.isSome(found)).toBe(true);
+      const library = Option.getOrThrow(found);
     const entry = exportAt(exportMap(library), "./ledger/Ledger");
     expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
     const file = entry.kind === "file" ? entry.file : "";
     expect(existsSync(file), "the Ledger contract file exists").toBe(true);
-    const { loaded, output } = await bundleContents(NEXT, file);
+      const { loaded, output } = yield* bundleContents(NEXT, file);
     expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
     expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
-    expect(Arr.filter(loaded, (id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
-    expect(Arr.filter(output, (id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
-  });
+      expect(Arr.filter(loaded, (id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
+      expect(Arr.filter(output, (id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
+    }),
+  );
 
   it("has packages that are private at 0.0.0, with no side effects, a typecheck, and nothing of today's", () => {
     expect(manifestFaults(NEXT)).toEqual([]);
@@ -559,9 +559,11 @@ describe("the real next/", () => {
     expect(importFaults(NEXT)).toEqual([]);
   });
 
-  it("bundles each top level for a browser without node, electron, cloudflare or MCP", async () => {
-    expect(await bundleFaults(NEXT)).toEqual([]);
-  });
+  it.live("bundles each top level for a browser without node, electron, cloudflare or MCP", () =>
+    Effect.gen(function* () {
+      expect(yield* bundleFaults(NEXT)).toEqual([]);
+    }),
+  );
 });
 
 describe("reading imports", () => {
@@ -600,7 +602,7 @@ describe("planted breaks", () => {
 
       expect(
         Arr.some(
-          yield* Effect.promise(() => bundleFaults(tree)),
+          yield* bundleFaults(tree),
           (fault) =>
             pipe(fault, Str.includes("@kampus/libfabrika/gateway/Gateway")) && pipe(fault, Str.includes("node:fs")),
         ),
@@ -728,8 +730,7 @@ describe("planted breaks", () => {
         "programs/chaos/src/index.ts": lines('import {app} from "electron";', "export const a = app;"),
         "programs/chaos/src/window.ts": lines('export {a} from "./index.ts";'),
       });
-
-      expect([...(yield* Effect.promise(() => bundleFaults(bundles)))].sort()).toEqual(
+      expect([...(yield* bundleFaults(bundles))].sort()).toEqual(
         [
           '@kampus/libfabrika reaches node:*: "node:fs" from packages/libfabrika/src/index.ts',
           '@kampus/libfabrika/transport/Wire reaches node:*: "node:crypto" from packages/libfabrika/src/transport/Wire.ts',
@@ -853,7 +854,8 @@ describe("a module's front files and its internal/ in the exports map", () => {
   );
 });
 
-it("format: L12 desktop contracts bundle for a browser without their implementations", async () => {
+it.live("format: L12 desktop contracts bundle for a browser without their implementations", () =>
+  Effect.gen(function* () {
   // The three public contracts are a client import protocol. Loading one must not load its driver.
   // After build plant: route a contract through BrainServiceManaged; this must fail even if all
   // platform imports were tree-shaken from the emitted bytes.
@@ -868,9 +870,10 @@ it("format: L12 desktop contracts bundle for a browser without their implementat
     expect(entry.kind).toBe("file");
     const file = entry.kind === "file" ? entry.file : "";
     expect(existsSync(file)).toBe(true);
-    const { loaded, output } = await bundleContents(NEXT, file);
+      const { loaded, output } = yield* bundleContents(NEXT, file);
     expect(loaded).toContain(shown(NEXT, file));
     expect(Arr.filter(loaded, (path) => implementation.test(path))).toEqual([]);
     expect(Arr.filter(output, (path) => implementation.test(path))).toEqual([]);
   }
-});
+  }),
+);

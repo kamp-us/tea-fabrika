@@ -5,10 +5,20 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
+import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import stylelint from "stylelint";
-import { afterAll, assert, describe, expect, it } from "vitest";
+import { afterAll, assert, describe, expect } from "vitest";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -58,12 +68,11 @@ const write = (root: string, path: string, text: string) => {
   return target;
 };
 
-const rootConfig = async (): Promise<stylelint.Config> => {
+const rootConfig = Effect.fnUntraced(function* () {
   assert(existsSync(CONFIG), "Today's lint has no root CSS config. PR 3 must install it.");
-  const module: { default: stylelint.Config } = await import(pathToFileURL(CONFIG).href);
-
+  const module: { default: stylelint.Config } = yield* promised(() => import(pathToFileURL(CONFIG).href));
   return module.default;
-};
+});
 
 const fixture = (side: "bad" | "good", name: string) => {
   const file = join(FIXTURES, side, `${name}.css`);
@@ -72,16 +81,16 @@ const fixture = (side: "bad" | "good", name: string) => {
   return file;
 };
 
-const lint = async (file: string, codeFilename?: string) => {
-  await rootConfig();
-
-  const report = await stylelint.lint({
+const lint = Effect.fnUntraced(function* (file: string, codeFilename?: string) {
+  yield* rootConfig();
+  const report = yield* promised(() =>
+    stylelint.lint({
     configFile: CONFIG,
     ...(codeFilename === undefined
       ? { files: file }
       : { code: readFileSync(file, "utf8"), codeFilename: join(ROOT, codeFilename) }),
-  });
-
+    }),
+  );
   expect(report.results).toHaveLength(1);
   const [result] = report.results;
   assert(result);
@@ -93,10 +102,11 @@ const lint = async (file: string, codeFilename?: string) => {
   ).toEqual([]);
 
   return result.warnings;
-};
+});
 
 describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
-  it.each(RULES)("law $law: $name", async ({ name, lines }) => {
+  it.live.each(RULES)("law $law: $name", ({ name, lines }) =>
+    Effect.gen(function* () {
     let bad = fixture("bad", name);
 
     // Plant this one under programs/, where a tile's tokens are forbidden.
@@ -106,30 +116,33 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
       bad = write(program, "fixtures/window.css", readFileSync(bad, "utf8"));
     }
 
-    const warnings = await lint(bad);
-    const fires = Arr.filter(warnings, (warning) => warning.rule === `fabrika/${name}`);
-    expect([...new Set(Arr.map(fires, (warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
-    expect(Arr.every(fires, (warning) => warning.severity === "error")).toBe(true);
+      const warnings = yield* lint(bad);
+      const fires = Arr.filter(warnings, (warning) => warning.rule === `fabrika/${name}`);
+      expect([...new Set(Arr.map(fires, (warning) => warning.line))].sort((a, b) => a - b)).toEqual(lines);
+      expect(Arr.every(fires, (warning) => warning.severity === "error")).toBe(true);
     const good = fixture("good", name);
-    expect(await lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
-  });
+      expect(yield* lint(good, name === "part-token-owner" ? WINDOW : undefined)).toEqual([]);
+    }),
+  );
 
-  it("law 21 reads only var() past comments and spaces and names the unknown token", async () => {
+  it.live("law 21 reads only var() past comments and spaces and names the unknown token", () =>
+    Effect.gen(function* () {
     const file = write(
       temp(),
       "reference.css",
       ".a { color: var(/* token */ --missing); }\n.label { content: attr(--label); }\n.literal { --keyword: var; }\n",
     );
-
-    expect(await lint(file)).toEqual([
+      expect(yield* lint(file)).toEqual([
       expect.objectContaining({
         rule: "fabrika/token-exists",
         text: expect.stringContaining("--missing"),
       }),
     ]);
-  });
+    }),
+  );
 
-  it("law 22 checks named backgrounds and hex colors without treating escapes as colors", async () => {
+  it.live("law 22 checks named backgrounds and hex colors without treating escapes as colors", () =>
+    Effect.gen(function* () {
     const file = write(
       temp(),
       "colors.css",
@@ -140,34 +153,40 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 .image { background: url(red); }
 `,
     );
-
-    const warnings = await lint(file);
-    expect(Arr.map(warnings, ({ rule, line }) => ({ rule, line }))).toEqual(
+      const warnings = yield* lint(file);
+      expect(Arr.map(warnings, ({ rule, line }) => ({ rule, line }))).toEqual(
       Arr.map([1, 2, 3], (line) => ({ rule: "fabrika/no-raw-color", line })),
     );
-  });
+    }),
+  );
 
-  it("law 26 ignores quoted fallback data when the font size is a scale token", async () => {
+  it.live("law 26 ignores quoted fallback data when the font size is a scale token", () =>
+    Effect.gen(function* () {
     const file = write(temp(), "size.css", '.a { font-size: var(--fs-small, "12px"); }\n');
-    expect(await lint(file)).toEqual([]);
-  });
+      expect(yield* lint(file)).toEqual([]);
+    }),
+  );
 
   // env() can supply a style, and calc-mix() a numeric weight, before the size.
   // https://www.w3.org/TR/css-env-1/#env-function
   // https://www.w3.org/TR/css-values-5/#calc-mix
-  it.each(["env(--fs-style, italic)", "calc-mix(0.5, 400, 600)"])(
+  it.live.each(["env(--fs-style, italic)", "calc-mix(0.5, 400, 600)"])(
     "law 26 checks the pixel font size after %s",
-    async (prefix) => {
+    (prefix) =>
+      Effect.gen(function* () {
       const file = write(temp(), "font.css", `.a { font: ${prefix} 12px var(--font); }\n`);
-      expect(await lint(file)).toEqual([expect.objectContaining({ rule: "fabrika/font-size-from-scale" })]);
-    },
+        expect(yield* lint(file)).toEqual([expect.objectContaining({ rule: "fabrika/font-size-from-scale" })]);
+      }),
   );
 
-  it("laws 22, 23, 24 and 26 allow the real generated regions and hand-written scale", async () => {
-    expect(await lint(join(ROOT, TOKENS))).toEqual([]);
-  });
+  it.live("laws 22, 23, 24 and 26 allow the real generated regions and hand-written scale", () =>
+    Effect.gen(function* () {
+      expect(yield* lint(join(ROOT, TOKENS))).toEqual([]);
+    }),
+  );
 
-  it("laws 22 to 24 exempt generated content only at the real token file's path", async () => {
+  it.live("laws 22 to 24 exempt generated content only at the real token file's path", () =>
+    Effect.gen(function* () {
     const file = write(
       temp(),
       "generated.css",
@@ -181,33 +200,36 @@ describe("T245 PR 3, laws 21 to 26: each rule refuses its plants", () => {
 /* @end generated colors */
 }\n`,
     );
-
-    expect(await lint(file, TOKENS)).toEqual([]);
-    const warnings = await lint(file, "programs/css-plant/window.css");
-    expect(Arr.map(warnings, ({ rule }) => rule)).toEqual(
+      expect(yield* lint(file, TOKENS)).toEqual([]);
+      const warnings = yield* lint(file, "programs/css-plant/window.css");
+      expect(Arr.map(warnings, ({ rule }) => rule)).toEqual(
       expect.arrayContaining(["fabrika/no-raw-color", "fabrika/no-primitive-var", "fabrika/part-token-owner"]),
     );
-  });
+    }),
+  );
 
-  it("law 26 refuses a pixel font size outside the hand-written scale, even in tokens.css", async () => {
+  it.live("law 26 refuses a pixel font size outside the hand-written scale, even in tokens.css", () =>
+    Effect.gen(function* () {
     const file = write(temp(), "size.css", ".a { font-size: 12px; }\n");
-    const warnings = await lint(file, TOKENS);
-    expect(Arr.map(warnings, ({ rule }) => rule)).toContain("fabrika/font-size-from-scale");
-  });
+      const warnings = yield* lint(file, TOKENS);
+      expect(Arr.map(warnings, ({ rule }) => rule)).toContain("fabrika/font-size-from-scale");
+    }),
+  );
 
-  it.each(['"sky"', "'sky'"])("law 22 limits pipe %s to its exact selector and five tokens", async (name) => {
+  it.live.each(['"sky"', "'sky'"])("law 22 limits pipe %s to its exact selector and five tokens", (name) =>
+    Effect.gen(function* () {
     const file = write(
       temp(),
       "pipe.css",
       `[data-pipe=${name}] { --tile-wash: #fff; --tile-wash-on: #fff; --tile-edge-hover: #fff; --tile-edge-on: #fff; --tile-edge-loud: #fff; }\n`,
     );
-
-    expect(await lint(file, WINDOW)).toEqual([]);
-    const warnings = await lint(file, "programs/css-plant/window.css");
-    expect(Arr.map(warnings, ({ rule }) => rule)).toContain("fabrika/no-raw-color");
+      expect(yield* lint(file, WINDOW)).toEqual([]);
+      const warnings = yield* lint(file, "programs/css-plant/window.css");
+      expect(Arr.map(warnings, ({ rule }) => rule)).toContain("fabrika/no-raw-color");
     const nested = write(temp(), "nested-pipe.css", `.outer [data-pipe=${name}] { --tile-wash: #fff; }\n`);
-    expect(await lint(nested, WINDOW)).toEqual([expect.objectContaining({ rule: "fabrika/no-raw-color" })]);
-  });
+      expect(yield* lint(nested, WINDOW)).toEqual([expect.objectContaining({ rule: "fabrika/no-raw-color" })]);
+    }),
+  );
 });
 
 const settingsProblems = (config: stylelint.Config | undefined, base: stylelint.Config) => {
@@ -264,9 +286,10 @@ const configPlant = (body: string) => {
 };
 
 describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule", () => {
-  it("law 27 keeps each rule's complete root options in every tracked CSS file", async () => {
-    const base = await rootConfig();
-    expect(Arr.filter(Object.keys(base.rules ?? {}), (rule) => rule.startsWith("fabrika/")).sort()).toEqual(
+  it.live("law 27 keeps each rule's complete root options in every tracked CSS file", () =>
+    Effect.gen(function* () {
+      const base = yield* rootConfig();
+      expect(Arr.filter(Object.keys(base.rules ?? {}), (rule) => rule.startsWith("fabrika/")).sort()).toEqual(
       Arr.map(RULES, ({ name }) => `fabrika/${name}`).sort(),
     );
     const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.css"], {
@@ -279,25 +302,27 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
     expect(files.length).toBeGreaterThan(0);
 
     for (const file of files) {
-      const resolved = await stylelint.resolveConfig(join(ROOT, file), { configFile: CONFIG });
+        const resolved = yield* promised(() => stylelint.resolveConfig(join(ROOT, file), { configFile: CONFIG }));
       expect(settingsProblems(resolved, base), file).toEqual([]);
     }
 
     const plant = configPlant(
       'export default {...base, overrides: [{files: ["**/*.css"], rules: {"fabrika/no-raw-color": [true]}}]};',
     );
-
-    const resolved = await stylelint.resolveConfig(join(plant.root, "programs/plant/window.css"), {
+      const resolved = yield* promised(() =>
+        stylelint.resolveConfig(join(plant.root, "programs/plant/window.css"), {
       configFile: plant.file,
-    });
-
+        }),
+      );
     expect(settingsProblems(resolved, base)).toContain("fabrika/no-raw-color: options were replaced");
-  });
+    }),
+  );
 
-  it("law 28 has no warning anywhere, including overrides and disable reports", async () => {
-    const base = await rootConfig();
+  it.live("law 28 has no warning anywhere, including overrides and disable reports", () =>
+    Effect.gen(function* () {
+      const base = yield* rootConfig();
     expect(warningPaths(base)).toEqual([]);
-    const actual = await stylelint.resolveConfig(join(ROOT, WINDOW), { configFile: CONFIG });
+      const actual = yield* promised(() => stylelint.resolveConfig(join(ROOT, WINDOW), { configFile: CONFIG }));
     expect(
       settingsProblems(actual, base),
       "All six rules must be registered at error before testing warning plants",
@@ -309,15 +334,16 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
       const plant = configPlant(
         `export default {...base, overrides: [{files: ["**/*.css"], rules: {${JSON.stringify(rule)}: [true, {severity: "warning", known: []}]}}]};`,
       );
-
-      const resolved = await stylelint.resolveConfig(join(plant.root, "apps/plant/window.css"), {
+        const resolved = yield* promised(() =>
+          stylelint.resolveConfig(join(plant.root, "apps/plant/window.css"), {
         configFile: plant.file,
-      });
-
+          }),
+        );
       expect(warningPaths(resolved)).toContain(`config.rules.${rule}.1.severity`);
       expect(settingsProblems(resolved, base)).toContain(`${rule}: must be on at error`);
     }
-  });
+    }),
+  );
 });
 
 const trackedFiles = (folder: string) => {
@@ -408,22 +434,24 @@ describe("T245 PR 3, law 29: known only shrinks", () => {
     expect(result.output).toContain("known");
   });
 
-  it("law 29 rejects non-string entries before a rule checks CSS", async () => {
+  it.live("law 29 rejects non-string entries before a rule checks CSS", () =>
+    Effect.gen(function* () {
     const plant = configPlant(
       'export default {...base, rules: {...base.rules, "fabrika/no-raw-color": [true, {severity: "error", known: [42]}]}};',
     );
-
-    const report = await stylelint.lint({
+      const report = yield* promised(() =>
+        stylelint.lint({
       configFile: plant.file,
       code: ".a { color: var(--focus); }",
       codeFilename: join(ROOT, WINDOW),
-    });
-
+        }),
+      );
     expect(report.errored).toBe(true);
     expect(Arr.flatMap(report.results, ({ invalidOptionWarnings }) => invalidOptionWarnings)).toEqual([
       expect.objectContaining({ text: expect.stringContaining("known") }),
     ]);
-  });
+    }),
+  );
 
   it.each([
     {
@@ -563,7 +591,7 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
     expect(result.output).toContain("planted stylelint crash");
   });
 
-  it.each([
+  it.live.each([
     {
       comment: "/* stylelint-disable */",
       css: ".a { color: #fff; }",
@@ -584,20 +612,23 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
       css: ".a { color: var(--focus); }",
       report: "--report-needless-disables",
     },
-  ])("law 30 reports $report", async ({ comment, css, report }) => {
+  ])("law 30 reports $report", ({ comment, css, report }) =>
+    Effect.gen(function* () {
     const file = write(temp(), "disable.css", `${comment}\n${css}\n`);
-    const warnings = await lint(file);
-    expect(Arr.map(warnings, ({ rule }) => rule)).toContain(report);
-    expect(Arr.every(warnings, ({ severity }) => severity === "error")).toBe(true);
-  });
+      const warnings = yield* lint(file);
+      expect(Arr.map(warnings, ({ rule }) => rule)).toContain(report);
+      expect(Arr.every(warnings, ({ severity }) => severity === "error")).toBe(true);
+    }),
+  );
 
-  it("law 30 allows a needed disable that names its rule and reason", async () => {
+  it.live("law 30 allows a needed disable that names its rule and reason", () =>
+    Effect.gen(function* () {
     const file = write(
       temp(),
       "disable.css",
       "/* stylelint-disable fabrika/no-raw-color -- planted contrast sample */\n.a { color: #fff; }\n/* stylelint-enable fabrika/no-raw-color */\n",
     );
-
-    expect(await lint(file)).toEqual([]);
-  });
+      expect(yield* lint(file)).toEqual([]);
+    }),
+  );
 });

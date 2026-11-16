@@ -67,8 +67,10 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
 
 // The 200 real-Git fixtures exceed 60 seconds under load. Allow 15 minutes,
 // using the lead's 695-second L7 measurement as the floor, and retain all 200 runs.
-it("L8: refusal, consent and retries never evaluate, bundle or start repository code or Git-configured commands", async () => {
-  await fc.assert(
+it(
+  "L8: refusal, consent and retries never evaluate, bundle or start repository code or Git-configured commands",
+  () =>
+    fc.assert(
     fc.asyncProperty(tape, ids, ids, people, async (cells, selection, request, actor) => {
       await Effect.runPromise(
         Effect.scoped(
@@ -154,5 +156,6 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
       );
     }),
     { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
-  );
-}, 900_000);
+    ),
+  900_000,
+);

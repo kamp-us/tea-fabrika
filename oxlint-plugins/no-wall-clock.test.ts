@@ -30,8 +30,8 @@ const kept = (at: string) => [
   "type J = Date;",
 ];
 
-it("refuses each clock read in next/ product code, and passes what reads no clock", async () => {
-  await fc.assert(
+it("refuses each clock read in next/ product code, and passes what reads no clock", () =>
+  fc.assert(
     fc.asyncProperty(name, host, fc.constantFrom("at", "1_000", "span.start"), async (file, on, at) => {
       const paths = [
         `next/packages/libfabrika/src/runtime/${file}.ts`,
@@ -48,11 +48,10 @@ it("refuses each clock read in next/ product code, and passes what reads no cloc
       }
     }),
     runs,
-  );
-});
+  ));
 
-it("leaves tests, test helpers, .tsx views and today's paths to their own rules", async () => {
-  await fc.assert(
+it("leaves tests, test helpers, .tsx views and today's paths to their own rules", () =>
+  fc.assert(
     fc.asyncProperty(name, host, async (file, on) => {
       const paths = [
         `next/packages/libfabrika/src/runtime/${file}.test.ts`,
@@ -72,5 +71,4 @@ it("leaves tests, test helpers, .tsx views and today's paths to their own rules"
       expect(result("fabrika(no-clock-in-view)", paths[3] ?? "")).toEqual([1, 2, 3]);
     }),
     runs,
-  );
-});
+  ));

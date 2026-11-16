@@ -1,8 +1,17 @@
 import { readFileSync } from "node:fs";
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { parse } from "yaml";
 import * as gate from "./gate.mjs";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // Today's CI, serving both versions. Covers gate.mjs, the first job of scheduled.yaml (0581): a push
 // to main or the hourly catch-up starts the full run only when no full run on main started within
@@ -338,13 +347,17 @@ const runsOf = (
   ];
 };
 
-it("G3 property: the reader asks the two run lists of main and one jobs list per run it walks, stops at the first full run, takes its earliest job start, and counts a run at the head only when it is full and not canceled", async () => {
+it.live(
+  "G3 property: the reader asks the two run lists of main and one jobs list per run it walks, stops at the first full run, takes its earliest job start, and counts a run at the head only when it is full and not canceled",
+  () =>
+    Effect.gen(function* () {
   // Plants, after build, each on gate.mjs and restored: drop `branch=main`, so a branch run counts
   // (red: a newer full branch run is taken as the last one, and a full branch run at the head as
   // tested); count a canceled full run at the head as tested (red where the head has only canceled
   // full runs).
   const reached = { none: 0, walked: 0, branchNewer: 0, canceledHeadOnly: 0, tested: 0, untested: 0, oldShape: 0 };
-  await fc.assert(
+      yield* promised(() =>
+        fc.assert(
     fc.asyncProperty(
       history,
       fc.constantFrom<Event>("push", "schedule"),
@@ -378,7 +391,9 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
             : {
                 id: full.id,
                 sha: full.head_sha,
-                at: Math.min(...full.jobs.flatMap((j) => (j.started_at === null ? [] : [Date.parse(j.started_at)]))),
+                      at: Math.min(
+                        ...full.jobs.flatMap((j) => (j.started_at === null ? [] : [Date.parse(j.started_at)])),
+                      ),
               },
         );
 
@@ -389,7 +404,9 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
 
         expect(lists).toHaveLength(2);
         expect(
-          lists.every((u) => u.searchParams.get("branch") === "main" && u.searchParams.get("status") === "completed"),
+                lists.every(
+                  (u) => u.searchParams.get("branch") === "main" && u.searchParams.get("status") === "completed",
+                ),
         ).toBe(true);
         expect(lists.map((u) => u.searchParams.get("head_sha")).toSorted()).toEqual([HEAD, null].toSorted());
 
@@ -402,7 +419,9 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
         });
 
         expect(walked.every((r) => asked.includes(r.id))).toBe(true);
-        expect(asked.every((id) => walked.some((r) => r.id === id) || atHead.some((r) => r.id === id))).toBe(true);
+              expect(asked.every((id) => walked.some((r) => r.id === id) || atHead.some((r) => r.id === id))).toBe(
+                true,
+              );
         // Each run's jobs are read once: the head's runs that the walk read are not read again
         // (the review of pull request 1404: the walk was 2K+4 calls for K skipped runs).
         expect(new Set(asked).size, JSON.stringify(asked)).toBe(asked.length);
@@ -421,12 +440,14 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
       },
     ),
     options,
+        ),
   );
   expect(
     Object.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
-});
+    }),
+);
 
 // ---------------------------------------------------------------- G2, the group over time
 
@@ -551,12 +572,16 @@ const simulate = async (list: readonly Asked[], gap: number, minute: number, fir
   return { ran, order };
 };
 
-it("G2 property: in the group, no full run on main starts within a gap of the last one except by hand, and when every catch-up fires each head that stays main's head gets one", async () => {
+it.live(
+  "G2 property: in the group, no full run on main starts within a gap of the last one except by hand, and when every catch-up fires each head that stays main's head gets one",
+  () =>
+    Effect.gen(function* () {
   // Plant, after build, on gate.mjs and restored: read `last.at` as the run's creation time, not
   // its start (red: a run that waited in the group counts as older, so the next starts inside the
   // gap). The generator makes runs wait on purpose: asks closer together than the runs last.
   const reached = { waited: 0, skipped: 0, started: 0, byHand: 0, stayed: 0 };
-  await fc.assert(
+      yield* promised(() =>
+        fc.assert(
     fc.asyncProperty(
       asks,
       fc.integer({ min: 60, max: 240 }),
@@ -603,12 +628,14 @@ it("G2 property: in the group, no full run on main starts within a gap of the la
       },
     ),
     { ...options, numRuns: 200 },
+        ),
   );
   expect(
     Object.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
-});
+    }),
+);
 
 // ---------------------------------------------------------------- G4, the token
 
@@ -617,12 +644,16 @@ const token = fc
   .string({ unit: fc.constantFrom(..."abcXYZ019_-./%?&=+ #:@!~*'()"), minLength: 12, maxLength: 40 })
   .map((s) => `ghs_${s}`);
 
-it("G4 property: [secrets] the token goes only in the authorization header, and in no URL, output line, summary line or error", async () => {
+it.live(
+  "G4 property: [secrets] the token goes only in the authorization header, and in no URL, output line, summary line or error",
+  () =>
+    Effect.gen(function* () {
   // Plant, after build, on gate.mjs and restored: put the token in the URL as `?access_token=` (red
   // on every flow). Plants for the other outputs, after build: the token in the summary line; the
   // token in the error after the third failure.
   const reached = { answered: 0, failed: 0 };
-  await fc.assert(
+      yield* promised(() =>
+        fc.assert(
     fc.asyncProperty(
       token,
       history,
@@ -666,20 +697,26 @@ it("G4 property: [secrets] the token goes only in the authorization header, and 
       },
     ),
     options,
+        ),
   );
   expect(
     Object.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
-});
+    }),
+);
 
 // ---------------------------------------------------------------- G5, a GitHub that fails
 
-it("G5 property: a call that fails is tried 3 times, and after the third failure the step exits non-zero with no start line; after every call answered it writes exactly one start line", async () => {
+it.live(
+  "G5 property: a call that fails is tried 3 times, and after the third failure the step exits non-zero with no start line; after every call answered it writes exactly one start line",
+  () =>
+    Effect.gen(function* () {
   // Plant, after build, on gate.mjs and restored: write `start=true` when the reader fails (red on
   // every flow with a call that failed 3 times).
   const reached = { retried: 0, gaveUp: 0, clean: 0 };
-  await fc.assert(
+      yield* promised(() =>
+        fc.assert(
     fc.asyncProperty(
       history,
       fc.constantFrom<Event>("push", "schedule", "workflow_dispatch"),
@@ -733,21 +770,30 @@ it("G5 property: a call that fails is tried 3 times, and after the third failure
       },
     ),
     options,
+        ),
   );
   expect(
     Object.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
-});
+    }),
+);
 
 // ---------------------------------------------------------------- G6, the walk's cost
 
-it("G6 property: after K runs at the head whose gate said false, the gate makes K + 3 calls: two run lists and one jobs list per run it walks", async () => {
+it.live(
+  "G6 property: after K runs at the head whose gate said false, the gate makes K + 3 calls: two run lists and one jobs list per run it walks",
+  () =>
+    Effect.gen(function* () {
   // The review of pull request 1404: the head's loop read again the jobs of every run the walk had
   // read, 2K + 4 calls, up to about 200 after a quiet stretch. Plant, run once on gate.mjs and
   // restored: the head loop reads its runs' jobs again (red: 2K + 4).
-  await fc.assert(
-    fc.asyncProperty(fc.integer({ min: 0, max: 40 }), fc.constantFrom<Event>("push", "schedule"), async (k, event) => {
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(
+            fc.integer({ min: 0, max: 40 }),
+            fc.constantFrom<Event>("push", "schedule"),
+            async (k, event) => {
       // The last full run, at an older commit, then K catch-ups at the head that skipped.
       const list = [
         {
@@ -780,10 +826,13 @@ it("G6 property: after K runs at the head whose gate said false, the gate makes 
 
       expect(result.code).toBe(0);
       expect(calls).toHaveLength(k + 3);
-    }),
+            },
+          ),
     options,
+        ),
   );
-});
+    }),
+);
 
 // ---------------------------------------------------------------- G7, a walk that runs out of time
 
@@ -796,13 +845,17 @@ const stepLimit = (() => {
   return typeof limit === "number" ? limit * MINUTE : Number.NaN;
 })();
 
-it("G7 property: a gate whose calls would run past its step's time limit stops before it, with a non-zero exit and no start line, and one that finishes in time answers", async () => {
+it.live(
+  "G7 property: a gate whose calls would run past its step's time limit stops before it, with a non-zero exit and no start line, and one that finishes in time answers",
+  () =>
+    Effect.gen(function* () {
   // The review of pull request 1404: a gate that ran into its job's limit ended `cancelled`, read
   // as stopped by a person, so no sev1 opened. Plant, run once on gate.mjs and restored: no
   // deadline (red: a slow walk ends past the step's limit).
   expect(Number.isFinite(stepLimit), "scheduled.yaml's decide step has a timeout-minutes").toBe(true);
   const reached = { answered: 0, outOfTime: 0 };
-  await fc.assert(
+      yield* promised(() =>
+        fc.assert(
     fc.asyncProperty(
       history,
       // A quiet stretch after it: catch-ups at the head whose gate said false, each one more call.
@@ -851,15 +904,19 @@ it("G7 property: a gate whose calls would run past its step's time limit stops b
 
         // A walk that fits well inside the limit answers.
         const needed = fake.calls.length * cost;
-        expect(result.code === 0 || needed >= stepLimit / 2, `${fake.calls.length} calls of ${cost} ms`).toBe(true);
+              expect(result.code === 0 || needed >= stepLimit / 2, `${fake.calls.length} calls of ${cost} ms`).toBe(
+                true,
+              );
         reached.answered += result.code === 0 ? 1 : 0;
         reached.outOfTime += result.code === 0 ? 0 : 1;
       },
     ),
     options,
+        ),
   );
   expect(
     Object.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
-});
+    }),
+);

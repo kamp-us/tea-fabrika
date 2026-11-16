@@ -1,10 +1,20 @@
+import { it } from "@effect/vitest";
 import type { Context } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { pipe } from "effect/Function";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStageWord } from "./no-stage-word.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const CODE = "fabrika(no-stage-word)";
 
@@ -80,8 +90,8 @@ const placements = (name: string, i: number, tsx: boolean) => [
     : []),
 ];
 
-it("rejects the word in generated names, spellings and placements, and passes their neighbors", async () => {
-  await fc.assert(
+it("rejects the word in generated names, spellings and placements, and passes their neighbors", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         before: fc.option(part, { nil: undefined }),
@@ -135,11 +145,10 @@ it("rejects the word in generated names, spellings and placements, and passes th
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("an exception allows only its annotated line, at generated offsets beside unannotated uses", async () => {
-  await fc.assert(
+it("an exception allows only its annotated line, at generated offsets beside unannotated uses", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         filler: fc.array(fc.constantFrom("a();", "// instance", "b(`instance`);"), { maxLength: 6 }),
@@ -164,11 +173,10 @@ it("an exception allows only its annotated line, at generated offsets beside una
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("real config holds generated next/ paths and leaves today's version, .agents/ and top-level scripts out", async () => {
-  await fc.assert(
+it("real config holds generated next/ paths and leaves today's version, .agents/ and top-level scripts out", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.tuple(letters, fc.constantFrom("ts", "tsx"), fc.constantFrom("", ".test", ".test-support")),
       async ([name, extension, kind]) => {
@@ -198,8 +206,7 @@ it("real config holds generated next/ paths and leaves today's version, .agents/
       },
     ),
     runs,
-  );
-});
+  ));
 
 it("absolute, relative and Windows spellings of a path get the same next/-only scope", () => {
   fc.assert(
@@ -228,11 +235,12 @@ it("absolute, relative and Windows spellings of a path get the same next/-only s
 });
 
 // format: escapes decode to the word, in literals, keys, identifiers and template text.
-it("format: escaped literal and identifier spellings fire by their decoded word", async () => {
+it.live("format: escaped literal and identifier spellings fire by their decoded word", () =>
+  Effect.gen(function* () {
   const path = "next/apps/fabrika/src/escaped.ts";
-
-  const result = await plant({
-    [path]: Arr.join(
+    const result = yield* promised(() =>
+      plant({
+        [path]: Arr.join(
       [
         'const a = "\\u0073tage";',
         'const b = {"\\u{53}tageError": 1};',
@@ -240,20 +248,23 @@ it("format: escaped literal and identifier spellings fire by their decoded word"
         "const c = `\\x73tage`;",
         'const d = {["sta\\u0067e"]: 1};',
         'const e = "\\u0062ackstage";',
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result(CODE, path)).toEqual([1, 2, 3, 4, 5]);
-});
+  }),
+);
 
 // format: each comment and text form, with one report per line that holds the word.
-it("format: line, block and multi-line comments, template lines and TSX text", async () => {
+it.live("format: line, block and multi-line comments, template lines and TSX text", () =>
+  Effect.gen(function* () {
   const path = "next/apps/fabrika/src/view.tsx";
-
-  const result = await plant({
-    [path]: Arr.join(
+    const result = yield* promised(() =>
+      plant({
+        [path]: Arr.join(
       [
         "// the stage starts",
         "/* the Stage */",
@@ -266,20 +277,23 @@ it("format: line, block and multi-line comments, template lines and TSX text", a
         "last`;",
         "const v = <p>the stage-wire</p>;",
         'const w = <p title="backstage">stagecoach</p>;',
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result(CODE, path)).toEqual([1, 2, 5, 8, 10]);
-});
+  }),
+);
 
 // scenario: Alchemy's own stage key passes only on its annotated line; the same key beside it fails.
-it("scenario: the annotated Alchemy key passes and an adjacent domain use fails", async () => {
+it.live("scenario: the annotated Alchemy key passes and an adjacent domain use fails", () =>
+  Effect.gen(function* () {
   const path = "next/apps/fabrika/src/brain.ts";
-
-  const result = await plant({
-    [path]: Arr.join(
+    const result = yield* promised(() =>
+      plant({
+        [path]: Arr.join(
       [
         "const stack = {",
         '  name: "fabrika",',
@@ -288,20 +302,23 @@ it("scenario: the annotated Alchemy key passes and an adjacent domain use fails"
         '  stage2: "local",',
         "};",
         "const localStage = stack;",
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result(CODE, path)).toEqual([5, 7]);
-});
+  }),
+);
 
 // pinned: experiment 238's saved driver name and today's app's capture stages keep their bytes.
-it("pinned: the saved driver and today's quote pass on annotated lines, new text beside them fails", async () => {
+it.live("pinned: the saved driver and today's quote pass on annotated lines, new text beside them fails", () =>
+  Effect.gen(function* () {
   const path = "next/apps/fabrika/src/instance-one-file.integration.test.ts";
-
-  const result = await plant({
-    [path]: Arr.join(
+    const result = yield* promised(() =>
+      plant({
+        [path]: Arr.join(
       [
         `${DISABLE} saved speed-bar results name experiment 238's driver exactly`,
         'assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");',
@@ -312,20 +329,23 @@ it("pinned: the saved driver and today's quote pass on annotated lines, new text
         "`;",
         "// oxlint-enable fabrika/no-stage-word",
         "const after = `capture stages`;",
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result(CODE, path)).toEqual([3, 9]);
-});
+  }),
+);
 
 // format: a directive that names this rule is not itself a use; its reason after `--` is read.
-it("format: an ignore directive's rule names are not read, its reason and the next violation are", async () => {
+it.live("format: an ignore directive's rule names are not read, its reason and the next violation are", () =>
+  Effect.gen(function* () {
   const path = "next/apps/fabrika/src/directive.ts";
-
-  const result = await plant({
-    [path]: Arr.join(
+    const result = yield* promised(() =>
+      plant({
+        [path]: Arr.join(
       [
         `${DISABLE} a kept key`,
         "const localStage = 1;",
@@ -336,16 +356,19 @@ it("format: an ignore directive's rule names are not read, its reason and the ne
         "const stageAfter = 3;",
         "// oxlint-disable-next-line fabrika/no-promises -- edge: the local stage proxy",
         "// eslint-disable-line fabrika/no-stage-word",
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result(CODE, path)).toEqual([4, 7, 8]);
-});
+  }),
+);
 
 // format: the path alone fires, at the file's start, with no code tokens to report on.
-it("format: an empty file or folder named for the word is refused by its path", async () => {
+it.live("format: an empty file or folder named for the word is refused by its path", () =>
+  Effect.gen(function* () {
   const files = {
     "next/apps/fabrika/src/stage.ts": "",
     "next/apps/fabrika/src/stage-records.test.ts": "",
@@ -354,7 +377,7 @@ it("format: an empty file or folder named for the word is refused by its path", 
     "next/apps/fabrika/src/backstage.ts": "",
     "next/apps/fabrika/src/instance.ts": "",
   };
-
-  const result = await plant(files);
-  expect(Arr.map(Object.keys(files), (path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
-});
+    const result = yield* promised(() => plant(files));
+    expect(Arr.map(Object.keys(files), (path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
+  }),
+);

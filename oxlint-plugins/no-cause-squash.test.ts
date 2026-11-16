@@ -1,16 +1,26 @@
+import { join } from "node:path";
 // Ticket 907, slice A1. `fabrika/no-cause-squash` refuses every use of Effect's `Cause.squash` in
 // next/'s product code (docs/direction/effect-code-guidelines.md, E2). Law 2 runs generated files in
 // process through oxlint's RuleTester: an import spelling, some uses and some neighbors that must
 // pass, one per line. Law 3 is one real oxlint run with the repo's config, since only the config
 // says which paths are tests.
-import { join } from "node:path";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { pipe } from "effect/Function";
+import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noCauseSquash } from "./no-cause-squash.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
@@ -177,8 +187,9 @@ const LEFT_OUT = [
   "packages/fabrika/src/plant.ts",
 ];
 
-it("scenario: one real lint run per path kind, since only the real config holds which paths are tests", async () => {
-  const linted = await plant(Object.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY])));
+it.live("scenario: one real lint run per path kind, since only the real config holds which paths are tests", () =>
+  Effect.gen(function* () {
+    const linted = yield* promised(() => plant(Object.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY]))));
 
   // Product code: the bare call fires, and the call under its edge comment passes.
   for (const path of HELD) {
@@ -195,4 +206,5 @@ it("scenario: one real lint run per path kind, since only the real config holds 
   for (const path of LEFT_OUT) {
     expect([path, linted(CODE, path)]).toEqual([path, []]);
   }
-});
+  }),
+);

@@ -1,13 +1,23 @@
+import { spawnSync } from "node:child_process";
+import { join, resolve } from "node:path";
 // Ticket 737, G2. `fabrika/service-id` asks a libfabrika service ID for the package, its file's path,
 // then `.Name` when the service is named otherwise (decision 0023). The fixtures are the rule's own
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
-import { spawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { pipe } from "effect/Function";
+import { it } from "@effect/vitest";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const CODE = "fabrika(service-id)";
 
@@ -32,8 +42,8 @@ const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
 });
 
 describe("T737 G2 service IDs carry the package and the file's path", () => {
-  it("fires on exactly the IDs that miss the package, the path or the name, through every import form", async () => {
-    await fc.assert(
+  it("fires on exactly the IDs that miss the package, the path or the name, through every import form", () =>
+    fc.assert(
       fc.asyncProperty(
         // Two service names in one file must differ, or the file does not parse and nothing fires.
         fc
@@ -139,8 +149,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
         },
       ),
       { seed: 119120, numRuns: 4 },
-    );
-  });
+    ));
 
   // The plan's mapping, old to new, kept here because diagnostics can hold either spelling.
   // `ProgramRunner` was renamed after it, by ticket 909, and has no row.
@@ -186,7 +195,8 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
   /** An old ID as it was written: bare names had the package in front. */
   const written = (old: string) => (old.includes("/") ? old : `${P}/${old}`);
 
-  it("vector: the plan's mapping is what the rule asks for, and every old spelling but Id.Generator fires", async () => {
+  it.live("vector: the plan's mapping is what the rule asks for, and every old spelling but Id.Generator fires", () =>
+    Effect.gen(function* () {
     const files = new Map<string, Array<readonly [string, boolean]>>();
 
     for (const [path, name, old, next] of mapping) {
@@ -212,13 +222,14 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
       files.set(path, lines);
     }
 
-    const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
-    const linted = await plant(Object.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text])));
+      const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
+      const linted = yield* promised(() => plant(Object.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text]))));
 
     for (const [path, f] of planted) {
       expect(linted(CODE, path), path).toEqual(f.fires);
     }
-  });
+    }),
+  );
 
   // Law 9 of docs/plan/effect-rules-small.md. The rule blocks since ticket 909, so it starts at zero
   // (decision 0168). The real tree is the input: no generator can stand in for the IDs that are there.

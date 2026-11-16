@@ -2,9 +2,18 @@ import * as Arr from "effect/Array";
 // oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (0058): on for our source,
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const CODE = "import(no-default-export)";
 
@@ -43,8 +52,8 @@ const OUTSIDE = ["stylelint.config.ts", "experiments/tool.ts", "docs/tutorials/f
 
 const NAMED = "export const a = 1;\nexport type T = number;\n";
 
-it("every default export form is refused in our source, under every source folder", async () => {
-  await fc.assert(
+it("every default export form is refused in our source, under every source folder", () =>
+  fc.assert(
     fc.asyncProperty(fc.constantFrom(...SOURCE), fc.stringMatching(/^[a-z]{1,8}$/), async (folder, stem) => {
       const files = Object.fromEntries(Arr.map(FORMS, (form, i) => [`${folder}/${stem}${i}.ts`, `${form}\n`]));
       const result = await plant({ ...files, [`${folder}/named.ts`]: NAMED });
@@ -56,11 +65,10 @@ it("every default export form is refused in our source, under every source folde
       expect(result(CODE, `${folder}/named.ts`)).toEqual([]);
     }),
     { seed: 119120, numRuns: 5 },
-  );
-});
+  ));
 
-it("an inline edge comment lets the default on the next line through, and no line further down", async () => {
-  await fc.assert(
+it("an inline edge comment lets the default on the next line through, and no line further down", () =>
+  fc.assert(
     fc.asyncProperty(fc.constantFrom(...SOURCE), fc.uuid(), async (folder, reason) => {
       const edge = `// oxlint-disable-next-line import/no-default-export -- edge: ${reason}`;
       const marked = `${folder}/worker.ts`;
@@ -75,27 +83,30 @@ it("an inline edge comment lets the default on the next line through, and no lin
       expect(result(CODE, farther)).toEqual([3]);
     }),
     { seed: 119120, numRuns: 5 },
-  );
-});
+  ));
 
-it("scenario: tooling and config files, and files outside our source, keep their default export", async () => {
+it.live("scenario: tooling and config files, and files outside our source, keep their default export", () =>
+  Effect.gen(function* () {
   // A tool loads these by their default, so 0058 leaves them out by glob.
-  const files = Object.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
-  const result = await plant(files);
+    const files = Object.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
+    const result = yield* promised(() => plant(files));
 
   for (const file of Object.keys(files)) {
     expect(result(CODE, file)).toEqual([]);
   }
-});
+  }),
+);
 
-it("scenario: a declare module block that types a loader's default is not an export of ours", async () => {
+it.live("scenario: a declare module block that types a loader's default is not an export of ours", () =>
+  Effect.gen(function* () {
   // apps/fabrika/src/window/wasm.d.ts types what esbuild's binary loader gives; the rule reads it as
   // a type, not as a module's own default.
   const file = "apps/fabrika/src/window/bytes.d.ts";
-
-  const result = await plant({
+    const result = yield* promised(() =>
+      plant({
     [file]: 'declare module "*.wasm" {\n  const bytes: Uint8Array;\n  export default bytes;\n}\n',
-  });
-
+      }),
+    );
   expect(result(CODE, file)).toEqual([]);
-});
+  }),
+);

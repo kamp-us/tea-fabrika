@@ -11,8 +11,8 @@ const CODE = "fabrika(no-ledger-sql)";
 const FILE = "next/packages/libfabrika/src/cloudflare/runtime.ts";
 
 describe("ledger SQL stays behind its service", () => {
-  it("refuses ledger table reads and writes outside the service, including aliases and templates", async () => {
-    await fc.assert(
+  it("refuses ledger table reads and writes outside the service, including aliases and templates", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("entries", "rings"),
         fc.constantFrom(" ", "\n", " /* checked */ "),
@@ -55,6 +55,5 @@ describe("ledger SQL stays behind its service", () => {
         },
       ),
       { seed: 119120, numRuns: 20 },
-    );
-  });
+    ));
 });

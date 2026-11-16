@@ -42,6 +42,13 @@ import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const READER = "connection:t1";
@@ -785,10 +792,12 @@ const event: fc.Arbitrary<() => MemberEvent> = fc.oneof(
 );
 
 describe("p96, write tells the truth over any history", () => {
-  it("refused writes nothing and the fold skips it; an event that changes who belongs is applied", async () => {
+  it.live("refused writes nothing and the fold skips it; an event that changes who belongs is applied", () =>
+    Effect.gen(function* () {
     let applied = 0;
     let refused = 0;
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -834,10 +843,12 @@ describe("p96, write tells the truth over any history", () => {
       ),
       // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
       { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
+        ),
     );
     expect(applied).toBeGreaterThan(60);
     expect(refused).toBeGreaterThan(60);
-  });
+    }),
+  );
 });
 
 // Gaps the mutation step found on the build (ticket 236): answers the tests above held loose.

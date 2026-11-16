@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import * as scheduled from "./scheduled.mjs";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 type Jobs = Parameters<typeof scheduled.verdict>[0]["jobs"];
 
@@ -565,20 +574,23 @@ it.each([
   expect(scheduled.causes(jobs, LIMITS)).toEqual(legs);
 });
 
-it("pinned: run 43723335863's report opens the issue and names both legs as time-outs; with no limits it cannot", async () => {
+it.live(
+  "pinned: run 43723335863's report opens the issue and names both legs as time-outs; with no limits it cannot",
+  () =>
+    Effect.gen(function* () {
   // pinned: the run that opened no issue. Plant: the report reads no limit from its env (red: no
   // issue). Without LIMIT_ the two time-outs read as cancels, which is why workflow-lint.ts's SC5
   // holds each test job's limit in the report step's env.
   const run = fixture("43723335863");
   const { calls, send } = fake(run.jobs, null, null);
-
-  const { result, action } = await scheduled.report({
+      const { result, action } = yield* promised(() =>
+        scheduled.report({
     needs: run.needs,
     reports: [],
     env,
     api: scheduled.github(env, send)!,
-  });
-
+        }),
+      );
   expect(result).toBe("red");
   expect(action._tag).toBe("open");
   expect(calls.filter((c) => c.method === "POST").map((c) => c.url.split("/repos/owner/repo/")[1])).toEqual([
@@ -592,16 +604,17 @@ it("pinned: run 43723335863's report opens the issue and names both legs as time
   }
 
   const { LIMIT_NEXT: _next, LIMIT_TOOLING: _tooling, ...bare } = env;
-
-  const blind = await scheduled.report({
+      const blind = yield* promised(() =>
+        scheduled.report({
     needs: run.needs,
     reports: [],
     env: bare,
     api: scheduled.github(bare, fake(run.jobs, null, null).send)!,
-  });
-
+        }),
+      );
   expect(blind.result).toBe("stopped");
-});
+    }),
+);
 
 it("property: the jobs API's answer reads as each job's name, status, conclusion, times and steps, and any other shape as none", () => {
   // Plants: keep only finished jobs (red: the running one dropped); drop a step's null conclusion to
@@ -858,11 +871,11 @@ const runJobs = fc.oneof(
 
 const JOBS_CALL = "GET actions/runs/7/jobs?filter=latest&per_page=100";
 
-it("property: the report reads the run's jobs first, then makes exactly the calls its action needs, each with the job's token", async () => {
+it("property: the report reads the run's jobs first, then makes exactly the calls its action needs, each with the job's token", () =>
   // Plants: close without the comment (red: no comment call); open without the label (red: no
   // label call); ask for the last green run on a green run (red: an extra call); judge before
   // reading the jobs (red: no jobs call, and a failed step missed).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       needs,
       runJobs,
@@ -927,17 +940,21 @@ it("property: the report reads the run's jobs first, then makes exactly the call
       },
     ),
     options,
-  );
-});
+  ));
 
-it("pinned: run 43673342835's report opens the issue, naming its failing test, and does so from its jobs alone too", async () => {
+it.live(
+  "pinned: run 43673342835's report opens the issue, naming its failing test, and does so from its jobs alone too",
+  () =>
+    Effect.gen(function* () {
   // pinned: the run that printed "stopped, nothing to report". Plants: the old verdict over needs
   // alone (red: no issue); the report passes no jobs to the verdict (red: no issue without the
   // report file, as for a leg that broke before writing one).
   for (const reports of [run43673342835.reports, []]) {
     const { calls, send } = fake(run43673342835.jobs, null, null);
     const api = scheduled.github(env, send)!;
-    const { result, action } = await scheduled.report({ needs: run43673342835.needs, reports, env, api });
+        const { result, action } = yield* promised(() =>
+          scheduled.report({ needs: run43673342835.needs, reports, env, api }),
+        );
     expect(result).toBe("red");
     expect(action._tag).toBe("open");
     expect(calls.filter((c) => c.method === "POST").map((c) => c.url.split("/repos/owner/repo/")[1])).toEqual([
@@ -949,11 +966,12 @@ it("pinned: run 43673342835's report opens the issue, naming its failing test, a
       expect(action.body.includes("ProgramMailReads.integration.test.ts")).toBe(reports.length > 0);
     }
   }
-});
+    }),
+);
 
-it("property: an error from GitHub fails the report, so a red run's issue never goes missing quietly", async () => {
+it("property: an error from GitHub fails the report, so a red run's issue never goes missing quietly", () =>
   // Plant: catch and ignore a failed write or read (red: the report resolved).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       fc.constantFrom("issues", "actions/workflows/", "actions/runs/"),
       fc.option(fc.integer({ min: 2, max: 9999 }), { nil: null }),
@@ -965,8 +983,7 @@ it("property: an error from GitHub fails the report, so a red run's issue never 
       },
     ),
     options,
-  );
-});
+  ));
 
 const branch = fc
   .oneof(
@@ -975,10 +992,10 @@ const branch = fc
   )
   .filter((ref) => ref !== "refs/heads/main");
 
-it("property: on any ref but main the report judges the run the same and writes nothing, reading only the run's jobs", async () => {
+it("property: on any ref but main the report judges the run the same and writes nothing, reading only the run's jobs", () =>
   // A hand-started run on a branch is judged, so it can end `failure`, and it never touches the
   // issue, which is main's. Plant: the report writes on any ref (red: a branch opened the issue).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       branch,
       fc.boolean(),
@@ -1006,10 +1023,9 @@ it("property: on any ref but main the report judges the run the same and writes 
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: the report job passes for a green run alone, so a red run ends failure on GitHub, on main and on a branch", async () => {
+it("property: the report job passes for a green run alone, so a red run ends failure on GitHub, on main and on a branch", () => {
   // 2026-11-15: a red run ended `cancelled` and was read as cut off. A failed leg or a test step
   // that ran out of time is a failed job by itself; this exit code covers a red run with neither,
   // such as a leg that ended odd. It cannot turn a run GitHub ended `cancelled` into a failure
@@ -1019,7 +1035,7 @@ it("property: the report job passes for a green run alone, so a red run ends fai
   expect(scheduled.exitCode("red")).toBe(1);
   expect(scheduled.exitCode("stopped")).toBe(1);
 
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(
       fc.constantFrom("refs/heads/main", "refs/heads/fabrikalfa/a-branch"),
       needs,
@@ -1041,7 +1057,10 @@ it("property: the report job passes for a green run alone, so a red run ends fai
   );
 });
 
-it("pinned: run 43723335863, two legs that only timed out, fails the report job on a branch too; a run with needs it cannot read fails it", async () => {
+it.live(
+  "pinned: run 43723335863, two legs that only timed out, fails the report job on a branch too; a run with needs it cannot read fails it",
+  () =>
+    Effect.gen(function* () {
   // pinned: GitHub ended this run `cancelled` with every other job green, the report job among
   // them. Its legs ran into the job's limit, so the run stays `cancelled` today whatever the report
   // job does; the test steps' own limit (SC12) is what ends such a run `failure` now. Plant: the
@@ -1050,26 +1069,29 @@ it("pinned: run 43723335863, two legs that only timed out, fails the report job 
 
   for (const ref of ["refs/heads/main", "refs/heads/fabrikalfa/a-branch"]) {
     const here = { ...env, GITHUB_REF: ref, NEEDS: JSON.stringify(run.needs) };
-    const { line, code } = await scheduled.main(here, [], fake(run.jobs, null, null).send);
+        const { line, code } = yield* promised(() => scheduled.main(here, [], fake(run.jobs, null, null).send));
     expect(code).toBe(1);
     expect(line).toBe(ref === "refs/heads/main" ? "scheduled: red, open" : "scheduled: red, nothing to report");
   }
 
-  const unreadable = await scheduled.main({ ...env, NEEDS: "{" }, [], fake(answer([]), null, null).send);
+      const unreadable = yield* promised(() =>
+        scheduled.main({ ...env, NEEDS: "{" }, [], fake(answer([]), null, null).send),
+      );
   expect(unreadable).toEqual({ line: "scheduled: stopped, nothing to report", code: 1 });
   const { GITHUB_TOKEN: _token, ...bare } = env;
-  expect((await scheduled.main(bare, [], fake(answer([]), null, null).send)).code).toBe(1);
-});
+      expect((yield* promised(() => scheduled.main(bare, [], fake(answer([]), null, null).send))).code).toBe(1);
+    }),
+);
 
 // The daily speed check's issue carries the same label (0541), with its own title (`TITLE` in
 // `.agents/skills/lead/scripts/ci/Speed.ts`, written here again so this file reads no lead script).
 const SPEED = "CI speed: a stage is over its goal";
 
-it("property: the report acts only on the open issue with its own title, never on the speed check's, which it leaves untouched", async () => {
+it("property: the report acts only on the open issue with its own title, never on the speed check's, which it leaves untouched", () =>
   // Plant: the report takes the first open `ci-scheduled` issue as its own, as before (red: on
   // 2026-11-15 a red main commented on the speed issue and opened none, and a green run would have
   // closed the speed issue).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       fc.constantFrom("red", "green"),
       fc.integer({ min: 2, max: 4999 }),
@@ -1103,22 +1125,24 @@ it("property: the report acts only on the open issue with its own title, never o
       },
     ),
     options,
-  );
-});
+  ));
 
-it("pinned: 2026-11-15, a red main with only the speed issue open opens its own issue, and a green run then leaves the speed issue open", async () => {
+it.live(
+  "pinned: 2026-11-15, a red main with only the speed issue open opens its own issue, and a green run then leaves the speed issue open",
+  () =>
+    Effect.gen(function* () {
   // pinned: the run whose red report went onto the speed issue as a comment. Plant: the old reader
   // (red: a comment on issue 1350, and no new issue; then a close of 1350).
   const speed = { number: 1350, title: SPEED };
   const red = fake(answer([]), null, null, [], [speed]);
-
-  const opened = await scheduled.report({
+      const opened = yield* promised(() =>
+        scheduled.report({
     needs: { next: { result: "failure" } },
     reports: [],
     env,
     api: scheduled.github(env, red.send)!,
-  });
-
+        }),
+      );
   expect(opened.action).toMatchObject({ _tag: "open", title: scheduled.TITLE });
   expect(red.calls.find((c) => c.method === "POST" && c.url.endsWith("/issues"))?.body).toMatchObject({
     title: scheduled.TITLE,
@@ -1126,17 +1150,18 @@ it("pinned: 2026-11-15, a red main with only the speed issue open opens its own 
   });
 
   const green = fake(answer([]), null, null, [], [speed]);
-
-  const closed = await scheduled.report({
+      const closed = yield* promised(() =>
+        scheduled.report({
     needs: { next: { result: "success" } },
     reports: [],
     env,
     api: scheduled.github(env, green.send)!,
-  });
-
+        }),
+      );
   expect(closed).toEqual({ result: "green", action: { _tag: "none" } });
   expect(green.calls.filter((c) => c.method !== "GET")).toEqual([]);
-});
+    }),
+);
 
 it("scenario: with no token, repository, workflow file or run id, no GitHub reader is made", () => {
   // scenario: each of the four missing alone.
@@ -1212,11 +1237,15 @@ const greens = fc.array(
   { maxLength: 30 },
 );
 
-it("L1 property: the last green run is main's newest green run whose test legs ran, stepping over runs whose gate said false, or none", async () => {
+it.live(
+  "L1 property: the last green run is main's newest green run whose test legs ran, stepping over runs whose gate said false, or none",
+  () =>
+    Effect.gen(function* () {
   // Plant: today's lastGreen, which takes main's first `success` run (red: a skipped run's commit
   // is named as the last green one).
   const reached = { stepped: 0, none: 0, first: 0, old: 0 };
-  await fc.assert(
+      yield* promised(() =>
+        fc.assert(
     fc.asyncProperty(greens, async (list) => {
       const runs = list.map((r, i) => ({ ...r, id: 500 + i }));
       const calls: string[] = [];
@@ -1275,9 +1304,11 @@ it("L1 property: the last green run is main's newest green run whose test legs r
       reached.old += green.find((r) => r.full)?.old ? 1 : 0;
     }),
     options,
+        ),
   );
   expect(
     Object.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
-});
+    }),
+);

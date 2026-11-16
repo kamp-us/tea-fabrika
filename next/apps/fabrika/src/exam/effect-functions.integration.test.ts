@@ -31,21 +31,23 @@ const source = Arr.join(
   "\n",
 );
 
-describe("effect-functions", async () => {
-  const all = await plant({
+const all = await plant({
     [FILE]: source,
     "next/packages/libfabrika/src/data/tracing.test.ts": source,
     "packages/fabrika/src/tracing.ts": source,
-    "next/packages/libfabrika/src/data/alias.ts": Arr.join(
-      ['import {Effect as E} from "effect";', 'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
+  "next/packages/libfabrika/src/data/alias.ts": Arr.join(
+      ['import {Effect as E} from "effect";',
+    'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
       "\n",
     ),
-    "next/packages/libfabrika/src/data/namespace.ts": Arr.join(
-      ['import * as E from "effect/Effect";', 'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
+  "next/packages/libfabrika/src/data/namespace.ts": Arr.join(
+      ['import * as E from "effect/Effect";',
+    'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
       "\n",
     ),
-  });
+});
 
+describe("effect-functions", () => {
   it("rejects function spans, including append, recovery, curried and direct wrappers", () => {
     expect(all(CODE, FILE)).toEqual([3, 4, 5, 6, 7, 8, 9]);
   });

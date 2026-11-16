@@ -109,8 +109,8 @@ describe("P12 Alchemy lifecycle patch", () => {
     );
   });
 
-  it("reports spawn PIDs, replacement delays and the brake; scope closure cancels recovery", async () => {
-    await fc.assert(
+  it("reports spawn PIDs, replacement delays and the brake; scope closure cancels recovery", () =>
+    fc.assert(
       fc.asyncProperty(fc.string({ minLength: 1 }), async (name) => {
         const { Runtime, RuntimeLive, RuntimeLifecycle } = await load("Runtime");
         expect(RuntimeLifecycle, "the installed Alchemy runtime lacks the P12 lifecycle hook").toBeDefined();
@@ -259,6 +259,5 @@ describe("P12 Alchemy lifecycle patch", () => {
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }), examples: [["p12-lifecycle"]] },
-    );
-  });
+    ));
 });

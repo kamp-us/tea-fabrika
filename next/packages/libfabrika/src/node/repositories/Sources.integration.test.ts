@@ -385,8 +385,8 @@ const realGitRunBudget = 30_000;
 // It runs on memory git, and on real git too at depth `full` (0535, GitLaws).
 it.each(GitLaws.gits)(
   "L7: bases, pinned bytes and outside targets on $name git (20 git runs; 200 injected runs cover the same paths)",
-  async ({ services }) => {
-    await fc.assert(
+  ({ services }) =>
+    fc.assert(
       fc.asyncProperty(
         fc.array(
           fc.record({
@@ -560,7 +560,6 @@ it.each(GitLaws.gits)(
           ),
       ),
       { seed: 119120, numRuns: realGitRuns },
-    );
-  },
+    ),
   realGitRuns * realGitRunBudget,
 );

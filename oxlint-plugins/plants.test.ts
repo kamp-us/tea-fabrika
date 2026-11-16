@@ -21,13 +21,23 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
+import * as Schema from "effect/Schema";
 import { RuleTester } from "oxlint/plugins-dev";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
 import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const ROOT = join(import.meta.dirname, "..");
 
@@ -394,9 +404,10 @@ describe("each rule refuses what it is there to refuse", () => {
     expect(firesInPlanted(notATest, "fabrika(no-expect-in-if)")).toEqual([]);
   });
 
-  it("the plugin has one planted line or more for every rule it lists", async () => {
-    const { default: plugin } = await import("./index.ts");
-    const planted = new Set(Arr.map(PLANTS, (p) => p.code));
+  it.live("the plugin has one planted line or more for every rule it lists", () =>
+    Effect.gen(function* () {
+      const { default: plugin } = yield* promised(() => import("./index.ts"));
+      const planted = new Set(Arr.map(PLANTS, (p) => p.code));
     // `no-bare-disable` reports at the top of the file, so it has its own test below.
     const elsewhere = [
       "prefer-schema-arbitrary", // generated syntax laws in prefer-schema-arbitrary.test.ts
@@ -468,10 +479,12 @@ describe("each rule refuses what it is there to refuse", () => {
     );
 
     expect(missing).toEqual([]);
-  });
+    }),
+  );
 });
 
-it("scenario: T877 L10 only the TOML adapter imports the parser and serializer", async () => {
+it.live("scenario: T877 L10 only the TOML adapter imports the parser and serializer", () =>
+  Effect.gen(function* () {
   // scenario: literal import names at every overriding config path are the rule's inputs.
   const imports = Arr.join(
     [
@@ -497,33 +510,41 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
   ];
 
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
-  const result = await lintCopies(Object.fromEntries(Arr.map([...banned, adapter], (file) => [file, imports])));
+    const result = yield* promised(() =>
+      lintCopies(Object.fromEntries(Arr.map([...banned, adapter], (file) => [file, imports]))),
+    );
 
   for (const file of banned) {
     expect(result("eslint(no-restricted-imports)", file), file).toEqual([1, 2, 3, 4]);
   }
 
   expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
-});
+  }),
+);
 
 // scenario: U11 is path-scoped, so its planted line must run under next/ with the real config.
-it("scenario: the isolate-boundary rule refuses a platform type outside cloudflare/", async () => {
+it.live("scenario: the isolate-boundary rule refuses a platform type outside cloudflare/", () =>
+  Effect.gen(function* () {
   const file = "next/packages/libfabrika/src/runtime/usage.ts";
-  const result = await lintCopies({ [file]: "export type Usage = TraceItem;\n" });
+    const result = yield* promised(() => lintCopies({ [file]: "export type Usage = TraceItem;\n" }));
   expect(result("fabrika(isolate-boundary)", file)).toEqual([1]);
-});
+  }),
+);
 
 // scenario: 0535's rule reads only next/'s test files, so its planted lines run there with the real config.
-it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, and a law in memory keeps it", async () => {
+it.live(
+  "scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, and a law in memory keeps it",
+  () =>
+    Effect.gen(function* () {
   const io = "next/packages/libfabrika/src/plant/OverIo.test.ts";
   const memory = "next/packages/libfabrika/src/plant/InMemory.test.ts";
   const imports = ['import * as fc from "fast-check";', 'import { it } from "vitest";'];
 
   const law = (body: string, count: string) =>
     `it("law", () => { ${body}fc.assert(fc.property(fc.nat(), () => true), { seed: 119120, numRuns: ${count} }); });`;
-
-  const result = await lintCopies({
-    [io]: Arr.join(
+      const result = yield* promised(() =>
+        lintCopies({
+          [io]: Arr.join(
       [
         'import { DatabaseSync } from "node:sqlite";',
         'import { runsFor } from "@kampus/vitest";',
@@ -531,15 +552,17 @@ it("scenario: T1031 runs-from-depth refuses a bare count in a law over real IO, 
         law('new DatabaseSync(":memory:"); ', "100"),
         law('new DatabaseSync(":memory:"); ', "runsFor({ fast: 10, full: 100 })"),
         "",
-      ],
+          ],
       "\n",
     ),
-    [memory]: Arr.join([...imports, law("", "3000"), ""], "\n"),
-  });
+          [memory]: Arr.join([...imports, law("", "3000"), ""], "\n"),
+        }),
+      );
 
   expect(result("fabrika(runs-from-depth)", io)).toEqual([5]);
   expect(result("fabrika(runs-from-depth)", memory)).toEqual([]);
-});
+    }),
+);
 
 /** oxlint's `--print-config`: the root rules and each override's globs and rules, a setting as `[level, options]`. */
 type Printed = {
@@ -1064,11 +1087,11 @@ describe("rules that apply by path", () => {
 });
 
 // pinned: 0046 is blocking from its first commit and the real config must enable it.
-it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
+it.live("pinned: L6 a second machine is planted and lint.ts exits 1", () =>
+  Effect.gen(function* () {
   const text =
     'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n';
-
-  const result = await lintCopies({ "next/machine.ts": text });
+    const result = yield* promised(() => lintCopies({ "next/machine.ts": text }));
   expect(result("fabrika(one-machine-per-file)", "next/machine.ts")).toEqual([3]);
   // Copy the wrapper as well: its ROOT is its own folder's parent. Keep cwd in the real
   // checkout so its read-only git check still sees a repository. No real product file is planted.
@@ -1097,34 +1120,39 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
 
   expect(out.stdout).toContain("fabrika(one-machine-per-file)");
   expect(out.status).toBe(1);
-});
+  }),
+);
 
 // format: the contract's forbidden Layer import is a lint input, including its static implementation.
-it("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", async () => {
+it.live("format: P21 L12 a PersonCheck contract cannot carry a Layer implementation", () =>
+  Effect.gen(function* () {
   const file = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
-
-  const result = await lintCopies({
-    [file]: Arr.join(
+    const result = yield* promised(() =>
+      lintCopies({
+        [file]: Arr.join(
       [
         'import { Context, Effect, Layer, Schema } from "effect";',
         'export const Answer = Schema.TaggedUnion({ checked: { check: Schema.Literals(["touch", "click"]) }, declined: {} });',
         'export class PersonCheck extends Context.Service<PersonCheck, { readonly ask: (reason: string) => Effect.Effect<typeof Answer.Type> }>()("@kampus/libfabrika/desktop/PersonCheck") {',
         '  static readonly layer = Layer.succeed(PersonCheck, { ask: () => Effect.succeed({ _tag: "checked", check: "touch" }) });',
         "}",
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result("eslint(no-restricted-imports)", file)).toContain(1);
-});
+  }),
+);
 
 // format: the second exported machine is an input to the existing one-machine lint rule.
-it("format: P21 L12 Menu exports only one tea machine", async () => {
+it.live("format: P21 L12 Menu exports only one tea machine", () =>
+  Effect.gen(function* () {
   const file = "next/packages/libfabrika/src/desktop/Menu.ts";
-
-  const result = await lintCopies({
-    [file]: Arr.join(
+    const result = yield* promised(() =>
+      lintCopies({
+        [file]: Arr.join(
       [
         'import { Machine } from "@demlik/tea/effect";',
         'import { Schema } from "effect";',
@@ -1132,20 +1160,23 @@ it("format: P21 L12 Menu exports only one tea machine", async () => {
         'const Msg = Schema.Struct({ type: Schema.Literal("enter") });',
         'export const machine = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
         'export const second = Machine.make({ model: Model, msg: Msg, cmds: [], init: () => [{ _tag: "idle" }, []], update: { enter: (s) => [s, []] } });',
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result("fabrika(one-machine-per-file)", file)).toContain(6);
-});
+  }),
+);
 
 // format: these are compile-time platform names; lint must catch them even when imports erase.
-it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM", async () => {
+it.live("format: P21 L11 desktop public types cannot name Electron, Node or the DOM", () =>
+  Effect.gen(function* () {
   const imported = "next/packages/libfabrika/src/desktop/Menu.ts";
   const globals = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
-
-  const result = await lintCopies({
+    const result = yield* promised(() =>
+      lintCopies({
     [imported]: 'import type { BrowserWindow } from "electron";\nexport type Handle = BrowserWindow;\n',
     [globals]: Arr.join(
       [
@@ -1153,21 +1184,24 @@ it("format: P21 L11 desktop public types cannot name Electron, Node or the DOM",
         "export type DomDocument = Document;",
         "export type NodeTimer = NodeJS.Timeout;",
         "export type ElectronWindow = Electron.BrowserWindow;",
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect.soft(result("eslint(no-restricted-imports)", imported)).toContain(1);
   expect.soft(result("typescript(no-restricted-types)", globals)).toEqual([1, 2, 3, 4]);
-});
+  }),
+);
 
 // format: these module paths include erased imports because platform types count too.
-it("format: P21 L12 desktop refuses gateway and platform imports while admitting access", async () => {
+it.live("format: P21 L12 desktop refuses gateway and platform imports while admitting access", () =>
+  Effect.gen(function* () {
   const file = "next/packages/libfabrika/src/desktop/Menu.ts";
-
-  const result = await lintCopies({
-    [file]: Arr.join(
+    const result = yield* promised(() =>
+      lintCopies({
+        [file]: Arr.join(
       [
         'import type { Grant } from "../access/Access.ts";',
         'import type { Gateway } from "../gateway/Gateway.ts";',
@@ -1176,55 +1210,66 @@ it("format: P21 L12 desktop refuses gateway and platform imports while admitting
         'import type { Brain } from "../cloudflare/objects.ts";',
         'import type { Stats } from "node:fs";',
         'import type { Document } from "@types/web";',
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect(result("eslint(no-restricted-imports)", file)).toEqual([2, 3, 4, 5, 6, 7]);
-});
+  }),
+);
 
 // format: module admission and PascalCase apply to desktop's new front files too.
-it("format: P21 desktop is admitted as a module and keeps the front-file naming rule", async () => {
+it.live("format: P21 desktop is admitted as a module and keeps the front-file naming rule", () =>
+  Effect.gen(function* () {
   const front = "next/packages/libfabrika/src/desktop/Menu.ts";
   const bad = "next/packages/libfabrika/src/desktop/bad.ts";
   const contract = "next/packages/libfabrika/src/desktop/PersonCheck.ts";
   const layer = "next/packages/libfabrika/src/desktop/PersonCheckTest.ts";
-
-  const result = await lintCopies({
+    const result = yield* promised(() =>
+      lintCopies({
     [front]: "export const view = () => [];\n",
     [bad]: "export const view = () => [];\n",
     [contract]: 'import { Context, Schema } from "effect";\nexport const Answer = Schema.String;\n',
     [layer]: 'import { Layer } from "effect";\nexport const layer = Layer.empty;\n',
-  });
-
+      }),
+    );
   expect(result("fabrika(modules)", front)).toEqual([]);
   expect(result("unicorn(filename-case)", front)).toEqual([]);
   expect(result("unicorn(filename-case)", bad)).toEqual([1]);
   expect(result("eslint(no-restricted-imports)", contract)).toEqual([]);
   expect(result("eslint(no-restricted-imports)", layer)).toEqual([]);
-});
+  }),
+);
 
 // L12 kept lint inputs. These copies exercise the actual desktop config.
-it("scenario: P19 a Layer on the service class is refused", async () => {
+it.live("scenario: P19 a Layer on the service class is refused", () =>
+  Effect.gen(function* () {
   const path = "next/packages/libfabrika/src/desktop/BrainService.ts";
-
-  const result = await lintCopies({
+    const result = yield* promised(() =>
+      lintCopies({
     [path]:
       'import {Context, Layer} from "effect";\nexport class BrainService extends Context.Service<BrainService, {}>()("@kampus/libfabrika/desktop/BrainService") { static layer = Layer.empty; }\n',
-  });
-
+      }),
+    );
   expect(result("fabrika(service-contract)", path)).toEqual([2]);
-});
+  }),
+);
 
-it("scenario: P19 desktop-core refuses a native import through the real config", async () => {
+it.live("scenario: P19 desktop-core refuses a native import through the real config", () =>
+  Effect.gen(function* () {
   const path = "next/packages/libfabrika/src/desktop/BrainServiceManaged.ts";
-  const result = await lintCopies({ [path]: 'import { readFile } from "node:fs";\nexport const read = readFile;\n' });
+    const result = yield* promised(() =>
+      lintCopies({ [path]: 'import { readFile } from "node:fs";\nexport const read = readFile;\n' }),
+    );
   expect(result("fabrika(service-contract)", path)).toEqual([1]);
-});
+  }),
+);
 
 // scenario: L12 checks the real config at the new module's paths, including both filename rules.
-it("scenario: T878 L12 repositories keeps private imports, names and one-machine rules", async () => {
+it.live("scenario: T878 L12 repositories keeps private imports, names and one-machine rules", () =>
+  Effect.gen(function* () {
   const src = "next/packages/libfabrika/src/";
 
   const files = {
@@ -1239,8 +1284,7 @@ it("scenario: T878 L12 repositories keeps private imports, names and one-machine
       'import {Machine} from "@demlik/tea/effect";\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n',
     [`${src}repositories/Platform.ts`]: 'import {spawn} from "node:child_process";\nexport {spawn};\n',
   };
-
-  const result = await lintCopies(files);
+    const result = yield* promised(() => lintCopies(files));
   expect(result("fabrika(modules)", `${src}repositories/Repositories.ts`)).toEqual([]);
   expect(result("unicorn(filename-case)", `${src}repositories/Repositories.ts`)).toEqual([]);
   expect(result("unicorn(filename-case)", `${src}repositories/repositories.ts`)).toEqual([1]);
@@ -1251,4 +1295,5 @@ it("scenario: T878 L12 repositories keeps private imports, names and one-machine
   expect(result("fabrika(no-of)", `${src}repositories/Names.ts`)).toEqual([1]);
   expect(result("fabrika(one-machine-per-file)", `${src}repositories/Machines.ts`)).toEqual([3]);
   expect(result("fabrika(no-node-imports)", `${src}repositories/Platform.ts`)).toEqual([1]);
-});
+  }),
+);

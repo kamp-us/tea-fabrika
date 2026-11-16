@@ -31,11 +31,22 @@ import { MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 let appendAdmitted: typeof import("./Authorization.ts").appendAdmitted;
 
-beforeEach(async () => {
-  ({ appendAdmitted } = await vi.importActual<typeof import("./Authorization.ts")>("./Authorization.ts"));
-});
+beforeEach(() =>
+  Effect.gen(function* () {
+    ({ appendAdmitted } = yield* promised(() =>
+      vi.importActual<typeof import("./Authorization.ts")>("./Authorization.ts"),
+    ));
+  }),
+);
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 4, full: 35 }) };
 
@@ -210,8 +221,8 @@ const boot = ClientManager.use((clients) => clients.members).pipe(
 const remove = (id = "revoked") => ClientManager.use((clients) => clients.write(revoke(old, id), from));
 
 describe("P17a, appendAdmitted", () => {
-  it("reads all current membership and appends in that same real transaction, including duplicates", async () => {
-    await fc.assert(
+  it("reads all current membership and appends in that same real transaction, including duplicates", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.integer({ min: 1, max: 5 }),
         fc.integer({ min: 1, max: 5 }),
@@ -277,10 +288,9 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       checks,
-    );
-  });
-  it("a write paused before its transaction cannot use admission from before revoke", async () => {
-    await fc.assert(
+    ));
+  it("a write paused before its transaction cannot use admission from before revoke", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.boolean(),
         fc.integer({ min: 0, max: 500 }),
@@ -336,10 +346,9 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
-  it("corrupt known membership refuses with bad_row and writes nothing, including after reopen", async () => {
-    await fc.assert(
+    ));
+  it("corrupt known membership refuses with bad_row and writes nothing, including after reopen", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("json", "known_fact", "row"),
         fc.boolean(),
@@ -373,10 +382,9 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       checks,
-    );
-  });
-  it("reopened storage keeps revocation and the earlier accepted letter", async () => {
-    await fc.assert(
+    ));
+  it("reopened storage keeps revocation and the earlier accepted letter", () =>
+    fc.assert(
       fc.asyncProperty(fc.string({ maxLength: 30 }), fc.integer({ min: 1, max: 5 }), (body, attempts) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -414,10 +422,9 @@ describe("P17a, appendAdmitted", () => {
         ),
       ),
       { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
-  it("P37 records each ended admitted-append outcome and keeps body and error text out of tags", async () => {
-    await fc.assert(
+    ));
+  it("P37 records each ended admitted-append outcome and keeps body and error text out of tags", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("placed", "not_granted", "bad_row", "storage"),
         fc.uuid(),
@@ -471,6 +478,5 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       { ...checks, numRuns: runsFor({ fast: 3, full: 24 }) },
-    );
-  });
+    ));
 });

@@ -1,17 +1,27 @@
+import { join } from "node:path";
 // p32 and p65, strict layers: the law of `fabrika/package-imports`, the names of our own packages
 // each part of next/ may import (ticket 987, moved from the exam's `layers.test.ts`). Each generated
 // file sits at a path in one part, or in no part, and imports names drawn from every part's list and
 // from names no list holds. Each case runs in process through oxlint's RuleTester with the plan's
 // table; one oxlint run over every case's file then proves the repo's own `.oxlintrc.json` holds the
 // same table at the same paths.
-import { join } from "node:path";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { pipe } from "effect/Function";
+import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { packageImports } from "./package-imports.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const CODE = "fabrika(package-imports)";
 
@@ -323,7 +333,8 @@ const numbered = (path: string, n: number) => path.replace(/\/([^/]+)$/, `/N${n}
 // Plants, each run once and recorded in PR 1251: give the window part's `may` in `.oxlintrc.json`
 // `transport/Connection`; drop the library part's `tests` there; put the library part's glob back
 // to `src/**`; make the rule skip every test again. Each turns this law red.
-it("each part fires on exactly the names of ours its table refuses, wherever its file sits", async () => {
+it.live("each part fires on exactly the names of ours its table refuses, wherever its file sits", () =>
+  Effect.gen(function* () {
   let n = 0;
   const cases = new Map<string, Case>();
   const places = new Set<string>();
@@ -355,11 +366,12 @@ it("each part fires on exactly the names of ours its table refuses, wherever its
   expect(Arr.some([...cases.values()], (one) => one.lines.length > 0)).toBe(true);
   expect(Arr.some([...cases.values()], (one) => one.lines.length === 0)).toBe(true);
 
-  const result = await plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text])));
-  expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+    const result = yield* promised(() => plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
+    expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+      Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
-});
+  }),
+);
 
 /** Where production code of ours sits, and where the suites that read the test depth sit. */
 const CODE_PLACES = ["library", "program"] as const;
@@ -372,7 +384,8 @@ const pathAt = new Map(PLACES);
 // `.oxlintrc.json` `@kampus/vitest` again, as the PR first had it. This law turns red. Ticket 1029
 // draws the SQLite module's subpath too; its plant, run once and restored: leave it out of the
 // "program suites" `may` in `.oxlintrc.json` (red: a program suite's import of it fired).
-it("the library's and a program's code may not import the test primitives, and their shared suites may", async () => {
+it.live("the library's and a program's code may not import the test primitives, and their shared suites may", () =>
+  Effect.gen(function* () {
   let n = 0;
   const cases = new Map<string, Case>();
   const seen = new Set<string>();
@@ -412,8 +425,9 @@ it("the library's and a program's code may not import the test primitives, and t
   );
   expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
-  const result = await plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text])));
-  expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+    const result = yield* promised(() => plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
+    expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+      Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
-});
+  }),
+);

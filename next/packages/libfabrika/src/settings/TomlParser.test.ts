@@ -170,8 +170,8 @@ const same = (a: ReadonlyArray<string>, b: ReadonlyArray<string>) =>
   a.length === b.length && a.every((s, n) => s === b[n]);
 
 describe("L9, TOML paths and lines stay right for every spelling", () => {
-  it("values, and one span per leaf and header with its segments and line", async () => {
-    await fc.assert(
+  it("values, and one span per leaf and header with its segments and line", () =>
+    fc.assert(
       fc.asyncProperty(doc, async (d) => {
         const w = write(d);
         const exit = await parse(w.text);
@@ -190,14 +190,13 @@ describe("L9, TOML paths and lines stay right for every spelling", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 
-  it("broken TOML fails with TomlError at the broken line, even beside a version line", async () => {
+  it("broken TOML fails with TomlError at the broken line, even beside a version line", () => {
     // Both forms are ones toml-eslint-parser 1.0.3 reports on their own line: a missing value is
     // reported on the next line, so it is not used here.
     const broken = fc.constantFrom('bad = "never closed', "bad = ]", "bad = 1 2");
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(doc, broken, fc.nat(), async (d, line, at) => {
         const w = write(d);
         const eol = d.crlf ? "\r\n" : "\n";

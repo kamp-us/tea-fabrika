@@ -50,9 +50,8 @@ const named = (name: string): string =>
 
 const declared = file("export const room = 1;"); // 2
 
-describe("eslint/id-denylist: the old library words as names in next/", async () => {
-  const files = {
-    ...Object.fromEntries(Arr.map(OLD, (name) => [`${APP}/old-${name}.ts`, named(name)])),
+const files = {
+  ...Object.fromEntries(Arr.map(OLD, (name) => [`${APP}/old-${name}.ts`, named(name)])),
     [`${APP}/new.ts`]: file(
       "export const module = 1;",
       "export const modules = [module];",
@@ -91,10 +90,11 @@ describe("eslint/id-denylist: the old library words as names in next/", async ()
     ),
     // The renamed rule, configured as `fabrika/modules`, on the plan's plant of 0043.
     [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
-  };
+};
 
-  const linted = await plant(files);
+const linted = await plant(files);
 
+describe("eslint/id-denylist: the old library words as names in next/", () => {
   // Plant: drop the `next/**` override from `.oxlintrc.json`, or drop a name from its list.
   it("scenario: each listed name is reported where it is declared and as an object key, the config's closed list", () => {
     for (const name of OLD) {

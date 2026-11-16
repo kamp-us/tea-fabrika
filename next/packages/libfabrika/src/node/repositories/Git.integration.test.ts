@@ -217,9 +217,9 @@ const session = (
 describe("0535 memory git contract", () => {
   it.runIf(GitLaws.realOnly)(
     "every generated session answers alike on memory git and real git: codes, ids, trees and the files on disk",
-    async () => {
+    () => {
       const [memory, real] = GitLaws.gits;
-      await fc.assert(
+      return fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),
           fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/),

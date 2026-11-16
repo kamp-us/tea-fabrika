@@ -1,15 +1,25 @@
+import { join } from "node:path";
 // Ticket 908, law 5 of docs/plan/effect-rules-small.md. `fabrika/written-service-type` fires exactly
 // when a service's type holds `ReturnType`, `Effect.Success` or a `typeof` query (decision 0095).
 // Each generated file runs in process through oxlint's RuleTester; one oxlint run over the first
 // file that fires then proves the repo's own .oxlintrc.json turns the rule on for next/ product
 // code and leaves tests out.
-import { join } from "node:path";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { writtenServiceType } from "./written-service-type.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
@@ -342,7 +352,8 @@ const services = fc.array(fc.record({ name: Name, success: fc.nat(), form: fc.na
 
 const product = "next/packages/libfabrika/src/unit/Unit.ts";
 
-it("fires exactly on a read service whose type holds ReturnType, Effect.Success or a typeof query", async () => {
+it.live("fires exactly on a read service whose type holds ReturnType, Effect.Success or a typeof query", () =>
+  Effect.gen(function* () {
   // The generated files with a fire: the first is for the oxlint run below.
   const fired: Array<ReturnType<typeof file>> = [];
   fc.assert(
@@ -383,7 +394,9 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
   ];
 
   const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
-  const linted = await plant(Object.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text])));
+    const linted = yield* promised(() =>
+      plant(Object.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text]))),
+    );
   expect(linted(CODE, product)).toEqual(planted.fires);
   // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
   expect(linted(CODE, tsx)).toEqual(planted.fires);
@@ -391,4 +404,5 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
   for (const path of off) {
     expect(linted(CODE, path), path).toEqual([]);
   }
-});
+  }),
+);

@@ -421,14 +421,13 @@ describe("p21, receive", () => {
     ),
   );
 
-  it("over any sends with resends: each id comes out once, in first-send order, with its first m", async () => {
+  it("over any sends with resends: each id comes out once, in first-send order, with its first m", () => {
     const sendArb = fc.record({
       to: fc.constantFrom("notes:1", "notes:2"),
       id: fc.constantFrom("letter_a", "letter_b", "letter_c", "letter_d", "letter_e"),
       m: fc.oneof(fc.integer(), fc.string({ maxLength: 5 }), fc.constant(null), fc.record({ n: fc.nat() })),
     });
-
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(sendArb, { maxLength: 30 }), (sends) =>
         Effect.runPromise(
           Effect.gen(function* () {

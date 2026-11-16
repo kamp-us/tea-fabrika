@@ -61,15 +61,15 @@ const lease = Arr.join(
   "\n",
 );
 
-describe("no-of", async () => {
-  const all = await plant({
+const all = await plant({
     [FIRES]: fires,
     [PASSES]: passes,
     [TEST]: "export const helperOf = 1;",
     [LEASE]: lease,
     "next/packages/tuval/src/desktop/old.ts": "export const nameOf = (x: number) => x;",
-  });
+});
 
+describe("no-of", () => {
   it("fires on each declared name, of every kind", () => {
     expect(all(CODE, FIRES)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
   });

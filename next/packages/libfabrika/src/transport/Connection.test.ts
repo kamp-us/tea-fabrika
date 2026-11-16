@@ -11,6 +11,13 @@ import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const SEED = 119120;
 
 const RUNS = 100;
@@ -274,9 +281,11 @@ it.effect.prop(
 );
 
 describe("T703 connection driver laws", () => {
-  it("save and callback order survives reentrant rings and delayed ordinary calls", async () => {
+  it.live("save and callback order survives reentrant rings and delayed ordinary calls", () =>
+    Effect.gen(function* () {
     const seen = new Set<string>();
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(Walk, (choices) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -332,13 +341,16 @@ describe("T703 connection driver laws", () => {
                 const [call] = h.calls.splice(pick % h.calls.length, 1);
 
                 const answer =
-                  move % 2 === 0 ? Answer.cases.ok.make({ result: null }) : Answer.cases.refused.make({ reason: "x" });
-
+                      move % 2 === 0
+                        ? Answer.cases.ok.make({ result: null })
+                        : Answer.cases.refused.make({ reason: "x" });
                 yield* Deferred.succeed(call!.reply, answer);
                 yield* settle;
                 const after = h.log.slice(from);
                 const sent = after.findIndex((e) => e._tag === "send");
-                const idle = after.findIndex((e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy);
+                    const idle = after.findIndex(
+                      (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy,
+                    );
                 // The response goes out first; only then is busy cleared.
                 expect(sent).toBeGreaterThanOrEqual(0);
                 expect(idle).toBeGreaterThan(sent);
@@ -417,14 +429,17 @@ describe("T703 connection driver laws", () => {
         ),
       ),
       { seed: SEED, numRuns: RUNS },
+        ),
     );
 
     for (const side of ["admitted", "refused", "reentrant", "call", "released", "failed", "ready", "ring"]) {
       expect(seen, side).toContain(side);
     }
-  });
+    }),
+  );
 
-  it("wake, probe and pre-hello frames keep their results on every observed attachment", async () => {
+  it.live("wake, probe and pre-hello frames keep their results on every observed attachment", () =>
+    Effect.gen(function* () {
     const seen = new Set<string>();
 
     const observation = fc.oneof(
@@ -457,8 +472,8 @@ describe("T703 connection driver laws", () => {
       other: fc.uuid(),
       id: fc.oneof(fc.string(), fc.integer()),
     });
-
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(fc.array(Step, { minLength: 1, maxLength: 40, size: "max" }), (steps) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -538,6 +553,7 @@ describe("T703 connection driver laws", () => {
         ),
       ),
       { seed: SEED, numRuns: RUNS },
+        ),
     );
 
     for (const side of [
@@ -557,7 +573,8 @@ describe("T703 connection driver laws", () => {
     ]) {
       expect(seen, side).toContain(side);
     }
-  });
+    }),
+  );
 });
 
 const isRev = (result: unknown) => typeof result === "object" && result !== null && "rev" in result;
@@ -829,25 +846,31 @@ const Move737 = fc.record({
 });
 
 describe("T737 decodes keep the connection's acceptance, refusals and order, next/", () => {
-  it("D2 D3: frames act as parse-then-decode did, and a failed wait keeps the old guard's reason and reads", async () => {
+  it.live("D2 D3: frames act as parse-then-decode did, and a failed wait keeps the old guard's reason and reads", () =>
+    Effect.gen(function* () {
     const seen = new Set<string>();
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(fc.array(Move737, { minLength: 1, maxLength: 50, size: "max" }), (moves) =>
         Effect.runPromise(
           Effect.gen(function* () {
             const h = harness(online());
 
             // Ordinary calls the old decode accepted, in the order they must reach `call`.
-            const queued: Array<{ readonly id: string | number; readonly method: string; readonly params: unknown }> =
-              [];
-
+                const queued: Array<{
+                  readonly id: string | number;
+                  readonly method: string;
+                  readonly params: unknown;
+                }> = [];
             const check = (from: number) => {
               const calls = h.log
                 .slice(from)
                 .flatMap((e) => (e._tag === "call" ? [{ method: e.method, params: e.params }] : []));
 
               // The calls the old decode accepted, in order, and no other.
-              expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
+                  expect(calls).toEqual(
+                    queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })),
+                  );
             };
 
             for (const { move, pick, frame, failure: f, rev } of moves) {
@@ -947,6 +970,7 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
         ),
       ),
       { seed: SEED, numRuns: RUNS },
+        ),
     );
 
     for (const side of [
@@ -969,7 +993,8 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
     ]) {
       expect(seen, side).toContain(side);
     }
-  });
+    }),
+  );
 });
 
 it.effect.prop(

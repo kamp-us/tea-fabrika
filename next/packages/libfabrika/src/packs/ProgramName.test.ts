@@ -1,3 +1,7 @@
+import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 // P40 slice 1, next/. A program's identity is `pack/program`: exactly two segments, each in the
 // builder's segment alphabet, at most 256 characters in all (0083). Builder contract:
 // `packs/ProgramName.ts` exports the `ProgramName` schema, pure and platform-free.
@@ -5,19 +9,24 @@
 // The law walks a name. A decision tape is folded through the current valid name: an even step
 // grows or replaces one of its segments, staying valid, and an odd step breaks the current name in
 // one way and must be refused. Shrinking a tape recomputes every move from the shortened prefix.
-import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
 import { String as Str, pipe } from "effect";
+import { it } from "@effect/vitest";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 type Api = { readonly ProgramName: Schema.Codec<string> };
 
-const load = async () => {
+const load = () => {
   const file = join(import.meta.dirname, "ProgramName.ts");
   assert(existsSync(file), "P40 not built: packs/ProgramName.ts, the qualified name schema, is absent");
   vi.resetModules();
@@ -132,10 +141,12 @@ const walk = (tape: ReadonlyArray<number>): ReadonlyArray<Step> => {
 const tape = fc.array(fc.nat(), { minLength: 2, maxLength: 40 });
 
 describe("P40 qualified program names", () => {
-  it("L1: a name is accepted exactly when it has one pack and one program segment within the bound", async () => {
-    const { ProgramName } = await load();
+  it.live("L1: a name is accepted exactly when it has one pack and one program segment within the bound", () =>
+    Effect.gen(function* () {
+      const { ProgramName } = yield* promised(() => load());
     const decode = Schema.decodeUnknownOption(ProgramName);
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(tape, async (tape) => {
         const steps = walk(tape);
         // The walk took both kinds of move, so a schema that accepts or refuses everything fails.
@@ -154,11 +165,14 @@ describe("P40 qualified program names", () => {
         }
       }),
       { seed: 119120, numRuns: 200 },
+        ),
     );
-  });
-  it("L1: values that are not text are refused", async () => {
-    const { ProgramName } = await load();
-    await fc.assert(
+    }),
+  );
+  it.live("L1: values that are not text are refused", () =>
+    Effect.gen(function* () {
+      const { ProgramName } = yield* promised(() => load());
+      fc.assert(
       fc.property(
         fc.oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string()), fc.object()),
         (raw) => {
@@ -167,5 +181,6 @@ describe("P40 qualified program names", () => {
       ),
       { seed: 119120, numRuns: 50 },
     );
-  });
+    }),
+  );
 });

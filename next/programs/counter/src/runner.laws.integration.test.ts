@@ -20,6 +20,13 @@ import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Predicate, Result, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const PROCESS: string = Effect.runSync(
   Id.Generator.use((ids) => ids.next(Id.Process)).pipe(Effect.provide(Id.Generator.layer)),
 );
@@ -88,10 +95,12 @@ const reconstruct = (before: unknown, change: Update): unknown => {
 };
 
 describe("p22 real counter in the runner", () => {
-  it("loads a constructed counter and returns typed load failures for broken modules", async () => {
-    const { counter } = await import("./program.ts");
-    const { ProgramDown, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-
+  it.live("loads a constructed counter and returns typed load failures for broken modules", () =>
+    Effect.gen(function* () {
+      const { counter } = yield* promised(() => import("./program.ts"));
+      const { ProgramDown, ProgramLoader }: typeof import("@kampus/libfabrika") = yield* promised(
+        () => import(LIBRARY),
+      );
     const malformed = fc.option(
       fc.oneof(
         fc
@@ -109,8 +118,8 @@ describe("p22 real counter in the runner", () => {
       ),
       { nil: null },
     );
-
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(
         fc.record({
           name: fc.string().map((s) => `broken-${s}`),
@@ -136,8 +145,10 @@ describe("p22 real counter in the runner", () => {
         },
       ),
       { seed: SEED, numRuns: 100 },
+        ),
+      );
+    }),
     );
-  });
   it.live("plant, skip first letter or patch the wrong base: wake and every watcher reproduce the counter", () =>
     Effect.gen(function* () {
       const { counter } = yield* Effect.promise(() => import("./program.ts"));
@@ -304,17 +315,15 @@ describe("p22 real counter in the runner", () => {
       Effect.forEach(
         ["missing", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { counter } = await import("./program.ts");
-            const { ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-            await Effect.runPromise(
               Effect.gen(function* () {
+            const { counter } = yield* Effect.promise(() => import("./program.ts"));
+            const { ProgramLoader }: typeof import("@kampus/libfabrika") = yield* Effect.promise(() => import(LIBRARY));
+            yield* Effect.gen(function* () {
                 const loader = yield* ProgramLoader;
                 expect(yield* Effect.flip(loader.load(value))).toMatchObject({
                   reason: "no_program",
                 });
-              }).pipe(Effect.provide(ProgramLoader.layer({ [PROGRAM]: counter }, {}))),
-            );
+            }).pipe(Effect.provide(ProgramLoader.layer({ [PROGRAM]: counter }, {})));
           }),
         { concurrency: 1, discard: true },
       ),
@@ -362,11 +371,11 @@ const managerLayer = (db: DatabaseSync) =>
   );
 
 describe("P40 the counter under its qualified identity", () => {
-  it("L7: the counter keeps its inputs and count across every reopen, recorded as fabrika/counter", async () => {
-    const { counter } = await import("./program.ts");
-    const A: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-    const C = await import("@kampus/libfabrika/runtime/ProcessStore");
-
+  it.live("L7: the counter keeps its inputs and count across every reopen, recorded as fabrika/counter", () =>
+    Effect.gen(function* () {
+      const { counter } = yield* promised(() => import("./program.ts"));
+      const A: typeof import("@kampus/libfabrika") = yield* promised(() => import(LIBRARY));
+      const C = yield* promised(() => import("@kampus/libfabrika/runtime/ProcessStore"));
     // One session of the runner over the folder's saved files: the declared identity is what the
     // loader serves and what the process is started with, as the brain's bootstrap does.
     const session = (folder: string) =>
@@ -455,7 +464,8 @@ describe("P40 the counter under its qualified identity", () => {
     const inputs = ["inc", "dec", "reset"] as const;
     // The walk: each step sends an input the counter declares, or, once a process has started,
     // reopens it from its saved files. The count the person expects is the counter's own rule.
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 24 }), async (tape) => {
         await Effect.runPromise(
           Effect.scoped(
@@ -472,7 +482,9 @@ describe("P40 the counter under its qualified identity", () => {
                 yield* Effect.scoped(
                   Effect.gen(function* () {
                     const r: Runner = yield* A.ProgramRunner;
-                    expect((yield* r.open(`open-${reopened}`)).view, "the saved count comes back").toEqual({ count });
+                        expect((yield* r.open(`open-${reopened}`)).view, "the saved count comes back").toEqual({
+                          count,
+                        });
 
                     for (; at < tape.length;) {
                       const n = tape[at++]!;
@@ -534,11 +546,13 @@ describe("P40 the counter under its qualified identity", () => {
         );
       }),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
+        ),
     );
-  });
-  it("L8: a registered name stays a process name, whatever the program identity", async () => {
-    const { counter } = await import("./program.ts");
-
+    }),
+  );
+  it.live("L8: a registered name stays a process name, whatever the program identity", () =>
+    Effect.gen(function* () {
+      const { counter } = yield* promised(() => import("./program.ts"));
     // Ways to bend a current registered name toward a program identity. Each holds a slash.
     const bends: ReadonlyArray<(name: string) => string> = [
       () => counter.name,
@@ -551,7 +565,8 @@ describe("P40 the counter under its qualified identity", () => {
 
     // The walk: each step starts the counter's code under a fresh valid registered name, or tries
     // a current name bent into a slashed one. A bent start is refused and records nothing.
-    await fc.assert(
+      yield* promised(() =>
+        fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 2, maxLength: 16 }), async (tape) => {
         await Effect.runPromise(
           Effect.scoped(
@@ -601,6 +616,8 @@ describe("P40 the counter under its qualified identity", () => {
         );
       }),
       { seed: SEED, numRuns: runsFor({ fast: 5, full: 50 }) },
+        ),
+      );
+    }),
     );
-  });
 });

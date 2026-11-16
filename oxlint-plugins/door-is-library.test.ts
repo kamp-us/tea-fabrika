@@ -4,9 +4,8 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
 const code = "fabrika(door-is-library)";
 
-describe("P17a, the library owns the door", async () => {
-  const files = {
-    "next/apps/fabrika/src/door.ts": Arr.join(
+const files = {
+  "next/apps/fabrika/src/door.ts": Arr.join(
       [
         'export {Gateway} from "@kampus/libfabrika/gateway/Gateway";',
         'export type {ConnectionId} from "@kampus/libfabrika/gateway/Gateway";',
@@ -37,9 +36,11 @@ describe("P17a, the library owns the door", async () => {
     "next/packages/libfabrika/src/gateway/Gateway.ts": "export const guard = () => true;",
     "next/apps/fabrika/src/door.integration.test.ts": "const guard = () => true;",
     "next/apps/fabrika/src/brain.ts": "export const wire = () => true;",
-  };
+};
 
-  const linted = await plant(files);
+const linted = await plant(files);
+
+describe("P17a, the library owns the door", () => {
   // The three fronts pass in any of the three retired files. The old barrel's name, a module's
   // internal file and another module's front do not.
   it("plants checks, folds, imports and a wrong re-export in each retired file", () => {

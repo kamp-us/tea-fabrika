@@ -37,8 +37,8 @@ const REPO = ".fabrika/fabrika.toml";
 
 const PERSON = "~/.fabrika/fabrika.toml";
 
-const validate = (repo: string, person: string, version: string) =>
-  Effect.runPromiseExit(
+/** Both files parsed and validated whole, as the instance does at start. */
+const validation = (repo: string, person: string, version: string) =>
     Effect.gen(function* () {
       const toml = yield* Toml;
 
@@ -48,8 +48,10 @@ const validate = (repo: string, person: string, version: string) =>
       };
 
       return yield* Files.validate(Declarations.all, files, { version });
-    }).pipe(Effect.provide(TomlParser.layer)),
-  );
+  }).pipe(Effect.provide(TomlParser.layer));
+
+const validate = (repo: string, person: string, version: string) =>
+  Effect.runPromiseExit(validation(repo, person, version));
 
 /** The one typed failure of an exit, or undefined when it succeeded. */
 const failure = (exit: Exit.Exit<unknown, unknown>) => {
@@ -130,9 +132,9 @@ const scopeOnly = (entries: ReadonlyArray<Entry>, file: "repo" | "person") =>
   entries.length > 0 && entries.every((e) => (file === "repo" ? e._tag === "port" : e._tag === "version"));
 
 describe("L7, every file is strict and whole, and a key outside its file's scope fails", () => {
-  it("both files pass only when every key in each is declared, valid and in scope", async () => {
+  it("both files pass only when every key in each is declared, valid and in scope", () => {
     const entries = fc.array(entry, { maxLength: 4 });
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(entries, entries, async (repo, person) => {
         const exit = await validate(text(repo), text(person), "1.2.3");
         const ok = allowed(repo, "repo") && allowed(person, "person");
@@ -152,8 +154,8 @@ describe("L7, every file is strict and whole, and a key outside its file's scope
   });
 });
 
-it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", async () => {
-  await fc.assert(
+it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         count: fc.integer({ min: 0, max: 1000000 }),
@@ -244,8 +246,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
       },
     ),
     check,
-  );
-});
+  ));
 
 describe("L8, the version refusal comes first, and a supported version goes on", () => {
   const triple = fc.tuple(fc.nat(12), fc.nat(12), fc.nat(12));
@@ -259,8 +260,8 @@ describe("L8, the version refusal comes first, and a supported version goes on",
     scope: { repo: "[instance]\nport = 18800\n", person: "" },
   };
 
-  it("a repo needing a newer fabrika is refused before any other error; an older or equal one goes on", async () => {
-    await fc.assert(
+  it("a repo needing a newer fabrika is refused before any other error; an older or equal one goes on", () =>
+    fc.assert(
       fc.asyncProperty(
         triple,
         fc.oneof(
@@ -291,8 +292,7 @@ describe("L8, the version refusal comes first, and a supported version goes on",
         },
       ),
       { ...check, examples: [[[0, 9, 0], [0, 10, 0], "unknown-repo"]] },
-    );
-  });
+    ));
 });
 
 describe("L10, the three S5 messages, word for word", () => {
@@ -301,40 +301,46 @@ describe("L10, the three S5 messages, word for word", () => {
   const person = (line: string) =>
     ["# ~/.fabrika/fabrika.toml, the person's", "#:schema ./person.json", "", "[instance]", line, ""].join("\n");
 
-  it("format: a port out of range names the file, line, key, value and the rule, and stops", async () => {
+  it.live("format: a port out of range names the file, line, key, value and the rule, and stops", () =>
+    Effect.gen(function* () {
     // format: settings.md S5 gives these words, and a person reads them at start.
-    const exit = await validate("", person("port = 70000"), "0.0.0");
+      const exit = yield* Effect.exit(validation("", person("port = 70000"), "0.0.0"));
     expect(failure(exit)).toMatchObject({
       reason: "invalid",
       message:
         "~/.fabrika/fabrika.toml, line 5: instance.port = 70000 is not a port.\n" +
         "  A port is a whole number from 1 to 65535. The instance did not start.",
     });
-  });
+    }),
+  );
 
-  it("format: a typo names the key and offers the key it meant, and stops", async () => {
+  it.live("format: a typo names the key and offers the key it meant, and stops", () =>
+    Effect.gen(function* () {
     // format: settings.md S5 gives these words, and a person reads them at start.
-    const exit = await validate("", person("prot = 18800"), "0.0.0");
+      const exit = yield* Effect.exit(validation("", person("prot = 18800"), "0.0.0"));
     expect(failure(exit)).toMatchObject({
       reason: "unknown",
       message:
         "~/.fabrika/fabrika.toml, line 5: there is no setting instance.prot. Did you mean instance.port?\n" +
         "  fabrika settings lists every setting. The instance did not start.",
     });
-  });
+    }),
+  );
 
-  it("format: a person's setting in the repo's file says where it may be set, and stops", async () => {
+  it.live("format: a person's setting in the repo's file says where it may be set, and stops", () =>
+    Effect.gen(function* () {
     // format: settings.md S5 gives these words, and a person reads them at start.
-    const exit = await validate("[instance]\nport = 18800\n", "", "0.0.0");
+      const exit = yield* Effect.exit(validation("[instance]\nport = 18800\n", "", "0.0.0"));
     expect(failure(exit)).toMatchObject({
       reason: "scope",
       message:
         ".fabrika/fabrika.toml, line 2: instance.port is a person's setting, so a repo's file may not set it.\n" +
         "  Set it in ~/.fabrika/fabrika.toml, as FABRIKA_INSTANCE_PORT, or with --instance.port. The instance did not start.",
     });
-  });
+    }),
+  );
 
-  it("a typo in the repo's file is never offered a person-only key", async () => {
+  it("a typo in the repo's file is never offered a person-only key", () => {
     // One edit away from `port`: each is a typo of a key the repo's file may not set.
     const typo = fc
       .tuple(fc.nat(3), fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), fc.constantFrom("swap", "add", "drop"))
@@ -348,8 +354,7 @@ describe("L10, the three S5 messages, word for word", () => {
             : word.slice(0, at) + word.slice(at + 1);
       })
       .filter((w) => w !== "port" && w.length > 0);
-
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(typo, async (key) => {
         const exit = await validate(`[instance]\n${key} = 18800\n`, "", "0.0.0");
         const error = failure(exit);

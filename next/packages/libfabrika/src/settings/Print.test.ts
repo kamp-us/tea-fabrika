@@ -169,8 +169,8 @@ const blocks = (report: string, paths: ReadonlyArray<string>) => {
 const collapse = (text: string) => text.replace(/\s+/g, " ").trim();
 
 describe("L5, the printed report says what the snapshot holds, and --all adds only default rows", () => {
-  it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", async () => {
-    await fc.assert(
+  it("shown rows are the explicit ones, or all; each says its value, origin, default and doc", () =>
+    fc.assert(
       fc.asyncProperty(declared, async (ds) => {
         const { snapshot, rows } = await loadRows(ds);
         const paths = rows.map((r) => r.path);
@@ -221,6 +221,5 @@ describe("L5, the printed report says what the snapshot holds, and --all adds on
         });
       }),
       check,
-    );
-  });
+    ));
 });

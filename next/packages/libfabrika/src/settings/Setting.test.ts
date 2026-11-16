@@ -17,6 +17,13 @@ import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 const RUNS = 100;
@@ -117,8 +124,8 @@ describe("L1, a Setting remains a Config", () => {
     expect(Declarations.port.default).toBe(DEFAULT);
   });
 
-  it("yield* under a provided ConfigProvider and parse(provider) agree, for every path and source", async () => {
-    await fc.assert(
+  it("yield* under a provided ConfigProvider and parse(provider) agree, for every path and source", () =>
+    fc.assert(
       fc.asyncProperty(segments, supplied, async (path, value) => {
         const setting = declare(path.join("."));
         expect(Config.isConfig(setting)).toBe(true);
@@ -132,8 +139,7 @@ describe("L1, a Setting remains a Config", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 describe("L2, metadata is required, scope is nonempty, and the decoded type is kept", () => {
@@ -201,8 +207,8 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
 });
 
 describe("L3, absence gives the default, and an invalid present value never does", () => {
-  it("missing files and omitted keys give the declared default; a present invalid value fails", async () => {
-    await fc.assert(
+  it("missing files and omitted keys give the declared default; a present invalid value fails", () =>
+    fc.assert(
       fc.asyncProperty(segments, supplied, fc.boolean(), async (path, value, emptyFile) => {
         const setting = declare(path.join("."));
         const root = value._tag === "absent" ? (emptyFile ? {} : nest(path.slice(0, -1), {})) : nest(path, value.value);
@@ -213,12 +219,12 @@ describe("L3, absence gives the default, and an invalid present value never does
         expect(Exit.isSuccess(exit) ? exit.value : "a failure").toBe(want);
       }),
       check,
-    );
-  });
+    ));
 
-  it("vector: an empty environment and no files give every declared default", async () => {
+  it.live("vector: an empty environment and no files give every declared default", () =>
+    Effect.gen(function* () {
     // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
-    const exit = await run(Declarations.all.parse(ConfigProvider.fromUnknown({})));
+      const exit = yield* promised(() => run(Declarations.all.parse(ConfigProvider.fromUnknown({}))));
     expect(Exit.isSuccess(exit)).toBe(true);
 
     if (Exit.isSuccess(exit)) {
@@ -226,12 +232,13 @@ describe("L3, absence gives the default, and an invalid present value never does
     }
 
     expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
-  });
+    }),
+  );
 });
 
 describe("L4, a dotted declaration path reaches the nested value exactly once", () => {
-  it("the nested value is read, and a literal dotted key is never mistaken for it", async () => {
-    await fc.assert(
+  it("the nested value is read, and a literal dotted key is never mistaken for it", () =>
+    fc.assert(
       fc.asyncProperty(segments, ports, ports, async (path, nested, literal) => {
         fc.pre(nested !== literal && nested !== DEFAULT && literal !== DEFAULT);
         const dotted = path.join(".");
@@ -249,11 +256,10 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
         }
       }),
       check,
-    );
-  });
+    ));
 
-  it("a group reads each declaration at its own path, once, and keeps the declarations", async () => {
-    await fc.assert(
+  it("a group reads each declaration at its own path, once, and keeps the declarations", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.uniqueArray(segments, { minLength: 1, maxLength: 4, selector: (p) => p[0] }),
         ports,
@@ -269,8 +275,7 @@ describe("L4, a dotted declaration path reaches the nested value exactly once", 
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
 it("scenario: T753 L1 a group's named declarations keep their decoded types", () => {

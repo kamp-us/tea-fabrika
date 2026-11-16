@@ -54,8 +54,7 @@ const CASES: Readonly<Record<string, readonly [string, string, boolean]>> = {
 const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
 const UNUSED = at("unused");
 
-describe("edge-comment", async () => {
-  const all = await plant({
+const all = await plant({
     ...Object.fromEntries(
       Arr.map(Object.entries(CASES), ([name, [comment, line]]) => [
         at(name),
@@ -67,11 +66,12 @@ describe("edge-comment", async () => {
         ...PRELUDE,
         "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below",
         "export const a = 1;",
-      ],
+  ],
       "\n",
     ),
-  });
+});
 
+describe("edge-comment", () => {
   it("refuses each wrong edge comment, at the top of the file", () => {
     const refused = Arr.filter(Object.entries(CASES), ([, [, , no]]) => no);
     expect(refused).toHaveLength(8);

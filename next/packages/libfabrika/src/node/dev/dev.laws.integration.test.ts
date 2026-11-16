@@ -61,8 +61,8 @@ const step = fc.record({
   delay: fc.integer({ min: 0, max: 10_000 }),
 });
 
-it("the control plugin returns a typed error for malformed platform port data", async () => {
-  await fc.assert(
+it("the control plugin returns a typed error for malformed platform port data", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.jsonValue().filter((raw) => !Schema.is(Schema.Int)(raw)),
       async (raw) => {
@@ -110,8 +110,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
       },
     ),
     { seed: 119120, numRuns: runsFor({ fast: 5, full: 20 }), examples: [[null], [{}], [1.5]] },
-  );
-});
+  ));
 
 type Step = ReturnType<typeof step.generate>["value"];
 
@@ -125,8 +124,8 @@ const sequence = fc.record({
   reason: fc.constantFrom<"intensity" | "restart_failed">("intensity", "restart_failed"),
 });
 
-it("every observed exit is durable once across restart or brake, with its reason and RSS", async ({ signal }) => {
-  await fc.assert(
+it("every observed exit is durable once across restart or brake, with its reason and RSS", ({ signal }) =>
+  fc.assert(
     fc.asyncProperty(sequence, async ({ restarts, final, reason }) => {
       const platform = { rss: 0, samples: 0 };
 
@@ -401,8 +400,7 @@ it("every observed exit is durable once across restart or brake, with its reason
         [{ restarts: [crashBrake], final: memoryBrake, reason: "intensity" }],
       ],
     },
-  );
-});
+  ));
 
 // L7 and L8: one replace, driven through the real driver. The stand-in runtime is the walk's own:
 // the process that grew too big (pid 27001, control port 27002) and its replacement (27003 on 27004).

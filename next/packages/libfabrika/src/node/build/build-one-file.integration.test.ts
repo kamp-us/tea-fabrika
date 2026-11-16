@@ -23,6 +23,7 @@ import {
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -38,8 +39,15 @@ import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
 import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput } from "rolldown";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, vi } from "vitest";
 import * as StartsTest from "../../settings/StartsTest.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 
@@ -61,8 +69,10 @@ const graph = fc.record({ text, chaos: fc.boolean(), count: fc.integer({ min: 1,
 
 const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 3 }) };
 
-it("A13: an actual built box exposes separate fresh, update and body-free audit calls", async () => {
-  await fc.assert(
+it(
+  "A13: an actual built box exposes separate fresh, update and body-free audit calls",
+  () =>
+    fc.assert(
     fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 6, maxLength: 16 }), (tape) =>
       Effect.runPromise(
         Effect.scoped(
@@ -138,8 +148,9 @@ process.stdout.write(JSON.stringify({model,records,updates}));
       ),
     ),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) },
-  );
-}, 120_000);
+    ),
+  120_000,
+);
 
 // A clean build measured 0.12 to 0.3 s on a laptop; 10 s per generated sample is the budget.
 const buildTimeout = (samples = runs.numRuns) => samples * 10_000;
@@ -229,7 +240,7 @@ const fixture = (value: string, count = 1) => {
   };
 };
 
-const api = async () => {
+const api = () => {
   const file = join(import.meta.dirname, "build.ts");
   assert(existsSync(file), "P16 not built: libfabrika/build reusable one-file build is absent");
 
@@ -363,8 +374,8 @@ describe("P16 p33 one-file build", () => {
   it(
     "text embedding: generated compiled bytes survive exactly and outer import is inert",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(graph, async ({ text, count, chaos }) => {
           const actual = await observe();
 
@@ -391,11 +402,10 @@ describe("P16 p33 one-file build", () => {
           expect(() => inert(planted)).toThrow();
         }),
         runs,
+      ),
       );
-    },
-  );
-  it("same file: clean builds ignore time and checkout path for equal chaos", { timeout: buildTimeout() }, async () => {
-    await fc.assert(
+  it("same file: clean builds ignore time and checkout path for equal chaos", { timeout: buildTimeout() }, () =>
+    fc.assert(
       fc.asyncProperty(graph, async ({ text, count, chaos }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2030-01-01"));
@@ -433,13 +443,13 @@ describe("P16 p33 one-file build", () => {
         expect(sha(readFileSync(second.brain))).toBe(second.build);
       }),
       runs,
+    ),
     );
-  });
   it(
     "table: duplicate selections fail with a typed error and keep the last good file",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(text, async (value) => {
           const f = fixture(value),
             previous = `last-good-${value}`;
@@ -463,13 +473,12 @@ describe("P16 p33 one-file build", () => {
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(previous);
         }),
         runs,
-      );
-    },
+      ),
   );
   it(
     "table: a selection name or export that is not a whole name fails typed and keeps the last good file",
     { timeout: buildTimeout() },
-    async () => {
+    () => {
       // Each bad text has a good name inside it, so a check on only its start or end lets it pass.
       // P40: one `/` between two segments is a qualified name, so a name's bad text puts its
       // separator inside one segment of a good name, and a bare word is bad on its own.
@@ -499,7 +508,7 @@ describe("P16 p33 one-file build", () => {
       mkdirSync(f.options.out);
       writeFileSync(join(f.options.out, "brain.mjs"), previous);
       const selection = f.options.programs[0]!;
-      await fc.assert(
+      return fc.assert(
         fc.asyncProperty(bad, async ([field, value]) => {
           const result = await Effect.runPromise(
             Effect.result(
@@ -523,8 +532,8 @@ describe("P16 p33 one-file build", () => {
   it(
     "plants: actual Rolldown bytes catch escaping, newline normalization and executable source",
     { timeout: buildTimeout(8) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(text, async (value) => {
           const f = fixture(value),
             file = join(f.home, "inner.ts");
@@ -561,8 +570,7 @@ describe("P16 p33 one-file build", () => {
           expect(() => embedded(source, [source])).toThrow("compiled text changed");
         }),
         { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
-      );
-    },
+      ),
   );
 });
 
@@ -872,12 +880,13 @@ const LOCAL_URL = ['"./img.png"', "img.png", "'../tab/img.png'"] as const;
 const boundaryWalks = { seed: 119120, numRuns: runsFor({ fast: 8, full: 8 }) };
 
 describe("P14 slice 1: the tab's page and script ride in the one build", () => {
-  it(
+  it.live(
     "S1.1 generated build walks: a complete tab build carries exactly its emitted page, script and styles; hashes, types and bytes agree",
-    { timeout: walkTimeout },
-    async () => {
+    () =>
+      Effect.gen(function* () {
       const reached = new Set<string>();
-      await fc.assert(
+        yield* Effect.promise(() =>
+          fc.assert(
         fc.asyncProperty(word, choices, async (value, steps) => {
           const calls = await observeCalls();
           const f = tabHome(value);
@@ -911,7 +920,10 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
                   : chosen === "label"
                     ? { ...tab!, label: `p14-${word}-${tab!.label.length}` }
                     : chosen === "style"
-                      ? { ...tab!, styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }] }
+                          ? {
+                              ...tab!,
+                              styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }],
+                            }
                       : chosen === "reorder"
                         ? { ...tab!, styles: [...tab!.styles.slice(1), tab!.styles[0]!] }
                         : chosen === "trap" || chosen === "split"
@@ -962,21 +974,24 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
           }
         }),
         walks,
+          ),
       );
       // A run that never reached a tab cannot claim this law.
       expect(reached.has("add"), "the walks built a tab").toBe(true);
       expect(reached.has("trapped"), "the walks built a stylesheet that tries to end its element").toBe(true);
       expect(reached.has("imported"), "the walks built a stylesheet behind a local @import").toBe(true);
-      expect(Arr.filter([...reached], (m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
-    },
+        expect(Arr.filter([...reached], (m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
+      }),
+    { timeout: walkTimeout },
   );
 
-  it(
+  it.live(
     "S1.2 generated failure walks: a failed compile, bundle or read keeps the last good brain and leaves no temporary output",
-    { timeout: walkTimeout },
-    async () => {
+    () =>
+      Effect.gen(function* () {
       const reached = new Set<string>();
-      await fc.assert(
+        yield* Effect.promise(() =>
+          fc.assert(
         fc.asyncProperty(word, choices, async (value, steps) => {
           const f = tabHome(value);
           // The walk's state: the tab files as written (with any fault they hold), and the last good output.
@@ -1044,20 +1059,23 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
           }
         }),
         walks,
+          ),
       );
       expect(
         Arr.some(["compiler", "bundle", "read"], (fault) => reached.has(`${fault}-after-good`)),
         "a tab fault was reached after a good build",
       ).toBe(true);
-    },
+      }),
+    { timeout: walkTimeout },
   );
 
-  it(
+  it.live(
     "S1.2 generated boundary walks: a tab that reaches a node: or cloudflare: module, or a stylesheet that names a local file, fails typed and keeps the last good brain",
-    { timeout: buildTimeout(boundaryWalks.numRuns * 6) },
-    async () => {
+    () =>
+      Effect.gen(function* () {
       const reached = new Set<string>();
-      await fc.assert(
+        yield* Effect.promise(() =>
+          fc.assert(
         fc.asyncProperty(
           word,
           fc.array(fc.record({ move: fc.nat(), word }), { minLength: 3, maxLength: 6 }),
@@ -1125,6 +1143,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
           },
         ),
         boundaryWalks,
+          ),
       );
 
       // A run that never reached a case cannot claim it.
@@ -1140,22 +1159,23 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
       ]) {
         expect(reached.has(label), `the walks reached ${label}`).toBe(true);
       }
-    },
+      }),
+    { timeout: buildTimeout(boundaryWalks.numRuns * 6) },
   );
 
-  it(
+  it.live(
     "S1.7 [secrets] generated build and request walks: output, responses, errors and spans copy no unrelated credential",
-    { timeout: walkTimeout },
-    async () => {
-      const { fetch } = await import("../../cloudflare/fetch.ts");
-
+    () =>
+      Effect.gen(function* () {
+        const { fetch } = yield* promised(() => import("../../cloudflare/fetch.ts"));
       const secrets = fc.record({
         token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
         name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
       });
 
       const reached = new Set<string>();
-      await fc.assert(
+        yield* promised(() =>
+          fc.assert(
         fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
           const f = tabHome(value);
           // The credentials sit where a build could pick them up: the environment, a token file in
@@ -1194,10 +1214,10 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
 
             const seen = JSON.stringify(
               Arr.map(spans, (s) => ({
-                name: s.name,
-                attributes: [...s.attributes],
-                events: s.events,
-                status: s.status,
+                    name: s.name,
+                    attributes: [...s.attributes],
+                    events: s.events,
+                    status: s.status,
               })),
               (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
             );
@@ -1232,14 +1252,14 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             // A file route reaches no object: each binding answers nothing but the name lookup.
             const config = StartsTest.fixture(
               { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
-              (algorithm, data) =>
-                createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
+                  (algorithm, data) =>
+                    createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
                   .update(data)
                   .digest(),
             );
-
-            const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
-
+                const binding = {
+                  getByName: () => ({ settingsStart: () => Promise.resolve(StartsTest.reply(config)) }),
+                };
             // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
             const env = {
               INSTANCE: JSON.stringify(config),
@@ -1271,11 +1291,13 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
           }
         }),
         walks,
+          ),
       );
       expect([...reached].sort(), "the walks reached a served page and a failed attempt").toEqual(
         expect.arrayContaining(["failure", "page"]),
       );
-    },
+      }),
+    { timeout: walkTimeout },
   );
 });
 
@@ -1516,13 +1538,12 @@ describe("P40 qualified selections through the real builder", () => {
   it(
     "L1, L3, L4 and L5: qualified selections build and embed under their own names, equal short names keep their own code, and a refused build keeps the last good brain",
     { timeout: 20 * p40Runs.numRuns * 10_000 },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (tape) => {
           await Effect.runPromise(Effect.scoped(p40Walk(tape)).pipe(Effect.provide(NodeServices.layer)));
         }),
         p40Runs,
-      );
-    },
+      ),
   );
 });

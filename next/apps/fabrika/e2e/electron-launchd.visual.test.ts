@@ -1,15 +1,18 @@
 // P19 L13, next/. No native work occurs without explicit host opt-in.
 import { NodeServices } from "@effect/platform-node";
-import { Array as Arr, Effect, FileSystem, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { Array as Arr } from "effect";
+import { it } from "@effect/vitest";
 import { Digest } from "effect/crypto";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
 
 const enabled = process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1" && !process.env.CI;
 
-it("pinned: L13 bundles keep native dependencies resolvable outside root node_modules", async () => {
+it.live("pinned: L13 bundles keep native dependencies resolvable outside root node_modules", () =>
   // Review found that pnpm's transitive native dependencies were absent from the root link.
-  await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem,
@@ -67,16 +70,16 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
         }
       }),
     ).pipe(Effect.provide(NodeServices.layer)),
-  );
-});
+);
 
-it.skipIf(!enabled)(
+it.live.skipIf(!enabled)(
   "scenario: L13 unsigned Electron's real brain survives controller death, restarts and fully stops",
-  async () => {
+  () =>
+    Effect.gen(function* () {
     // launchd, Electron's bundled Node and detached process cleanup require a GUI-domain Mac.
     // A skipped run is not L13 evidence. The host lead records readings under runs/.
-    const result = await Effect.runPromise(
-      Effect.scoped(Host.check()).pipe(Effect.provide([NodeServices.layer, Digest.layerWebCrypto])),
+      const result = yield* Effect.scoped(Host.check()).pipe(
+        Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
     );
 
     expect(result.starts).toHaveLength(4);
@@ -84,5 +87,5 @@ it.skipIf(!enabled)(
     expect(result.controllerDeath).toBe(true);
     expect(result.normalExit).toBe(true);
     expect(result.leftovers).toEqual([]);
-  },
+    }),
 );

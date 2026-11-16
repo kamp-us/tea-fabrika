@@ -7,8 +7,9 @@ import { join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { String as Str, Array as Arr } from "effect";
+import { it } from "@effect/vitest";
 import { chromium, type Browser, type Page } from "playwright";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
 
 interface BrowserDriver {
@@ -303,20 +304,21 @@ const rpc = (page: Page, method: string, params: unknown) =>
   });
 
 describe("P12 real browser protocol", () => {
-  it("scenario: p29 instance plant: notify the wrong key, issue one code per tab, or require reconnect after command grant", async () => {
-    const s = await start(),
-      a = await s.context.newPage(),
-      b = await s.context.newPage();
-
-    const first = await driver(a, s.url, "tab-a"),
-      second = await driver(b, s.url, "tab-b");
-
+  it.live(
+    "scenario: p29 instance plant: notify the wrong key, issue one code per tab, or require reconnect after command grant",
+    () =>
+      Effect.gen(function* () {
+        const s = yield* Effect.promise(() => start()),
+          a = yield* Effect.promise(() => s.context.newPage()),
+          b = yield* Effect.promise(() => s.context.newPage());
+        const first = yield* Effect.promise(() => driver(a, s.url, "tab-a")),
+          second = yield* Effect.promise(() => driver(b, s.url, "tab-b"));
     expect(first.extractable).toBe(false);
     expect(first.fingerprint).toBe(second.fingerprint);
     expect(first.first.error.data.reason).toBe("not_granted");
     expect(second.first.error.data.reason).toBe("not_granted");
-    const firstKnock = await rpc(a, "gateway.knock", { label: "Chromium" });
-    const secondKnock = await rpc(b, "gateway.knock", { label: "Chromium" });
+        const firstKnock = yield* Effect.promise(() => rpc(a, "gateway.knock", { label: "Chromium" }));
+        const secondKnock = yield* Effect.promise(() => rpc(b, "gateway.knock", { label: "Chromium" }));
     const code = firstKnock.result.code;
     expect(secondKnock.result.code).toBe(code);
 
@@ -337,53 +339,65 @@ describe("P12 real browser protocol", () => {
     expect(output).not.toContain("PRIVATE KEY");
 
     for (const page of [a, b]) {
-      await page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized"));
-      const reinitialized = Option.getOrUndefined(
-        Arr.findFirst(await state(page), (f: any) => f.method === "reinitialized"),
-      );
+          yield* Effect.promise(() =>
+            page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized")),
+          );
+          const reinitialized = Option.getOrUndefined(
+            Arr.findFirst(yield* Effect.promise(() => state(page)), (f: any) => f.method === "reinitialized"),
+          );
       expect(reinitialized.result.error).toBeUndefined();
-      expect(await page.evaluate(() => window.p12.connections())).toBe(1);
+          expect(yield* Effect.promise(() => page.evaluate(() => window.p12.connections()))).toBe(1);
     }
 
-    const processes = await rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 });
+        const processes = yield* Effect.promise(() =>
+          rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 }),
+        );
     const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
     // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
     expect(started.body.program).toBe("fabrika/counter");
     const pid = started.body.process;
-    expect((await rpc(a, "view.open", { pid })).result).toEqual({ rev: 0, view: { count: 0 } });
+        expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result).toEqual({
+          rev: 0,
+          view: { count: 0 },
+        });
     // W8 scenario: only a real clock can let the local runtime evict an idle Process.
-    await a.waitForTimeout(15_000);
+        yield* Effect.promise(() => a.waitForTimeout(15_000));
     const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
-
-    const accepted = await rpc(a, "process.send", {
+        const accepted = yield* Effect.promise(() =>
+          rpc(a, "process.send", {
       pid,
       letter: "browser-once",
       m: { type: "inc" },
       sentAt: "2026-11-08T04:00:00.000Z",
       seen: 0,
-    });
-
+          }),
+        );
     expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
-    expect((await waiting).result).toMatchObject({ rev: accepted.result.rev });
+        expect((yield* Effect.promise(() => waiting)).result).toMatchObject({ rev: accepted.result.rev });
     // The original connection must receive the patch before a reload or another view.open.
-    await a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch"));
-    const idlePatch = Option.getOrUndefined(Arr.findFirst(await state(a), (f: any) => f.method === "view.patch"));
+        yield* Effect.promise(() =>
+          a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch")),
+        );
+        const idlePatch = Option.getOrUndefined(
+          Arr.findFirst(yield* Effect.promise(() => state(a)), (f: any) => f.method === "view.patch"),
+        );
     expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
-    expect(await a.evaluate(() => window.p12.connections())).toBe(1);
-    const reloaded = await driver(a, s.url, "tab-a");
+        expect(yield* Effect.promise(() => a.evaluate(() => window.p12.connections()))).toBe(1);
+        const reloaded = yield* Effect.promise(() => driver(a, s.url, "tab-a"));
     expect(reloaded.fingerprint).toBe(first.fingerprint);
     expect(reloaded.first.error).toBeUndefined();
-
-    const retry = await rpc(a, "process.send", {
+        const retry = yield* Effect.promise(() =>
+          rpc(a, "process.send", {
       pid,
       letter: "browser-once",
       m: { type: "inc" },
       sentAt: "2026-11-08T04:00:00.000Z",
       seen: 0,
-    });
-
+          }),
+        );
     expect(retry.result).toEqual(accepted.result);
-    expect((await rpc(a, "view.open", { pid })).result.view).toEqual({ count: 1 });
+        expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result.view).toEqual({ count: 1 });
     expect(s.output()).not.toContain("PRIVATE KEY");
-  });
+      }),
+  );
 });

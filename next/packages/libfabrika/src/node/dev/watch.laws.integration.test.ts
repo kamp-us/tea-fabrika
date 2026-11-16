@@ -1,3 +1,4 @@
+import { NodeServices } from "@effect/platform-node";
 // P15 slice 1, next/. The watcher: laws L10 and L18 of the approved plan, through the real Rolldown
 // watcher and the real program build on fixture programs in a temp folder. Only the brain is a
 // double here: `install` and `failed` record what the watcher sent and answer as the brain would.
@@ -13,7 +14,7 @@
 //
 // These start real file watchers. A sandbox that refuses file events (macOS without FSEvents in a
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
-import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -26,12 +27,20 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
+import * as Schema from "effect/Schema";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
-import { assert, describe, expect, it, vi } from "vitest";
+import { assert, describe, expect, vi } from "vitest";
 import { expectTypeOf } from "vitest";
 import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const SEED = 119120;
 /** Sorts `[program, from]` pairs so two lists compare as sets. */
@@ -80,7 +89,7 @@ vi.mock("rolldown", async (original) => {
                 get(target, key) {
                   if (key === "close") {
                     // Replay owns no new Rolldown result to close.
-                    return async () => undefined;
+                    return () => Promise.resolve(undefined);
                   }
 
                   return Reflect.get(target, key);
@@ -97,9 +106,7 @@ vi.mock("rolldown", async (original) => {
               completed,
               (notification) =>
                 Effect.tryPromise({
-                  try: async () => {
-                    await listener(notification);
-                  },
+                  try: () => Promise.resolve(listener(notification)),
                   catch: (cause: unknown): Error => new Error("the repeated Rolldown notification failed", { cause }),
                 }).pipe(Effect.orDie),
               { discard: true, concurrency: 1 },
@@ -240,7 +247,10 @@ const drain = <A>(queue: Queue.Queue<A>, ms: number) =>
   });
 
 describe("P15 slice 1: the watcher", () => {
-  it("L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings or repeating a failure for unchanged bytes", async () => {
+  it.live(
+    "L17/L18: every completed rebuild records its program, bytes, duration and outcome, including initial bundle and compiler failures, without leaking source through warnings or repeating a failure for unchanged bytes",
+    () =>
+      Effect.gen(function* () {
     const seen = new Set<string>();
 
     const Save = fc.record({
@@ -256,8 +266,9 @@ describe("P15 slice 1: the watcher", () => {
     // One save of each move runs before the random tail: three seeded runs at the fast depth drew no
     // compiler move, so the reach check below failed while every rebuild was fine
     // (field/findings/2026-11-15-watch-l17-misses-compiler-move.json).
-    const each = Arr.map(moves, (move): [Save] => [{ program: 0, sentinel: "AAAAAAAAAAAA", move, repeats: 1 }]);
-    await fc.assert(
+        const each = Arr.map(moves, (move): [Save] => [{ program: 0, sentinel: "AAAAAAAAAAAA", move, repeats: 1 }]);
+        yield* promised(() =>
+          fc.assert(
       fc.asyncProperty(Save, (save) =>
         Effect.runPromise(
           Effect.scoped(
@@ -409,13 +420,20 @@ describe("P15 slice 1: the watcher", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true, examples: each },
+          ),
     );
     expect(seen).toEqual(new Set(["fit", "syntax", "compiler"]));
-  }, 300_000);
+      }),
+    300_000,
+  );
 
-  it("L17/L18: save-driven rebuilds record success and ERROR outcomes and close every acquired result", async () => {
+  it.live(
+    "L17/L18: save-driven rebuilds record success and ERROR outcomes and close every acquired result",
+    () =>
+      Effect.gen(function* () {
     const seen = new Set<string>();
-    await fc.assert(
+        yield* promised(() =>
+          fc.assert(
       fc.asyncProperty(fc.gen(), (g) =>
         Effect.runPromise(
           Effect.scoped(
@@ -463,7 +481,9 @@ describe("P15 slice 1: the watcher", () => {
 
               for (let n = 0; n < edits; n++) {
                 // Pick from the reached module's current state, then generate a distinct edit.
-                const moves: ReadonlyArray<"fix" | "syntax" | "edit"> = broken ? ["fix", "syntax"] : ["edit", "syntax"];
+                      const moves: ReadonlyArray<"fix" | "syntax" | "edit"> = broken
+                        ? ["fix", "syntax"]
+                        : ["edit", "syntax"];
                 const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
                 value += g(fc.integer, { min: 1, max: 99 });
                 broken = move === "syntax";
@@ -546,14 +566,21 @@ describe("P15 slice 1: the watcher", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
+          ),
     );
     expect(seen).toEqual(new Set(["edit", "syntax", "fix"]));
-  }, 300_000);
+      }),
+    300_000,
+  );
 
   // L10, p77. Plant: hash the entry file only; push the swap to every process.
-  it("L10: a save changes the hash of exactly the programs whose bundle reaches the file, and only they install", async () => {
+  it.live(
+    "L10: a save changes the hash of exactly the programs whose bundle reaches the file, and only they install",
+    () =>
+      Effect.gen(function* () {
     const seen = new Set<string>();
-    await fc.assert(
+        yield* promised(() =>
+          fc.assert(
       fc.asyncProperty(fc.gen(), (g) =>
         Effect.runPromise(
           Effect.scoped(
@@ -595,11 +622,11 @@ describe("P15 slice 1: the watcher", () => {
                 const file = files[g(fc.nat, { max: files.length - 1 })]!;
                 const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
                 values.set(file, value);
-                const name = pipe(file, Str.endsWith("shared.ts"))
+                      const name = pipe(file, Str.endsWith("shared.ts"))
                   ? "shared"
-                  : pipe(file, Str.endsWith("unused.ts"))
-                    ? "unused"
-                    : "own";
+                        : pipe(file, Str.endsWith("unused.ts"))
+                          ? "unused"
+                          : "own";
                 yield* fs.writeFileString(path.join(home, file), `export const ${name} = ${value};\n`);
                 const got = yield* drain(b.installs, 3000);
                 const changed = Arr.map(
@@ -616,24 +643,33 @@ describe("P15 slice 1: the watcher", () => {
                   hashes.set(i.program, i.hash);
                 }
 
-                seen.add(reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside");
+                      seen.add(
+                        reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside",
+                      );
               }
             }),
           ).pipe(Effect.provide(NodeServices.layer)),
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
+          ),
     );
 
     for (const kind of ["shared", "own", "outside"]) {
       expect(seen.has(kind), `the walk reaches a save to a ${kind} file`).toBe(true);
     }
-  }, 600_000);
+      }),
+    600_000,
+  );
 
   // L18. Plant: never close a BUNDLE_END result; close the watcher outside the scope.
-  it("L18: every Rolldown watcher and every BUNDLE_END and ERROR result is closed when the scope closes, after success, a failure or an interruption at any point the run reached", async () => {
+  it.live(
+    "L18: every Rolldown watcher and every BUNDLE_END and ERROR result is closed when the scope closes, after success, a failure or an interruption at any point the run reached",
+    () =>
+      Effect.gen(function* () {
     const seen = new Set<string>();
-    await fc.assert(
+        yield* promised(() =>
+          fc.assert(
       fc.asyncProperty(fc.gen(), (g) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -688,7 +724,10 @@ describe("P15 slice 1: the watcher", () => {
                     ).toBe(true);
                     seen.add("error");
                   } else {
-                    yield* fs.writeFileString(path.join(home, "shared/shared.ts"), `export const shared = ${cut};\n`);
+                          yield* fs.writeFileString(
+                            path.join(home, "shared/shared.ts"),
+                            `export const shared = ${cut};\n`,
+                          );
                   }
 
                   yield* Deferred.await(reached).pipe(Effect.timeoutOption(3000));
@@ -712,10 +751,13 @@ describe("P15 slice 1: the watcher", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }), endOnFailure: true },
+          ),
     );
 
     for (const point of ["acquire", "reached", "error"]) {
       expect(seen.has(point), `the walk reaches ${point}`).toBe(true);
     }
-  }, 600_000);
+      }),
+    600_000,
+  );
 });

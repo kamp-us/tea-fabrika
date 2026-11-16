@@ -3,11 +3,12 @@
 import { arbGuidedSequence, propertyTrace } from "@demlik/tea/pbt";
 import { expect, expectTypeOf, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
 import * as fc from "fast-check";
 
-it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
-  const { watcher } = await import("./watcher.ts");
-
+it.live("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", () =>
+  Effect.gen(function* () {
+    const { watcher } = yield* Effect.promise(() => import("./watcher.ts"));
   type Model =
     | { readonly _tag: "booting"; readonly failedInputs?: string | null }
     | { readonly _tag: "watching"; readonly failedInputs?: string | null };
@@ -25,8 +26,12 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
   const rebuilt = fc
     .option(fc.string(), { nil: null })
     .map((failedInputs): Extract<Msg, { type: "rebuilt" }> => ({ type: "rebuilt", failedInputs }));
-
-  const attempts = arbGuidedSequence(watcher, {}, { outside: { attempted, rebuilt } }, { maxLength: 60, size: "max" });
+    const attempts = arbGuidedSequence(
+      watcher,
+      {},
+      { outside: { attempted, rebuilt } },
+      { maxLength: 60, size: "max" },
+    );
   const rebuildsSeen = new Set<string>();
 
   const run = propertyTrace(
@@ -77,4 +82,5 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
   expect(rebuildsSeen, "success and failure rebuilds reach both install phases").toEqual(
     new Set(["booting:cleared", "booting:failed", "watching:cleared", "watching:failed"]),
   );
-});
+  }),
+);

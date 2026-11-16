@@ -2,10 +2,19 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
 import * as ci from "./changes.mjs";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // Today's CI, both versions. Covers changes.mjs and the shared gitignore.mjs.
 // Red baseline adapters are preserved in the first T342 tests commit. These laws
@@ -942,8 +951,8 @@ const envOf = (event: string, draft: boolean) => ({
 /** What a run prints for a scope: the reader paths, or all of next/. */
 const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
 
-it("property: probe changes no flag: the first pass prints the same flags for any diff text", async () => {
-  await fc.assert(
+it("property: probe changes no flag: the first pass prints the same flags for any diff text", () =>
+  fc.assert(
     fc.asyncProperty(
       // A NUL ends a path in git's output, so no path holds one.
       fc
@@ -975,10 +984,10 @@ it("property: probe changes no flag: the first pass prints the same flags for an
       },
     ),
     options,
-  );
-});
+  ));
 
-it("scenario: with no parser to import, --same prints what the first pass printed", async () => {
+it.live("scenario: with no parser to import, --same prints what the first pass printed", () =>
+  Effect.gen(function* () {
   // scenario: the import of program.ts rejects, as it does when the parser's install failed. Then
   // a parser that proves every path, and one that proves all but one, for the same runs.
   const rejects = () => Promise.reject(new Error("Cannot find package 'oxc-parser'"));
@@ -1001,14 +1010,19 @@ it("scenario: with no parser to import, --same prints what the first pass printe
   ] as [readonly string[], string][]) {
     const run = git(paths, comments);
     const env = envOf(event, false);
-    const first = await ci.outputs({ same: false, env, run });
-    const again = await ci.outputs({ same: true, env, run, load: rejects });
-    expect({ next: again["next"], filter: again["filter"] }).toEqual({ next: first["next"], filter: first["filter"] });
+      const first = yield* promised(() => ci.outputs({ same: false, env, run }));
+      const again = yield* promised(() => ci.outputs({ same: true, env, run, load: rejects }));
+      expect({ next: again["next"], filter: again["filter"] }).toEqual({
+        next: first["next"],
+        filter: first["filter"],
+      });
     expect(first["next"]).toBe("true");
 
-    const proved = await ci.outputs({ same: true, env, run, load: proves(() => true) });
+      const proved = yield* promised(() => ci.outputs({ same: true, env, run, load: proves(() => true) }));
     expect(proved).toMatchObject({ next: "true", filter: filterOf("readers") });
-    const one = await ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) });
+      const one = yield* promised(() =>
+        ci.outputs({ same: true, env, run, load: proves((p) => !p.endsWith("Wire.ts")) }),
+      );
     expect(one).toMatchObject({
       next: "true",
       filter: paths.includes("next/packages/libfabrika/src/transport/Wire.ts") ? "next/" : filterOf("readers"),
@@ -1018,12 +1032,16 @@ it("scenario: with no parser to import, --same prints what the first pass printe
   // History that cannot be read: both passes run everything, parser or none.
   const broken: Runner = () => ({ status: 128, stdout: "" });
   const env = envOf("pull_request", false);
-  expect(await ci.outputs({ same: true, env, run: broken, load: rejects })).toMatchObject({
+    expect(yield* promised(() => ci.outputs({ same: true, env, run: broken, load: rejects }))).toMatchObject({
     next: "true",
     filter: "next/",
   });
-  expect(await ci.outputs({ same: false, env, run: broken })).toMatchObject({ next: "true", filter: "next/" });
-});
+    expect(yield* promised(() => ci.outputs({ same: false, env, run: broken }))).toMatchObject({
+      next: "true",
+      filter: "next/",
+    });
+  }),
+);
 
 // A push to main that a merge queue run already tested (changes.mjs's `tested`). The queue moves
 // main to the commit it tested, so a push and its queue run share their tree and their base tree;
@@ -1133,8 +1151,8 @@ const prints = (printed: Record<string, string>, expected: Record<string, boolea
 // not ended counts, any head tree counts, any base tree counts, an API error counts as tested, every
 // event asks, a tested push skips check too, the reader ignores a refused answer, the reader asks
 // with no token, and a tree git cannot read is ignored.
-it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", async () => {
-  await fc.assert(
+it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", () =>
+  fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, {});
       const expected = ci.jobs(paths, "push", false);
@@ -1143,12 +1161,16 @@ it("property: a push whose tree and base tree a passed queue run tested skips ne
       expect(printed["probe"]).toBe("false");
     }),
     options,
-  );
-});
+  ));
 
-it("scenario: a tested push of today's and next/ files keeps check, typecheck, build and field, and names the run", async () => {
+it.live(
+  "scenario: a tested push of today's and next/ files keeps check, typecheck, build and field, and names the run",
+  () =>
+    Effect.gen(function* () {
   // scenario: the shape of most queue merges, written out so the flags are read and not compared.
-  const { printed } = await pushed(["apps/fabrika/src/a.ts", "next/packages/libfabrika/src/b.ts"], {});
+      const { printed } = yield* promised(() =>
+        pushed(["apps/fabrika/src/a.ts", "next/packages/libfabrika/src/b.ts"], {}),
+      );
   expect(printed).toMatchObject({
     check: "true",
     typecheck: "true",
@@ -1156,10 +1178,11 @@ it("scenario: a tested push of today's and next/ files keeps check, typecheck, b
     build: "true",
     tested: "7",
   });
-});
+    }),
+);
 
-it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", async () => {
-  await fc.assert(
+it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.oneof(
@@ -1176,22 +1199,20 @@ it("property: a queue run that did not pass, or has not ended, tests nothing, so
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", async () => {
-  await fc.assert(
+it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, { runs: [] });
       prints(printed, ci.jobs(paths, "push", false));
       expect(printed["tested"]).toBe("");
     }),
     options,
-  );
-});
+  ));
 
-it("property: a passed queue run of another tree, or of no readable tree, tests nothing", async () => {
-  await fc.assert(
+it("property: a passed queue run of another tree, or of no readable tree, tests nothing", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom<QueueRun["head_commit"]>({ tree_id: tree.other }, { tree_id: tree.base }, { tree_id: "" }, null),
@@ -1202,24 +1223,24 @@ it("property: a passed queue run of another tree, or of no readable tree, tests 
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: a passed queue run of the same tree built on another base tree tests nothing", async () => {
+it("property: a passed queue run of the same tree built on another base tree tests nothing", () =>
   // A push of two queue entries at once: the last entry's run started from the first's head, so
   // its `--changed` tests missed what the first brought.
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(changedPaths, fc.constantFrom(tree.other, tree.head, ""), async (paths, baseTree) => {
       const { printed } = await pushed(paths, { baseTree });
       prints(printed, ci.jobs(paths, "push", false));
       expect(printed["tested"]).toBe("");
     }),
     options,
-  );
-});
+  ));
 
-it("property: an API error, a malformed answer or a tree git cannot read runs what jobs says", async () => {
-  await fc.assert(
+it.live("property: an API error, a malformed answer or a tree git cannot read runs what jobs says", () =>
+  Effect.gen(function* () {
+    yield* promised(() =>
+      fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom("runs", "commit") satisfies fc.Arbitrary<Fake["fails"]>,
@@ -1230,6 +1251,7 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
       },
     ),
     options,
+      ),
   );
 
   // Answers of the wrong shape, read through the real GitHub reader: each throws or matches nothing.
@@ -1239,8 +1261,8 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
     GITHUB_REPOSITORY: "owner/repo",
     GITHUB_WORKFLOW_REF: "owner/repo/.github/workflows/check.yaml@refs/heads/main",
   };
-
-  await fc.assert(
+    yield* promised(() =>
+      fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom<[unknown, unknown]>(
@@ -1268,18 +1290,20 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
       },
     ),
     options,
+      ),
   );
 
   // git cannot read the push's trees: no question goes to GitHub, and every job the paths need runs.
   const paths = ["apps/fabrika/src/a.ts"];
   const { api, calls } = fakeApi({});
-  const printed = await ci.outputs({ same: false, env: pushEnv, run: git(paths, ""), api });
+    const printed = yield* promised(() => ci.outputs({ same: false, env: pushEnv, run: git(paths, ""), api }));
   prints(printed, ci.jobs(paths, "push", false));
   expect(calls).toEqual([]);
-});
+  }),
+);
 
-it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", async () => {
-  await fc.assert(
+it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom("pull_request", "merge_group"),
@@ -1293,8 +1317,7 @@ it("property: a pull request never asks GitHub, a merge queue's group asks only 
       },
     ),
     options,
-  );
-});
+  ));
 
 // Experiment 292, change 5: a merge queue group passes at once when a ready pull request run already
 // tested its tree green. The pull request run's changes job records the tree it tested (the merge
@@ -1483,7 +1506,10 @@ const grouped = async (paths: readonly string[], api: ci.Api) => {
 
 const noJob = { check: false, typecheck: false, next: false, field: false, build: false };
 
-it("scenario: a group whose tree and base tree a ready pull request run tested green runs no job but changes and ci-required, and links that run", async () => {
+it.live(
+  "scenario: a group whose tree and base tree a ready pull request run tested green runs no job but changes and ci-required, and links that run",
+  () =>
+    Effect.gen(function* () {
   // scenario: the common merge, a next/ file and today's app, so the group would run check,
   // typecheck, next and the build.
   const paths = ["next/packages/libfabrika/src/b.ts", "apps/fabrika/src/a.ts"];
@@ -1491,24 +1517,29 @@ it("scenario: a group whose tree and base tree a ready pull request run tested g
   expect(needed).toMatchObject({ check: true, typecheck: true, next: true, build: true, scope: "all" });
   const { api, made } = world(paths, needed, "none");
   expect(made.name).toBe(`tested-${tree.head}-${tree.base}`);
-  const { printed, notes } = await grouped(paths, api);
+      const { printed, notes } = yield* promised(() => grouped(paths, api));
   prints(printed, noJob);
   expect(printed["tested"]).toBe("11");
   expect(printed["probe"]).toBe("false");
   expect(notes.join("\n")).toContain("https://github.com/owner/repo/actions/runs/11");
   expect(notes.join("\n")).toContain(tree.head);
-});
+    }),
+);
 
-it("scenario: main moved after the pull request run, so the group's base tree has no record and it runs its tests", async () => {
+it.live(
+  "scenario: main moved after the pull request run, so the group's base tree has no record and it runs its tests",
+  () =>
+    Effect.gen(function* () {
   // scenario: the run tested its merge onto an older main. Its record names that main's tree, and
   // the group, built on the newer main, asks for the record of its own.
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api, made } = world(paths, neededOf(paths), "base");
   expect(made.name).toBe(`tested-${tree.head}-${tree.other}`);
-  const { printed } = await grouped(paths, api);
+      const { printed } = yield* promised(() => grouped(paths, api));
   prints(printed, ci.jobs(paths, "merge_group", false));
   expect(printed).toMatchObject({ check: "true", next: "true", tested: "" });
-});
+    }),
+);
 
 // What a changes job may print for one flag or the filter: GitHub hands an output over as text, and
 // a step that did not run leaves it empty.
@@ -1657,8 +1688,8 @@ it("property: covers holds for the same selection and any wider one, and fails w
   );
 });
 
-it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", async () => {
-  await fc.assert(
+it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom(...faults),
@@ -1686,8 +1717,7 @@ it("property: a group passes at once only when a green ready pull request run of
         0,
       ]),
     },
-  );
-});
+  ));
 
 // GitHub's values for a run's event, status and conclusion, and a job's conclusion (its REST
 // docs for workflow runs and jobs), with names a job of this workflow can have.
@@ -1846,10 +1876,10 @@ const malformed = fc.oneof(
   fc.integer(),
 );
 
-it("property: a group whose one GitHub call fails or answers in a wrong shape runs what jobs says", async () => {
+it("property: a group whose one GitHub call fails or answers in a wrong shape runs what jobs says", () => {
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api } = world(paths, neededOf(paths), "none");
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(
       fc.constantFrom("artifacts", "run", "jobs"),
       fc.oneof(
@@ -1869,7 +1899,7 @@ it("property: a group whose one GitHub call fails or answers in a wrong shape ru
   );
 });
 
-it("property: of the artifacts GitHub lists for the group's record, only one of exactly that name, not expired, with its run's id, lets the group pass", async () => {
+it("property: of the artifacts GitHub lists for the group's record, only one of exactly that name, not expired, with its run's id, lets the group pass", () => {
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api } = world(paths, neededOf(paths), "none");
   const name = ci.recordName(tree.head, tree.base);
@@ -1884,8 +1914,7 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
     expired: fc.boolean(),
     workflow_run: fc.constantFrom<unknown>({ id: 11 }, { id: "11" }, { id: 12 }, {}, null),
   });
-
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(fc.array(artifact, { maxLength: 4 }), async (listed) => {
       // The id goes into a URL, so GitHub would read run 11 for "11" too: the fake does the same,
       // and only `matched`'s own check keeps a malformed id out.
@@ -1921,7 +1950,10 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
   );
 });
 
-it("scenario: the GitHub reader asks only with a token, a repository and a workflow file, and fails on a bad answer", async () => {
+it.live(
+  "scenario: the GitHub reader asks only with a token, a repository and a workflow file, and fails on a bad answer",
+  () =>
+    Effect.gen(function* () {
   const runEnv = {
     GITHUB_TOKEN: "token",
     GITHUB_REPOSITORY: "owner/repo",
@@ -1958,12 +1990,15 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   });
 
   expect(api).not.toBeNull();
-  expect(await api?.runs()).toEqual([passed]);
-  expect(await api?.commit(queue.head)).toEqual({ tree: tree.head, parents: [queue.base] });
+      expect(yield* promised(() => Promise.resolve(api?.runs()))).toEqual([passed]);
+      expect(yield* promised(() => Promise.resolve(api?.commit(queue.head)))).toEqual({
+        tree: tree.head,
+        parents: [queue.base],
+      });
   expect(api?.workflow).toBe("check.yaml");
-  expect(await api?.artifacts(artifact.name)).toEqual([artifact]);
-  expect(await api?.run(11)).toEqual({ event: "pull_request" });
-  expect(await api?.jobs(11)).toEqual([job]);
+      expect(yield* promised(() => Promise.resolve(api?.artifacts(artifact.name)))).toEqual([artifact]);
+      expect(yield* promised(() => Promise.resolve(api?.run(11)))).toEqual({ event: "pull_request" });
+      expect(yield* promised(() => Promise.resolve(api?.jobs(11)))).toEqual([job]);
   expect(asked.map((a) => a.url)).toEqual([
     "https://api.example/repos/owner/repo/actions/workflows/check.yaml/runs?event=merge_group&status=success&exclude_pull_requests=true&per_page=50",
     `https://api.example/repos/owner/repo/git/commits/${queue.head}`,
@@ -1973,9 +2008,12 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   ]);
   expect(asked.every((a) => a.auth === "Bearer token")).toBe(true);
 
-  const refused = ci.github(runEnv, () => Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }));
-  await expect(refused?.runs()).rejects.toThrow("403");
-});
+      const refused = ci.github(runEnv, () =>
+        Promise.resolve({ ok: false, status: 403, json: () => Promise.resolve({}) }),
+      );
+      yield* promised(() => expect(refused?.runs()).rejects.toThrow("403"));
+    }),
+);
 
 // 0533: CI runs none of the tests of today's version, and 0539: the merge line runs no tooling test.
 // No event, path list or draft flag turns today's tests, its app end to end or the tooling tests
@@ -1987,8 +2025,8 @@ const flagNames = ["build", "check", "field", "next", "typecheck"];
 
 const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflow_dispatch", "schedule", "");
 
-it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", async () => {
-  await fc.assert(
+it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", () =>
+  fc.assert(
     fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
       expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
       expect(Object.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
@@ -2006,5 +2044,4 @@ it("property: on every event, for any paths and either draft flag, no flag and n
         [null, "workflow_dispatch", false],
       ],
     },
-  );
-});
+  ));

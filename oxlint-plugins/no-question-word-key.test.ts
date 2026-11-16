@@ -1,9 +1,19 @@
+import { it } from "@effect/vitest";
 import type { Context, ESTree } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { expect, vi } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noQuestionWordKey } from "./no-question-word-key.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // oxlint's own rule holds a name written as an identifier; ours holds a literal key (0081).
 const NATIVE = "eslint(id-denylist)";
@@ -112,8 +122,8 @@ const bindings = (name: string, i: number) => [
   `function z${i}(target: {${name}: number}) {target.${name} = 1;}`,
 ];
 
-it("refuses all five words in every declaration and binding form, each by exactly one rule", async () => {
-  await fc.assert(
+it("refuses all five words in every declaration and binding form, each by exactly one rule", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.oneof(fc.constantFrom(...WORDS), unicodeKey),
       identifier,
@@ -161,11 +171,10 @@ it("refuses all five words in every declaration and binding form, each by exactl
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", async () => {
-  await fc.assert(
+it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.tuple(
         identifier,
@@ -211,11 +220,10 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", async () => {
-  await fc.assert(
+it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ value: unicodeKey, dynamic: identifier, near: neighbor, word: fc.constantFrom(...WORDS) }),
       async ({ value, dynamic, near, word }) => {
@@ -245,13 +253,14 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
       },
     ),
     runs,
-  );
-});
+  ));
 
 // format: these exact TypeScript spellings pin decoded names, shorthand and computed identifiers.
-it("format: quoted, escaped, shorthand and computed spellings", async () => {
-  const result = await plant({
-    [PATH]: Arr.join(
+it.live("format: quoted, escaped, shorthand and computed spellings", () =>
+  Effect.gen(function* () {
+    const result = yield* promised(() =>
+      plant({
+        [PATH]: Arr.join(
       [
         "const why = 1;",
         "const a = {why};",
@@ -264,14 +273,16 @@ it("format: quoted, escaped, shorthand and computed spellings", async () => {
         'type H = {["who"](): void};',
         "class I {readonly [`what`] = 1;}",
         "const j = {\\u0077ho: 1};",
-      ],
+        ],
       "\n",
     ),
-  });
+      }),
+    );
 
   expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
   expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
-});
+  }),
+);
 
 // format: the user-facing diagnostic names all five words, asks for the value's noun, assumes no
 // replacement and offers no autofix.

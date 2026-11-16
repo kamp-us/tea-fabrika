@@ -9,9 +9,20 @@ import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Program, Input, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
-import { Array as Arr, Option, Result, Schema, pipe } from "effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const SEED = 119120;
 
@@ -295,8 +306,11 @@ const Bad = fc.oneof(
 );
 
 describe("ticket 806 the checklist's laws", () => {
-  it("L1: every move follows the table, a note on check and the first note kept on a checked item, at every tea step, and no step returns a Cmd", async () => {
-    const { checklistMachine } = await load();
+  it.live(
+    "L1: every move follows the table, a note on check and the first note kept on a checked item, at every tea step, and no step returns a Cmd",
+    () =>
+      Effect.gen(function* () {
+        const { checklistMachine } = yield* promised(() => load());
     propertyInvariant(
       checklistMachine,
       {},
@@ -307,10 +321,12 @@ describe("ticket 806 the checklist's laws", () => {
           : byName(next.items) === byName(expected(prev, msg)) || `${msg.type} broke the table`,
       { seed: SEED, numRuns: RUNS },
     );
-  });
+      }),
+  );
 
-  it("L2: every JSON cut keeps every later model and Cmd", async () => {
-    const { checklist } = await load();
+  it.live("L2: every JSON cut keeps every later model and Cmd", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
     fc.assert(
       fc.property(walked(checklist.machine), ({ msgs }) => {
         syncTest(
@@ -327,20 +343,24 @@ describe("ticket 806 the checklist's laws", () => {
       }),
       { seed: SEED, numRuns: RUNS },
     );
-  });
+    }),
+  );
 
-  it("L3: refuse says taken exactly when the new name exists, missing exactly when the named item does not", async () => {
-    const { checklist } = await load();
+  it.live("L3: refuse says taken exactly when the new name exists, missing exactly when the named item does not", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
     fc.assert(
       fc.property(reached(checklist.machine), ({ model, msg }) => {
         expect(checklist.refuse(model, msg)?.reason ?? null).toBe(reason(model, msg));
       }),
       { seed: SEED, numRuns: RUNS },
     );
-  });
+    }),
+  );
 
-  it("L4: a refused Msg leaves the model, view and Cmds as they were, through the stepper", async () => {
-    const { checklist } = await load();
+  it.live("L4: a refused Msg leaves the model, view and Cmds as they were, through the stepper", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
     const loaded = stepper(checklist);
     expect(Result.isSuccess(loaded)).toBe(true);
     const p = Result.getOrThrow(loaded);
@@ -367,10 +387,12 @@ describe("ticket 806 the checklist's laws", () => {
       }),
       { seed: SEED, numRuns: RUNS },
     );
-  });
+    }),
+  );
 
-  it("L5: wake is 0 while any item is new, else the oldest open since + LATE, else null", async () => {
-    const { checklistMachine, checklist, LATE } = await load();
+  it.live("L5: wake is 0 while any item is new, else the oldest open since + LATE, else null", () =>
+    Effect.gen(function* () {
+      const { checklistMachine, checklist, LATE } = yield* promised(() => load());
     expect(LATE).toBe(DAY);
     propertyInvariant(
       checklistMachine,
@@ -388,11 +410,14 @@ describe("ticket 806 the checklist's laws", () => {
       },
       { seed: SEED, numRuns: RUNS },
     );
-  });
+    }),
+  );
 
-  it("L6: a timer makes an open item late exactly when arrivedAt >= since + LATE, and stamps every new item from arrivedAt", async () => {
-    const { checklistMachine } = await load();
-
+  it.live(
+    "L6: a timer makes an open item late exactly when arrivedAt >= since + LATE, and stamps every new item from arrivedAt",
+    () =>
+      Effect.gen(function* () {
+        const { checklistMachine } = yield* promised(() => load());
     const Timed = walked(checklistMachine, 4).chain((w) =>
       fc
         .record({
@@ -429,10 +454,14 @@ describe("ticket 806 the checklist's laws", () => {
       // Biased toward the edge: `offset` 0 is drawn on most runs.
       { seed: SEED, numRuns: RUNS },
     );
-  });
+      }),
+  );
 
-  it("L7: query left answers a non-negative integer equal to an independent count of items not checked, and to view.left", async () => {
-    const { checklistMachine, checklist } = await load();
+  it.live(
+    "L7: query left answers a non-negative integer equal to an independent count of items not checked, and to view.left",
+    () =>
+      Effect.gen(function* () {
+        const { checklistMachine, checklist } = yield* promised(() => load());
     const port = checklist.inputs.left;
     // The query takes no input: its schema is `Null`, and its answer reads the view alone.
     expect(Schema.decodeSync(port.schema)(null)).toBeNull();
@@ -456,11 +485,13 @@ describe("ticket 806 the checklist's laws", () => {
       { seed: SEED, numRuns: RUNS },
     );
     expect(port._tag).toBe("read");
-  });
+      }),
+  );
 
-  it("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", async () => {
-    const { checklistMachine, finished, Done } = await load();
-    const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
+  it.live("L8: finished is a Done exactly when there is an item and all are checked, and it decodes by Done", () =>
+    Effect.gen(function* () {
+      const { checklistMachine, finished, Done } = yield* promised(() => load());
+      const roundTrip = (d: unknown) => Schema.decodeSync(Done)(Schema.encodeUnknownSync(Done)(d));
     propertyInvariant(
       checklistMachine,
       {},
@@ -482,10 +513,14 @@ describe("ticket 806 the checklist's laws", () => {
       },
       { seed: SEED, numRuns: RUNS },
     );
-  });
+    }),
+  );
 
-  it("L13: query items and view.items answer each item's name, state and the note the walk wrote, in list order", async () => {
-    const { checklist } = await load();
+  it.live(
+    "L13: query items and view.items answer each item's name, state and the note the walk wrote, in list order",
+    () =>
+      Effect.gen(function* () {
+        const { checklist } = yield* promised(() => load());
     const port = checklist.inputs.items;
     expect(port._tag).toBe("read");
     expect(Schema.decodeSync(port.schema)(null)).toBeNull();
@@ -499,10 +534,14 @@ describe("ticket 806 the checklist's laws", () => {
       }),
       { seed: SEED, numRuns: RUNS },
     );
-  });
+      }),
+  );
 
-  it("L14: every reached model and walked Msg goes through the program's schemas back to itself, a reached model one field wrong does not, and a main-shaped model still decodes at v 1", async () => {
-    const { checklist } = await load();
+  it.live(
+    "L14: every reached model and walked Msg goes through the program's schemas back to itself, a reached model one field wrong does not, and a main-shaped model still decodes at v 1",
+    () =>
+      Effect.gen(function* () {
+        const { checklist } = yield* promised(() => load());
     const model = checklist.state.schema;
     const roundTrip = (m: Model) => Schema.decodeUnknownSync(model)(Schema.encodeSync(model)(m));
     const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(model)(u));
@@ -532,10 +571,14 @@ describe("ticket 806 the checklist's laws", () => {
       const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
       expect(Schema.decodeSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
     }
-  });
+      }),
+  );
 
-  it("L15: a Msg one field outside the shape fails to decode through checklist.msg, and the same Msg made good decodes", async () => {
-    const { checklist } = await load();
+  it.live(
+    "L15: a Msg one field outside the shape fails to decode through checklist.msg, and the same Msg made good decodes",
+    () =>
+      Effect.gen(function* () {
+        const { checklist } = yield* promised(() => load());
     const decodes = (u: unknown) => Result.isSuccess(Schema.decodeUnknownResult(checklist.msg)(u));
     fc.assert(
       fc.property(Bad, (bad) => {
@@ -543,19 +586,24 @@ describe("ticket 806 the checklist's laws", () => {
         // The control: the good Msg it was made from decodes, so the refusal is the one field's.
         expect(
           decodes(
-            bad.type === "rename" ? { type: "rename", name: "a", to: "b" } : { type: "check", name: "a", note: "n" },
+                bad.type === "rename"
+                  ? { type: "rename", name: "a", to: "b" }
+                  : { type: "check", name: "a", note: "n" },
           ),
         ).toBe(true);
       }),
       { seed: SEED, numRuns: RUNS },
     );
-  });
+      }),
+  );
 
+  it.live(
   // oxlint-disable-next-line fabrika/law-shape -- a type law: its @ts-expect-error lines are the check, so it is neither a property nor an example
-  it("L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile", async () => {
+    "L11 type: an input key that is no Msg type, a query on a field the view lacks, or a check note that is not a string, does not compile",
+    () =>
+      Effect.gen(function* () {
     // A type law (plan, L11): the checks are the `@ts-expect-error` lines, read by the typecheck.
-    const { checklist, checklistMachine } = await load();
-
+        const { checklist, checklistMachine } = yield* promised(() => load());
     const spec = {
       name: checklist.name,
       machine: checklistMachine,
@@ -591,11 +639,13 @@ describe("ticket 806 the checklist's laws", () => {
     // @ts-expect-error A check's note is a string or absent, never a number.
     const numbered: Check = { type: "check", name: "x", note: 1 };
     expect(numbered.name).toBe("x");
-  });
+      }),
+  );
 
   // pinned: the checklist's input keys, so a renamed or dropped input is seen.
-  it("pinned: the checklist's input keys, so a renamed or dropped input is seen", async () => {
-    const { checklist } = await load();
+  it.live("pinned: the checklist's input keys, so a renamed or dropped input is seen", () =>
+    Effect.gen(function* () {
+      const { checklist } = yield* promised(() => load());
     expect(Object.keys(checklist.inputs).sort()).toEqual([
       "add",
       "check",
@@ -605,5 +655,6 @@ describe("ticket 806 the checklist's laws", () => {
       "rename",
       "uncheck",
     ]);
-  });
+    }),
+  );
 });

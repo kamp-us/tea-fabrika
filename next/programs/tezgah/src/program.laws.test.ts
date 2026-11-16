@@ -42,8 +42,19 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Array as Arr, Option, Result, Schema, pipe } from "effect";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Effect from "effect/Effect";
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const SEED = 119120;
 
@@ -477,17 +488,20 @@ const walk = (p: Stepper, cmds: Iterable<fc.Command<{ events: Array<Event> }, { 
   return events;
 };
 
-const loaded = async () => {
-  const { tezgah } = await load();
+const loaded = Effect.fnUntraced(function* () {
+  const { tezgah } = yield* promised(() => load());
   const p = stepper(tezgah);
   expect(Result.isSuccess(p), "the program's declaration loads").toBe(true);
 
   return Result.getOrThrow(p);
-};
+});
 
 describe("Desk S2a: tezgah's layout changes, at the program", () => {
-  it("L6: a split puts the new tile after the focused one with half its share, and focus moves to it, only after start_child_ok", async () => {
-    const p = await loaded();
+  it.live(
+    "L6: a split puts the new tile after the focused one with half its share, and focus moves to it, only after start_child_ok",
+    () =>
+      Effect.gen(function* () {
+        const p = yield* loaded();
     const seen = { asked: 0, dropped: 0, placed: 0, attached: 0, rehomed: 0 };
     fc.assert(
       fc.property(
@@ -511,7 +525,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
               expect(e.result._tag, `L6: ${e.move} is taken`).toBe("stepped");
               expect(e.after, `L6: ${e.move} changes no view before its start answers`).toEqual(e.before);
               expect(starts(e.cmds), `L6: ${e.move} asks for one start`).toHaveLength(1);
-              expect(live(e.after), `L6: ${e.move}'s tile is not on any workspace yet`).not.toContain(e.waiting.tile);
+                  expect(live(e.after), `L6: ${e.move}'s tile is not on any workspace yet`).not.toContain(
+                    e.waiting.tile,
+                  );
             }
 
             if (e.waiting?._tag === "split" && e.answer === "refused") {
@@ -550,7 +566,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
               }
 
               const shown = order(now!.layout);
-              expect(shown.indexOf(tile), `L6: ${tile} follows ${from} in reading order`).toBe(shown.indexOf(from) + 1);
+                  expect(shown.indexOf(tile), `L6: ${tile} follows ${from} in reading order`).toBe(
+                    shown.indexOf(from) + 1,
+                  );
               expect(now?.focus, "L6: focus moves to the new tile").toBe(tile);
               expect(now?.recent[0], "L6: the new tile is the newest in recent").toBe(tile);
               const made = Option.getOrUndefined(Arr.findFirst(e.after.tiles, (t) => t.id === tile));
@@ -595,9 +613,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
             }
 
             if (e.result._tag === "stepped") {
-              expect(
+                  expect(
                 [...Arr.map(e.after.tiles, (t) => t.id)].sort(),
-                `${e.move}: the tiles are the layouts' tiles`,
+                    `${e.move}: the tiles are the layouts' tiles`,
               ).toEqual([...live(e.after)].sort());
             }
           }
@@ -611,10 +629,14 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       Arr.every(Object.values(seen), (n) => n > 0),
       `L6: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
-  });
+      }),
+  );
 
-  it("L7: closing the last tile is refused last_tile and changes nothing; a close sends focus to the next open tile in reading order", async () => {
-    const p = await loaded();
+  it.live(
+    "L7: closing the last tile is refused last_tile and changes nothing; a close sends focus to the next open tile in reading order",
+    () =>
+      Effect.gen(function* () {
+        const p = yield* loaded();
     const seen = { last: 0, heir: 0, kept: 0 };
     fc.assert(
       fc.property(
@@ -663,10 +685,14 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       Arr.every(Object.values(seen), (n) => n > 0),
       `L7: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
-  });
+      }),
+  );
 
-  it("L8: a close of a tile tezgah started asks one stop_child for its process; a close of any other tile asks for none", async () => {
-    const p = await loaded();
+  it.live(
+    "L8: a close of a tile tezgah started asks one stop_child for its process; a close of any other tile asks for none",
+    () =>
+      Effect.gen(function* () {
+        const p = yield* loaded();
     const seen = { child: 0, other: 0 };
     fc.assert(
       fc.property(
@@ -697,7 +723,8 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       Arr.every(Object.values(seen), (n) => n > 0),
       `L8: the walks closed both kinds ${JSON.stringify(seen)}`,
     ).toBe(true);
-  });
+      }),
+  );
 });
 
 /** L9's blind draw: which kind of move, and which target the fold picks in the state it reached. */
@@ -722,9 +749,11 @@ const Pick = fc.record({
 });
 
 describe("Desk S2a L9: tezgah refuses what names nothing", () => {
-  it("L9: a reused tile id, an unknown from or a missing workspace is refused with its reason and writes nothing", async () => {
-    const p = await loaded();
-
+  it.live(
+    "L9: a reused tile id, an unknown from or a missing workspace is refused with its reason and writes nothing",
+    () =>
+      Effect.gen(function* () {
+        const p = yield* loaded();
     const seen: Record<string, number> = {
       no_workspace: 0,
       id_reused: 0,
@@ -774,7 +803,8 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
               continue;
             }
 
-            const want = w.view.workspaces.length === 0 ? "no_workspace" : kind === "reused" ? "id_reused" : "missing";
+                const want =
+                  w.view.workspaces.length === 0 ? "no_workspace" : kind === "reused" ? "id_reused" : "missing";
             seen[want] = (seen[want] ?? 0) + 1;
             expect(e.result, `L9: ${e.move}`).toEqual({ _tag: "refused", reason: want });
             expect(e.after, "L9: a refusal changes no view").toEqual(e.before);
@@ -789,10 +819,12 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
       Arr.every(Object.values(seen), (n) => n > 0),
       `L9: the walks met every refusal ${JSON.stringify(seen)}`,
     ).toBe(true);
-  });
+      }),
+  );
 
-  it("L9: with no workspace at all, every did is no_workspace", async () => {
-    const p = await loaded();
+  it.live("L9: with no workspace at all, every did is no_workspace", () =>
+    Effect.gen(function* () {
+      const p = yield* loaded();
     fc.assert(
       fc.property(arbMsgSequence(Pick, { minLength: 1, maxLength: 10 }), (picks) => {
         const w = begin(p);
@@ -804,7 +836,8 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
       }),
       { seed: SEED, numRuns: 50 },
     );
-  });
+    }),
+  );
 });
 
 // Desk S3, next/: law L27, each tile's cursor (0165), and the focus moves' rows in tezgah's one
@@ -943,8 +976,8 @@ const splitMove = (p: Stepper, w: World, c: FocusPick) => {
 };
 
 /** tezgah's focus commands, from its one commands table, and the click's move. */
-const focusCommands = async () => {
-  const { commands } = await loadCommands();
+const focusCommands = Effect.fnUntraced(function* () {
+  const { commands } = yield* promised(() => loadCommands());
   return [
     ...pipe(
       commands,
@@ -953,14 +986,17 @@ const focusCommands = async () => {
     ),
     CLICK,
   ];
-};
+});
 
 describe("Desk S3: focus moves at the program", () => {
   // The plan's S3 default rows (tezgah's commands table in "The shape"); the walk below draws its
   // moves from this table, so every row is also a command tezgah's did takes, between any two tiles.
-  it("S3 commands: tezgah's one table names every focus move on tmux's keys, after the prefix, and tezgah's did takes each, and the click's, from any tile to another", async () => {
-    const { commands } = await loadCommands();
-    const boundKeys = (does: string) =>
+  it.live(
+    "S3 commands: tezgah's one table names every focus move on tmux's keys, after the prefix, and tezgah's did takes each, and the click's, from any tile to another",
+    () =>
+      Effect.gen(function* () {
+        const { commands } = yield* promised(() => loadCommands());
+        const boundKeys = (does: string) =>
       Option.getOrUndefined(Arr.findFirst(commands, (c) => c.does === does))?.keys ?? [];
     // The plan's default key rows for S3 ("The shape", tezgah's commands table).
     const want: Readonly<Record<string, ReadonlyArray<string>>> = {
@@ -973,7 +1009,7 @@ describe("Desk S3: focus moves at the program", () => {
       "tezgah.focus_down": ["<prefix>j", "<prefix>arrowdown"],
     };
 
-    const p = await loaded();
+        const p = yield* loaded();
     const seen = new Set<string>();
     fc.assert(
       fc.property(
@@ -1013,11 +1049,15 @@ describe("Desk S3: focus moves at the program", () => {
       { seed: SEED, numRuns: 100 },
     );
     expect(seen.size, "S3: the walk tries every focus move and the click").toBe(Object.keys(want).length + 1);
-  });
+      }),
+  );
 
-  it("S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, as a split's letter does, which every later view shows until a letter leaves that tile again", async () => {
-    const p = await loaded();
-    const does = await focusCommands();
+  it.live(
+    "S3 cursor: a focus move focuses its to, puts it first in recent, and keeps the cursor it left on its from, as a split's letter does, which every later view shows until a letter leaves that tile again",
+    () =>
+      Effect.gen(function* () {
+        const p = yield* loaded();
+        const does = yield* focusCommands();
     const seen = { moved: 0, far: 0, cursor: 0, kept: 0, stale: 0, split: 0, long: 0 };
     fc.assert(
       fc.property(arbMsgSequence(FocusPick, { minLength: 8, maxLength: 60, size: "max" }), (picks) => {
@@ -1100,11 +1140,13 @@ describe("Desk S3: focus moves at the program", () => {
       Arr.every(Object.values(seen), (n) => n > 0),
       `S3: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
-  });
+      }),
+  );
 
-  it("L27: tezgah applies moves in arrival order and never reads sentAt", async () => {
-    const p = await loaded();
-    const does = await focusCommands();
+  it.live("L27: tezgah applies moves in arrival order and never reads sentAt", () =>
+    Effect.gen(function* () {
+      const p = yield* loaded();
+      const does = yield* focusCommands();
     fc.assert(
       fc.property(
         fc.integer({ min: 2, max: 6 }),
@@ -1137,7 +1179,15 @@ describe("Desk S3: focus moves at the program", () => {
               const e = take(
                 p,
                 w,
-                { type: "did", does: name, from, to, via: { _tag: "click" }, cursor: m.cursor, sentAt: iso(clock(i)) },
+                  {
+                    type: "did",
+                    does: name,
+                    from,
+                    to,
+                    via: { _tag: "click" },
+                    cursor: m.cursor,
+                    sentAt: iso(clock(i)),
+                  },
                 false,
               );
 
@@ -1154,7 +1204,9 @@ describe("Desk S3: focus moves at the program", () => {
           const descending = run((i) => (moves.length - i) * 1_000);
 
           for (const [i, view] of shuffled.views.entries()) {
-            expect(view.workspaces[0]!.focus, `L27: after move ${i} the focus is that move's to`).toBe(shuffled.tos[i]);
+              expect(view.workspaces[0]!.focus, `L27: after move ${i} the focus is that move's to`).toBe(
+                shuffled.tos[i],
+              );
           }
 
           expect(shuffled.views, "L27: the clocks a letter carries change no view").toEqual(ascending.views);
@@ -1165,5 +1217,6 @@ describe("Desk S3: focus moves at the program", () => {
       ),
       { seed: SEED, numRuns: 200 },
     );
-  });
+    }),
+  );
 });

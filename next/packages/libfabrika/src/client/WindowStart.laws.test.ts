@@ -50,6 +50,13 @@ import { windowMachineFor, type WindowModel, type WindowMsg, write } from "./Win
 import { MemorySocket } from "./WindowStart.test-support.ts";
 import { start } from "./WindowStart.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const SEED = 119120;
 
 const BUILD = "build_test";
@@ -437,16 +444,22 @@ const retryTiming = (list: ReadonlyArray<Choice>, seed: number, seen: Map<number
   }).pipe(Effect.scoped, Random.withSeed(seed), Effect.provide(TestClock.layer()));
 
 describe("L2: retry jitter in the dial", () => {
-  it("L2 scenario: a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s", async () => {
+  it.live(
+    "L2 scenario: a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s",
+    () =>
+      Effect.gen(function* () {
     const seen = new Map<number, Set<number>>();
-    await fc.assert(
+        yield* promised(() =>
+          fc.assert(
       fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
         await Effect.runPromise(retryTiming(list, seed, seen));
       }),
       { seed: SEED, numRuns: 100 },
+          ),
     );
     expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
-  });
+      }),
+  );
 });
 
 describe("L10: real runtime progress", () => {

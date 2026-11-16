@@ -1,15 +1,30 @@
-// Today's CI, about next/. The unusual keys and line breaks exercise the check's edges.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
+// Today's CI, about next/. The unusual keys and line breaks exercise the check's edges.
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
 import { main, nextFiles, stale, visualFiles } from "./shard-rows.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
+/** A scratch folder under the temp folder, removed when the test's scope closes. */
+const scratch = (prefix: string) =>
+  Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), prefix))),
+    (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+  );
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -91,16 +106,18 @@ it("L2: stale rows are exactly next/ rows whose file Vitest does not select, sor
 // app's end-to-end files are found (red).
 // 0536: the vitest legs' files are the `next` and `next-integration` projects; a visual file, which
 // the end-to-end legs run, is never one, and an integration file in the e2e folder is.
-it("scenario: L3 the real config finds TSX and integration tests and excludes visual, plain e2e, node_modules and dist", async () => {
+it.live(
+  "scenario: L3 the real config finds TSX and integration tests and excludes visual, plain e2e, node_modules and dist",
+  () =>
+    Effect.gen(function* () {
   // This law is about the file set selected by today's real Vitest config. No .tsx test is left
   // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
-  const files = await nextFiles(root);
+      const files = yield* promised(() => nextFiles(root));
   expect(files.length).toBeGreaterThan(0);
   expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
   expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
   expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
-  const folder = mkdtempSync(join(tmpdir(), "t890-files-"));
-
+      const folder = yield* scratch("t890-files-");
   const selected = [
     "next/apps/toy/e2e/stored.integration.test.ts",
     "next/apps/toy/src/db.integration.test.ts",
@@ -116,40 +133,38 @@ it("scenario: L3 the real config finds TSX and integration tests and excludes vi
     "next/apps/toy/src/dist/generated.test.ts",
   ];
 
-  try {
     for (const path of [...selected, ...excluded]) {
       mkdirSync(dirname(join(folder, path)), { recursive: true });
       writeFileSync(join(folder, path), "");
     }
 
-    const actual = await selectedBy(folder, ["next", "next-integration"]);
-    expect(await nextFiles(folder)).toEqual(actual);
+      const actual = yield* promised(() => selectedBy(folder, ["next", "next-integration"]));
+      expect(yield* promised(() => nextFiles(folder))).toEqual(actual);
     expect(actual).toEqual(selected);
 
     // New next/ globs in the config must be read on every call.
     const added = "next/extra/fresh.test.tsx";
     mkdirSync(dirname(join(folder, added)), { recursive: true });
     writeFileSync(join(folder, added), "");
-    globsOf("next").include.push("next/extra/*.test.tsx");
-
-    try {
-      expect(await nextFiles(folder)).toEqual([...selected, added].toSorted());
-    } finally {
-      globsOf("next").include.pop();
-    }
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-});
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => globsOf("next").include.push("next/extra/*.test.tsx")),
+        () =>
+          Effect.gen(function* () {
+            expect(yield* promised(() => nextFiles(folder))).toEqual([...selected, added].toSorted());
+          }),
+        () => Effect.sync(() => globsOf("next").include.pop()),
+      );
+    }),
+);
 
 // T967, E8, today's CI about next/. The end-to-end selection is the `next-visual` project as
 // Vitest reads it: every `*.visual.test.ts(x)` under next/, at any depth, beside the module it
 // tests (0536), and no other file, whatever its folder.
-it("scenario: E8 the end-to-end files are next/'s visual tests and nothing else, on a scratch tree", async () => {
+it.live("scenario: E8 the end-to-end files are next/'s visual tests and nothing else, on a scratch tree", () =>
+  Effect.gen(function* () {
   // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
   // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
-  const folder = mkdtempSync(join(tmpdir(), "t967-e2e-"));
-
+    const folder = yield* scratch("t967-e2e-");
   const selected = [
     "next/apps/fabrika/e2e/a.visual.test.ts",
     "next/apps/fabrika/e2e/node/b.visual.test.ts",
@@ -166,17 +181,14 @@ it("scenario: E8 the end-to-end files are next/'s visual tests and nothing else,
     "apps/fabrika/src/today.visual.test.ts",
   ];
 
-  try {
     for (const path of [...selected, ...left]) {
       mkdirSync(dirname(join(folder, path)), { recursive: true });
       writeFileSync(join(folder, path), "");
     }
 
-    expect(await visualFiles(folder)).toEqual(selected);
-  } finally {
-    rmSync(folder, { recursive: true, force: true });
-  }
-});
+    expect(yield* promised(() => visualFiles(folder))).toEqual(selected);
+  }),
+);
 
 // Generated paths under the three next/ include roots. A folder or file name may start with a dot
 // or end in `.git`, and a folder may be one the config or Vitest's defaults exclude, so the dot
@@ -203,8 +215,8 @@ const testPath = fc
 // lost); read the excludes once at load, so the pushed exclude is ignored (red).
 // Each run gets its own folder and its own Vitest: one Vitest reused over a changed tree kept its
 // first selection, so a reused one is no reference.
-it("L3: next files equal Vitest's own selection on generated trees, new excludes included", async () => {
-  await fc.assert(
+it("L3: next files equal Vitest's own selection on generated trees, new excludes included", () =>
+  fc.assert(
     fc.asyncProperty(fc.uniqueArray(testPath, { minLength: 1, maxLength: 8 }), fc.nat(), async (paths, pick) => {
       const folder = mkdtempSync(join(tmpdir(), "t890-dots-"));
 
@@ -235,8 +247,7 @@ it("L3: next files equal Vitest's own selection on generated trees, new excludes
       }
     }),
     options,
-  );
-});
+  ));
 
 // L4. Plants, each run once on shard-rows.ts and restored: exit 0 always (red); print only the
 // first path (red).
@@ -270,13 +281,14 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
   );
 });
 
-it("scenario: L4 the Node entry passes the real table and file set to the reporter", async () => {
+it.live("scenario: L4 the Node entry passes the real table and file set to the reporter", () =>
+  Effect.gen(function* () {
   // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
   // entry judges the vitest and end-to-end selections together, since one table holds both rows.
   // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
   // e2eFiles out of the entry (red: the entry printed 8 stale rows). The full-depth table,
   // vitest.shards.full.json, is judged after it, against the same files.
-  const files = [...(await nextFiles(root)), ...(await visualFiles(root))];
+    const files = [...(yield* promised(() => nextFiles(root))), ...(yield* promised(() => visualFiles(root)))];
   const rows = stale(measured, files);
   const fullRows = stale(full, files);
   const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
@@ -292,18 +304,19 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
   expect(result.stderr).toBe(
     [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
   );
-});
+  }),
+);
 
 // 0536: a next/ test file runs on exactly one layer. Plants, each run once on vitest.config.ts and
 // restored: drop the integration glob from the `next` project's exclude (red: every integration file
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
-it("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", async () => {
+it.live("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", () =>
+  Effect.gen(function* () {
   const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
     .stdout.split("\0")
     .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
-
-  const [memory, integration, visual] = await Promise.all(
-    ["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name])),
+    const [memory, integration, visual] = yield* promised(() =>
+      Promise.all(["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name]))),
   );
 
   const all = [...memory!, ...integration!, ...visual!];
@@ -313,4 +326,5 @@ it("scenario: every tracked next/ test file is in exactly one of next, next-inte
     integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
   ).toBe(true);
   expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
-});
+  }),
+);

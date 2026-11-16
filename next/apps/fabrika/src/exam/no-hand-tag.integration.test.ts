@@ -39,14 +39,14 @@ const passes = Arr.join(
   "\n",
 );
 
-describe("no-hand-tag", async () => {
-  const all = await plant({
+const all = await plant({
     [FIRES]: fires,
     [PASSES]: passes,
     [LOG]: fires,
     "next/packages/libfabrika/src/coordination/fires.test.ts": fires,
-  });
+});
 
+describe("no-hand-tag", () => {
   it("fires on a key, a type member and a class field named _tag", () => {
     expect(all(CODE, FIRES)).toEqual([2, 3, 4, 5, 6, 7]);
   });

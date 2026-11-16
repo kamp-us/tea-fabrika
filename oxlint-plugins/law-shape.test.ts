@@ -211,8 +211,10 @@ const preamble = (a: string, star: boolean) => [
 
 // Every run plants one file per label, so each of the five labels meets every case line in each run,
 // whatever the seed draws.
-it("fires on exactly the tests that are neither a property nor labeled, and on each type: test whose body runs anything, in any order and spelling", async () => {
-  await fc.assert(
+it(
+  "fires on exactly the tests that are neither a property nor labeled, and on each type: test whose body runs anything, in any order and spelling",
+  () =>
+    fc.assert(
     fc.asyncProperty(
       fc.record({
         a: alias,
@@ -248,8 +250,9 @@ it("fires on exactly the tests that are neither a property nor labeled, and on e
       },
     ),
     runs,
-  );
-}, 120_000);
+    ),
+  120_000,
+);
 
 /** Where a type law's check comes from, the statement that calls it, and whether the law fires. */
 const checks: readonly (readonly [string, string, boolean])[] = [
@@ -269,8 +272,10 @@ const checks: readonly (readonly [string, string, boolean])[] = [
   ["const expectTypeOf = () => ({ toEqualTypeOf: () => true });", "expectTypeOf<1>().toEqualTypeOf<1>();", true],
 ];
 
-it("counts expectTypeOf and assertType only from a value import of vitest or @effect/vitest, under any name or a namespace", async () => {
-  await fc.assert(
+it(
+  "counts expectTypeOf and assertType only from a value import of vitest or @effect/vitest, under any name or a namespace",
+  () =>
+    fc.assert(
     fc.asyncProperty(fc.record({ reason: words, nested: fc.boolean() }), async ({ reason, nested }) => {
       const files = Arr.map(checks, ([source, call, fires], i) => {
         const law = `it("type: ${reason}", () => { ${call} });`;
@@ -280,16 +285,17 @@ it("counts expectTypeOf and assertType only from a value import of vitest or @ef
         );
         return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
       });
-      const result = await linted(Object.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
-      const fired = Object.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
-      const expected = Object.fromEntries(
-        Arr.map(files, ({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]),
-      );
+        const result = await linted(Object.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
+        const fired = Object.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
+        const expected = Object.fromEntries(
+          Arr.map(files, ({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]),
+        );
       expect(fired, files[0]?.text).toEqual(expected);
     }),
     { ...runs, numRuns: 2 },
-  );
-}, 120_000);
+    ),
+  120_000,
+);
 
 /** Where a law's `property` comes from, the call that names it, and whether the law fires. */
 const sources: readonly (readonly [string, string, boolean])[] = [
@@ -309,8 +315,10 @@ const sources: readonly (readonly [string, string, boolean])[] = [
   ["const property = (a: unknown, law: unknown, p: unknown) => 1;", "property", true],
 ];
 
-it("counts the shared runner, property from Testing.test-support.ts, as a property, and no other property", async () => {
-  await fc.assert(
+it(
+  "counts the shared runner, property from Testing.test-support.ts, as a property, and no other property",
+  () =>
+    fc.assert(
     fc.asyncProperty(fc.record({ title: words, nested: fc.boolean() }), async ({ title, nested }) => {
       const files = Arr.map(sources, ([source, call, fires], i) => {
         const run = `${call}(fc.nat(), () => Effect.void, { numRuns: 1 })`;
@@ -333,11 +341,14 @@ it("counts the shared runner, property from Testing.test-support.ts, as a proper
       expect(fired, files[0]?.text).toEqual(expected);
     }),
     { ...runs, numRuns: 2 },
-  );
-}, 120_000);
+    ),
+  120_000,
+);
 
-it("reads next/ and .agents/ tests and shared suites, and leaves today's tests and product files alone", async () => {
-  await fc.assert(
+it(
+  "reads next/ and .agents/ tests and shared suites, and leaves today's tests and product files alone",
+  () =>
+    fc.assert(
     fc.asyncProperty(fc.record({ title: words }), async ({ title }) => {
       const text = Arr.join(
         [
@@ -365,8 +376,9 @@ it("reads next/ and .agents/ tests and shared suites, and leaves today's tests a
       }
     }),
     { ...runs, numRuns: 2 },
-  );
-}, 120_000);
+    ),
+  120_000,
+);
 
 /** Runs `pnpm lint`'s own runner on one planted law at `next/unit.test.ts`, in a clean git checkout under `next/`. */
 const lintOne = (text: string) => {

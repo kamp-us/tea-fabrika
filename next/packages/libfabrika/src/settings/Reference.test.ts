@@ -37,8 +37,8 @@ const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).
   description: "A port is a whole number from 1 to 65535.",
 });
 
-it("T753 L7–L8 byte references distinguish file input from recorded values and keep explicit defaults visible", async () => {
-  await fc.assert(
+it("T753 L7–L8 byte references distinguish file input from recorded values and keep explicit defaults visible", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ count: fc.bigInt({ min: 1n, max: 2n ** 80n }), doc, explicit: fc.boolean(), all: fc.boolean() }),
       async (v) => {
@@ -84,8 +84,7 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
       },
     ),
     check,
-  );
-});
+  ));
 
 // Release triples near 9 and 10, where text order and number order part.
 const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
@@ -146,7 +145,7 @@ const grouped = (ds: Declared) =>
   );
 
 /** The snapshot a real resolve gives for the generated sources. */
-const loaded = async (ds: Declared) => {
+const loaded = (ds: Declared) => {
   const group = grouped(ds);
   const flags: Record<string, string> = {};
   const env: Record<string, string> = {};
@@ -166,20 +165,16 @@ const loaded = async (ds: Declared) => {
       person[d.table] = { ...person[d.table], [d.key]: d.value };
     }
   });
-
-  const snapshot = await Effect.runPromise(
-    Sources.resolve(group, {
+  return Sources.resolve(group, {
       flags: Sources.flags(flags),
       env: Sources.env(env),
       repo: Sources.file(REPO, { value: {}, spans: [] }),
       person: Sources.file(PERSON, { value: person, spans: [] }),
     }).pipe(
       Effect.flatMap((resolved) => Snapshot.make(group, resolved)),
+    Effect.map((snapshot) => ({ group, snapshot })),
       Effect.provide(Digest.layerWebCrypto),
-    ),
   );
-
-  return { group, snapshot };
 };
 
 const triple = (version: string) => version.split(".").map(Number);
@@ -193,10 +188,10 @@ const newer = (a: string, b: string) => {
 };
 
 describe("L5, rows carry the snapshot's values and origins, and only declared keys", () => {
-  it("one row per declaration, by path, with the snapshot's value and origin and the declaration's metadata", async () => {
-    await fc.assert(
+  it("one row per declaration, by path, with the snapshot's value and origin and the declaration's metadata", () =>
+    fc.assert(
       fc.asyncProperty(declared, fc.dictionary(segment, port, { maxKeys: 2 }), async (ds, stray) => {
-        const { group, snapshot } = await loaded(ds);
+        const { group, snapshot } = await Effect.runPromise(loaded(ds));
         // Keys no declaration names, such as a field a later release dropped, stay out of the rows.
         const extra = Object.fromEntries(Object.entries(stray).map(([k, v]) => [`zz-${k}.stray`, v]));
 
@@ -227,15 +222,14 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 describe("L6, a warning names exactly the explicit keys newer than the repo's minimum", () => {
-  it("explicit rows whose since is a newer release than the minimum, by number, and no default row", async () => {
-    await fc.assert(
+  it("explicit rows whose since is a newer release than the minimum, by number, and no default row", () =>
+    fc.assert(
       fc.asyncProperty(declared, release, async (ds, minimum) => {
-        const { group, snapshot } = await loaded(ds);
+        const { group, snapshot } = await Effect.runPromise(loaded(ds));
         const rows = Reference.rows(group, snapshot);
 
         const want = rows
@@ -272,8 +266,7 @@ describe("L6, a warning names exactly the explicit keys newer than the repo's mi
           ],
         ],
       },
-    );
-  });
+    ));
 });
 
 /** The reference as a reader sees it: Markdown escapes and line breaks undone, spaces collapsed. */

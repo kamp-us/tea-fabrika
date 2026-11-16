@@ -95,15 +95,15 @@ const OLD_EDGES = [
   "next/apps/fabrika/alchemy.run.ts",
 ];
 
-describe("no-effect-run-outside-edge", async () => {
-  const all = await plant({
+const all = await plant({
     [FIRES]: runs,
     [PASSES]: passes,
     [EDGE]: edges,
     ...Object.fromEntries(Arr.map(OLD_EDGES, (path) => [path, runs])),
     "next/packages/libfabrika/src/app/process.test.ts": runs,
-  });
+});
 
+describe("no-effect-run-outside-edge", () => {
   it("fires on each run, a runtime's methods and the runtime makers too", () => {
     expect(all(CODE, FIRES)).toEqual(RUN_LINES);
   });

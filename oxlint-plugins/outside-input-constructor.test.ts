@@ -1,13 +1,24 @@
 import * as Arr from "effect/Array";
-import { describe, expect, it } from "vitest";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { describe, expect } from "vitest";
+import { it } from "@effect/vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const code = "fabrika(outside-input-constructor)";
 
 const file = "next/packages/libfabrika/src/data/id.ts";
 
 describe("P17a, outside input has typed failures", () => {
-  it("plants schema aliases and destructured decoder aliases in the door", async () => {
+  it.live("plants schema aliases and destructured decoder aliases in the door", () =>
+    Effect.gen(function* () {
     const door = "next/packages/libfabrika/src/gateway/Gateway.ts";
     const lines = Arr.join(
       [
@@ -24,10 +35,12 @@ describe("P17a, outside input has typed failures", () => {
       ],
       "\n",
     );
-    expect((await plant({ [door]: lines }))(code, door)).toEqual([3, 4, 5, 6, 7, 8, 10]);
-  });
-  it("follows destructured aliases and keeps same-named bindings in their own scope", async () => {
-    const lines = Arr.join(
+      expect((yield* promised(() => plant({ [door]: lines })))(code, door)).toEqual([3, 4, 5, 6, 7, 8, 10]);
+    }),
+  );
+  it.live("follows destructured aliases and keeps same-named bindings in their own scope", () =>
+    Effect.gen(function* () {
+      const lines = Arr.join(
       [
         'import {Id} from "./ids.ts";',
         "declare const wire: string, saved: {body: unknown}, Row: any;",
@@ -41,10 +54,12 @@ describe("P17a, outside input has typed failures", () => {
       ],
       "\n",
     );
-    expect((await plant({ [file]: lines }))(code, file)).toEqual([4, 5, 7, 8]);
-  });
-  it("plants throwing calls, saved aliases, decoder aliases and a wire prefix", async () => {
-    const lines = Arr.join(
+      expect((yield* promised(() => plant({ [file]: lines })))(code, file)).toEqual([4, 5, 7, 8]);
+    }),
+  );
+  it.live("plants throwing calls, saved aliases, decoder aliases and a wire prefix", () =>
+    Effect.gen(function* () {
+      const lines = Arr.join(
       [
         'import {Schema} from "effect";',
         'import {Id as Identity} from "./ids.ts";',
@@ -63,10 +78,12 @@ describe("P17a, outside input has typed failures", () => {
       ],
       "\n",
     );
-    expect((await plant({ [file]: lines }))(code, file)).toEqual([4, 6, 7, 9, 10, 11, 12, 13, 14]);
-  });
-  it("permits code constants and Effect or Result decoders", async () => {
-    const lines = Arr.join(
+      expect((yield* promised(() => plant({ [file]: lines })))(code, file)).toEqual([4, 6, 7, 9, 10, 11, 12, 13, 14]);
+    }),
+  );
+  it.live("permits code constants and Effect or Result decoders", () =>
+    Effect.gen(function* () {
+      const lines = Arr.join(
       [
         'import {Schema} from "effect";',
         'import {Id} from "./ids.ts";',
@@ -85,9 +102,11 @@ describe("P17a, outside input has typed failures", () => {
       ],
       "\n",
     );
-    expect((await plant({ [file]: lines }))(code, file)).toEqual([]);
-  });
-  it("covers each named production path and leaves other files alone", async () => {
+      expect((yield* promised(() => plant({ [file]: lines })))(code, file)).toEqual([]);
+    }),
+  );
+  it.live("covers each named production path and leaves other files alone", () =>
+    Effect.gen(function* () {
     const paths = [
       "data/id",
       "ledger/Log",
@@ -109,16 +128,18 @@ describe("P17a, outside input has typed failures", () => {
     );
 
     const other = "next/packages/libfabrika/src/access/Access.ts";
-
-    const linted = await plant({
+      const linted = yield* promised(() =>
+        plant({
       ...files,
       [other]: "declare const raw: unknown, Row: any; Row.make(raw);",
-    });
+        }),
+      );
 
     for (const path of Object.keys(files)) {
       expect(linted(code, path)).toEqual([1]);
     }
 
     expect(linted(code, other)).toEqual([]);
-  });
+    }),
+  );
 });

@@ -1,7 +1,8 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect } from "effect";
+import { it } from "@effect/vitest";
+import { type Duration, Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import {
   Unread,
   collect,
@@ -17,6 +18,13 @@ import {
   type Timings,
   TRIES,
 } from "./time-table.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // Today's CI, both workflows. Covers time-table.ts, each test leg's time table. Inputs are shaped as
 // GitHub's jobs API and Vitest's JSON reporter write them; every other input is broken. Each plant
@@ -221,16 +229,22 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
   );
 });
 
-it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output", async () => {
+it.live(
+  "format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output",
+  () =>
+    Effect.gen(function* () {
   // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
-  const report = { testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)] };
-
-  const timings = await timingsOf(
+      const report = {
+        testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)],
+      };
+      const timings = yield* promised(() =>
+        timingsOf(
     { ...env, GITHUB_SHA: "m".repeat(40) },
     io(
       () => job,
       () => JSON.stringify(report),
     ),
+        ),
   );
 
   expect(timings).toEqual({
@@ -252,7 +266,8 @@ it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, e
   });
   expect(JSON.stringify(timings)).not.toContain("test output");
   expect(fileName(timings)).toBe("timings-next-3.json");
-});
+    }),
+);
 
 // What GitHub or a leg could hand over instead: nothing, the wrong JSON, or a near miss.
 const broken = fc.oneof(
@@ -291,10 +306,10 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
   );
 });
 
-it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", async () => {
+it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", () => {
   // Plant: let a failed read escape collect as a defect, as a bare JSON.parse of a missing report would.
   const key = fc.constantFrom(...Object.keys(env));
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(
       fc.uniqueArray(key),
       fc.oneof(broken, fc.constant(job)),
@@ -332,7 +347,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
   );
 });
 
-it("TT6: the jobs API is asked again, a pause apart, until the steps before this one show an end, at most TRIES times", async () => {
+it("TT6: the jobs API is asked again, a pause apart, until the steps before this one show an end, at most TRIES times", () => {
   // Plant: read the answer once, so the step just before is timed as never ended.
   const running = structuredClone(job);
   running.steps[1]!.completed_at = null;
@@ -341,7 +356,7 @@ it("TT6: the jobs API is asked again, a pause apart, until the steps before this
 
   // How many answers come before the step just before the time table shows its end: none, some, or
   // more than the tries allow.
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(fc.integer({ min: 0, max: TRIES + 3 }), async (late) => {
       const asked: number[] = [];
 

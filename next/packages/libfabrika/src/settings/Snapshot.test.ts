@@ -175,8 +175,8 @@ const objectFlow = fc
   );
 
 describe("T753 complete checked snapshots", () => {
-  it("L4 exact JSON and decoded values survive a checked snapshot round trip", async () => {
-    await fc.assert(
+  it("L4 exact JSON and decoded values survive a checked snapshot round trip", () =>
+    fc.assert(
       fc.asyncProperty(savedFlow, async (v) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
@@ -192,11 +192,10 @@ describe("T753 complete checked snapshots", () => {
         expect(checked.snapshot).toEqual(made);
       }),
       check,
-    );
-  });
+    ));
 
-  it("L5 every declared value and origin is required and extra or renamed keys fail", async () => {
-    await fc.assert(
+  it("L5 every declared value and origin is required and extra or renamed keys fail", () =>
+    fc.assert(
       fc.asyncProperty(
         savedFlow.chain((v) => {
           const { group } = save(v);
@@ -244,11 +243,10 @@ describe("T753 complete checked snapshots", () => {
         },
       ),
       check,
-    );
-  });
+    ));
 
-  it("L6 canonical values alone determine the hash and corrupt values or hashes fail", async () => {
-    await fc.assert(
+  it("L6 canonical values alone determine the hash and corrupt values or hashes fail", () =>
+    fc.assert(
       fc.asyncProperty(fc.record({ scalar: savedFlow, object: objectFlow }), async ({ scalar: v, object }) => {
         const flow = save(v);
         const made = await digest(Snapshot.make(flow.group, flow));
@@ -345,8 +343,7 @@ describe("T753 complete checked snapshots", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 const snapshot = <A>(group: Setting.Group<A>, slots: Sources.Slots) =>
@@ -384,8 +381,8 @@ const portGroup = (paths: ReadonlyArray<readonly [string, string]>) =>
   );
 
 describe("the snapshot: encoded values by path, and a hash of the values alone", () => {
-  it("equal values give one hash, whatever source and declaration order; other values another", async () => {
-    await fc.assert(
+  it("equal values give one hash, whatever source and declaration order; other values another", () =>
+    fc.assert(
       fc.asyncProperty(declared, fc.integer({ min: 0, max: 2 }), async ([paths, values], changed) => {
         const flags = Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
 
@@ -409,8 +406,7 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
         expect(Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(saved))).toEqual(fromFlags);
       }),
       check,
-    );
-  });
+    ));
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
@@ -473,8 +469,8 @@ const placed = (key: string, word: string) => {
 };
 
 describe("L14 [secrets], only declared settings reach values, errors and spans", () => {
-  it("a secret in an unrelated env field, an unknown file field or under a declared key never reaches an output", async () => {
-    await fc.assert(
+  it("a secret in an unrelated env field, an unknown file field or under a declared key never reaches an output", () =>
+    fc.assert(
       fc.asyncProperty(
         fc
           .tuple(secret, fc.constantFrom("token", "key", "password"))
@@ -530,12 +526,11 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
-it("T753 L9 [secrets] malformed snapshots keep rejected values out of public diagnostics", async () => {
-  await fc.assert(
+it("T753 L9 [secrets] malformed snapshots keep rejected values out of public diagnostics", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ flow: savedFlow, word: secret, field: fc.constantFrom("value", "extra", "origin", "hash") }),
       async ({ flow: v, word, field }) => {
@@ -604,5 +599,4 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
       },
     ),
     check,
-  );
-});
+  ));

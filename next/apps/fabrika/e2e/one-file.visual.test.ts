@@ -17,6 +17,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -28,7 +29,7 @@ import { String as Str, pipe, Array as Arr } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import type { Built } from "../src/build.ts";
 import { heldPort } from "../src/port.test-support.ts";
 import * as RecordWireTest from "../src/record-wire.test-support.ts";
@@ -65,8 +66,8 @@ const field = (v: string | Buffer) => {
 };
 
 describe("P16 real browser from a copied one-file build", () => {
-  it("assets: generated secondary imports execute and CSS loads; blocking the secondary route kills the same check", async () => {
-    await fc.assert(
+  it("assets: generated secondary imports execute and CSS loads; blocking the secondary route kills the same check", () =>
+    fc.assert(
       fc.asyncProperty(
         fc
           .array(fc.constantFrom("雪", "🫖", "</script>", "\\", "'", '"', "\r\n"), {
@@ -228,8 +229,7 @@ describe("P16 real browser from a copied one-file build", () => {
         },
       ),
       { seed: 119120, numRuns: runsFor({ fast: 2, full: 2 }) },
-    );
-  });
+    ));
 });
 
 // P14 slice 1 (ticket 698): S1.5 and the scoped browser fixture S1.6 supervises. The real counter
@@ -470,14 +470,16 @@ const servedCounter = Effect.gen(function* () {
 });
 
 describe("P14 slice 1: the typed counter view in a real tab", () => {
-  it("S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages", async () => {
-    const { stepper } = await import("@kampus/libfabrika");
-    const { counter } = await import("@kampus/counter");
+  it.live(
+    "S1.5 generated presses: the rendered counter shows its program's data and emits only its program's messages",
+    () =>
+      Effect.gen(function* () {
+        const { stepper } = yield* Effect.promise(() => import("@kampus/libfabrika"));
+        const { counter } = yield* Effect.promise(() => import("@kampus/counter"));
     const program = Result.getOrThrow(stepper(counter));
     const inputs = Object.keys(counter.inputs);
     const pressedTypes = new Set<string>();
-    await Effect.runPromise(
-      Effect.scoped(
+        yield* Effect.scoped(
         Effect.gen(function* () {
           const { built, instance, page } = yield* servedCounter;
           yield* Effect.promise(async () => {
@@ -524,8 +526,11 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
                   pressedTypes.add(type);
                   await button(type).click();
                   const sent = (await pressed()).slice(start);
-                  expect(sent, "each press emits one Msg, the program's own").toEqual([...sent.slice(0, n), { type }]);
-                  expect(Arr.every(sent, (m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
+                    expect(sent, "each press emits one Msg, the program's own").toEqual([
+                      ...sent.slice(0, n),
+                      { type },
+                    ]);
+                    expect(Arr.every(sent, (m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
                   // The view never steps the program: until the next view arrives, the count stays.
                   expect(await count.textContent(), "a press alone changes nothing shown").toBe(
                     String((step.view as { count: number }).count),
@@ -543,8 +548,8 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
             );
           });
         }),
-      ).pipe(Effect.raceFirst(stopped)),
-    );
+        ).pipe(Effect.raceFirst(stopped));
     expect([...pressedTypes].sort(), "the walks pressed every input").toEqual([...inputs].sort());
-  });
+      }),
+  );
 });
