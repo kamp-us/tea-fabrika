@@ -77,3 +77,17 @@ export class PipePrograms extends Rebac.Permission<PipePrograms>()(
     permission: "pipe",
   },
 ) {}
+
+/**
+ * The right of one registered name to mail another, checked for the sending name on the receiving
+ * name: a live pipe's `pipes_to` row grants it, one way, while the pipe lives (0526).
+ *
+ * @stability unstable
+ * @category rights
+ */
+export class MailName extends Rebac.Permission<MailName>()("@kampus/libfabrika/permissions/Model.MailName", {
+  model: Model,
+  on: "name",
+  permission: "mail",
+  subject: "name",
+}) {}

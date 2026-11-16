@@ -97,13 +97,6 @@ export class PipeTable {
       .map((held) => held.piped);
   }
 
-  /** Whether a live pipe runs from `source`'s name to `to`'s: the writer's right to mail its reader. */
-  mails(source: string, to: string): boolean {
-    return [...this.model.pipes.values()].some(
-      (held) => held.live && held.piped.from.name === source && held.piped.to.name === to,
-    );
-  }
-
   /** The live pipe into `name`'s `input`, if any: a pipe never fans in. */
   into(name: string, input: string): Option.Option<Listed> {
     return Option.fromUndefinedOr(

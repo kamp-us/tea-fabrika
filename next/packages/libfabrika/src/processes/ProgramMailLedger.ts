@@ -5,7 +5,8 @@
  * both under the command's `/mail` ID. A repeat answers the first receipt and appends nothing; a
  * stale sender, a name outside the host's grant or a missing name writes nothing at all, and a send
  * never registers or starts a name. Besides the host's grant, a child and the program that started
- * it reach each other, and nobody else does.
+ * it reach each other, a live pipe's writer reaches its reader through the `mail` right, and nobody
+ * else does.
  *
  * @stability unstable
  */
@@ -13,6 +14,8 @@ import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
+import { MailName, Model } from "../permissions/Model.ts";
+import { Relations } from "../permissions/Relations.ts";
 import { short } from "../telemetry/Trace.ts";
 import { full, granted, mailId, businessRef, unread } from "./internal/programMail.ts";
 import { inbox, letterBody, letterLine } from "./Mailbox.ts";
@@ -114,7 +117,8 @@ const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
   JSON.stringify([ProcessTable.stream, ...names.map(ProcessTable.events)].map((stream) => turn.head(stream)));
 
 /**
- * Layer that provides `ProgramMail` on the ledger, through `LedgerTransaction` and `ProcessManager`.
+ * Layer that provides `ProgramMail` on the ledger, through `LedgerTransaction`, `ProcessManager` and
+ * `Relations`, whose rows a pipe's mail right is read from in the check's own turn.
  *
  * **Details**
  *
@@ -134,12 +138,13 @@ const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
 export const layer = (config: {
   readonly grants: Grants;
   readonly cap: number;
-}): Layer.Layer<ProgramMail, never, LedgerTransaction | ProcessManager> =>
+}): Layer.Layer<ProgramMail, never, LedgerTransaction | ProcessManager | Relations> =>
   Layer.effect(
     ProgramMail,
     Effect.gen(function* () {
       const tx = yield* LedgerTransaction;
       const manager = yield* ProcessManager;
+      const relations = yield* Relations;
       const transact = <A>(step: (turn: LedgerTurn) => A) =>
         tx
           .transact(step)
@@ -148,17 +153,28 @@ export const layer = (config: {
         failure instanceof ProcessError ? refuse(refusal) : storage(failure);
       /** A child and the program that started it may mail each other with no host grant. The
        *  right is read by name from the first life's requester, so a restart under the name keeps it.
-       *  A live pipe gives its writer's name the right to mail its reader's name, one way only, while
-       *  the pipe lives (0526): a restart of either end keeps it too. */
+       *  A live pipe's `pipes_to` row gives its writer's name the `mail` right on its reader's name,
+       *  one way only, while the pipe lives (0526): a restart of either end keeps it too. */
       const related = (source: string, to: string) =>
         transact((turn) => {
           const table = manager.table(turn);
-          return (
+
+          if (
             Option.exists(table.starter(to), (name) => name === source) ||
-            Option.exists(table.starter(source), (name) => name === to) ||
-            manager.pipes(turn).mails(source, to)
+            Option.exists(table.starter(source), (name) => name === to)
+          ) {
+            return Result.succeed(true);
+          }
+
+          // The pipe's right is a relation row, checked through the one model (0526).
+          return Result.map(relations.within(turn), (tuples) =>
+            Result.isSuccess(MailName.within(tuples, Model.ref("name", source), Model.ref("name", to))),
           );
-        });
+        }).pipe(
+          Effect.flatMap((held) =>
+            Effect.fromResult(held).pipe(Effect.mapError((cause) => ProgramMailError.storage(cause))),
+          ),
+        );
       const deliver = Effect.fn("program_mail.deliver")(
         function* (delivery: Delivery) {
           yield* Effect.annotateCurrentSpan({

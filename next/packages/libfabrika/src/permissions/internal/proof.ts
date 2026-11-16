@@ -14,10 +14,10 @@ const ProofTypeId: unique symbol = Symbol.for("@kampus/libfabrika/permissions/Pr
  *
  * @internal
  */
-export interface Proof<out P> {
+export interface Proof<out P, out W = Sender> {
   readonly [ProofTypeId]: (_: never) => P;
-  /** Who was checked, both ids kept (0261). */
-  readonly sender: Sender;
+  /** Who was checked: a sender with both ids kept (0261), or the ref of a subject that is no person. */
+  readonly sender: W;
   readonly permission: string;
   /** The one object this proof is for, as a ref. */
   readonly object: string;
@@ -29,7 +29,7 @@ type Sealed = {
   readonly holds: (tuples: Tuples) => boolean;
 };
 
-const minted = new WeakMap<Proof<unknown>, Sealed>();
+const minted = new WeakMap<Proof<unknown, unknown>, Sealed>();
 
 /**
  * The one way to make a proof: a check that passed. `holds` checks the same subject, permission
@@ -37,14 +37,14 @@ const minted = new WeakMap<Proof<unknown>, Sealed>();
  *
  * @internal
  */
-export const mint = <P>(
-  sender: Sender,
+export const mint = <P, W = Sender>(
+  sender: W,
   permission: string,
   object: string,
-  key: Context.Key<unknown, Proof<P>>,
+  key: Context.Key<unknown, Proof<P, W>>,
   holds: (tuples: Tuples) => boolean,
-): Proof<P> => {
-  const proof: Proof<P> = { [ProofTypeId]: (never) => never, sender, permission, object };
+): Proof<P, W> => {
+  const proof: Proof<P, W> = { [ProofTypeId]: (never) => never, sender, permission, object };
   minted.set(proof, { key, holds });
   return proof;
 };
@@ -54,4 +54,5 @@ export const mint = <P>(
  *
  * @internal
  */
-export const sealed = (proof: Proof<unknown>): Option.Option<Sealed> => Option.fromUndefinedOr(minted.get(proof));
+export const sealed = (proof: Proof<unknown, unknown>): Option.Option<Sealed> =>
+  Option.fromUndefinedOr(minted.get(proof));

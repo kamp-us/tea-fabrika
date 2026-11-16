@@ -164,6 +164,20 @@ const walker = (writerDoc: SchemaRepresentation.Document, decodes: Path | null) 
 
   const same = (a: Path, b: Path) => a.length === b.length && a.every((part, n) => part === b[n]);
 
+  /** Every index signature of a writer struct must fit the reader's need at a key it may send. Any
+   *  index is taken to match the key, which can only refuse more, never pass a value wrongly. */
+  const indexes = (writer: SchemaRepresentation.Objects, need: Node, at: Path): Fit => {
+    for (const index of writer.indexSignatures) {
+      const verdict = walk(index.type, need, at);
+
+      if (!Fit.guards.fits(verdict)) {
+        return verdict;
+      }
+    }
+
+    return FITS;
+  };
+
   const walk = (writerNode: Node, reader: Node, path: Path): Fit => {
     const writer = resolved(writerNode);
 
@@ -253,11 +267,19 @@ const walker = (writerDoc: SchemaRepresentation.Document, decodes: Path | null) 
 
           // A field the reader makes optional may be missing; extra writer fields are fine (0550).
           if (has === undefined) {
-            if (need.isOptional) {
-              continue;
+            if (!need.isOptional) {
+              return missing(at, word(need.type), "missing");
             }
 
-            return missing(at, word(need.type), "missing");
+            // A writer's index signature may still send this key, and Effect reads every key an
+            // index matches: its value must then fit what the reader needs here.
+            const verdict = indexes(writer, need.type, at);
+
+            if (!Fit.guards.fits(verdict)) {
+              return verdict;
+            }
+
+            continue;
           }
 
           if (has.isOptional && !need.isOptional) {

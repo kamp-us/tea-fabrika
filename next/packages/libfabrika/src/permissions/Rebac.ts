@@ -16,7 +16,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Option, Result, Schema } from "effect";
+import { Context, Effect, Option, Predicate, Result, Schema } from "effect";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
@@ -153,39 +153,69 @@ export class Denied extends Schema.TaggedError<Denied>()("Denied", {
  * @stability unstable
  * @category models
  */
-export type PermissionClass<Self, Id extends string, On extends string> = Context.ServiceClass<
+export type PermissionClass<
   Self,
-  Id,
-  Proof<Self>
-> & {
+  Id extends string,
+  On extends string,
+  Kind extends string = "person",
+> = Context.ServiceClass<Self, Id, Proof<Self, Subject<Kind>>> & {
   /**
    * Checks the right for `sender` on `object` in these tuples. A person and an agent are both
-   * checked as `person:<for>`: an agent is capped by its person (0526).
+   * checked as `person:<for>`: an agent is capped by its person (0526). A right on another subject
+   * type, such as a registered name, is checked for that subject's own ref.
    */
-  readonly within: (tuples: Tuples, sender: Sender, object: Ref<On>) => Result.Result<Proof<Self>, Denied>;
+  readonly within: (
+    tuples: Tuples,
+    sender: Subject<Kind>,
+    object: Ref<On>,
+  ) => Result.Result<Proof<Self, Subject<Kind>>, Denied>;
 };
+
+/**
+ * Who a right is checked for: a sender for a right on people, else a ref of the subject's own type.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Subject<Kind extends string> = [Kind] extends ["person"] ? Sender : Ref<Kind>;
+
+/** The subject's ref a check reads: `person:<for>` for a sender, the ref itself for any other. */
+const subjectRef = (sender: Sender | Ref<string>): string =>
+  Predicate.isString(sender) ? sender : `person:${sender.for}`;
 
 /**
  * Builds a right on one permission of one object type: `class X extends Permission<X>()(id, {
  * model, on, permission }) {}`. The id is the proof's context key, so two rights never share one.
+ * `subject` names the subject's type when it is not a person, as a registered name that mails
+ * another.
  *
  * @stability unstable
  * @category constructors
  */
 export const Permission =
   <Self>() =>
-  <const Id extends string, T extends Types, const On extends keyof T & string, const P extends T[On]["permissions"]>(
+  <
+    const Id extends string,
+    T extends Types,
+    const On extends keyof T & string,
+    const P extends T[On]["permissions"],
+    const Kind extends keyof T & string = "person",
+  >(
     id: Id,
-    config: { readonly model: Model<T>; readonly on: On; readonly permission: P },
-  ): PermissionClass<Self, Id, On> => {
+    config: { readonly model: Model<T>; readonly on: On; readonly permission: P; readonly subject?: Kind },
+  ): PermissionClass<Self, Id, On, Kind> => {
     const { model, permission } = config;
     // oxlint-disable-next-line fabrika/service-id -- a right's id is its declarer's, as with Effect's own `Context.Service` caller; `Model.ts` names its rights by their path
-    const key = Context.Service<Self, Proof<Self>>()(id);
-    const within = (tuples: Tuples, sender: Sender, object: Ref<On>): Result.Result<Proof<Self>, Denied> => {
-      const subject = `person:${sender.for}`;
+    const key = Context.Service<Self, Proof<Self, Subject<Kind>>>()(id);
+    const within = (
+      tuples: Tuples,
+      sender: Subject<Kind>,
+      object: Ref<On>,
+    ): Result.Result<Proof<Self, Subject<Kind>>, Denied> => {
+      const subject = subjectRef(sender);
       const holds = (rows: Tuples) => evaluate(model.declared, rows, subject, permission, object);
       return holds(tuples)
-        ? Result.succeed(mint<Self>(sender, permission, object, key, holds))
+        ? Result.succeed(mint<Self, Subject<Kind>>(sender, permission, object, key, holds))
         : Result.fail(new Denied({ subject, permission, object }));
     };
     return Object.assign(key, { within });
@@ -199,7 +229,7 @@ export const Permission =
  * @category combinators
  */
 export const provide =
-  <P>(proof: Proof<P>) =>
+  <P, W>(proof: Proof<P, W>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, Exclude<R, P>> =>
     Option.match(sealed(proof), {
       onNone: () => Effect.die(new Error("a proof no check made")),
@@ -213,5 +243,5 @@ export const provide =
  * @stability unstable
  * @category combinators
  */
-export const recheck = (proof: Proof<unknown>, tuples: Tuples): boolean =>
+export const recheck = (proof: Proof<unknown, unknown>, tuples: Tuples): boolean =>
   Option.match(sealed(proof), { onNone: () => false, onSome: ({ holds }) => holds(tuples) });
