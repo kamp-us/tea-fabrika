@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-app-src-s2-review2",
+  "ticket": 1067,
+  "pr": null,
+  "started": "2026-11-16T01:58:00-08:00",
+  "ended": "2026-11-16T02:08:00-08:00",
+  "parent": "2026-11-16-mock-app-src-s2-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Recheck of slice 2 of the mock sweep in next/ (ticket 1067) at 63e44558a, after the fix round c5d81f1e1 and 63e44558a, against docs/plan/quests/mock-app-src-PLAN.md at eb7e56100. The named fault is fixed: error() now classifies the whole startup stderr, and the new pinned law in exam/alchemy-lifecycle.test.ts (a service line and a 200-frame stack, ConfigError WorkerdUserScript after 1 spawn) reaches it; by reading, the old tail-based error() turns it red, as the fix agent's plant did. The dev.ts:114 doc now names the spawner. The lockfile changes only the patch hash, in its 5 places. Sent back again, for a new fault the fix itself brings: the Node path now reads stdout and stderr through makeStreamPump (patch lines 254 and 260), which keeps every chunk for the life of the process (Workerd.mjs:127, chunks.push) and joins them all when the stream ends (Workerd.mjs:135). Before this round, and in unpatched Node, stdout was only forwarded and stderr was kept only during the start. A probe drove the installed patched Workerd.mjs with a fake spawner whose workerd starts, writes 600 lines of 1 MB to stdout after its start and then exits: the parent forwarded all 600 MB and then crashed on an unhandled rejection, 'RangeError: Invalid string length' at Workerd.mjs:135, return chunks.join(\"\"); with 200 MB it did not crash. So a long dev session holds all of workerd's output in memory, and once it passes about 512 MB the parent process dies at workerd's next exit (a replace, a crash or the stop). The fix it needs: on the Node path keep the whole stderr only until the start settles, then only the 4096-character tail, and keep no stdout beyond what waits for pipe(); pin it with a law that writes output after the start and then ends the child. The fix agent's doubt (1): the pumps read outside the serve scope, but each stream ends when the spawner's release kills workerd and its pipes close, so a reader does not outlive the process; that is not the fault. Point (2): the remote branch is linear, cd1e2352a, d9d8c5f68, c5d81f1e1, 63e44558a, and the review row d9d8c5f68 is in it; the local git reset --hard before a fast-forward push changed nothing on the remote, though step-rules says never reset. loosening.sh on d9d8c5f68..HEAD: 3 hits, none a loosening (the added pinned law, the patch file, the lockfile hash). Ran at 63e44558a, each alone with nice -n 19 vitest --maxWorkers=1 and TYPESAFE_API_KEY unset: exam/alchemy-lifecycle.test.ts 3 of 3; instance-one-file.integration.test.ts 7 of 7. No workerd was left. This is the slice's second send-back (0176); the fault is named, located and inside the plan's patch row, so 0564 lets the lead decide one more fix round.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": null,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "B1 pinned stderr law",
+      "plant": "by reading: error() classifies stderr.tail() again; the service line falls outside the last 4096 characters, so the start fails as SystemError after 4 spawns, red",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}
