@@ -56,36 +56,30 @@ const resolverFor = (conditions: readonly string[]) => {
   return found;
 };
 
+// The values one export value holds a step below it, each with the condition that leads there: a
+// fallback array's elements under no condition, an object's keys but TypeScript's `types`, and
+// nothing below anything else.
+const branches = (x: unknown): ReadonlyArray<readonly [string | undefined, unknown]> =>
+  Array.isArray(x)
+    ? x.map((target): readonly [undefined, unknown] => [undefined, target])
+    : map(x)
+      ? Object.entries(x).filter(([condition]) => condition !== "types")
+      : [];
+
 // The resolver answers for one set of conditions with the first match in key order, so a
 // target after `default`, or after another condition the set holds, never comes back. The rule
 // judges every target a runtime condition names, so it lists the condition paths itself: an
 // object's keys (never TypeScript's `types`), each element of a fallback array, nothing for null.
-const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] => {
-  if (typeof x === "string") {
-    return [[...path]];
-  }
-
-  return Array.isArray(x)
-    ? x.flatMap((target) => conditionPaths(target, path))
-    : map(x)
-      ? Object.entries(x).flatMap(([condition, target]) =>
-          condition === "types" ? [] : conditionPaths(target, [...path, condition]),
-        )
-      : [];
-};
+const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
+  typeof x === "string"
+    ? [[...path]]
+    : branches(x).flatMap(([condition, target]) =>
+        conditionPaths(target, condition === undefined ? path : [...path, condition]),
+      );
 
 // Every target string an export value names under a runtime condition.
-const targetStrings = (x: unknown): string[] => {
-  if (typeof x === "string") {
-    return [x];
-  }
-
-  return Array.isArray(x)
-    ? x.flatMap(targetStrings)
-    : map(x)
-      ? Object.entries(x).flatMap(([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
-      : [];
-};
+const targetStrings = (x: unknown): string[] =>
+  typeof x === "string" ? [x] : branches(x).flatMap(([, target]) => targetStrings(target));
 
 // The platform's own import names, as decision 0042 lists them
 // (.decisions/0042-platform-pieces-go-through-alchemy.md, "New `next/` code never imports the
@@ -177,26 +171,26 @@ const workerClass = (node: unknown): boolean =>
     ? typeof node.name === "string" && /^(?:WorkerEntrypoint|DurableObject|WorkflowEntrypoint)$/.test(node.name)
     : node.type === "MemberExpression" && workerClass(node.property));
 
+// The text each kind of literal node holds as written, by its node type.
+const LITERAL_TEXT: ReadonlyMap<string, (node: Record<string, unknown>) => string | undefined> = new Map([
+  ["Literal", (node: Record<string, unknown>) => (typeof node.value === "string" ? node.value : undefined)],
+  [
+    "TemplateLiteral",
+    (node: Record<string, unknown>) =>
+      Array.isArray(node.expressions) &&
+      node.expressions.length === 0 &&
+      Array.isArray(node.quasis) &&
+      map(node.quasis[0]) &&
+      map(node.quasis[0].value) &&
+      typeof node.quasis[0].value.cooked === "string"
+        ? node.quasis[0].value.cooked
+        : undefined,
+  ],
+]);
+
 // A string a link names as written: a string literal or a template literal with no `${}`.
-const literal = (node: unknown): string | undefined => {
-  if (!map(node)) {
-    return undefined;
-  }
-
-  if (node.type === "Literal") {
-    return typeof node.value === "string" ? node.value : undefined;
-  }
-
-  return node.type === "TemplateLiteral" &&
-    Array.isArray(node.expressions) &&
-    node.expressions.length === 0 &&
-    Array.isArray(node.quasis) &&
-    map(node.quasis[0]) &&
-    map(node.quasis[0].value) &&
-    typeof node.quasis[0].value.cooked === "string"
-    ? node.quasis[0].value.cooked
-    : undefined;
-};
+const literal = (node: unknown): string | undefined =>
+  map(node) && typeof node.type === "string" ? LITERAL_TEXT.get(node.type)?.(node) : undefined;
 
 // `require("x")` with one argument.
 const required = (node: { readonly callee: unknown; readonly arguments: readonly unknown[] }) =>

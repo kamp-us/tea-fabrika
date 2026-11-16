@@ -386,21 +386,20 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
   if (w.old.length > 0) {
     const f = w.old[c.pick % w.old.length]!;
     const on = { id: f.id, dial: f.dial };
-    out.push(() => {
-      if (f.call._tag === "open") {
-        return { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms };
-      }
-
-      if (f.call._tag === "send") {
-        return { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms };
-      }
-
-      return f.call._tag === "wait"
-        ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
-        : f.call._tag === "monitor"
-          ? answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })
-          : { type: "read_ok", ...on, value: [], ms: c.ms };
-    });
+    out.push(() =>
+      Match.value(f.call).pipe(
+        Match.tag("open", (): WindowMsg => ({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms })),
+        Match.tag("send", (): WindowMsg => ({
+          type: "send_ok",
+          ...on,
+          value: { _tag: "accepted", rev: 1, pos: 1 },
+          ms: c.ms,
+        })),
+        Match.tag("wait", () => answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })),
+        Match.tag("monitor", () => answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })),
+        Match.orElse((): WindowMsg => ({ type: "read_ok", ...on, value: [], ms: c.ms })),
+      ),
+    );
     const current = w.flights[c.aux % Math.max(1, w.flights.length)];
     const oldDial = w.old.find((old) => old.dial !== current?.dial)?.dial;
 
@@ -2568,32 +2567,41 @@ const takenOn = (s: WindowModel, letter: unknown) => {
   return tile === undefined ? null : { tile, down: m, rev: Number(Reflect.get(entry, "rev")) };
 };
 
+/** A letter's parts that the window reads before it takes the letter. */
+type Letter = { readonly by: unknown; readonly id: unknown; readonly m: unknown };
+
+/**
+ * Each reason the window leaves a letter alone, in the order it asks, with the test that finds it.
+ * A test is only read when every test above it said no; a letter that passes them all is "gone".
+ */
+const IGNORED: ReadonlyArray<{ readonly reason: string; readonly when: (s: WindowModel, l: Letter) => boolean }> = [
+  { reason: "writer", when: (_, l) => !trusted(l.by) },
+  { reason: "plain", when: (_, l) => typeof l.id !== "string" || !inSignalSpace(l.id) },
+  { reason: "shape", when: (_, l) => !Schema.is(Down)(l.m) },
+  {
+    reason: "tab",
+    when: (_, l) => Schema.is(Down)(l.m) && (l.m.to._tag !== "client" || l.m.to.client !== TAB),
+  },
+  {
+    reason: "stale",
+    when: (s, { m }) =>
+      Schema.is(Down)(m) &&
+      s.tiles.some((t) => {
+        const r: ReachView = t.reach;
+        return holds(r) && r.pid === m.process;
+      }),
+  },
+];
+
 /** Why the window leaves a letter alone, for the laws' counts. */
 const ignoredAs = (s: WindowModel, letter: unknown): string => {
   const entry = Object(letter);
-  const id: unknown = Reflect.get(entry, "id");
-  const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
-
-  if (!trusted(Reflect.get(entry, "by"))) {
-    return "writer";
-  }
-
-  if (typeof id !== "string" || !inSignalSpace(id)) {
-    return "plain";
-  }
-
-  if (!Schema.is(Down)(m)) {
-    return "shape";
-  }
-
-  return m.to._tag !== "client" || m.to.client !== TAB
-    ? "tab"
-    : s.tiles.some((t) => {
-          const r: ReachView = t.reach;
-          return holds(r) && r.pid === m.process;
-        })
-      ? "stale"
-      : "gone";
+  const l: Letter = {
+    by: Reflect.get(entry, "by"),
+    id: Reflect.get(entry, "id"),
+    m: Reflect.get(Object(Reflect.get(entry, "body")), "m"),
+  };
+  return IGNORED.find((rule) => rule.when(s, l))?.reason ?? "gone";
 };
 
 /** The step reads the window's inbox page: its read was the inbox's own call in flight. */
@@ -2906,60 +2914,53 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               m.cmd.id === was.id &&
               prev.flight.some((f) => f.id === m.cmd.id && f.dial === m.cmd.dial && streamIn(f.call) === INBOX));
           const top = Math.max(was.after, ...(page ?? []).map((l) => Number(Reflect.get(Object(l), "rev"))));
-          // The inbox this step must leave, and the name of the case that says so, first case first.
-          const expected = (): readonly [unknown, string] => {
-            if (prev.link._tag !== "online" && next.link._tag === "online") {
-              return [
-                {
-                  calls: [["wait", was.after, calls[0]?.[2]]],
-                  now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
-                },
-                "online",
-              ];
-            }
-
-            if (answer.type === "wait_ok" && current && was._tag === "waiting" && was.id === answer.id) {
-              return [
-                {
-                  calls: [["read", was.after, calls[0]?.[2]]],
-                  now: { _tag: "reading", after: was.after, id: calls[0]?.[2] },
-                },
-                "woke",
-              ];
-            }
-
-            if (page !== null) {
-              return [
-                {
-                  calls: [["wait", top, calls[0]?.[2]]],
-                  now: { _tag: "waiting", after: top, id: calls[0]?.[2] },
-                },
-                "pages",
-              ];
-            }
-
-            if (lost) {
-              return [{ calls: [], now: { _tag: "idle", after: was.after } }, "errors"];
-            }
-
-            if (prev.link._tag === "online" && next.link._tag !== "online") {
-              return [{ calls: [], now: { _tag: "idle", after: was.after } }, "offline"];
-            }
-
-            return m.type === "resend" &&
-              m.dial === socketDial(prev) &&
-              prev.link._tag === "online" &&
-              was._tag === "idle"
-              ? [
-                  {
-                    calls: [["wait", was.after, calls[0]?.[2]]],
-                    now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
-                  },
-                  "armed",
-                ]
-              : [{ calls: [], now: was }, "other"];
-          };
-          const [want, label] = expected();
+          // The inbox this step must leave, by the case that says so: the first case that holds, in
+          // this order, names it, and a step no case holds leaves the inbox as it was.
+          const cases: ReadonlyArray<{ readonly label: string; readonly when: boolean; readonly want: unknown }> = [
+            {
+              label: "online",
+              when: prev.link._tag !== "online" && next.link._tag === "online",
+              want: {
+                calls: [["wait", was.after, calls[0]?.[2]]],
+                now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
+              },
+            },
+            {
+              label: "woke",
+              when: answer.type === "wait_ok" && current && was._tag === "waiting" && was.id === answer.id,
+              want: {
+                calls: [["read", was.after, calls[0]?.[2]]],
+                now: { _tag: "reading", after: was.after, id: calls[0]?.[2] },
+              },
+            },
+            {
+              label: "pages",
+              when: page !== null,
+              want: {
+                calls: [["wait", top, calls[0]?.[2]]],
+                now: { _tag: "waiting", after: top, id: calls[0]?.[2] },
+              },
+            },
+            { label: "errors", when: lost, want: { calls: [], now: { _tag: "idle", after: was.after } } },
+            {
+              label: "offline",
+              when: prev.link._tag === "online" && next.link._tag !== "online",
+              want: { calls: [], now: { _tag: "idle", after: was.after } },
+            },
+            {
+              label: "armed",
+              when:
+                m.type === "resend" &&
+                m.dial === socketDial(prev) &&
+                prev.link._tag === "online" &&
+                was._tag === "idle",
+              want: {
+                calls: [["wait", was.after, calls[0]?.[2]]],
+                now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
+              },
+            },
+          ];
+          const { want, label } = cases.find((c) => c.when) ?? { label: "other", want: { calls: [], now: was } };
 
           if (label !== "other") {
             seen[label as keyof typeof seen]++;
@@ -4267,13 +4268,10 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
 
     if (lead >= 0 && shares[lead]! < least) {
       const rest = total - node.parts[lead]!.percent;
-      shares = node.parts.map((p, i) => {
-        if (i === lead) {
-          return least;
-        }
-
-        return fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
-      });
+      // A part beside the lead: a strip keeps its strip, and the others share what the lead leaves.
+      const beside = (p: (typeof node.parts)[number], i: number) =>
+        fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
+      shares = node.parts.map((p, i) => (i === lead ? least : beside(p, i)));
     }
 
     for (const [i, p] of node.parts.entries()) {

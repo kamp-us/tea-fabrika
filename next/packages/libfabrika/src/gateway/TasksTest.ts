@@ -1125,17 +1125,14 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       }
 
       for (const [name, value] of Object.entries(outputs)) {
-        const encoded = JSON.stringify(value, (_key, item: unknown) => {
-          if (typeof item === "bigint") {
-            return String(item);
-          }
-
-          return item instanceof Map
-            ? [...item]
-            : item instanceof Error
-              ? { name: item.name, message: item.message, cause: item.cause }
-              : item;
-        });
+        const encoded = JSON.stringify(value, (_key, item: unknown): unknown =>
+          Match.value(item).pipe(
+            Match.when(Match.bigint, (n) => String(n)),
+            Match.when(Match.instanceOf(Map), (map) => [...map]),
+            Match.when(Match.instanceOf(Error), (e) => ({ name: e.name, message: e.message, cause: e.cause })),
+            Match.orElse((other) => other),
+          ),
+        );
 
         for (const sentinel of sentinels) {
           for (const form of [

@@ -52,15 +52,13 @@ const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Ch
     return matching.length === 0 || matching.some((r) => r.status._tag !== "done");
   });
 
-  if (red.length > 0) {
-    return { tag: "red", values: red };
-  }
-
-  return lost.length > 0
-    ? { tag: "lost", values: lost }
-    : pending.length > 0
-      ? { tag: "pending", values: pending }
-      : { tag: "green", values: selected };
+  // The verdicts in their priority: the first with any values wins, and green when none has.
+  const verdicts: ReadonlyArray<{ readonly tag: string; readonly values: ReadonlyArray<unknown> }> = [
+    { tag: "red", values: red },
+    { tag: "lost", values: lost },
+    { tag: "pending", values: pending },
+  ];
+  return verdicts.find((v) => v.values.length > 0) ?? { tag: "green", values: selected };
 };
 
 describe("L5: the verdict", () => {

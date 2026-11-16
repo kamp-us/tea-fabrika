@@ -470,17 +470,14 @@ const expected = (world: World, child: Child): Expected => {
 };
 
 /** An answer as a failure message shows it: its tag or reason, never a cause. */
-const shown = (answer: Answer | undefined): string => {
-  if (answer === undefined) {
-    return "no answer";
-  }
-
-  return Result.isSuccess(answer)
-    ? JSON.stringify(answer.success)
-    : answer.failure instanceof ChildrenError
-      ? `ChildrenError ${answer.failure.reason}`
-      : String(answer.failure);
-};
+const shown = (answer: Answer | undefined): string =>
+  answer === undefined
+    ? "no answer"
+    : Result.match(answer, {
+        onSuccess: (success) => JSON.stringify(success),
+        onFailure: (failure) =>
+          failure instanceof ChildrenError ? `ChildrenError ${failure.reason}` : String(failure),
+      });
 
 const refused = (answer: Answer, reason: Reason, message: string) => {
   expect(Result.isFailure(answer), `${message}; got ${shown(answer)}`).toBe(true);

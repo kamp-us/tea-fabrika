@@ -70,17 +70,11 @@ const numberIn = (node: Node | null | undefined): number | null =>
 /** A key and its value as the parser hands it: in an object literal, a pattern or an assignment target. */
 type Pair = Extract<Node, { readonly type: "Property" }>;
 
-const keyName = (property: Pair): string | null => {
-  if (property.computed) {
-    return null;
-  }
+const stringIn = (node: Node | null | undefined): string | null =>
+  node?.type === "Literal" && typeof node.value === "string" ? node.value : null;
 
-  return property.key.type === "Identifier"
-    ? property.key.name
-    : property.key.type === "Literal" && typeof property.key.value === "string"
-      ? property.key.value
-      : null;
-};
+const keyName = (property: Pair): string | null =>
+  property.computed ? null : property.key.type === "Identifier" ? property.key.name : stringIn(property.key);
 
 /** The written module name of an import's source, or null when it is built at run time. */
 const moduleName = (source: Node | null | undefined): string | null =>

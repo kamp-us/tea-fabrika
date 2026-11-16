@@ -433,6 +433,22 @@ const deliveries = (w: Watch) =>
 const expected = (s: Folded) => {
   const live = (p: string) => s.lives.get(p)?.state._tag === "live";
   const liveWatches = [...s.watches.values()].filter((w) => w.tag === "live");
+  // A fresh start's refusal by the name's reservation: none (null) when the owner holds it for this
+  // program.
+  const reservationRefusal = (reserved: Registered | undefined, owner: Owned) =>
+    reserved === undefined || !sameOwner(reserved.owner, owner)
+      ? "not_parent"
+      : reserved.program !== CODE.program
+        ? "name_taken"
+        : null;
+  // A fresh start the reservation allows, answered by the name's current process: none is stale.
+  const currentAnswer = (name: string) => {
+    const current = s.current.get(name);
+    return current === undefined ? "stale" : live(current) ? "alive" : undefined;
+  };
+  // A monitor that holds no live watch on its ref: an ended process target, or the watch's next round.
+  const newWatchAnswer = (w: Watch, held: Watch | undefined) =>
+    Recipient.guards.process(w.to) && !live(w.to.process) ? "ended" : (held?.round ?? 0) + 1;
   const lifecycle = pids(s).map((p) => {
     const owned = parent(s, p, BRAIN_OWNER);
     return {
@@ -470,19 +486,7 @@ const expected = (s: Folded) => {
     const reserved = s.names.get(name);
     return [
       reserved === undefined ? undefined : "name_taken",
-      ...OWNERS.map((owner) => {
-        const after = s.current.get(name) ?? A;
-
-        if (reserved === undefined || !sameOwner(reserved.owner, owner)) {
-          return "not_parent";
-        }
-
-        if (reserved.program !== CODE.program) {
-          return "name_taken";
-        }
-
-        return s.current.get(name) !== after ? "stale" : live(after) ? "alive" : undefined;
-      }),
+      ...OWNERS.map((owner) => reservationRefusal(reserved, owner) ?? currentAnswer(name)),
     ];
   });
   const watches = [
@@ -492,17 +496,13 @@ const expected = (s: Folded) => {
     const held = s.watches.get(keyFor(w.to, w.ref));
     return {
       demonitor: held?.tag === "live" ? shown(held) : undefined,
-      monitor: [w.process, B].map((process) => {
-        if (held !== undefined && held.process !== process) {
-          return "bad_ref";
-        }
-
-        return held?.tag === "live"
-          ? undefined
-          : w.to._tag === "process" && !live(w.to.process)
-            ? "ended"
-            : (held?.round ?? 0) + 1;
-      }),
+      monitor: [w.process, B].map((process) =>
+        held !== undefined && held.process !== process
+          ? "bad_ref"
+          : held?.tag === "live"
+            ? undefined
+            : newWatchAnswer(w, held),
+      ),
       deliver: deliveries(w).map(({ n, by, target, receiver }) =>
         by !== BRAIN || held === undefined || held.process !== target || n > held.round
           ? "mail"

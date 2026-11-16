@@ -107,13 +107,10 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
 
       if (shares[lead]! < least) {
         const rest = total - node.parts[lead]!.percent;
-        shares = node.parts.map((p, i) => {
-          if (i === lead) {
-            return least;
-          }
-
-          return fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
-        });
+        // A part beside the lead: a strip keeps its strip, and the others share what the lead leaves.
+        const beside = (p: (typeof node.parts)[number], i: number) =>
+          fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
+        shares = node.parts.map((p, i) => (i === lead ? least : beside(p, i)));
       }
     }
 

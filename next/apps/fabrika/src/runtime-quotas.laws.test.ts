@@ -301,8 +301,17 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     INSTANCE: instance(limits),
     // Every Project RPC a Process makes reaches the real service, with the two typed replies the class adds.
     PROJECT: {
-      getByName: () =>
-        new Proxy(
+      getByName: () => {
+        // A Process records its start on the Project's own small runtime, beside its service.
+        const own: ReadonlyMap<string, unknown> = new Map<string, unknown>([
+          [
+            "settingsStart",
+            (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
+              Effect.runPromise(required(projectHeld).settingsStart(input)),
+          ],
+          ["settingsRead", (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start))],
+        ]);
+        return new Proxy(
           {},
           {
             get: (_target, method) => {
@@ -310,14 +319,8 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                 return undefined;
               }
 
-              // A Process records its start on the Project's own small runtime, beside its service.
-              if (method === "settingsStart") {
-                return (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
-                  Effect.runPromise(required(projectHeld).settingsStart(input));
-              }
-
-              if (method === "settingsRead") {
-                return (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start));
+              if (own.has(method)) {
+                return own.get(method);
               }
 
               return (...args: ReadonlyArray<unknown>) =>
@@ -330,7 +333,8 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                 );
             },
           },
-        ),
+        );
+      },
     },
     PROCESS: {
       getByName: (name: string) => {

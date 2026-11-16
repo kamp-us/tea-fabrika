@@ -236,25 +236,18 @@ const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof 
 // lone surrogate in a string or a key.
 const lone = (text: string) => /[\uD800-\uDFFF]/u.test(text);
 
-const writable = (value: unknown): boolean => {
-  if (value === null) {
-    return false;
-  }
-
-  if (Array.isArray(value)) {
-    return value.every(writable);
-  }
-
-  if (record(value)) {
-    return Object.entries(value).every(([key, child]) => !lone(key) && writable(child));
-  }
-
-  if (typeof value === "string") {
-    return !lone(value);
-  }
-
-  return typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
-};
+const writable = (value: unknown): boolean =>
+  Match.value(value).pipe(
+    Match.when(Match.is(null), () => false),
+    Match.when(
+      (v: unknown): v is ReadonlyArray<unknown> => Array.isArray(v),
+      (list) => list.every(writable),
+    ),
+    Match.when(record, (tree) => Object.entries(tree).every(([key, child]) => !lone(key) && writable(child))),
+    Match.when(Match.string, (text) => !lone(text)),
+    Match.when(Match.number, (n) => !Number.isInteger(n) || Number.isSafeInteger(n)),
+    Match.orElse(() => true),
+  );
 
 const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
 

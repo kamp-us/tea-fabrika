@@ -269,6 +269,15 @@ const note = (row: Readonly<Record<string, unknown>>) =>
     }
   });
 
+/** What a planted fault does once its resource is acquired, by its kind. A `test` fault fails later, in
+ *  the test itself, so here it does nothing. */
+const FAULT_AFTER_ACQUIRE: Readonly<Record<typeof Fault.Type.kind, (at: Resource) => Effect.Effect<void, SetupFault>>> =
+  {
+    setup: (at) => Effect.fail(new SetupFault({ at })),
+    hold: (at) => note({ holding: at }).pipe(Effect.andThen(Effect.never)),
+    test: () => Effect.void,
+  };
+
 /** One owned resource: acquired, noted with its facts, released by the scope within 10 s, noted again.
  *  `undo`, if given, is the same release done synchronously on the worker's `exit` until the scope's
  *  release has run: Vitest's fork worker exits at its first send once its parent is gone, which can
@@ -300,17 +309,7 @@ const owned = <A, E, R>(
       ),
   ).pipe(
     Effect.map(({ a }) => a),
-    Effect.tap(() => {
-      if (fault?.at !== at) {
-        return Effect.void;
-      }
-
-      return fault.kind === "setup"
-        ? Effect.fail(new SetupFault({ at }))
-        : fault.kind === "hold"
-          ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
-          : Effect.void;
-    }),
+    Effect.tap(() => (fault?.at === at ? FAULT_AFTER_ACQUIRE[fault.kind](at) : Effect.void)),
   );
 
 // The counter's own package provides React and React DOM for its window; the tab links the same copies.

@@ -112,6 +112,17 @@ const onExit = (undo: () => void) => {
   return () => process.off("exit", undo);
 };
 
+/** What a planted fault does once its resource is acquired, by its kind. A `test` fault fails later,
+ *  in the test, and a `trace` fault fails in `note`, so here neither does anything. */
+const FAULT_AFTER_ACQUIRE: Readonly<Record<typeof Fault.Type.kind, (at: Resource) => Effect.Effect<void, SetupFault>>> =
+  {
+    setup: (at) => Effect.fail(new SetupFault({ at })),
+    hold: (at) => note({ holding: at }).pipe(Effect.andThen(Effect.never)),
+    timeout: (at) => note({ holding: at }).pipe(Effect.andThen(Effect.never)),
+    test: () => Effect.void,
+    trace: () => Effect.void,
+  };
+
 /** One owned resource: acquired, noted, then the planted fault if it names this one; released within
  *  10 s by the scope and noted again. The release is registered before the fault can fire. `undo`,
  *  if given, is the same release done synchronously, kept on the worker's exit until the scope's
@@ -137,17 +148,7 @@ const owned = <A, E, R>(
   ).pipe(
     Effect.map(({ a }) => a),
     Effect.tap((a) => note({ acquired: at, ...facts(a) })),
-    Effect.tap(() => {
-      if (fault?.at !== at) {
-        return Effect.void;
-      }
-
-      return fault.kind === "setup"
-        ? Effect.fail(new SetupFault({ at }))
-        : fault.kind === "hold" || fault.kind === "timeout"
-          ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
-          : Effect.void;
-    }),
+    Effect.tap(() => (fault?.at === at ? FAULT_AFTER_ACQUIRE[fault.kind](at) : Effect.void)),
   );
 
 /** The env a child of the suite gets: the person's own, minus anything that could spend or deploy. */

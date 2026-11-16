@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
-import type { CheckRun } from "./Ci.ts";
+import type { CheckRun, Conclusion } from "./Ci.ts";
 import { Checks, Ci, CiError, RateLimited, Status, Unavailable } from "./Ci.ts";
 
 // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's synchronous command interface
@@ -168,6 +168,21 @@ export const run = fc.record({
 
 const order = fc.option(fc.integer({ min: -2, max: 3 }), { nil: null });
 
+// The oracle's own rank of a finished run, written apart from the Layer's: a failure is worst, a run
+// that was stopped next, and every other conclusion least. A run not finished ranks above them all.
+const CONCLUSION_PRIORITY: Readonly<Record<typeof Conclusion.Type, number>> = {
+  failure: 3,
+  timed_out: 3,
+  cancelled: 2,
+  startup_failure: 2,
+  success: 1,
+  skipped: 1,
+  neutral: 1,
+};
+
+// Orders two words as the oracle sorts them: by code unit, as `<` compares strings.
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 // The oracle filters candidates by the written order, rather than using the Layer's reduction.
 const expected = (reports: ReadonlyArray<Report>, commit: string) => {
   const latest = reports.filter(
@@ -185,17 +200,12 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
       unknown.length > 0
         ? unknown
         : group.filter((r) => r.order === Math.max(...group.map((p) => p.order ?? -Infinity)));
-    const priority = (r: typeof CheckRun.Type) => {
-      if (r.status._tag !== "done") {
-        return 4;
-      }
-
-      return ["failure", "timed_out"].includes(r.status.conclusion)
-        ? 3
-        : ["cancelled", "startup_failure"].includes(r.status.conclusion)
-          ? 2
-          : 1;
-    };
+    const priority = (r: typeof CheckRun.Type) =>
+      Status.match(r.status, {
+        queued: () => 4,
+        running: () => 4,
+        done: ({ conclusion }) => CONCLUSION_PRIORITY[conclusion],
+      });
     const worst =
       unknown.length > 0 ? pool : pool.filter((r) => priority(r.run) === Math.max(...pool.map((p) => priority(p.run))));
     const winner = item(
@@ -207,13 +217,7 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
 };
 
 const sorted = (runs: ReadonlyArray<typeof CheckRun.Type>) =>
-  [...runs].sort((a, b) => {
-    if (a.name !== b.name) {
-      return a.name < b.name ? -1 : 1;
-    }
-
-    return a.source < b.source ? -1 : a.source > b.source ? 1 : 0;
-  });
+  [...runs].sort((a, b) => byText(a.name, b.name) || byText(a.source, b.source));
 
 export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
   describe("C2: the CI contract", () => {

@@ -17,6 +17,22 @@ type Program = ReturnType<typeof merger>;
 type Model = Program["machine"]["model"]["Type"];
 type Msg = Program["msg"]["Type"];
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+
+// The refusal a land is owed: it needs a merger with no job.
+const landRefusal = (s: Model) =>
+  Match.value(s).pipe(
+    Match.tag("idle", () => null),
+    Match.orElse(() => "busy"),
+  );
+
+// The refusal an abandon is owed: it needs a job to drop that is still this one and not yet merging.
+const abandonRefusal = (s: Model, ref: string) =>
+  Match.value(s).pipe(
+    Match.tag("idle", () => "idle"),
+    Match.tag("merging", () => "merging"),
+    Match.orElse((w) => (w.job.ref === ref ? null : "other_job")),
+  );
+
 const ctx = stubCtxThrowingProxy<never>();
 const LAST = 8.64e15;
 const clamp = (time: number) => Math.min(time, LAST);
@@ -690,22 +706,13 @@ describe("the merger, next/", () => {
 
                   const msg = moves[cell.move % moves.length]!();
                   // The refusal the machine owes this Msg in this state, or null.
-                  const refusal = () => {
-                    if (msg.type === "land") {
-                      return prev._tag !== "idle" ? "busy" : null;
-                    }
-
-                    if (msg.type !== "abandon") {
-                      return null;
-                    }
-
-                    if (prev._tag === "idle") {
-                      return "idle";
-                    }
-
-                    return prev._tag === "merging" ? "merging" : msg.ref !== prev.job.ref ? "other_job" : null;
-                  };
-                  const refused = refusal();
+                  const refused = Match.value(msg).pipe(
+                    Match.discriminators("type")({
+                      land: () => landRefusal(prev),
+                      abandon: (a) => abandonRefusal(prev, a.ref),
+                    }),
+                    Match.orElse(() => null),
+                  );
 
                   if (msg.type === "land" || msg.type === "abandon") {
                     expect(p.refuse(prev, msg)?.reason ?? null).toBe(refused);

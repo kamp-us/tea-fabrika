@@ -386,34 +386,31 @@ const success = <A>(answer: R.Result<A, unknown>, message: string): A => {
   return answer.success;
 };
 
-/** The task the oracle expects `read` to answer: its state, and one event per accepted call. */
-const expected = (saved: Saved): Task => {
-  const { request, executor, execution, result } = saved;
-  const assignment = executor === undefined || execution === undefined ? undefined : { execution, executor };
-  // The state the saved phase holds, first match first.
-  const stateFor = () => {
-    if (saved.phase === "requested") {
-      return State.cases.requested.make({ request });
-    }
+/** A fact the saved phase must hold; the oracle stops when the fold reached a phase without it. */
+const held = <A>(fact: A | undefined): A => fact ?? expect.fail("the fold reached a phase without its facts");
 
-    if (saved.phase === "assigned" && assignment !== undefined) {
-      return State.cases.assigned.make({ request, assignment });
-    }
+/** The saved task's assignment, held once both its executor and its execution are. */
+const assignmentIn = ({ executor, execution }: Saved) =>
+  held(executor === undefined || execution === undefined ? undefined : { execution, executor });
 
-    if (saved.phase === "started" && assignment !== undefined) {
-      return State.cases.started.make({ request, assignment });
-    }
-
-    if (saved.phase === "finished" && assignment !== undefined && result !== undefined) {
-      return State.cases.finished.make({ request, assignment, result });
-    }
-
-    return assignment !== undefined && result !== undefined && saved.collection !== undefined
-      ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
-      : expect.fail("the fold reached a phase without its facts");
-  };
-  return { state: stateFor(), events: saved.events } as Task;
+/** The state each saved phase holds, made from the facts that phase must have. */
+const STATE_AT: Readonly<Record<Phase, (saved: Saved) => typeof State.Type>> = {
+  requested: ({ request }) => State.cases.requested.make({ request }),
+  assigned: (saved) => State.cases.assigned.make({ request: saved.request, assignment: assignmentIn(saved) }),
+  started: (saved) => State.cases.started.make({ request: saved.request, assignment: assignmentIn(saved) }),
+  finished: (saved) =>
+    State.cases.finished.make({ request: saved.request, assignment: assignmentIn(saved), result: held(saved.result) }),
+  collected: (saved) =>
+    State.cases.collected.make({
+      request: saved.request,
+      assignment: assignmentIn(saved),
+      result: held(saved.result),
+      collection: held(saved.collection),
+    }),
 };
+
+/** The task the oracle expects `read` to answer: its state, and one event per accepted call. */
+const expected = (saved: Saved): Task => ({ state: STATE_AT[saved.phase](saved), events: saved.events }) as Task;
 
 const at = (world: World, phases: ReadonlyArray<Phase>) =>
   [...world.tasks.values()].filter((j) => phases.includes(j.phase));

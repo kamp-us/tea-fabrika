@@ -454,14 +454,15 @@ const M5Case = fc
   .filter((c) => c.bad || c.stale !== "no" || c.denied || c.missing);
 type M5Case = typeof M5Case extends fc.Arbitrary<infer A> ? A : never;
 
-/** The first refusal a case earns, in the plan's order. */
-const firstRefusal = (c: M5Case) => {
-  if (c.bad) {
-    return "bad_name";
-  }
+/** M5's refusals in the plan's order, each with the fault of a case that earns it. */
+const REFUSALS: ReadonlyArray<{ readonly reason: string; readonly earned: (c: M5Case) => boolean }> = [
+  { reason: "bad_name", earned: (c) => c.bad },
+  { reason: "stale_sender", earned: (c) => c.stale !== "no" },
+  { reason: "forbidden", earned: (c) => c.denied },
+];
 
-  return c.stale !== "no" ? "stale_sender" : c.denied ? "forbidden" : "no_name";
-};
+/** The first refusal a case earns, in the plan's order: a case with none of the faults above has no name. */
+const firstRefusal = (c: M5Case) => REFUSALS.find((r) => r.earned(c))?.reason ?? "no_name";
 
 /**
  * M5 on one case: a request that fails several checks gets the first refusal of `bad_name`,

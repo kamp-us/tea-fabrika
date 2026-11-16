@@ -10,7 +10,7 @@
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
 import { Layer, Option, Schema } from "effect";
 import { Socket } from "effect/socket";
-import type { Request } from "../tasks/Task.ts";
+import type { Assignment, Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
 
@@ -71,6 +71,18 @@ type Saved = {
 const SENT = "2026-11-15T10:00:00.000Z";
 const isResult = Schema.is(Result);
 
+/** A saved task's state at each phase, once it has an assignment. A finish saved with no result
+ *  still reads as assigned. */
+const STATE_AT: Readonly<Record<Phase, (s: Saved, assignment: typeof Assignment.Type) => typeof State.Type>> = {
+  requested: (s) => State.cases.requested.make({ request: s.request }),
+  assigned: (s, assignment) => State.cases.assigned.make({ request: s.request, assignment }),
+  started: (s, assignment) => State.cases.started.make({ request: s.request, assignment }),
+  finished: (s, assignment) =>
+    s.result === undefined
+      ? State.cases.assigned.make({ request: s.request, assignment })
+      : State.cases.finished.make({ request: s.request, assignment, result: s.result }),
+};
+
 /** The task as the brain's read answers it, in the tasks module's own schema. */
 const task = (s: Saved): Task => {
   const assignment =
@@ -81,16 +93,8 @@ const task = (s: Saved): Task => {
           executor: { key: s.executor, connection: "connection_hands", has: ["git"], build: "hands-build" },
         };
 
-  if (s.phase === "requested" || assignment === undefined) {
-    return { state: State.cases.requested.make({ request: s.request }), events: [] };
-  }
-
   const state =
-    s.phase === "finished" && s.result !== undefined
-      ? State.cases.finished.make({ request: s.request, assignment, result: s.result })
-      : s.phase === "started"
-        ? State.cases.started.make({ request: s.request, assignment })
-        : State.cases.assigned.make({ request: s.request, assignment });
+    assignment === undefined ? State.cases.requested.make({ request: s.request }) : STATE_AT[s.phase](s, assignment);
   return { state, events: [] };
 };
 
