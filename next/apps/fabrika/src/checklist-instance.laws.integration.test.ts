@@ -455,7 +455,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 const call = <A>(w: World, use: (p: ProjectCalls) => Effect.Effect<A, unknown>) =>
   Effect.promise(() => w.project.run(use));
 
-const Started = Schema.Struct({ _tag: Schema.Literal("started"), body: Schema.Struct({ process: Schema.String }) });
+const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
 
 /** The live process each boot entry placed first, read from its own `processes/<name>`. */
 const placings = (w: World) =>

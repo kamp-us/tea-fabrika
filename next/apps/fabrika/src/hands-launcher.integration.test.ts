@@ -55,7 +55,7 @@ const NAME = "hands-launcher";
 
 /** The launcher's stdout protocol, as the plan writes it. */
 const Line = Schema.TaggedUnion({
-  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Number },
+  waiting: { fingerprint: Schema.String, code: Schema.String, until: Schema.Finite },
   online: { fingerprint: Schema.String },
   offline: { fingerprint: Schema.String },
 });
@@ -134,8 +134,8 @@ type Seen = {
   readonly stderr: Array<string>;
   readonly d: string;
   readonly fingerprints: ReadonlyArray<string>;
-  readonly task: typeof Task.Type;
-  readonly taskAfterRestart: typeof Task.Type;
+  readonly task: Task;
+  readonly taskAfterRestart: Task;
   readonly journal: Record<string, unknown>;
   readonly brain: unknown;
 };
@@ -282,11 +282,7 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
-
-        const stored = Schema.decodeUnknownSync(Stored)(
-          yield* fs.readFileString(path.join(hands, "hands", "key.json")),
-        );
-
+        const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
         expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );

@@ -213,7 +213,7 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
 
 let counter = 0;
 
-const inputId = (): typeof InputId.Type => {
+const inputId = (): InputId => {
   counter = (counter + 1) % 1024;
   const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 

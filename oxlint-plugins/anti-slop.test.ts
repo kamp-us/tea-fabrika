@@ -65,7 +65,7 @@ const Report = Schema.fromJsonString(
       Schema.Struct({
         code: Schema.String,
         filename: Schema.String,
-        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) })),
+        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) })),
       }),
     ),
   }),

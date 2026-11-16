@@ -456,8 +456,9 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     yield* killWorkerd(process.pid);
     // The proxy can reply 502 while workerd reopens, so retry non-200 replies too.
     yield* request.pipe(
-      Effect.flatMap((response) =>
-        response.status === 200 ? Effect.succeed(response) : Effect.fail(new Error("Worker has not reopened")),
+      Effect.filterOrFail(
+        (response) => response.status === 200,
+        () => new Error("Worker has not reopened"),
       ),
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );

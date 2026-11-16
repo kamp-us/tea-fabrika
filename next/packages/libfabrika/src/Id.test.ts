@@ -234,7 +234,7 @@ describe("T518 Id format", () => {
           expect(Schema.is(Id.Type)(name)).toBe(true);
           expect(Specific.prefix).toBe(name);
           const raw = wire(name, bytes);
-          expect(Schema.decodeUnknownSync(Specific)(raw)).toBe(raw);
+          expect(Schema.decodeSync(Specific)(raw)).toBe(raw);
           expect(Schema.is(Specific)(wire("", bytes))).toBe(false);
         }
 
@@ -249,7 +249,7 @@ describe("T518 Id format", () => {
         expect(Front).toBe(Id);
         expect(Front.IdError).toBe(Public.IdError);
         const raw = wire(type, bytes);
-        expect(Schema.decodeUnknownSync(Front.make(type))(raw)).toBe(raw);
+        expect(Schema.decodeSync(Front.make(type))(raw)).toBe(raw);
       }),
       options,
     );
@@ -310,8 +310,8 @@ describe("T518 Id format", () => {
       fc.property(uuid, prefixShapes, prefix, (bytes, shapes, type) => {
         for (const name of [...shapes, type]) {
           const raw = wire(name, bytes);
-          expect(Schema.decodeUnknownSync(Id.Schema)(raw)).toBe(raw);
-          expect(Schema.decodeUnknownSync(Id.make(name))(raw)).toBe(raw);
+          expect(Schema.decodeSync(Id.Schema)(raw)).toBe(raw);
+          expect(Schema.decodeSync(Id.make(name))(raw)).toBe(raw);
           expect(referenceDecode(split(raw)[1])).toEqual(bytes);
         }
       }),
@@ -336,14 +336,9 @@ describe("T518 Id format", () => {
 
         for (const value of values) {
           expect(accepts(value, type)).toBe(true);
-          expect(Schema.decodeUnknownSync(Specific)(value)).toBe(value);
-          expect(Schema.decodeUnknownSync(Id.Schema)(value)).toBe(value);
-          expectDecoded(
-            yield* Effect.exit(Schema.decodeUnknownEffect(Other)(value)),
-            false,
-            value,
-            Schema.isSchemaError,
-          );
+          expect(Schema.decodeSync(Specific)(value)).toBe(value);
+          expect(Schema.decodeSync(Id.Schema)(value)).toBe(value);
+          expectDecoded(yield* Effect.exit(Schema.decodeEffect(Other)(value)), false, value, Schema.isSchemaError);
         }
       }),
     effectOptions,
@@ -408,13 +403,13 @@ describe("T518 Id format", () => {
           for (const value of bad) {
             expect(accepts(value)).toBe(false);
             expectDecoded(
-              Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Id.Schema)(value))),
+              Effect.runSync(Effect.exit(Schema.decodeEffect(Id.Schema)(value))),
               false,
               value,
               Schema.isSchemaError,
             );
             expectDecoded(
-              Effect.runSync(Effect.exit(Schema.decodeUnknownEffect(Specific)(value))),
+              Effect.runSync(Effect.exit(Schema.decodeEffect(Specific)(value))),
               false,
               value,
               Schema.isSchemaError,
@@ -473,7 +468,7 @@ describe("T518 Id format", () => {
       fc.property(prefixShapes, uuid, (shapes, bytes) => {
         for (const type of shapes) {
           const Specific = Effect.runSync(Id.makeEffect(type));
-          expect(Schema.decodeUnknownSync(Specific)(wire(type, bytes))).toBe(wire(type, bytes));
+          expect(Schema.decodeSync(Specific)(wire(type, bytes))).toBe(wire(type, bytes));
         }
       }),
       options,
@@ -656,7 +651,7 @@ describe("T518 Id order and generation", () => {
           for (const id of ids) {
             expect(accepts(id, type)).toBe(true);
             expect(id.startsWith(`${type}_`)).toBe(true);
-            expect(Schema.decodeUnknownSync(Specific)(id)).toBe(id);
+            expect(Schema.decodeSync(Specific)(id)).toBe(id);
             expect(timestamp(id)).toBe(at);
           }
 
@@ -733,7 +728,7 @@ describe("T518 Id order and generation", () => {
 
             for (const id of ids) {
               expect(accepts(id, "letter")).toBe(true);
-              expect(Schema.decodeUnknownSync(Specific)(id)).toBe(id);
+              expect(Schema.decodeSync(Specific)(id)).toBe(id);
               expect(timestamp(id)).toBe(now);
             }
           }

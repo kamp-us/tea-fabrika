@@ -62,7 +62,7 @@ const jsonLines = (text: string) =>
   stripVTControlCharacters(text)
     .split(/\r?\n/)
     .flatMap((line) => {
-      const result = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Unknown))(line);
+      const result = Schema.decodeResult(Schema.fromJsonString(Schema.Unknown))(line);
 
       return Result.isSuccess(result) ? [result.success] : [];
     });

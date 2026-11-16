@@ -142,7 +142,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   const pair = generateKeyPairSync("ed25519");
   const raw = pair.publicKey.export({ format: "der", type: "spki" }).subarray(-32);
 
-  const line = Schema.decodeUnknownSync(KeyLine)(
+  const line = Schema.decodeSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
 

@@ -445,7 +445,7 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        const body = Schema.decodeUnknownSync(Body)(bodyText(options));
+        const body = Schema.decodeSync(Body)(bodyText(options));
         const port = Number(new URL(String(url)).port);
         requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
 

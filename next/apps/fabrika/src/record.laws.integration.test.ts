@@ -117,10 +117,7 @@ const WireLive = Layer.effect(
     const instance = yield* recordWire(cap);
 
     const driver: Driver = Effect.fnUntraced(function* (name: string) {
-      const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(
-        name,
-      );
-
+      const decoded = Schema.decodeOption(Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])))(name);
       const [project, part] = Option.getOrElse(decoded, () => ["invalid-name", name]);
       const stub = instance.record(project, part);
       const { write, read, content, deleteContent } = stub;

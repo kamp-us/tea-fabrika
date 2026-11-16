@@ -54,14 +54,12 @@ export const localInstance = Effect.fn("brain.localInstance")(function* (
   const started = startDev(built, options).pipe(Effect.provide([ProcessIdGenerator.layer, FetchHttpClient.layer]));
 
   return yield* started.pipe(
-    Effect.catchCause((cause): Effect.Effect<never, PortError | Effect.Error<typeof started>> =>
-      portTaken(cause)
-        ? Effect.fail(
-            new PortError({
-              message: `Port ${options.settings.values["instance.port"]} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
-            }),
-          )
-        : Effect.failCause(cause),
+    Effect.catchCauseIf(portTaken, () =>
+      Effect.fail(
+        new PortError({
+          message: `Port ${options.settings.values["instance.port"]} is taken, so the instance did not start. Stop what uses it, or set instance.port to another port.`,
+        }),
+      ),
     ),
   );
 });

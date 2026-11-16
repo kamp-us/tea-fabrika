@@ -26,18 +26,18 @@ import * as RepositoryTrustLedger from "./RepositoryTrustLedger.ts";
 
 export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
-class TrustLawFailed extends Schema.TaggedError<TrustLawFailed>()("TrustLawFailed", {
+class TrustLawFailed extends Schema.TaggedError<TrustLawFailed, { readonly brand: unique symbol }>()("TrustLawFailed", {
   cause: Schema.Defect(),
 }) {}
 
 // Effect 4 owns schema generation; fast-check chooses its seed and the operation tape.
 const generated = <S extends Schema.ConstraintDecoder<unknown>>(schema: S): fc.Arbitrary<S["Type"]> =>
-  fc.nat().map((seed) => {
-    return Schema.decodeUnknownSync(schema)(
+  fc.nat().map((seed) =>
+    Schema.decodeUnknownSync(schema)(
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's generator is synchronous
       Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }))[0],
-    );
-  });
+    ),
+  );
 
 const input = generated(Id.InputId);
 
@@ -95,9 +95,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           trace,
           tape,
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
-          async (repoId, operator, selection, request, key, traceId, cells) => {
+          async (repoId, operator, selection, request, key, traceId, cells) =>
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-            return Effect.runPromise(
+            Effect.runPromise(
               run((store, trust) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
@@ -154,7 +154,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
 
-                    const otherPerson = Schema.decodeUnknownSync(Id.make("person"))(
+                    const otherPerson = Schema.decodeSync(Id.make("person"))(
                       `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
                     );
 
@@ -163,7 +163,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
 
-                    const reopened = Schema.decodeUnknownSync(Id.InputId)(
+                    const reopened = Schema.decodeSync(Id.InputId)(
                       `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
                     );
 
@@ -212,8 +212,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                   }
                 }),
               ).pipe(Effect.provide(Digest.layerWebCrypto)),
-            );
-          },
+            ),
         );
 
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
@@ -237,9 +236,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             trace,
             tape,
             // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
-            async (repoId, operator, selection, answer, opening, key, traceId, cells) => {
+            async (repoId, operator, selection, answer, opening, key, traceId, cells) =>
               // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-              return Effect.runPromise(
+              Effect.runPromise(
                 run((store, trust, ledger) =>
                   Effect.gen(function* () {
                     const snapshot = yield* settings;
@@ -339,8 +338,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     }
                   }),
                 ).pipe(Effect.provide(Digest.layerWebCrypto)),
-              );
-            },
+              ),
           );
 
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
@@ -360,9 +358,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           trace,
           tape,
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check requires an asynchronous property callback
-          async (repoId, operator, selection, key, traceId, cells) => {
+          async (repoId, operator, selection, key, traceId, cells) =>
             // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each real store operation
-            return Effect.runPromise(
+            Effect.runPromise(
               run((_store, trust, ledger) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
@@ -435,7 +433,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       }
                     }
 
-                    const corrupt: Entry = Schema.decodeUnknownSync(EntrySchema)({
+                    const corrupt: Entry = Schema.decodeSync(EntrySchema)({
                       id: selection,
                       stream: "fixture",
                       pos: 1,
@@ -457,8 +455,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                   }
                 }),
               ).pipe(Effect.provide(Digest.layerWebCrypto)),
-            );
-          },
+            ),
         );
 
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise

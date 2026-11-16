@@ -217,7 +217,7 @@ const life = Effect.fnUntraced(function* (
         ChildrenLedger.layer({ grants, fabrika: Model.ref("fabrika", "pipeline") }).pipe(
           // T953: these laws pin `StartGrant`, so the inputs they send are given no member behind them.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
         // T1041: mail.unread's largest value, so no law here meets a full inbox.
         ProgramMailLedger.layer({
@@ -380,7 +380,7 @@ const open = Effect.fnUntraced(function* (
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
-        id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
+        id: Schema.decodeSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`),
         by: owner,
         arrivedAt: n,
         input,
@@ -461,9 +461,7 @@ const open = Effect.fnUntraced(function* (
     );
 
     const model =
-      checkpoint === null
-        ? null
-        : Schema.decodeUnknownSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
+      checkpoint === null ? null : Schema.decodeSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
 
     return {
       model,

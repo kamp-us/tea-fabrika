@@ -46,7 +46,7 @@ const ADMITTED = { version: 1, ping: 5_000, identity: { key: "SHA256:k", person:
 const admission = (person: string) => ({ ...ADMITTED, identity: { ...ADMITTED.identity, person } });
 
 const isAdmission = Schema.is(
-  Schema.Struct({ ping: Schema.Number, identity: Schema.Struct({ person: Schema.String }) }),
+  Schema.Struct({ ping: Schema.Finite, identity: Schema.Struct({ person: Schema.String }) }),
 );
 
 /** A blind draw the fold reads in the state it reached. */

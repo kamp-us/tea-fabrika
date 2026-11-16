@@ -450,7 +450,7 @@ const wire = async (
       diagnostics.frame(
         initialized || raw === "pong"
           ? raw
-          : JSON.stringify(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
+          : JSON.stringify(Schema.decodeSync(Schema.fromJsonString(Schema.Json))(raw), (name, value) =>
               ["key", "nonce", "signed", "token"].includes(name) ? "[redacted]" : value,
             ),
       );

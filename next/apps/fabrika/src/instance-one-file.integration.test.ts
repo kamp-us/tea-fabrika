@@ -126,24 +126,20 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
 // A loaded program answers its init and step calls with P11's Step. Decode it, never read it raw.
 type Loaded = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
 
-const SealedTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const SealedTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ keys: Schema.Array(Schema.String), outbound: Schema.String }),
 });
 
-const CounterTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
-  model: Schema.Struct({ count: Schema.Number }),
+const CounterTurn = Schema.TaggedStruct("stepped", {
+  model: Schema.Struct({ count: Schema.Finite }),
 });
 
-const ChecklistTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const ChecklistTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ items: Schema.Array(Schema.Unknown) }),
 });
 
 /** Desk S2a: tezgah's first init, before any window attaches: no workspace, no tile. */
-const TezgahTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const TezgahTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ workspaces: Schema.Array(Schema.Unknown), tiles: Schema.Array(Schema.Unknown) }),
 });
 
@@ -182,13 +178,13 @@ const field = (value: string | Buffer) => {
 // P12's driver field names. Experiment 238's driver on branch fabrikalfa/exp241-script gives
 // lostLinkMs and writes the caps: experiment 241's guess from its sitting's four base runs.
 const Metrics = Schema.Struct({
-  acceptedSend: Schema.Number,
-  publication: Schema.Number,
-  restart: Schema.Number,
-  reconnect: Schema.Number,
-  lostLink: Schema.Number,
-  rss: Schema.Number,
-  startup: Schema.Number,
+  acceptedSend: Schema.Finite,
+  publication: Schema.Finite,
+  restart: Schema.Finite,
+  reconnect: Schema.Finite,
+  lostLink: Schema.Finite,
+  rss: Schema.Finite,
+  startup: Schema.Finite,
 });
 
 const Sample = Schema.Struct({
@@ -199,13 +195,13 @@ const Sample = Schema.Struct({
   load: Schema.String,
   missing: Schema.Record(Schema.String, Schema.String),
   error: Schema.optionalKey(Schema.String),
-  startMs: Schema.Number,
-  sendMs: Schema.Array(Schema.Number),
-  publishMs: Schema.Array(Schema.Number),
-  replaceMs: Schema.Number,
-  reconnectMs: Schema.Number,
-  lostLinkMs: Schema.Number,
-  workerdRssMb: Schema.Number,
+  startMs: Schema.Finite,
+  sendMs: Schema.Array(Schema.Finite),
+  publishMs: Schema.Array(Schema.Finite),
+  replaceMs: Schema.Finite,
+  reconnectMs: Schema.Finite,
+  lostLinkMs: Schema.Finite,
+  workerdRssMb: Schema.Finite,
 });
 
 const Bar = Schema.Struct({
@@ -214,7 +210,7 @@ const Bar = Schema.Struct({
   caps: Metrics,
   base: Schema.Array(Sample),
   head: Schema.Array(Sample),
-  sizes: Schema.Struct({ brain: Schema.Number, programs: Schema.Number, window: Schema.Number }),
+  sizes: Schema.Struct({ brain: Schema.Finite, programs: Schema.Finite, window: Schema.Finite }),
 });
 
 type Bar = typeof Bar.Type;
@@ -1002,7 +998,7 @@ describe("P16 copied-file real instance, serial", () => {
       return;
     }
 
-    const bar = Schema.decodeUnknownSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
+    const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
     const brain = process.env.P16_BRAIN;
     assert(brain, "final brain path missing");
     const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");

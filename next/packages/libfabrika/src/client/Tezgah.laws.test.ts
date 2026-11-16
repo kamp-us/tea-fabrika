@@ -117,7 +117,7 @@ const both = (
   applyCell(tezgahMachine as never, m as never, msg as never) as never;
 
 /** A view as the wire carries it, JSON. */
-const onWire = (view: typeof TezgahView.Type): unknown =>
+const onWire = (view: TezgahView): unknown =>
   Schema.decodeSync(Json)(Schema.encodeSync(Json)(Schema.encodeSync(TezgahView)(view)));
 
 const text = (state: unknown) =>
@@ -373,7 +373,7 @@ const tileRow = (id: string, n: number): Tile =>
 const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
 
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,

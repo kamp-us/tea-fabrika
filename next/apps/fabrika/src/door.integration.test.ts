@@ -50,7 +50,7 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -1983,7 +1983,7 @@ describe("P10 review regressions", () => {
   };
 
   const gatewayCrypto = (failure: unknown, thrown: unknown) => {
-    assert(failure instanceof GatewayError);
+    assert(Schema.is(GatewayError)(failure));
     expect(failure).toMatchObject({ _tag: "GatewayError", reason: { _tag: "Crypto" } });
     expect(failure.reason.cause).toBe(thrown);
   };
@@ -1994,12 +1994,12 @@ describe("P10 review regressions", () => {
   };
 
   const membershipCrypto = (failure: unknown, thrown: unknown) => {
-    assert(failure instanceof SessionManagerError);
+    assert(Schema.is(SessionManagerError)(failure));
     expect(failure).toMatchObject({
       _tag: "SessionManagerError",
       reason: { _tag: "Membership", cause: { _tag: "LedgerError", reason: "crypto" } },
     });
-    assert(failure.reason.cause instanceof LedgerError);
+    assert(Schema.is(LedgerError)(failure.reason.cause));
     expect(failure.reason.cause.cause).toBe(thrown);
   };
 
@@ -3691,7 +3691,7 @@ describe("P10 inputs, retries and signer", () => {
       const fields = Object.entries(state.schema.fields).filter(
         ([key, field]) =>
           Object.hasOwn(state.m, key) &&
-          (!missing || Schema.decodeUnknownResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
+          (!missing || Schema.decodeResult(Schema.Struct({ [key]: field }))({})._tag === "Failure"),
       );
 
       assert(fields.length > 0, "the current message must have a field that can be broken");
@@ -4846,7 +4846,7 @@ describe("P10 span reader and recording", () => {
               RecordManager.pipe(
                 Effect.map((real: typeof RecordManager.Service) => ({
                   ...real,
-                  read: (chain: typeof Chain.Type) =>
+                  read: (chain: Chain) =>
                     real.read(chain).pipe(
                       Stream.take(256),
                       Stream.concat(
@@ -5689,7 +5689,7 @@ describe("P10 refusal records and checked writes", () => {
   ] as const) {
     it.effect.prop(
       `p67: malformed ${method} ${JSON.stringify(params)} is recorded as refused`,
-      { generated: Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]) },
+      { generated: Schema.Union([Schema.String, Schema.Finite, Schema.Boolean, Schema.Null]) },
       ({ generated }) =>
         Effect.forEach(
           [params, generated],

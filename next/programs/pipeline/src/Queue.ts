@@ -27,7 +27,7 @@ const line = { ...counts, line: Schema.Array(Entry) };
 const Model = Schema.TaggedUnion({
   idle: counts,
   starting: { ...line, current: Current },
-  landing: { ...line, current: Current, since: Schema.Number },
+  landing: { ...line, current: Current, since: Schema.Finite },
   stopped: { ...line, reason: Stop },
 });
 
@@ -48,12 +48,12 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
   const cmd = input.mapFields((fields) => ({ ...fields, type: Schema.Literal(name) }));
 
   return Schema.Union([
-    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Finite }),
     Schema.Struct({
       type: Schema.Literal(`${name}_err`),
       cmd,
       error: Schema.Union(tags.map((tag) => Schema.TaggedStruct(tag, {}))),
-      at: Schema.Number,
+      at: Schema.Finite,
     }),
   ]);
 };
@@ -71,7 +71,7 @@ const Msg = Schema.Union([
     type: Schema.Literal("start_child_err"),
     cmd: Schema.Struct({ type: Schema.Literal("start_child") }),
     reason: Schema.Literals([...StartChild.StartRefusal.literals, "bad_cmd"]),
-    at: Schema.Number,
+    at: Schema.Finite,
   }),
   answers("send", Send.SendInput, Send.Queued, Send.send.errTags),
 ]);

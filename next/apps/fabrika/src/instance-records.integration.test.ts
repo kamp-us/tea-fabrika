@@ -97,7 +97,7 @@ const identity = () => {
 };
 
 const span = (n: number) =>
-  Schema.decodeUnknownSync(SpanRow)({
+  Schema.decodeSync(SpanRow)({
     traceId: TRACE,
     spanId: n.toString(16).padStart(16, "0"),
     parentSpanId: null,

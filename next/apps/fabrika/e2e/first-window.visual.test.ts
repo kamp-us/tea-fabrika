@@ -232,7 +232,7 @@ const Resends = Schema.Struct({
       ),
       firstAnswer: Schema.NullOr(Sent),
       result: Schema.NullOr(Sent),
-      closed: Schema.NullOr(Schema.Struct({ code: Schema.Int, clean: Schema.Boolean, ms: Schema.Number })),
+      closed: Schema.NullOr(Schema.Struct({ code: Schema.Int, clean: Schema.Boolean, ms: Schema.Finite })),
     }),
   ),
 });

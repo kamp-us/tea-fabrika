@@ -44,14 +44,17 @@ const QUIET = 250;
 const REDIAL_WITHIN = 10_000;
 
 /** A Playwright call the law awaited failed: which call, and the cause. */
-class PlaywrightError extends Schema.TaggedError<PlaywrightError>()("PlaywrightError", {
-  op: Schema.String,
-  message: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+class PlaywrightError extends Schema.TaggedError<PlaywrightError, { readonly brand: unique symbol }>()(
+  "PlaywrightError",
+  {
+    op: Schema.String,
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
 /** A property's own run failed, a counterexample or a setup error, with fast-check's report as its message. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", {
+class PropertyFailed extends Schema.TaggedError<PropertyFailed, { readonly brand: unique symbol }>()("PropertyFailed", {
   message: Schema.String,
   cause: Schema.Defect(),
 }) {}

@@ -68,7 +68,7 @@ type Model = {
   readonly views: { readonly [pid: string]: { readonly rev: number; readonly view: Schema.Json } };
 };
 
-expectTypeOf<Model>().toEqualTypeOf<typeof Client.Type>();
+expectTypeOf<Model>().toEqualTypeOf<Client>();
 
 type Msg = ClientMsg;
 

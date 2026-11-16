@@ -884,7 +884,7 @@ it.effect.prop(
             );
           }
 
-          const saved = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+          const saved = Schema.decodeSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
             w.files.get(file) ?? "{}",
           );
 

@@ -127,9 +127,7 @@ const TileBody = ({
   });
 
   const registration = windowFor(tile.program);
-
-  const data =
-    registration && shown ? Option.getOrNull(Schema.decodeUnknownOption(registration.data)(shown.view)) : null;
+  const data = registration && shown ? Option.getOrNull(Schema.decodeOption(registration.data)(shown.view)) : null;
 
   // The tile guideline's empty state: one word where the view will start, and on an ended tile in
   // place of the ended process's last view.

@@ -195,7 +195,7 @@ type Dispatched = {
   /** The request as the task first saved it, once it was. */
   first?: string;
   /** The result the hands finished it with. */
-  result?: typeof TaskResult.Type;
+  result?: TaskResult;
   /** Its process ended before the answer folded: a later life may never take it. */
   orphan: boolean;
   /** Its task was already collected when its process ended. */

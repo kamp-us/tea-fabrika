@@ -39,9 +39,9 @@ import { type Chain, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-type ChainValue = typeof Chain.Type;
+type ChainValue = Chain;
 
-type Row = typeof SpanRow.Type;
+type Row = SpanRow;
 
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
  *  call, so a file cannot be acquired one by one: the folder holds them, and the scope that asked
@@ -510,13 +510,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0 ? Effect.fail(new SinkError({ reason: value, held: 0 })) : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: value, held: 0 }),
                     ),
+                  ),
               };
 
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
@@ -713,15 +712,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0
-                          ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 }))
-                          : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: "unreachable", held: 0 }),
                     ),
+                  ),
               };
 
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
@@ -1316,8 +1312,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
     );
 
     await fc.assert(
-      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;
             yield* Effect.gen(function* () {
@@ -1358,8 +1354,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               }
             }).pipe(Effect.provide(world(sql)));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
@@ -1686,8 +1682,9 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
       Effect.gen(function* () {
         const { sql } = yield* walkHome;
         yield* Effect.gen(function* () {
-          class Typed extends Schema.TaggedError<Typed>()(sample.tag, { reason: Schema.String }) {}
-
+          class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
+            reason: Schema.String,
+          }) {}
           const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
 
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {

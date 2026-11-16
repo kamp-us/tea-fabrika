@@ -126,9 +126,7 @@ const segment = fc.oneof(
   fc.stringMatching(/^[a-z0-9_-]{1,12}$/),
 );
 
-const path = fc
-  .array(segment, { minLength: 1, maxLength: 5 })
-  .map((parts) => Schema.decodeUnknownSync(Path)(parts.join("/")));
+const path = fc.array(segment, { minLength: 1, maxLength: 5 }).map((parts) => Schema.decodeSync(Path)(parts.join("/")));
 
 const glob = fc
   .oneof(
@@ -177,10 +175,8 @@ describe("L6: kind is the heaviest", () => {
             expect(weight[Change.kind(kinds, [...paths, added])]).toBeGreaterThanOrEqual(weight[expected]);
           }
 
-          const both = Schema.decodeUnknownSync(Change.Glob)("**");
-          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeUnknownSync(Path)("docs/a b.md")])).toBe(
-            "docs",
-          );
+          const both = Schema.decodeSync(Change.Glob)("**");
+          expect(Change.kind({ rows: [both], docs: [both] }, [Schema.decodeSync(Path)("docs/a b.md")])).toBe("docs");
         },
       ),
       { seed: 119120, numRuns: 500 },

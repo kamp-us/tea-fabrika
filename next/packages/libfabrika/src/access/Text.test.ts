@@ -96,7 +96,7 @@ it.prop(
   ({ grant, as }) => {
     const signed = { ...grant, as };
     const text = grantText(signed);
-    expect(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(text)).toEqual({
+    expect(Schema.decodeSync(Schema.fromJsonString(Schema.Unknown))(text)).toEqual({
       _tag: "granted",
       grant: signed,
     });

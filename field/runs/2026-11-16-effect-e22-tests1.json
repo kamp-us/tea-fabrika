@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e22-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00Z",
+  "ended": "2026-11-16T04:30:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E22 (catchConditionalRefailToCatchIf) in next/. Met 7 hits: 2 outside pull request 1366's files, 5 in next/packages/libfabrika/src/cloudflare (ConnectionObject.ts:22, ProcessObject.ts:29, connection.ts:176, runtime.ts:480, runtime.ts:1890), which belong to slice E70 and wait for the after-1366 slice (connection.ts and runtime.ts are in 1366's diff). Fixed by hand edit: 2 (quick fix not used; each is one catchCause call). next/apps/fabrika/src/local-instance.ts:53 now uses Effect.catchCauseIf(portTaken, ...) and next/packages/libfabrika/src/processes/ChildrenLedger.ts:293 uses Effect.catchCauseIf(Cause.hasDies, ...); the same causes are caught and every other cause fails through unchanged. Left: 0.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Lock: next/apps/fabrika/tsconfig.json (whole app, the check at error) and next/packages/libfabrika/tsconfig.json overrides include src/processes/**/*.ts. Recount: libfabrika 5 hits left, all as message in cloudflare; app 0; processes 0. Tests: Children.types.test.ts and local-instance.integration.test.ts passed (3 tests). pnpm lint: 16 of 17 parts passed; lint:dead aborted with SIGABRT (Node crash in this box), not a finding.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "the old catchCause ternary back in ChildrenLedger.ts:293 (locked processes folder)",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

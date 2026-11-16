@@ -178,7 +178,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   return yield* Effect.try(() => ({
     rp: text(p.rp),
     origin: text(p.origin),
-    client: Schema.decodeUnknownSync(Client)(text(p.client)),
+    client: Schema.decodeSync(Client)(text(p.client)),
   })).pipe(
     Effect.flatMap(
       Effect.fnUntraced(function* ({ rp, origin, client }) {
@@ -205,11 +205,11 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
         return ok ? { origin, rp, be: (p.flags & 8) !== 0, bs: (p.flags & 16) !== 0, counter: p.counter } : null;
       }),
     ),
-    Effect.catch(() => Effect.succeed(null)),
+    Effect.orElseSucceed(() => null),
   );
 });
 
-class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
+class BadAssertion extends Schema.TaggedError<BadAssertion, { readonly brand: unique symbol }>()("BadAssertion", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
@@ -270,7 +270,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   const { blob, key, ints } = parsed.value;
 
   const decoded = yield* Effect.try({
-    try: () => Schema.decodeUnknownSync(Client)(text(client)),
+    try: () => Schema.decodeSync(Client)(text(client)),
     catch: (cause) => BadAssertion.make({ cause }),
   });
 

@@ -74,7 +74,7 @@ describe("P16 real browser from a copied one-file build", () => {
 
           process.env.FABRIKA_HOME = home;
           delete process.env.TYPESAFE_API_KEY;
-          const scope = Effect.runSync(Scope.make());
+          const scope = Scope.makeUnsafe();
           let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
 
           try {
@@ -247,13 +247,17 @@ const Fault = Schema.Struct({
 const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 
-class SetupFault extends Schema.TaggedError<SetupFault>()("SetupFault", { at: Schema.String }) {}
+class SetupFault extends Schema.TaggedError<SetupFault, { readonly brand: unique symbol }>()("SetupFault", {
+  at: Schema.String,
+}) {}
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.String }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  reason: Schema.String,
+}) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 

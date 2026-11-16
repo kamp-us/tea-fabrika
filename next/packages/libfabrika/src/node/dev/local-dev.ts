@@ -81,7 +81,7 @@ export const lifeCell = Effect.fnUntraced(function* (last: string | null) {
 
 type LifeCell = Effect.Success<ReturnType<typeof lifeCell>>;
 
-class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
+class BrainError extends Schema.TaggedError<BrainError, { readonly brand: unique symbol }>()("BrainError", {
   reason: Schema.Literals(["storage", "bad_row", "id_reused"]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -120,7 +120,7 @@ export const checkMemory = Effect.fn("brain.checkMemory")(function* <E, R>(optio
 const isMissing = Schema.is(Schema.Struct({ code: Schema.Literal("ESRCH") }));
 
 // A signal the OS refused: `missing` when the pid has no process (ESRCH), `refused` for any other.
-class SignalError extends Schema.TaggedError<SignalError>()("SignalError", {
+class SignalError extends Schema.TaggedError<SignalError, { readonly brand: unique symbol }>()("SignalError", {
   reason: Schema.Literals(["missing", "refused"]),
   /** The error `process.kill` threw, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
@@ -264,7 +264,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 
     return yield* Effect.forEach(
       text.split("\n").filter(Boolean),
-      (row) => Schema.decodeUnknownEffect(Schema.fromJsonString(PendingEvent))(row),
+      (row) => Schema.decodeEffect(Schema.fromJsonString(PendingEvent))(row),
       { concurrency: 1 },
     );
   }).pipe(Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })));
@@ -307,7 +307,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         return null;
       }
 
-      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.NonEmptyString))(
+      return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.NonEmptyString))(
         yield* fs.readFileString(lastFile),
       );
     }).pipe(Effect.mapError((cause) => BrainError.make({ reason: "bad_row", cause })));

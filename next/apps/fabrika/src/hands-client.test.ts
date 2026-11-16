@@ -60,8 +60,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // private key's armored text in the hello's `build`.
 import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import * as KeyValueStore from "effect/persistence/KeyValueStore";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -142,7 +141,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
 
   return {
     raw: Base64Url.encode(raw),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`),
     fingerprint: yield* fingerprint(raw),
     sshFingerprint: yield* fingerprint(blob),
     sign,

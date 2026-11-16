@@ -1229,7 +1229,7 @@ describe("Desk S1: start and stop refusals decode by name", () => {
     const named = [...StartChild.stopChild.errTags, ...StartChild.StartRefusal.literals];
     fc.assert(
       fc.property(fc.constantFrom(...named), fc.string(), (reason, other) => {
-        const decoded = Schema.decodeUnknownOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
+        const decoded = Schema.decodeOption(Schema.Union([stops, StartChild.StartRefusal]))(reason);
         expect(decoded._tag === "Some" ? decoded.value : null, `L4: ${reason} decodes by name`).toBe(reason);
         expect(
           Schema.is(Schema.Union([stops, StartChild.StartRefusal]))(other),

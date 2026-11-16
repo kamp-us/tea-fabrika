@@ -23,7 +23,7 @@ const database = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p15-code-" });
 
-  return connection(path.join(folder, "code.sqlite"));
-}).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
+  return path.join(folder, "code.sqlite");
+}).pipe(Effect.map(connection), Effect.provide(NodeServices.layer), Effect.orDie);
 
 CodeStoreTest.suite(database);
