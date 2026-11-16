@@ -122,7 +122,6 @@ const environment: ProjectAuditTest.Harness["environment"] = (
       vi.fn().mockImplementation((object: string) => ({
         configure: () => Promise.resolve(undefined),
         usage: (rows: Parameters<typeof usage>[1]) => Promise.resolve(usage(object, rows)),
-        // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for a platform RPC stub, whose methods return Promises the code under test awaits
         msg: async (input: Incoming) => {
           const message = input.envelope.input;
           const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;

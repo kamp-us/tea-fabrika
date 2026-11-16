@@ -83,18 +83,15 @@ describe("ledger.call, next/ tracing keep-laws", () => {
             });
           };
           const stub: LedgerCalls = {
-            // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for LedgerCalls, a Promise interface the ledger client awaits
             async append(stream) {
               sending("append", stream);
               return append;
             },
-            // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for LedgerCalls, a Promise interface the ledger client awaits
             async read(stream, after, readerId) {
               sending("read", stream);
               expect(readerId).toBe(reader);
               return rows.filter((r) => r.rev > after).slice(0, PAGE);
             },
-            // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for LedgerCalls, a Promise interface the ledger client awaits
             async wait(stream, _after, readerId) {
               sending("wait", stream);
               expect(readerId).toBe(reader);

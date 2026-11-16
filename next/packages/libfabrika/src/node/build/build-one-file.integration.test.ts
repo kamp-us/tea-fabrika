@@ -293,12 +293,10 @@ const observe = async () => {
   }>("rolldown");
   vi.doMock("rolldown", () => ({
     ...native,
-    // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
     rolldown: async (options: RolldownOptions) => {
       const handle = await native.rolldown(options);
       return {
         ...handle,
-        // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
         generate: async (o: OutputOptions) => {
           const out = await handle.generate(o);
 
@@ -585,12 +583,10 @@ const observeCalls = async () => {
   }>("rolldown");
   vi.doMock("rolldown", () => ({
     ...native,
-    // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
     rolldown: async (options: RolldownOptions) => {
       const handle = await native.rolldown(options);
       return {
         ...handle,
-        // @effect-diagnostics-next-line asyncFunction:off -- wraps Rolldown's own Promise API, which the build under test awaits
         generate: async (o: OutputOptions) => {
           const out = await handle.generate(o);
           calls.push({

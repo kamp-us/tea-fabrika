@@ -45,7 +45,6 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const reason = mode === "json" || mode === "schema" ? "bad_row" : mode === "remote" ? `remote-${id}` : mode;
-        // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
           if (mode === "unreachable") {
             throw new Error(id);
@@ -150,7 +149,6 @@ for (const mode of ["exit", "spawn"] as const) {
             return span;
           },
         });
-        // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
         const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
           return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });

@@ -39,7 +39,6 @@ const opened = vi.hoisted(() => ({
   results: [] as Array<{ code: string; closed: boolean }>,
 }));
 
-// @effect-diagnostics-next-line asyncFunction:off -- Vitest's module factory, whose contract is an async function
 vi.mock("rolldown", async (original) => {
   const actual = await original<typeof import("rolldown")>();
   return {

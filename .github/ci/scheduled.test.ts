@@ -1120,65 +1120,71 @@ const greens = fc.array(
   { maxLength: 30 },
 );
 
-it("L1 property: the last green run is main's newest green run whose test legs ran, stepping over runs whose gate said false, or none", async () => {
-  // Plant: today's lastGreen, which takes main's first `success` run (red: a skipped run's commit
-  // is named as the last green one).
-  const reached = { stepped: 0, none: 0, first: 0, old: 0 };
-  await fc.assert(
-    fc.asyncProperty(greens, async (list) => {
-      const runs = list.map((r, i) => ({ ...r, id: 500 + i }));
-      const calls: string[] = [];
-      const send = (url: string) => {
-        calls.push(url);
-        const parsed = new URL(url);
-        const path = parsed.pathname.replace("/repos/owner/repo/", "");
-        const query = parsed.searchParams;
-        const json = /^actions\/workflows\/scheduled\.yaml\/runs$/.test(path)
-          ? {
-              workflow_runs: runs
-                .filter(
-                  (r) =>
-                    (query.get("branch") === null || r.branch === query.get("branch")) &&
-                    (query.get("status") === null || r.conclusion === query.get("status")),
-                )
-                .toSorted((a, b) => b.id - a.id)
-                .slice(0, Math.min(Number(query.get("per_page") ?? 30), 100))
-                .map((r) => ({
-                  id: r.id,
-                  head_branch: r.branch,
-                  head_sha: r.sha,
-                  conclusion: r.conclusion,
-                  status: "completed",
-                })),
-            }
-          : (() => {
-              const run = runs.find((r) => path === `actions/runs/${r.id}/jobs`);
-              const names = !run?.full
-                ? ["gate", "tests", "report"]
-                : run.old
-                  ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
-                  : ["gate", "tests (e2e-1)", "tests (1)", "report"];
-              return {
-                total_count: names.length,
-                jobs: names.map((name) => ({ name, status: "completed", conclusion: "success" })),
-              };
-            })();
-        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(json) });
-      };
-      const green = runs
-        .filter((r) => r.branch === "main" && r.conclusion === "success")
-        .toSorted((a, b) => b.id - a.id);
-      const expected = green.find((r) => r.full)?.sha ?? null;
-      expect(await scheduled.github(env, send)!.lastGreen()).toBe(expected);
-      reached.stepped += green[0] !== undefined && !green[0].full && expected !== null ? 1 : 0;
-      reached.none += expected === null && green.length > 0 ? 1 : 0;
-      reached.first += green[0]?.full ? 1 : 0;
-      reached.old += green.find((r) => r.full)?.old ? 1 : 0;
+it.live(
+  "L1 property: the last green run is main's newest green run whose test legs ran, stepping over runs whose gate said false, or none",
+  () =>
+    Effect.gen(function* () {
+      // Plant: today's lastGreen, which takes main's first `success` run (red: a skipped run's commit
+      // is named as the last green one).
+      const reached = { stepped: 0, none: 0, first: 0, old: 0 };
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(greens, async (list) => {
+            const runs = list.map((r, i) => ({ ...r, id: 500 + i }));
+            const calls: string[] = [];
+            const send = (url: string) => {
+              calls.push(url);
+              const parsed = new URL(url);
+              const path = parsed.pathname.replace("/repos/owner/repo/", "");
+              const query = parsed.searchParams;
+              const json = /^actions\/workflows\/scheduled\.yaml\/runs$/.test(path)
+                ? {
+                    workflow_runs: runs
+                      .filter(
+                        (r) =>
+                          (query.get("branch") === null || r.branch === query.get("branch")) &&
+                          (query.get("status") === null || r.conclusion === query.get("status")),
+                      )
+                      .toSorted((a, b) => b.id - a.id)
+                      .slice(0, Math.min(Number(query.get("per_page") ?? 30), 100))
+                      .map((r) => ({
+                        id: r.id,
+                        head_branch: r.branch,
+                        head_sha: r.sha,
+                        conclusion: r.conclusion,
+                        status: "completed",
+                      })),
+                  }
+                : (() => {
+                    const run = runs.find((r) => path === `actions/runs/${r.id}/jobs`);
+                    const names = !run?.full
+                      ? ["gate", "tests", "report"]
+                      : run.old
+                        ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
+                        : ["gate", "tests (e2e-1)", "tests (1)", "report"];
+                    return {
+                      total_count: names.length,
+                      jobs: names.map((name) => ({ name, status: "completed", conclusion: "success" })),
+                    };
+                  })();
+              return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(json) });
+            };
+            const green = runs
+              .filter((r) => r.branch === "main" && r.conclusion === "success")
+              .toSorted((a, b) => b.id - a.id);
+            const expected = green.find((r) => r.full)?.sha ?? null;
+            expect(await scheduled.github(env, send)!.lastGreen()).toBe(expected);
+            reached.stepped += green[0] !== undefined && !green[0].full && expected !== null ? 1 : 0;
+            reached.none += expected === null && green.length > 0 ? 1 : 0;
+            reached.first += green[0]?.full ? 1 : 0;
+            reached.old += green.find((r) => r.full)?.old ? 1 : 0;
+          }),
+          options,
+        ),
+      );
+      expect(
+        Object.values(reached).every((count) => count > 0),
+        JSON.stringify(reached),
+      ).toBe(true);
     }),
-    options,
-  );
-  expect(
-    Object.values(reached).every((count) => count > 0),
-    JSON.stringify(reached),
-  ).toBe(true);
-});
+);

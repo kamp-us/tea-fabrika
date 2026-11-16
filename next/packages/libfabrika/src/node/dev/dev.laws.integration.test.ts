@@ -115,7 +115,6 @@ it("every observed exit is durable once across restart or brake, with its reason
       const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
       vi.stubEnv("FABRIKA_HOME", home);
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
-      // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
       const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
         const call = JSON.parse(bodyText(options)) as { method: string };
         // Keep lifecycle events in the real outbox while the real record sink still flushes.
@@ -132,7 +131,6 @@ it("every observed exit is durable once across restart or brake, with its reason
               let listen: Effect.Effect<unknown> = Effect.void;
               platform.rss = 0;
               // The first info call succeeds. Startup flush has no events until deployment yields.
-              // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
               fetch.mockImplementation(async (_url, options) => {
                 const call = JSON.parse(bodyText(options)) as { method: string };
                 return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
@@ -146,7 +144,6 @@ it("every observed exit is durable once across restart or brake, with its reason
                   yield* listen;
                 }),
               );
-              // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
               fetch.mockImplementation(async (_url, options) => {
                 const call = JSON.parse(bodyText(options)) as Call;
                 calls.push(call);
@@ -284,7 +281,6 @@ it("every observed exit is durable once across restart or brake, with its reason
         expect(pending.filter((event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
-        // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
         fetch.mockImplementation(async (_url, options) => {
           const call = JSON.parse(bodyText(options)) as Call;
           calls.push(call);
@@ -412,7 +408,6 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
 
   yield* Effect.acquireRelease(
     Effect.sync(() =>
-      // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
         const body = Schema.decodeUnknownSync(Body)(bodyText(options));
         const port = Number(new URL(String(url)).port);
@@ -795,7 +790,6 @@ effectIt.effect.prop(
           );
           yield* Effect.acquireRelease(
             Effect.sync(() =>
-              // @effect-diagnostics-next-line asyncFunction:off -- a stand-in for the global fetch, whose contract is a Promise the code under test awaits
               vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ value: null })),
             ),
             (spy) => Effect.sync(() => spy.mockRestore()),
