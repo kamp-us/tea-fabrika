@@ -8,6 +8,7 @@ import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
+  Array as Arr,
   Cause,
   Effect,
   Exit,
@@ -15,6 +16,7 @@ import {
   Formatter,
   Layer,
   Logger,
+  Option,
   Path,
   PlatformError,
   References,
@@ -313,7 +315,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     realPath: (path) => Effect.succeed(path),
     glob: () => Effect.succeed([relative(root, source)]),
     exists: (path) =>
-      Effect.sync(() => files.has(path) || [...files.keys()].some((file) => file.startsWith(`${path}/`))),
+      Effect.sync(() => files.has(path) || Arr.some([...files.keys()], (file) => file.startsWith(`${path}/`))),
     readFileString: (path) =>
       Effect.suspend(() => {
         note("read", path);
@@ -414,38 +416,43 @@ for (const failed of [false, true]) {
 
           // P14 slice 2 (ticket 828): the app's build selects its tab, so the tab's three stylesheets are
           // read through the same FileSystem too, and every read still comes before the first write.
-          const reads = w.calls.flatMap(([call, file]) => (call === "read" ? [String(file)] : []));
-          expect(reads.filter((file) => file === source || file === join(root, "compiler-ledger.json"))).toEqual([
+          const reads = Arr.flatMap(w.calls, ([call, file]) => (call === "read" ? [String(file)] : []));
+          expect(Arr.filter(reads, (file) => file === source || file === join(root, "compiler-ledger.json"))).toEqual([
             source,
             join(root, "compiler-ledger.json"),
           ]);
           expect(w.calls[0]).toEqual(["read", source]);
           expect(w.calls[1]).toEqual(["read", join(root, "compiler-ledger.json")]);
-
-          const ledgerRead = w.calls.findIndex(
+          const ledgerRead = Option.getOrThrow(
+            Arr.findFirstIndex(
+              w.calls,
             ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
+            ),
           );
 
           expect(
-            w.calls.slice(0, ledgerRead).every(([call]) => call === "read"),
+            Arr.every(w.calls.slice(0, ledgerRead), ([call]) => call === "read"),
             "only reads come before the compiler ledger read",
           ).toBe(true);
-          const styles = reads.filter((file) => file.endsWith(".css"));
+          const styles = Arr.filter(reads, (file) => file.endsWith(".css"));
           expect(new Set(styles).size, "the tab's stylesheets are read through FileSystem").toBe(3);
-          const lastRead = w.calls.findLastIndex(([call]) => call === "read");
-          const firstWrite = w.calls.findIndex(([call]) => call === "write");
-          expect(firstWrite === -1 || lastRead < firstWrite, "a read came after a write").toBe(true);
-          const renames = w.calls.filter(([call]) => call === "rename");
+          const lastRead = Arr.findLastIndex(w.calls, ([call]) => call === "read");
+          const firstWrite = Arr.findFirstIndex(w.calls, ([call]) => call === "write");
+          expect(
+            Option.isNone(firstWrite) || Option.isNone(lastRead) || lastRead.value < firstWrite.value,
+            "a read came after a write",
+          ).toBe(true);
+          const renames = Arr.filter(w.calls, ([call]) => call === "rename");
           expect(renames).toEqual([
             ["rename", w.out, w.backup],
             ["rename", w.pending, w.out],
             ...(failed ? [["rename", w.backup, w.out]] : []),
           ]);
-          const firstRename = w.calls.findIndex(([call]) => call === "rename");
-          const writes = w.calls.flatMap(([call], index) => (call === "write" ? [index] : []));
+          const firstRename = Option.getOrThrow(Arr.findFirstIndex(w.calls, ([call]) => call === "rename"));
+          const writes = Arr.flatMap(w.calls, ([call], index) => (call === "write" ? [index] : []));
           // P16 publishes one file: brain.mjs is the only file written, into the pending folder.
-          expect(writes.map((index) => w.calls[index]![1])).toEqual([join(w.pending, "brain.mjs")]);
-          expect(writes.every((index) => index < firstRename)).toBe(true);
+          expect(Arr.map(writes, (index) => w.calls[index]![1])).toEqual([join(w.pending, "brain.mjs")]);
+          expect(Arr.every(writes, (index) => index < firstRename)).toBe(true);
           expect(w.calls.slice(-2)).toEqual([
             ["remove", w.pending],
             ["remove", w.backup],
@@ -521,8 +528,8 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           window: `-window-${name}`,
           port,
         };
-
-        const selected = Object.entries(overrides).filter(
+        const selected = Arr.filter(
+          Object.entries(overrides),
           ([field]) =>
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
@@ -533,7 +540,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           "dev.ts",
           "--child",
           `--parent=${process.ppid}`,
-          ...selected.flatMap(([field, value]) =>
+          ...Arr.flatMap(selected, ([field, value]) =>
             choices.inline ? [`--${field}=${value}`] : [`--${field}`, String(value)],
           ),
         ];
@@ -547,7 +554,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             _tag: "Some",
             value: { reason: "test_instance_ready" },
           });
-          const calls = w.calls.filter(([, path]) => path === folder || path === file);
+          const calls = Arr.filter(w.calls, ([, path]) => path === folder || path === file);
           // T664: the port is a setting now, so it leaves the saved state and goes to the instance.
           const { port: _flag, ...founding } = Object.fromEntries(selected);
           const { port: _saved, ...kept } = saved;
@@ -558,17 +565,20 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             ...founding,
             build: "pending",
           };
-
-          expect(instances.map((instance) => instance.port)).toEqual([choices.port ? port : 18787]);
+          expect(Arr.map(instances, (instance) => instance.port)).toEqual([choices.port ? port : 18787]);
           expect(calls).toEqual([
             ["mkdir", folder],
             ...(choices.saved ? [["read", file]] : []),
             ["write", file, w.files.get(file)],
           ]);
           expect(JSON.parse(w.files.get(file)!)).toEqual(expected);
-          expect(w.modes.filter(([path]) => path === file)).toEqual([[file, 0o600]]);
-          const savedAt = w.calls.findIndex(([call, path]) => call === "write" && path === file);
-          const buildAt = w.calls.findIndex(([call, path]) => call === "read" && path === source);
+          expect(Arr.filter(w.modes, ([path]) => path === file)).toEqual([[file, 0o600]]);
+          const savedAt = Option.getOrThrow(
+            Arr.findFirstIndex(w.calls, ([call, path]) => call === "write" && path === file),
+          );
+          const buildAt = Option.getOrThrow(
+            Arr.findFirstIndex(w.calls, ([call, path]) => call === "read" && path === source),
+          );
           expect(savedAt).toBeLessThan(buildAt);
           expect(w.paths).toContainEqual([folder, "instance.json"]);
         } finally {
@@ -660,7 +670,7 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               "dev.ts",
               "--child",
               `--parent=${process.ppid}`,
-              ...["name", "person", "founder"].map((field) => `--${field}=${name}`),
+              ...Arr.map(["name", "person", "founder"], (field) => `--${field}=${name}`),
               ...(failure.kind === "flag" ? [`--${alias ? "port" : "instance.port"}=${failure.body}`] : []),
             ];
 
@@ -679,9 +689,9 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               },
             });
             // Counted fakes: the build reads its source first, the instance records each start.
-            expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual(
-              [],
-            );
+            expect(
+              Arr.filter(w.calls, ([call, path]) => call === "write" || call === "temp" || path === source),
+            ).toEqual([]);
             expect(instances).toEqual([]);
           }),
         ),
@@ -705,14 +715,17 @@ it("dev without saved settings reports settings for each missing required value"
         "dev.ts",
         "--child",
         `--parent=${process.ppid}`,
-        ...["name", "person", "founder"].filter((field) => field !== missing).map((field) => `--${field}=${name}`),
+        ...Arr.map(
+          Arr.filter(["name", "person", "founder"], (field) => field !== missing),
+          (field) => `--${field}=${name}`,
+        ),
       ];
 
       try {
         vi.resetModules();
         await import("../dev.ts");
         instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
-        expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
+        expect(Arr.filter(w.calls, ([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;
         cli.layer = undefined;
@@ -754,7 +767,7 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
           _tag: "Some",
           value: { _tag: "BuildError", reason: "read" },
         });
-        expect(w.calls.filter(([call]) => call === "write" || call === "rename")).toEqual([]);
+        expect(Arr.filter(w.calls, ([call]) => call === "write" || call === "rename")).toEqual([]);
       } finally {
         rmSync(folder, { recursive: true, force: true });
       }
@@ -807,7 +820,7 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
           _tag: "Some",
           value: { _tag: "InstanceError", reason: "settings" },
         });
-        expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
+        expect(Arr.filter(w.calls, ([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;
         cli.layer = undefined;
@@ -870,7 +883,7 @@ it.effect.prop(
           "dev.ts",
           "--child",
           `--parent=${process.ppid}`,
-          ...["name", "person", "founder"].map((field) => `--${field}=test`),
+          ...Arr.map(["name", "person", "founder"], (field) => `--${field}=test`),
         ];
 
         for (const choice of choices) {
@@ -924,15 +937,18 @@ it.effect.prop(
           }
 
           if (refused) {
-            expect(entries.filter((entry) => entry.level === "Warn")).toEqual([]);
+            expect(Arr.filter(entries, (entry) => entry.level === "Warn")).toEqual([]);
             instanceFailure(exit, "settings");
             expect(
-              w.calls.slice(before).filter(([call, path]) => call === "write" || call === "temp" || path === source),
+              Arr.filter(
+                w.calls.slice(before),
+                ([call, path]) => call === "write" || call === "temp" || path === source,
+              ),
             ).toEqual([]);
             expect(instances).toEqual([]);
           } else {
-            expect(instances.map((instance) => instance.port)).toEqual([Declarations.port.default]);
-            expect(entries.some((entry) => entry.level === "Warn")).toBe(saved.port !== undefined);
+            expect(Arr.map(instances, (instance) => instance.port)).toEqual([Declarations.port.default]);
+            expect(Arr.some(entries, (entry) => entry.level === "Warn")).toBe(saved.port !== undefined);
           }
         }
       }),

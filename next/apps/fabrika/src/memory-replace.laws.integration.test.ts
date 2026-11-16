@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer, Predicate, Stream } from "effect";
+import { Array as Arr, Effect, Layer, Option, Predicate, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
@@ -122,10 +122,10 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
     const end = Date.now() + START;
 
     while (Date.now() < end) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closed !== undefined) {
@@ -183,7 +183,7 @@ type Fact = { readonly _tag: string; readonly body: Record<string, unknown> };
 /** The brain's facts on `gateway/brain`, or null while the call cannot be answered. */
 const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> => {
   try {
-    return ((await instance.project(PROJECT).read("gateway/brain", 0, "audit")) as Array<any>).map((row) => ({
+    return Arr.map((await instance.project(PROJECT).read("gateway/brain", 0, "audit")) as Array<any>, (row) => ({
       _tag: row._tag,
       body: row.body,
     }));
@@ -289,7 +289,10 @@ const world = (kib: (pid: number) => number | null) =>
 
 /** The facts of one start, in the order the brain wrote them. */
 const sequence = (facts: ReadonlyArray<Fact>, start: unknown) =>
-  facts.filter((fact) => fact.body.start === start && fact._tag !== "started").map((fact) => fact._tag);
+  Arr.map(
+    Arr.filter(facts, (fact) => fact.body.start === start && fact._tag !== "started"),
+    (fact) => fact._tag,
+  );
 
 describe("the memory restart on real workerd, next/", () => {
   // scenario: the bug's own shape, real workerd draining on SIGTERM while a WebSocket stays open, which no
@@ -310,12 +313,11 @@ describe("the memory restart on real workerd, next/", () => {
         const before = yield* Effect.promise(() =>
           watch(
             () => brain(instance),
-            (facts) => facts?.some((fact) => fact._tag === "started") === true,
+            (facts) => Arr.some(facts ?? [], (fact) => fact._tag === "started"),
             START,
           ),
         );
-
-        const first = before.last!.find((fact) => fact._tag === "started")!.body;
+        const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         expect(yield* alive(old), "the first workerd runs").toBe(true);
         expect(socket.open(), "the door's WebSocket is open").toBe(true);
@@ -347,8 +349,9 @@ describe("the memory restart on real workerd, next/", () => {
           watch(
             async () => {
               const facts = await brain(instance);
-              const next = facts?.find((fact) => fact._tag === "started" && fact.body.after === first.start);
-
+              const next = Option.getOrUndefined(
+                Arr.findFirst(facts ?? [], (fact) => fact._tag === "started" && fact.body.after === first.start),
+              );
               return next === undefined ? null : { facts: facts!, next: next.body };
             },
             (found) => found !== null,
@@ -380,14 +383,18 @@ describe("the memory restart on real workerd, next/", () => {
         expect(yield* alive(next), "the new workerd runs").toBe(true);
         // A WebSocket keeps workerd draining, so the grace runs out and the kill is recorded.
         expect(sequence(replaced.last!.facts, first.start)).toEqual(["replacing", "killed", "exited", "restarting"]);
-        expect(replaced.last!.facts.find((fact) => fact._tag === "replacing")?.body).toMatchObject({
+        expect(
+          Option.getOrUndefined(Arr.findFirst(replaced.last!.facts, (fact) => fact._tag === "replacing"))?.body,
+        ).toMatchObject({
           pid: old,
           reason: "memory",
           bytes: OVER * 1024,
           limit: LIMIT,
           grace: GRACE,
         });
-        expect(replaced.last!.facts.find((fact) => fact._tag === "exited")?.body).toMatchObject({
+        expect(
+          Option.getOrUndefined(Arr.findFirst(replaced.last!.facts, (fact) => fact._tag === "exited"))?.body,
+        ).toMatchObject({
           reason: "memory",
           signal: "SIGKILL",
         });
@@ -410,12 +417,11 @@ describe("the memory restart on real workerd, next/", () => {
         const before = yield* Effect.promise(() =>
           watch(
             () => brain(instance),
-            (facts) => facts?.some((fact) => fact._tag === "started") === true,
+            (facts) => Arr.some(facts ?? [], (fact) => fact._tag === "started"),
             START,
           ),
         );
-
-        const first = before.last!.find((fact) => fact._tag === "started")!.body;
+        const first = Option.getOrThrow(Arr.findFirst(before.last!, (fact) => fact._tag === "started")).body;
         const old = Number(first.pid);
         sizes.set(old, OVER);
 
@@ -431,8 +437,7 @@ describe("the memory restart on real workerd, next/", () => {
           watch(
             async () => {
               const facts = await brain(instance);
-
-              return facts?.some((fact) => fact._tag === "started" && fact.body.after === first.start) === true
+              return Arr.some(facts ?? [], (fact) => fact._tag === "started" && fact.body.after === first.start)
                 ? facts
                 : null;
             },
@@ -447,7 +452,9 @@ describe("the memory restart on real workerd, next/", () => {
         expect(sequence(replaced.last!, first.start)).toEqual(["replacing", "exited", "restarting"]);
         // workerd takes SIGTERM as its drain and then exits by itself, so its exit names no signal. The
         // plan expected `signal: SIGTERM`; the first run on workerd 1.20261026.1 showed none.
-        expect(replaced.last!.find((fact) => fact._tag === "exited")?.body).toMatchObject({
+        expect(
+          Option.getOrUndefined(Arr.findFirst(replaced.last!, (fact) => fact._tag === "exited"))?.body,
+        ).toMatchObject({
           reason: "memory",
           signal: null,
         });

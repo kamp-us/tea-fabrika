@@ -1,7 +1,8 @@
-// P12, next/: the page entry's shape, read as source text. The real build's laws are in
-// build.integration.test.ts, which runs Rolldown and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+// P12, next/: the page entry's shape, read as source text. The real build's laws are in
+// build.integration.test.ts, which runs Rolldown and so runs on the schedule (0536).
+import { Array as Arr } from "effect";
 import { parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -16,19 +17,19 @@ it("format: the page entry starts its one Effect program through runMain, once, 
   // Any oxc node: some carry a `name` that is itself a node (V8IntrinsicExpression), so it is read as unknown.
   const isRunMain = (node: { readonly type: string; readonly name?: unknown }) =>
     node.type === "Identifier" && node.name === "runMain";
-
-  const imported = parsed.program.body.filter(
+  const imported = Arr.filter(
+    parsed.program.body,
     (node) =>
       node.type === "ImportDeclaration" &&
       node.source.value === "@kampus/tuval/browser" &&
-      node.specifiers.some((s) => s.type === "ImportSpecifier" && isRunMain(s.imported) && isRunMain(s.local)),
+      Arr.some(node.specifiers, (s) => s.type === "ImportSpecifier" && isRunMain(s.imported) && isRunMain(s.local)),
   );
 
   expect(imported, "runMain comes from @kampus/tuval/browser").toHaveLength(1);
 
   // A start is `program.pipe(runMain)`, `runMain(program)` or `runMain(options)(program)`, as a
   // statement of the module itself.
-  const boots = parsed.program.body.filter((node) => {
+  const boots = Arr.filter(parsed.program.body, (node) => {
     if (node.type !== "ExpressionStatement" || node.expression.type !== "CallExpression") {
       return false;
     }

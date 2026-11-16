@@ -7,7 +7,13 @@ import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
-import { Effect, FileSystem, Formatter, Path, Queue, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import { Array as Arr } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -206,12 +212,15 @@ it.live(
       // Only a generated public fingerprint enters the bundle; no key material or extra wire method.
       yield* fs.writeFileString(
         entry,
+        Arr.join(
         [
           // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
-          `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
-          `import { Project as SeededProject } from ${Formatter.formatJson(path.join(app, "src/tasks-wire.test-support.ts"))};`,
-          `export class Project extends SeededProject { static selected = ${Formatter.formatJson(selected)}; }`,
-        ].join("\n"),
+            `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
+            `import { Project as SeededProject } from ${Formatter.formatJson(path.join(app, "src/tasks-wire.test-support.ts"))};`,
+            `export class Project extends SeededProject { static selected = ${Formatter.formatJson(selected)}; }`,
+          ],
+          "\n",
+        ),
       );
 
       const built = yield* build({
@@ -303,8 +312,7 @@ it.live(
       yield* grant(hands, "hands");
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
-      expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
-
+      expect(Arr.filter(first.frames, (f) => f.method?.startsWith("tasks.") === true)).toEqual([]);
       const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
@@ -343,7 +351,7 @@ it.live(
       ).toEqual(finished);
       const read = Schema.decodeUnknownSync(Task)(ok(yield* resumed.call("tasks.read", resource)));
       expect(read.state).toMatchObject({ _tag: "finished", result, assignment: taken.task.state.assignment });
-      expect(read.events.map((e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
+      expect(Arr.map(read.events, (e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
       expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
         _tag: "idle",
       });

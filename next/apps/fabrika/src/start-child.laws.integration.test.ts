@@ -12,7 +12,19 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import {
+  Array as Arr,
+  Clock,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  ManagedRuntime,
+  Option,
+  Result,
+  Schema,
+  Scope,
+} from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -120,10 +132,10 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
     const end = Date.now() + WAIT;
 
     while (Date.now() < end) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -241,9 +253,9 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
     facts: async (stream: string) =>
-      ((await call("read", stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      Arr.map((await call("read", stream, 0, "audit")) as Array<any>, (row) => ({ ...row.body, _tag: row._tag })),
     live: async (name: string): Promise<string | undefined> =>
-      ((await call("info")) as Array<any>).find((row) => row.name === name)?.process,
+      Option.getOrUndefined(Arr.findFirst((await call("info")) as Array<any>, (row) => row.name === name))?.process,
   };
 };
 
@@ -284,7 +296,7 @@ const outputText = (value: unknown): Array<string> => {
   }
 
   if (typeof value === "object" && value !== null) {
-    return Object.entries(value).flatMap(([key, entry]) => [key, ...outputText(entry)]);
+    return Arr.flatMap(Object.entries(value), ([key, entry]) => [key, ...outputText(entry)]);
   }
 
   return [];
@@ -359,7 +371,7 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   const placed = Effect.fnUntraced(function* () {
     const starts = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
-    const saved = starts.filter((row) => row._tag === "started");
+    const saved = Arr.filter(starts, (row) => row._tag === "started");
     expect(saved, "L11: the failing path follows a committed child start").toHaveLength(1);
     pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(saved[0]?.body).process;
   });
@@ -475,12 +487,15 @@ const projectSecrets = Effect.fnUntraced(function* (
       });
       const rows = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
       expect(
-        rows.filter((row) => row._tag === "exited"),
+        Arr.filter(rows, (row) => row._tag === "exited"),
         "L11: retry writes one normal exit",
       ).toMatchObject([{ body: { process: pid, reason: { _tag: "normal" } } }]);
       const watches = yield* Effect.promise(() => runtime.runPromise(project.read("processes", 0, "audit")));
       expect(
-        watches.filter((row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`)),
+        Arr.filter(
+          watches,
+          (row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`),
+        ),
       ).toHaveLength(1);
       inspectRows();
     }
@@ -491,9 +506,8 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   expect(reached.size, "L11: every available failure operation was exercised").toBe(expected);
-  expect(fixture.configured.filter((c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
-
-  const recorded = fixture.recorded.flatMap((batch) =>
+  expect(Arr.filter(fixture.configured, (c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
+  const recorded = Arr.flatMap(fixture.recorded, (batch) =>
     Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })))(
       batch,
     ),
@@ -695,7 +709,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
           yield* call;
           const statements = fixture.observed();
           expect(statements.length, `L11: ${path} reached storage`).toBeGreaterThan(0);
-          statements.forEach((statement, operation) => {
+          Arr.forEach(statements, (statement, operation) => {
             remaining.push({ path, operation, statement });
           });
         }),
@@ -777,7 +791,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       outputs.log.push(...(printed ?? []));
 
       for (const [output, texts] of Object.entries(outputs)) {
-        if (texts.some((text) => forms(secret).some((form) => text.includes(form)))) {
+        if (Arr.some(texts, (text) => Arr.some(forms(secret), (form) => text.includes(form)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }
       }
@@ -863,11 +877,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           expect(fixture.hit(), "L10: the cut reached the descriptor write").toBe(true);
           expect(cut._tag).toBe("Failure");
           const starts = yield* Effect.promise(() => first.runPromise(project.read("processes/child:cut", 0, "audit")));
-          const committed = starts.filter((row) => row._tag === "started");
+          const committed = Arr.filter(starts, (row) => row._tag === "started");
           expect(committed, "L10: the child start committed before the descriptor failed").toHaveLength(1);
           const input = yield* Effect.promise(() => first.runPromise(project.read("child:cut/inbox", 0, "audit")));
           expect(input, "L10: the first letter committed with the start").toHaveLength(1);
-          expect(fixture.configured.filter((call) => call.descriptor.name === child.name)).toEqual([]);
+          expect(Arr.filter(fixture.configured, (call) => call.descriptor.name === child.name)).toEqual([]);
           yield* Scope.close(scope, Exit.void);
           const reopened = yield* fixture.acquire();
           const recovered = yield* Effect.promise(() => reopened.runPromise(ProjectService));
@@ -877,7 +891,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             value: { _tag: "started", name: child.name, rev: committed[0]?.rev },
           });
           expect(
-            fixture.configured.filter((call) => call.descriptor.name === child.name),
+            Arr.filter(fixture.configured, (call) => call.descriptor.name === child.name),
             "L10: recovery rebuilds the descriptor and wakes the first letter once",
           ).toEqual([
             {
@@ -1015,7 +1029,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         ).toBe("Some");
         expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
         expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
-        const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
+        const lines = Arr.filter(await facts(`processes/${ask.name}`), (fact) => fact._tag === "started");
         expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
           { requester: { process: starter } },
         ]);
@@ -1026,7 +1040,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       // The starts were allowed because of this one row: no grant names either program.
       expect(
-        (await facts("permissions/relations")).map(({ _tag, subject, relation, object }) => ({
+        Arr.map(await facts("permissions/relations"), ({ _tag, subject, relation, object }) => ({
           _tag,
           subject,
           relation,
@@ -1066,13 +1080,14 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       await pause(1_000);
       const after = client.pushed.slice(quiet);
       expect(
-        after.filter(
+        Arr.filter(
+          after,
           (frame) => JSON.stringify(frame).includes(String(child)) || JSON.stringify(frame).includes("child:1"),
         ),
         "L9: no frame about the child reaches any client",
       ).toEqual([]);
       expect(
-        after.filter((frame) => /notify|view|focus|open/i.test(String(frame.method))),
+        Arr.filter(after, (frame) => /notify|view|focus|open/i.test(String(frame.method))),
         "L9: a code start opens, notifies and focuses nothing",
       ).toEqual([]);
     });
@@ -1162,7 +1177,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       const [restarted] = await until(
         "one restarted fact after the child's throw",
-        async () => (await facts("processes/child:1")).filter((fact) => fact._tag === "restarted"),
+        async () => Arr.filter(await facts("processes/child:1"), (fact) => fact._tag === "restarted"),
         (rows) => rows.length >= 1,
       );
 
@@ -1196,15 +1211,15 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "L10: another life of the child's program keeps its nonzero count",
       ).toEqual(peerView.result.view);
       expect(
-        (await facts("processes/starter:1")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/starter:1"), (fact) => fact._tag === "restarted"),
         "L10: the starter's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/counter:1")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/counter:1"), (fact) => fact._tag === "restarted"),
         "L10: another program's restarts are unchanged",
       ).toEqual([]);
       expect(
-        (await facts("processes/child:boot")).filter((fact) => fact._tag === "restarted"),
+        Arr.filter(await facts("processes/child:boot"), (fact) => fact._tag === "restarted"),
         "L10: another life of the child's program has no restart",
       ).toEqual([]);
     });

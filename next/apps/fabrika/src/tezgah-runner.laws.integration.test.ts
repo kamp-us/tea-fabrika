@@ -28,7 +28,7 @@ import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
@@ -155,13 +155,8 @@ const door = async (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const found = await until(
-      "a frame",
-      async () => frames.findIndex(match),
-      (i) => i >= 0,
-    );
-
-    return frames.splice(found, 1)[0];
+    const found = await until("a frame", async () => Arr.findFirstIndex(frames, match), Option.isSome);
+    return frames.splice(Option.getOrThrow(found), 1)[0];
   };
 
   const call = async (method: string, params: unknown) => {
@@ -248,7 +243,7 @@ const calls = (instance: Instance) => {
   return {
     info: async (): Promise<Array<any>> => project().info(),
     facts: async (stream: string): Promise<Array<any>> =>
-      ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
+      Arr.map((await project().read(stream, 0, "audit")) as Array<any>, (row) => ({ ...row.body, _tag: row._tag })),
   };
 };
 
@@ -257,10 +252,9 @@ const findTezgah = async (instance: Instance) => {
   const rows = await until(
     "tezgah's process in the table",
     () => calls(instance).info(),
-    (all) => all.some((row) => String(row.name).startsWith("tezgah:")),
+    (all) => Arr.some(all, (row) => String(row.name).startsWith("tezgah:")),
   );
-
-  const found = rows.filter((row) => String(row.name).startsWith("tezgah:"));
+  const found = Arr.filter(rows, (row) => String(row.name).startsWith("tezgah:"));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
 
   return { pid: String(found[0].process), name: String(found[0].name) };
@@ -294,12 +288,11 @@ const open: RunnerTest.Open = Effect.gen(function* () {
     view: Effect.promise(async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view),
     process: (name: string) =>
       Effect.promise(async () => {
-        const live = (await calls(instance).info()).some((row) => row.name === name);
-
-        const exited = (await calls(instance).facts(`processes/${name}`))
-          .filter((row) => row._tag === "exited")
-          .map((row) => row.reason);
-
+        const live = Arr.some(await calls(instance).info(), (row) => row.name === name);
+        const exited = Arr.map(
+          Arr.filter(await calls(instance).facts(`processes/${name}`), (row) => row._tag === "exited"),
+          (row) => row.reason,
+        );
         return { live, exited };
       }),
   };
@@ -314,8 +307,7 @@ const order = (node: any): ReadonlyArray<string> =>
 const shown = (view: any) => {
   const space = (view?.workspaces ?? []).find((w: any) => w.n === 1);
   const ids = space === undefined ? [] : order(space.layout);
-
-  return ids.map((id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
+  return Arr.map(ids, (id) => ({ id, name: (view.tiles ?? []).find((t: any) => t.id === id)?.shows }));
 };
 
 describe("Desk S2a L12: a headless window follows tezgah on the real instance", () => {
@@ -371,19 +363,15 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             const view = async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view;
 
             const tiles = () =>
-              run
-                .getState()
-                .tiles.map((t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" }))
-                .sort((a, b) => (a.id < b.id ? -1 : 1));
-
+              Arr.map(run.getState().tiles, (t) => ({ id: t.id, name: t.name, open: t.reach._tag === "open" })).sort(
+                (a, b) => (a.id < b.id ? -1 : 1),
+              );
             /** The window shows exactly workspace 1's tiles in tezgah's view, each one open. */
             const follows = async (label: string, count: number) => {
               const want = await until(label, view, (v) => shown(v).length === count);
-
-              const expected = shown(want)
-                .map((t) => ({ ...t, open: true }))
-                .sort((a, b) => (a.id < b.id ? -1 : 1));
-
+              const expected = Arr.map(shown(want), (t) => ({ ...t, open: true })).sort((a, b) =>
+                a.id < b.id ? -1 : 1,
+              );
               await until(
                 `${label}: the window follows`,
                 async () => tiles(),
@@ -415,7 +403,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             );
             const one = await follows("the window's own attach makes workspace 1 of checklist:1", 1);
             expect(
-              one.map((t) => t.name),
+              Arr.map(one, (t) => t.name),
               "L12: workspace 1's first tile is the boot list's checklist:1",
             ).toEqual(["checklist:1"]);
 
@@ -423,7 +411,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             await did({ does: "tezgah.split_right", from: one[0]!.id, tile: t2 });
             const two = await follows("after a split right", 2);
             expect(
-              two.map((t) => t.id),
+              Arr.map(two, (t) => t.id),
               "L12: the new tile follows t1",
             ).toEqual([one[0]!.id, t2]);
 
@@ -431,25 +419,28 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             await did({ does: "tezgah.split_down", from: t2, tile: t3 });
             const three = await follows("after a split down", 3);
             expect(
-              three.map((t) => t.id),
+              Arr.map(three, (t) => t.id),
               "L12: t3 follows t2",
             ).toEqual([one[0]!.id, t2, t3]);
 
             await did({ does: "tezgah.close", from: t2 });
             const closed = await follows("after a close", 2);
             expect(
-              closed.map((t) => t.id),
+              Arr.map(closed, (t) => t.id),
               "L12: t2 is gone",
             ).toEqual([one[0]!.id, t3]);
 
             const ended = await until(
               "the closed tile's process ends",
               () => calls(instance).facts(`processes/${three[1]!.name}`),
-              (rows) => rows.some((row) => row._tag === "exited"),
+              (rows) => Arr.some(rows, (row) => row._tag === "exited"),
             );
 
             expect(
-              ended.filter((row) => row._tag === "exited").map((row) => row.reason),
+              Arr.map(
+                Arr.filter(ended, (row) => row._tag === "exited"),
+                (row) => row.reason,
+              ),
               "L12: the closed tile's process ends with shutdown",
             ).toMatchObject([{ _tag: "shutdown" }]);
           });

@@ -31,6 +31,7 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Formatter from "effect/Formatter";
 import { RateLimiter } from "effect/persistence";
+import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -79,10 +80,10 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     return result;
   }
 
-  return Array.isArray(value)
-    ? value.flatMap((part) => texts(part, cache))
+  return Arr.isArray<Schema.Json>(value)
+    ? Arr.flatMap(value, (part) => texts(part, cache))
     : value !== null && typeof value === "object"
-      ? Object.values(value).flatMap((part) => texts(part, cache))
+      ? Arr.flatMap(Object.values(value), (part) => texts(part, cache))
       : [];
 };
 
@@ -466,34 +467,34 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 yield* Effect.void.pipe(Effect.withSpan("archive-control"));
                 yield* (yield* SpanSink).flush;
                 expect(w.archived.length).toBeGreaterThan(0);
-
-                const cells = w.databases.flatMap((db) =>
-                  db
-                    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-                    .all()
-                    .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
+                const cells = Arr.flatMap(w.databases, (db) =>
+                  Arr.flatMap(
+                    db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all(),
+                    ({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all(),
+                  ),
                 );
                 const shown = yield* Schema.encodeEffect(
                   Schema.fromJsonString(Schema.Unknown, {
                     replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
                   }),
                 )({
-                    spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
+                    spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),
                     events: tracer.events,
-                });
-                const outputs = [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors].flatMap(
+                  });
+                const outputs = Arr.flatMap(
+                  [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors],
                   (output) => texts(output, decoded),
                 );
 
                 for (const body of bodies) {
                   for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
-                    expect(outputs.filter((output) => output.includes(form))).toEqual([]);
+                    expect(Arr.filter(outputs, (output) => output.includes(form))).toEqual([]);
                   }
                 }
 
                 // A successful control still records the required safe metadata.
                 if (move === "send") {
-                  const rows = cells.filter((r) => r.stream === "gateway/inputs" && r._tag === "received");
+                  const rows = Arr.filter(cells, (r) => r.stream === "gateway/inputs" && r._tag === "received");
                   expect(rows.length).toBeGreaterThan(0);
                   expect(
                     yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
@@ -628,11 +629,11 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
                 ).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.initialize"]);
+                const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.initialize"]);
                 checkSpan(spans[0]!, a, !fail);
-                const appends = c.spans.filter((s) => s.name === "authorization.appendAdmitted");
-                const transactions = c.spans.filter((s) => s.name === "ledger.transaction");
+                const appends = Arr.filter(c.spans, (s) => s.name === "authorization.appendAdmitted");
+                const transactions = Arr.filter(c.spans, (s) => s.name === "ledger.transaction");
                 expect(appends).toHaveLength(1);
                 expect(transactions).toHaveLength(1);
 
@@ -700,10 +701,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.grant"]);
+                const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.grant"]);
                 checkSpan(spans[0]!, a, !fail);
-                const write = c.spans.find((s) => s.name === "access.write")!;
+                const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
                 expect(Option.getOrThrow(write.parent).spanId).toBe(spans[0]!.spanId);
               }).pipe(Effect.provide(w.layer));
             }),
@@ -736,10 +737,10 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                expect(spans.map((s) => s.name)).toEqual(["gateway.deny"]);
+                const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.deny"]);
                 checkSpan(spans[0]!, a, true);
-                const write = c.spans.find((s) => s.name === "access.write")!;
+                const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
                 expect(write.traceId).toBe(a.traceId);
                 expect(Option.getOrThrow(write.parent).spanId).toBe(a.spanId);
                 expect(write.status._tag).toBe("Ended");
@@ -800,8 +801,8 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
                     }
 
-                    const spans = c.spans.filter((s) => s.name.startsWith("gateway."));
-                    expect(spans.map((s) => s.name)).toEqual(
+                    const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                    expect(Arr.map(spans, (s) => s.name)).toEqual(
                       call === "input_failed" ? ["gateway.input"] : ["gateway.input", "gateway.route"],
                     );
                     checkSpan(spans[0]!, a, call !== "input_failed");
@@ -817,7 +818,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       ok ? { "fab.gateway.outcome": call === "refused" ? "refused" : "ok" } : {},
                     );
                     expect(
-                      spans[1]!.links.map((l) => ({
+                      Arr.map(spans[1]!.links, (l) => ({
                         traceId: l.span.traceId,
                         spanId: l.span.spanId,
                         attributes: l.attributes,
@@ -826,7 +827,9 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                     const recorded = yield* Stream.runCollect((yield* RecordManager).read(Chain.cases.spans.make({})));
 
                     for (const span of spans) {
-                      expect(recorded.find((r) => r.spanId === span.spanId)).toMatchObject({
+                      expect(
+                        Option.getOrUndefined(Arr.findFirst(recorded, (r) => r.spanId === span.spanId)),
+                      ).toMatchObject({
                         name: span.name,
                         ok: span === spans[0] || ok,
                         traceId: a.traceId,

@@ -17,7 +17,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Array as Arr, Effect, Layer, Option, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
@@ -160,8 +160,8 @@ const world = async (
     const writer = join(home, "writer.ts"),
       timer = join(home, "timer.ts"),
       sealed = join(home, "sealed.ts");
-
-    const common = [
+    const common = Arr.join(
+      [
       'import {Machine, Cmd} from "@demlik/tea/effect";',
       'import {Schema} from "effect";',
       'const noted = Schema.TaggedStruct("noted", {n: Schema.Int});',
@@ -170,12 +170,14 @@ const world = async (
       'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
       'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
       'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
-    ].join("\n");
-
+      ],
+      "\n",
+    );
     writeFileSync(writer, `${common}\nexport const program = {...declaration,name:"p12/writer-fixture"};`);
     writeFileSync(timer, `${common}\nexport const program = {...declaration,name:"p12/timer-fixture"};`);
     writeFileSync(
       sealed,
+      Arr.join(
       [
         'import {env} from "cloudflare:workers";',
         'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
@@ -185,20 +187,25 @@ const world = async (
         'const Msg = Schema.Struct({type: Schema.Literal("read")});',
         "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
         'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
-      ].join("\n"),
+        ],
+        "\n",
+      ),
     );
     // Ticket 502 slice S2: one wake, asked for by `schedule`, dropped by `cancel`, and never asked
     // for again by `timer`. So each alarm the platform delivers is one the test asked for.
     const alarm = join(home, "alarm.ts");
     writeFileSync(
       alarm,
+      Arr.join(
       [
         'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
         "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
         'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
         "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
         'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
-      ].join("\n"),
+        ],
+        "\n",
+      ),
     );
 
     const built = await Effect.runPromise(
@@ -387,10 +394,13 @@ export class Control extends Brain.Control {
     const out = await bundle.generate({ format: "esm", codeSplitting: false });
     writeFileSync(
       brain,
-      out.output
-        .filter((item) => item.type === "chunk")
-        .map((item) => item.code)
-        .join("\n"),
+      Arr.join(
+        Arr.map(
+          Arr.filter(out.output, (item) => item.type === "chunk"),
+          (item) => item.code,
+        ),
+        "\n",
+      ),
     );
   } finally {
     await bundle.close();
@@ -439,10 +449,10 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
 
   const next = async (match: (frame: any) => boolean) => {
     for (;;) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -482,12 +492,13 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
 };
 
 const workerdPid = () => {
-  const rows = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" })
-    .split("\n")
-    .flatMap((row) => {
+  const rows = Arr.flatMap(
+    execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }).split("\n"),
+    (row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
       return m !== null ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
-    });
+    },
+  );
 
   const descendants = new Set([process.pid]);
 
@@ -499,7 +510,7 @@ const workerdPid = () => {
     }
   }
 
-  const matches = rows.filter((row) => descendants.has(row.pid) && /\/workerd(?:\s|$)/.test(row.command));
+  const matches = Arr.filter(rows, (row) => descendants.has(row.pid) && /\/workerd(?:\s|$)/.test(row.command));
   expect(matches.length).toBeLessThanOrEqual(1);
 
   return matches[0]?.pid ?? 0;
@@ -813,8 +824,7 @@ describe("P12 real object adapters", () => {
       const found = await Effect.runPromise(
         RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
       );
-
-      expect(found.map((r) => r.spanId)).toEqual(rows.map((r) => r.span.spanId));
+      expect(Arr.map(found, (r) => r.spanId)).toEqual(Arr.map(rows, (r) => r.span.spanId));
       const held = await first.read(chain, 0, 0);
       const retry = await first.write(chain, 0, [rows[0], { span: span(99), content: null }]);
       expect(retry).toMatchObject({ _tag: "rolled", had: [rows[0]!.span.spanId] });
@@ -823,7 +833,7 @@ describe("P12 real object adapters", () => {
       expect((await instance.record("project-b", "spans/0").read(chain, 0, 0)).spans.map((r: any) => r.spanId)).toEqual(
         [span(100).spanId],
       );
-      expect(found.some((r) => r.spanId === span(100).spanId)).toBe(false);
+      expect(Arr.some(found, (r) => r.spanId === span(100).spanId)).toBe(false);
     });
   });
   it("scenario: R2 archive plant: unlike checksum encodings or a lost acknowledgement must not lose the local copy", async () => {
@@ -927,20 +937,20 @@ describe("P12 real object adapters", () => {
         Effect.runPromise(RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)));
 
       const job = await collect({ _tag: "job", process: pid });
-      expect(job.some((r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
+      expect(Arr.some(job, (r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
       const failures = await collect({ _tag: "job", process: broken.process });
-      expect(failures.some((r) => r.ok === false && r.name === "runner.step")).toBe(true);
-      expect(job.every((r) => r.attributes["fab.process"] === pid)).toBe(true);
+      expect(Arr.some(failures, (r) => r.ok === false && r.name === "runner.step")).toBe(true);
+      expect(Arr.every(job, (r) => r.attributes["fab.process"] === pid)).toBe(true);
       const outside = await collect({ _tag: "spans" });
-      expect(outside.some((r) => r.name === "gateway.initialize")).toBe(true);
+      expect(Arr.some(outside, (r) => r.name === "gateway.initialize")).toBe(true);
       const permanent = JSON.stringify([...job, ...outside, ...failures]);
       expect(permanent).not.toContain("private raw frame P12");
       expect(permanent).not.toContain("private failure P12");
       expect(permanent).not.toContain("PRIVATE KEY");
-      expect([...job, ...outside].some((r) => /record\.(write|read)|sink\.flush/.test(r.name))).toBe(false);
+      expect(Arr.some([...job, ...outside], (r) => /record\.(write|read)|sink\.flush/.test(r.name))).toBe(false);
       const again = await collect({ _tag: "job", process: pid });
-      expect(again.map((r) => r.spanId)).toEqual(job.map((r) => r.spanId));
-      expect(new Set(job.map((r) => r.spanId)).size).toBe(job.length);
+      expect(Arr.map(again, (r) => r.spanId)).toEqual(Arr.map(job, (r) => r.spanId));
+      expect(new Set(Arr.map(job, (r) => r.spanId)).size).toBe(job.length);
     });
   });
   it.each(["revoke", "exit"] as const)(

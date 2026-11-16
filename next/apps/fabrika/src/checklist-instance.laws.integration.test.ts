@@ -37,7 +37,13 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Formatter, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -463,7 +469,7 @@ const placings = (w: World) =>
     BOOT,
     (name) =>
       call(w, (p) => p.read(`processes/${name}`, 0, "audit")).pipe(
-        Effect.map((entries) => entries.filter(Schema.is(Started)).map((e) => e.body.process)),
+        Effect.map((entries) => Arr.map(Arr.filter(entries, Schema.is(Started)), (e) => e.body.process)),
       ),
     { concurrency: 1 },
   );
@@ -515,11 +521,11 @@ describe("L21: the boot list", () => {
                 expect(Exit.isSuccess(yield* Effect.promise(() => w.project.exit())), "the boot failed").toBe(true);
                 yield* Effect.promise(() => vi.waitFor(() => expect(w.startsPending()).toBe(0), { timeout: 2_000 }));
                 expect(
-                  w.configured.map((d) => d.name),
+                  Arr.map(w.configured, (d) => d.name),
                   "the boot list started once each, in order",
                 ).toEqual([...BOOT]);
                 const first = yield* placings(w);
-                expect(first.map((p) => p.length)).toEqual([1, 1, 1]);
+                expect(Arr.map(first, (p) => p.length)).toEqual([1, 1, 1]);
                 const live = new Set(first.flat());
                 const client = yield* admit(w);
 
@@ -618,7 +624,10 @@ describe("L13: notices name their process", () => {
               let model = checklistMachine.init(null, {})[0];
 
               for (const [n] of names.entries()) {
-                const name = names.filter((candidate) => !model.items.some((item) => item.name === candidate))[0]!;
+                const name = Arr.filter(
+                  names,
+                  (candidate) => !Arr.some(model.items, (item) => item.name === candidate),
+                )[0]!;
                 const msg = { type: "add" as const, name };
 
                 const answer = yield* call(w, (p) =>
@@ -647,13 +656,13 @@ describe("L13: notices name their process", () => {
                 // Ticket 866 saves wake 0 and delivers timer {at: 0}. That is a requested wake,
                 // not today's time: an item added just now must not already be a day old.
                 expect(
-                  result.view.items.find((item) => item.name === name)?.state,
+                  Option.getOrUndefined(Arr.findFirst(result.view.items, (item) => item.name === name))?.state,
                   "a fresh item's immediate wake leaves it open, never late",
                 ).toBe("open");
                 expect(
-                  result.view.items.map((item) => item.name),
+                  Arr.map(result.view.items, (item) => item.name),
                   "a late subscriber gets the current view",
-                ).toEqual(model.items.map((item) => item.name));
+                ).toEqual(Arr.map(model.items, (item) => item.name));
               }
             }),
           ),
@@ -740,8 +749,8 @@ describe("L13: notices name their process", () => {
                 }
 
                 yield* settle;
-                const views = w.heard.filter((h) => Schema.is(Notice)(h.news));
-                const theirs = w.published.filter((h) => Reflect.get(Object(h.news), "type") !== undefined);
+                const views = Arr.filter(w.heard, (h) => Schema.is(Notice)(h.news));
+                const theirs = Arr.filter(w.published, (h) => Reflect.get(Object(h.news), "type") !== undefined);
                 expect(views.length, "the client heard the checklist's views").toBeGreaterThan(0);
                 expect(views.length).toBe(theirs.length);
 

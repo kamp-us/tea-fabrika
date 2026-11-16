@@ -1,6 +1,6 @@
 // T843, next/. The driver owner supplies a scoped persistent Sql and its reopen operation (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Array as Arr, Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
@@ -183,7 +183,7 @@ export const suite = (rig: Rig): void => {
             const rows = store.sql.exec("SELECT sender,until,value FROM gateway_limits");
             expect(rows).toHaveLength(history.size);
             expect(rows.length).toBeLessThanOrEqual(4);
-            expect(new Set(rows.map((r) => r.sender)).size).toBe(rows.length);
+            expect(new Set(Arr.map(rows, (r) => r.sender)).size).toBe(rows.length);
 
             for (const r of rows) {
               const envelope = JSON.parse(String(r.value));

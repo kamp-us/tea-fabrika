@@ -12,7 +12,7 @@
 // of the wrong length, which has no cause), `GatewayNonce.ts:29` (the one WebCrypto callback that
 // importKey, sign and verify share).
 import { describe, expect } from "@effect/vitest";
-import { Effect, Predicate, Result, Schema } from "effect";
+import { Array as Arr, Effect, Option, Predicate, Result, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -121,7 +121,7 @@ export const suite = (law: Law, { fresh }: Harness) => {
           store.sql.exec("UPDATE gateway_state SET value=? WHERE name=?", JSON.stringify(bad), name);
           const error = yield* Effect.flip(store.atomic(() => store.get(name, Schema.String)));
           expect(error._tag).toBe("GatewayError");
-          const row = chain(error).find(isBadRow);
+          const row = Option.getOrUndefined(Arr.findFirst(chain(error), isBadRow));
           expect(row, "a `BadRow` GatewayError is in the chain").toBeDefined();
           expect(Schema.isSchemaError(beneath(row)), "it holds the decoder's own failure").toBe(true);
         }),

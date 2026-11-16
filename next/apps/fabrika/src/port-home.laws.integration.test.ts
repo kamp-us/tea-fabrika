@@ -52,6 +52,9 @@ import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import { Array as Arr } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -186,10 +189,10 @@ const press = Effect.fnUntraced(function* (
 
   const next = Effect.fnUntraced(function* (match: (frame: typeof Frame.Type) => boolean) {
     for (let n = 0; n < 300; n++) {
-      const at = frames.findIndex(match);
+      const at = Arr.findFirstIndex(frames, match);
 
-      if (at >= 0) {
-        return frames.splice(at, 1)[0]!;
+      if (Option.isSome(at)) {
+        return frames.splice(at.value, 1)[0]!;
       }
 
       if (socket.readyState === WebSocket.CLOSED) {
@@ -256,7 +259,7 @@ const add = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
         }),
       ),
     ),
-    Effect.map((answer) => answer.result.view.items.map((item) => item.name)),
+    Effect.map((answer) => Arr.map(answer.result.view.items, (item) => item.name)),
   );
 
 class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
@@ -338,7 +341,9 @@ const observe = Effect.fnUntraced(function* (instance: any) {
   // Through JSON and back, so a live answer compares as the saved one reads from its file.
   return yield* Schema.decodeEffect(Schema.fromJsonString(Seen))(
     Formatter.formatJson({
-      table: rows.map((row) => ({ name: row.name, process: row.process })).sort((a, b) => a.name.localeCompare(b.name)),
+      table: Arr.map(rows, (row) => ({ name: row.name, process: row.process })).sort((a, b) =>
+        a.name.localeCompare(b.name),
+      ),
       streams,
     }),
   );
@@ -356,20 +361,23 @@ const reopened = Effect.gen(function* () {
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t502-h-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
   const seen = yield* open(home, saved.founding, observe);
-  const names = new Set(saved.seen.table.map((row) => row.name));
+  const names = new Set(Arr.map(saved.seen.table, (row) => row.name));
   // The same names under the same process ids: a lost Project would start them again as new.
   expect(saved.seen.table.length).toBeGreaterThan(0);
   expect(
-    seen.table.filter((row) => names.has(row.name)),
+    Arr.filter(seen.table, (row) => names.has(row.name)),
     "each saved name runs once, under its saved process id",
   ).toEqual(saved.seen.table);
   // A newer build may boot a program the saved home's build did not, beside the saved ones. Those
   // rows are new, so their process ids are fresh; their names are exactly the build's own list,
   // less any the saved home already ran (a home saved on this build holds them all).
   expect(
-    seen.table.filter((row) => !names.has(row.name)).map((row) => row.name),
+    Arr.map(
+      Arr.filter(seen.table, (row) => !names.has(row.name)),
+      (row) => row.name,
+    ),
     "the rows beyond the saved ones are exactly the programs this build adds to the boot",
-  ).toEqual(booted(saved.founding).filter((name) => !names.has(name)));
+  ).toEqual(Arr.filter(booted(saved.founding), (name) => !names.has(name)));
 
   // A ledger only grows, so every saved entry is still there, in its place.
   for (const stream of STREAMS) {
@@ -416,7 +424,12 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     // `src/State/LocalState.ts`). Writing it back the same way changes only `props.main`; a file
     // in any other shape fails here rather than be rewritten.
     expect(yield* Schema.encodeEffect(AlchemyState)(resource), `${file} is not in Alchemy's own shape`).toBe(text);
-    const relative = dists.map((dist) => path.relative(dist, main)).find((one) => !one.startsWith(".."));
+    const relative = Option.getOrUndefined(
+      Arr.findFirst(
+        Arr.map(dists, (dist) => path.relative(dist, main)),
+        (one) => !one.startsWith(".."),
+      ),
+    );
     expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
     // Why a relative path is safe: Alchemy's local provider diff reads only the new props and the
     // saved attributes (`alchemy@2.0.0-beta.85`, `src/Local/LocalProvider.ts`, `diff`), and the
@@ -466,7 +479,7 @@ const written = Effect.gen(function* () {
     Effect.gen(function* () {
       // One input, so the saved home holds counter:1's checkpoint at its program's state version.
       const rows = yield* call("info", Schema.Array(Row), () => instance.project(NAME).info());
-      const pid = rows.find((row) => row.name === "counter:1")!.process;
+      const pid = Option.getOrThrow(Arr.findFirst(rows, (row) => row.name === "counter:1")).process;
       expect(yield* inc(instance, key, pid, "port-home-1"), "counter:1 stepped its one input").toBe(1);
 
       return { seen: yield* observe(instance), dists };
@@ -638,7 +651,7 @@ const writtenBy = Effect.fnUntraced(function* (
   );
 
   for (const { file, rows } of checkpoints) {
-    for (const row of rows.filter((r) => r.process === saved.id)) {
+    for (const row of Arr.filter(rows, (r) => r.process === saved.id)) {
       named.push({ record: "checkpoint", build: row.checkpoint.saved.build });
 
       // The activity marker lives in the same object's key-value rows.
@@ -664,7 +677,7 @@ const writtenBy = Effect.fnUntraced(function* (
     "SELECT name, value FROM process_recovery",
     Supervisions,
   )) {
-    for (const row of rows.filter((r) => r.name === saved.name)) {
+    for (const row of Arr.filter(rows, (r) => r.name === saved.name)) {
       named.push({ record: "supervision", build: row.value.build });
     }
   }
@@ -676,7 +689,10 @@ const writtenBy = Effect.fnUntraced(function* (
     Lines,
   );
 
-  for (const line of lines.flatMap((found) => found.rows).filter((l) => l.stream === saved.id)) {
+  for (const line of Arr.filter(
+    Arr.flatMap(lines, (found) => found.rows),
+    (l) => l.stream === saved.id,
+  )) {
     named.push({ record: `line ${line._tag}`, build: line.build });
   }
 
@@ -686,7 +702,7 @@ const writtenBy = Effect.fnUntraced(function* (
     "SELECT name, startTimeUnixNano, attributes FROM spans",
     Jobs,
   )) {
-    for (const job of rows.filter((row) => BigInt(row.startTimeUnixNano) >= since)) {
+    for (const job of Arr.filter(rows, (row) => BigInt(row.startTimeUnixNano) >= since)) {
       const a = job.attributes;
 
       if ((a["process"] === saved.id || a["fab.process"] === saved.id) && typeof a["build"] === "string") {
@@ -707,20 +723,30 @@ const reopenedOnItsCode = Effect.gen(function* () {
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
 
   // Read from the copy, never the fixture: even a read-only open is the copy's to make.
-  const descriptors = (yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors))
-    .flatMap((found) => found.rows)
-    .map((row) => row.value);
-
-  const [last] = (yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs)).flatMap(
+  const descriptors = Arr.map(
+    Arr.flatMap(
+      yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors),
+      (found) => found.rows,
+    ),
+    (row) => row.value,
+  );
+  const [last] = Arr.flatMap(
+    yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs),
     (f) => f.rows,
   );
 
   const after = last?.rev ?? 0;
   expect(descriptors.length, "the saved home has its processes' descriptors").toBeGreaterThan(0);
   // Each saved process steps below, so the law names them all: a new one needs its own step here.
-  expect(descriptors.map((d) => d.name).toSorted(), "the saved home's processes").toEqual(["checklist:1", "counter:1"]);
-  const counter = descriptors.find((d) => d.name === "counter:1")!;
-  const checklist = descriptors.find((d) => d.name === "checklist:1")!;
+  expect(
+    Arr.sort(
+      Arr.map(descriptors, (d) => d.name),
+      Order.String,
+    ),
+    "the saved home's processes",
+  ).toEqual(["checklist:1", "counter:1"]);
+  const counter = Option.getOrThrow(Arr.findFirst(descriptors, (d) => d.name === "counter:1"));
+  const checklist = Option.getOrThrow(Arr.findFirst(descriptors, (d) => d.name === "checklist:1"));
   const since = BigInt(yield* Clock.currentTimeMillis) * 1_000_000n;
 
   const code = yield* open(
@@ -734,24 +760,25 @@ const reopenedOnItsCode = Effect.gen(function* () {
           yield* add(instance, saved.key, checklist.id, "t833-two", "t833 item"),
           "checklist:1 stepped one real input",
         ).toContain("t833 item");
-
-        return Object.fromEntries(Object.entries(built.programs).map(([name, program]) => [name, program.hash]));
+        return Object.fromEntries(Arr.map(Object.entries(built.programs), ([name, program]) => [name, program.hash]));
       }),
     { "fabrika/counter": counterAt(1) },
   );
-
-  const added = (yield* rowsUnder(
+  const added = Arr.flatMap(
+    yield* rowsUnder(
     home,
     "entries",
     `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
     Lines,
-  )).flatMap((found) => found.rows);
+    ),
+    (found) => found.rows,
+  );
 
   for (const descriptor of descriptors) {
     const hash = code[descriptor.program];
     expect(hash, `this build has ${descriptor.program}`).toBeDefined();
-
-    const moves = added.filter(
+    const moves = Arr.filter(
+      added,
       (line) =>
         line.stream === "gateway/code" &&
         line._tag === "code.loaded" &&
@@ -763,7 +790,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
     // One fact records the move from the saved build to this build's code; none when they match.
     expect
       .soft(
-        moves.map((line) => line.body),
+        Arr.map(moves, (line) => line.body),
         `${descriptor.name}: one code.loaded from "open", with was set, records its move to this build's code`,
       )
       .toEqual(
@@ -778,13 +805,13 @@ const reopenedOnItsCode = Effect.gen(function* () {
 
     expect
       .soft(
-        records.filter((r) => r.build !== hash),
+        Arr.filter(records, (r) => r.build !== hash),
         `${descriptor.name}: every record it writes names this build's code`,
       )
       .toEqual([]);
 
     // Its own lines come after the fact that moved it, and no other new record names the saved build.
-    for (const line of added.filter((l) => l.stream === descriptor.id)) {
+    for (const line of Arr.filter(added, (l) => l.stream === descriptor.id)) {
       expect
         .soft(line.rev, `${descriptor.name}'s ${line._tag} is after its code.loaded`)
         .toBeGreaterThan(moves[0]?.rev ?? 0);
@@ -794,10 +821,13 @@ const reopenedOnItsCode = Effect.gen(function* () {
     if (hash !== descriptor.build) {
       expect
         .soft(
-          added
-            .filter((line) => !moves.includes(line))
-            .filter((line) => JSON.stringify([line.build, line.body]).includes(descriptor.build))
-            .map((line) => [line.stream, line._tag, line.body]),
+          Arr.map(
+            Arr.filter(
+              Arr.filter(added, (line) => !moves.includes(line)),
+              (line) => JSON.stringify([line.build, line.body]).includes(descriptor.build),
+            ),
+            (line) => [line.stream, line._tag, line.body],
+          ),
           `${descriptor.name}: only its code.loaded names the saved build ${descriptor.build}`,
         )
         .toEqual([]);
@@ -819,24 +849,30 @@ const upgradedOnItsCode = Effect.gen(function* () {
   const saved = yield* Schema.decodeEffect(Saved)(yield* fs.readFileString(path.join(FIXTURE, "saved.json")));
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "t833-u-" });
   yield* fs.copy(path.join(FIXTURE, "home"), home, { overwrite: true });
-
-  const counter = (yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors))
-    .flatMap((found) => found.rows)
-    .map((row) => row.value)
-    .find((d) => d.name === "counter:1")!;
-
-  const checkpoint = (yield* rowsUnder(
-    home,
-    "process_state",
-    "SELECT process, checkpoint FROM process_state",
-    Checkpoints,
-  ))
-    .flatMap((found) => found.rows)
-    .find((row) => row.process === counter.id);
-
+  const counter = Option.getOrThrow(
+    Arr.findFirst(
+      Arr.map(
+        Arr.flatMap(
+          yield* rowsUnder(home, "dev_descriptors", "SELECT value FROM dev_descriptors", Descriptors),
+          (found) => found.rows,
+        ),
+        (row) => row.value,
+      ),
+      (d) => d.name === "counter:1",
+    ),
+  );
+  const checkpoint = Option.getOrUndefined(
+    Arr.findFirst(
+      Arr.flatMap(
+        yield* rowsUnder(home, "process_state", "SELECT process, checkpoint FROM process_state", Checkpoints),
+        (found) => found.rows,
+      ),
+      (row) => row.process === counter.id,
+    ),
+  );
   expect(checkpoint, "the saved home holds counter:1's checkpoint").toBeDefined();
-
-  const [last] = (yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs)).flatMap(
+  const [last] = Arr.flatMap(
+    yield* rowsUnder(home, "entries", "SELECT max(rev) AS rev FROM entries", Revs),
     (f) => f.rows,
   );
 
@@ -856,40 +892,46 @@ const upgradedOnItsCode = Effect.gen(function* () {
       }),
     { "fabrika/counter": counterAt(2) },
   );
-
-  const added = (yield* rowsUnder(
+  const added = Arr.flatMap(
+    yield* rowsUnder(
     home,
     "entries",
     `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
     Lines,
-  )).flatMap((found) => found.rows);
-
+    ),
+    (found) => found.rows,
+  );
   // The open moved counter:1 off its saved build first, as one code.loaded from "open" (0529).
   expect
     .soft(
-      added
-        .filter(
+      Arr.map(
+        Arr.filter(
+          added,
           (line) =>
             line.stream === "gateway/code" &&
             line._tag === "code.loaded" &&
             line.body["program"] === "fabrika/counter" &&
             line.body["was"] === counter.build,
-        )
-        .map((line) => line.body),
+        ),
+        (line) => line.body,
+      ),
       'one code.loaded from "open", with was set, records the move to this build\'s counter',
     )
     .toEqual([{ program: "fabrika/counter", hash, was: counter.build, from: "open" }]);
-  const lines = added.filter((line) => line.stream === counter.id);
-  const upgraded = lines.filter((line) => line._tag === "state.upgraded");
+  const lines = Arr.filter(added, (line) => line.stream === counter.id);
+  const upgraded = Arr.filter(lines, (line) => line._tag === "state.upgraded");
   expect(
-    upgraded.map((line) => [line.build, line.body]),
+    Arr.map(upgraded, (line) => [line.build, line.body]),
     "one state.upgraded from v1 to v2, written by and naming this build's counter",
   ).toEqual([[hash, { program: "fabrika/counter", from: 1, to: 2, ran: ["same"], build: hash }]]);
   expect(
-    lines
-      .filter((line) => line.rev >= upgraded[0]!.rev)
-      .filter((line) => line.build !== hash || JSON.stringify(line.body).includes(counter.build))
-      .map((line) => [line._tag, line.build, line.body]),
+    Arr.map(
+      Arr.filter(
+        Arr.filter(lines, (line) => line.rev >= upgraded[0]!.rev),
+        (line) => line.build !== hash || JSON.stringify(line.body).includes(counter.build),
+      ),
+      (line) => [line._tag, line.build, line.body],
+    ),
     `every line from the upgrade on names this build's counter, never the saved build ${counter.build}`,
   ).toEqual([]);
 }).pipe(Effect.scoped);

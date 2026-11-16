@@ -3,7 +3,13 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Clock, Effect, FileSystem, Formatter, Path, Schema } from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import { Array as Arr } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -171,10 +177,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         const rows = Schema.decodeUnknownSync(Schema.Array(Letter))(
           yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
         );
-
-        const timers = rows.filter((row) => Schema.is(Timer)(row.body.m));
+        const timers = Arr.filter(rows, (row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
-        expect(new Set(timers.map((row) => row.id)).size).toBe(timers.length);
+        expect(new Set(Arr.map(timers, (row) => row.id)).size).toBe(timers.length);
 
         for (const row of timers) {
           const timer = Schema.decodeUnknownSync(Timer)(row.body.m);
@@ -185,7 +190,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         }
 
         for (const beat of beats) {
-          expect(timers.some((row) => row.id === `${pid}/due/${beat.body.due}/${row.pos - 1}`)).toBe(true);
+          expect(Arr.some(timers, (row) => row.id === `${pid}/due/${beat.body.due}/${row.pos - 1}`)).toBe(true);
         }
 
         // Bracket the alarm read with views: retry when a tick crosses the observation.

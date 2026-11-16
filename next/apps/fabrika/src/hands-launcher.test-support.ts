@@ -10,7 +10,12 @@
 // Every other request goes to the real `Control` untouched. The product's list gains nothing.
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
-import { Cause, Effect, Formatter, Option, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Array as Arr } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -37,7 +42,11 @@ const ControlCall = Schema.fromJsonString(
   Schema.Struct({ target: Schema.Literal("project"), project: Schema.String, ...Call.fields }),
 );
 
-const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) =>
+  Arr.join(
+    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")),
+    "",
+  );
 
 export class Project extends RealProject {
   /** Asks the hands of `target` for `git --version`, as a started program would. */
@@ -85,21 +94,15 @@ export class Project extends RealProject {
    */
   allRows() {
     const sql = this.ctx.storage.sql;
-
-    const tables = sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table'")
-      .toArray()
-      .map((row) => String(row["name"]));
-
+    const tables = Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table'").toArray(), (row) =>
+      String(row["name"]),
+    );
     return Object.fromEntries(
-      tables.map((table) => [
+      Arr.map(tables, (table) => [
         table,
-        sql
-          .exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)
-          .toArray()
-          .map((row) =>
+        Arr.map(sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`).toArray(), (row) =>
             Object.fromEntries(
-              Object.entries(row).map(([column, value]) => [
+            Arr.map(Object.entries(row), ([column, value]) => [
                 column,
                 value instanceof ArrayBuffer
                   ? { hex: hex(new Uint8Array(value)), text: new TextDecoder().decode(value) }

@@ -15,7 +15,7 @@ import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
-import { Effect, Schema, Scope } from "effect";
+import { Array as Arr, Effect, Option, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -212,10 +212,10 @@ const wire = async (instance: Instance, key: Key, tab: string, socket: WebSocket
     const end = Date.now() + WAIT;
 
     while (Date.now() < end) {
-      const index = frames.findIndex(match);
+      const index = Arr.findFirstIndex(frames, match);
 
-      if (index >= 0) {
-        return frames.splice(index, 1)[0];
+      if (Option.isSome(index)) {
+        return frames.splice(index.value, 1)[0];
       }
 
       if (closeCode !== undefined) {
@@ -383,11 +383,11 @@ const letter = (pid: string, id: string, m: unknown) => ({ pid, letter: id, m, s
 
 /** Whether a pushed view update carries a log row of this type, however the update is cut. */
 const carries = (value: unknown, type: string): boolean =>
-  Array.isArray(value)
-    ? value.some((item) => carries(item, type))
+  Arr.isArray(value)
+    ? Arr.some(value, (item) => carries(item, type))
     : typeof value === "object" &&
       value !== null &&
-      (Reflect.get(value, "type") === type || Object.values(value).some((item) => carries(item, type)));
+      (Reflect.get(value, "type") === type || Arr.some(Object.values(value), (item) => carries(item, type)));
 
 /** The next view update the brain pushes for `pid` whose rows hold one of this type. It asks nothing. */
 const pushed = (client: Awaited<ReturnType<typeof wire>>, pid: string, type: string) =>
@@ -439,7 +439,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     await client.call("process.send", letter(writer, "quit-1", { type: "quit" }));
 
     const folded = await until("the reader folds the writer's DOWN", log, (rows) =>
-      rows.some((r) => r.type === "DOWN" && r.ref === kept),
+      Arr.some(rows, (r) => r.type === "DOWN" && r.ref === kept),
     );
 
     expect(

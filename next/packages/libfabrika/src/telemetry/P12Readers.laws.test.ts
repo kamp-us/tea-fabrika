@@ -1,7 +1,7 @@
 // P12, next/. Corrupt saved rows at each synchronous decoder in the changed record files.
 import { DatabaseSync } from "node:sqlite";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer } from "effect";
+import { Array as Arr, Cause, Effect, Exit, Layer } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -53,11 +53,11 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
             const rows = real.exec(query, ...args);
 
             if (corrupt && reader === "kept" && query.includes("SELECT * FROM content")) {
-              return rows.map((r) => ({ ...r, message: text.length }));
+              return Arr.map(rows, (r) => ({ ...r, message: text.length }));
             }
 
             return corrupt && reader === "seq" && query.includes("rowid AS seq")
-              ? rows.map((r) => ({ ...r, seq: text }))
+              ? Arr.map(rows, (r) => ({ ...r, seq: text }))
               : rows;
           },
         };

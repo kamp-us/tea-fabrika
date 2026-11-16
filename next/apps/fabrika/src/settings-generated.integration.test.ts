@@ -19,7 +19,7 @@ import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
-import { Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Option, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
@@ -69,7 +69,7 @@ type Declared = typeof declared extends fc.Arbitrary<infer D> ? D : never;
 const grouped = (ds: Declared) =>
   Setting.group(
     Object.fromEntries(
-      ds.map((d) => [
+      Arr.map(ds, (d) => [
         `${d.table}_${d.key}`,
         Setting.make(`${d.table}.${d.key}`, {
           schema: Port,
@@ -134,7 +134,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
           fc.tuple(
             fc.constant(ds),
             fc.shuffledSubarray(
-              ds.map((_, n) => n),
+              Arr.map(ds, (_, n) => n),
               { minLength: ds.length, maxLength: ds.length },
             ),
             fc.nat(ds.length - 1),
@@ -146,14 +146,14 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
         ),
         ([ds, order, at, change]) => {
           const base = outputs(grouped(ds));
-          expect(outputs(grouped(order.map((n) => ds[n]!)))).toEqual(base);
+          expect(outputs(grouped(Arr.map(order, (n) => ds[n]!)))).toEqual(base);
 
           const before = ds[at]!;
           const after = change._tag === "doc" ? { ...before, doc: change.doc } : { ...before, default: change.default };
           // A doc that differs only in spacing may read the same in Markdown, so the change is in its words.
           const words = (text: string) => text.replace(/\s+/g, " ").trim();
           fc.pre(change._tag === "doc" ? words(change.doc) !== words(before.doc) : change.default !== before.default);
-          const changed = outputs(grouped(ds.map((d, n) => (n === at ? after : d))));
+          const changed = outputs(grouped(Arr.map(ds, (d, n) => (n === at ? after : d))));
           expect(changed.reference).not.toBe(base.reference);
           expect(changed.person !== base.person).toBe(before.scope.includes("person"));
           expect(changed.repo !== base.repo).toBe(before.scope.includes("repo"));
@@ -226,10 +226,11 @@ const target = fc.constantFrom("package", "relative", "relative-bare", "parser",
 /** The relative import spelling from one repo file to another, as `../../packages/x.ts`. */
 const relative = (from: string, to: string) => {
   const [a, b] = [from.split("/").slice(0, -1), to.split("/")];
-  const shared = a.findIndex((s, n) => s !== b[n]);
-  const n = shared === -1 ? a.length : shared;
-  const rest = b.slice(n).join("/");
-
+  const n = Option.getOrElse(
+    Arr.findFirstIndex(a, (s, i) => s !== b[i]),
+    () => a.length,
+  );
+  const rest = Arr.join(b.slice(n), "/");
   return a.length === n ? `./${rest}` : `${"../".repeat(a.length - n)}${rest}`;
 };
 
@@ -240,9 +241,9 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
       fc.asyncProperty(
         fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
         async (cases) => {
-          const planted = cases
-            .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
-            .map(([c, t]) => {
+          const planted = Arr.map(
+            Arr.filter(cases, ([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath")),
+            ([c, t]) => {
               const spec =
                 t === "package"
                   ? "@kampus/libfabrika/settings/TomlParser"
@@ -257,13 +258,13 @@ describe("L9, only the start files take the TOML adapter in next/apps, and only 
               const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
 
               return { file: c.file, spec, allowed };
-            });
-
+            },
+          );
           fc.pre(planted.length > 0);
 
           const result = await plant(
             Object.fromEntries(
-              planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
+              Arr.map(planted, (p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
             ),
           );
 

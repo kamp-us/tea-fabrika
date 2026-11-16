@@ -58,7 +58,16 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Formatter, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
+import * as Tracer from "effect/Tracer";
+import { Array as Arr } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
@@ -88,7 +97,7 @@ const field = (bytes: Uint8Array) => {
 };
 
 const join = (...parts: ReadonlyArray<Uint8Array>) => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
   let at = 0;
 
   for (const p of parts) {
@@ -99,7 +108,11 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
   return out;
 };
 
-const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: Uint8Array) =>
+  Arr.join(
+    Arr.map([...bytes], (b) => b.toString(16).padStart(2, "0")),
+    "",
+  );
 
 // A shared test's failures are tagged like product code's, never thrown.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
@@ -147,7 +160,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
     sign,
     /** Every form the private half could leak in: the seed and PKCS#8 bytes as base64, base64url and
      *  hex. An armored key's body is the PKCS#8 base64, one 64-column line for Ed25519, so it is here too. */
-    secrets: [seed, pkcs8].flatMap((b) => [Base64.encode(b), Base64Url.encode(b), hex(b)]),
+    secrets: Arr.flatMap([seed, pkcs8], (b) => [Base64.encode(b), Base64Url.encode(b), hex(b)]),
   };
 });
 
@@ -294,7 +307,10 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
 
   const make = (url: string): MemorySocket => {
     // The client dials `<origin>/client/<fingerprint>/<tab>`, as the Worker's door reads it.
-    const [name = "", tab = ""] = (new URL(url).pathname.split("/client/")[1] ?? "").split("/").map(decodeURIComponent);
+    const [name = "", tab = ""] = Arr.map(
+      (new URL(url).pathname.split("/client/")[1] ?? "").split("/"),
+      decodeURIComponent,
+    );
     // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
     const client: { id: ConnectionId | null } = { id: null };
 
@@ -500,14 +516,13 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       });
 
       const busy = new Set(
-        tasks.flatMap((task) =>
+        Arr.flatMap(tasks, (task) =>
           task.state._tag === "absent" || task.state._tag === "finished" || task.state._tag === "collected"
             ? []
             : [task.state.request.process],
         ),
       );
-
-      const free = f.processes.filter((p) => !busy.has(p));
+      const free = Arr.filter(f.processes, (p) => !busy.has(p));
       const moves = [...(free.length > 0 ? ["request"] : []), "run", "run", "drop", "lose", "restart"];
       const move = moves[cell.move % moves.length] ?? "run";
       done.add(move);
@@ -560,7 +575,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
     const finished = () =>
       Effect.forEach(requested, (id) => b.tasks((j) => j.read(id)).pipe(Effect.orDie), { concurrency: 1 }).pipe(
-        Effect.map((tasks) => tasks.every((task) => task.state._tag === "finished")),
+        Effect.map((tasks) => Arr.every(tasks, (task) => task.state._tag === "finished")),
       );
 
     for (let i = 0; i < 300 && !(yield* finished()); i++) {
@@ -581,24 +596,23 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     // E1: every parked wait was rung at the object its socket lives on. A wait that names another
     // reader is never answered on the Worker, so the hands would sleep through new work.
     expect(
-      d.rung.filter((r) => r.to !== READER),
+      Arr.filter(d.rung, (r) => r.to !== READER),
       "E1: every ring names the object the sockets live on",
     ).toEqual([]);
 
-    if (d.rung.some((r) => r.stream.startsWith("target:"))) {
+    if (Arr.some(d.rung, (r) => r.stream.startsWith("target:"))) {
       done.add("ring:target");
     }
 
     // S1: every output a leak could reach, read whole, and every encoding of the private key.
     done.add(requested.length > 0 && (yield* finished()) ? "finished" : "unfinished");
     // The secrets law reads every stored row, as A12 does.
-    const tables = b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'").map((row) => String(row.name));
-
+    const tables = Arr.map(b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), (row) => String(row.name));
     const outputs: Record<string, unknown> = {
-      frames: d.sockets.map((socket) => socket.sent),
+      frames: Arr.map(d.sockets, (socket) => socket.sent),
       journal: [...kept.values.entries()],
-      ledger: tables.map((table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),
-      spans: spans.map((span) => ({ name: span.name, attributes: [...span.attributes] })),
+      ledger: Arr.map(tables, (table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),
+      spans: Arr.map(spans, (span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
     for (const [name, value] of focus === "S1" ? Object.entries(outputs) : []) {
@@ -616,7 +630,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     }
 
     expect(
-      d.sockets.some((socket) => socket.sent.length > 0),
+      Arr.some(d.sockets, (socket) => socket.sent.length > 0),
       "S1 read frames the client really wrote",
     ).toBe(true);
     yield* Scope.close(scope, Exit.void);

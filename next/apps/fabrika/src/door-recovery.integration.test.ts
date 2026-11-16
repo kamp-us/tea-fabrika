@@ -29,8 +29,13 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, Layer, Schema, Scope, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import { RateLimiter } from "effect/persistence";
+import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
@@ -363,7 +368,7 @@ const world = ({ disk }: Disks) => {
       if (
         controls.cutRecorded &&
         query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        Arr.some(args, (arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -373,7 +378,7 @@ const world = ({ disk }: Disks) => {
       if (
         controls.cutRetryable &&
         query.startsWith("UPDATE gateway_bindings") &&
-        args.some((arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        Arr.some(args, (arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;
