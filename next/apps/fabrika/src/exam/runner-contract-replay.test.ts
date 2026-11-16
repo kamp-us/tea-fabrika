@@ -14,7 +14,7 @@ import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 import {
   Body,
   build,

@@ -30,7 +30,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
