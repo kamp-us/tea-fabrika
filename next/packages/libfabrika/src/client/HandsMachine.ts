@@ -13,7 +13,7 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import { Array as Arr, Option, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -309,9 +309,10 @@ const saved = (s: HandsModel, task: Assigned, entry: Entry): Step => {
  * next one, so one task whose take fails for a passing reason does not hold back the others.
  */
 const takeable = (s: HandsModel, tasks: ReadonlyArray<(typeof Listed.Type.tasks)[number]>, tries: number) => {
-  const once = tasks.filter(
+  const once = Arr.filter(
+    tasks,
     (p) =>
-      tasks.filter((q) => q.process === p.process).length === 1 &&
+      Arr.filter(tasks, (q) => q.process === p.process).length === 1 &&
       !s.held.includes(p.id) &&
       !s.skip.tasks.includes(p.id),
   );
@@ -337,18 +338,21 @@ const takeable = (s: HandsModel, tasks: ReadonlyArray<(typeof Listed.Type.tasks)
  *   what the table cannot place is sent again.
  */
 const LASTS: ReadonlyMap<string, "never" | "link" | "list"> = new Map([
-  ...[
-    "not_allowed",
-    "not_target",
-    "conflict",
-    "wrong_execution",
-    "wrong_state",
-    "wrong_process",
-    "not_found",
-    "bad_input",
-    "reserved",
-    "unknown_method",
-  ].map((reason) => [reason, "never"] as const),
+  ...Arr.map(
+    [
+      "not_allowed",
+      "not_target",
+      "conflict",
+      "wrong_execution",
+      "wrong_state",
+      "wrong_process",
+      "not_found",
+      "bad_input",
+      "reserved",
+      "unknown_method",
+    ],
+    (reason) => [reason, "never"] as const,
+  ),
   ["lacks_capability", "link"],
   ["idle", "list"],
   ["ambiguous", "list"],
@@ -522,7 +526,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
   const fresh = open !== null && open > s.handshake.dial;
   // A grant wait's renewal knock goes on the dial it holds, with its own id `k<dial>.<n>`: its answer
   // renews the code the exchange shows.
-  const renew = cmds.some((c) => c.type === "knock");
+  const renew = Arr.some(cmds, (c) => c.type === "knock");
   const next: HandsModel = {
     ...s,
     link,
@@ -530,7 +534,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
     tries: fresh && link._tag === "dialing" ? (link.tries ?? 0) : s.tries,
     sent: renew ? s.sent + 1 : s.sent,
   };
-  const pings = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
+  const pings = Arr.filter(cmds, (c): c is ReturnType<typeof ping> => c.type === "ping");
   const knocks = renew ? [knock({ dial: open ?? 0, id: `k${open ?? 0}.${next.sent}` })] : [];
   return moved(s, [next, [...pings, ...knocks]]);
 };

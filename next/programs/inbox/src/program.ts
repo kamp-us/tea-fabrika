@@ -1,6 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
 import { Program } from "@kampus/libfabrika";
-import { Schema } from "effect";
+import { Array as Arr, Schema } from "effect";
 
 const Fact = Schema.Struct({ stream: Schema.NonEmptyString, rev: Schema.Int });
 
@@ -28,7 +28,7 @@ export const inboxMachine = Machine.make({
   init: (loaded) => [loaded ?? { rows: [] }, []],
   update: {
     added: (model, msg) => {
-      if (model.rows.some((row) => row.id === msg.id)) {
+      if (Arr.some(model.rows, (row) => row.id === msg.id)) {
         return [model, []];
       }
 

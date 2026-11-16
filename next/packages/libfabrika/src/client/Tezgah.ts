@@ -19,7 +19,7 @@
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Result, Schema } from "effect";
+import { Array as Arr, Option, Result, Schema } from "effect";
 import { apply } from "../runtime/Patch.ts";
 import { focus } from "../tezgah/Layout.ts";
 import { CursorKey, TezgahView, TileId } from "../tezgah/Workspace.ts";
@@ -134,8 +134,15 @@ const S = MoveState.cases;
 const sentAs = (p: Mutation): string | null => (p.state._tag === "waiting" ? null : p.state.letter);
 
 /** The focus the window draws on its workspace with `pending` over the server state. */
-const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null =>
-  optimisticState({ ...s, pendingMutations: pending })?.workspaces.find((w) => w.n === s.workspace)?.focus ?? null;
+const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null => {
+  const view = optimisticState({ ...s, pendingMutations: pending });
+  return view === null
+    ? null
+    : Arr.findFirst(view.workspaces, (w) => w.n === s.workspace).pipe(
+        Option.map((w) => w.focus),
+        Option.getOrNull,
+      );
+};
 
 /** Drops each answered move the shown view is at or past, one at a time, oldest first: each is
  *  `overridden` when dropping it moves the drawn focus, else `kept`. */
@@ -149,7 +156,7 @@ const confirmed = (s: TezgahClient): Step => {
     }
 
     const was = drawnFocus(s, pending);
-    pending = pending.filter((x) => x !== p);
+    pending = Arr.filter(pending, (x) => x !== p);
     const result = drawnFocus(s, pending) === was ? "kept" : "overridden";
     rows.push(settled({ letter: p.state.letter, result, ms: p.state.ms }));
   }
@@ -217,7 +224,7 @@ export const tezgahMachine = Machine.make({
     dated: (s, m): Step => [
       {
         ...s,
-        pendingMutations: s.pendingMutations.map((p) =>
+        pendingMutations: Arr.map(s.pendingMutations, (p) =>
           p.state._tag === "waiting" && p.state.n === m.n ? { ...p, state: S.sent.make({ letter: m.letter }) } : p,
         ),
       },
@@ -227,7 +234,7 @@ export const tezgahMachine = Machine.make({
     accepted: (s, m): Step =>
       confirmed({
         ...s,
-        pendingMutations: s.pendingMutations.map((p) =>
+        pendingMutations: Arr.map(s.pendingMutations, (p) =>
           p.state._tag === "sent" && p.state.letter === m.letter
             ? { ...p, state: S.answered.make({ letter: m.letter, pos: m.pos, ms: m.ms }) }
             : p,
@@ -235,10 +242,10 @@ export const tezgahMachine = Machine.make({
       }),
     // tezgah's state did not change, so the move is dropped now: the drawn focus goes back to the server's.
     refused: (s, m): Step => {
-      const gone = s.pendingMutations.filter((p) => sentAs(p) === m.letter);
+      const gone = Arr.filter(s.pendingMutations, (p) => sentAs(p) === m.letter);
       return [
-        { ...s, pendingMutations: s.pendingMutations.filter((p) => sentAs(p) !== m.letter) },
-        gone.map(() => settled({ letter: m.letter, result: "overridden", ms: m.ms })),
+        { ...s, pendingMutations: Arr.filter(s.pendingMutations, (p) => sentAs(p) !== m.letter) },
+        Arr.map(gone, () => settled({ letter: m.letter, result: "overridden", ms: m.ms })),
       ];
     },
     ask_ok: (s): Step => [s, []],
@@ -254,8 +261,8 @@ const applyFocus = (view: TezgahView | null, mutation: Mutation): TezgahView | n
   view === null
     ? null
     : {
-        workspaces: view.workspaces.map((w) => focus(w, mutation.to)),
-        tiles: view.tiles.map((t) => (t.id === mutation.from ? { ...t, cursor: mutation.cursor } : t)),
+        workspaces: Arr.map(view.workspaces, (w) => focus(w, mutation.to)),
+        tiles: Arr.map(view.tiles, (t) => (t.id === mutation.from ? { ...t, cursor: mutation.cursor } : t)),
       };
 
 /**
@@ -266,4 +273,4 @@ const applyFocus = (view: TezgahView | null, mutation: Mutation): TezgahView | n
  * @category getters
  */
 export const optimisticState = (m: TezgahClient): TezgahView | null =>
-  m.pendingMutations.reduce(applyFocus, m.serverState);
+  Arr.reduce(m.pendingMutations, m.serverState, applyFocus);

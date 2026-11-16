@@ -1,6 +1,6 @@
 import { Outcome } from "@demlik/tea";
 import { Ci, CodeHost, type Handler } from "@kampus/libfabrika";
-import { Cause, Effect, Schema } from "effect";
+import { Array as Arr, Cause, Effect, Schema } from "effect";
 import { Inputs } from "./Merger.ts";
 
 export class HandlerDefect extends Schema.TaggedError<HandlerDefect>()("HandlerDefect", {
@@ -57,7 +57,7 @@ export const handlers: Readonly<Record<string, Handler<CodeHost.CodeHost | Ci.Ci
       Effect.tap((runs) =>
         Effect.annotateCurrentSpan(
           "fab.checks",
-          runs.map((r) => r.name),
+          Arr.map(runs, (r) => r.name),
         ),
       ),
       outcome("checks"),

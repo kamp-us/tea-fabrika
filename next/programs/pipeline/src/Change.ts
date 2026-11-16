@@ -27,14 +27,14 @@ export const kind = (
     return "code";
   }
 
-  const rows = kinds.rows.map((g) => picomatch(g));
-  const docs = kinds.docs.map((g) => picomatch(g));
+  const rows = Arr.map(kinds.rows, (g) => picomatch(g));
+  const docs = Arr.map(kinds.docs, (g) => picomatch(g));
   let heaviest: typeof Kind.Type = "rows";
 
   for (const path of paths) {
-    if (docs.some((matches) => matches(path))) {
+    if (Arr.some(docs, (matches) => matches(path))) {
       heaviest = "docs";
-    } else if (!rows.some((matches) => matches(path))) {
+    } else if (!Arr.some(rows, (matches) => matches(path))) {
       return "code";
     }
   }
@@ -62,17 +62,19 @@ export const verdict = (
   const asked = Arr.dedupeWith(checks, (a, b) => a.name === b.name && a.source === b.source);
   const matches = (c: typeof Check.Type, r: typeof Ci.CheckRun.Type) =>
     c.name === r.name && (c.source === undefined || c.source === r.source);
-  const selected = current.filter((r) => asked.some((c) => matches(c, r)));
-  const red = selected.filter(
+  const selected = Arr.filter(current, (r) => Arr.some(asked, (c) => matches(c, r)));
+  const red = Arr.filter(
+    selected,
     (r) => r.status._tag === "done" && (r.status.conclusion === "failure" || r.status.conclusion === "timed_out"),
   );
-  const lost = selected.filter(
+  const lost = Arr.filter(
+    selected,
     (r) =>
       r.status._tag === "done" && (r.status.conclusion === "cancelled" || r.status.conclusion === "startup_failure"),
   );
-  const pending = asked.filter((c) => {
-    const runs = selected.filter((r) => matches(c, r));
-    return runs.length === 0 || runs.some((r) => r.status._tag !== "done");
+  const pending = Arr.filter(asked, (c) => {
+    const runs = Arr.filter(selected, (r) => matches(c, r));
+    return runs.length === 0 || Arr.some(runs, (r) => r.status._tag !== "done");
   });
 
   if (Arr.isReadonlyArrayNonEmpty(red)) {

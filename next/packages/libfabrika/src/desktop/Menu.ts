@@ -4,6 +4,8 @@
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
@@ -181,7 +183,7 @@ const current = (model: Model) => ({
 const idle = (model: Model): Model => Model.cases.idle.make(current(model));
 
 const unique = <A extends { readonly key: string }>(rows: ReadonlyArray<A>): ReadonlyArray<A> => [
-  ...new Map(rows.map((row) => [row.key, row])).values(),
+  ...new Map(Arr.map(rows, (row) => [row.key, row])).values(),
 ];
 
 /**
@@ -212,22 +214,22 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
       clients: (s, m) => {
         const clients = unique(m.clients);
         // Snapshots arrive separately. The latest list decides a shared key's row.
-        const rows = s.rows.filter((row) => !clients.some((client) => client.key === row.key));
+        const rows = Arr.filter(s.rows, (row) => !Arr.some(clients, (client) => client.key === row.key));
         return [{ ...s, rows, clients }, []];
       },
       rows: (s, m) => {
-        let passes = s.passes.filter((p) => m.at < p.until);
+        let passes = Arr.filter(s.passes, (p) => m.at < p.until);
         const commands: Array<ReturnType<typeof signGrant>> = [];
         const rows = unique(m.rows);
 
         for (const row of rows) {
-          if (row.pass !== null && passes.some((p) => p.digest === row.pass)) {
-            passes = passes.filter((p) => p.digest !== row.pass);
+          if (row.pass !== null && Arr.some(passes, (p) => p.digest === row.pass)) {
+            passes = Arr.filter(passes, (p) => p.digest !== row.pass);
             commands.push(signGrant({ key: row.key, as: row.as, saw: saw(row, "link", "none") }));
           }
         }
 
-        const clients = s.clients.filter((client) => !rows.some((row) => row.key === client.key));
+        const clients = Arr.filter(s.clients, (client) => !Arr.some(rows, (row) => row.key === client.key));
         return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
@@ -235,7 +237,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
           return [s, []];
         }
 
-        const row = s.rows.find((r) => r.key === m.key);
+        const row = Option.getOrUndefined(Arr.findFirst(s.rows, (r) => r.key === m.key));
 
         if (row === undefined) {
           return [s, []];
@@ -256,7 +258,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
           return [s, []];
         }
 
-        const client = s.clients.find((c) => c.key === m.key && !c.own);
+        const client = Option.getOrUndefined(Arr.findFirst(s.clients, (c) => c.key === m.key && !c.own));
 
         if (client === undefined) {
           return [s, []];
@@ -273,7 +275,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         ];
       },
       deny: (s, m) => {
-        const row = s.rows.find((r) => r.key === m.key);
+        const row = Option.getOrUndefined(Arr.findFirst(s.rows, (r) => r.key === m.key));
         return [s, row === undefined ? [] : [deny({ key: row.key, saw: saw(row, "compare", "none") })]];
       },
       checked: (s, m) => {
@@ -316,9 +318,9 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         return [
           {
             ...s,
-            opens: s.opens.filter((cmd) => cmd !== m.cmd),
+            opens: Arr.filter(s.opens, (cmd) => cmd !== m.cmd),
             passes: [
-              ...s.passes.filter((p) => p.digest !== m.digest),
+              ...Arr.filter(s.passes, (p) => p.digest !== m.digest),
               { digest: m.digest, until: m.at + options.linkTtl },
             ],
           },
