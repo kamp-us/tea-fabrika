@@ -421,6 +421,13 @@
   },
   "overrides": [
     {
+      // 0559: no reduce callback or loop spreads its running result back into itself. An error, with
+      // no warn line and no inline ignore: a hit is rewritten, or it goes to the owner. Today's app
+      // keeps its hits and is not in `files`.
+      "files": ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"],
+      "rules": { "oxc/no-accumulating-spread": "error" }
+    },
+    {
       // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
       "files": ["scripts/vitest.setup.ts", "scripts/testhome.ts"],
       "rules": {

@@ -173,7 +173,7 @@ describe("P16 checked built tables", () => {
     const tape = fc.array(fc.nat(), { minLength: 2, maxLength: 12 });
     await fc.assert(
       fc.asyncProperty(rows, tape, async (rows, tape) => {
-        let programs: Record<string, Program> = Object.fromEntries(
+        const programs: Record<string, Program> = Object.fromEntries(
           rows.map(({ name, source }) => [name, { hash: sha(source), source }]),
         );
         let added = 0,
@@ -184,7 +184,7 @@ describe("P16 checked built tables", () => {
 
           if (i % 2 === 0) {
             const key = `pack${n % 5}/added${i}`;
-            programs = { ...programs, [key]: { hash: sha(key), source: key } };
+            programs[key] = { hash: sha(key), source: key };
             const decoded = await Effect.runPromise(api.decodeBuilt({ programs, assets: {} }));
             expect(Object.keys(decoded.programs).sort()).toEqual(Object.keys(programs).sort());
             expect(decoded.programs).toEqual(programs);

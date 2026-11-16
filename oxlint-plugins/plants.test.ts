@@ -723,6 +723,31 @@ describe("rules that apply by path", () => {
     made.push(at);
     expect(fires(file, "react-hooks(rules-of-hooks)")).toEqual([]);
   });
+
+  const SELF_SPREAD =
+    "declare const xs: number[];\nexport const f = () => { let out: number[] = []; for (const x of xs) { out = [...out, x]; } return out; };\n";
+
+  // scenario: the override's own globs are the thing checked, so each row is one real folder, read
+  // by the real oxlint through the repository's own config (0559).
+  // Plants, run once: with the rule moved to the root `rules`, the three rows for today's app are
+  // red; with one folder dropped from the override's `files`, that folder's row is red.
+  it.each(["next", ".agents", "oxlint-plugins", ".github/ci"])(
+    "scenario: a result spread back into itself in a loop under %s/ is refused",
+    (folder) => {
+      const { at, file } = plantIn(folder, SELF_SPREAD);
+      made.push(at);
+      expect(fires(file, "oxc(no-accumulating-spread)")).toEqual([2]);
+    },
+  );
+
+  it.each(["packages", "programs", "apps"])(
+    "scenario: the same line under %s/, today's app, is left alone",
+    (folder) => {
+      const { at, file } = plantIn(folder, SELF_SPREAD);
+      made.push(at);
+      expect(fires(file, "oxc(no-accumulating-spread)")).toEqual([]);
+    },
+  );
 });
 
 // pinned: 0046 is blocking from its first commit and the real config must enable it.

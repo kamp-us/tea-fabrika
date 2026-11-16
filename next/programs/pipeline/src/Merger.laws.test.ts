@@ -198,7 +198,7 @@ const guided = (p: Program, w: World) => {
   ).chain((raw) =>
     fc.array(draw, { minLength: 12, maxLength: 80, size: "max" }).map((tail) => {
       let model = p.machine.init(null, ctx)[0];
-      let out: ReadonlyArray<Command> = [];
+      const out: Array<Command> = [];
       let clock = 0;
       let started = false;
       const msgs: Array<Msg> = [];
@@ -251,7 +251,7 @@ const guided = (p: Program, w: World) => {
         msgs.push(msg);
         const [next, commands] = applyCell<Model, Msg, Command>(p.machine, model, msg);
         model = next;
-        out = [...out, ...commands];
+        out.push(...commands);
       }
 
       // Continue from the state the fold reached. Tea's blind picks can leave an old request
@@ -285,7 +285,7 @@ const guided = (p: Program, w: World) => {
         msgs.push(msg);
         const [next, commands] = applyCell<Model, Msg, Command>(p.machine, model, msg);
         model = next;
-        out = [...out, ...commands];
+        out.push(...commands);
       }
 
       return msgs;
