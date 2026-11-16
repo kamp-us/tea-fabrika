@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-hostonly-box",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:05:00-08:00",
+  "ended": "2026-11-15T22:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "lead tooling",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Today's tooling: the host-only test guard from PR 1413 refused integration and visual tests everywhere outside CI, cloud boxes included, which blocked every box proof. Its decision moved into a pure function, vitest.hostrun.ts's hostRun: allow on CI, on the owner's FABRIKA_HOST_RUN_OWNER_APPROVED=1, or on Linux with CLAUDE_CODE_REMOTE=true, the cloud runtime's own marker (the CLI reads it with that exact test); refuse everywhere else. The Linux check keeps a stray marker on the Mac from slipping through, and the laptop's own boxes set no marker, so they still refuse.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Fast-tracked lead tooling, one agent, no subagents. Laws in vitest.hostrun.test.ts, one per side: laptop refused (with a seeded fast-check property over laptop shells), cloud box allowed, CI allowed on any platform, owner's yes allowed. Five plants, each run once and red on its own law, then restored: marker without the platform check, any marker value, no box case, CI only on Linux, no owner case. scripts/caps.test.ts's subprocess laws now unset CLAUDE_CODE_REMOTE so their refusals hold inside a box, and check the new 'cloud box' line in the refusal. Ran: the two touched test files alone (4 of 4, 29 of 29), pnpm lint (18 parts green after dropping an unused type export), one pnpm typecheck. Not run: the guard inside a real cloud box; the box law is proven only through the pure function.",
+  "step": "lead"
+}

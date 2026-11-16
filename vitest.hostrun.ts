@@ -27,7 +27,7 @@
 export const HOST_RUN = "FABRIKA_HOST_RUN_OWNER_APPROVED";
 
 /** Whether a host-only test may start here, and why. */
-export type HostRun = { readonly _tag: "allow"; readonly reason: "ci" | "owner" | "box" } | { readonly _tag: "refuse" };
+type HostRun = { readonly _tag: "allow"; readonly reason: "ci" | "owner" | "box" } | { readonly _tag: "refuse" };
 
 /** The guard's decision, from the environment and the platform alone. */
 export const hostRun = (env: Readonly<Record<string, string | undefined>>, platform: NodeJS.Platform): HostRun => {

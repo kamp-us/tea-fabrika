@@ -9,10 +9,7 @@ const options = { seed: 119120, numRuns: 200 };
 
 /** Any environment the laptop's shell might hold, without CI or the owner's yes. */
 const laptopEnv = fc
-  .dictionary(
-    fc.constantFrom("CLAUDE_CODE_REMOTE", "CLAUDECODE", "HOME", "TERM", "FABRIKA_HOME"),
-    fc.string(),
-  )
+  .dictionary(fc.constantFrom("CLAUDE_CODE_REMOTE", "CLAUDECODE", "HOME", "TERM", "FABRIKA_HOME"), fc.string())
   .map((env): Record<string, string | undefined> => ({ ...env, CI: undefined, [HOST_RUN]: undefined }));
 
 describe("the host-only guard's decision", () => {
