@@ -20,7 +20,8 @@ import { ChildProcessSpawner } from "effect/process";
 import { TestConsole } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Exited, redact } from "./redact.ts";
+import { NO_SPENT, stepRow } from "./agents.ts";
+import { Exited, readCount, redact } from "./redact.ts";
 import { type Ask, Redact, scrub } from "./redact/Redact.ts";
 import * as RedactFs from "./redact/RedactFs.ts";
 import * as RedactTest from "./redact/RedactTest.ts";
@@ -1144,5 +1145,47 @@ describe("T766 S5 redact.ts, the port of redact.sh", () => {
       },
     );
     return fc.assert(law, { seed: 766, numRuns: RUNS, endOnFailure: true });
+  });
+
+  // The amended S5 law (the plan's 2026-11-16 Laws row). drive.ts's and chain.ts's record steps
+  // write `redacted: readCount(out)` of redact.ts's output through agents.ts's `stepRow`; both run
+  // the real child with spawnSync inside handlers neither module exports, so the law holds the
+  // number at the two public names those steps call. Plant, run once: `readCount` read as the old
+  // callers did, `Number(out.trim())`. Red: every row's `redacted` was null, not the count.
+  it("property: the redacted count is recorded as a number, the run row's `redacted` field N for the output `redacted N`", () => {
+    const reached = new Set<string>();
+    const noise = fc.array(fc.stringMatching(/^[a-z][a-z0-9 ]{0,20}$/), { maxLength: 3 });
+    fc.assert(
+      // A clean scrub prints `redacted 0`, which fc.nat alone seldom draws.
+      fc.property(fc.oneof(fc.constant(0), fc.nat()), noise, fc.boolean(), (count, before, newline) => {
+        const out = [...before, `redacted ${count}`].join("\n") + (newline ? "\n" : "");
+        reached.add(count === 0 ? "zero" : "some");
+        reached.add(before.length === 0 ? "alone" : "after other lines");
+        expect(readCount(out)).toBe(count);
+        const row = JSON.parse(
+          stepRow({
+            run: "t766-tests",
+            ticket: "766",
+            step: "tests",
+            provider: "codex",
+            model: "gpt-6-astra",
+            effort: "medium",
+            outcome: "pass",
+            reason: "done.",
+            started: new Date("2026-11-16T10:00:00Z"),
+            ended: new Date("2026-11-16T10:30:00Z"),
+            spent: NO_SPENT,
+            redacted: readCount(out),
+          }),
+        ) as Record<string, unknown>;
+        expect(row["redacted"]).toBe(count);
+      }),
+      // pinned: before the port every row's `redacted` was null, Number("redacted 3") being NaN.
+      { seed: 766, numRuns: 100, endOnFailure: true, examples: [[3, [], true]] },
+    );
+
+    for (const want of ["zero", "some", "alone", "after other lines"]) {
+      expect(reached, `no case reached: ${want}`).toContain(want);
+    }
   });
 });
