@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e63-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:09:56-08:00",
+  "ended": "2026-11-16T01:50:35-08:00",
+  "parent": "2026-11-16-effect-e63-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of Effect sweep slice E63 (preferTypedSchemaDecoder, mechanical), in next/ and our tooling, branch fabrikalfa/effect-e63 at ad1e6ddd4, range 891075e7a..HEAD (63 files): merge-ready, no finding. Every one of the 62 code files is a pure rename of Schema.decodeUnknownX to Schema.decodeX plus formatter reflow: a script that maps each removed line to its added line after the rename and whitespace and trailing-comma normalization finds no other change, and the same number of expect calls on both sides of every file. 145 renames land net (138 in next/packages/libfabrika, 7 in oxlint-plugins); the first commit a413796 renamed 210 in 99 files, the rest came from the fold. In effect 4.1.3 each typed decoder is the same function as its unknown twin at runtime (dist/Schema.js: decodeEffect = decodeUnknownEffect, and the same for Exit, Result, Promise, Sync; SchemaParser.js: decodeOption = decodeUnknownOption), so no call loses a runtime check, and the only new constraint is the compile-time input type, which the typecheck holds. Hits left as decodeUnknownX on purpose stay so (for example Codec.test.ts:107, an extra key that does not fit the typed input). No comment went stale: the comments beside changed calls (Runner.ts:2850, Runner.integration.test.ts:71) still say true things. The three merge files (Id.ts, LaunchdStatus.ts, transport/Webauthn.ts) are byte-equal to the fold. Recount at head with only this check at error (effect-tsgo diagnostics --lspconfig, one run per tsconfig, 571 of 571 libfabrika files checked): 0 in libfabrika, oxlint-plugins, .agents, .github/ci, the app, tuval, vitest and the six programs; the same run finds 9 in packages/fabrika and 24 in packages/pipeline (today's version, outside ticket 1075's scope), which proves the method counts. pnpm typecheck at the committed head with no override: exit 0 on all 30 projects, packages/fabrika included, so the tests step's red root typecheck came only from its temporary tsconfig.base.json override, which turns the check on for today's code. The field row's folder list for the lock matches the folders a413796 touched exactly, plus oxlint-plugins. loosening.sh 891075e7a HEAD: every 'unrecognized change' and 'removed expect' hit is one of these renamed lines; no law is loosened. git merge-tree with the current fabrikalfa/effect-mechanical (71c4e4b71): no conflict.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 41,
+  "note": "Read-only apart from this row. Tests at ad1e6ddd4, one file at a time with --maxWorkers=1: 29 plain files (247 tests) and 19 integration files the diff reaches directly or through its *Test.ts suites (355 passed, 1 skipped), all green, none refused by the 0178 guard, no 60 s timeout. No lock and no L1 plant by design (the integrator adds locks). The tests row mentions packages/fabrika's hits but not packages/pipeline's 24, also today's version. Not run: pnpm lint.",
+  "step": "review"
+}
