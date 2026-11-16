@@ -1,12 +1,12 @@
 ---
 id: 0574
-title: Doc comments carry no @stability tag until libfabrika's first release, and unstableApiUsage is an error with each unstable Effect part we use named once
+title: Doc comments carry no @stability tag until libfabrika's first release, unstableApiUsage is an error with each unstable Effect part we use named once, and apiStabilityLeak is an error only where it recounts at zero
 status: accepted
 date: 2026-11-15
-tags: [effect, tsgo, typecheck, doc-comments, stability, since, unstable, next, tooling]
+tags: [apistabilityleak, effect, tsgo, typecheck, doc-comments, stability, since, unstable, next, tooling]
 ---
 
-# 0574: Doc comments carry no @stability tag until libfabrika's first release, and unstableApiUsage is an error with each unstable Effect part we use named once
+# 0574: Doc comments carry no @stability tag until libfabrika's first release, unstableApiUsage is an error with each unstable Effect part we use named once, and apiStabilityLeak is an error only where it recounts at zero
 
 ```jsonc
 // tsconfig.base.json, a sketch, not run: the checker setting that names each unstable part on purpose
@@ -18,7 +18,7 @@ tags: [effect, tsgo, typecheck, doc-comments, stability, since, unstable, next, 
 
 **What this decides:** `@stability` leaves every doc block in `next/` and our tooling until
 `libfabrika` first ships, and the Effect checker's `unstableApiUsage` is an error, with each
-unstable Effect part we use on purpose named once.
+unstable Effect part we use on purpose named once, and `apiStabilityLeak` is decided by a recount.
 
 ## Context
 
@@ -29,8 +29,8 @@ hits are our own exports used by our own code. About 3,350 point at Effect's pac
 
 [0118](0118-no-since-tag-before-a-release.md) dropped `@since` because a tag that says the same
 thing on every export tells a reader nothing. `@stability unstable` is that tag today. The owner
-ruled on 2026-11-15 that the same reasoning holds for it. `apiStabilityLeak` (clash 2) shares the
-root and is decided separately, not here.
+ruled on 2026-11-15 that the same reasoning holds for it. `apiStabilityLeak` (clash 2, 235 hits) shares the
+root: it flags an export whose type shows a less stable type. The owner ruled on it the same day.
 
 ## Decision
 
@@ -44,13 +44,17 @@ root and is decided separately, not here.
 - That setting is a list of chosen dependencies, not a list that lets broken code pass, so
   [0524](0524-no-list-lets-broken-code-pass.md) does not apply (the owner's word).
 - At the first release, `@stability` comes back together with `@since`, in the same sweep.
+- **`apiStabilityLeak` is recounted once the tags are gone.** If it is at zero, it goes on as an
+  error. If hits remain because our exports show Effect's unstable types, it stays off, and those
+  hits are not swept. We use Effect's unstable APIs on purpose, to stay on its leading edge, so an
+  export that shows one is the same choice as the import.
 
 **Binding constraints**
 
 - Nothing is added to `allowedUnstableApis` to make a hit pass. An entry is a part we chose, with
   its reason in the pull request that adds it.
-- Not decided here: `apiStabilityLeak` (clash 2 of 0565). It shares the root and is decided
-  separately.
+- `apiStabilityLeak` is never set to `error` while a hit that is left over comes from an Effect
+  unstable type. A hit from our own tags is fixed by the sweep, not left.
 
 ## Consequences
 
@@ -74,6 +78,6 @@ root and is decided separately, not here.
     read Effect's own tags, not ours, and need no change unless the sweep finds otherwise.
   - Every `@stability` line in `next/` source.
   - `.agents/`, `.claude/` and `next/AGENTS.md` hold no `@stability`.
-- **Amends** [0565](0565-effects-own-checks-block.md) (clash 1 is ruled),
+- **Amends** [0565](0565-effects-own-checks-block.md) (clashes 1 and 2 are ruled),
   [0118](0118-no-since-tag-before-a-release.md) and
   [0023](0023-next-follows-effects-code-style.md) (the doc comment rule loses a second tag for now).
