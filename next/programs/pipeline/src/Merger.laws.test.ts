@@ -909,10 +909,10 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
 const OldCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 const OldStep = Schema.TaggedUnion({
-  asking: { tries: OldCount, at: Schema.Number },
+  asking: { tries: OldCount, at: Schema.Finite },
   waiting: {
     tries: OldCount,
-    at: Schema.Number,
+    at: Schema.Finite,
     reason: Schema.Literals([
       "unavailable",
       "rate_limited",
@@ -945,7 +945,7 @@ const OldModel = Schema.TaggedUnion({
     step: Schema.Union([OldStep, Schema.TaggedStruct("asking", { tries: Schema.Literal(0), at: Schema.Null })]),
   },
   updating: oldPrepared,
-  checking: { ...oldPrepared, head: Commit, tree: Tree, until: Schema.Number },
+  checking: { ...oldPrepared, head: Commit, tree: Tree, until: Schema.Finite },
   merging: { ...oldWorking, head: Commit, tree: Tree },
 });
 

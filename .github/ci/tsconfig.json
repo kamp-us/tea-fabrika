@@ -1,5 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "allowJs": true, "checkJs": true },
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    // Effect's `schemaNumber` (E4). The globs read from this folder.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "overrides": [
+          { "include": ["**/*.ts", "**/*.mjs"], "options": { "diagnosticSeverity": { "schemaNumber": "error" } } }
+        ]
+      }
+    ]
+  },
   "include": ["*.ts", "*.mjs", "workflow-lint/*.ts"]
 }

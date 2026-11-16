@@ -123,7 +123,7 @@ export const Line = Schema.Struct({
   box: Schema.NullOr(Schema.String),
   phase: Schema.NullOr(Schema.Literals(Beat.PHASES)),
   /** Seconds since the chain last wrote its beat; `null` with no beat. */
-  quietSeconds: Schema.NullOr(Schema.Number),
+  quietSeconds: Schema.NullOr(Schema.Finite),
   /** Since when: the phase began, the step started, the quest stopped or landed. */
   since: Schema.NullOr(Schema.String),
   text: Schema.String,

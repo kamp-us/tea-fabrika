@@ -1636,7 +1636,7 @@ const frameRuns = { arbitrary: { seed: SEED, runs: 300, size: 200 } };
 
 /** The id of a JSON-RPC answer, read as the door wrote it. */
 const answerId = Schema.decodeUnknownOption(
-  Schema.fromJsonString(Schema.Struct({ id: Schema.Union([Schema.String, Schema.Number]) })),
+  Schema.fromJsonString(Schema.Struct({ id: Schema.Union([Schema.String, Schema.Finite]) })),
 );
 
 /** What a frame on `prev` did, beside what its owner says it must do, with a label for a failure. */

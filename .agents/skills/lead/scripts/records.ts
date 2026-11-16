@@ -425,7 +425,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
 export const Hit = Schema.Struct({
   path: Schema.String,
   title: Schema.String,
-  score: Schema.Number,
+  score: Schema.Finite,
   words: Schema.Array(Schema.String),
   notes: Schema.Array(Schema.String),
 });
@@ -436,8 +436,8 @@ export type Hit = typeof Hit.Type;
  * a rare word, or the corpus or the query is too thin for a ranking to mean anything.
  */
 export const Found = Schema.TaggedUnion({
-  shortlist: { hits: Schema.Array(Hit), ranked: Schema.Number },
-  noOverlap: { ranked: Schema.Number },
+  shortlist: { hits: Schema.Array(Hit), ranked: Schema.Finite },
+  noOverlap: { ranked: Schema.Finite },
   indeterminate: { reason: Schema.String },
 });
 export type Found = typeof Found.Type;

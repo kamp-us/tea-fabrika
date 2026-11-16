@@ -15,13 +15,13 @@ interface Fire {
 }
 
 const Report = Schema.Struct({
-  number_of_files: Schema.Number,
+  number_of_files: Schema.Finite,
   diagnostics: Schema.Array(
     Schema.Struct({
       code: Schema.optional(Schema.String),
       filename: Schema.String,
       message: Schema.String,
-      labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) }))),
+      labels: Schema.optional(Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) }))),
     }),
   ),
 });

@@ -60,7 +60,7 @@ export const Msg = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("save"),
     body: Schema.String,
-    base: Schema.Number,
+    base: Schema.Finite,
     work: Schema.Boolean,
   }),
   // A person-only write port, so the runner's person-only refusal has a real port to guard.

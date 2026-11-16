@@ -78,16 +78,16 @@ export type Judgment = typeof Judgment.Type;
 
 /** What one turn spent, for its field row. */
 export const Spent = Schema.Struct({
-  input: Schema.Number,
-  cached: Schema.Number,
-  output: Schema.Number,
+  input: Schema.Finite,
+  cached: Schema.Finite,
+  output: Schema.Finite,
   /** Where the tokens come from: the maker's turn total, our sum, the last request only, or none. */
   counted: Schema.Literals(["turn", "requests", "last", "none"]),
   /** Dollars where the maker says (Claude's SDK result); `null` elsewhere. */
-  usd: Schema.NullOr(Schema.Number),
-  requests: Schema.NullOr(Schema.Number),
+  usd: Schema.NullOr(Schema.Finite),
+  requests: Schema.NullOr(Schema.Finite),
   /** Tool calls the turn made. */
-  tools: Schema.Number,
+  tools: Schema.Finite,
 });
 export type Spent = typeof Spent.Type;
 
@@ -368,7 +368,7 @@ export const CapacityRetry = Context.Reference<{ readonly tries: number; readonl
 /** What a `codex-exec` turn adds to its `events` file between Codex's own updates. */
 const ExecNote = Schema.TaggedUnion({
   /** A try failed on capacity words; the next starts after the wait. */
-  capacity: { attempt: Schema.Number, waitSeconds: Schema.Number },
+  capacity: { attempt: Schema.Finite, waitSeconds: Schema.Finite },
   /** The report held no answer, so one more turn asks for it. */
   answer_ask: { reason: Schema.String },
 });
@@ -536,18 +536,18 @@ const FieldRow = Schema.Struct({
   outcome: Schema.String,
   reason: Schema.String,
   tokens: Schema.Null,
-  tools: Schema.Number,
-  minutes: Schema.Number,
+  tools: Schema.Finite,
+  minutes: Schema.Finite,
   note: Schema.Null,
   costUsd: Schema.Null,
-  listUsd: Schema.NullOr(Schema.Number),
-  billed: Schema.NullOr(Schema.Number),
-  inputTokens: Schema.NullOr(Schema.Number),
-  cachedTokens: Schema.NullOr(Schema.Number),
-  outputTokens: Schema.NullOr(Schema.Number),
+  listUsd: Schema.NullOr(Schema.Finite),
+  billed: Schema.NullOr(Schema.Finite),
+  inputTokens: Schema.NullOr(Schema.Finite),
+  cachedTokens: Schema.NullOr(Schema.Finite),
+  outputTokens: Schema.NullOr(Schema.Finite),
   step: Schema.String,
   billing: Schema.optionalKey(Schema.Literal("subscription")),
-  redacted: Schema.optionalKey(Schema.Number),
+  redacted: Schema.optionalKey(Schema.Finite),
   plants: Schema.optionalKey(Schema.Array(Plant)),
 }).pipe(Schema.encodeKeys({ reason: "why" }));
 

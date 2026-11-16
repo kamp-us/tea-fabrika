@@ -106,7 +106,7 @@ const HostFields = Schema.Struct({
   /** The run's id, `<quest>-host<n>`: chain.ts takes it from `RunId.next`, and it names the worktree and log. */
   name: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*-host[1-9][0-9]*$/)),
   commands: Schema.Array(Schema.String),
-  minutes: Schema.Number.check(Schema.isGreaterThan(0)),
+  minutes: Schema.Finite.check(Schema.isGreaterThan(0)),
 });
 
 /**
@@ -120,7 +120,7 @@ export type HostArgs = typeof HostArgs.Type;
 export type Hosted = { readonly outcome: Outcome.Outcome; readonly head: string; readonly log: string | null };
 
 /** Another live process holds the lock; the take is tried again on its schedule. */
-class Held extends Schema.TaggedError<Held>()("Held", { pid: Schema.Number }) {}
+class Held extends Schema.TaggedError<Held>()("Held", { pid: Schema.Finite }) {}
 
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(

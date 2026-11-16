@@ -34,7 +34,7 @@ export type DialMsg =
   | { readonly type: "socket_failure"; readonly dial: number; readonly op: "connect"; readonly error: ErrorClass };
 
 /** The id of a frame that answers a call, read only to time the answer. */
-const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
+const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Finite })));
 
 /** The class of a socket that failed to open: the thrown error's own class, or a network failure. */
 const openFailure = (error: Socket.SocketError): ErrorClass => {

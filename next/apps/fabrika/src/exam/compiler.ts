@@ -6,7 +6,7 @@ import { Console, Effect, FileSystem, Path, Schema } from "effect";
 export { check, compile, Row, type Finding } from "@kampus/libfabrika/compiler";
 
 class Unread extends Schema.TaggedError<Unread>()("Unread", { path: Schema.String }) {}
-class Refused extends Schema.TaggedError<Refused>()("Refused", { findings: Schema.Number }) {}
+class Refused extends Schema.TaggedError<Refused>()("Refused", { findings: Schema.Finite }) {}
 
 /** `pnpm lint:compiler`: every `.tsx` file in `next/`, tests left out, against the ledger. */
 const lint = Effect.gen(function* () {

@@ -17,7 +17,7 @@ export const LABEL = "ci-scheduled";
 const LIMIT = 100;
 
 const Listed = Schema.fromJsonString(
-  Schema.Array(Schema.Struct({ number: Schema.Number, title: Schema.String, createdAt: Schema.String })),
+  Schema.Array(Schema.Struct({ number: Schema.Finite, title: Schema.String, createdAt: Schema.String })),
 );
 
 /** `gh issue list --json`'s rows, as `Alert`s, oldest first. */

@@ -19,16 +19,16 @@ export type Ended = typeof Ended.Type;
 /** `clean` and `failed` hold no spans, `holding` and `reported` hold at least one. A failure awaits
  *  a flush in `failed` and `holding`. `checked` is the newest hour a sized commit reached. */
 const Model = Schema.TaggedUnion({
-  clean: { checked: Schema.Number },
-  failed: { checked: Schema.Number },
-  holding: { checked: Schema.Number, spans: Schema.NonEmptyArray(Ended) },
-  reported: { checked: Schema.Number, spans: Schema.NonEmptyArray(Ended) },
+  clean: { checked: Schema.Finite },
+  failed: { checked: Schema.Finite },
+  holding: { checked: Schema.Finite, spans: Schema.NonEmptyArray(Ended) },
+  reported: { checked: Schema.Finite, spans: Schema.NonEmptyArray(Ended) },
 });
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("commit_failed"), more: Schema.Array(Ended) }),
-  Schema.Struct({ type: Schema.Literal("committed"), hour: Schema.Number, sized: Schema.Boolean }),
+  Schema.Struct({ type: Schema.Literal("committed"), hour: Schema.Finite, sized: Schema.Boolean }),
   Schema.Struct({ type: Schema.Literal("flush_checked") }),
 ]);
 

@@ -362,7 +362,7 @@ type Out = ReadonlyArray<
 // --- The door's frames ----------------------------------------------------------------------------
 
 const RpcAnswer = Schema.Struct({
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(
     Schema.Struct({ data: Schema.optionalKey(Schema.Struct({ reason: Schema.optionalKey(Schema.String) })) }),
@@ -373,7 +373,7 @@ const Notice = Schema.Struct({ method: Schema.String, params: Schema.optionalKey
 const decodeFrame = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Union([RpcAnswer, Notice])));
 
 const Nonce = Schema.Struct({ nonce: Schema.String });
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 const Opened = Schema.Struct({ rev: Schema.Int, view: Schema.Json });
 const Entries = Schema.Struct({ entries: Schema.Array(Schema.Unknown) });
 const Woke = Schema.Struct({ rev: Schema.Int });

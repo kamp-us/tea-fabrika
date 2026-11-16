@@ -61,10 +61,10 @@ export const readSums = (sql: Sql, piece: string, from: number, to: number): Arr
 const HealthColumns = Schema.Struct({
   piece: Schema.String,
   at: Schema.Int,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   ok: Schema.Literals([0, 1]),
   error: Schema.NullOr(Schema.String),
-  lag: Schema.NullOr(Schema.Number),
+  lag: Schema.NullOr(Schema.Finite),
   spanId: Schema.NullOr(Schema.String),
 });
 
@@ -80,10 +80,10 @@ const decodeSummary = Schema.decodeUnknownSync(
     hour: Schema.Int,
     count: Schema.Int,
     errors: Schema.Int,
-    p50: Schema.Number,
-    p95: Schema.Number,
-    max: Schema.Number,
-    lag: Schema.NullOr(Schema.Number),
+    p50: Schema.Finite,
+    p95: Schema.Finite,
+    max: Schema.Finite,
+    lag: Schema.NullOr(Schema.Finite),
   }),
 );
 

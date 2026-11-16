@@ -5342,7 +5342,7 @@ describe("P10 refusal records and checked writes", () => {
   ] as const) {
     it.effect.prop(
       `p67: malformed ${method} ${JSON.stringify(params)} is recorded as refused`,
-      { generated: Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]) },
+      { generated: Schema.Union([Schema.String, Schema.Finite, Schema.Boolean, Schema.Null]) },
       ({ generated }) =>
         Effect.forEach(
           [params, generated],

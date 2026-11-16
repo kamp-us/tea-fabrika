@@ -259,7 +259,7 @@ const step = (walk: Walk, input: Msg) => {
       const tag =
         input.type === "start_child_ok" ? input.value._tag : "reason" in input ? input.reason : input.error._tag;
       m.reason = Schema.TaggedStruct("start_refused", {
-        change: Schema.Number,
+        change: Schema.Finite,
         name: Schema.String,
         refusal: Schema.String,
       }).make({ change: current.change, name: current.name, refusal: tag });
@@ -286,7 +286,7 @@ const step = (walk: Walk, input: Msg) => {
       if (input._tag === "merged" && input.tree !== input.checked) {
         m.state = "stopped";
         m.reason = Schema.TaggedStruct("tree_drift", {
-          change: Schema.Number,
+          change: Schema.Finite,
           commit: Commit,
           tree: Tree,
           checked: Tree,

@@ -49,7 +49,7 @@ class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { reason: Schema.
 
 class DevFailed extends Schema.TaggedError<DevFailed>()("DevFailed", { output: Schema.String }) {}
 
-class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { exitCode: Schema.Number }) {}
+class KeygenFailed extends Schema.TaggedError<KeygenFailed>()("KeygenFailed", { exitCode: Schema.Finite }) {}
 
 const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
 
