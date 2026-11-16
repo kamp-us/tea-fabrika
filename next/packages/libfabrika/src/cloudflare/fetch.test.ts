@@ -236,7 +236,13 @@ describe("P12 public Worker fetch", () => {
     await fc.assert(
       fc.asyncProperty(arrivals, generated, async (order, { port, name }) => {
         const held: Array<() => void> = [];
-        const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
+        const w = world(port, name, (reply) =>
+          Effect.runPromise(
+            Effect.callback<unknown>((resume) => {
+              held.push(() => resume(Effect.succeed(reply)));
+            }),
+          ),
+        );
         const answered: Array<number> = [];
 
         const first = order.map(() =>
@@ -256,7 +262,9 @@ describe("P12 public Worker fetch", () => {
         for (const [done, at] of order.entries()) {
           held[at]?.();
           await vi.waitFor(() => expect(answered).toHaveLength(done + 1));
-          await new Promise((settle) => setTimeout(settle, 0));
+          // One timer turn, as the old `setTimeout(0)` was (Node runs a 0 ms timer at 1 ms), so a stray
+          // second answer has time to land. `Effect.sleep(0)` would be only `Effect.yieldNow`.
+          await Effect.runPromise(Effect.sleep("1 millis"));
           expect(answered).toHaveLength(done + 1);
         }
 

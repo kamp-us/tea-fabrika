@@ -84,7 +84,20 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // The package commands use plain Node, which strips types without transforming them.
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // E54: a `new Promise` is an Effect here: `Effect.callback`, `Effect.sleep`, `Effect.never`. Only e2e/
+        // for now; src/ joins with its own slice. The globs read from this folder.
+        "overrides": [
+          {
+            "include": ["e2e/**/*.ts"],
+            "options": { "diagnosticSeverity": { "newPromise": "error" } }
+          }
+        ]
+      }
+    ]
   },
   // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
   // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.
