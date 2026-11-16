@@ -49,10 +49,10 @@ Rules:
   `Digest.layerWebCrypto`.
 - **Random bytes and ids come from `SecureRandom`.** `grant.ts:69` makes a grant id with
   `SecureRandom.SecureRandom.use((random) => random.uuidV4())`, and `grant.ts:132` provides
-  `SecureRandom.layerWebCrypto`. `Id.makeGenerator` (`next/packages/libfabrika/src/Id.ts:170-175`)
+  `SecureRandom.layerWebCrypto`. `Id.makeGenerator` (`next/packages/libfabrika/src/Id.ts:205-211`)
   yields `SecureRandom.SecureRandom` and draws its 10 bytes with `randomBytes(10)`, and a law
   provides `SecureRandom.make(fill)` with the bytes it wants (`Id.test-support.ts`, `generatorWith`).
-  One bundled layer stays on purpose: `Id.Generator.layer` (`Id.ts:226-228`) provides
+  One bundled layer stays on purpose: `Id.Generator.layer` (`Id.ts:263-265`) provides
   `SecureRandom.layerWebCrypto` inside itself, so its about 50 callers need nothing. It stays until
   a law needs an edge to pick (the mock sweep's lib-top plan, amendment 2026-11-16).
   The service's `uuidV7` reads the `Clock`, so a test clock moves it
