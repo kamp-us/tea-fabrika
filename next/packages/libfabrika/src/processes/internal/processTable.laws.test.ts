@@ -134,7 +134,9 @@ const at = <T>(list: ReadonlyArray<T>, n: number): T | undefined => list[n % Mat
 /** Folds a walk by the transition table. Each choice reads the state reached so far. */
 const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
   const steps: Array<Step> = [];
-  let s = empty;
+  let { names, lives, watches, current, restarts } = empty;
+  /** The fold reached so far, as the one value a step keeps. */
+  const reached = (): Folded => ({ names, lives, watches, current, restarts });
   let rev = 0;
   let clock = T0;
   let fresh = 0;
@@ -159,13 +161,13 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
 
   for (const c of choices) {
     clock += c.gap;
-    const lives = [...s.lives.keys()];
-    const watches = [...s.watches.values()];
-    const unused = PIDS.filter((pid) => !s.lives.has(pid));
+    const known = [...lives.keys()];
+    const watching = [...watches.values()];
+    const unused = PIDS.filter((pid) => !lives.has(pid));
     const absent = at(unused, c.pick) ?? X;
     // A known process, or, one time in five or when none exists, one the fold never started.
-    const target = c.other % 5 === 0 || lives.length === 0 ? absent : (at(lives, c.pick) ?? absent);
-    const life = s.lives.get(target);
+    const target = c.other % 5 === 0 || known.length === 0 ? absent : (at(known, c.pick) ?? absent);
+    const life = lives.get(target);
     const name = at(NAMES, c.pick) ?? "counter:1";
     const move = c.move;
 
@@ -177,8 +179,8 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
         owner,
       });
       const entry = entryFor(event);
-      s = { ...s, names: put(s.names, name, event) };
-      steps.push({ effect: "applied", entry, after: s });
+      names = put(names, name, event);
+      steps.push({ effect: "applied", entry, after: reached() });
     } else if (move < 25) {
       // A start again for a known life, else a process this walk has not used.
       const process = c.other % 3 === 0 && life !== undefined ? target : (unused[fresh++ % unused.length] ?? absent);
@@ -191,8 +193,9 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
         from: entry,
         rev: entry.rev,
       };
-      s = { ...s, lives: put(s.lives, process, started), current: put(s.current, name, process) };
-      steps.push({ effect: "applied", entry, after: s });
+      lives = put(lives, process, started);
+      current = put(current, name, process);
+      steps.push({ effect: "applied", entry, after: reached() });
     } else if (move < 55) {
       const restartName = c.other % 4 === 0 ? name : (life?.name ?? name);
       const event =
@@ -222,70 +225,64 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
           after: event.after,
           reason: event.reason,
         });
-        s = {
-          ...s,
-          lives: put(s.lives, target, { ...life, request }),
-          restarts: put(s.restarts, event.name, [...(s.restarts.get(event.name) ?? []), entry.arrivedAt]),
-        };
+        lives = put(lives, target, { ...life, request });
+        restarts = put(restarts, event.name, [...(restarts.get(event.name) ?? []), entry.arrivedAt]);
       } else {
         const code = life.state.code;
-        s =
+        lives = put(
+          lives,
+          target,
           event._tag === "exited"
             ? {
-                ...s,
-                lives: put(s.lives, target, {
-                  ...life,
-                  exited: event.reason,
-                  state: State.cases.ended.make({ process: target, code, reason: event.reason }),
-                }),
+                ...life,
+                exited: event.reason,
+                state: State.cases.ended.make({ process: target, code, reason: event.reason }),
               }
             : {
-                ...s,
-                lives: put(s.lives, target, {
-                  ...life,
-                  state: State.cases.down.make({
-                    process: target,
-                    code,
-                    reason: c.reason,
-                    crashes: c.crashes,
-                    until: c.until,
-                  }),
+                ...life,
+                state: State.cases.down.make({
+                  process: target,
+                  code,
+                  reason: c.reason,
+                  crashes: c.crashes,
+                  until: c.until,
                 }),
-              };
+              },
+        );
       }
 
-      steps.push({ effect: "applied", entry, after: s });
+      steps.push({ effect: "applied", entry, after: reached() });
     } else if (move < 75) {
       // A repeat of a watch the fold holds, live or canceled, else a new recipient and ref.
-      const old = c.other % 2 === 0 ? at(watches, c.pick) : undefined;
+      const old = c.other % 2 === 0 ? at(watching, c.pick) : undefined;
       const watched = old !== undefined && c.other % 4 !== 0 ? old.process : target;
       const to =
-        old?.to ?? (c.pick % 3 === 0 ? CLIENT_TO : Recipient.cases.process.make({ process: at(lives, c.other) ?? B }));
+        old?.to ?? (c.pick % 3 === 0 ? CLIENT_TO : Recipient.cases.process.make({ process: at(known, c.other) ?? B }));
       const ref = old?.ref ?? at(REFS, c.other) ?? "watch-a";
       const entry = entryFor(ProcessEvent.cases.monitored.make({ ref, process: watched, to }));
       const key = keyFor(to, ref);
-      const round = (s.watches.get(key)?.round ?? 0) + 1;
-      s = { ...s, watches: put(s.watches, key, { tag: "live", ref, process: watched, to, round }) };
-      steps.push({ effect: "applied", entry, after: s });
+      const round = (watches.get(key)?.round ?? 0) + 1;
+      watches = put(watches, key, { tag: "live", ref, process: watched, to, round });
+      steps.push({ effect: "applied", entry, after: reached() });
     } else if (move < 85) {
-      const old = c.other % 5 === 0 ? undefined : at(watches, c.pick);
+      const old = c.other % 5 === 0 ? undefined : at(watching, c.pick);
       const to = old?.to ?? Recipient.cases.process.make({ process: absent });
       const ref = old?.ref ?? "watch-gone";
       const reason = c.other % 2 === 0 ? "canceled" : "watcher_exited";
       const entry = entryFor(ProcessEvent.cases.demonitored.make({ ref, to, reason }));
 
       if (old !== undefined) {
-        s = { ...s, watches: put(s.watches, keyFor(to, ref), { ...old, tag: "canceled" }) };
+        watches = put(watches, keyFor(to, ref), { ...old, tag: "canceled" });
       }
 
-      steps.push({ effect: "applied", entry, after: s });
+      steps.push({ effect: "applied", entry, after: reached() });
     } else if (move < 92) {
       // A foreign writer's process event, sometimes with a body no schema would decode.
       const event = ProcessEvent.cases.exited.make({ process: absent, reason: EXITS[c.reason] });
       steps.push({
         effect: "ignored",
         entry: entryFor(event, CLIENT, c.other % 2 === 0 ? { process: 7 } : undefined),
-        after: s,
+        after: reached(),
       });
     } else if (move < 97) {
       // The brain's own row of a case the process table does not know, sometimes malformed.
@@ -293,7 +290,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
       steps.push({
         effect: "ignored",
         entry: entryFor(event, BRAIN, c.other % 2 === 0 ? { process: [] } : undefined),
-        after: s,
+        after: reached(),
       });
     } else {
       // A known brain case whose body does not decode: the same failure as main.

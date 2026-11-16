@@ -162,6 +162,9 @@ built-in rules did get weaker, and [What it costs](#what-it-costs) lists how.
 | `no-extraneous-class` | 1 | an ambient class; `no-static-only-class` stays on |
 | `ban-types` | 1 | `string & {}`; three narrower rules replace it |
 
+  - `no-accumulating-spread` goes on in `next/` and our tooling
+    ([0559](../../.decisions/0559-no-accumulating-spread-is-on.md), 2026-11-15), which replaces
+    this call there. The row above still holds for today's app.
   - Six of these stand for Biome rules that were on: `noRedeclare`, `noConfusingVoidType`,
     `noInvalidBuiltinInstantiation`, `noAccumulatingSpread`, `noArrayIndexKey`,
     `useSemanticElements`. Here is what now passes:
