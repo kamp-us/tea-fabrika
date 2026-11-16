@@ -1,16 +1,22 @@
 // T878, next/, L8 against real git: refusal, consent and retries never run a command the clone's
 // git config names (hooks, fsmonitor, ssh command, upload-pack). Only real git can show that git
 // itself leaves them alone, so this law drives git, temp folders and a spawned process, and runs on
-// the schedule (0536). OpenRepository.test.ts keeps L3, L9 and the injected L8, which hold the
-// repository-code tripwires on every pull request. The arbitraries below are that file's own.
+// the schedule (0536). OpenRepository.composed.integration.test.ts keeps L3, L9 and the injected L8,
+// which hold the repository-code tripwires. The arbitraries below are that file's own.
 import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions are the ledger's driver contract
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import type { Schema } from "effect";
-import { Arbitrary, Effect, Exit, FileSystem, Layer, Path } from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import type * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Id from "../../Id.ts";
 import { Doorbell } from "../../ledger/Ledger.ts";

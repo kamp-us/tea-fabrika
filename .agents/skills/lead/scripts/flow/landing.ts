@@ -4,7 +4,7 @@
 //
 //   format      act     pnpm format in the worktree
 //   lint        check   pnpm lint: red is stuck
-//   governance  gather  governance.sh: the decision files the diff touches, as the reason
+//   governance  gather  governance.ts: the decision files the diff touches, as the reason
 //   lead-commit act     stepcommit.sh lead: commits and signs as the lead (a `lead` step)
 //   leak-grep   check   leakgrep.sh on each commit not on origin: a hit asks for the lead's hand check
 //   bot-push    act     botpush.mjs: the branch and the step notes, as the bot
@@ -42,13 +42,13 @@ const run = Effect.fn("landing.run")(
   },
   Effect.scoped,
   (effect, dir, command) =>
-    Effect.mapError(effect, () => new StepFailed({ reason: `${command} could not start in ${dir}` })),
+    Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
 /** A step's args, read by the runner's own schema. */
 const readArgs = <A>(schema: Schema.Codec<A>, step: Step) =>
   Schema.decodeUnknownEffect(schema)(step.args).pipe(
-    Effect.mapError((e) => new StepFailed({ reason: `${step.name}'s args do not parse: ${e.message}` })),
+    Effect.mapError((e) => StepFailed.make({ reason: `${step.name}'s args do not parse: ${e.message}` })),
   );
 
 const Dir = Schema.Struct({ dir: Schema.String });
@@ -76,11 +76,11 @@ export const passOrStuck = (command: string, ran: Ran): Outcome.Outcome =>
     ? Outcome.done(`${command} passed`)
     : Outcome.stuck(`${command} exited ${ran.code}: ${tail(ran.output)}`);
 
-/** governance.sh only advises and always exits 0: its list is the reason. */
+/** governance.ts only advises and exits 0 whatever it finds: its list is the reason. */
 export const governanceOutcome = (ran: Ran): Outcome.Outcome =>
   ran.code === 0
     ? Outcome.done(`read these decisions against the diff: ${tail(ran.output, 20)}`)
-    : Outcome.stuck(`governance.sh exited ${ran.code}: ${tail(ran.output)}`);
+    : Outcome.stuck(`governance.ts exited ${ran.code}: ${tail(ran.output)}`);
 
 /** stepcommit.sh: 5 is a ticket the lead must pick again (an open PR holds it, or PRs cannot be read). */
 export const commitOutcome = (ran: Ran): Outcome.Outcome =>
@@ -126,7 +126,7 @@ const openPr = Effect.fn("landing.openPr")(function* (dir: string, branch: strin
   const pr = listedPr(yield* listPr(dir, branch));
 
   if (pr === null) {
-    return yield* new StepFailed({ reason: `${branch} has no open pull request` });
+    return yield* StepFailed.make({ reason: `${branch} has no open pull request` });
   }
 
   return pr;
@@ -152,7 +152,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
   }),
   governance: Effect.fn("landing.governance")(function* (step) {
     const { dir } = yield* readArgs(Dir, step);
-    return Outcome.answer(governanceOutcome(yield* run(dir, "sh", [yield* script("governance.sh")])));
+    return Outcome.answer(governanceOutcome(yield* run(dir, "node", [yield* script("governance.ts")])));
   }),
   "lead-commit": Effect.fn("landing.leadCommit")(function* (step) {
     const { dir, ticket, subject, paths } = yield* readArgs(Commit, step);
@@ -198,7 +198,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
     const repo = PullRequestsGh.repoFromUrl((yield* run(dir, "git", ["remote", "get-url", "origin"])).output);
 
     if (repo === null) {
-      return yield* new StepFailed({ reason: `${dir}'s origin is not a GitHub repo` });
+      return yield* StepFailed.make({ reason: `${dir}'s origin is not a GitHub repo` });
     }
 
     const services = Layer.mergeAll(

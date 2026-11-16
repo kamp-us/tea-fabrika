@@ -3,20 +3,22 @@
  * test in next/ reads them by the package's name, as `import { runsFor, Recorder } from
  * "@kampus/vitest"`. The package imports no service of ours, and each module here keeps its own doc
  * blocks.
- *
- * @stability unstable
  */
 /**
  * How deep a test run goes, `runsFor({ fast, full })`, the only reader of `FABRIKA_TEST_DEPTH`.
- *
- * @stability unstable
  */
 export * from "./Depth.ts";
 /**
  * The one typed way a law watches a service's calls (decision 0579): `Recorder.layer` provides a
  * service and records each run of its methods, and `Recorder.calls` reads them back.
  *
- * @stability unstable
  * @category testing
  */
 export * as Recorder from "./Recorder.ts";
+/**
+ * The one stand-in for a platform object (decision 0554): `Stub.make(rest, own)` answers `own`'s
+ * members as given and every other method with `rest(name)`.
+ *
+ * @category testing
+ */
+export * as Stub from "./Stub.ts";

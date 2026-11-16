@@ -17,7 +17,7 @@ change tomorrow is a setting, and gets no decision file and no pull request (own
 flowchart LR
   decides["owner decides"] --> number["find the next number"]
   number --> write["write .decisions/NNNN-slug.md"]
-  write --> sweep["sweep: governance.sh and rg"]
+  write --> sweep["sweep: governance.ts and rg"]
   sweep --> relate["link, supersede or amend"]
   relate --> pr["one docs PR"]
 ```
@@ -93,7 +93,7 @@ rule, and neither points at the other. Write what this file settles **as questio
 merge without a review?"), then search for each:
 
 ```sh
-sh .agents/skills/lead/scripts/governance.sh
+node .agents/skills/lead/scripts/governance.ts
 node .agents/skills/lead/scripts/records.ts find "<the question>"
 rg -il '<word>' .decisions docs/direction .glossary
 ```

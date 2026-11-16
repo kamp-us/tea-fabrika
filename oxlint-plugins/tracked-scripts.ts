@@ -23,7 +23,6 @@ export const NOT_YET_PORTED: ReadonlyArray<string> = [
   ".agents/skills/lead/scripts/box.sh",
   ".agents/skills/lead/scripts/env.sh",
   ".agents/skills/lead/scripts/fieldrow.py",
-  ".agents/skills/lead/scripts/governance.sh",
   ".agents/skills/lead/scripts/keepruns.sh",
   ".agents/skills/lead/scripts/leakgrep.sh",
   ".agents/skills/lead/scripts/loosening.sh",

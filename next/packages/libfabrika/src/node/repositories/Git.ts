@@ -1,11 +1,9 @@
 /**
  * Git in memory, for laws: the `git` command answered from an in-memory object store, so a law over
  * a repository runs without starting git (0535).
- *
- * @stability unstable
  */
-import { Layer } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import * as Layer from "effect/Layer";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as gitMemory from "./internal/gitMemory.ts";
 
 /**
@@ -28,7 +26,6 @@ import * as gitMemory from "./internal/gitMemory.ts";
  * guess. A remote is a path to a repository this world made: a URL fails as an unreachable network
  * would. Hooks and configured commands never run, so a law about them needs real git.
  *
- * @stability unstable
  * @category layers
  */
 export const layerMemory = Layer.effect(ChildProcessSpawner.ChildProcessSpawner, gitMemory.make());

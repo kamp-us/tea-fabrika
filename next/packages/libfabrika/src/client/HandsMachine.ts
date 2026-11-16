@@ -8,12 +8,11 @@
  * are none, take one, then save each step in the journal before the next. The command runs only in
  * `executing`, after the brain said it started and `executing` was saved, so a crash never runs it
  * twice: a task whose journal says `executing` and no result ends `unknown interrupted`.
- *
- * @stability unstable
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -642,7 +641,6 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
  * the work is not about, and a take that assigns another key's task change nothing it would run. Its
  * Cmds are `write`, `hello`, `knock`, `ping`, `journal_read`, `journal_write` and `execute`.
  *
- * @stability unstable
  * @category constructors
  */
 export const handsMachine = Machine.make({
