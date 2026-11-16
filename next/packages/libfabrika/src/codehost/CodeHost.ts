@@ -59,7 +59,7 @@ export const Change = Schema.TaggedUnion({
     head: Commit,
     state: Schema.Literals(["open", "draft", "closed", "merged"]),
     // null means the host could not list every path; a partial list cannot lighten a change.
-    paths: Schema.NullOr(Schema.Array(Path)),
+    paths: Path.pipe(Schema.Array, Schema.NullOr),
   },
   missing: { change: ChangeId },
 });
