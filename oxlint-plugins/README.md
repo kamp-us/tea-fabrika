@@ -1052,7 +1052,7 @@ What oxlint 1.90.0 sees, from a probe and from `REFLECT` in `builtin-plants.ts`:
 - It misses an alias, `const R = Reflect; R.get(x)`. No built-in rule sees that, nothing does it
   today, and the review reads for it.
 
-First-day count, 2026-11-15, on main at `a16c31d54`, one oxlint run with only the four entries
+First-day count, 2026-11-15, on main at `24f39b2cc`, one oxlint run with only the four entries
 over `next`, `.agents`, `oxlint-plugins` and `.github`: **165 fires in 39 files**, all in
 `next/`, the same as the plan's count at `ca4444777`. The tooling has none. The folders with fires
 wait for their own slices: `tuval/src/browser`, `programs/counter`, `programs/pipeline`, the
