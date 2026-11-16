@@ -176,7 +176,7 @@ const said = (cell: Cell, over: Partial<From> = {}): From =>
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT of the next call. */
 const cutting = (sql: Sql) => {
-  // SAFETY: `after` starts empty and the cut only ever sets a count there.
+  // SAFETY: widens `after` from `null` so the cut can hold a count; `null` means no cut is armed.
   const fault = { after: null as number | null, hit: false };
   const wrapped: Sql = {
     exec: (query, ...params) => {
@@ -836,7 +836,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
           break;
         }
         case "start_forbidden": {
-          // SAFETY: rogue:1 is started at boot and never stopped, so `world.names` always holds it.
+          // SAFETY: rogue:1 is booted, and `world.names` never drops a name; this move is offered only while it is live.
           const self = world.names.get("rogue:1") as { program: string; process: string };
           const name = choose(
             [...world.names.keys()].filter((n) => n !== "rogue:1"),
@@ -1112,7 +1112,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
           break;
         }
         case "restart": {
-          // SAFETY: the reader's live process is always in `lives` while the walk runs.
+          // SAFETY: the reader is put in `lives` before the walk, and `lives` is only ever set, never cleared.
           const process = lives.get(READER) as string;
           const exited = yield* run(ProcessManager.use((p) => p.exit(process, SHUTDOWN, from())));
           expect(Result.isSuccess(exited), "the reader stops").toBe(true);
