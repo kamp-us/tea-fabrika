@@ -76,6 +76,7 @@ const silent = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E,
   return yield* effect.pipe(Effect.withTracer(quiet));
 });
 
+// SAFETY: the cast is reached only after the checks before it rule out null, arrays and every primitive, so `a` is an object, whose string keys may hold any value.
 const rawObject = (a: unknown): Record<string, unknown> | null =>
   typeof a === "object" && a !== null && !Array.isArray(a) ? (a as Record<string, unknown>) : null;
 
