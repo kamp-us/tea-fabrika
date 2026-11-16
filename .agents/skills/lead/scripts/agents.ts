@@ -22,7 +22,7 @@
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { Clock, Context, Effect, FileSystem, Match, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
@@ -240,26 +240,21 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
   }).pipe(Effect.provide(nodeServices));
 
 /** Tokens into a `Spent`, adding this update's tool call when it is one. */
-const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
-  switch (heard._tag) {
-    case "tool":
-      return heard.status === "pending" || heard.status === "in_progress"
-        ? { ...spent, tools: spent.tools + 1 }
-        : spent;
-    case "tokens":
-      return { ...spent, ...heard.tokens };
-    case "ended":
-      return {
-        ...spent,
-        ...heard.tokens,
-        counted: heard.counted,
-        usd: heard.usd,
-        requests: heard.requests,
-      };
-    default:
-      return spent;
-  }
-};
+const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent =>
+  Match.value(heard).pipe(
+    Match.tag("tool", (heard): Spent =>
+      heard.status === "pending" || heard.status === "in_progress" ? { ...spent, tools: spent.tools + 1 } : spent,
+    ),
+    Match.tag("tokens", (heard): Spent => ({ ...spent, ...heard.tokens })),
+    Match.tag("ended", (heard): Spent => ({
+      ...spent,
+      ...heard.tokens,
+      counted: heard.counted,
+      usd: heard.usd,
+      requests: heard.requests,
+    })),
+    Match.orElse(() => spent),
+  );
 
 /** Appends one event line to the turn's `events` file, with when it arrived. */
 const appendTo = (events: string, line: object) =>
@@ -330,18 +325,21 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
         Effect.gen(function* () {
           yield* append(heard);
 
-          if (heard._tag === "tool") {
-            state.closing = [];
-          }
-
-          // An adapter may say its last message twice: once as it arrives, once as the turn's last word.
-          if (heard._tag === "said" && heard.text !== state.closing.at(-1)) {
-            state.closing.push(heard.text);
-          }
-
-          if (heard._tag === "ended") {
-            state.ended = heard;
-          }
+          Match.value(heard).pipe(
+            Match.tag("tool", () => {
+              state.closing = [];
+            }),
+            // An adapter may say its last message twice: once as it arrives, once as the turn's last word.
+            Match.tag("said", (heard) => {
+              if (heard.text !== state.closing.at(-1)) {
+                state.closing.push(heard.text);
+              }
+            }),
+            Match.tag("ended", (heard) => {
+              state.ended = heard;
+            }),
+            Match.orElse(() => {}),
+          );
 
           state.spent = spending(state.spent, heard);
         }),
@@ -432,8 +430,7 @@ const triedOnCapacity = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, unt
       spent = plus(spent, turned.spent);
 
       const again =
-        turned._tag === "failed" &&
-        CAPACITY.test(turned.message) &&
+        Match.valueTags(turned, { failed: ({ message }) => CAPACITY.test(message), ended: () => false }) &&
         attempt < retry.tries &&
         left - retry.waitSeconds > 1;
 
@@ -458,7 +455,12 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     const until = (yield* Clock.currentTimeMillis) + ask.minutes * 60_000;
     const first = yield* triedOnCapacity(agents, ask, ask.prompt, until);
     const t = first.turned;
-    const asks = t._tag === "ended" && t.stop === "end_turn" && t.answer === null && first.said.trim() !== "";
+
+    const asks =
+      Match.valueTags(t, {
+        ended: ({ stop, answer }) => stop === "end_turn" && answer === null,
+        failed: () => false,
+      }) && first.said.trim() !== "";
 
     if (!asks) {
       yield* fs.writeFileString(ask.report, first.said).pipe(Effect.ignore);
@@ -476,16 +478,16 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     yield* fs.writeFileString(ask.report, report).pipe(Effect.ignore);
     const s = second.turned;
 
-    if (s._tag === "ended" && s.answer !== null) {
-      return { ...s, spent, said: report };
-    }
+    const none = (detail: string) =>
+      Failed.make({
+        reason: "no_answer",
+        message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${detail})`,
+        spent,
+      });
 
-    const detail = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
-
-    return Failed.make({
-      reason: "no_answer",
-      message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${detail})`,
-      spent,
+    return Match.valueTags(s, {
+      ended: (s) => (s.answer !== null ? { ...s, spent, said: report } : none(`it stopped ${s.stop} with none`)),
+      failed: (s) => none(`${s.reason}: ${s.message}`),
     });
   });
 

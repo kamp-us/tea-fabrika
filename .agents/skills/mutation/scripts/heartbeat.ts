@@ -27,7 +27,7 @@
  * - A merge stamped in the future (a skewed clock): never late on its own.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Console, Effect, Schema, Stream } from "effect";
+import { Clock, Console, Effect, Match, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** How long a merge may wait for a passing run, in ms. */
@@ -55,9 +55,11 @@ const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)} h`;
 
 /** The one line it prints. Pure. */
 export const line = (now: number, b: Beat): string =>
-  b._tag === "late"
-    ? `mutation heartbeat: late: ${b.merges} merges since the last passing run (${iso(b.lastPass)}), the oldest ${hours(now - b.oldest)} ago`
-    : `mutation heartbeat: ok: ${b.merges} merges since the last passing run (${iso(b.lastPass)})`;
+  Beat.match(b, {
+    late: (b) =>
+      `mutation heartbeat: late: ${b.merges} merges since the last passing run (${iso(b.lastPass)}), the oldest ${hours(now - b.oldest)} ago`,
+    ok: (b) => `mutation heartbeat: ok: ${b.merges} merges since the last passing run (${iso(b.lastPass)})`,
+  });
 
 const Runs = Schema.fromJsonString(
   Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ created_at: Schema.String })) }),
@@ -115,7 +117,7 @@ const main = Effect.gen(function* () {
 
   yield* Console.log(line(now, b));
 
-  if (b._tag === "late") {
+  if (Beat.isAnyOf(["late"])(b)) {
     return yield* Late.make();
   }
 });
@@ -124,7 +126,12 @@ const main = Effect.gen(function* () {
 if (import.meta.main) {
   NodeRuntime.runMain(
     main.pipe(
-      Effect.tapError((error) => (error._tag === "Late" ? Effect.void : Console.error(`mutation heartbeat: ${error}`))),
+      Effect.tapError(
+        Match.type<Effect.Error<typeof main>>().pipe(
+          Match.tag("Late", () => Effect.void),
+          Match.orElse((error) => Console.error(`mutation heartbeat: ${error}`)),
+        ),
+      ),
       Effect.provide(NodeServices.layer),
     ),
     { disableErrorReporting: true },

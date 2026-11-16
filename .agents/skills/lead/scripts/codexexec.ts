@@ -32,7 +32,7 @@
 
 import { Agent } from "@kampus/fabrika-old";
 import { rawOfLine } from "@kampus/fabrika-old/agents/codex";
-import { Effect, FileSystem, Option, Schema, Stream } from "effect";
+import { Effect, FileSystem, Match, Option, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { holdsPin, NODE_PROBE } from "./boxnode.ts";
 
@@ -129,6 +129,12 @@ const ENDED: Agent.Raw = { _tag: "ended", stop: "end_turn", structured: undefine
 // oxlint-disable-next-line fabrika/no-hand-tag -- edge: today's `Agent.Raw` is a plain union, with no maker to call
 const lastWord = (text: string): Agent.Raw => ({ _tag: "said", text });
 
+/** A raw that ends the turn: today's `Agent.Raw` has no matcher of its own, so Effect's `Match` reads it. */
+const ends = Match.type<Agent.Raw>().pipe(
+  Match.tag("ended", () => true),
+  Match.orElse(() => false),
+);
+
 /** The tail kept of what Codex said went wrong, for a failure's message and the capacity check. */
 const TAIL = 2_000;
 
@@ -184,7 +190,7 @@ export const codexExecAdapter = (
       holds: { usd: false, schema: false },
       start: (turn) =>
         Effect.gen(function* () {
-          if (turn.system._tag === "replace") {
+          if (Match.valueTags(turn.system, { replace: () => true, append: () => false })) {
             return yield* Agent.failed("start", "codex-exec takes only an append system prompt");
           }
 
@@ -258,9 +264,9 @@ export const codexExecAdapter = (
               }
 
               // The end waits for the last message file, which Codex writes on its way out.
-              said.ended = raws.find((r) => r._tag === "ended") ?? said.ended;
+              said.ended = raws.find(ends) ?? said.ended;
 
-              return Effect.succeed(raws.filter((r) => r._tag !== "ended"));
+              return Effect.succeed(raws.filter((r) => !ends(r)));
             }),
             Stream.flattenIterable,
           );

@@ -6,8 +6,10 @@ import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
@@ -65,9 +67,16 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   });
 
   const translate = (cause: BrainControlError | BrainProbeError) =>
-    cause.reason._tag === "Conflict" || cause.reason._tag === "Foreign" ? "Conflict" : "Operation";
+    Match.value(cause.reason).pipe(
+      Match.tag("Conflict", "Foreign", () => "Conflict" as const),
+      Match.orElse(() => "Operation" as const),
+    );
 
   const Failed = Schema.TaggedUnion({ Conflict: {}, Operation: {} });
+
+  // The state a span records: a confirmed stop reads as removed.
+  const confirmation = (m: typeof BrainLife.Model.Type) =>
+    BrainLife.Model.isAnyOf(["stopped"])(m) ? "removed" : m._tag;
 
   const command = Effect.fnUntraced(
     function* (cmd: BrainLife.Command, action: "up" | "stop") {
@@ -91,16 +100,22 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       const at = yield* Clock.currentTimeMillis;
       yield* Effect.annotateCurrentSpan({
         "fab.elapsed": at - began,
-        "fab.result": answer._tag === "Failure" ? answer.failure.reason._tag : "success",
+        "fab.result": Result.match(answer, { onFailure: ({ reason }) => reason._tag, onSuccess: () => "success" }),
       });
 
-      if (answer._tag === "Failure") {
-        if (answer.failure.reason._tag === "Command" && answer.failure.reason.code !== undefined) {
-          yield* Effect.annotateCurrentSpan("fab.native.code", answer.failure.reason.code);
+      if (Result.isFailure(answer)) {
+        // Only a command that ran has a native exit code or signal.
+        const native = Match.value(answer.failure.reason).pipe(
+          Match.tag("Command", (ran) => ran),
+          Match.orElse(() => null),
+        );
+
+        if (native !== null && native.code !== undefined) {
+          yield* Effect.annotateCurrentSpan("fab.native.code", native.code);
         }
 
-        if (answer.failure.reason._tag === "Command" && answer.failure.reason.signal !== undefined) {
-          yield* Effect.annotateCurrentSpan("fab.native.signal", answer.failure.reason.signal);
+        if (native !== null && native.signal !== undefined) {
+          yield* Effect.annotateCurrentSpan("fab.native.signal", native.signal);
         }
 
         const error = translate(answer.failure);
@@ -113,7 +128,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
       const cmds = yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg);
 
-      if (cmd.type === "remove" && model._tag === "failed_stop") {
+      if (cmd.type === "remove" && BrainLife.Model.isAnyOf(["failed_stop"])(model)) {
         return yield* BrainServiceError.make({
           reason: Timeout.make({ action: "stop", cause: Redacted.make("deadline") }),
         });
@@ -159,10 +174,10 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
               cmds = answer.cmds;
             }
 
-            yield* Effect.annotateCurrentSpan("fab.confirmation", model._tag === "stopped" ? "removed" : model._tag);
+            yield* Effect.annotateCurrentSpan("fab.confirmation", confirmation(model));
           }
 
-          if (model._tag === "failed_up" || model._tag === "failed_stop") {
+          if (BrainLife.Model.isAnyOf(["failed_up", "failed_stop"])(model)) {
             const reason =
               model.reason === "Timeout"
                 ? Timeout.make({ action, cause })
@@ -203,12 +218,12 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           yield* Effect.annotateCurrentSpan({
             "fab.elapsed": (yield* Clock.currentTimeMillis) - began,
             "fab.result": Exit.isSuccess(exit)
-              ? model._tag === "online"
-                ? model.result
-                : "stopped"
-              : model._tag === "failed_up" || model._tag === "failed_stop"
-                ? model.reason
-                : "interrupted",
+              ? BrainLife.Model.matchOrElse(model, { online: ({ result }) => result }, () => "stopped")
+              : BrainLife.Model.matchOrElse(
+                  model,
+                  { failed_up: ({ reason }) => reason, failed_stop: ({ reason }) => reason },
+                  () => "interrupted",
+                ),
           });
 
           return yield* exit;
@@ -243,7 +258,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
                       "fab.sentAt": String(at),
                       "fab.result": "delivery_failed",
                       "fab.elapsed": at - began,
-                      "fab.confirmation": model._tag === "stopped" ? "removed" : model._tag,
+                      "fab.confirmation": confirmation(model),
                     },
                   }),
                 ),

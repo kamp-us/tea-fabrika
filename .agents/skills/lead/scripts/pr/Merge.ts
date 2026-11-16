@@ -11,7 +11,7 @@
 // A bare `gh pr merge` skips the gate: on 2026-11-15 a shell line ran the grep, never read its exit
 // code, and merged past a hit (field/notes/2026-11-15-admin-merge-ran-past-a-leak-grep-hit.json).
 // Read through its module: `Merge.merge(...)`.
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import * as Arm from "./Arm.ts";
 import * as Leaks from "./Leaks.ts";
@@ -102,8 +102,11 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, sev0:
   if (allowed.for === "sev0") {
     const required = yield* (yield* Checks).job(found.oid, Queue.REQUIRED);
 
-    if (required._tag === "None" || required.value.conclusion !== "success") {
-      const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
+    if (Option.isNone(required) || required.value.conclusion !== "success") {
+      const stands = Option.match(required, {
+        onNone: () => "missing",
+        onSome: (job) => job.conclusion ?? job.status,
+      });
 
       return yield* refuse(`${Queue.REQUIRED} is ${stands} at ${found.oid}, not a success; not merged`);
     }
@@ -115,15 +118,16 @@ const admin = Effect.fn("Merge.admin")(function* (dir: string, pr: number, sev0:
 });
 
 export const merge = Effect.fn("Merge.merge")(function* (a: Ask) {
-  if (a.route._tag === "admin") {
+  if (Route.isAnyOf(["admin"])(a.route)) {
     return yield* admin(a.dir, a.pr, a.route.sev0);
   }
 
   const added = yield* Queue.add({ dir: a.dir, pr: a.pr });
 
-  return added._tag === "queued"
-    ? Done.cases.queued.make({ pr: added.pr, oid: added.oid })
-    : Done.cases.merged.make({ pr: added.pr, commit: added.commit });
+  return Queue.Added.match(added, {
+    queued: ({ pr, oid }) => Done.cases.queued.make({ pr, oid }),
+    merged: ({ pr, commit }) => Done.cases.merged.make({ pr, commit }),
+  });
 });
 
 /** One line for a log: what `merge` did. */

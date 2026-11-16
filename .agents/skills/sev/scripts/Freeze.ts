@@ -8,7 +8,7 @@
 //
 // The loop reads the log again before each cancel, so a close, a `next` or an `allow` counts at
 // once, never a beat late. It never asks for a rerun: the service has none.
-import { Console, Duration, Effect, Schema } from "effect";
+import { Console, Duration, Effect, Result, Schema } from "effect";
 import * as Level from "./Level.ts";
 import type { Run } from "./WorkflowRuns.ts";
 import { WorkflowRuns } from "./WorkflowRuns.ts";
@@ -40,14 +40,15 @@ export const verdict = (run: Run, allow: ReadonlyArray<string>): Verdict =>
  * writes one `ended` by `close`, which ends them all.
  */
 export const running = (entries: ReadonlyArray<Level.Entry>): number => {
-  const from = entries.findLastIndex((e) => e._tag === "opened");
+  const from = entries.findLastIndex(Level.Entry.isAnyOf(["opened"]));
   const latest = entries.slice(Math.max(0, from));
+  const ended = latest.filter(Level.Entry.isAnyOf(["ended"]));
 
-  if (latest.some((e) => e._tag === "ended" && e.by === "close")) {
+  if (ended.some((e) => e.by === "close")) {
     return 0;
   }
 
-  return latest.filter((e) => e._tag === "looping").length - latest.filter((e) => e._tag === "ended").length;
+  return latest.filter(Level.Entry.isAnyOf(["looping"])).length - ended.length;
 };
 
 // ---------------------------------------------------------------- the loop
@@ -56,7 +57,7 @@ export const running = (entries: ReadonlyArray<Level.Entry>): number => {
 const allowed = Effect.fnUntraced(function* (home: string) {
   const { sev0 } = yield* Level.read(home);
 
-  return sev0._tag === "open" ? sev0.allow : null;
+  return Level.Sev0.match(sev0, { open: ({ allow }) => allow, closed: () => null });
 });
 
 const runLine = (run: Run) => `${run.id} ${run.workflow} ${run.event} ${run.branch}`;
@@ -69,7 +70,7 @@ const beat = Effect.fn("Freeze.beat")(function* (home: string) {
   const github = yield* WorkflowRuns;
   const listed = yield* Effect.result(github.unfinished);
 
-  if (listed._tag === "Failure") {
+  if (Result.isFailure(listed)) {
     const reason = listed.failure.reason;
     yield* note(home, Level.Entry.cases.failed.make({ at: yield* Level.now, call: "unfinished", id: null, reason }));
 
@@ -83,13 +84,13 @@ const beat = Effect.fn("Freeze.beat")(function* (home: string) {
       return;
     }
 
-    if (verdict(run, allow)._tag === "keep") {
+    if (Verdict.isAnyOf(["keep"])(verdict(run, allow))) {
       continue;
     }
 
     const done = yield* Effect.result(github.cancel(run.id));
 
-    if (done._tag === "Failure") {
+    if (Result.isFailure(done)) {
       const reason = done.failure.reason;
       yield* note(home, Level.Entry.cases.failed.make({ at: yield* Level.now, call: "cancel", id: run.id, reason }));
       yield* Console.log(`sev: could not cancel ${runLine(run)}: ${reason}`);

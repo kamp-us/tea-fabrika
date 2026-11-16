@@ -436,7 +436,11 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
  * so readers of that file need no second shape.
  */
 export const outcomeName = (o: Outcome.Outcome): string =>
-  o._tag === "done" ? "done" : o._tag === "send" ? `send:${o.to}:host_failed` : `${o._tag}:host`;
+  Outcome.Outcome.matchOrElse(
+    o,
+    { done: () => "done", send: (o) => `send:${o.to}:host_failed` },
+    (o) => `${o._tag}:host`,
+  );
 
 /**
  * Write the host step's entry into the quest's state file (`state/<quest>.json`, drive.ts's), as a
@@ -458,7 +462,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
     Option.getOrElse(() => ({ quest: a.quest, steps: [] })),
   );
 
-  const done = hosted.outcome._tag === "done";
+  const done = Outcome.Outcome.isAnyOf(["done"])(hosted.outcome);
 
   const entry = {
     step: "host",
@@ -469,7 +473,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
     outcome: outcomeName(hosted.outcome),
     // oxlint-disable-next-line eslint/id-denylist -- drive.ts writes this file with today's key, and its readers read one shape
     why: hosted.outcome.reason,
-    exit: hosted.outcome._tag === "stuck" ? 30 : 0,
+    exit: Outcome.Outcome.isAnyOf(["stuck"])(hosted.outcome) ? 30 : 0,
     report: hosted.log,
     kept: false,
     ended,

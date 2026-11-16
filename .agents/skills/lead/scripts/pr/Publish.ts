@@ -9,7 +9,7 @@
 // The commit step runs `publish` after each signed commit; a quest's host part runs it after each
 // step's commit comes out of the box, and `ready` where the quest used to open its pull request.
 // Read through its module: `Publish.publish(...)`.
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { PullRequests, type Text } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 
@@ -51,7 +51,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   yield* pushes.push(a.dir, branch, a.head);
   const open = yield* prs.openOn(branch);
 
-  if (open._tag === "Some") {
+  if (Option.isSome(open)) {
     return { pr: open.value.number, opened: false, draft: open.value.draft } satisfies Published;
   }
 

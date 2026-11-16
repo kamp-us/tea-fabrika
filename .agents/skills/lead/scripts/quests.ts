@@ -162,11 +162,11 @@ const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): st
 export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
   const nothing = { quest: seen.quest, step: null, box: null, phase: null, quietSeconds: null, since: null };
 
-  if (seen.found._tag === "missing") {
+  if (Found.isAnyOf(["missing"])(seen.found)) {
     return { ...nothing, state: "unknown", text: "no chain record" };
   }
 
-  if (seen.found._tag === "unreadable") {
+  if (Found.isAnyOf(["unreadable"])(seen.found)) {
     return { ...nothing, state: "unknown", text: "the chain record does not read" };
   }
 

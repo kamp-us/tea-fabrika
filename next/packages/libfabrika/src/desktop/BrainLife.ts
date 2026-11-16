@@ -153,14 +153,19 @@ const down = (m: Active) => ({ ...flow(m), action: "stop" as const });
 const matches = (m: Model, cmd: Command): m is Active =>
   active(m) && m.pending?.id === cmd.id && m.pending.type === cmd.type;
 
+// The command a state polls with: readiness while it waits for it, children while it checks them.
+const polled = (m: Active): Command["type"] =>
+  Model.matchOrElse(
+    m,
+    { waiting_ready: () => "ready" as const, checking_children: () => "cleanup" as const },
+    () => "inspect" as const,
+  );
+
 const fail = (m: Active, reason: typeof Failure.reason.Type, command?: Command["type"]): Cell => [
   Model.cases[m.action === "up" ? "failed_up" : "failed_stop"].make({
     sequence: m.sequence,
     reason,
-    command:
-      command ??
-      m.pending?.type ??
-      (m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect"),
+    command: command ?? m.pending?.type ?? polled(m),
   }),
   [],
 ];
@@ -187,7 +192,7 @@ const reply =
   };
 
 const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell =>
-  fail(m, msg.error._tag === "Conflict" ? "Conflict" : "Operation");
+  fail(m, Error.isAnyOf(["Conflict"])(msg.error) ? "Conflict" : "Operation");
 
 /**
  * Creates the machine for startup, ownership, deadlines and confirmed shutdown.
@@ -239,34 +244,30 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           return [m, []];
         }
 
-        return issue(
-          m,
-          m._tag === "waiting_ready" ? "ready" : m._tag === "checking_children" ? "cleanup" : "inspect",
-          msg.next,
-        );
+        return issue(m, polled(m), msg.next);
       },
       inspect_ok: reply("inspect_ok", (m, msg) => {
-        if (msg.value._tag === "loaded" && !BrainSpec.matches(spec, msg.value)) {
+        if (Status.isAnyOf(["loaded"])(msg.value) && !BrainSpec.matches(spec, msg.value)) {
           return fail(m, "Conflict");
         }
 
-        if (m._tag === "confirming_absence") {
-          return msg.value._tag === "absent"
+        if (Model.isAnyOf(["confirming_absence"])(m)) {
+          return Status.isAnyOf(["absent"])(msg.value)
             ? issue(Model.cases.checking_children.make(down(m)), "cleanup", msg.next)
             : again(m, msg.at);
         }
 
-        if (m._tag !== "inspecting") {
+        if (!Model.isAnyOf(["inspecting"])(m)) {
           return [m, []];
         }
 
         if (m.action === "stop") {
-          return msg.value._tag === "absent"
+          return Status.isAnyOf(["absent"])(msg.value)
             ? issue(Model.cases.checking_children.make(down(m)), "cleanup", msg.next)
             : issue(Model.cases.stopping.make(down(m)), "stop", msg.next);
         }
 
-        if (msg.value._tag === "loaded") {
+        if (Status.isAnyOf(["loaded"])(msg.value)) {
           return issue(Model.cases.waiting_ready.make({ ...up(m), result: "reused" }), "ready", msg.next);
         }
 
@@ -275,37 +276,39 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           : issue(Model.cases.installing.make(up(m)), "install", msg.next);
       }),
       install_ok: reply("install_ok", (m, msg) =>
-        m._tag === "installing"
+        Model.isAnyOf(["installing"])(m)
           ? issue(Model.cases.starting.make({ ...up(m), result: "started" }), "start", msg.next)
           : [m, []],
       ),
       start_ok: reply("start_ok", (m, msg) =>
-        m._tag === "starting" ? issue(Model.cases.waiting_ready.make(up(m)), "ready", msg.next) : [m, []],
+        Model.isAnyOf(["starting"])(m) ? issue(Model.cases.waiting_ready.make(up(m)), "ready", msg.next) : [m, []],
       ),
       start_err: reply("start_err", (m, msg) =>
-        m._tag === "starting"
+        Model.isAnyOf(["starting"])(m)
           ? issue(Model.cases.inspecting.make({ ...flow(m), purpose: "bootstrap" }), "inspect", msg.next)
           : [m, []],
       ),
       ready_ok: reply("ready_ok", (m, msg) =>
-        m._tag !== "waiting_ready"
+        !Model.isAnyOf(["waiting_ready"])(m)
           ? [m, []]
-          : msg.value._tag === "ready"
+          : Readiness.isAnyOf(["ready"])(msg.value)
             ? [Model.cases.online.make({ sequence: m.sequence, result: m.result }), []]
             : again(m, msg.at),
       ),
       stop_ok: reply("stop_ok", (m, msg) =>
-        m._tag === "stopping" ? issue(Model.cases.confirming_absence.make(down(m)), "inspect", msg.next) : [m, []],
+        Model.isAnyOf(["stopping"])(m)
+          ? issue(Model.cases.confirming_absence.make(down(m)), "inspect", msg.next)
+          : [m, []],
       ),
       cleanup_ok: reply("cleanup_ok", (m, msg) =>
-        m._tag !== "checking_children"
+        !Model.isAnyOf(["checking_children"])(m)
           ? [m, []]
-          : msg.value._tag === "gone"
+          : Children.isAnyOf(["gone"])(msg.value)
             ? issue(Model.cases.removing.make(down(m)), "remove", msg.next)
             : again(m, msg.at),
       ),
       remove_ok: reply("remove_ok", (m) =>
-        m._tag === "removing" ? [Model.cases.stopped.make({ sequence: m.sequence }), []] : [m, []],
+        Model.isAnyOf(["removing"])(m) ? [Model.cases.stopped.make({ sequence: m.sequence }), []] : [m, []],
       ),
       inspect_err: reply("inspect_err", error),
       install_err: reply("install_err", error),

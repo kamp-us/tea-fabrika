@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Match, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -136,6 +136,7 @@ import {
   prepare,
   runNames,
   sh,
+  Start,
 } from "./drive.ts";
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
@@ -379,11 +380,11 @@ export const moveFrom = (text: string): Judged => {
   const move = Result.try((): Judged | undefined => {
     const d = JSON.parse(text) as Judged;
 
-    if (d._tag === "step" && isQuestStep(d.step)) {
+    if (Move.isAnyOf(["step"])(d) && isQuestStep(d.step)) {
       return toStep(d.step, String(d.note ?? ""));
     }
 
-    if (d._tag === "park") {
+    if (Move.isAnyOf(["park"])(d)) {
       return toPark(String(d.reason ?? ""));
     }
 
@@ -620,16 +621,19 @@ export const stopReason = (stop: Stop): string => {
   const spent = `Spent so far: ${stop.steps} steps, $${stop.dollars.toFixed(2)}.`;
   const ask = "Answer redo, cut scope or drop (0076).";
 
-  if (stop._tag === "intensity") {
-    const { sends, work } = counted(stop.window);
-    const tools = stop.window.filter((m) => m === "tool").length;
+  return Stop.match(stop, {
+    intensity: (stop) => {
+      const { sends, work } = counted(stop.window);
+      const tools = stop.window.filter((m) => m === "tool").length;
 
-    return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
-  }
+      return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
+    },
+    backstop: (stop) => {
+      const limit = stop.passed === "steps" ? `${stop.backstop.steps} steps` : `$${stop.backstop.dollars.toFixed(2)}`;
 
-  const limit = stop.passed === "steps" ? `${stop.backstop.steps} steps` : `$${stop.backstop.dollars.toFixed(2)}`;
-
-  return `backstop: the quest reached ${limit}, its backstop (${stop.backstop.steps} steps, $${stop.backstop.dollars.toFixed(2)}). ${spent} ${ask}`;
+      return `backstop: the quest reached ${limit}, its backstop (${stop.backstop.steps} steps, $${stop.backstop.dollars.toFixed(2)}). ${spent} ${ask}`;
+    },
+  });
 };
 
 // ---------------------------------------------------------------- the machine
@@ -898,25 +902,20 @@ const next = (quest: Quest, step: QuestStep, note: string, limits: Limits): Step
  * Take a move: a step, the judgment agent, the pull request or a park. Before a step or a judgment,
  * the backstop, or with none `MaxSteps` for a step, may stop the quest.
  */
-const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limits): Step => {
-  switch (move._tag) {
-    case "step":
-      return next(quest, move.step, move.note, limits);
-    case "judge": {
+const take = (quest: Quest, step: StepName, line: Line, move: Move, limits: Limits): Step =>
+  Move.match(move, {
+    step: (move): Step => next(quest, move.step, move.note, limits),
+    judge: (): Step => {
       const backstop = backstopStop(quest, limits.backstop);
 
       return backstop !== null
         ? stopped(quest, backstop)
         : [{ phase: "judging", quest, step, line }, [judge({ step, line, round: quest.round })]];
-    }
-
+    },
     // No laptop typecheck first (0133): CI's typecheck job answers once the head is pushed.
-    case "open":
-      return [{ phase: "opening", quest }, [prOpen({ head: quest.head })]];
-    default:
-      return over(quest, { kind: "ask", reason: move.reason });
-  }
-};
+    open: (): Step => [{ phase: "opening", quest }, [prOpen({ head: quest.head })]],
+    park: (move): Step => over(quest, { kind: "ask", reason: move.reason }),
+  });
 
 export const makeMachine = (limits: Limits) =>
   defineMachine({
@@ -1001,10 +1000,13 @@ export const makeMachine = (limits: Limits) =>
         s.phase === "stepping"
           ? over(s.quest, {
               kind: "stuck",
-              reason:
-                m.error._tag === "RetriesExhausted"
-                  ? `${s.step}: ${m.error.schedule} ran out after ${m.error.times} tries: ${m.error.reason}`
-                  : `drive.ts ${s.step} could not be started`,
+              reason: Match.value(m.error).pipe(
+                Match.tag(
+                  "RetriesExhausted",
+                  (e) => `${s.step}: ${e.schedule} ran out after ${e.times} tries: ${e.reason}`,
+                ),
+                Match.orElse(() => `drive.ts ${s.step} could not be started`),
+              ),
             })
           : stay(s),
       judge_ok: (s, m): Step => {
@@ -1048,8 +1050,8 @@ export const makeMachine = (limits: Limits) =>
 
         const verdict = m.value;
 
-        if (verdict._tag !== "red") {
-          const unchecked = verdict._tag === "skipped" ? verdict.reason : null;
+        if (!Typecheck.Verdict.isAnyOf(["red"])(verdict)) {
+          const unchecked = Typecheck.Verdict.isAnyOf(["skipped"])(verdict) ? verdict.reason : null;
 
           return loosenAt({ ...s.quest, unchecked }, s.pr);
         }
@@ -1349,7 +1351,7 @@ const handlers = (s: Setup) => {
             plan: s.plan,
           });
 
-          if (prepared._tag === "refused") {
+          if (Start.isAnyOf(["refused"])(prepared)) {
             const check = slotRefusal(prepared.outcome);
 
             if (check !== null) {
@@ -1462,8 +1464,12 @@ const handlers = (s: Setup) => {
           report: at(".md"),
         });
 
-        const text = turned._tag === "ended" ? turned.said : `${turned.reason}: ${turned.message}`;
-        const move = turned._tag === "ended" && turned.answer !== null ? judgedMove(turned.answer) : judgedOf(text);
+        const move = Match.valueTags(turned, {
+          ended: ({ said, answer }) => (answer !== null ? judgedMove(answer) : judgedOf(said)),
+          failed: ({ reason, message }) => judgedOf(`${reason}: ${message}`),
+        });
+
+        const sent = Move.isAnyOf(["step"])(move);
         // Its field row, beside the steps' rows (record wide).
         const scrubbed = sh("sh", [join(HERE, "redact.sh"), at(".md"), at(".jsonl")]);
         appendFileSync(
@@ -1475,15 +1481,20 @@ const handlers = (s: Setup) => {
             provider: "codex-read",
             model: env.CODEX_MODEL,
             effort: env.CODEX_EFFORT,
-            outcome: move._tag === "step" ? "pass" : "parked",
-            reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${move._tag === "step" ? `send ${move.step}` : "park"}`,
+            outcome: sent ? "pass" : "parked",
+            reason: `chain.ts judgment for ${s.quest} after ${cmd.step} ${cmd.line.outcome}: ${sent ? `send ${move.step}` : "park"}`,
             started,
             ended: new Date(),
             spent: turned.spent,
             redacted: scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null,
           }),
         );
-        const answer = move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
+
+        const answer = Match.valueTags(move, {
+          step: ({ step, note }) => `send ${step}: ${note}`,
+          park: ({ reason }) => `park: ${reason}`,
+        });
+
         note(`judgment: ${answer}`);
         const r = readRecord();
         const last = r.steps.find((e) => e.round === earlier + cmd.round);
@@ -1649,9 +1660,9 @@ const handlers = (s: Setup) => {
           reason: hosted.outcome.reason,
           report: hosted.log,
           box: name,
-          exit: hosted.outcome._tag === "stuck" ? 30 : 0,
+          exit: Outcome.Outcome.isAnyOf(["stuck"])(hosted.outcome) ? 30 : 0,
           // A host stuck is the tool's (git, the signer, the push); the host step runs no agent.
-          fault: hosted.outcome._tag === "stuck" ? "tool" : null,
+          fault: Outcome.Outcome.isAnyOf(["stuck"])(hosted.outcome) ? "tool" : null,
           listUsd: null,
         };
 
@@ -1990,20 +2001,20 @@ const main = () => {
   const state = Pin.pinState(process.env[Pin.PIN_ENV]);
   const [quest = ""] = args;
 
-  if (state._tag === "malformed") {
+  if (Pin.PinState.isAnyOf(["malformed"])(state)) {
     unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`);
 
     return;
   }
 
   // A usage error needs no pin: it is printed here, from the checkout.
-  if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
+  if (Pin.PinState.isAnyOf(["unpinned"])(state) && QUEST_NAME.test(quest)) {
     launch(env, quest, args);
 
     return;
   }
 
-  const pin = state._tag === "pinned" ? state.pin : null;
+  const pin = Pin.PinState.isAnyOf(["pinned"])(state) ? state.pin : null;
   Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {

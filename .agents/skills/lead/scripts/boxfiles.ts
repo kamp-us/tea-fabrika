@@ -309,7 +309,7 @@ export const sweep = Effect.fn("boxfiles.sweep")(function* (o: {
       idle: now - newest,
     });
 
-    if (verdict._tag === "keep") {
+    if (Verdict.isAnyOf(["keep"])(verdict)) {
       if (verdict.reason === "its quest has not landed") {
         totals.waiting += 1;
       } else {

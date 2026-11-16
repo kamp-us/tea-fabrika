@@ -76,7 +76,7 @@
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, FileSystem, Layer, Match, Option, Path, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as Level from "../../sev/scripts/Level.ts";
@@ -630,7 +630,15 @@ export const queue = Effect.fn("land.queue")(function* (env: Env, pr: number, wa
   return yield* Queue.add({ dir, pr, ...(wait ? { wait: Queue.QUEST_WAIT } : {}) }).pipe(
     Effect.provide(queueServices(env)),
     Effect.mapError(
-      (e) => new Refused({ check: e._tag === "LeakGrepRefused" ? "leak" : "queue", reason: e.reason, output: "" }),
+      (e) =>
+        new Refused({
+          check: Match.value(e).pipe(
+            Match.tag("LeakGrepRefused", () => "leak" as const),
+            Match.orElse(() => "queue" as const),
+          ),
+          reason: e.reason,
+          output: "",
+        }),
     ),
   );
 });
@@ -730,13 +738,16 @@ const sev0Allows = Effect.fn("land.sev0Allows")(function* (main: string) {
       (e) =>
         new Refused({
           check: "merge",
-          reason: `the sev log does not read: ${e._tag === "Refused" ? e.reason : e.message}`,
+          reason: `the sev log does not read: ${Match.value(e).pipe(
+            Match.tag("Refused", (r) => r.reason),
+            Match.orElse((other) => other.message),
+          )}`,
           output: "",
         }),
     ),
   );
 
-  return sev0._tag === "open" ? sev0.allow : [];
+  return Level.Sev0.match(sev0, { open: ({ allow }) => allow, closed: () => [] });
 });
 
 const mergeCommand = Command.make(

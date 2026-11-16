@@ -164,7 +164,7 @@ export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<stri
   const tally = { product: 0, test: 0, docs: 0, lock: 0, generated: 0, other: 0, binary: 0 };
 
   for (const row of rows) {
-    if (row._tag === "binary") {
+    if (Row.isAnyOf(["binary"])(row)) {
       tally.binary += 1;
     } else {
       tally[classify(row.path, generated.has(row.path))] += row.lines;
@@ -330,14 +330,12 @@ export const advise = (size: PlanSize): ReadonlyArray<Advice> =>
 
 const ADVICE = "(advice only, 0099)";
 
-export const adviceLine = (advice: Advice): string => {
-  switch (advice._tag) {
-    case "unsized":
-      return `size: slice ${advice.order} (${advice.name}) gives no "<n> lines" estimate ${ADVICE}`;
-    case "unknown":
-      return `size: no files table has a "Product lines expected" column and ## Size lists no slices, so the plan records no size ${ADVICE}`;
-  }
-};
+export const adviceLine = (advice: Advice): string =>
+  Advice.match(advice, {
+    unsized: (advice) => `size: slice ${advice.order} (${advice.name}) gives no "<n> lines" estimate ${ADVICE}`,
+    unknown: () =>
+      `size: no files table has a "Product lines expected" column and ## Size lists no slices, so the plan records no size ${ADVICE}`,
+  });
 
 /** The line `plan` prints first, before any advice. */
 export const planLine = (size: PlanSize): string => {

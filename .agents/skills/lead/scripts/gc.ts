@@ -40,7 +40,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs
 import { isAbsolute, join, resolve } from "node:path";
 import { Result, Schema } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
-import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
+import { PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
 
 const HOUR = 3_600_000;
@@ -102,13 +102,16 @@ export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>):
  * IDLE old; a process list pgrep cannot read keeps it, never reads as none running.
  */
 export const decidePin = (holders: PgrepAnswer, idle: number): PinVerdict =>
-  holders._tag === "refused"
-    ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" })
-    : holders.count > 0
-      ? PinVerdict.cases.keep.make({ reason: `${holders.count} running processes name it` })
-      : idle < IDLE
-        ? PinVerdict.cases.keep.make({ reason: "made less than 2 h ago" })
-        : PinVerdict.cases.remove.make({ reason: "no running process names it" });
+  PgrepAnswer.match(holders, {
+    refused: () =>
+      PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" }),
+    listed: ({ count }) =>
+      count > 0
+        ? PinVerdict.cases.keep.make({ reason: `${count} running processes name it` })
+        : idle < IDLE
+          ? PinVerdict.cases.keep.make({ reason: "made less than 2 h ago" })
+          : PinVerdict.cases.remove.make({ reason: "no running process names it" }),
+  });
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
@@ -549,16 +552,17 @@ const main = () => {
 
     const verdict = decide(seen);
 
-    if (verdict._tag === "keep") {
+    if (Verdict.isAnyOf(["keep"])(verdict)) {
       console.log(`keep ${name}: ${verdict.reason}`);
       keptCount += 1;
       continue;
     }
 
-    let reason: string = verdict._tag === "remove" ? verdict.reason : "";
+    const goes = Verdict.isAnyOf(["remove"])(verdict);
+    let reason: string = goes ? verdict.reason : "";
 
     // A merged quest's box may hold commits no remote has: keep its HEAD in the main checkout.
-    if (verdict._tag === "remove" && !onRemote && !dry) {
+    if (goes && !onRemote && !dry) {
       if (repo("fetch", "-q", "-f", box, `HEAD:refs/keep/box/${name}`).code !== 0) {
         console.log(`keep ${name}: could not save its HEAD`);
         keptCount += 1;
@@ -570,7 +574,7 @@ const main = () => {
 
     // A landed quest's box with files never committed: they go into the main checkout as a stash, the
     // untracked ones too (git ignores node_modules), before the folder goes.
-    if (verdict._tag === "remove" && (seen.dirty ?? 0) > 0) {
+    if (goes && (seen.dirty ?? 0) > 0) {
       const kept = `refs/keep/box/${name}-files`;
 
       // Only a box's own git data: a stash in a worktree of the main checkout would land in its refs.
@@ -591,7 +595,7 @@ const main = () => {
       reason += `, ${seen.dirty} uncommitted files ${dry ? "would be " : ""}kept at ${kept}`;
     }
 
-    if (verdict._tag === "backup") {
+    if (Verdict.isAnyOf(["backup"])(verdict)) {
       if (dry) {
         reason = `would back up to ${verdict.to[0]}`;
       } else {
@@ -672,14 +676,15 @@ const main = () => {
     const holders = sh("pgrep", ["-f", folder]);
     const verdict = decidePin(pgrepAnswer(holders.code, holders.out), now - statSync(folder).mtimeMs);
 
-    if (verdict._tag === "remove" && !dry) {
+    if (PinVerdict.isAnyOf(["remove"])(verdict) && !dry) {
       rmSync(folder, { recursive: true, force: true });
     }
 
     console.log(
-      verdict._tag === "keep"
-        ? `keep pins/${name}: ${verdict.reason}`
-        : `${dry ? "would remove" : "removed"} pins/${name}: ${verdict.reason}`,
+      PinVerdict.match(verdict, {
+        keep: ({ reason }) => `keep pins/${name}: ${reason}`,
+        remove: ({ reason }) => `${dry ? "would remove" : "removed"} pins/${name}: ${reason}`,
+      }),
     );
   }
 
@@ -743,8 +748,8 @@ const main = () => {
       prs: worktreePrs({ branch, head, tips }, prsOf, prsAt),
     });
 
-    if (verdict._tag !== "remove") {
-      console.log(`keep worktree ${path}: ${verdict._tag === "keep" ? verdict.reason : ""}`);
+    if (!Verdict.isAnyOf(["remove"])(verdict)) {
+      console.log(`keep worktree ${path}: ${Verdict.isAnyOf(["keep"])(verdict) ? verdict.reason : ""}`);
       keptCount += 1;
       continue;
     }

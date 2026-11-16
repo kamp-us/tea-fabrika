@@ -173,7 +173,7 @@ const NOTHING = readOutput("");
 
 /** The newest sweep that ran, and how many were skipped after it. */
 export const newest = (sweeps: ReadonlyArray<Sweep>) => {
-  const at = sweeps.findLastIndex((s) => s.outcome._tag !== "skipped");
+  const at = sweeps.findLastIndex((s) => !Outcome.isAnyOf(["skipped"])(s.outcome));
 
   return { last: at < 0 ? null : (sweeps[at] ?? null), skipped: sweeps.length - 1 - at };
 };
@@ -185,7 +185,7 @@ export const late = (last: Sweep | null, now: number, minutes: number): boolean 
 const ended = (s: Sweep): string => {
   const took = spoken(s.ms);
 
-  if (s.outcome._tag === "failed") {
+  if (Outcome.isAnyOf(["failed"])(s.outcome)) {
     return `failed in ${took}: ${s.outcome.reason}`;
   }
 

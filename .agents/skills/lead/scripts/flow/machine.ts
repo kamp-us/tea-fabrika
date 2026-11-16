@@ -15,7 +15,7 @@
 // and the step runs again: a step must be safe to run twice.
 
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Match, Schema } from "effect";
 import { Flow } from "./Flow.ts";
 import { Answer, Outcome, Spent } from "./Outcome.ts";
 import { Step } from "./Step.ts";
@@ -110,7 +110,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
         return enter(ctx.flow, [], 0, ctx.at);
       }
 
-      if (loaded._tag === "done") {
+      if (Model.isAnyOf(["done"])(loaded)) {
         return stay(loaded);
       }
 
@@ -118,7 +118,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
     },
     update: {
       step_run_ok: (s, m): Next => {
-        if (s._tag !== "running" || m.cmd.position !== s.position) {
+        if (!Model.isAnyOf(["running"])(s) || m.cmd.position !== s.position) {
           return stay(s);
         }
 
@@ -127,40 +127,43 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
         const history = closed(s.history, m.at, outcome, spent);
         const name = m.cmd.step.name;
 
-        if (outcome._tag === "done" || outcome._tag === "skip") {
-          return position + 1 >= flow.steps.length
+        const onward = (): Next =>
+          position + 1 >= flow.steps.length
             ? stay(Model.cases.done.make({ flow, history }))
             : enter(flow, history, position + 1, m.at);
-        }
 
-        if (outcome._tag === "send") {
-          const to = flow.steps.findIndex((step) => step.name === outcome.to);
+        return Outcome.match(outcome, {
+          done: onward,
+          skip: onward,
+          send: (outcome) => {
+            const to = flow.steps.findIndex((step) => step.name === outcome.to);
 
-          return to === -1
-            ? stay(
-                Model.cases.stuck.make({
-                  flow,
-                  position,
-                  history,
-                  reason: `${name} sent the flow to ${outcome.to}, which is no step of it: ${outcome.reason}`,
-                }),
-              )
-            : enter(flow, history, to, m.at);
-        }
-
-        if (outcome._tag === "ask") {
-          return stay(Model.cases.parked.make({ flow, position, history, reason: `${name} asks: ${outcome.reason}` }));
-        }
-
-        return stay(Model.cases.stuck.make({ flow, position, history, reason: `${name}: ${outcome.reason}` }));
+            return to === -1
+              ? stay(
+                  Model.cases.stuck.make({
+                    flow,
+                    position,
+                    history,
+                    reason: `${name} sent the flow to ${outcome.to}, which is no step of it: ${outcome.reason}`,
+                  }),
+                )
+              : enter(flow, history, to, m.at);
+          },
+          ask: (outcome) =>
+            stay(Model.cases.parked.make({ flow, position, history, reason: `${name} asks: ${outcome.reason}` })),
+          stuck: (outcome) =>
+            stay(Model.cases.stuck.make({ flow, position, history, reason: `${name}: ${outcome.reason}` })),
+        });
       },
       step_run_err: (s, m): Next => {
-        if (s._tag !== "running" || m.cmd.position !== s.position) {
+        if (!Model.isAnyOf(["running"])(s) || m.cmd.position !== s.position) {
           return stay(s);
         }
 
-        const cause =
-          m.error._tag === "StepFailed" ? String(m.error.reason) : `its answer did not parse (${m.error._tag})`;
+        const cause = Match.value(m.error).pipe(
+          Match.tag("StepFailed", (e) => String(e.reason)),
+          Match.orElse((e) => `its answer did not parse (${e._tag})`),
+        );
 
         const reason = `${m.cmd.step.name} failed: ${cause}`;
         const history = closed(s.history, m.at, Outcome.cases.stuck.make({ reason }), null);

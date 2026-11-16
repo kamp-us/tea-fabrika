@@ -119,7 +119,10 @@ type Times = { readonly [K in StageName]: Option.Option<number> };
 
 /** The last time the PR entered the queue before it merged; none when it never did. */
 const lastEntry = (pull: Pull, merged: number): Option.Option<number> => {
-  const entered = pull.queue.flatMap((e) => (e._tag === "added" ? [at(e.at)] : [])).filter((t) => t <= merged);
+  const entered = pull.queue
+    .filter(QueueEvent.isAnyOf(["added"]))
+    .map((e) => at(e.at))
+    .filter((t) => t <= merged);
 
   return entered.length === 0 ? Option.none() : Option.some(Math.max(...entered));
 };
@@ -130,7 +133,9 @@ const lastEntry = (pull: Pull, merged: number): Option.Option<number> => {
  * queue's own `merged` removal up to a second before the merge, so the reason decides, not the time.
  */
 const droppedAfter = (pull: Pull, entry: number, merged: number): boolean =>
-  pull.queue.some((e) => e._tag === "removed" && e.reason !== "merged" && at(e.at) >= entry && at(e.at) <= merged);
+  pull.queue.some(
+    (e) => QueueEvent.isAnyOf(["removed"])(e) && e.reason !== "merged" && at(e.at) >= entry && at(e.at) <= merged,
+  );
 
 /**
  * A PR's last push: the runs at the head it merged with, oldest first, and its queue number's start,

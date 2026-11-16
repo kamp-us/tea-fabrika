@@ -25,21 +25,17 @@ export class Usage extends Schema.TaggedError<Usage, { readonly brand: unique sy
 /** How a flow that stopped ended, as the last line says it. */
 export type End = { readonly outcome: "done" | "ask" | "stuck"; readonly reason: string; readonly exit: 0 | 20 | 30 };
 
-export const ending = (m: FlowMachine.Model): End => {
-  if (m._tag === "done") {
-    return { outcome: "done", reason: `${m.flow.steps.length} steps ended done or skip`, exit: 0 };
-  }
-
-  if (m._tag === "parked") {
-    return { outcome: "ask", reason: m.reason, exit: 20 };
-  }
-
-  if (m._tag === "stuck") {
-    return { outcome: "stuck", reason: m.reason, exit: 30 };
-  }
-
-  return { outcome: "stuck", reason: `the flow stopped while ${m.flow.steps[m.position]?.name} ran`, exit: 30 };
-};
+export const ending = (m: FlowMachine.Model): End =>
+  FlowMachine.Model.match(m, {
+    done: (m): End => ({ outcome: "done", reason: `${m.flow.steps.length} steps ended done or skip`, exit: 0 }),
+    parked: (m): End => ({ outcome: "ask", reason: m.reason, exit: 20 }),
+    stuck: (m): End => ({ outcome: "stuck", reason: m.reason, exit: 30 }),
+    running: (m): End => ({
+      outcome: "stuck",
+      reason: `the flow stopped while ${m.flow.steps[m.position]?.name} ran`,
+      exit: 30,
+    }),
+  });
 
 /** The saved Model, read back by tea's store: a file that is no Model is refused, never booted. */
 const parse = (raw: unknown) =>
@@ -96,7 +92,7 @@ export const runFlow = Effect.fn("flow.run")(function* (flow: Flow.Flow, options
     interpret: {
       step_run: (cmd) => runners.run(cmd.step).pipe(Effect.mapError((e) => Failed.make({ reason: e.reason }))),
     },
-    terminal: (m) => m._tag !== "running",
+    terminal: (m) => !FlowMachine.Model.isAnyOf(["running"])(m),
   });
 
   const runtime = yield* handle.ready;

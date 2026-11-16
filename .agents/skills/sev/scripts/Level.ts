@@ -82,41 +82,41 @@ export type Level = typeof Level.Type;
 
 /** The level from the sev0 and the open issues: an open sev0 wins, then any open issue. */
 export const level = (sev0: Sev0, issues: ReadonlyArray<Alert>): Level =>
-  sev0._tag === "open"
-    ? Level.cases.sev0.make({ since: sev0.since, reason: sev0.reason, allow: sev0.allow })
-    : issues.length > 0
-      ? Level.cases.sev1.make({ issues })
-      : Level.cases.none.make({});
+  Sev0.match(sev0, {
+    open: ({ since, reason, allow }) => Level.cases.sev0.make({ since, reason, allow }),
+    closed: () => (issues.length > 0 ? Level.cases.sev1.make({ issues }) : Level.cases.none.make({})),
+  });
+
+/** A line that needs an open sev0, refused while none is open. */
+const whileOpen = (sev0: Sev0, then: (open: typeof Sev0.cases.open.Type) => Sev0): Result.Result<Sev0, string> =>
+  Sev0.match(sev0, {
+    closed: () => Result.fail("no sev0 is open"),
+    open: (open) => Result.succeed(then(open)),
+  });
 
 /** The sev0 after one more line at `index`; a line that does not follow is refused with why. */
-export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {
-  switch (entry._tag) {
-    case "opened":
-      return sev0._tag === "open"
-        ? Result.fail(`a sev0 is open already, since ${sev0.since}`)
-        : Result.succeed(Sev0.cases.open.make({ since: entry.at, reason: entry.reason, allow: entry.allow, index }));
-    case "allowed":
-      return sev0._tag === "closed"
-        ? Result.fail("no sev0 is open")
-        : Result.succeed(
-            sev0.allow.includes(entry.branch)
-              ? sev0
-              : Sev0.cases.open.make({ ...sev0, allow: [...sev0.allow, entry.branch] }),
-          );
-    case "next":
-      return sev0._tag === "closed"
-        ? Result.fail("no sev0 is open")
-        : Result.succeed(Sev0.cases.open.make({ ...sev0, allow: [entry.branch] }));
-    case "closed":
-      return sev0._tag === "closed" ? Result.fail("no sev0 is open") : Result.succeed(Sev0.cases.closed.make({}));
+export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> =>
+  Entry.match(entry, {
+    opened: (entry) =>
+      Sev0.match(sev0, {
+        open: (open) => Result.fail(`a sev0 is open already, since ${open.since}`),
+        closed: () =>
+          Result.succeed(Sev0.cases.open.make({ since: entry.at, reason: entry.reason, allow: entry.allow, index })),
+      }),
+    allowed: (entry) =>
+      whileOpen(sev0, (open) =>
+        open.allow.includes(entry.branch)
+          ? open
+          : Sev0.cases.open.make({ ...open, allow: [...open.allow, entry.branch] }),
+      ),
+    next: (entry) => whileOpen(sev0, (open) => Sev0.cases.open.make({ ...open, allow: [entry.branch] })),
+    closed: () => whileOpen(sev0, () => Sev0.cases.closed.make({})),
     // What the loop writes changes no level; a late cancel may follow a close.
-    case "looping":
-    case "canceled":
-    case "failed":
-    case "ended":
-      return Result.succeed(sev0);
-  }
-};
+    looping: () => Result.succeed(sev0),
+    canceled: () => Result.succeed(sev0),
+    failed: () => Result.succeed(sev0),
+    ended: () => Result.succeed(sev0),
+  });
 
 /** The sev0 the whole log folds to; the first line that does not follow fails it. */
 export const fold = (entries: ReadonlyArray<Entry>): Result.Result<Sev0, string> => {

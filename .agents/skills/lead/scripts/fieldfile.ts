@@ -25,7 +25,7 @@
 // and a type), so neither can save a JSON row under its own id.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Console, Effect, FileSystem, Path, Predicate, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
 
 export const Log = Schema.Literals(["notes", "runs", "findings"]);
@@ -63,11 +63,11 @@ export const saved = (log: Log, row: Row): Result.Result<Saved, Refused> => {
   }
 
   if (log === "findings") {
-    if (row["_tag"] === "finding") {
+    if (Predicate.isTagged(row, "finding")) {
       return named("id");
     }
 
-    if (row["_tag"] !== "rated") {
+    if (!Predicate.isTagged(row, "rated")) {
       return refuse("a findings row's `_tag` must be finding or rated");
     }
 

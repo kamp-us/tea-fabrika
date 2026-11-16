@@ -2,6 +2,7 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
+import { Predicate } from "effect";
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
@@ -107,7 +108,7 @@ const stuckIn = (out: string) =>
       return [];
     }
 
-    if (a === null || typeof a !== "object" || !("_tag" in a) || a._tag !== "stuck") {
+    if (!Predicate.isTagged(a, "stuck")) {
       return [];
     }
 

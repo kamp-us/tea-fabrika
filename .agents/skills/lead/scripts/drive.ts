@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Match, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -123,7 +123,7 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
-import { pgrepAnswer, skipLine } from "./pgrep.ts";
+import { PgrepAnswer, pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
@@ -622,15 +622,15 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 
   const said = answerWords(answer) ?? readAnswer(read.report);
 
-  if (said._tag === "none") {
+  if (Said.isAnyOf(["none"])(said)) {
     return stuck("no_answer", "no answer line in the report");
   }
 
-  if (said._tag === "many") {
+  if (Said.isAnyOf(["many"])(said)) {
     return stuck("no_answer", `${said.count} answer lines in the report, and drive takes exactly one`);
   }
 
-  if (said._tag === "unread") {
+  if (Said.isAnyOf(["unread"])(said)) {
     return stuck("no_answer", "the answer line names no verb drive knows");
   }
 
@@ -755,22 +755,17 @@ export const machine = defineMachine({
         return stay(s);
       }
 
-      const started = m.value;
-
-      if (started._tag === "refused") {
-        return recordIt(
-          s.ask,
-          { outcome: { kind: "refused", check: started.check }, reason: started.detail },
-          s.ask.base,
-          NO_SPENT,
-        );
-      }
-
-      if (started._tag === "failed") {
-        return recordIt(s.ask, stuck("box_failed", started.detail), s.ask.base, NO_SPENT);
-      }
-
-      return [{ phase: "drafting", ask: s.ask }, []];
+      return Started.match(m.value, {
+        refused: (started): Step =>
+          recordIt(
+            s.ask,
+            { outcome: { kind: "refused", check: started.check }, reason: started.detail },
+            s.ask.base,
+            NO_SPENT,
+          ),
+        failed: (started): Step => recordIt(s.ask, stuck("box_failed", started.detail), s.ask.base, NO_SPENT),
+        made: (): Step => [{ phase: "drafting", ask: s.ask }, []],
+      });
     },
     box_new_err: (s): Step =>
       s.phase === "starting" ? recordIt(s.ask, stuck("box_failed", "box.sh new threw"), s.ask.base, NO_SPENT) : stay(s),
@@ -779,26 +774,26 @@ export const machine = defineMachine({
         return stay(s);
       }
 
-      const t = m.turned;
+      return Match.valueTags(m.turned, {
+        failed: (t): Step =>
+          recordIt(
+            s.ask,
+            stuck("agent_failed", `${s.ask.agent} ${t.reason}: ${t.message}; see ${s.ask.events}`),
+            s.ask.base,
+            t.spent,
+          ),
+        ended: (t): Step => {
+          if (t.stop === "over_time") {
+            return recordIt(s.ask, stuck("timeout", `stopped after ${s.ask.minutes} minutes`), s.ask.base, t.spent);
+          }
 
-      if (t._tag === "failed") {
-        return recordIt(
-          s.ask,
-          stuck("agent_failed", `${s.ask.agent} ${t.reason}: ${t.message}; see ${s.ask.events}`),
-          s.ask.base,
-          t.spent,
-        );
-      }
+          if (t.stop !== "end_turn") {
+            return recordIt(s.ask, stuck("agent_failed", `${s.ask.agent} stopped: ${t.stop}`), s.ask.base, t.spent);
+          }
 
-      if (t.stop === "over_time") {
-        return recordIt(s.ask, stuck("timeout", `stopped after ${s.ask.minutes} minutes`), s.ask.base, t.spent);
-      }
-
-      if (t.stop !== "end_turn") {
-        return recordIt(s.ask, stuck("agent_failed", `${s.ask.agent} stopped: ${t.stop}`), s.ask.base, t.spent);
-      }
-
-      return [{ phase: "reading", ask: s.ask, answer: t.answer, spent: t.spent }, [stepRead(s.ask)]];
+          return [{ phase: "reading", ask: s.ask, answer: t.answer, spent: t.spent }, [stepRead(s.ask)]];
+        },
+      });
     },
     step_read_ok: (s, m): Step => {
       if (s.phase !== "reading") {
@@ -1287,7 +1282,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         ready = Date.now();
         const started = startedOf(r.code, r.err);
 
-        if (started._tag !== "made") {
+        if (!Started.isAnyOf(["made"])(started)) {
           return started;
         }
 
@@ -1717,12 +1712,13 @@ const MutboxLine = Schema.fromJsonString(
 export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
   const line = Schema.decodeOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
 
-  return line._tag === "Some"
-    ? {
-        outcome: line.value.outcome,
-        reason: [line.value.reason, line.value.detail].filter(Boolean).join(": "),
-      }
-    : { outcome: "stuck", reason: "mutbox.ts gave no answer" };
+  return Option.match(line, {
+    onSome: (line): { outcome: "done" | "skip" | "stuck"; reason: string } => ({
+      outcome: line.outcome,
+      reason: [line.reason, line.detail].filter(Boolean).join(": "),
+    }),
+    onNone: () => ({ outcome: "stuck", reason: "mutbox.ts gave no answer" }),
+  });
 };
 
 /** What a mutation agent is told about the run that already happened in the container. */
@@ -1893,7 +1889,7 @@ const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
 /** When the agent's event log says it first did anything, in ms; `null` with no timed first line. */
 export const firstEventAt = (events: string): number | null => {
   const first = Schema.decodeOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
-  const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
+  const at = Option.match(first, { onSome: (event) => Date.parse(event.at), onNone: () => Number.NaN });
 
   return Number.isFinite(at) ? at : null;
 };
@@ -2216,8 +2212,12 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     return pgrepAnswer(r.code, r.out);
   });
 
-  const refused = counts.some((c) => c._tag === "refused");
-  const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
+  const refused = counts.some(PgrepAnswer.isAnyOf(["refused"]));
+
+  const agents = counts.reduce(
+    (sum, c) => sum + PgrepAnswer.match(c, { listed: ({ count }) => count, refused: () => 0 }),
+    0,
+  );
 
   if (refused) {
     console.error(skipLine("agent cap"));
@@ -2352,7 +2352,7 @@ export const driveStep = (
         const r = sh("pgrep", ["-x", "tsgo"]);
         const tsgo = pgrepAnswer(r.code, r.out);
 
-        if (tsgo._tag === "refused") {
+        if (PgrepAnswer.isAnyOf(["refused"])(tsgo)) {
           yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
           break;
         }
@@ -2463,7 +2463,7 @@ const main = () => {
     from: flag(args, "--from"),
   });
 
-  if (prepared._tag === "refused") {
+  if (Start.isAnyOf(["refused"])(prepared)) {
     if (prepared.exit === 2) {
       console.error(`drive.ts: ${prepared.reason}`);
       process.exit(2);

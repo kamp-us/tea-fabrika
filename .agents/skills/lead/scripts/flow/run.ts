@@ -14,7 +14,7 @@
 // Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
+import { Console, Effect, Layer, Match, Option, Path, Runtime, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as Flow from "./Flow.ts";
@@ -106,7 +106,10 @@ const flowCommand = Command.make(
       }
     }).pipe(
       Effect.tapError((e) =>
-        e._tag === "Usage" ? Console.log(JSON.stringify({ outcome: "usage", reason: e.reason, exit: 2 })) : Effect.void,
+        Match.value(e).pipe(
+          Match.tag("Usage", (e) => Console.log(JSON.stringify({ outcome: "usage", reason: e.reason, exit: 2 }))),
+          Match.orElse(() => Effect.void),
+        ),
       ),
     ),
 );

@@ -38,11 +38,10 @@ export const relations = Machine.make({
       const key = tupleKey(row.subject, row.relation, row.object);
       const tuples = new Set(s.tuples);
 
-      if (row._tag === "related") {
-        tuples.add(key);
-      } else {
-        tuples.delete(key);
-      }
+      Row.match(row, {
+        related: () => tuples.add(key),
+        unrelated: () => tuples.delete(key),
+      });
 
       return [{ tuples }, []];
     },

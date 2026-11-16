@@ -33,7 +33,8 @@ export const line = ({ shown, verdict }: Removal): string =>
     kept: ({ reason }) => `kept box ${shown}: ${reason}`,
   });
 
-export const exitCode = (verdict: Verdict): number => (verdict._tag === "kept" ? verdict.code : 0);
+export const exitCode = (verdict: Verdict): number =>
+  Verdict.matchOrElse(verdict, { kept: ({ code }) => code }, () => 0);
 
 /** A check said no: the pair stays, for this reason. */
 class Keep extends Schema.TaggedError<Keep, { readonly brand: unique symbol }>()("Keep", {

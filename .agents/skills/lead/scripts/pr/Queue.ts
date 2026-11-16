@@ -122,9 +122,13 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (0162). So the
   // required check is read first, and anything but a finished success asks nothing.
   const required = yield* requiredAt(found.oid, a.wait);
-  const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
 
-  if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
+  const stands = Option.match(required, {
+    onNone: () => "missing",
+    onSome: (job) => job.conclusion ?? job.status,
+  });
+
+  if (Option.isNone(required) || required.value.status !== "completed" || required.value.conclusion !== "success") {
     return yield* NotQueued.make({
       reason: `pr ${found.number}: ${REQUIRED} is ${stands} at ${found.oid}, not a success; not added to the queue`,
     });
@@ -137,9 +141,10 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
 
 /** One line for a log: what `add` did. */
 export const line = (added: Added): string =>
-  added._tag === "queued"
-    ? `pr ${added.pr}: queued at ${added.oid}; GitHub tests it on newest main and merges it`
-    : `pr ${added.pr}: already merged at ${added.commit}`;
+  Added.match(added, {
+    queued: ({ pr, oid }) => `pr ${pr}: queued at ${oid}; GitHub tests it on newest main and merges it`,
+    merged: ({ pr, commit }) => `pr ${pr}: already merged at ${commit}`,
+  });
 
 // ---------------------------------------------------------------- after the merge
 
@@ -184,7 +189,7 @@ const closeNamed = Effect.fn("Queue.closeNamed")(function* (repo: string, found:
 
   const open = yield* tickets.open.pipe(Effect.option);
 
-  if (open._tag === "None") {
+  if (Option.isNone(open)) {
     return [said(`cannot read the tracker; closed no tickets: ${named.join(" ")}`)];
   }
 
@@ -258,7 +263,7 @@ const standing = Effect.fn("Queue.standing")(function* (
 export const closeOnly = Effect.fn("Queue.closeOnly")(function* (a: { readonly repo: string; readonly pr: number }) {
   const at = yield* standing(a.pr);
 
-  if (at._tag === "unmerged") {
+  if (Standing.isAnyOf(["unmerged"])(at)) {
     return Settled.cases.unmerged.make({ pr: at.found.number, lines: at.lines });
   }
 
@@ -281,7 +286,7 @@ export const settle = Effect.fn("Queue.settle")(function* (a: { readonly repo: s
   const sweeps = yield* Sweeps;
   const at = yield* standing(a.pr);
 
-  if (at._tag === "unmerged") {
+  if (Standing.isAnyOf(["unmerged"])(at)) {
     return Settled.cases.unmerged.make({ pr: at.found.number, lines: at.lines });
   }
 

@@ -232,7 +232,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
-        if (s._tag !== "idle") {
+        if (!Model.isAnyOf(["idle"])(s)) {
           return [s, []];
         }
 
@@ -254,7 +254,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         ];
       },
       remove: (s, m) => {
-        if (s._tag !== "idle") {
+        if (!Model.isAnyOf(["idle"])(s)) {
           return [s, []];
         }
 
@@ -281,32 +281,30 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         return [s, row === undefined ? [] : [deny({ key: row.key, saw: saw(row, "compare", "none") })]];
       },
       checked: (s, m) => {
-        if (s._tag !== "checking" || s.cmd !== m.cmd) {
+        if (!Model.isAnyOf(["checking"])(s) || s.cmd !== m.cmd) {
           return [s, []];
-        }
-
-        const act = s.act;
-
-        if (act._tag === "approve") {
-          return [idle(s), [signGrant({ key: act.key, as: act.as, saw: saw(act.shown, "compare", m.check) })]];
         }
 
         return [
           idle(s),
           [
-            signRevoke({
-              key: act.key,
-              saw: {
-                label: act.shown.label,
-                location: act.shown.location,
-                method: "panel",
-                check: m.check,
-              },
+            Act.match(s.act, {
+              approve: (act) => signGrant({ key: act.key, as: act.as, saw: saw(act.shown, "compare", m.check) }),
+              remove: (act) =>
+                signRevoke({
+                  key: act.key,
+                  saw: {
+                    label: act.shown.label,
+                    location: act.shown.location,
+                    method: "panel",
+                    check: m.check,
+                  },
+                }),
             }),
           ],
         ];
       },
-      not_checked: (s, m) => [s._tag === "checking" && s.cmd === m.cmd ? idle(s) : s, []],
+      not_checked: (s, m) => [Model.isAnyOf(["checking"])(s) && s.cmd === m.cmd ? idle(s) : s, []],
       enter: (s) => [s, []],
       open_browser: (s, m) =>
         s.browserLink && !s.opens.includes(m.cmd)
@@ -357,7 +355,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
  */
 export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
   const status = { connecting: "fabrika is connecting", online: "fabrika is running", lost: "Connection lost" };
-  const busy = model._tag === "checking";
+  const busy = Model.isAnyOf(["checking"])(model);
   const items: Array<typeof Item.Type> = [Item.cases.status.make({ words: status[model.link._tag] })];
 
   if (model.rows.length === 0 && model.clients.length === 0) {
@@ -376,7 +374,7 @@ export const view = (model: Model): ReadonlyArray<typeof Item.Type> => {
   }
 
   for (const client of model.clients) {
-    const count = client.tabs._tag === "known" ? tabs(client.tabs.online) : "tabs unknown";
+    const count = Tabs.match(client.tabs, { known: ({ online }) => tabs(online), unknown: () => "tabs unknown" });
     items.push(
       Item.cases.client.make({
         key: client.key,

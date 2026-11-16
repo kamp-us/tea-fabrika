@@ -151,28 +151,19 @@ export const moveFaults = (
 ): ReadonlyArray<Fault> => {
   const named = new Set(table.named);
 
-  return changes.flatMap((change): ReadonlyArray<Fault> => {
-    if (change._tag === "renamed") {
-      return table.moves.some((move) => move.from === change.from && move.to === change.to)
-        ? followed(change.to, change.before, change.after)
-        : [{ path: change.to, reason: `renamed from ${change.from}, which is no row of the table` }];
-    }
+  const unnamed = (path: string, reason: string): ReadonlyArray<Fault> => (named.has(path) ? [] : [{ path, reason }]);
 
-    if (named.has(change.path)) {
-      return [];
-    }
-
-    if (change._tag === "modified") {
-      return followed(change.path, change.before, change.after);
-    }
-
-    return [
-      {
-        path: change.path,
-        reason: change._tag === "added" ? "a new file nobody named" : "deleted with no new path, and nobody named it",
-      },
-    ];
-  });
+  return changes.flatMap((change): ReadonlyArray<Fault> =>
+    Change.match(change, {
+      renamed: (change) =>
+        table.moves.some((move) => move.from === change.from && move.to === change.to)
+          ? followed(change.to, change.before, change.after)
+          : [{ path: change.to, reason: `renamed from ${change.from}, which is no row of the table` }],
+      modified: (change) => (named.has(change.path) ? [] : followed(change.path, change.before, change.after)),
+      added: (change) => unnamed(change.path, "a new file nobody named"),
+      deleted: (change) => unnamed(change.path, "deleted with no new path, and nobody named it"),
+    }),
+  );
 };
 
 const said = (rows: ReadonlyArray<string>): string => (rows.length === 0 ? "none" : rows.join(" and "));
@@ -464,19 +455,25 @@ const movePr = (
   ...partFaults(moves, rules, allowed.except),
 ];
 
-const pathIn = (change: Change): string => (change._tag === "renamed" ? change.to : change.path);
+const pathIn = (change: Change): string => Change.matchOrElse(change, { renamed: ({ to }) => to }, ({ path }) => path);
+
+/** A file the diff adds or deletes: it has a text on one side only. */
+const oneSided = Change.isAnyOf(["added", "deleted"]);
 
 /** The old file is the one the flag names; every file the diff adds is one of its parts. */
 const splitPr = (changes: ReadonlyArray<Change>, old: string, named: ReadonlyArray<string>): ReadonlyArray<Fault> => {
-  const front = changes.find((change): change is Modified => change._tag === "modified" && change.path === old);
+  const front = changes.find(
+    (change): change is Modified => Change.isAnyOf(["modified"])(change) && change.path === old,
+  );
 
   if (front === undefined) {
     return [{ path: old, reason: "the diff does not change this file, so nothing was split" }];
   }
 
-  const parts = changes.flatMap((change) =>
-    change._tag === "added" && !named.includes(change.path) ? [{ path: change.path, text: change.after }] : [],
-  );
+  const parts = changes
+    .filter(Change.isAnyOf(["added"]))
+    .filter((change) => !named.includes(change.path))
+    .map((change) => ({ path: change.path, text: change.after }));
 
   const rest = changes.filter((change) => change !== front && !parts.some((part) => part.path === pathIn(change)));
 
@@ -493,12 +490,12 @@ const renamePr = (
   named: ReadonlyArray<string>,
 ): ReadonlyArray<Fault> => {
   const texts = changes.flatMap((change) =>
-    change._tag === "added" || change._tag === "deleted" || named.includes(pathIn(change))
+    oneSided(change) || named.includes(pathIn(change))
       ? []
       : [{ path: pathIn(change), before: change.before, after: change.after }],
   );
 
-  const rest = changes.filter((change) => change._tag === "added" || change._tag === "deleted");
+  const rest = changes.filter(oneSided);
 
   return [...renameFaults(texts, names), ...moveFaults(rest, { moves: [], named })];
 };
