@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e58-recheck1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:25:57-08:00",
+  "ended": "2026-11-16T01:28:25-08:00",
+  "parent": "2026-11-16-effect-e58-tests3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of judgment slice E58 of the Effect-check sweep (strictEffectProvide in oxlint-plugins/, our tooling) at head 54fc18a1d, after the lead ruling in step-rules.md on fabrikalfa/twin-tools that a judgment slice takes out an @effect-diagnostics ignore line where the typecheck reports TS377000 and lists it in the run row. Merge-ready, no findings. The tests3 commit changes only oxlint-plugins/parallel.ts (one line removed) and its own row; git diff 9e9f7a005~1 HEAD on parallel.ts is empty, so the file is byte for byte its state before the line. The branch diff against origin/main (merge base 37db01aa8) holds only oxlint-plugins/script-reads.test.ts, which review1 passed, and field rows: no @effect-diagnostics line in oxlint-plugins/, no tsconfig or lock change, no LOCKED row. tsc --noEmit -p oxlint-plugins exits 0 with no output, so no TS377000. The tests3 row's listed site, oxlint-plugins/parallel.ts:163, is the one strictEffectProvide hit the checker reports (163,33, the Effect.provide inside NodeRuntime.runMain under if (import.meta.main)), and its listed line quotes the checker's own entry-point sentence exactly. Its counts are right: met 1, hand edits 0, left 1 listed. This withdraws nothing from review2: that line was right under the rule then in force, and the later ruling moves it to the lock PR.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "Read-only apart from this row. Ran at 54fc18a1d: tsc --noEmit -p oxlint-plugins, exit 0; effect-tsgo diagnostics --format text --file oxlint-plugins/parallel.ts with an --lspconfig setting strictEffectProvide to error and includeSuggestionsInTsc true, 1 error at parallel.ts(163,33), which also runs the plant review2 only read (without the line the hit returns); vitest oxlint-plugins/parallel.test.ts, 7 passed; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 16 of 17 parts passed and lint:dead died with EPIPE (the box's memory limit), then passed alone (unreachable ledger PASS, none new); a second pnpm lint with this row staged passed field-check and 14 more parts, lost lint:dead and lint:promise-types to EPIPE again, and each passed run alone (lint:dead once more failed alone under the same pressure, then passed; promise-types 0 findings); loosening.sh 37db01aa8..HEAD, one hit, the import line in script-reads.test.ts:3, no law loosened; the clone is not shallow. After moving to the head, the index still held the old parallel.ts and lacked the tests3 row; both were restored from HEAD before any check, as step-rules.md says. Not run: the whole repo's pnpm typecheck, any .integration. law (none reached).",
+  "plants": [
+    {
+      "law": "the Effect checker's strictEffectProvide on oxlint-plugins/parallel.ts",
+      "plant": "the ignore line taken out (the tests3 head itself)",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}
