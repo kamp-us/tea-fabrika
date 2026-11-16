@@ -78,15 +78,15 @@ const integer = (minimum: number, maximum: number) =>
   Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum, maximum })));
 
 const ordinal = integer(1, 10000);
-const request = (fault: typeof Chaos.Fault.Type, n: number) => Chaos.Fire.make({ id, ordinal: n, target, fault });
+const request = (fault: Chaos.Fault, n: number) => Chaos.Fire.make({ id, ordinal: n, target, fault });
 const fire = Arbitrary.schema(Chaos.Fault);
 const fired = Arbitrary.schema(Chaos.Fired);
 
 // Exact public errors and result types are checked by CI; no lower error may escape this service.
 type Service = Nemesis["Service"];
-expectTypeOf<Parameters<Service["fire"]>[0]>().toEqualTypeOf<typeof Chaos.Fire.Type>();
-expectTypeOf<Effect.Success<ReturnType<Service["fire"]>>>().toEqualTypeOf<typeof Chaos.Fired.Type>();
-expectTypeOf<Effect.Success<ReturnType<Service["check"]>>>().toEqualTypeOf<typeof Chaos.Report.Type>();
+expectTypeOf<Parameters<Service["fire"]>[0]>().toEqualTypeOf<Chaos.Fire>();
+expectTypeOf<Effect.Success<ReturnType<Service["fire"]>>>().toEqualTypeOf<Chaos.Fired>();
+expectTypeOf<Effect.Success<ReturnType<Service["check"]>>>().toEqualTypeOf<Chaos.Report>();
 expectTypeOf<Effect.Error<ReturnType<Service["fire"]>>>().toEqualTypeOf<NemesisError>();
 expectTypeOf<Effect.Error<ReturnType<Service["check"]>>>().toEqualTypeOf<NemesisError>();
 expectTypeOf<Effect.Services<ReturnType<Service["fire"]>>>().toEqualTypeOf<never>();

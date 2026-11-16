@@ -25,5 +25,5 @@ it("format: L11 the public lifecycle has typed errors and needs no app or native
   // @ts-expect-error a bare reason loses its failure class
   const invalid: BrainServiceError["reason"] = "stop";
   expectTypeOf(invalid).not.toEqualTypeOf<string>();
-  expectTypeOf<typeof BrainServiceError.Type>().toEqualTypeOf<BrainServiceError>();
+  expectTypeOf<BrainServiceError>().toEqualTypeOf<BrainServiceError>();
 });

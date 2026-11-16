@@ -36,7 +36,7 @@ it("L4/L6: saved history replays through the machine, with a matching new save r
       const events: Array<Event> = [];
       const selected: Array<typeof Event.cases.selected.Type> = [];
       const messages: Array<Msg> = [];
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       let writes = 0;
       const send = (msg: Msg) => {
         messages.push(msg);

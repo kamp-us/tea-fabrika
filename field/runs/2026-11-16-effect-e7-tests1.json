@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e7-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T09:50:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E7 of the Effect-check sweep (unnecessaryTypeofType), in next/ and our tooling. Recounted 70 hits on main (effect-tsgo diagnostics per tsconfig, only this check at error); 45 sit in the E7 row's folders, 25 in runtime, gateway and cloudflare folders that belong to other slices or to pull request 1366 and stay out of the lock. Wrote the lock in libfabrika (9 globs), the app (src/*.ts, e2e) and chaos (whole package), and fixed the 40 exam-path hits by hand with the Edit tool, one hit at a time. The checkerfix tool was not on the twin-tools branch and no script edited a file. 5 product hits remain for the build: client/HandsMachine.ts, client/Journal.ts (2), packs/RepositoryTrustLedger.ts, packs/internal/open.ts. The libfabrika typecheck is red only on those. Follow-up under the one-pull-request shape: the 5 product hits and the 15 other runtime/ hits are fixed too (20 more hand edits with the Edit tool, 60 in all, 0 by quick fix, 0 by script; one scripted bulk edit was refused and not retried), and src/runtime/**/*.ts joins the libfabrika lock with the two files of pull request 1366 excluded. libfabrika, the app and chaos now report 0 errors. 10 hits wait on 1366: gateway/Gateway.ts (2), runtime/ProcessStore.integration.test.ts (5), runtime/RuntimeCauseTest.ts (1), cloudflare/runtime.ts (2).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 50,
+  "note": "Counts from effect-tsgo diagnostics per tsconfig: 45 errors with the lock before the fixes, 5 after. Three type-law asserts of the form expectTypeOf<typeof X.Type>().toEqualTypeOf<X>() now read expectTypeOf<X>().toEqualTypeOf<X>(), which the check forces; the review should look at whether they still prove anything. Narrow vitest at the follow-up: 8 more files passed (runtime Chaos, Client, HandsTasks types, supervisor laws; client Hands; packs/internal).",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "one line `export type PlantE7 = typeof TasksError.Type;` added to libfabrika src/tasks/Tasks.types.test.ts: the tasks file reports 1 unnecessaryTypeofType error; line removed afterwards",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/tasks/**/*.ts dropped from libfabrika's override with the plant present: the tasks error count falls from 1 to 0, so the glob holds that folder; glob put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

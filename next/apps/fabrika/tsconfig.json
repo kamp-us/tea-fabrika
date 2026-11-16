@@ -17,6 +17,15 @@
               }
             }
           },
+          // These folders: unnecessaryTypeofType (E7).
+          {
+            "include": ["e2e/**/*.ts", "src/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryTypeofType": "error"
+              }
+            }
+          },
           // These folders: schemaClassMissingBrand (E6).
           {
             "include": ["*.ts", "e2e/**/*.ts", "src/exam/**/*.ts"],

@@ -344,7 +344,7 @@ const press = (w: World, i: number, key: string) => {
   return { cmds, sent: w.sent.slice(before) };
 };
 
-const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: typeof Prefix.Type }).prefix;
+const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: Prefix }).prefix;
 const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknown }).polite;
 const focused = (w: World) => w.view.workspaces[0]!.focus;
 const dids = (sent: World["sent"]) => sent.map((x) => x.m as Did);

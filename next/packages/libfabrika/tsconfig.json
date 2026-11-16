@@ -33,6 +33,16 @@
                 "preferTypedSchemaDecoder": "error"
               }
             }
+          },
+          // These folders: unnecessaryTypeofType (E7).
+          {
+            "include": ["src/*.ts", "src/client/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/processes/**/*.ts", "src/runtime/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts"],
+            "exclude": ["src/runtime/ProcessStore.integration.test.ts", "src/runtime/RuntimeCauseTest.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryTypeofType": "error"
+              }
+            }
           }
         ]
       }

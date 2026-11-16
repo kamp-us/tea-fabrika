@@ -39,8 +39,8 @@ import { type Chain, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-type ChainValue = typeof Chain.Type;
-type Row = typeof SpanRow.Type;
+type ChainValue = Chain;
+type Row = SpanRow;
 
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
  *  call, so a file cannot be acquired one by one: the folder holds them, and the scope that asked

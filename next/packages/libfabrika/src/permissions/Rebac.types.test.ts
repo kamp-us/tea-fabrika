@@ -61,7 +61,7 @@ const undeclared = () => {
 };
 
 /** L7's ways to make a proof without a check. Never called. */
-const forged = (sender: typeof Sender.Type, tuples: Tuples) => {
+const forged = (sender: Sender, tuples: Tuples) => {
   // @ts-expect-error a proof is never an object literal: its brand is a symbol only the module holds.
   const literal: StartProof = { sender, permission: "start", object: "fabrika:demo" };
   // @ts-expect-error `mint` stays in internal/proof.ts; the module's front file does not export it.

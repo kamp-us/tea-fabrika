@@ -162,7 +162,7 @@ it("brands and public Model/Msg schemas stay exact through the program", () => {
   expectTypeOf<Extract<Msg, { type: "start" }>["id"]>().toEqualTypeOf<typeof Fabrika.Chaos.ExperimentId.Type>();
   expectTypeOf<typeof Fabrika.Incoming.Type.envelope.id>().toEqualTypeOf<typeof Fabrika.Id.Input.Type>();
   // Slice 1's ProcessId is still a checked string, pending the shared ID conversion.
-  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<typeof Fabrika.Chaos.Target.Type>();
+  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<Fabrika.Chaos.Target>();
   fc.assert(
     fc.property(starts, (start) => {
       expect(Schema.is(Fabrika.ChaosMachine.Msg)({ type: "start", ...start })).toBe(true);
