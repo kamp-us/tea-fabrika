@@ -84,7 +84,7 @@ on the laptop, which the owner accepts. The merge line is decided
 [0162](../../.decisions/0162-no-friction-before-a-merge.md),
 [0164](../../.decisions/0164-the-bot-stays-without-signing.md)): what is left is the queue's
 trigger in CI ([PR 1120](https://github.com/kamp-us/tea-fabrika/pull/1120)), the queue turned on,
-and the bot's plain tooling. Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
+and the bot's plain tooling. *2026-11-15:* main's full run now starts on a push when the last one is over an hour old, plus an hourly catch-up, and a gate that cannot answer fails loudly ([0581](../../.decisions/0581-main-full-run-starts-on-push-and-hourly.md), [PR 1404](https://github.com/kamp-us/tea-fabrika/pull/1404)). Nothing in `next/` names `fabsh`, `summon` or a room yet. Open pull
 requests on Tier 1 rows: [1012](https://github.com/usirin/tea-fabrika/pull/1012) (P15),
 [1032](https://github.com/usirin/tea-fabrika/pull/1032) (P36), and drafts
 [1079](https://github.com/usirin/tea-fabrika/pull/1079) (P19),
@@ -379,7 +379,7 @@ raises a new design call goes to the owner. When the lead fills agent slots, the
 much as `next/` work and run beside Tier 1, never held back for it (owner, 2026-11-10,
 [0063](../../.decisions/0063-todays-app-lanes-share-the-slots.md)).
 
-- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`
+- **The four primitives first, in `next/` ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)).** The changed Tier 1 was approved by the owner on 2026-11-13, in [the four primitives first](./tier-1.md#the-four-primitives-first): what done means in the Electron app and a browser tab, what is built, what is missing piece by piece, the build order with the thin menu bar and the cloud instance beside it, and the 12 rows that wait. → the lead picks on PR 1028 and PR 1044 and finishes the merge line; the owner walks the focus clash (0279 against 0274) before the desk is built, then S1 before `fabsh`. *2026-11-15 ([0586](../../.decisions/0586-fabsh-v1-is-todays-terminal.md)): the order is `fabsh` v1 as today's terminal, then pipe slice 1, then `summon` as today's `tsh` has it, then `join` as IRC has it.*
 
 - **Configurable keys on today's app, ticket 174.** Two pull requests. Keys PR 1, change your keys without leaving the app, merged 2026-11-08 ([PR 505](https://github.com/usirin/tea-fabrika/pull/505)). Keys PR 2 brings program and mode keys into the same table. → the lead agent plans PR 2
 - **Design foundations on today's app, approved by the owner 2026-11-07.** [The build plan](./design-foundations.md): ticket 245, three pull requests, all merged 2026-11-08 ([499](https://github.com/usirin/tea-fabrika/pull/499), [506](https://github.com/usirin/tea-fabrika/pull/506), [519](https://github.com/usirin/tea-fabrika/pull/519)). → nothing

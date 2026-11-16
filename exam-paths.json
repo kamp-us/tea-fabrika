@@ -50,6 +50,7 @@
   { "glob": ".oxfmtrc.json", "why": "the format settings" },
   { "glob": "stylelint.config.ts", "why": "the CSS lint rules and their known lists" },
   { "glob": "oxlint-plugins/**", "why": "the custom lint rules and the lint runner" },
+  { "glob": "vendor/**", "why": "the lint rules we take as they ship, at their pinned commit (0563)" },
   { "glob": "vitest.config.ts", "why": "which tests run, and their time limit" },
   { "glob": "vitest.e2e.config.ts", "why": "which end-to-end tests run, and their time limit" },
   {

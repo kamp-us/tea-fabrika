@@ -2,6 +2,7 @@
 // tracker or the leak grep, and nothing sweeps. The laws of the retired catchup.sh that still have
 // a job moved here: the state gate, the one pinned squash, and the ticket close of 0015 (T410).
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import { Effect, Fiber, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { ChecksError, type Job } from "../ci/Checks.ts";
@@ -9,6 +10,7 @@ import * as ChecksTest from "../ci/ChecksTest.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
+import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 import * as Queue from "./Queue.ts";
 import * as SweepsTest from "./SweepsTest.ts";
@@ -22,7 +24,19 @@ const repo = "fixture/repo";
 const State = Schema.Literals(["OPEN", "CLOSED", "MERGED"]);
 /** How the required check stands at the head: not made yet, or one of GitHub's answers. */
 const Required = Schema.Literals(["none", "queued", "in_progress", "success", "failure", "cancelled", "skipped"]);
-const Leak = Schema.Literals(["clean", "leakChange", "leak", "leakText"]);
+/** Which leak check refuses, by its method's name, or none. */
+const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+const refused = new LeakGrepRefused({ reason: "private_word" });
+
+/** The one leak check that refuses, with the error it refuses with. */
+const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
+  leak === "clean"
+    ? {}
+    : leak === "leakChange"
+      ? { leakChange: refused }
+      : leak === "leakGrep"
+        ? { leakGrep: refused }
+        : { leakText: refused };
 
 const job = (stands: typeof Required.Type): Option.Option<Job> =>
   stands === "none"
@@ -53,10 +67,9 @@ const memory = (w: World = {}) => {
   const remote = PushesTest.remote();
   const tracker = TicketsTest.world(w.open ?? []);
   const sweeps = SweepsTest.count();
-  const leak = w.leak === undefined || w.leak === "clean" ? {} : { [w.leak]: "private_word" };
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github, w.failing?.prs),
-    PushesTest.layer(remote, leak),
+    PushesTest.layer(remote, leaking(w.leak ?? "clean")),
     ChecksTest.layer([job(w.required ?? "success")], ""),
     TicketsTest.layer(tracker, w.failing?.tickets),
     SweepsTest.layer(sweeps, w.failing?.sweep),
@@ -65,6 +78,14 @@ const memory = (w: World = {}) => {
 };
 
 const add = (m: ReturnType<typeof memory>) => Queue.add({ dir: ".", pr: 900 }).pipe(Effect.provide(m.layer));
+
+/** One add, and the leak checks it asked for, read inside the layer that recorded them. */
+const added = (m: ReturnType<typeof memory>) =>
+  Effect.gen(function* () {
+    const answer = yield* Effect.result(Queue.add({ dir: ".", pr: 900 }));
+    return { answer, leaks: yield* Recorder.calls(Pushes) };
+  }).pipe(Effect.provide(m.layer));
+
 const settle = (m: ReturnType<typeof memory>) => Queue.settle({ repo, pr: 900 }).pipe(Effect.provide(m.layer));
 
 describe("add: a finished pull request enters GitHub's merge queue by one pinned squash (0162)", () => {
@@ -88,23 +109,23 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
           leak,
           required,
         });
-        const answer = yield* Effect.result(add(m));
+        const { answer, leaks } = yield* added(m);
         const enters = state === "OPEN" && !draft && base === "main" && leak === "clean" && required === "success";
         expect(m.github.calls).toEqual(enters ? [{ _tag: "enqueue", number: 900, oid }] : []);
         expect(answer._tag === "Success" && answer.success._tag === "queued").toBe(enters);
 
         if (enters) {
           // Every leak check ran, on the head and on the words a squash puts on main, before the ask.
-          expect(m.remote.calls).toEqual([
-            `leakchange ${oid}`,
-            `leakgrep ${oid}`,
-            "leaktext T1: a title\n\nWhat it does.\n",
+          expect(leaks).toEqual([
+            { method: "leakChange", args: [".", oid] },
+            { method: "leakGrep", args: [".", oid] },
+            { method: "leakText", args: [".", "T1: a title\n\nWhat it does.\n"] },
           ]);
         }
 
         // A pull request that may not enter is refused before anything is fetched or read.
         if (state !== "OPEN" || draft || base !== "main") {
-          expect(m.remote.calls).toEqual([]);
+          expect(leaks).toEqual([]);
         }
       }),
   );
@@ -140,9 +161,9 @@ describe("add: a finished pull request enters GitHub's merge queue by one pinned
         expect(red._tag === "NotQueued" ? red.reason : "").toContain(`ci-required is failure at ${oid}`);
         const none = yield* Effect.flip(add(memory({ required: "none" })));
         expect(none._tag === "NotQueued" ? none.reason : "").toContain("ci-required is missing");
-        const unread = memory({ failing: { prs: { view: "gh: offline" } } });
-        expect((yield* Effect.flip(add(unread)))._tag).toBe("PullRequestsError");
-        expect(unread.remote.calls).toEqual([]);
+        const unread = yield* added(memory({ failing: { prs: { view: "gh: offline" } } }));
+        expect(unread.answer._tag === "Failure" ? unread.answer.failure._tag : null).toBe("PullRequestsError");
+        expect(unread.leaks).toEqual([]);
         const refused = memory({ failing: { prs: { enqueue: "gh: head moved" } } });
         expect((yield* Effect.flip(add(refused)))._tag).toBe("PullRequestsError");
       }),

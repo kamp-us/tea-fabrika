@@ -284,6 +284,11 @@ In build order. "Decide first" lists only what no decision answers yet.
   reader that gives every word a role (S1), and the built-ins.
 - Decide first: S1, and with it what a line may hold and which built-in words `fabsh` has (both
   listed as not decided in 0159).
+- *2026-11-15 ([0586](../../.decisions/0586-fabsh-v1-is-todays-terminal.md)): `fabsh` v1 is today's
+  terminal rebuilt on `next/`'s runtime: a Ghostty terminal in a tile, today's line editor, `tsh`'s
+  grammar, built-ins, completion and pipes, and syntax highlighting, set under `[terminal]` with
+  Ghostty's key names. That answers the two questions above. PR 1232 and PR 1254 are parked, and
+  `summon` v1 is today's `summon`.*
 
 **4. Pipes, for built-ins first.**
 - Designed by: [0109](../../.decisions/0109-a-pipe-is-saved-program-mail.md),
@@ -400,6 +405,12 @@ In build order. "Decide first" lists only what no decision answers yet.
 
 After step 8, the first work is recovery and the rest of the cloud rows (P26, P27, P28, P29, P36),
 ahead of the programs with their own view (owner, 2026-11-13).
+
+*2026-11-15 ([0586](../../.decisions/0586-fabsh-v1-is-todays-terminal.md)): the four primitives
+go in this order. 1, `fabsh` v1: today's terminal, plus Ctrl-R, Tab, syntax highlighting and
+Ghostty-style settings. 2, pipe slice 1, at the next free slot. 3,
+`summon`, working like today's `tsh`. 4, `join`, working like IRC. The summon plan follows the pipe
+plan, and the join plan follows summon's.*
 
 The order of steps 2 and 3, and of step 8's records, is the lead's lean. 0159 fixes only window,
 `fabsh`, pipes, `summon`, `join`, with the app, the thin menu bar and the cloud instance beside

@@ -28,7 +28,8 @@ catalog:
   '@anthropic-ai/sandbox-runtime': 0.0.81
   '@demlik/code-graph': 0.15.0
   '@demlik/structure-sweep': 0.4.1
-  '@demlik/tea': 0.25.0
+  # next/ and the root (tooling). 0.26.0 shipped demlik#897, so no patch is needed for it.
+  '@demlik/tea': 0.27.0
   '@effect/opentelemetry': 4.1.3
   # Held at effect's own version: the browser runner for the page (next/apps/fabrika/src/entry/browser.tsx).
   '@effect/platform-browser': 4.1.3
@@ -119,6 +120,12 @@ catalog:
   yaml: 2.9.1
   zod: 4.6.7
 
+catalogs:
+  # Today's version (packages/, programs/, apps/, docs/tutorials/), held at the tea it runs on, with
+  # its patch, while next/ moves to `_tag` (decision 0569). Goes when today's version goes.
+  old:
+    '@demlik/tea': 0.25.0
+
 # `pnpm add` writes the exact version, not a range (docs/direction/pin-exact-versions.md).
 savePrefix: ''
 
@@ -146,7 +153,8 @@ patchedDependencies:
   # (https://github.com/alchemy-run/alchemy/pull/3203) after 2.0.0-beta.85. Drop this at the
   # release that carries it.
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.85': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch
-  # demlik#897: expose the machine's existing schemas; drop at the release that has it.
+  # demlik#897: expose the machine's existing schemas. Today's version only, on 0.25.0 (0217);
+  # 0.27.0 ships the fix. Goes when today's version goes.
   '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
   # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
   # first shrink, not while generating (sampleFromValidatedShrink already is). Fixed upstream after
@@ -177,5 +185,5 @@ patchedDependencies:
   '@alchemy.run/cloudflare@2.0.0-beta.85': patches/@alchemy.run__cloudflare@2.0.0-beta.85.patch
 
 minimumReleaseAgeExclude:
-  - '@demlik/tea@0.24.0 || 0.25.0'
+  - '@demlik/tea@0.25.0 || 0.27.0'
   - '@demlik/code-graph@0.15.0'

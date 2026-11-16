@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1062-tests2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1381",
+  "started": "2026-11-15T18:14:31-08:00",
+  "ended": "2026-11-15T18:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests fix round for ticket 1062 slice 1 (decision 0568, docs/plan/quests/error-cause-PLAN.md), in next/, after review 1 sent L4 back for two classes. One: the two L4 files wrote `_tag` by hand in their encoded values (0562); each value is now made with the error's class and encoded by the old optionalKey schema, then given its cause, so no `_tag` is written in either file. Two: L4's generator never drew an Error-shaped cause, the one case where Schema.Defect() and Schema.Unknown differ; both files now draw a fourth cause form, an Error with a drawn name and message encoded by Schema.Defect(), assert it decodes to an Error, and count it in the coverage check, so a run that never reaches it fails. Case counts now use runsFor({ fast: 50, full: 200 }). Both L4 laws are green on the built branch; each of the six plants below turns its law red. The reviewer's finding row is written as field/findings/2026-11-15-error-cause-plan-prose-counts.json, rebuilt from the review row and the tests1 row's note, since the review row holds no finding JSON.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Plants run once each in the branch's worktree, each line saved by copy, broken by one sed, the one law file run, and restored by copy; git status showed only the two test files after. Branch merged with origin/main at d20bfe6b1 (clean). pnpm format, pnpm lint (17 parts passed), the list ratchet (exit 0) and one pnpm typecheck (exit 0) all ran green.",
+  "plants": [
+    {
+      "law": "L4 settings",
+      "plant": "settings/Files.ts:29 set to Schema.optional(Schema.Unknown): SettingsError's encoded Error cause {name, message} decodes to a plain object, not an Error",
+      "result": "red"
+    },
+    {
+      "law": "L4 settings",
+      "plant": "settings/Snapshot.ts:47 set to Schema.optional(Schema.Unknown): SnapshotError's encoded Error cause decodes to a plain object, not an Error",
+      "result": "red"
+    },
+    {
+      "law": "L4 senders",
+      "plant": "permissions/Senders.ts:43 set to Schema.optional(Schema.Unknown): SendersError's encoded Error cause decodes to a plain object, not an Error",
+      "result": "red"
+    },
+    {
+      "law": "L4 settings",
+      "plant": "settings/Files.ts:29 set back to Schema.optionalKey(Schema.Defect()): SettingsError with cause: undefined fails to decode",
+      "result": "red"
+    },
+    {
+      "law": "L4 settings",
+      "plant": "settings/Snapshot.ts:47 set back to Schema.optionalKey(Schema.Defect()): SnapshotError with cause: undefined fails to decode",
+      "result": "red"
+    },
+    {
+      "law": "L4 senders",
+      "plant": "permissions/Senders.ts:43 set back to Schema.optionalKey(Schema.Defect()): SendersError with cause: undefined fails to decode",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
