@@ -1240,7 +1240,8 @@ const prop = (
   );
 
 const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boolean) =>
-  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  // Each tape provides its own TestClock.layer(), so the walk runs on a test clock under it.live or
+  // it.effect alike; it.live changes nothing this law reads.
   it.live(
     stopped
       ? "M3: mailed neither starts a stopped name nor keeps its mail alarm alive"
@@ -1456,7 +1457,8 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
  * the mail wake never leaves a write behind with no alarm.
  */
 const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  // Each tape provides its own TestClock.layer(), so the walk runs on a test clock under it.live or
+  // it.effect alike; it.live changes nothing this law reads.
   it.live(
     "M6: a write made from mail read during a send runs, or its alarm stays until it does",
     () =>
