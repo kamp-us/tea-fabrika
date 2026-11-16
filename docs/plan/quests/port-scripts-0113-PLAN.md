@@ -316,9 +316,10 @@ them on every commit. Each of those slices switches its callers and deletes its 
 after integrator 2's switch, is `node .agents/skills/step-commit/scripts/stepcommit.ts --commit-only
 plan 766 "T766 plan: x" a.md`:
 
-1. `effect/cli` parses `--commit-only`, the step, the ticket, the subject and one path. An unknown
-   step fails with today's line, `stepcommit: unknown step plan`, and exit 2. (Today `plan` is
-   refused too; the brief's box passes `plan` and falls back to plain git, as step-rules allows.)
+1. `effect/cli` parses `--commit-only`, the step, the ticket, the subject and one path. The step
+   `plan` is now known (S12 adds it); an unknown step still fails with today's line,
+   `stepcommit: unknown step <step>`, and exit 2. Today `stepcommit.sh` refuses `plan`, so a
+   cloud plan commit is a plain git commit (the merge session tickets it).
 2. `Git.staged` answers `[]`, so the "index already holds staged changes" refusal (exit 4) does not
    fire.
 3. `Paths.named` (pure) normalizes `a.md`, refuses folders, `..` and absolute paths.
@@ -367,6 +368,12 @@ slice that renames one edits a clause row in `skillscheck.ts` and the skill line
 | S12 | `stepcommit.sh` | `Git`, `FileSystem`, `PullRequests`, `run` for the signer and `publish.ts` | `drive.ts`, `flow/host.ts`, `flow/landing.ts`, `land.ts`, `publish.ts`'s comment, step-commit and lead skills, `docs/how-to/sign-a-step-commit.md` |
 | S13 | `loosening.sh` | `Git` | `chain.ts`, `ci/typecheck.ts`'s comment, `AGENTS.md`, build, lead, pr, review and tests skills, `exam-paths.json`, `docs/plan/README.md` |
 
+S12 also takes `plan` as a step. Today `stepcommit.sh` knows only tests, build, mutation and lead,
+so a plan step's commit falls back to plain git; the merge session tickets that, and the fix folds
+into this slice. The lean (80%): `plan` is accepted with `--commit-only` only, and in a box its paths
+go through the plan's owner rows like any step's; the signed route refuses `plan` with its own line,
+`stepcommit: no plan key; commit with --commit-only`, since no plan step key exists to sign with.
+
 S10 waits for https://github.com/kamp-us/tea-fabrika/pull/1454 to merge (it adds 0587's Existing
 tools check to `plancheck.sh`); if it has not merged when S10 starts, S10 ports main's version and
 1454 rebases onto the port. S9 goes first: four of the others call it.
@@ -413,6 +420,7 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 | Every old law of the five `leakgrep*.test.ts` files holds, on the `.sh` and the `.ts` until the switch | S11 | test | scenario: the old files' own generated inputs | `scan` skips `+++` lines |
 | A diagnostic never holds matched text or a private word, on every output path | S11 | test | fc.string: generated private words, 100 runs | the hit line quotes the word |
 | Every old law of `stepcommit.test.ts` holds, on the `.sh` and the `.ts` until the switch | S12 | test | scenario: the old file's own cases | a staged folder passes |
+| `plan` is a known step: `--commit-only plan` commits the named paths, and a signed `plan` commit refuses with its own line and exit 2, leaving the index as it was | S12 | test | fc.constantFrom: each step name, known and unknown, 30 runs | `plan` refused as unknown |
 | A refused commit leaves the index as it was | S12 | test | fc.constantFrom: each refusal, 30 runs | `unstage` skipped on a format refusal |
 | Every old law of `loosening.test.ts` holds, exit codes 0, 1 and 2 included | S13 | test | scenario: the old file's own cases | a removed `expect` passes |
 | Every old law of `box.test.ts` holds on `BoxTest` layers, and its process laws on the real layer | S14 | test | scenario: the old file's own cases | the slot limit 8 becomes 9 |
