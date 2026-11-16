@@ -1,6 +1,7 @@
 // T753 L16 quest, slice 1: the ProcessManager keeps its last folded process table. These laws hold
 // with or without that memo; they exist to turn a wrong memo red. A long-lived manager is one layer
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
+// `storage()` reopens real SQLite files (Process.test-support.ts), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
 import * as fc from "fast-check";

@@ -160,7 +160,9 @@ export const first = (id = "start:counter:1", name = "counter:1", code = CODE) =
 export const again = (after: string, id = `restart:${after}`, code = CODE) =>
   Start.cases.again.make({ id, name: "counter:1", after, reason: "crashed", code });
 
-const folder = mkdtempSync(join(tmpdir(), "p33-"));
+// The temp folder is made on the first `storage()` call, never on import, so a plain test that
+// imports this file for its builders and never calls `storage()` touches no disk (0584).
+let folder: string | null = null;
 const opened: Array<DatabaseSync> = [];
 let files = 0;
 
@@ -171,11 +173,14 @@ afterAll(() => {
     }
   }
 
-  rmSync(folder, { recursive: true, force: true });
+  if (folder !== null) {
+    rmSync(folder, { recursive: true, force: true });
+  }
 });
 
 // A real SQLite file, reopened without manager memory. Faults interrupt real INSERTs.
 export const storage = () => {
+  folder ??= mkdtempSync(join(tmpdir(), "p33-"));
   const path = join(folder, `${++files}.db`);
   const open = () => {
     const db = new DatabaseSync(path);
