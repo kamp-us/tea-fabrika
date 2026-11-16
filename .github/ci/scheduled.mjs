@@ -1,5 +1,7 @@
-// Today's CI, serving both versions. The scheduled run's report (0534): scheduled.yaml runs all of
-// next/ and every tooling test on main every 3 hours, and its report job runs this. A red run opens
+// Today's CI, serving both versions. The full run's report (0534): scheduled.yaml runs all of
+// next/ and every tooling test on main, started by a push to main or the hourly catch-up at most
+// once an hour through its gate (0581, gate.mjs), and its report job runs this. A run whose gate
+// said `false` skips the report, so it leaves the issue as it was. A red run opens
 // one GitHub issue labeled `ci-scheduled` naming the commits since the last green scheduled run and
 // the failing tests, or comments on the open one; a green run closes it. Those are the only issues
 // automation opens on this repository (0534's exception to "no GitHub issues here"), with the
@@ -202,19 +204,63 @@ export const limits = (env) =>
  * result to Succeeded), so a broken time table never turns a run red. With none of those, a leg
  * canceled before its limit means a person or a sev0's freeze stopped the run: `stopped`, which
  * reports nothing, since it proved neither. Green only when no leg was canceled and every job in
- * `needs` passed; `needs` that cannot be read is `stopped` too.
+ * `needs` passed, or skipped where the run meant it to (`skippable`); `needs` that cannot be read
+ * is `stopped` too.
  * @param {Outcome} outcome
  * @returns {Verdict}
  */
 export const verdict = ({ needs, jobs, failed, limits: limit }) => {
-  const results = isMap(needs) ? Object.values(needs).map((job) => (isMap(job) ? job["result"] : undefined)) : [];
+  const entries = isMap(needs) ? Object.entries(needs) : [];
+  const results = entries.map(([, job]) => (isMap(job) ? job["result"] : undefined));
 
   if (failed.length > 0 || causes(jobs, limit).length > 0 || results.includes("failure")) {
     return "red";
   }
 
+  const skipped = skippable(needs);
+  const passed = entries.every(
+    ([name, job]) => isMap(job) && (job["result"] === "success" || (job["result"] === "skipped" && skipped.has(name))),
+  );
   const canceled = jobs.some((job) => job.status === "completed" && ending(job, limit) === "canceled");
-  return !canceled && results.length > 0 && results.every((result) => result === "success") ? "green" : "stopped";
+  return !canceled && entries.length > 0 && passed ? "green" : "stopped";
+};
+
+/**
+ * The jobs a run skips on purpose, by what its `select` job did (0590). `select` runs only on a
+ * branch's hand start. Skipped, the run is main's or a hand start on main, which runs the full set,
+ * so `changed` skips. Run and passed, it said `full`, so `changed` skips, or `changed`, so `tests`
+ * skips, and `changed` too when its set has no file (`legs` is `[]`): that run is green with no test
+ * leg. A `needs` with no `select`, the shape before 0590, or a `select` that failed or said anything
+ * else, skips nothing: every job must pass.
+ * @param {unknown} needs
+ * @returns {ReadonlySet<string>}
+ */
+export const skippable = (needs) => {
+  const select = isMap(needs) ? needs["select"] : undefined;
+
+  if (!isMap(select)) {
+    return new Set();
+  }
+
+  if (select["result"] === "skipped") {
+    return new Set(["select", "changed"]);
+  }
+
+  const outputs = isMap(select["outputs"]) ? select["outputs"] : {};
+
+  if (select["result"] !== "success") {
+    return new Set();
+  }
+
+  if (outputs["scope"] === "full") {
+    return new Set(["changed"]);
+  }
+
+  if (outputs["scope"] === "changed") {
+    return outputs["legs"] === "[]" ? new Set(["tests", "changed"]) : new Set(["tests"]);
+  }
+
+  return new Set();
 };
 
 /**
@@ -241,6 +287,17 @@ export const jobsOf = (answer) => {
     })),
   }));
 };
+
+/**
+ * Whether a run's jobs show its test legs ran: a leg `tests (<shard>)` is in the list. GitHub lists
+ * a skipped matrix as one job named `tests`, with no shard (probe run 43795273918), so a run whose
+ * gate said `false` is never full. The gate and `lastGreen` read runs by it. `next (<shard>)` and
+ * `tooling (<shard>)` are the legs of the shape before the gate, when the two suites were two jobs:
+ * every green full run on main when the gate landed has only those (run 43780996689).
+ * @param {readonly Job[]} jobs
+ * @returns {boolean}
+ */
+export const isFull = (jobs) => jobs.some((job) => /^(tests|next|tooling) \(.+\)$/.test(job.name));
 
 /**
  * Each failing test in Vitest's JSON reports, as `file > test`, each once, in report order. A file
@@ -464,11 +521,19 @@ export const github = (env, send = globalThis.fetch) => {
   return {
     // The latest attempt's jobs, every leg its own; the run has 10, well under one page of 100.
     jobs: async () => jobsOf(await call("GET", `actions/runs/${id}/jobs?filter=latest&per_page=100`)),
+    // Main's newest green run whose test legs ran: a run whose gate said `false` ends `success`
+    // too, and names no tested commit (0581). One jobs call per green run stepped over.
     lastGreen: async () => {
-      const runs = (await call("GET", `actions/workflows/${workflow}/runs?branch=main&status=success&per_page=1`))
-        .workflow_runs;
-      const sha = Array.isArray(runs) && isMap(runs[0]) ? runs[0]["head_sha"] : undefined;
-      return typeof sha === "string" ? sha : null;
+      const answer = await call("GET", `actions/workflows/${workflow}/runs?branch=main&status=success&per_page=100`);
+      const runs = isMap(answer) && Array.isArray(answer["workflow_runs"]) ? answer["workflow_runs"].filter(isMap) : [];
+
+      for (const run of runs) {
+        if (isFull(jobsOf(await call("GET", `actions/runs/${String(run["id"])}/jobs?filter=latest&per_page=100`)))) {
+          return typeof run["head_sha"] === "string" ? run["head_sha"] : null;
+        }
+      }
+
+      return null;
     },
     open: async () => {
       const issues = await call("GET", `issues?labels=${LABEL}&state=open&sort=created&direction=asc&per_page=20`);

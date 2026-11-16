@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 // log (../ci/fixtures/run-43776563690-next-2.log): one leg's vitest step failed, and that leg's stop
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { FileSystem } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -13,6 +14,8 @@ import * as RunsGh from "../ci/RunsGh.ts";
 import * as RunsTest from "../ci/RunsTest.ts";
 import * as Arm from "./Arm.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
+import { LeakGrepRefused, Pushes } from "./Pushes.ts";
+import * as PushesTest from "./PushesTest.ts";
 
 const oid = "e42d1dce6a74f4ccb246ed19b4db04ad72c0d899";
 const older = "0123456789abcdef0123456789abcdef01234567";
@@ -29,9 +32,35 @@ const fixture = Effect.gen(function* () {
   return { jobs, log };
 }).pipe(Effect.provide(NodeServices.layer));
 
-/** The same jobs as a branch run that went green: every job a success, and the report skipped. */
+/** The same jobs as a branch run that went green: every job a success, the report too. */
 const allGreen = (jobs: ReadonlyArray<Job>): ReadonlyArray<Job> =>
-  jobs.map((job) => ({ ...job, conclusion: job.name === "report" ? "skipped" : "success" }));
+  jobs.map((job) => ({ ...job, conclusion: "success" }));
+
+/** A job of a run in today's shape (0590), with no step: only its name and how it ended are read. */
+const job = (id: number, name: string, conclusion: string): Job => ({
+  id,
+  name,
+  status: "completed",
+  conclusion,
+  steps: [],
+});
+
+/**
+ * A green proof run's jobs, by what `select` chose: the full set on `tests`, a changed set on
+ * `changed`, or a changed set of zero files, with no leg. The matrix it did not start is one skipped
+ * job with no leg in its name, as GitHub lists it.
+ */
+const shaped = (kind: "full" | "changed" | "zero", report = "success"): ReadonlyArray<Job> => [
+  job(1, "gate", "success"),
+  job(2, "select", "success"),
+  ...(kind === "full"
+    ? [job(3, "tests (1)", "success"), job(4, "tests (tooling-1)", "success")]
+    : [job(3, "tests", "skipped")]),
+  ...(kind === "changed"
+    ? [job(5, "changed (1)", "success"), job(6, "changed (2)", "success")]
+    : [job(5, "changed", "skipped")]),
+  job(7, "report", report),
+];
 
 /** How the branch's full runs stand, as a law sets them: at the head, or only at an older head. */
 const Stands = Schema.Literals([
@@ -55,6 +84,8 @@ type World = {
   readonly files?: ReadonlyArray<string>;
   /** The jobs of the run that is read, for a law that builds its own. */
   readonly jobs?: ReadonlyArray<Job>;
+  /** Which leak check refuses, as PushesTest.layer takes it; none when absent. */
+  readonly leak?: PushesTest.Failing;
 };
 
 const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log: string }) => {
@@ -83,11 +114,38 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   actions.runs.set(branch, runs[stands]);
   const isRed = stands === "red" || stands === "older_red";
   actions.jobs.set(RED, w.jobs ?? (isRed ? red.jobs : allGreen(red.jobs)));
-  const layer = Layer.mergeAll(PullRequestsTest.layer(github), RunsTest.layer(actions), ChecksTest.layer([], red.log));
+  const remote = PushesTest.remote();
+  const layer = Layer.mergeAll(
+    PullRequestsTest.layer(github),
+    PushesTest.layer(remote, w.leak),
+    RunsTest.layer(actions),
+    ChecksTest.layer([], red.log),
+  );
   return { github, actions, layer };
 };
 
-const arm = (m: ReturnType<typeof memory>) => Arm.arm({ repo, pr: 1092 }).pipe(Effect.provide(m.layer));
+const arm = (m: ReturnType<typeof memory>) => Arm.arm({ repo, dir: ".", pr: 1092 }).pipe(Effect.provide(m.layer));
+
+/** One arm, and the leak checks it asked for, read inside the layer that recorded them. */
+const armed = (m: ReturnType<typeof memory>) =>
+  Effect.gen(function* () {
+    const answer = yield* Effect.result(Arm.arm({ repo, dir: ".", pr: 1092 }));
+    return { answer, leaks: yield* Recorder.calls(Pushes) };
+  }).pipe(Effect.provide(m.layer));
+
+/** Which leak check refuses, by its method's name, or none. */
+const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
+
+/** The one leak check that refuses, with the error it refuses with. */
+const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
+  leak === "clean"
+    ? {}
+    : leak === "leakChange"
+      ? { leakChange: hit }
+      : leak === "leakGrep"
+        ? { leakGrep: hit }
+        : { leakText: hit };
 
 const armedAt = [{ _tag: "arm", number: 1092, oid }];
 
@@ -172,7 +230,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
 
   // scenario: the green path, as the lead runs it on a reviewed draft.
   it.effect(
-    "scenario: a draft whose full run is green on every job, the report skipped as on every branch, is marked ready, then armed pinned to its head",
+    "scenario: a draft whose full run is green on every job is marked ready, then armed pinned to its head",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -202,9 +260,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
     ({ stands, state, base, plan, docsOnly, skipped }) =>
       Effect.gen(function* () {
         const red = yield* fixture;
-        // The report skipped as on every branch, or a success, or another job skipped in its place.
-        const skips = (job: Job) => job.name === skipped || (job.name === "report" && skipped === "report");
-        const withSkip = red.jobs.map((job) => ({ ...job, conclusion: skips(job) ? "skipped" : "success" }));
+        // Every job a success, or one skipped that no run skips by design: the report, which runs on
+        // every branch run since pull request 1404, or a leg.
+        const withSkip = red.jobs.map((job) => ({ ...job, conclusion: job.name === skipped ? "skipped" : "success" }));
         const isRed = stands === "red" || stands === "older_red";
         const m = memory(
           {
@@ -219,12 +277,74 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         );
         const answer = yield* Effect.result(arm(m));
         const open = state === "OPEN" && base === "main" && !plan;
-        const green = (stands === "green" || stands === "older") && skipped !== "tooling (1)";
+        const green = (stands === "green" || stands === "older") && skipped === "none";
         const arms = open && (green || stands === "none");
         expect(m.github.calls).toEqual(arms ? armedAt : []);
         expect(answer._tag).toBe(arms ? "Success" : "Failure");
       }),
   );
+
+  // 0590: a branch's proof run tests the full set or the changed set. Plants, each run once on
+  // Arm.ts and restored: `kind` reads every run as full (red: the changed-set run at the older head
+  // arms); a changed-set run at an older head arms with the note as a full one does (red: the same);
+  // the report skips by design, as before pull request 1404 (red: the runs with a skipped report arm).
+  it.effect(
+    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with 0544's note",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const head = oid.slice(0, 12);
+        const url = `https://github.com/${repo}/actions/runs/${RED}`;
+
+        for (const kind of ["changed", "zero"] as const) {
+          const at = memory({ stands: "green", jobs: shaped(kind) }, red);
+          expect(Arm.line(yield* arm(at)), kind).toBe(
+            `pr 1092: changed-set run ${RED} green on every job at ${head}, the tests this change reaches (0590); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          );
+          expect(at.github.calls, kind).toEqual(armedAt);
+
+          const stale = memory({ stands: "older", jobs: shaped(kind) }, red);
+          const refused = yield* Effect.flip(arm(stale));
+          expect(refused.reason, kind).toBe(
+            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); start one at this head: gh workflow run scheduled.yaml --ref ${branch}`,
+          );
+          expect(stale.github.calls, kind).toEqual([]);
+        }
+
+        const full = memory({ stands: "older", jobs: shaped("full") }, red);
+        expect(Arm.line(yield* arm(full))).toBe(
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+        );
+        const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
+        expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);
+      }),
+  );
+
+  it.effect(
+    "scenario: a run whose report failed, was canceled or never ran refuses at the head, whatever its matrices did",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+
+        for (const report of ["failure", "skipped", "cancelled"]) {
+          for (const kind of ["full", "changed", "zero"] as const) {
+            const m = memory({ stands: "green", jobs: shaped(kind, report) }, red);
+            const refused = yield* Effect.flip(arm(m));
+            expect(refused.reason, `${kind} ${report}`).toContain("is not green on every job:");
+            expect(refused.reason, `${kind} ${report}`).toContain(`  report: ${report}`);
+            expect(m.github.calls).toEqual([]);
+          }
+        }
+      }),
+  );
+
+  it("vector: a run's kind is full when a leg of the full set ran, of today's shape or the older two-job one, and changed otherwise", () => {
+    expect(Arm.kind(shaped("full"))).toBe("full");
+    expect(Arm.kind(shaped("changed"))).toBe("changed");
+    expect(Arm.kind(shaped("zero"))).toBe("changed");
+    expect(Arm.kind([job(1, "next (2)", "success"), job(2, "tooling (1)", "success")])).toBe("full");
+    expect(Arm.kind([job(1, "tests", "skipped"), job(2, "changed (1)", "success")])).toBe("changed");
+  });
 
   // vector: a plan's pull request, and a merged one.
   it.effect(
@@ -238,6 +358,54 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const done = memory({ state: "MERGED" }, red);
         expect(Arm.line(yield* arm(done))).toBe(`pr 1092: already merged at ${older}`);
         expect([...plan.github.calls, ...done.github.calls]).toEqual([]);
+      }),
+  );
+  // Plants: skip the names check, or run it after the arm.
+  it.effect(
+    "scenario: a green pull request whose diff exports a name its description does not name is refused with that name and arms nothing; with the line it arms (0587)",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const patch = {
+          path: "next/apps/fabrika/src/worker-quotas.ts",
+          patch: "@@ -0,0 +1 @@\n+export const Quota = 1;",
+        };
+        const bare = memory({}, red);
+        bare.github.patches.set(1092, [patch]);
+        const refused = yield* Effect.flip(arm(bare));
+        expect(refused.reason).toContain(
+          "pr 1092: its diff exports new names its ## New names section does not name: Quota",
+        );
+        expect(bare.github.calls).toEqual([]);
+        const named = memory({}, red);
+        named.github.more.set(1092, {
+          ...named.github.more.get(1092),
+          body: "## New names\n\n- `Quota`: a quota (source).",
+        });
+        named.github.patches.set(1092, [patch]);
+        yield* arm(named);
+        expect(named.github.calls).toEqual(armedAt);
+      }),
+  );
+
+  // Plants: turn merge when ready on before the leak gate, or past a refusal from it; skip the
+  // grep of the commits or of the words. The hit on 2026-11-15 was in a description.
+  it.effect.prop(
+    "property: over a green full run it arms only when the leak grep passed on the change, each commit and the title and description; a refusal from any of them, or a grep that could not run, arms nothing",
+    { leak: Leak },
+    ({ leak }) =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const m = memory({ stands: "green", draft: true, leak: leaking(leak) }, red);
+        const { answer, leaks } = yield* armed(m);
+        expect(m.github.calls).toEqual(leak === "clean" ? [{ _tag: "ready", number: 1092 }, ...armedAt] : []);
+        expect(answer._tag === "Failure" && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
+        const ran = [
+          { method: "leakChange", args: [".", oid] },
+          { method: "leakGrep", args: [".", oid] },
+          { method: "leakText", args: [".", "Per-program quotas, in next/ (P34c slice 4)\n\n\n"] },
+        ];
+        expect(leaks).toEqual(ran.slice(0, { clean: 3, leakChange: 1, leakGrep: 2, leakText: 3 }[leak]));
       }),
   );
 });

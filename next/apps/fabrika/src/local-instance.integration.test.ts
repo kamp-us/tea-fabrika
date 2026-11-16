@@ -6,6 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import type { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
+import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -109,6 +110,78 @@ const bodyText = (options: RequestInit | undefined): string =>
 // The installed runner takes runs and a seed, so the old example runs first from this callback.
 const buildsPair = Schema.Tuple([Schema.NonEmptyString, Schema.NonEmptyString]);
 const pinned: ReadonlyArray<readonly [string, string]> = [["build-a", "build-b"]];
+
+it.live.prop(
+  "Q11-start rejects invalid quota byte sizes before making a request",
+  {
+    field: Schema.Literals([
+      "storage",
+      "project.bytes",
+      "project.message.bytes",
+      "process.bytes",
+      "process.message.bytes",
+    ]),
+    suffix: Schema.String,
+  },
+  ({ field, suffix }) =>
+    Effect.gen(function* () {
+      const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
+      const folder = yield* sandbox;
+      const fetched = yield* spyOnFetch(async () => Response.json({ value: null }));
+      const fixture = RecordWireTest.startupFixture({
+        home: folder,
+        name: "quota-start",
+        person: "person-test",
+        founder: "public-test-key",
+        window: null,
+        port: 18787,
+        build: "quota-start",
+      });
+      // The quota values ride in the settings snapshot, each as its declared schema encodes it.
+      const values: Record<string, Schema.Json> = { ...fixture.settings.values };
+      const recovery = Schema.decodeUnknownSync(Schema.toEncoded(Declarations.recovery.schema))(
+        values[Declarations.recovery.path],
+      );
+      const invalid = `invalid:${suffix}`;
+      const { project, process } = recovery;
+
+      if (field === "storage") {
+        values[Declarations.storage.path] = invalid;
+      } else {
+        values[Declarations.recovery.path] = {
+          project:
+            field === "project.bytes"
+              ? { ...project, bytes: invalid }
+              : field === "project.message.bytes"
+                ? { ...project, message: { ...project.message, bytes: invalid } }
+                : project,
+          process:
+            field === "process.bytes"
+              ? { ...process, bytes: invalid }
+              : field === "process.message.bytes"
+                ? { ...process, message: { ...process.message, bytes: invalid } }
+                : process,
+        };
+      }
+
+      // The snapshot's envelope accepts any JSON; each declared byte-size codec must still reject it.
+      const declaration = field === "storage" ? Declarations.storage : Declarations.recovery;
+      expect(Schema.decodeUnknownResult(declaration.schema)(values[declaration.path])._tag).toBe("Failure");
+      const config = { ...fixture, settings: { ...fixture.settings, values } };
+      const result = yield* Effect.scoped(
+        startDev({ build: "quota-start", brain: "unused.mjs", programs: {} }, config),
+      ).pipe(
+        Effect.provide(fetchClient),
+        Effect.provide(ProcessIdGenerator.layer),
+        Effect.provide(SecureRandom.layerWebCrypto),
+        Effect.provide(filesWithoutSync),
+        Effect.result,
+      );
+      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
+      expect(fetched).not.toHaveBeenCalled();
+    }),
+  { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
+);
 
 it.live.prop(
   "a later dev command links its first start to the last runtime in that home",

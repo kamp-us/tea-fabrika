@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1057-review1",
+  "ticket": "1057",
+  "pr": "kamp-us/tea-fabrika#1373",
+  "started": "2026-11-15T17:20:00-08:00",
+  "ended": "2026-11-15T17:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Anti-slop install review of 5ddad7f2a, our tooling and next/'s lint config: sent to tests, one blocking class, two finding rows. The class: a test's temp repo that copies the real .oxlintrc.json and gives it no vendor/ link. Its one case is plants.test.ts's Reflect-ban scenario (line 532, copy at 536), which came in with the main merge from pull request 1369 after the tests step added its links. oxlint cannot load the anti-slop plugins there, --print-config exits 1, and the test is red on this head. The pin holds: HEAD:vendor/anti-slop/src and the fork's 5360c123d:src are both tree e69eeeffb, and the LICENSE blob matches too. A recount of all eight taken rules with oxlint 1.90 matches the seven blocks folder for folder, and spacing has no folder at zero. The rows: the audit never reads a plugin's specifier, so a config that loads an edited copy from another path passes L1 and the zero lock; and anti-slop.ts's TAKEN still says the owner took eight rules, while 0567 took two more.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "Ran alone with Node 26.13.0: vendored.test.ts 5/5, anti-slop.test.ts 19/19, advice.test.ts 16/16, prefer-schema-arbitrary.test.ts 7/7, program-package-layout.test.ts 17/17, commits.test.ts 39/39, plants.test.ts 235/236 (the one red above). Plants run in scratch, never committed: a byte appended to vendor/anti-slop/src/index.ts made verify name it, then undone; audit run on edited --print-config text: a dropped zero folder, a non-scope glob and a block at warn each gave lines, and a redirected specifier gave none; a config with no jsPlugins fails oxlint with Plugin 'anti-slop' not found. git merge-tree with origin/main 61d551ff3: no conflict. CI on this head ran lint and typecheck green; its test jobs did not run, as the pull request is a draft. Not run: any .integration. file, the vendored CLI test, pnpm typecheck (CI's is green on this head).",
+  "step": "review"
+}

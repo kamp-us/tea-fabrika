@@ -12,7 +12,9 @@ type Jobs = Parameters<typeof scheduled.verdict>[0]["jobs"];
 const options = { seed: 119120, numRuns: 100 };
 
 const result = fc.constantFrom("success", "failure", "cancelled", "skipped", "", undefined);
-const jobName = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/);
+// Any job but `select`, whose result and outputs say which jobs a run skips on purpose (0590): the
+// laws on `skippable` below give it its own shapes.
+const jobName = fc.stringMatching(/^[a-z][a-z0-9-]{0,10}$/).filter((name) => name !== "select");
 
 const needs = fc.dictionary(
   jobName,
@@ -272,6 +274,83 @@ it("property: when every leg passed or was skipped and every need passed, the ru
     fc.property(allPassed, passed, (given, jobs) => {
       expect(scheduled.verdict({ needs: given, jobs, failed: [], limits: LIMITS })).toBe("green");
       expect(scheduled.causes(jobs, LIMITS)).toEqual([]);
+    }),
+    options,
+  );
+});
+
+// 0590: a branch's proof run starts `select`, then `tests` for the full set or `changed` for a
+// changed set; main's runs skip `select` and run `tests`. `needs` as the report gets it, with the
+// select's outputs, for each shape a run can end in.
+const ended = (select: unknown, tests: string, changed: string) => ({
+  gate: { result: "success", outputs: { start: "true" } },
+  ...(select === undefined ? {} : { select }),
+  tests: { result: tests, outputs: {} },
+  ...(select === undefined ? {} : { changed: { result: changed, outputs: {} } }),
+});
+
+const chose = (scope: string, legs: string) => ({
+  result: "success",
+  outputs: { scope, legs, files: legs === "[]" ? "{}" : '{"1":"a.test.ts"}' },
+});
+
+const SKIPPED = { result: "skipped", outputs: {} };
+
+it("pinned: each way a run with select ends is judged by what select chose, and a zero-file set is green with no leg", () => {
+  // Plants, each run once on scheduled.mjs and restored: `skippable` gives nothing (red: main's run,
+  // a full branch run, a changed run and a zero-file run all read stopped); it lets `tests` skip
+  // whatever select did (red: main with tests skipped reads green); it lets `changed` skip on a
+  // changed set with legs (red: that run reads green).
+  const shapes: [string, ReturnType<typeof ended>, string][] = [
+    ["main: select skipped, every test on tests", ended(SKIPPED, "success", "skipped"), "green"],
+    ["main: select skipped and tests skipped too, so no test ran", ended(SKIPPED, "skipped", "skipped"), "stopped"],
+    ["main: select skipped, a red tests leg", ended(SKIPPED, "failure", "skipped"), "red"],
+    ["branch, a trigger: select said full, tests green", ended(chose("full", "[]"), "success", "skipped"), "green"],
+    ["branch, a trigger: select said full, tests skipped", ended(chose("full", "[]"), "skipped", "skipped"), "stopped"],
+    ["branch: select said changed, its legs green", ended(chose("changed", '["1"]'), "skipped", "success"), "green"],
+    [
+      "branch: select said changed, its legs skipped",
+      ended(chose("changed", '["1"]'), "skipped", "skipped"),
+      "stopped",
+    ],
+    ["branch: select said changed, a red leg", ended(chose("changed", '["1"]'), "skipped", "failure"), "red"],
+    ["branch: select said changed, and tests ran too", ended(chose("changed", '["1"]'), "success", "success"), "green"],
+    ["branch: a changed set of zero files, no leg", ended(chose("changed", "[]"), "skipped", "skipped"), "green"],
+    ["branch: select failed", ended({ result: "failure", outputs: {} }, "skipped", "skipped"), "red"],
+    ["branch: select said nothing", ended({ result: "success", outputs: {} }, "skipped", "skipped"), "stopped"],
+    ["branch: select said another word", ended(chose("some", "[]"), "skipped", "skipped"), "stopped"],
+    ["the shape before 0590: no select, tests green", ended(undefined, "success", ""), "green"],
+    ["the shape before 0590: no select, tests skipped", ended(undefined, "skipped", ""), "stopped"],
+  ];
+
+  for (const [shape, given, expected] of shapes) {
+    expect(scheduled.verdict({ needs: given, jobs: [], failed: [], limits: LIMITS }), shape).toBe(expected);
+  }
+});
+
+it("property: a run is green only when the test job select chose passed, whatever the other jobs did", () => {
+  // The rule at the heart of 0590's report: main's run (select skipped) and a full branch run need
+  // `tests`, a changed run with legs needs `changed`, and only a zero-file set needs neither.
+  // Plant, run once on scheduled.mjs and restored: `skippable` returns every job (red: a run whose
+  // chosen job was skipped reads green).
+  const outcome = fc.constantFrom("success", "skipped", "cancelled", "");
+  const select = fc.oneof(
+    fc.constant(SKIPPED),
+    fc
+      .constantFrom("full", "changed")
+      .chain((scope) => fc.constantFrom("[]", '["1"]', '["1","2"]').map((legs) => chose(scope, legs))),
+  );
+  fc.assert(
+    fc.property(select, outcome, outcome, (chosen, tests, changed) => {
+      const given = ended(chosen, tests, changed);
+      const scope = "scope" in chosen.outputs ? chosen.outputs.scope : "full";
+      const zero = scope === "changed" && "legs" in chosen.outputs && chosen.outputs.legs === "[]";
+      const needed = zero ? [] : scope === "full" ? [tests] : [changed];
+      const others = zero ? [tests, changed] : scope === "full" ? [changed] : [tests];
+      const green = needed.every((r) => r === "success") && others.every((r) => r === "success" || r === "skipped");
+      expect(scheduled.verdict({ needs: given, jobs: [], failed: [], limits: LIMITS })).toBe(
+        green ? "green" : "stopped",
+      );
     }),
     options,
   );
@@ -655,9 +734,20 @@ type Call = { method: string; url: string; body: unknown; auth: string | undefin
 /** An open issue as the issues list gives it, cut to the fields the report reads. */
 type Listed = { number: number; title: string };
 
+/** The last green run's id in `fake`, and its jobs: a full run's, whose test legs ran (0581). */
+const LAST_GREEN = 41;
+
+const fullJobs = {
+  total_count: 2,
+  jobs: [
+    { name: "gate", status: "completed", conclusion: "success" },
+    { name: "tests (1)", status: "completed", conclusion: "success" },
+  ],
+};
+
 /**
  * A fake GitHub: the run's jobs as the jobs API answers them, the report's own open issue or none,
- * a last green run or none, and every call recorded. `others` are open issues with the same label
+ * a last green run or none, a full run, and every call recorded. `others` are open issues with the same label
  * that are not the report's, as the daily speed check's (0541), listed before the report's own.
  */
 const fake = (
@@ -685,10 +775,12 @@ const fake = (
           ...(open === null ? [] : [{ number: open, title: scheduled.TITLE }]),
         ]
       : path.startsWith("actions/workflows/")
-        ? { workflow_runs: last === null ? [] : [{ head_sha: last }] }
-        : path.startsWith("actions/runs/")
-          ? jobs
-          : {};
+        ? { workflow_runs: last === null ? [] : [{ id: LAST_GREEN, head_sha: last }] }
+        : path.startsWith(`actions/runs/${LAST_GREEN}/`)
+          ? fullJobs
+          : path.startsWith("actions/runs/")
+            ? jobs
+            : {};
     const status = fail ? 500 : path === "labels" ? 422 : 200;
     return Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(json) });
   };
@@ -1006,4 +1098,133 @@ it("scenario: with no token, repository, workflow file or run id, no GitHub read
   for (const missing of ["GITHUB_TOKEN", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF", "GITHUB_RUN_ID"]) {
     expect(scheduled.github({ ...env, [missing]: "" }), missing).toBeNull();
   }
+});
+
+// ---------------------------------------------------------------- L1, full runs (0581)
+
+// A run of scheduled.yaml whose gate said `false` ends `success` with its tests skipped, and GitHub
+// lists a skipped matrix as one job named `tests`, with no shard. So a run is full only when a test
+// leg, `tests (<shard>)`, is in its jobs, and the last green run is the newest green full one.
+const shard = fc.stringMatching(/^[a-z0-9][a-z0-9-]{0,9}$/);
+
+const notLeg = fc.oneof(
+  fc.constantFrom("gate", "report", "tests", "tests ()", "tests(1)", "xtests (1)", "tests (1) x", "test (1)"),
+  jobName,
+);
+
+const listed = fc.array(
+  fc.oneof(
+    shard.map((s) => ({ leg: true, name: `tests (${s})` })),
+    // The legs before the gate, of the two jobs `next` and `tooling` (run 43780996689).
+    fc.tuple(fc.constantFrom("next", "tooling"), shard).map(([suite, s]) => ({ leg: true, name: `${suite} (${s})` })),
+    notLeg.map((name) => ({ leg: false, name })),
+  ),
+  { maxLength: 12 },
+);
+
+it("L1 property: a run is full exactly when one of its jobs is a test leg, tests (<shard>), or before the gate next (<shard>) or tooling (<shard>)", () => {
+  // The review of pull request 1404: every green full run on main when the gate landed named its
+  // legs `next (1)`, `tooling (1)` and so on, so lastGreen named none until a new-shape run was
+  // green. Plant, run once on scheduled.mjs and restored: isFull knows only `tests (<shard>)` (red
+  // on an old-shape run, here and in the last-green law).
+  // Plant, after build, on scheduled.mjs and restored: isFull reads any job starting `tests`
+  // (red: a skipped run's one `tests` job counts).
+  const reached = { full: 0, skipped: 0 };
+  fc.assert(
+    fc.property(listed, (entries) => {
+      const jobs = entries.map(({ name }) => ({
+        name,
+        status: "completed",
+        conclusion: "success",
+        start: null,
+        end: null,
+        steps: [],
+      }));
+      const full = entries.some((e) => e.leg);
+      expect(scheduled.isFull(jobs)).toBe(full);
+      reached.full += full ? 1 : 0;
+      reached.skipped += full ? 0 : 1;
+    }),
+    options,
+  );
+  expect(
+    Object.values(reached).every((count) => count > 0),
+    JSON.stringify(reached),
+  ).toBe(true);
+});
+
+/** Main's runs of scheduled.yaml and some branch runs, oldest first, each green or red, full or skipped. */
+const greens = fc.array(
+  fc.record({
+    branch: fc.constantFrom("main", "main", "main", "fabrikalfa/probe"),
+    conclusion: fc.constantFrom("success", "success", "failure"),
+    full: fc.boolean(),
+    // A full run from before the gate names its legs `next (<shard>)` and `tooling (<shard>)`.
+    old: fc.boolean(),
+    sha,
+  }),
+  { maxLength: 30 },
+);
+
+it("L1 property: the last green run is main's newest green run whose test legs ran, stepping over runs whose gate said false, or none", async () => {
+  // Plant: today's lastGreen, which takes main's first `success` run (red: a skipped run's commit
+  // is named as the last green one).
+  const reached = { stepped: 0, none: 0, first: 0, old: 0 };
+  await fc.assert(
+    fc.asyncProperty(greens, async (list) => {
+      const runs = list.map((r, i) => ({ ...r, id: 500 + i }));
+      const calls: string[] = [];
+      const send = (url: string) => {
+        calls.push(url);
+        const parsed = new URL(url);
+        const path = parsed.pathname.replace("/repos/owner/repo/", "");
+        const query = parsed.searchParams;
+        const json = /^actions\/workflows\/scheduled\.yaml\/runs$/.test(path)
+          ? {
+              workflow_runs: runs
+                .filter(
+                  (r) =>
+                    (query.get("branch") === null || r.branch === query.get("branch")) &&
+                    (query.get("status") === null || r.conclusion === query.get("status")),
+                )
+                .toSorted((a, b) => b.id - a.id)
+                .slice(0, Math.min(Number(query.get("per_page") ?? 30), 100))
+                .map((r) => ({
+                  id: r.id,
+                  head_branch: r.branch,
+                  head_sha: r.sha,
+                  conclusion: r.conclusion,
+                  status: "completed",
+                })),
+            }
+          : (() => {
+              const run = runs.find((r) => path === `actions/runs/${r.id}/jobs`);
+              const names = !run?.full
+                ? ["gate", "tests", "report"]
+                : run.old
+                  ? ["tooling (1)", "next (e2e-1)", "next (1)", "report"]
+                  : ["gate", "tests (e2e-1)", "tests (1)", "report"];
+              return {
+                total_count: names.length,
+                jobs: names.map((name) => ({ name, status: "completed", conclusion: "success" })),
+              };
+            })();
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(json) });
+      };
+      const green = runs
+        .filter((r) => r.branch === "main" && r.conclusion === "success")
+        .toSorted((a, b) => b.id - a.id);
+      const expected = green.find((r) => r.full)?.sha ?? null;
+      expect(await scheduled.github(env, send)!.lastGreen()).toBe(expected);
+      reached.stepped += green[0] !== undefined && !green[0].full && expected !== null ? 1 : 0;
+      reached.none += expected === null && green.length > 0 ? 1 : 0;
+      reached.first += green[0]?.full ? 1 : 0;
+      reached.old += green.find((r) => r.full)?.old ? 1 : 0;
+    }),
+    options,
+  );
+  expect(
+    Object.values(reached).every((count) => count > 0),
+    JSON.stringify(reached),
+  ).toBe(true);
 });

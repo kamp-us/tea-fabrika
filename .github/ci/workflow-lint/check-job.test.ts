@@ -140,6 +140,30 @@ const plants: Plant[] = [
       mutate(w);
     },
   ]),
+  // 0587 (C1): jscpd is advice only, so a step that can fail the job, or that is gone, is refused.
+  [
+    "C1: the copies step can fail the job",
+    (w) => Reflect.deleteProperty(step(w, "check", "copies (advice)"), "continue-on-error"),
+  ],
+  [
+    "C1: the copies step is deleted",
+    (w) => {
+      w.jobs.check.steps.splice(place(w, "check", "copies (advice)"), 1);
+    },
+  ],
+  [
+    "C1: the copies step runs after lint",
+    (w) => {
+      const [copies] = w.jobs.check.steps.splice(place(w, "check", "copies (advice)"), 1);
+      w.jobs.check.steps.push(copies!);
+    },
+  ],
+  [
+    "C1: the copies step has no base",
+    (w) => {
+      step(w, "check", "copies (advice)")["env"] = {};
+    },
+  ],
   // 0524, ticket 933 (L7): a pull request that drops or mutes the ratchet would pass with a grown list.
   [
     "L7: the ratchet step is deleted",
