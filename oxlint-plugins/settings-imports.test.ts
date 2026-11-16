@@ -33,7 +33,7 @@ const caller = fc.oneof(
     .constantFrom(
       "next/apps/fabrika/settings-generate.ts",
       "next/apps/fabrika/build.ts",
-      "next/apps/fabrika/src/settings-generated.test.ts",
+      "next/apps/fabrika/src/settings-generated.integration.test.ts",
     )
     .map((file) => ({ file, adapter: false, parser: false })),
   fc

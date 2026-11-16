@@ -1,4 +1,6 @@
-// T730, P38 slice 2, next/: L1 and L9 of the approved plan. Written before the build.
+// T730, P38 slice 2, next/: L1 of the approved plan. Written before the build. L9 called `plant`,
+// which spawns oxlint in a temp folder, which made the file `.integration.` (0584); 0591 moved L9 to
+// oxlint-plugins/settings-imports.test.ts.
 //
 // The shape these tests hold the app and libfabrika to:
 // - The committed `next/apps/fabrika/person.json` and `repo.json` are, byte for byte,

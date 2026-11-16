@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s5-review2",
+  "ticket": "1056",
+  "pr": "kamp-us/tea-fabrika#1411",
+  "started": "2026-11-15T19:14:50-08:00",
+  "ended": "2026-11-15T19:18:00-08:00",
+  "parent": "2026-11-15-reflect-ban-s5-build2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Reflect ban slice 5 recheck of c252ba901, in next/: merge-ready, no finding rows. The blocker from review1 is fixed: put in next/packages/libfabrika/src/settings/TomlParser.ts now steps into an array as into a table. The [[starts]] probe parses to {\"starts\":[{...},{...}]} and [[__proto__]] to {\"__proto__\":[{\"x\":1}]}, the same as main. The new array-of-tables law in TomlParser.test.ts holds the three hostile names as array names in every run, each with a table and an array inside an element, so the review1 output ({\"0\":{...},\"__proto__\":[]}) fails its toEqual every run. The TypeError for a value that is neither a table nor an array cannot be reached, because the parser refuses a write through a scalar first, and it lands as Syntax at line 1, as main's defineProperty TypeError did through the same catch. No defect is owed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Read-only apart from this row. Read git diff 20b31a965..c252ba901. Ran TomlParser.test.ts (4) and TomlEdit.test.ts (18) one at a time, both green, and the scratch probes through the public Toml service. The plant on 892112e1f was checked by reading against review1's probe output, not run. No typecheck: the fix changed one branch of one function, and the build ran it. Not run: any .integration., .visual. or workerd file.",
+  "step": "review"
+}

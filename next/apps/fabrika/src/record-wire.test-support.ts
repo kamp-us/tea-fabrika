@@ -12,7 +12,7 @@ import { heldPort } from "./port.test-support.ts";
 const Failure = Schema.Struct({ reason: Schema.String });
 
 export const settingsFixture = <A extends StartsTest.Fixture>(config: A) => {
-  const { port: _port, person: _person, founder: _founder, window: _window, ...rest } = config;
+  const { port: _port, person: _person, founder: _founder, window: _window, values: _values, ...rest } = config;
   return {
     ...rest,
     ...StartsTest.fixture(config, (algorithm, data) =>
