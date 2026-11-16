@@ -10,6 +10,8 @@
  * container has when that is less. `fold` is the fixpoint on that geometry: a tile folds only when
  * it is drawn under 220x120 where it folds, and the focused tile never folds.
  */
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { GAP, order, type Rect } from "./Layout.ts";
 import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
 
@@ -38,7 +40,7 @@ type Size = { readonly width: number; readonly height: number };
  * @category getters
  */
 export const shut = (node: Layout, strips: ReadonlySet<TileId>): boolean =>
-  typeof node === "string" ? strips.has(node) : node.parts.every((p) => shut(p.inner, strips));
+  typeof node === "string" ? strips.has(node) : Arr.every(node.parts, (p) => shut(p.inner, strips));
 
 /**
  * Returns each part's length along a container of `length` pixels, gaps not counted: a part that is
@@ -56,29 +58,32 @@ export const lengths = (
   focus: TileId,
 ): ReadonlyArray<number> => {
   const left = length - (node.parts.length - 1) * GAP;
-  const fixed = node.parts.map((p) => shut(p.inner, strips));
-  const count = fixed.filter((f) => f).length;
+  const fixed = Arr.map(node.parts, (p) => shut(p.inner, strips));
+  const count = Arr.filter(fixed, (f) => f).length;
   const has = left - count * STRIP[node.dir];
 
   if (has < 0) {
-    return fixed.map((f) => (f ? Math.max(0, left) / count : 0));
+    return Arr.map(fixed, (f) => (f ? Math.max(0, left) / count : 0));
   }
 
-  const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
-  const shares = node.parts.map((p, i) => (fixed[i] ? STRIP[node.dir] : (has * p.percent) / total));
-  const lead = node.parts.findIndex((p) => order(p.inner).includes(focus));
+  const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] ? sum : sum + p.percent));
+  const shares = Arr.map(node.parts, (p, i) => (fixed[i] ? STRIP[node.dir] : (has * p.percent) / total));
+  const lead = Arr.findFirstWithIndex(node.parts, (p) => order(p.inner).includes(focus));
   const least = Math.min(node.dir === "row" ? SMALLEST.width : SMALLEST.height, has);
 
-  const held = node.parts[lead];
+  if (Option.isNone(lead)) {
+    return shares;
+  }
 
-  if (held === undefined || (shares[lead] ?? 0) >= least) {
+  const [held, at] = lead.value;
+
+  if ((shares[at] ?? 0) >= least) {
     return shares;
   }
 
   const rest = total - held.percent;
-
-  return node.parts.map((p, i) =>
-    i === lead ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+  return Arr.map(node.parts, (p, i) =>
+    i === at ? least : fixed[i] ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
   );
 };
 
@@ -145,8 +150,7 @@ export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
 
   for (;;) {
     const boxes = drawn(w, size, strips);
-
-    const due = order(w.layout).filter((t) => {
+    const due = Arr.filter(order(w.layout), (t) => {
       const r = boxes.get(t);
 
       return (

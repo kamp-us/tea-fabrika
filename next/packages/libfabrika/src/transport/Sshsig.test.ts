@@ -15,6 +15,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import {
   SPACE,
@@ -237,7 +238,7 @@ describe("p27, blobs built by hand from good.sig's bytes", () => {
           }),
         ),
       ),
-      { ...runs, examples: cases.map(([, armored, signers]) => [{ armored, signers: [...signers] }]) },
+      { ...runs, examples: Arr.map(cases, ([, armored, signers]) => [{ armored, signers: [...signers] }]) },
     );
   });
 
@@ -340,7 +341,7 @@ describe("KeyLine", () => {
           }),
         ),
       ),
-      { ...runs, examples: bad.map(([, line]) => [line]) },
+      { ...runs, examples: Arr.map(bad, ([, line]) => [line]) },
     );
   });
 
@@ -537,7 +538,7 @@ describe("p27, the armor's own words", () => {
           }),
         ),
       ),
-      { ...runs, examples: cases.map(([, armored]) => [armored]) },
+      { ...runs, examples: Arr.map(cases, ([, armored]) => [armored]) },
     );
   });
 });
@@ -548,7 +549,7 @@ describe("a key line's parts and its type", () => {
   const [type = "", key = "", comment = ""] = signer.split(" ");
   it("KeyLine takes runs of spaces and tabs and matches the same key", () => {
     // Plant: normalize the returned signer to two space-separated words. Exact equality fails.
-    const gap = fc.array(fc.constantFrom(" ", "\t"), { minLength: 1 }).map((chars) => chars.join(""));
+    const gap = fc.array(fc.constantFrom(" ", "\t"), { minLength: 1 }).map((chars) => Arr.join(chars, ""));
     return fc.assert(
       fc.asyncProperty(gap, gap, (before, after) =>
         Effect.runPromise(
@@ -588,7 +589,7 @@ describe("a key line's parts and its type", () => {
           }),
         ),
       ),
-      { ...runs, examples: bad.map(([, line]) => [line]) },
+      { ...runs, examples: Arr.map(bad, ([, line]) => [line]) },
     );
   });
 });
@@ -631,7 +632,7 @@ describe("properties", () => {
         (body, place, swap) => {
           const chars = [...body];
           const i = place % chars.length;
-          const changed = [...chars.slice(0, i), swap, ...chars.slice(i + 1)].join("");
+          const changed = Arr.join([...chars.slice(0, i), swap, ...chars.slice(i + 1)], "");
           fc.pre(Buffer.compare(Buffer.from(utf8(changed)), Buffer.from(utf8(body))) !== 0);
 
           return Effect.runPromise(
@@ -659,8 +660,8 @@ describe("properties", () => {
         const line = body[r] ?? "";
         const c = col % line.length;
         const changedRow = `${line.slice(0, c)}${swap}${line.slice(c + 1)}`;
-        const changed = [lines[0], ...body.map((x, i) => (i === r ? changedRow : x)), ...lines.slice(-2)];
-        const armored = changed.join("\n");
+        const changed = [lines[0] ?? "", ...Arr.map(body, (x, i) => (i === r ? changedRow : x)), ...lines.slice(-2)];
+        const armored = Arr.join(changed, "\n");
         fc.pre(Buffer.compare(Buffer.from(unarmor(armored)), Buffer.from(unarmor(goodSig))) !== 0);
 
         return Effect.runPromise(

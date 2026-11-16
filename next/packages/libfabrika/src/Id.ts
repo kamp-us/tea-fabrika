@@ -7,6 +7,7 @@ import * as Layer from "effect/Layer";
 import * as Ordering from "effect/Order";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
+import * as Arr from "effect/Array";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -53,8 +54,7 @@ const valid = (id: string): boolean => {
     return false;
   }
 
-  const uuid = [...suffix].reduce((bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)), 0n);
-
+  const uuid = Arr.reduce([...suffix], 0n, (bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)));
   return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
 };
 

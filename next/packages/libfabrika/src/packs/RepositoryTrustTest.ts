@@ -11,6 +11,8 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -161,7 +163,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
-                    expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
+                    expect(Arr.filter(same, (event) => event._tag === "decision")).toEqual([accepted]);
                     const reopened = Schema.decodeSync(Id.InputId)(
                       `${pipe(selection, Str.slice(0, -1))}${pipe(selection, Str.endsWith("0")) ? "1" : "0"}`,
                     );
@@ -303,8 +305,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       }
 
                       const history = yield* trust.history(key, operator);
-                      expect(history.filter((fact) => fact._tag === "decision")).toEqual([decision]);
-                      expect(history.filter((fact) => fact._tag === "opened")).toEqual([opened]);
+                      expect(Arr.filter(history, (fact) => fact._tag === "decision")).toEqual([decision]);
+                      expect(Arr.filter(history, (fact) => fact._tag === "opened")).toEqual([opened]);
                     }
 
                     // The adapter's actual writes, observed before the real ledger sees them.
@@ -424,7 +426,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(Exit.isFailure(result)).toBe(true);
 
                     if (Exit.isFailure(result)) {
-                      const failure = result.cause.reasons.find((reason) => reason._tag === "Fail");
+                      const failure = Option.getOrUndefined(
+                        Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
+                      );
                       expect(failure?._tag).toBe("Fail");
 
                       if (failure?._tag === "Fail") {

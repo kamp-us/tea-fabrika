@@ -9,6 +9,8 @@ import * as Layer from "effect/Layer";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { String as Str, pipe } from "effect";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -96,7 +98,7 @@ type Model = (typeof task)["model"]["Type"];
 const step = (model: Model, msg: Msg): Model => applyCell(task, model, msg)[0];
 
 const fold = (events: ReadonlyArray<Stored>): Model =>
-  events.reduce((model, event) => step(model, toMsg(event)), task.init(null, undefined)[0]);
+  Arr.reduce(events, task.init(null, undefined)[0], (model, event) => step(model, toMsg(event)));
 
 /** The tasks a target index names that are still open: requested, assigned or started. */
 const OPEN: ReadonlySet<Task["state"]["_tag"]> = new Set(["requested", "assigned", "started"]);
@@ -107,10 +109,11 @@ const translated = (cause: LedgerError) =>
 
 /** One task as its stream holds it, read inside a turn: its state and its events. */
 const saved = (turn: LedgerTurn, id: string): Task => {
-  const entries = [...turn.read(stream(id), 0)].map((entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
-  const events = entries.map(({ entry, stored }) => decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }));
-
-  return { state: fold(entries.map(({ stored }) => stored)).state, events };
+  const entries = Arr.map([...turn.read(stream(id), 0)], (entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
+  const events = Arr.map(entries, ({ entry, stored }) =>
+    decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
+  );
+  return { state: fold(Arr.map(entries, ({ stored }) => stored)).state, events };
 };
 
 /**
@@ -153,7 +156,10 @@ export const layer = Layer.effect(
 
       const answer = yield* ledger
         .transact((turn) => {
-          const model = step(fold([...turn.read(stream(id), 0)].map((entry) => decodeStored(valueFor(entry)))), msg);
+          const model = step(
+            fold(Arr.map([...turn.read(stream(id), 0)], (entry) => decodeStored(valueFor(entry)))),
+            msg,
+          );
 
           if (model.answer._tag === "refused") {
             return R.fail(model.answer.reason);
@@ -173,12 +179,14 @@ export const layer = Layer.effect(
             }
           }
 
-          const entry = [...turn.read(stream(id), 0)].find((e) => e._tag === stored._tag);
+          const entry = Arr.findFirst(turn.read(stream(id), 0), (e) => e._tag === stored._tag);
 
           // An accepted or repeated call has its event in the stream; a stream without one is a broken store.
-          return entry === undefined
-            ? R.fail("storage" as const)
-            : R.succeed({ receipt: { rev: entry.rev, arrivedAt: entry.arrivedAt }, state: model.state });
+          return Option.match(entry, {
+            onNone: () => R.fail("storage" as const),
+            onSome: (found) =>
+              R.succeed({ receipt: { rev: found.rev, arrivedAt: found.arrivedAt }, state: model.state }),
+          });
         })
         .pipe(Effect.mapError(translated));
 
@@ -222,11 +230,10 @@ export const layer = Layer.effect(
         return yield* ledger
           .transact((turn) => {
             const index = targetStream(key);
-
-            const tasks = [...turn.read(index, 0)]
-              .map((entry) => saved(turn, decodePointer(valueFor(entry)).id))
-              .filter((found) => OPEN.has(found.state._tag));
-
+            const tasks = Arr.filter(
+              Arr.map([...turn.read(index, 0)], (entry) => saved(turn, decodePointer(valueFor(entry)).id)),
+              (found) => OPEN.has(found.state._tag),
+            );
             return { tasks, rev: turn.head(index) };
           })
           .pipe(Effect.mapError(translated));

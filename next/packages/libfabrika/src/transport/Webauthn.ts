@@ -13,6 +13,7 @@ import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 
 const KEY = "sk-ecdsa-sha2-nistp256@openssh.com";
@@ -282,7 +283,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 
   const signature = join(
     field(SIG),
-    field(join(...ints.map(field))),
+    field(join(...Arr.map(ints, field))),
     auth.slice(32, 37),
     field(decoded.origin),
     field(client),

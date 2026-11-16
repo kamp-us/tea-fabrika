@@ -2,6 +2,7 @@ import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 
 /** @internal */
 export type Bytes = Uint8Array<ArrayBuffer>;
@@ -11,13 +12,12 @@ export const utf8 = (text: string): Bytes => new TextEncoder().encode(text);
 
 /** @internal */
 export const join = (...parts: ReadonlyArray<Uint8Array>): Bytes => {
-  const out = new Uint8Array(parts.reduce((n, part) => n + part.length, 0));
-  parts.reduce((at, part) => {
+  const out = new Uint8Array(Arr.reduce(parts, 0, (n, part) => n + part.length));
+  Arr.reduce(parts, 0, (at, part) => {
     out.set(part, at);
 
     return at + part.length;
-  }, 0);
-
+  });
   return out;
 };
 
@@ -71,8 +71,7 @@ export const holds = (ok: boolean): Option.Option<true> => (ok ? Option.some(tru
 export const armor = (blob: Uint8Array): string => {
   const body = Base64.encode(blob);
   const rows = Array.from({ length: Math.ceil(body.length / 70) }, (_, i) => body.slice(i * 70, (i + 1) * 70));
-
-  return `-----BEGIN SSH SIGNATURE-----\n${rows.join("\n")}\n-----END SSH SIGNATURE-----\n`;
+  return `-----BEGIN SSH SIGNATURE-----\n${Arr.join(rows, "\n")}\n-----END SSH SIGNATURE-----\n`;
 };
 
 /** @internal */

@@ -7,6 +7,7 @@ import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import { subtle } from "./internal/binary.ts";
 import { checkSshsig } from "./Sshsig.ts";
 import type { Admission } from "./Wire.ts";
@@ -27,8 +28,7 @@ export const helloText = (a: { readonly url: string; readonly tab: string; reado
  * @category combinators
  */
 export const selectVersion = (client: ReadonlyArray<number>, server: ReadonlyArray<number>): number | null => {
-  const shared = client.filter((v) => server.includes(v));
-
+  const shared = Arr.filter(client, (v) => server.includes(v));
   return shared.length === 0 ? null : Math.max(...shared);
 };
 

@@ -5,6 +5,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -57,7 +58,7 @@ describe("S2 syncTest catches its plants", () => {
     fc.assert(
       fc.property(fc.array(fc.integer({ min: -10, max: 10 }), { maxLength: 12 }), (ns) => {
         expect(() =>
-          syncTest(machine, {}, { msgs: ns.map((n) => ({ type: "add", n })), encode, decode, equals, seed: SEED }),
+          syncTest(machine, {}, { msgs: Arr.map(ns, (n) => ({ type: "add", n })), encode, decode, equals, seed: SEED }),
         ).not.toThrow();
       }),
       { seed: SEED, numRuns: 80 },

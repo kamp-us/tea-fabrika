@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 
@@ -186,14 +187,11 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
   return yield* Option.match(
     Option.gen(function* () {
       const sig = yield* read(a.armored);
-
-      const signer = yield* Option.fromNullishOr(
-        a.signers.find((line) =>
+      const signer = yield* Arr.findFirst(a.signers, (line) =>
           Option.exists(
             Option.orElse(keyBlob(line), () => passkeyBlob(line)),
             (blob) => same(blob, sig.key),
           ),
-        ),
       );
 
       yield* holds(same(sig.space, utf8(a.space)));
@@ -251,7 +249,7 @@ export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
 }): Effect.fn.Return<Answer> {
   const checked = yield* verifySshsig({
     ...a,
-    signers: a.signers.filter((line) => Option.isSome(keyBlob(line))),
+    signers: Arr.filter(a.signers, (line) => Option.isSome(keyBlob(line))),
   });
 
   return checked._tag === "key" ? { signer: checked.signer } : refused;

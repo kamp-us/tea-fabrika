@@ -10,6 +10,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import * as Arr from "effect/Array";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";
@@ -292,11 +293,11 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
           return;
         }
 
-        const next = latest.waits
-          .filter((wait) => wait.stream === stream)
-          .reduce<typeof Wait.Type | undefined>(
-            (first, wait) => (first === undefined || wait.after < first.after ? wait : first),
+        const next = Arr.reduce(
+          Arr.filter(latest.waits, (wait) => wait.stream === stream),
             undefined,
+          (first: typeof Wait.Type | undefined, wait) =>
+            first === undefined || wait.after < first.after ? wait : first,
           );
 
         if (next === undefined || (yield* register(next, onRefused))._tag === "parked") {

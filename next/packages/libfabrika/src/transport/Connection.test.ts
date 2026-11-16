@@ -8,6 +8,8 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 import * as Formatter from "effect/Formatter";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -176,12 +178,11 @@ const admits = (saved: Saved, wait: W) => {
   }
 
   const next = { ...saved, waits: [...saved.waits, wait] };
-
-  return !saved.waits.some((w) => w.id === wait.id) && next.waits.length <= 64 && bytes(next) <= 16_384;
+  return !Arr.some(saved.waits, (w) => w.id === wait.id) && next.waits.length <= 64 && bytes(next) <= 16_384;
 };
 
 const answers = (log: ReadonlyArray<Event>, from: number) =>
-  log.slice(from).flatMap((e) => (e._tag === "send" ? [e.frame] : []));
+  Arr.flatMap(log.slice(from), (e) => (e._tag === "send" ? [e.frame] : []));
 
 it.effect.prop(
   "T843 frame: ordinary and parked-read replies retain the delay, tag their ended frame, and keep the socket online (50 runs)",
@@ -227,8 +228,8 @@ it.effect.prop(
         const reply = answers(h.log, 0).at(-1)!;
         expect(reply.error).toMatchObject({ message: "rate_limited", data: { reason: "rate_limited", retryAfter } });
         expect(h.saved()._tag).toBe("online");
-        expect(h.log.filter((e) => e._tag === "close")).toEqual([]);
-        const frame = spans.filter((span) => span.name === "connection.frame").at(-1)!;
+        expect(Arr.filter(h.log, (e) => e._tag === "close")).toEqual([]);
+        const frame = Arr.filter(spans, (span) => span.name === "connection.frame").at(-1)!;
         expect(frame.status._tag).toBe("Ended");
         expect(frame.attributes.get("fab.gateway.refused")).toBe("rate_limited");
       }
@@ -269,7 +270,7 @@ it.effect.prop(
       yield* settle;
       expect(answers(h.log, 0)).toEqual([kind === "ok" ? { jsonrpc: "2.0", id, result: params } : no(id, kind).frame]);
       expect(h.saved()).toEqual(online());
-      const frames = spans.filter((span) => span.name === "connection.frame");
+      const frames = Arr.filter(spans, (span) => span.name === "connection.frame");
       expect(frames).toHaveLength(1);
       expect(frames[0]!.status._tag).toBe("Ended");
       expect(frames[0]!.attributes.has("fab.gateway.refused")).toBe(kind === "reserved");
@@ -310,13 +311,13 @@ describe("T703 connection driver laws", () => {
                 }
 
                 yield* h.run(h.c.frame(waitFrame(id, { stream: wait.stream, after: wait.after })));
-
-                const refused = answers(h.log, from).filter(
+                const refused = Arr.filter(
+                  answers(h.log, from),
                   (f) => f.id === id && f.error?.message === "too_many_waits",
                 );
 
                 expect(refused).toHaveLength(ok ? 0 : 1);
-                const registered = h.log.slice(from).find((e) => e._tag === "wait");
+                const registered = Option.getOrUndefined(Arr.findFirst(h.log.slice(from), (e) => e._tag === "wait"));
 
                 if (ok) {
                   seen.add("admitted");
@@ -348,10 +349,24 @@ describe("T703 connection driver laws", () => {
                 yield* Deferred.succeed(call!.reply, answer);
                 yield* settle;
                 const after = h.log.slice(from);
+<<<<<<< HEAD
                 const sent = after.findIndex((e) => e._tag === "send");
                     const idle = after.findIndex(
                       (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy,
                     );
+||||||| e613fa45b
+                const sent = after.findIndex((e) => e._tag === "send");
+                const idle = after.findIndex((e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy);
+=======
+                const sent = Option.getOrElse(
+                  Arr.findFirstIndex(after, (e) => e._tag === "send"),
+                  () => -1,
+                );
+                const idle = Option.getOrElse(
+                  Arr.findFirstIndex(after, (e) => e._tag === "save" && e.saved._tag === "online" && !e.saved.busy),
+                  () => -1,
+                );
+>>>>>>> 7a10b6213
                 // The response goes out first; only then is busy cleared.
                 expect(sent).toBeGreaterThanOrEqual(0);
                 expect(idle).toBeGreaterThan(sent);
@@ -377,7 +392,7 @@ describe("T703 connection driver laws", () => {
                 const left = h.saved();
                 // Every wait the ring could answer is answered.
                 expect(
-                  left._tag === "online" && left.waits.filter((w) => w.stream === stream && rev > w.after),
+                  left._tag === "online" && Arr.filter(left.waits, (w) => w.stream === stream && rev > w.after),
                 ).toEqual([]);
                 seen.add("ring");
               }
@@ -490,7 +505,7 @@ describe("T703 connection driver laws", () => {
                 seen.add(`restored:${h.saved()._tag}`);
               } else if (move < 35) {
                 yield* h.c.wake();
-                const closed = h.log.slice(from).filter((e) => e._tag === "close");
+                const closed = Arr.filter(h.log.slice(from), (e) => e._tag === "close");
                 expect(closed).toEqual(now._tag === "online" && now.busy ? [{ _tag: "close", code: 1012 }] : []);
                 seen.add(`wake:${closed.length}`);
               } else if (move < 50) {
@@ -511,7 +526,7 @@ describe("T703 connection driver laws", () => {
                 const handshake = method !== "process.send";
 
                 if (now._tag === "online") {
-                  expect(after.map((e) => e._tag)).toEqual(["save", "call", "send", "save"]);
+                  expect(Arr.map(after, (e) => e._tag)).toEqual(["save", "call", "send", "save"]);
                   expect(h.saved()).toEqual({ ...now, busy: false });
                 } else if (handshake) {
                   // Before hello only the handshake reaches the call, and nothing is saved.
@@ -864,14 +879,21 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                   readonly params: unknown;
                 }> = [];
             const check = (from: number) => {
-              const calls = h.log
-                .slice(from)
-                .flatMap((e) => (e._tag === "call" ? [{ method: e.method, params: e.params }] : []));
-
+              const calls = Arr.flatMap(h.log.slice(from), (e) =>
+                e._tag === "call" ? [{ method: e.method, params: e.params }] : [],
+              );
               // The calls the old decode accepted, in order, and no other.
+<<<<<<< HEAD
                   expect(calls).toEqual(
                     queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })),
                   );
+||||||| e613fa45b
+              expect(calls).toEqual(queued.splice(0, calls.length).map(({ method, params }) => ({ method, params })));
+=======
+              expect(calls).toEqual(
+                Arr.map(queued.splice(0, calls.length), ({ method, params }) => ({ method, params })),
+              );
+>>>>>>> 7a10b6213
             };
 
             for (const { move, pick, frame, failure: f, rev } of moves) {
@@ -921,11 +943,13 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                 const trace: Array<string> = [];
                 const value = failure(f, trace);
                 const before = h.saved();
-
-                const id = (before._tag === "online" ? before.waits : []).find(
+                const id = Arr.findFirst(
+                  before._tag === "online" ? before.waits : [],
                   (w) => `${w.stream}|${w.after}` === pending!.label,
-                )?.id;
-
+                ).pipe(
+                  Option.map((w) => w.id),
+                  Option.getOrUndefined,
+                );
                 yield* Deferred.fail(pending!.reply, value);
                 yield* settle;
                 const old = oldAnswer(f);
@@ -938,7 +962,12 @@ describe("T737 decodes keep the connection's acceptance, refusals and order, nex
                   expect(h.log.slice(from)).toEqual([]);
                   seen.add("failed:thrown");
                 } else if (id !== undefined) {
-                  expect(sent.filter((s) => s.id === id).map((s) => s.error?.data?.reason)).toEqual([old.reason]);
+                  expect(
+                    Arr.map(
+                      Arr.filter(sent, (s) => s.id === id),
+                      (s) => s.error?.data?.reason,
+                    ),
+                  ).toEqual([old.reason]);
                   seen.add(`failed:${f.kind}:${old.reason === "unreachable" ? "fallback" : "reason"}`);
 
                   if (old.reason === "") {
@@ -1032,7 +1061,7 @@ it.effect.prop(
       });
 
       yield* c.frame(callFrame("take", "tasks.take"));
-      expect(copies.map((a) => a._tag === "online" && a.busy)).toEqual([true, false]);
+      expect(Arr.map(copies, (a) => a._tag === "online" && a.busy)).toEqual([true, false]);
 
       for (const copy of copies) {
         expect(copy).toMatchObject({ identity: { as: "hands" }, has, build });

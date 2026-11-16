@@ -17,7 +17,13 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, Layer, Predicate, Result, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -67,11 +73,7 @@ const reconstruct = (before: unknown, change: Update): unknown => {
       continue;
     }
 
-    const keys = p.path
-      .slice(1)
-      .split("/")
-      .map((k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
-
+    const keys = Arr.map(p.path.slice(1).split("/"), (k) => k.replaceAll("~1", "/").replaceAll("~0", "~"));
     let target: unknown = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -531,7 +533,7 @@ describe("P40 the counter under its qualified identity", () => {
                     expect(yield* Stream.runCollect((yield* Mailbox).receive(NAME, 0))).toHaveLength(sent);
                     // The process facts name the qualified program under the registered name.
                     const info = yield* (yield* ProcessManager).info;
-                    expect(info.map((p) => ({ name: p.name, program: p.program }))).toEqual([
+                    expect(Arr.map(info, (p) => ({ name: p.name, program: p.program }))).toEqual([
                       { name: NAME, program: PROGRAM },
                     ]);
                   }).pipe(Effect.provide(yield* session(folder))),
@@ -605,8 +607,8 @@ describe("P40 the counter under its qualified identity", () => {
                 }
 
                 const info = yield* m.info;
-                expect(info.map((p) => p.name).sort()).toEqual([...names].sort());
-                expect(info.every((p) => p.program === PROGRAM)).toBe(true);
+                expect(Arr.map(info, (p) => p.name).sort()).toEqual([...names].sort());
+                expect(Arr.every(info, (p) => p.program === PROGRAM)).toBe(true);
               }
 
               expect(names.length).toBeGreaterThan(0);

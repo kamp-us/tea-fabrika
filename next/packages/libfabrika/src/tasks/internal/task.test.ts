@@ -10,6 +10,7 @@
 // another process collect.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Executor, type Request, Result, State } from "../Task.ts";
@@ -126,8 +127,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     collect_other: done,
     collect_early: !done,
   };
-
-  return moves.filter((move) => can[move]);
+  return Arr.filter(moves, (move) => can[move]);
 };
 
 /** The state the oracle expects, built from the world through the schema's own constructors. */
@@ -217,7 +217,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
 
     case "take_other": {
       const key = choose(
-        tape.keys.filter((k) => k !== request.target),
+        Arr.filter(tape.keys, (k) => k !== request.target),
         cell.variant,
       );
 
@@ -228,8 +228,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
 
     case "take_lacking": {
       const missing = choose(request.needs, cell.variant);
-      const executor = { ...able(request, cell, base), has: CAPABILITIES.filter((c) => c !== missing) };
-
+      const executor = { ...able(request, cell, base), has: Arr.filter(CAPABILITIES, (c) => c !== missing) };
       return [{ type: "take", executor, execution: cell.execution }, world, refuse("lacks_capability")];
     }
 
@@ -351,7 +350,7 @@ const law = (name: string, moves: ReadonlyArray<Move>, required: ReadonlyArray<D
           world = next;
           expect(model.state, `${move}: the state the plan's table gives`).toEqual(expected(world));
           // L7 on every prefix: folding only the committed events from a fresh init is the same task.
-          const replayed = accepted.reduce(step, init());
+          const replayed = Arr.reduce(accepted, init(), step);
           expect(replayed.state, `${move}: the committed events fold back to the same task`).toEqual(model.state);
         }
       }),
@@ -384,7 +383,7 @@ describe("P39 slice 1: the task machine", () => {
       "take_ok",
       "take_other",
       "early",
-      ...(["assigned", "started", "finished"] as const).flatMap((phase) => [
+      ...Arr.flatMap(["assigned", "started", "finished"] as const, (phase) => [
         `take_again@${phase}` as const,
         `take_lacking@${phase}` as const,
       ]),

@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
@@ -249,7 +250,7 @@ describe("P10 hello", () => {
         fc.array(fc.integer({ min: 1, max: 9 })),
         fc.array(fc.integer({ min: 1, max: 9 })),
         (client, server) => {
-          const common = [...new Set(client)].filter((v) => server.includes(v));
+          const common = Arr.filter([...new Set(client)], (v) => server.includes(v));
           expect(selectVersion(client, server)).toEqual(common.length ? Math.max(...common) : null);
         },
       ),

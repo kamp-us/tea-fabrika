@@ -8,6 +8,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -206,7 +207,7 @@ const check = (armored: string, signer: string = line, body: string = text, over
 
 const refused = { _tag: "refused", reason: "bad_signature" };
 
-const blob = (armored = realArmor) => Buffer.from(armored.trim().split("\n").slice(1, -1).join(""), "base64");
+const blob = (armored = realArmor) => Buffer.from(Arr.join(armored.trim().split("\n").slice(1, -1), ""), "base64");
 
 const runs = { seed: 119120, numRuns: 40 };
 
@@ -466,7 +467,10 @@ describe("P10 WebAuthn SSHSIG", () => {
       ),
       {
         ...runs,
-        examples: policyCases.map(([, options]): [string, typeof options] => [text, options]),
+        examples: Arr.map(
+          policyCases,
+          ([, options]: (typeof policyCases)[number]): [string, (typeof policyCases)[number][1]] => [text, options],
+        ),
       },
     );
   });
@@ -525,7 +529,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       ),
       {
         ...runs,
-        examples: bindingCases.map(([, body, over]): [{ body: string; over: typeof over }] => [{ body, over }]),
+        examples: Arr.map(bindingCases, ([, body, over]): [{ body: string; over: typeof over }] => [{ body, over }]),
       },
     );
   });
@@ -634,7 +638,7 @@ describe("P10 WebAuthn SSHSIG", () => {
           }),
         ),
       ),
-      { ...runs, examples: corruptions.map((kind) => [kind, 0]) },
+      { ...runs, examples: Arr.map(corruptions, (kind) => [kind, 0]) },
     ));
   it("P7: the compatibility checker keeps SK out and returns an Ed25519 signer as supplied", () =>
     // Plant: strip the returned signer's comment. The supplied-line equality must fail.

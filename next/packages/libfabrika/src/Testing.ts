@@ -5,6 +5,7 @@
 // when tea ships the matching helper.
 import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
 import * as Result from "effect/Result";
+import * as Arr from "effect/Array";
 
 type Options<S, M> = {
   readonly msgs: ReadonlyArray<M>;
@@ -101,9 +102,8 @@ export const senderTest = ({ inputs, expected, writes, owner, seed }: SenderOpti
   const fail = (message: string): never => {
     throw new Error(`senderTest (seed ${seed}): ${message}`);
   };
-
-  const senders = new Map(inputs.map((input) => [input.parent, input.by]));
-  const ids = new Set(expected.map((e) => e.id));
+  const senders = new Map(Arr.map(inputs, (input) => [input.parent, input.by]));
+  const ids = new Set(Arr.map(expected, (e) => e.id));
 
   for (const write of writes) {
     if (!ids.has(write.id)) {
@@ -112,7 +112,7 @@ export const senderTest = ({ inputs, expected, writes, owner, seed }: SenderOpti
   }
 
   for (const want of expected) {
-    const found = writes.filter((write) => write.id === want.id);
+    const found = Arr.filter(writes, (write) => write.id === want.id);
 
     if (found.length !== 1) {
       fail(`write ${want.id} landed ${found.length} times`);

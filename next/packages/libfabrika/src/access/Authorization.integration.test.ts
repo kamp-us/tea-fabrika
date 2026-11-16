@@ -18,6 +18,7 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Rec from "effect/Record";
 import * as Formatter from "effect/Formatter";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -268,18 +269,19 @@ describe("P17a, appendAdmitted", () => {
                 expect((yield* appendAdmitted(other, { stream: "notes", id: "other", line: line(body) }))._tag).toBe(
                   "placed",
                 );
-                expect((yield* read("notes")).map((row) => row.id)).toEqual([
+                expect(Arr.map(yield* read("notes"), (row) => row.id)).toEqual([
                   ...Array.from({ length: before }, (_, n) => `before-${n}`),
                   "other",
                 ]);
-                const appends = w.observations.filter((x) => x.op === "append");
+                const appends = Arr.filter(w.observations, (x) => x.op === "append");
                 expect(appends).toHaveLength(before * 2 + 1);
 
                 for (const write of appends) {
                   expect(
-                    w.observations
-                      .filter((x) => x.turn === write.turn)
-                      .map(({ op, stream, after, inside }) => ({ op, stream, after, inside })),
+                    Arr.map(
+                      Arr.filter(w.observations, (x) => x.turn === write.turn),
+                      ({ op, stream, after, inside }) => ({ op, stream, after, inside }),
+                    ),
                   ).toEqual([
                     { op: "read", stream: "gateway/access", after: 0, inside: true },
                     { op: "append", stream: "notes", after: undefined, inside: true },
@@ -418,7 +420,7 @@ describe("P17a, appendAdmitted", () => {
                   line: line(body),
                 }))._tag,
               ).toBe("placed");
-              expect((yield* read("notes")).map((row) => row.id)).toEqual(["accepted", "still-live"]);
+              expect(Arr.map(yield* read("notes"), (row) => row.id)).toEqual(["accepted", "still-live"]);
             }).pipe(Effect.provide(fresh.layer));
           }).pipe(Effect.scoped),
         ),
@@ -453,8 +455,8 @@ describe("P17a, appendAdmitted", () => {
                 expect(Result.isSuccess(result)).toBe(outcome === "placed");
                 yield* SpanSink.use((sink) => sink.flush);
                 const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
-
-                const operations = rows.filter(
+                const operations = Arr.filter(
+                  rows,
                   (row) =>
                     Rec.values(row.attributes).includes(id) &&
                     Rec.values(row.attributes).includes("notes") &&

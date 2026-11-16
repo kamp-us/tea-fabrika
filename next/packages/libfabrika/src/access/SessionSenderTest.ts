@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import type * as Id from "../Id.ts";
 import type { Sql } from "../Sql.ts";
@@ -46,8 +47,7 @@ const CLIENTS = ["person", "agent"] as const;
 type Client = (typeof CLIENTS)[number];
 
 const inputId = Brand.nominal<Id.InputId>(); // The test plays the trusted door, never a public decoder.
-
-const PARENTS = [1, 2, 3].map((n) => inputId(`in-${START}-${n}`));
+const PARENTS = Arr.map([1, 2, 3], (n) => inputId(`in-${START}-${n}`));
 
 const writer = (client: Client) =>
   Writer.cases[client].make({ key: client === "person" ? "SHA256:person-window" : "SHA256:agent", for: PERSON });
@@ -68,19 +68,14 @@ const record = (parent: string, client: Client, process: string) => ({
 /** Every saved row, by table. A table the manager made on first use and left empty holds nothing. */
 const snapshot = (sql: Sql) =>
   JSON.stringify(
-    sql
-      .exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-      .map(
+    Arr.filter(
+      Arr.map(
+        sql.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"),
         ({ name }) =>
-          [
-            name,
-            sql
-              .exec(`SELECT * FROM "${String(name)}"`)
-              .map((row) => JSON.stringify(row))
-              .sort(),
-          ] as const,
-      )
-      .filter(([, rows]) => rows.length > 0),
+          [name, Arr.map(sql.exec(`SELECT * FROM "${String(name)}"`), (row) => JSON.stringify(row)).sort()] as const,
+      ),
+      ([, rows]) => rows.length > 0,
+    ),
   );
 
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
@@ -212,7 +207,7 @@ const walk = (open: Open) =>
         SessionManager.layer(
           sql,
           (key: string) =>
-            CLIENTS.some((c) => c === key && world.live.has(c))
+            Arr.some(CLIENTS, (c) => c === key && world.live.has(c))
               ? Effect.succeed(writer(key === "agent" ? "agent" : "person"))
               : Effect.fail(NotGranted.make({})),
           { input: () => false, event: () => false },

@@ -20,6 +20,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as Arr from "effect/Array";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
@@ -113,7 +114,8 @@ const build = <T extends Types>(name: string, declared: ReadonlyMap<string, Decl
       new Map(declared).set(type, {
         relations: new Set(Rec.keys(shape.relations ?? {})),
         permissions: new Map(
-          Rec.toEntries<string, (p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}).map(
+          Arr.map(
+            Rec.toEntries<string, (p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}),
             ([permission, rewrite]) => [permission, rewrite(rewrites)[RewriteTypeId]],
           ),
         ),

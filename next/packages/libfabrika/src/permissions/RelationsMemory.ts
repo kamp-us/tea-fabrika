@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
+import * as Arr from "effect/Array";
 import { fold } from "./internal/relationsTable.ts";
 import type { Change } from "./Relation.ts";
 import { Relations, RelationsError } from "./Relations.ts";
@@ -53,7 +54,7 @@ export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>
       yield* Effect.fromResult(add(changes)).pipe(Effect.orDie);
 
       return Relations.of({
-        within: () => Result.succeed(fold([...held.values()].map(({ row }) => row))),
+        within: () => Result.succeed(fold(Arr.map([...held.values()], ({ row }) => row))),
         write: (batch) => Effect.fromResult(add(batch)),
       });
     }),

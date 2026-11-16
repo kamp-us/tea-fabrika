@@ -3,6 +3,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Add, Adds, Signed } from "./Access.ts";
 
@@ -73,7 +74,7 @@ describe("P10 passkey records", () => {
       .chain((full) =>
         fc
           .subarray(Rec.keys(full), { maxLength: 6 })
-          .map((keys) => Rec.fromEntries(keys.map((key) => [key, full[key as keyof typeof full]]))),
+          .map((keys) => Rec.fromEntries(Arr.map(keys, (key) => [key, full[key as keyof typeof full]]))),
       );
 
     fc.assert(

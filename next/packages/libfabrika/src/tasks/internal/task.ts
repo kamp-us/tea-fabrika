@@ -4,6 +4,7 @@
 import { Machine } from "@demlik/tea/effect";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import { Collection, Executor, Request, Result, State } from "../Task.ts";
 
 const Execution = Schema.NonEmptyString;
@@ -82,7 +83,7 @@ export const task = Machine.make({
         return refused(model, "not_target");
       }
 
-      if (!s.request.needs.every((need) => executor.has.includes(need))) {
+      if (!Arr.every(s.request.needs, (need) => executor.has.includes(need))) {
         return refused(model, "lacks_capability");
       }
 

@@ -22,6 +22,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
@@ -157,19 +159,19 @@ const denied = (key: string, by: string): MemberEvent => ({
 const view = (m: Access) => ({
   person: m.person,
   name: m.name,
-  keys: [...m.keys.entries()]
-    .map(([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under }))
-    .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0)),
+  keys: Arr.map([...m.keys.entries()], ([key, k]) => ({ key, rank: k.rank, live: k.live, under: k.under })).sort(
+    (a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+  ),
   spent: [...m.spent].sort(),
 });
 
 const isIn = (m: Access, key: string): boolean => "as" in admitted(m, key);
 
 const liveWith = (m: Access, rank: string): ReadonlyArray<string> =>
-  [...m.keys.entries()]
-    .filter(([key, k]) => k.rank === rank && k.live && !m.spent.has(key))
-    .map(([key]) => key)
-    .sort();
+  Arr.map(
+    Arr.filter([...m.keys.entries()], ([key, k]) => k.rank === rank && k.live && !m.spent.has(key)),
+    ([key]) => key,
+  ).sort();
 
 /** Recovery keys that are live and not spent: the sheets that still work. */
 const liveSheets = (m: Access) => liveWith(m, "recovery");
@@ -298,14 +300,14 @@ const first = fc
 /** A whole history: `founded` first, then up to 30 events of any kind. Each event gets its own id. */
 const history = fc
   .tuple(first, fc.array(laterEvent, { maxLength: 30 }))
-  .map(([head, rest]) => [head, ...rest.map((make) => make())]);
+  .map(([head, rest]) => [head, ...Arr.map(rest, (make) => make())]);
 
 /** A history with two devices from the start, so tests that need two live devices often get them. */
 const twoDevices = fc
   .tuple(fc.constantFrom(["pA", "pB"], ["pA", "pB", "pC"]), fc.array(laterEvent, { maxLength: 20 }))
-  .map(([keys, rest]) => [founded(keys, "wA"), ...rest.map((make) => make())]);
+  .map(([keys, rest]) => [founded(keys, "wA"), ...Arr.map(rest, (make) => make())]);
 
-const prefixes = (events: ReadonlyArray<MemberEvent>) => events.map((_, i) => foldAccess(events.slice(0, i + 1)));
+const prefixes = (events: ReadonlyArray<MemberEvent>) => Arr.map(events, (_, i) => foldAccess(events.slice(0, i + 1)));
 
 // Distinct from the fixed roots and windows used around each generated subject.
 const leafKey = fc
@@ -487,7 +489,7 @@ describe("p28, founding", () => {
     fc.assert(
       fc.property(fc.uniqueArray(fc.string()), (keys) => {
         const m = foldAccess([founded(keys, null)]);
-        expect([...ALL, ...keys].filter((key) => isIn(m, key))).toEqual([]);
+        expect(Arr.filter([...ALL, ...keys], (key) => isIn(m, key))).toEqual([]);
       }),
       opts(["pA"]),
     );
@@ -603,12 +605,14 @@ describe("p28, grants", () => {
     fc.assert(
       fc.property(history, (events) => {
         const m = foldAccess(events);
-
-        const weak = [...m.keys.entries()]
-          .filter(([key, k]) => k.rank !== "person" || m.spent.has(key))
-          .map(([key]) => key);
-
-        const target = [...m.keys.keys()].find((key) => isIn(m, key)) ?? "pA";
+        const weak = Arr.map(
+          Arr.filter([...m.keys.entries()], ([key, k]) => k.rank !== "person" || m.spent.has(key)),
+          ([key]) => key,
+        );
+        const target = Option.getOrElse(
+          Arr.findFirst([...m.keys.keys()], (key) => isIn(m, key)),
+          () => "pA",
+        );
 
         for (const by of weak) {
           ran++;
@@ -829,13 +833,16 @@ describe("p28, devices are equal roots", () => {
 
         ran++;
         const by = devices[pick % devices.length] ?? "pA";
-        const gone = devices.find((key) => key !== by) ?? "pB";
+        const gone = Option.getOrElse(
+          Arr.findFirst(devices, (key) => key !== by),
+          () => "pB",
+        );
         const [key, window] = FRESH_DEVICES[0];
         const drop = byAdd ? addedDevice(by, key, window, { drops: [gone] }) : revoked(by, gone);
         const after = foldAccess([...events, drop]);
         expect(after.keys.get(gone)?.live).toBe(false);
-        const others = devices.filter((d) => d !== gone);
-        expect(livePersons(after).filter((d) => others.includes(d))).toEqual(others);
+        const others = Arr.filter(devices, (d) => d !== gone);
+        expect(Arr.filter(livePersons(after), (d) => others.includes(d))).toEqual(others);
         expect(liveSheets(after)).toEqual(liveSheets(before));
         expect([...after.spent].sort()).toEqual([...before.spent].sort());
       }),
@@ -855,7 +862,7 @@ describe("p28, devices are equal roots", () => {
           return;
         }
 
-        const targets = [...m.keys.keys()].filter((key) => key !== one && key !== two);
+        const targets = Arr.filter([...m.keys.keys()], (key) => key !== one && key !== two);
         const target = targets[pick % Math.max(1, targets.length)];
 
         if (target === undefined) {
@@ -1049,7 +1056,7 @@ describe("p28, the rule's answer for a key that is out", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const events = [founded(["pA", "pB"], "wA"), granted("pA", key), revoked("pB", key)];
-        const folded = events.reduce((at, event) => Result.getOrElse(allows(at, event), () => at), EMPTY);
+        const folded = Arr.reduce(events, EMPTY, (at, event) => Result.getOrElse(allows(at, event), () => at));
         const again = allows(folded, granted("pA", key));
         expect(Result.isFailure(again) && again.failure).toBe("revoked");
         expect(isIn(foldAccess([...events, granted("pA", key)]), key)).toBe(false);
@@ -1062,7 +1069,7 @@ describe("p28, the rule's answer for a key that is out", () => {
     fc.assert(
       fc.property(leafKey, (key) => {
         const events = [founded(["pA", "pB"], "wA"), granted("pA", key)];
-        const folded = events.reduce((at, event) => Result.getOrElse(allows(at, event), () => at), EMPTY);
+        const folded = Arr.reduce(events, EMPTY, (at, event) => Result.getOrElse(allows(at, event), () => at));
         const again = allows(folded, granted("pB", key));
         expect(Result.isSuccess(again)).toBe(true);
 
