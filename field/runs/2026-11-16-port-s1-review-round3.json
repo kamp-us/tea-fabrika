@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s1-review-round3",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": "2026-11-15T23:55:48-08:00",
+  "ended": "2026-11-16T00:06:52-08:00",
+  "parent": "2026-11-16-port-s1-tests-round3",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of the fix round for slice S1 (today's tooling, the lint hold on 0113) at 43944f5b0, diff bad5a82..43944f5b0: merge-ready, one finding row. The named fault is fixed: envTarget (oxlint-plugins/tracked-scripts.ts:68-78) skips the value of an env option that takes one (TAKES_VALUE at line 65, after GNU coreutils env and FreeBSD env(1)), and check() now gives new_script for '#!/usr/bin/env -S -u FOO bash', '#!/usr/bin/env -S -C /tmp sh', '#!/usr/bin/env -iu FOO bash' and '#!/usr/bin/env --unset=FOO python3', and [] for '#!/usr/bin/env -u bash node'. The law's envWord generator (tracked-scripts.test.ts:69-78) draws NAME=value words, plain flags and options with values on both sides, and asserts all three kinds were drawn. The new law file is red on eb4fa6e's check (1 of 6). Plants of mine, each red: no-extension read removed, the name pattern unanchored, env read as the name, flags not skipped, NAME=value not skipped, option value not skipped, long options dropped from TAKES_VALUE, every flag taking a value, Python names dropped, listed files read anyway. One plant stayed green: dropping the flag-cluster prefix from TAKES_VALUE (so '-iu FOO' reads FOO), because seed 119120 over 50 runs never draws '-iu ' with a non-shell value; the code is right, the law reaches that case weakly (finding row). The plan's Laws row and the pinned law's plant comment now name the three launchers and the 19.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Read-only apart from this row. After the fast-forward to 43944f5b0 the worktree's index and files again held the old content; restored with git checkout HEAD on the four changed paths, git status then clean, before any check. Ran at 43944f5b0: nice -n 15 pnpm exec vitest run --maxWorkers=3 oxlint-plugins/tracked-scripts.test.ts, 6 of 6; node oxlint-plugins/tracked-scripts.ts, exit 0, 19 scripts not yet ported; NODE_OPTIONS=--max-old-space-size=6144 pnpm lint, 17 of 18 parts passed and lint:dead died with EPIPE from the type server in the shared box, then lint:dead alone passed (3 recorded findings, none new). loosening.sh bad5a82 43944f5b0: two hits, tracked-scripts.test.ts line 69 (the generator's new tuple member, inputs widened) and tracked-scripts.ts line 65 (TAKES_VALUE, not a test), no law loosened. Plants ran on scratch copies, never the branch.",
+  "step": "review",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}
