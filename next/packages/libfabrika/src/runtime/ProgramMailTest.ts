@@ -28,6 +28,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Logger,
   Option,
@@ -699,7 +700,7 @@ const walk = (
           Effect.sync(() => {
             recorded?.errors.push(
               String(Cause.squash(cause)),
-              JSON.stringify(Cause.squash(cause)),
+              Formatter.formatJson(Cause.squash(cause)),
               Cause.pretty(cause),
             );
           }),

@@ -3,7 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Formatter, Layer, Result, Schema, Scope, Stream } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
@@ -635,7 +635,7 @@ const walk = Effect.fnUntraced(function* (
     const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
 
     for (const body of refusedBodies) {
-      const forms = [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body), Str.slice(0, 14)(body)];
+      const forms = [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body), Str.slice(0, 14)(body)];
       expect(
         Arr.filter(outputs, (output) => Arr.some(forms, (form) => Str.includes(form)(output))),
         "input text leaked",

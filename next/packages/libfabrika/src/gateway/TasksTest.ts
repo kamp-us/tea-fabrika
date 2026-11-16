@@ -30,6 +30,7 @@ import {
   Deferred,
   Effect,
   Fiber,
+  Formatter,
   Layer,
   Logger,
   Option,
@@ -504,7 +505,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
       call: () => Effect.succeed(answer),
     });
 
-    yield* trace(transport.frame(JSON.stringify({ jsonrpc: "2.0", id: frames.length, method, params })));
+    yield* trace(transport.frame(Formatter.formatJson({ jsonrpc: "2.0", id: frames.length, method, params })));
 
     return answer;
   });
@@ -626,10 +627,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
     });
 
     yield* add(tape.request.process, pick(tape.cells, 0));
-    const beforeHello = JSON.stringify(Arr.map(saved, (s) => s.task));
+    const beforeHello = Formatter.formatJson(Arr.map(saved, (s) => s.task));
     expect(Arr.filter(w.notices, (n) => Str.includes("tasks.")(JSON.stringify(n)))).toEqual([]);
-    expect(JSON.stringify(yield* w.j((j) => j.read(pick(saved, 0).request.id)))).toBe(
-      JSON.stringify(pick(saved, 0).task),
+    expect(Formatter.formatJson(yield* w.j((j) => j.read(pick(saved, 0).request.id)))).toBe(
+      Formatter.formatJson(pick(saved, 0).task),
     );
     expect(beforeHello).not.toBe("");
 
@@ -1209,15 +1210,18 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       }
 
       for (const [name, value] of Object.entries(outputs)) {
-        const encoded = JSON.stringify(value, (_key, item: unknown) =>
-          typeof item === "bigint"
-            ? String(item)
-            : item instanceof Map
-              ? [...item]
-              : item instanceof Error
-                ? { name: item.name, message: item.message, cause: item.cause }
-                : item,
-        );
+        const encoded = yield* Schema.encodeEffect(
+          Schema.fromJsonString(Schema.Unknown, {
+            replacer: (_key, item: unknown) =>
+              typeof item === "bigint"
+                ? String(item)
+                : item instanceof Map
+                  ? [...item]
+                  : item instanceof Error
+                    ? { name: item.name, message: item.message, cause: item.cause }
+                    : item,
+          }),
+        )(value).pipe(Effect.orDie);
 
         for (const sentinel of sentinels) {
           for (const form of [

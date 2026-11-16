@@ -40,7 +40,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, Formatter, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
@@ -634,8 +634,8 @@ const walk = (
             expect(request.id, `${label}: L12 the task's id is the Cmd's`).toBe(d.id);
             expect(request.process, `${label}: L12 the task names the process that asked`).toBe(d.process);
             expect(request.target, `${label}: S1 the task targets the person's hands key`).toBe(world.target);
-            d.first ??= JSON.stringify(request);
-            expect(JSON.stringify(request), `${label}: L12 the request keeps its first bytes`).toBe(d.first);
+            d.first ??= Formatter.formatJson(request);
+            expect(Formatter.formatJson(request), `${label}: L12 the request keeps its first bytes`).toBe(d.first);
             expect(
               Arr.filter(j.events, (e) => e.event === "collected").length,
               `${label}: one collect`,

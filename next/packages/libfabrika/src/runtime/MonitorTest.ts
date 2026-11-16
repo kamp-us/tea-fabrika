@@ -39,6 +39,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Option,
   Result,
@@ -647,7 +648,7 @@ const walk = (
     });
 
     const say = Effect.fnUntraced(function* (name: string, input: unknown) {
-      return yield* answers(runner(name).msg(letter(++world.n, input)), `${name}'s ${JSON.stringify(input)}`);
+      return yield* answers(runner(name).msg(letter(++world.n, input)), `${name}'s ${Formatter.formatJson(input)}`);
     });
 
     /** Supervision ends a watched life; a retried exit, with the same reason, answers again. */

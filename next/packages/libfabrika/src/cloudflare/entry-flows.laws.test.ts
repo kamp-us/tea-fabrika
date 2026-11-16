@@ -8,7 +8,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Formatter, Layer, Option, Schema, Scope, Tracer } from "effect";
 import { Digest } from "effect/crypto";
 import * as Str from "effect/String";
 import { vi } from "vitest";
@@ -122,7 +122,7 @@ SettingsTest.suite((recipe, secret) =>
       founding: { person: "person_01m6v5270hf3c8x2q7w9z4k5mn", founder: key, window: null },
     };
 
-    captured.transport.push(JSON.stringify(input));
+    captured.transport.push(Formatter.formatJson(input));
     const lower = new Error(secret, { cause: { password: secret } });
 
     const database = Effect.acquireRelease(
@@ -238,7 +238,7 @@ SettingsTest.suite((recipe, secret) =>
         build: input.build,
         owner: Writer.cases.person.make({ key: "fixture-writer", for: input.founding.person }),
       });
-      const encoded = JSON.stringify(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
+      const encoded = Formatter.formatJson(corrupt === undefined ? input : StartsTest.corrupt(input, corrupt, secret));
 
       let attached = Attached.cases.online.make({
         client: "fixture-client",
@@ -267,9 +267,9 @@ SettingsTest.suite((recipe, secret) =>
         id: {
           name:
             path === "Process"
-              ? JSON.stringify([input.name, "worker"])
+              ? Formatter.formatJson([input.name, "worker"])
               : path === "RecordPart"
-                ? JSON.stringify([input.name, "spans/0"])
+                ? Formatter.formatJson([input.name, "spans/0"])
                 : input.name,
         },
         storage: {
@@ -480,7 +480,7 @@ SettingsTest.suite((recipe, secret) =>
     return {
       deploy: Effect.fnUntraced(function* (next: StartsTest.Recipe) {
         input = { ...(yield* StartsTest.input(next)), founding: input.founding };
-        captured.transport.push(JSON.stringify(input));
+        captured.transport.push(Formatter.formatJson(input));
       }, Effect.provide(Digest.layerWebCrypto)),
       open,
       fault: (next) => {

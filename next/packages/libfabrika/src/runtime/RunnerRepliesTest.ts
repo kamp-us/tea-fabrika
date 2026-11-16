@@ -7,7 +7,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Formatter, Layer, Schema, Scope, Stream } from "effect";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
 import { Writer } from "../access/SessionManager.ts";
@@ -427,7 +427,7 @@ const walk = (
     /** A call that must fail, then its retry, which returns what committed. */
     const failed = Effect.fnUntraced(function* (sent: Incoming) {
       const exit = yield* Effect.exit(live.runner.msg(sent));
-      expect(Exit.isFailure(exit), `a failed write or flush gave an answer: ${JSON.stringify(exit)}`).toBe(true);
+      expect(Exit.isFailure(exit), `a failed write or flush gave an answer: ${Formatter.formatJson(exit)}`).toBe(true);
 
       if (Exit.isFailure(exit)) {
         errors.push(Cause.pretty(exit.cause));
@@ -438,7 +438,7 @@ const walk = (
     const broken = Effect.fnUntraced(function* (prior: Answered, cell: string) {
       const before = yield* observe();
       const exit = yield* Effect.exit(live.runner.msg(prior.letter));
-      expect(Exit.isFailure(exit), `a damaged reply gave an answer: ${JSON.stringify(exit)}`).toBe(true);
+      expect(Exit.isFailure(exit), `a damaged reply gave an answer: ${Formatter.formatJson(exit)}`).toBe(true);
 
       if (Exit.isFailure(exit)) {
         errors.push(Cause.pretty(exit.cause));
@@ -574,7 +574,9 @@ const walk = (
         const located = replyRows(live.inbox, prior.letter.id);
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
-        const json = JSON.parse(value) as Record<string, unknown>;
+        const json = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+        )(value);
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;
 
@@ -582,14 +584,14 @@ const walk = (
           kind === "json"
             ? `${Str.slice(0, -1)(value)}${step.secret}`
             : kind === "missing"
-              ? JSON.stringify(
+              ? Formatter.formatJson(
                   Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),
                 )
               : kind === "key"
-                ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
+                ? Formatter.formatJson({ ...json, id: `${prior.letter.id}-other` })
                 : kind === "accepted"
-                  ? JSON.stringify({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                  : JSON.stringify({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
+                  ? Formatter.formatJson({ ...json, answer: Sent.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
+                  : Formatter.formatJson({ ...json, answer: Malformed.make({ reason: { text: step.secret } }) });
 
         secrets.push(step.secret);
         live.inbox.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, cell, value);

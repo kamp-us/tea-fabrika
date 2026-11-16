@@ -10,7 +10,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import { Clock, type Context, Effect, Exit, Formatter, Layer, Option, Schema, type Scope } from "effect";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
@@ -711,7 +711,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           yield* w.settle;
           recovered();
           const receipt = yield* w.recovery((s) => s.receipt(id));
-          expect(Str.includes(lost)(JSON.stringify([w.rows(), receipt])), "an uncaptured class survives nowhere").toBe(
+          expect(Str.includes(lost)(Formatter.formatJson([w.rows(), receipt])), "an uncaptured class survives nowhere").toBe(
             false,
           );
           break;

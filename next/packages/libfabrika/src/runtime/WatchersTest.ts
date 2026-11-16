@@ -1,7 +1,7 @@
 // next/, W3/W4. Driver-free laws run by the Node module over real scoped SQLite files.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Formatter, Layer, Schema } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
@@ -159,7 +159,7 @@ export const suite = (database: Database) =>
             frames.length = 0;
             yield* rebuilt.publish(patch);
             expect(frames).toEqual([]);
-            expect(JSON.stringify(rows(sql)).length).toBeLessThan(2048);
+            expect(Formatter.formatJson(rows(sql)).length).toBeLessThan(2048);
           }),
         ),
       { timeout: RUNS * 10_000, arbitrary: { seed: 119120, runs: RUNS } },
@@ -240,7 +240,7 @@ export const suite = (database: Database) =>
 
               expect(column).toBeDefined();
               const original = String((row ?? {})[column ?? "value"]);
-              const damaged = step.pick % 2 !== 0 ? "{bad-json" : JSON.stringify({ ...json(original), v: 999 });
+              const damaged = step.pick % 2 !== 0 ? "{bad-json" : Formatter.formatJson({ ...json(original), v: 999 });
               sql.exec(`UPDATE process_watchers SET "${column}"=? WHERE name=?`, damaged, "counter:fault");
               const before = rows(sql);
               frames.length = 0;

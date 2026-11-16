@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e84-build",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T01:14:26-08:00",
+  "ended": "2026-11-16T01:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Build step for judgment slice E84 of the Effect-check sweep (preferSchemaOverJson in next/packages/libfabrika/src/runtime, cloudflare and gateway), in next/, on branch fabrikalfa/effect-e84 from the tests step's head 674056f19. By decision 0589's first amendment it adds no lock line and opens no pull request. The 22 product hits the tests step left are the same 22 the E38 branch's commit 173fe7008 fixed, so by the lead's call they take E38's text byte for byte, applied with the Edit tool and not cherry-picked: cloudflare/connection.ts 297, 340; cloudflare/runtime.ts 952, 1151, 1178, 1384, 1416, 1449 (split over four lines, as E38 has it), 1498; gateway/Gateway.ts 936, 937, 1344, 1345, 1783, 1859, 1952 (two), 1953 (two), 1960; runtime/Runner.ts 395, 2530; each becomes Formatter.formatJson, with a Formatter import in each of the four files at E38's place. Runner.ts 2532, the other side of the id_reused compare with 2530, is not a hit (it sits in a plain callback) and moved too, as in E38, so both sides stay on one encoder and the hunk matches E38's. The added and removed lines of this diff equal E38's diff in those four files line for line (diff of the two -U0 line sets: same). The lead's trap check: Formatter.formatJson is JSON.stringify with a replacer (effect 4.1.3, src/Formatter.ts), so its bytes differ only for an Error (it adds name and message), a bigint (a string, where JSON.stringify throws), a cycle (dropped, where JSON.stringify throws), an Effect Redactable (only http Headers and UrlParams in effect define one) or a getter that returns one. None of the 22 values can hold those: JSON-RPC frames and challenge nonces, a [client, session] key used only in its own map, process descriptors and start requests written to SQL, gateway params, messages and memberships decoded from the wire or by a Schema, and Runner deliveries whose input crossed Durable Object RPC from that decode. Every hash or compare is made on one encoder in one file (Gateway 936 with 937, 1344 with the stored digest at 1376, 1345 with 1783 and 1960, 1859 with its stored digest, 1952 and 1953 with themselves, Runner inputDigest on every side, Runner 2530 with 2532). So no product site writes new bytes that a law or a secret search would see, no site needed Schema.fromJsonString(Schema.Unknown), and E38 carries no such trap.",
+  "laws": [
+    {
+      "law": "L1, preferSchemaOverJson at error in libfabrika's runtime, cloudflare and gateway: effect-tsgo diagnostics on next/packages/libfabrika/tsconfig.json with an --lspconfig that sets only preferSchemaOverJson at error",
+      "red": "22 product hits at 674056f19, 0 in the three folders after; libfabrika 166 to 144, down by exactly 22, all 144 outside the three folders (access 5, client 10, codehost 4, desktop 2, ledger 1, node 80, processes 14, settings 4, tasks 3, telemetry 6, transport 15)"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Narrow tests under nice -n 19 with --maxWorkers=1 and Node 26.13.0, one file at a time, TYPESAFE_API_KEY unset: 21 files, 149 tests, all passed, none skipped. The brief's four sets (runtime/Execution.test.ts, node/ErrorCause.test.ts, node/runtime/RunnerHands.test.ts, gateway's non-integration tests Gateway.types.test.ts and TaskAccess.test.ts) plus non-integration readers of the four changed files: runtime/Gateway.laws.test.ts, cloudflare connection.test.ts, leave.laws.test.ts, alarm.laws.test.ts, ObjectService.test.ts, runner-reply.laws.test.ts, reload.laws.test.ts, mail.test.ts, hands.test.ts, fetch.test.ts, SettingsStarts.test.ts, SettingsRecorded.test.ts, runtime RunnerRecovery.laws.test.ts, EffectFunctions.test.ts, Entry.test.ts, node/QuotaRunner.test.ts. Not run, since the brief keeps .integration. and .visual. files to a box: gateway/GatewayRevocation.integration.test.ts and the integration readers of the four files. pnpm format changed nothing beyond the edits; pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed all 18 parts; the exam ratchet exited 0; one pnpm typecheck passed in every package; loosening.sh 674056f19 HEAD had 0 hits. No law, test or assertion was changed; no cast, disable, ignore line, lock line or ledger row was added. The import form stays the barrel import the four files already use, as E38 has it, so the fold merges clean.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "build"
+}

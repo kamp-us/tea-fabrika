@@ -10,6 +10,7 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -1294,7 +1295,7 @@ describe("T285, runner tracing keep-laws", () => {
                       process: target,
                       name: "write",
                       personOnly: false,
-                      digest: JSON.stringify(m),
+                      digest: Formatter.formatJson(m),
                       traceId: signer.traceId,
                       span: signer,
                       arrivedAt: n,

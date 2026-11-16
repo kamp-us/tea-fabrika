@@ -29,6 +29,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Logger,
   Option,
@@ -230,7 +231,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: {
       getByName: () => ({
         codeInstall: (install: unknown) =>

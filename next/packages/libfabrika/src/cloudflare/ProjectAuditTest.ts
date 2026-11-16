@@ -1,7 +1,7 @@
 // P13 slice 2, next/. Project audit laws take scoped storage and RPC handles from their driver (0062).
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
-import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Effect, Formatter, Layer, Schema, type Scope, Stream } from "effect";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
@@ -226,7 +226,7 @@ const projectWalk = Effect.fnUntraced(function* (
     Effect.provide(
       projectLayer(
         ctx,
-        { ...env, INSTANCE: JSON.stringify(instance) },
+        { ...env, INSTANCE: Formatter.formatJson(instance) },
         {
           programs: { [PROGRAM]: CODE },
           bootstrap: [{ name: NAME, id: "project-start", program: PROGRAM }],
@@ -325,7 +325,7 @@ const projectWalk = Effect.fnUntraced(function* (
       ]);
       expect(reported.slice(before)).toEqual([
         {
-          object: JSON.stringify(["p13-project", NAME]),
+          object: Formatter.formatJson(["p13-project", NAME]),
           rows: [{ process: project.boot.process, method: "audit", outcome: "ok", cpuMs, wallMs }],
         },
       ]);

@@ -1,7 +1,7 @@
 // P13 slice 2, next/. Selection is exercised through the same execution entry used by a box.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Effect, Exit, Schema } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Formatter, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Audit from "./Audit.ts";
 import { nodeExecution, workerExecution } from "./Execution.ts";
@@ -116,7 +116,7 @@ describe("P13 safe audit", () => {
               for (const [n, cell] of tape.entries()) {
                 const note = `note-${cell.pick % 3}`;
                 const base = versions.get(note) ?? 0;
-                const body = JSON.stringify({ private: cell.pick, line: `"/雪\n${n}` });
+                const body = Formatter.formatJson({ private: cell.pick, line: `"/雪\n${n}` });
                 const input = Save.make({ type: "save", note, base, body });
                 bodies.push(body);
                 const modes = ["decode", "selector", "output", "json", "rpc", "reply"] as const;
@@ -142,7 +142,7 @@ describe("P13 safe audit", () => {
                     expect(Cause.hasDies(direct.cause)).toBe(false);
                     const error = Cause.squash(direct.cause);
                     expect(error).toBeInstanceOf(Audit.AuditError);
-                    outputs.push(String(error), JSON.stringify(error), Cause.pretty(direct.cause));
+                    outputs.push(String(error), Formatter.formatJson(error), Cause.pretty(direct.cause));
                   }
                 }
 
@@ -189,7 +189,7 @@ describe("P13 safe audit", () => {
                   expect(Cause.hasDies(exit.cause)).toBe(false);
                   const error = Cause.squash(exit.cause);
                   expect(error).toMatchObject({ _tag: "AuditError", reason: { _tag: expect.any(String) } });
-                  outputs.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
+                  outputs.push(String(error), Formatter.formatJson(error), Cause.pretty(exit.cause));
                 }
 
                 // Repair on the same input is the positive control for every failure edge.

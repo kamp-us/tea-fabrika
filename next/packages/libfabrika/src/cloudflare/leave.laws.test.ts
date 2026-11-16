@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import { Context, Effect, Exit, Formatter, Layer, Schedule, Schema } from "effect";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -152,7 +152,7 @@ const instance = Effect.fnUntraced(function* () {
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
-    INSTANCE: JSON.stringify(START),
+    INSTANCE: Formatter.formatJson(START),
     PROJECT: { getByName: () => ({}) },
     PROCESS: {
       getByName: (key: string) => ({
@@ -276,7 +276,7 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                         const to = Recipient.cases.client.make({ client, session });
                         expect(Exit.isSuccess(yield* Effect.exit(i.monitor(ref, pid, to, origin)))).toBe(true);
                         const watches = held.get(session) ?? new Map<string, "live" | "fired">();
-                        const key = JSON.stringify([client, ref]);
+                        const key = yield* Schema.encodeEffect(Key)([client, ref]);
                         watches.set(key, watches.get(key) ?? (running ? "live" : "fired"));
                         held.set(session, watches);
                       } else if (move === 5) {

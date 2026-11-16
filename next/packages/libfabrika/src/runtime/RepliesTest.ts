@@ -3,7 +3,7 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Formatter, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";
@@ -254,7 +254,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
   reason: Module.RepliesError["reason"],
 ) {
   const exit = yield* Effect.exit(effect);
-  expect(Exit.isFailure(exit), `expected a ${reason} failure, got ${JSON.stringify(exit)}`).toBe(true);
+  expect(Exit.isFailure(exit), `expected a ${reason} failure, got ${Formatter.formatJson(exit)}`).toBe(true);
 
   if (Exit.isSuccess(exit)) {
     return null;
@@ -383,7 +383,9 @@ const walk = (
 
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
-        const json = JSON.parse(value) as Record<string, unknown>;
+        const json = yield* Schema.decodeUnknownEffect(
+          Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+        )(value);
         const secret = step.body;
         secrets.push(secret);
         const kind = move === "corrupt" ? nth(CORRUPT, step.kind) : nth(ANSWER, step.kind);
@@ -393,16 +395,19 @@ const walk = (
           kind === "json"
             ? `${Str.slice(0, -1)(value)}${secret}`
             : kind === "missing"
-              ? JSON.stringify(
+              ? Formatter.formatJson(
                   Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),
                 )
               : kind === "key"
-                ? JSON.stringify({ ...json, ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }) })
+                ? Formatter.formatJson({
+                    ...json,
+                    ...(n % 2 === 0 ? { id: `${stored.id}-other` } : { name: "other:1" }),
+                  })
                 : kind === "typed"
-                  ? JSON.stringify({ ...json, by: { text: secret } })
+                  ? Formatter.formatJson({ ...json, by: { text: secret } })
                   : kind === "accepted"
-                    ? JSON.stringify({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
-                    : JSON.stringify({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) });
+                    ? Formatter.formatJson({ ...json, answer: Wrong.cases.accepted.make({ rev: n + 1, pos: n + 1 }) })
+                    : Formatter.formatJson({ ...json, answer: Wrong.cases.refused.make({ reason: { text: secret } }) });
 
         raw.exec(`UPDATE "${table}" SET "${column}"=? WHERE "${column}"=?`, damaged, value);
         corrupt.set(k, damaged);
