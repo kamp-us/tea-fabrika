@@ -333,8 +333,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // step limit (`LIMIT`, next's, SC18) and where its record goes, and no token. It checks out the
   // whole history, to diff the branch with origin/main from their merge base, and keeps the record
   // as `proof-set` after a red step too.
-  const commandsOf = (job: YamlMap) =>
-    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+  const commandsOf = (job: YamlMap) => steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
   const select = map(jobs[SELECT_JOB]);
   const selectSteps = steps(select);
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
