@@ -3,8 +3,10 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { beforeAll } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { beforeAll, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
 import {
   budgetOf,
@@ -22,6 +24,13 @@ import {
 } from "./legs.ts";
 import { nextFiles, visualFiles } from "./shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // Today's CI, next/. Covers legs.ts, which sizes the next job's matrix on the merge line: a pull
 // request, a merge queue group and a push to main (0534). Paths are the real next/ files Vitest
@@ -49,9 +58,11 @@ const line = fc
 let vitest: string[] = [];
 let e2e: string[] = [];
 
-beforeAll(async () => {
-  [vitest, e2e] = await Promise.all([nextFiles(ROOT), visualFiles(ROOT)]);
-});
+beforeAll(() =>
+  Effect.gen(function* () {
+    [vitest, e2e] = yield* promised(() => Promise.all([nextFiles(ROOT), visualFiles(ROOT)]));
+  }),
+);
 
 /** Some of the real files, with a scratch table that gives each a row or none. */
 const picked = () =>

@@ -1,7 +1,8 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect } from "effect";
+import { it } from "@effect/vitest";
+import { type Duration, Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import {
   Unread,
   collect,
@@ -17,6 +18,13 @@ import {
   type Timings,
   TRIES,
 } from "./time-table.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // Today's CI, both workflows. Covers time-table.ts, each test leg's time table. Inputs are shaped as
 // GitHub's jobs API and Vitest's JSON reporter write them; every other input is broken. Each plant
@@ -214,36 +222,44 @@ it("TT2: a Vitest report gives every file to the artifact and the slowest ten, s
   );
 });
 
-it("format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output", async () => {
-  // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
-  const report = { testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)] };
-  const timings = await timingsOf(
-    { ...env, GITHUB_SHA: "m".repeat(40) },
-    io(
-      () => job,
-      () => JSON.stringify(report),
-    ),
-  );
-  expect(timings).toEqual({
-    run: "43633120187",
-    attempt: "1",
-    workflow: "check",
-    event: "pull_request",
-    sha: "a".repeat(40),
-    job: "next",
-    leg: "3",
-    steps: readSteps(job),
-    files: {
-      _tag: "read",
-      rows: [
-        { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
-        { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
-      ],
-    },
-  });
-  expect(JSON.stringify(timings)).not.toContain("test output");
-  expect(fileName(timings)).toBe("timings-next-3.json");
-});
+it.live(
+  "format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output",
+  () =>
+    Effect.gen(function* () {
+      // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
+      const report = {
+        testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)],
+      };
+      const timings = yield* promised(() =>
+        timingsOf(
+          { ...env, GITHUB_SHA: "m".repeat(40) },
+          io(
+            () => job,
+            () => JSON.stringify(report),
+          ),
+        ),
+      );
+      expect(timings).toEqual({
+        run: "43633120187",
+        attempt: "1",
+        workflow: "check",
+        event: "pull_request",
+        sha: "a".repeat(40),
+        job: "next",
+        leg: "3",
+        steps: readSteps(job),
+        files: {
+          _tag: "read",
+          rows: [
+            { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
+            { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
+          ],
+        },
+      });
+      expect(JSON.stringify(timings)).not.toContain("test output");
+      expect(fileName(timings)).toBe("timings-next-3.json");
+    }),
+);
 
 // What GitHub or a leg could hand over instead: nothing, the wrong JSON, or a near miss.
 const broken = fc.oneof(

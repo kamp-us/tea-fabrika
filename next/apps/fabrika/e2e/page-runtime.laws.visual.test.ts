@@ -16,12 +16,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { it } from "@effect/vitest";
+import { it, beforeAll } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
-import { beforeAll, describe, expect } from "vitest";
+import { describe, expect } from "vitest";
 import { build } from "../src/build.ts";
 
 const SEED = 119120;
@@ -68,20 +68,22 @@ const property = (run: () => Promise<void>) =>
 type Assets = { readonly page: string; readonly script: string };
 let assets: Assets;
 
-beforeAll(async () => {
-  assets = await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const folder = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
-          (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-        );
-        const built = yield* build({ out: join(folder, "dist"), ledger: [] });
-        return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
-      }),
-    ).pipe(Effect.provide(NodeServices.layer)),
-  );
-}, 120_000);
+beforeAll(
+  () =>
+    Effect.gen(function* () {
+      assets = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const folder = yield* Effect.acquireRelease(
+            Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
+            (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+          );
+          const built = yield* build({ out: join(folder, "dist"), ledger: [] });
+          return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
+        }),
+      ).pipe(Effect.provide(NodeServices.layer));
+    }),
+  120_000,
+);
 
 const browser = (options: LaunchOptions = {}) =>
   Effect.acquireRelease(

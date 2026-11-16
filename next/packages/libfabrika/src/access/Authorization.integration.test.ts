@@ -24,11 +24,22 @@ import { MemberEvent } from "./Access.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 let appendAdmitted: typeof import("./Authorization.ts").appendAdmitted;
 
-beforeEach(async () => {
-  ({ appendAdmitted } = await vi.importActual<typeof import("./Authorization.ts")>("./Authorization.ts"));
-});
+beforeEach(() =>
+  Effect.gen(function* () {
+    ({ appendAdmitted } = yield* promised(() =>
+      vi.importActual<typeof import("./Authorization.ts")>("./Authorization.ts"),
+    ));
+  }),
+);
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 4, full: 35 }) };
 

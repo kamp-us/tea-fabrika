@@ -1,8 +1,17 @@
+import { it } from "@effect/vitest";
 import type { Context } from "@oxlint/plugins";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStageWord } from "./no-stage-word.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const CODE = "fabrika(no-stage-word)";
 const runs = { seed: 681080, numRuns: 12 };
@@ -203,107 +212,129 @@ it("absolute, relative and Windows spellings of a path get the same next/-only s
 });
 
 // format: escapes decode to the word, in literals, keys, identifiers and template text.
-it("format: escaped literal and identifier spellings fire by their decoded word", async () => {
-  const path = "next/apps/fabrika/src/escaped.ts";
-  const result = await plant({
-    [path]: [
-      'const a = "\\u0073tage";',
-      'const b = {"\\u{53}tageError": 1};',
-      "const \\u0073tageX = 1;",
-      "const c = `\\x73tage`;",
-      'const d = {["sta\\u0067e"]: 1};',
-      'const e = "\\u0062ackstage";',
-    ].join("\n"),
-  });
-  expect(result(CODE, path)).toEqual([1, 2, 3, 4, 5]);
-});
+it.live("format: escaped literal and identifier spellings fire by their decoded word", () =>
+  Effect.gen(function* () {
+    const path = "next/apps/fabrika/src/escaped.ts";
+    const result = yield* promised(() =>
+      plant({
+        [path]: [
+          'const a = "\\u0073tage";',
+          'const b = {"\\u{53}tageError": 1};',
+          "const \\u0073tageX = 1;",
+          "const c = `\\x73tage`;",
+          'const d = {["sta\\u0067e"]: 1};',
+          'const e = "\\u0062ackstage";',
+        ].join("\n"),
+      }),
+    );
+    expect(result(CODE, path)).toEqual([1, 2, 3, 4, 5]);
+  }),
+);
 
 // format: each comment and text form, with one report per line that holds the word.
-it("format: line, block and multi-line comments, template lines and TSX text", async () => {
-  const path = "next/apps/fabrika/src/view.tsx";
-  const result = await plant({
-    [path]: [
-      "// the stage starts",
-      "/* the Stage */",
-      "/**",
-      " * no word here",
-      " * stages",
-      " */",
-      "const t = `first",
-      "STAGE_DRIVER",
-      "last`;",
-      "const v = <p>the stage-wire</p>;",
-      'const w = <p title="backstage">stagecoach</p>;',
-    ].join("\n"),
-  });
-  expect(result(CODE, path)).toEqual([1, 2, 5, 8, 10]);
-});
+it.live("format: line, block and multi-line comments, template lines and TSX text", () =>
+  Effect.gen(function* () {
+    const path = "next/apps/fabrika/src/view.tsx";
+    const result = yield* promised(() =>
+      plant({
+        [path]: [
+          "// the stage starts",
+          "/* the Stage */",
+          "/**",
+          " * no word here",
+          " * stages",
+          " */",
+          "const t = `first",
+          "STAGE_DRIVER",
+          "last`;",
+          "const v = <p>the stage-wire</p>;",
+          'const w = <p title="backstage">stagecoach</p>;',
+        ].join("\n"),
+      }),
+    );
+    expect(result(CODE, path)).toEqual([1, 2, 5, 8, 10]);
+  }),
+);
 
 // scenario: Alchemy's own stage key passes only on its annotated line; the same key beside it fails.
-it("scenario: the annotated Alchemy key passes and an adjacent domain use fails", async () => {
-  const path = "next/apps/fabrika/src/brain.ts";
-  const result = await plant({
-    [path]: [
-      "const stack = {",
-      '  name: "fabrika",',
-      `  ${DISABLE} Alchemy's own key picks its deployment state`,
-      '  stage: "local",',
-      '  stage2: "local",',
-      "};",
-      "const localStage = stack;",
-    ].join("\n"),
-  });
-  expect(result(CODE, path)).toEqual([5, 7]);
-});
+it.live("scenario: the annotated Alchemy key passes and an adjacent domain use fails", () =>
+  Effect.gen(function* () {
+    const path = "next/apps/fabrika/src/brain.ts";
+    const result = yield* promised(() =>
+      plant({
+        [path]: [
+          "const stack = {",
+          '  name: "fabrika",',
+          `  ${DISABLE} Alchemy's own key picks its deployment state`,
+          '  stage: "local",',
+          '  stage2: "local",',
+          "};",
+          "const localStage = stack;",
+        ].join("\n"),
+      }),
+    );
+    expect(result(CODE, path)).toEqual([5, 7]);
+  }),
+);
 
 // pinned: experiment 238's saved driver name and today's app's capture stages keep their bytes.
-it("pinned: the saved driver and today's quote pass on annotated lines, new text beside them fails", async () => {
-  const path = "next/apps/fabrika/src/instance-one-file.integration.test.ts";
-  const result = await plant({
-    [path]: [
-      `${DISABLE} saved speed-bar results name experiment 238's driver exactly`,
-      'assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");',
-      'assert.equal(bar.name, "a local stage");',
-      "// oxlint-disable fabrika/no-stage-word -- the pinned bytes quote today's app, which keeps its pipeline words",
-      "const quote = `",
-      '  { "why": "today\'s app\'s keyboard focus laws and capture stages" },',
-      "`;",
-      "// oxlint-enable fabrika/no-stage-word",
-      "const after = `capture stages`;",
-    ].join("\n"),
-  });
-  expect(result(CODE, path)).toEqual([3, 9]);
-});
+it.live("pinned: the saved driver and today's quote pass on annotated lines, new text beside them fails", () =>
+  Effect.gen(function* () {
+    const path = "next/apps/fabrika/src/instance-one-file.integration.test.ts";
+    const result = yield* promised(() =>
+      plant({
+        [path]: [
+          `${DISABLE} saved speed-bar results name experiment 238's driver exactly`,
+          'assert.equal(bar.driver, "experiments/238-local-stage-speed-bar.ts");',
+          'assert.equal(bar.name, "a local stage");',
+          "// oxlint-disable fabrika/no-stage-word -- the pinned bytes quote today's app, which keeps its pipeline words",
+          "const quote = `",
+          '  { "why": "today\'s app\'s keyboard focus laws and capture stages" },',
+          "`;",
+          "// oxlint-enable fabrika/no-stage-word",
+          "const after = `capture stages`;",
+        ].join("\n"),
+      }),
+    );
+    expect(result(CODE, path)).toEqual([3, 9]);
+  }),
+);
 
 // format: a directive that names this rule is not itself a use; its reason after `--` is read.
-it("format: an ignore directive's rule names are not read, its reason and the next violation are", async () => {
-  const path = "next/apps/fabrika/src/directive.ts";
-  const result = await plant({
-    [path]: [
-      `${DISABLE} a kept key`,
-      "const localStage = 1;",
-      "// oxlint-disable-next-line no-console -- not this rule",
-      "const stageError = 2;",
-      "/* oxlint-disable fabrika/no-stage-word -- a range */",
-      "/* oxlint-enable fabrika/no-stage-word */",
-      "const stageAfter = 3;",
-      "// oxlint-disable-next-line fabrika/no-promises -- edge: the local stage proxy",
-      "// eslint-disable-line fabrika/no-stage-word",
-    ].join("\n"),
-  });
-  expect(result(CODE, path)).toEqual([4, 7, 8]);
-});
+it.live("format: an ignore directive's rule names are not read, its reason and the next violation are", () =>
+  Effect.gen(function* () {
+    const path = "next/apps/fabrika/src/directive.ts";
+    const result = yield* promised(() =>
+      plant({
+        [path]: [
+          `${DISABLE} a kept key`,
+          "const localStage = 1;",
+          "// oxlint-disable-next-line no-console -- not this rule",
+          "const stageError = 2;",
+          "/* oxlint-disable fabrika/no-stage-word -- a range */",
+          "/* oxlint-enable fabrika/no-stage-word */",
+          "const stageAfter = 3;",
+          "// oxlint-disable-next-line fabrika/no-promises -- edge: the local stage proxy",
+          "// eslint-disable-line fabrika/no-stage-word",
+        ].join("\n"),
+      }),
+    );
+    expect(result(CODE, path)).toEqual([4, 7, 8]);
+  }),
+);
 
 // format: the path alone fires, at the file's start, with no code tokens to report on.
-it("format: an empty file or folder named for the word is refused by its path", async () => {
-  const files = {
-    "next/apps/fabrika/src/stage.ts": "",
-    "next/apps/fabrika/src/stage-records.test.ts": "",
-    "next/apps/fabrika/stages/index.ts": "",
-    "next/apps/fabrika/src/localStage.tsx": "",
-    "next/apps/fabrika/src/backstage.ts": "",
-    "next/apps/fabrika/src/instance.ts": "",
-  };
-  const result = await plant(files);
-  expect(Object.keys(files).map((path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
-});
+it.live("format: an empty file or folder named for the word is refused by its path", () =>
+  Effect.gen(function* () {
+    const files = {
+      "next/apps/fabrika/src/stage.ts": "",
+      "next/apps/fabrika/src/stage-records.test.ts": "",
+      "next/apps/fabrika/stages/index.ts": "",
+      "next/apps/fabrika/src/localStage.tsx": "",
+      "next/apps/fabrika/src/backstage.ts": "",
+      "next/apps/fabrika/src/instance.ts": "",
+    };
+    const result = yield* promised(() => plant(files));
+    expect(Object.keys(files).map((path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
+  }),
+);

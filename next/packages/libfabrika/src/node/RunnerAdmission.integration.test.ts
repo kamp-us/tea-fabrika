@@ -2,7 +2,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
+import { Effect, FileSystem, Layer, Path, Predicate, type Scope, Schema } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -25,6 +25,13 @@ import { Sent } from "../runtime/Runner.ts";
 import * as RunnerAdmissionTest from "../runtime/RunnerAdmissionTest.ts";
 import { BRAIN, type Harness } from "../runtime/RunnerRepliesTest.ts";
 import { Written } from "../telemetry/Records.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 // T843: the gateway needs a sender budget; this one is far above what the audit laws send.
@@ -64,17 +71,20 @@ const register = <A>(
   reached: Set<string>,
   required: ReadonlyArray<string>,
 ) => {
-  it(
+  it.live(
     name,
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(tape, (cells: Array<A>) =>
-          Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
-        ),
-        options,
-      );
-      expect([...reached]).toEqual(expect.arrayContaining([...required]));
-    },
+    () =>
+      Effect.gen(function* () {
+        yield* promised(() =>
+          fc.assert(
+            fc.asyncProperty(tape, (cells: Array<A>) =>
+              Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
+            ),
+            options,
+          ),
+        );
+        expect([...reached]).toEqual(expect.arrayContaining([...required]));
+      }),
     600_000,
   );
 };

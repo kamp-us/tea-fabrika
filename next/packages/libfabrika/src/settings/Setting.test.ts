@@ -17,6 +17,13 @@ import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 const check = { seed: SEED, numRuns: RUNS };
@@ -210,17 +217,19 @@ describe("L3, absence gives the default, and an invalid present value never does
       check,
     ));
 
-  it("vector: an empty environment and no files give every declared default", async () => {
-    // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
-    const exit = await run(Declarations.all.parse(ConfigProvider.fromUnknown({})));
-    expect(Exit.isSuccess(exit)).toBe(true);
+  it.live("vector: an empty environment and no files give every declared default", () =>
+    Effect.gen(function* () {
+      // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
+      const exit = yield* promised(() => run(Declarations.all.parse(ConfigProvider.fromUnknown({}))));
+      expect(Exit.isSuccess(exit)).toBe(true);
 
-    if (Exit.isSuccess(exit)) {
-      expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
-    }
+      if (Exit.isSuccess(exit)) {
+        expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
+      }
 
-    expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
-  });
+      expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
+    }),
+  );
 });
 
 describe("L4, a dotted declaration path reaches the nested value exactly once", () => {

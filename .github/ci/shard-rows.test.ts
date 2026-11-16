@@ -1,15 +1,23 @@
-// Today's CI, about next/. The unusual keys and line breaks exercise the check's edges.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { it, expect } from "@effect/vitest";
+// Today's CI, about next/. The unusual keys and line breaks exercise the check's edges.
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
 import { main, nextFiles, stale, visualFiles } from "./shard-rows.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const options = { seed: 119120, numRuns: 100 };
@@ -263,43 +271,47 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
   );
 });
 
-it("scenario: L4 the Node entry passes the real table and file set to the reporter", async () => {
-  // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
-  // entry judges the vitest and end-to-end selections together, since one table holds both rows.
-  // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
-  // e2eFiles out of the entry (red: the entry printed 8 stale rows). The full-depth table,
-  // vitest.shards.full.json, is judged after it, against the same files.
-  const files = [...(await nextFiles(root)), ...(await visualFiles(root))];
-  const rows = stale(measured, files);
-  const fullRows = stale(full, files);
-  const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
-  expect(result.error).toBeUndefined();
-  expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
-  expect(result.stdout).toBe("");
-  const lines = (stale: readonly string[], table: string) =>
-    stale.map(
-      (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
+it.live("scenario: L4 the Node entry passes the real table and file set to the reporter", () =>
+  Effect.gen(function* () {
+    // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
+    // entry judges the vitest and end-to-end selections together, since one table holds both rows.
+    // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
+    // e2eFiles out of the entry (red: the entry printed 8 stale rows). The full-depth table,
+    // vitest.shards.full.json, is judged after it, against the same files.
+    const files = [...(yield* promised(() => nextFiles(root))), ...(yield* promised(() => visualFiles(root)))];
+    const rows = stale(measured, files);
+    const fullRows = stale(full, files);
+    const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
+    expect(result.stdout).toBe("");
+    const lines = (stale: readonly string[], table: string) =>
+      stale.map(
+        (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
+      );
+    expect(result.stderr).toBe(
+      [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
     );
-  expect(result.stderr).toBe(
-    [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
-  );
-});
+  }),
+);
 
 // 0536: a next/ test file runs on exactly one layer. Plants, each run once on vitest.config.ts and
 // restored: drop the integration glob from the `next` project's exclude (red: every integration file
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
-it("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", async () => {
-  const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
-    .stdout.split("\0")
-    .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
-  const [memory, integration, visual] = await Promise.all(
-    ["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name])),
-  );
-  const all = [...memory!, ...integration!, ...visual!];
-  expect(new Set(all).size, "a file in two projects").toBe(all.length);
-  expect(all.toSorted()).toEqual(tracked.toSorted());
-  expect(
-    integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
-  ).toBe(true);
-  expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
-});
+it.live("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", () =>
+  Effect.gen(function* () {
+    const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+      .stdout.split("\0")
+      .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
+    const [memory, integration, visual] = yield* promised(() =>
+      Promise.all(["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name]))),
+    );
+    const all = [...memory!, ...integration!, ...visual!];
+    expect(new Set(all).size, "a file in two projects").toBe(all.length);
+    expect(all.toSorted()).toEqual(tracked.toSorted());
+    expect(
+      integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
+    ).toBe(true);
+    expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
+  }),
+);

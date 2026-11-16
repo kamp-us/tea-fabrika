@@ -177,13 +177,8 @@ describe("ledger.call, next/ tracing keep-laws", () => {
           const { spans, tracer } = capture();
 
           for (const c of calls) {
-            const send = async () => {
-              if (c.unreachable) {
-                throw new Error("generated remote failure");
-              }
-
-              return c.bad;
-            };
+            const send = () =>
+              c.unreachable ? Promise.reject(new Error("generated remote failure")) : Promise.resolve(c.bad);
             const stub: LedgerCalls = { append: send, read: send, wait: send };
             const result = await Effect.runPromise(
               Effect.gen(function* () {

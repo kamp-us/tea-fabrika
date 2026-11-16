@@ -10,6 +10,13 @@ import * as fc from "fast-check";
 import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const seed = 119120;
 const options = { seed, numRuns: 100 };
 const effectOptions = { arbitrary: { seed, runs: 40 } };
@@ -1044,11 +1051,15 @@ describe("T518 shared Id generator", () => {
       ),
       { ...options, numRuns: 40 },
     ));
-  it("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", async () => {
-    await checkSchedule({
-      type: "process",
-      entropy: 0,
-      batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
-    });
-  });
+  it.live("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", () =>
+    Effect.gen(function* () {
+      yield* promised(() =>
+        checkSchedule({
+          type: "process",
+          entropy: 0,
+          batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
+        }),
+      );
+    }),
+  );
 });

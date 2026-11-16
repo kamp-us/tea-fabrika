@@ -1,11 +1,20 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import { it, beforeAll } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
 import { parse } from "yaml";
 import { measured } from "../../vitest.shards.ts";
 import { vitestLegs } from "./workflow-lint.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // Today's CI for both versions. Vitest 5.0.5's public node API, read in
 // dist/chunks/plugin.d.C8mmycim.d.ts and cli-api.De07GUeT.js: `related` takes absolute
@@ -68,9 +77,11 @@ const markdown = files.filter((path) => path.endsWith(".md") && !path.includes("
 const options = { seed: 119120, numRuns: 20 };
 let vitest: Vitest;
 
-beforeAll(async () => {
-  vitest = await createVitest("test", { root, watch: false, maxWorkers: 1 });
-});
+beforeAll(() =>
+  Effect.gen(function* () {
+    vitest = yield* promised(() => createVitest("test", { root, watch: false, maxWorkers: 1 }));
+  }),
+);
 
 afterAll(async () => {
   await vitest?.close();
@@ -99,19 +110,23 @@ it("real script subsets select exactly their declaring tests, never an empty set
 // alone, inside its own run: about 150 graph walks in one test, 12.7 s in the mutation
 // container's plain run and over the mutation run's 10 s limit (CI runs 42988915529 and
 // 42989306764). This walks every script, not a sample, at one walk per test.
-it.each(readScripts)("the real script %s alone selects exactly its declaring tests, never none", async (path) => {
-  const expected = declaring([path]);
-  expect(expected.length).toBeGreaterThan(0);
-  expect(await affected([path])).toEqual(expected);
-});
+it.live.each(readScripts)("the real script %s alone selects exactly its declaring tests, never none", (path) =>
+  Effect.gen(function* () {
+    const expected = declaring([path]);
+    expect(expected.length).toBeGreaterThan(0);
+    expect(yield* promised(() => affected([path]))).toEqual(expected);
+  }),
+);
 
 // scenario: the rule that takes fixtures out of the script laws. A fixture alone selects what a
 // lockfile change selects, every test, so a change to a fixture never runs too few.
-it.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockfile change does", async (path) => {
-  const every = await affected(["pnpm-lock.yaml"]);
-  expect(every.length).toBeGreaterThan(tests.length);
-  expect(await affected([path])).toEqual(every);
-});
+it.live.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockfile change does", (path) =>
+  Effect.gen(function* () {
+    const every = yield* promised(() => affected(["pnpm-lock.yaml"]));
+    expect(every.length).toBeGreaterThan(tests.length);
+    expect(yield* promised(() => affected([path]))).toEqual(every);
+  }),
+);
 
 it("real skill Markdown subsets select no test", () =>
   fc.assert(
@@ -155,47 +170,55 @@ describe("next workflow coverage", () => {
     expect(kept.flat().toSorted()).toEqual(universe.toSorted());
     expect(new Set(kept.flat()).size).toBe(kept.flat().length);
   };
-  beforeAll(async () => {
-    const baseline = await createVitest("test", { root, watch: false, maxWorkers: 1 });
-    contexts.push(baseline);
-    nextSpecs = (await baseline.globTestSpecifications()).filter((spec) => repoPath(spec).startsWith("next/"));
-
-    for (const index of indices) {
-      contexts.push(
-        await createVitest("test", {
-          root,
-          watch: false,
-          maxWorkers: 1,
-          shard: `${index}/${denominator}`,
-        }),
+  beforeAll(() =>
+    Effect.gen(function* () {
+      const baseline = yield* promised(() => createVitest("test", { root, watch: false, maxWorkers: 1 }));
+      contexts.push(baseline);
+      nextSpecs = (yield* promised(() => baseline.globTestSpecifications())).filter((spec) =>
+        repoPath(spec).startsWith("next/"),
       );
-    }
-  });
+
+      for (const index of indices) {
+        contexts.push(
+          yield* promised(() =>
+            createVitest("test", {
+              root,
+              watch: false,
+              maxWorkers: 1,
+              shard: `${index}/${denominator}`,
+            }),
+          ),
+        );
+      }
+    }),
+  );
   afterAll(async () => {
     for (const context of contexts) {
       await context.close();
     }
   });
 
-  it("scenario: workflow shards partition every config-discovered next file exactly once", async () => {
-    // Real config discovery and each configured sequencer run without executing a test.
-    expect(Number.isInteger(denominator)).toBe(true);
-    expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
-      Array.from({ length: denominator }, (_, i) => String(i + 1)),
-    );
-    const universe = nextSpecs.map(repoPath);
-    expect(universe.length).toBeGreaterThan(0);
-    expect(new Set(universe).size).toBe(universe.length);
-    const kept: string[][] = [];
+  it.live("scenario: workflow shards partition every config-discovered next file exactly once", () =>
+    Effect.gen(function* () {
+      // Real config discovery and each configured sequencer run without executing a test.
+      expect(Number.isInteger(denominator)).toBe(true);
+      expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
+        Array.from({ length: denominator }, (_, i) => String(i + 1)),
+      );
+      const universe = nextSpecs.map(repoPath);
+      expect(universe.length).toBeGreaterThan(0);
+      expect(new Set(universe).size).toBe(universe.length);
+      const kept: string[][] = [];
 
-    for (const context of contexts.slice(1)) {
-      const specs = await context.globTestSpecifications(["next/"]);
-      const Sequencer = context.config.sequence.sequencer;
-      kept.push((await new Sequencer(context).shard(specs)).map(repoPath));
-    }
+      for (const context of contexts.slice(1)) {
+        const specs = yield* promised(() => Promise.resolve(context.globTestSpecifications(["next/"])));
+        const Sequencer = context.config.sequence.sequencer;
+        kept.push((yield* promised(() => Promise.resolve(new Sequencer(context).shard(specs)))).map(repoPath));
+      }
 
-    complete(kept, universe);
-  });
+      complete(kept, universe);
+    }),
+  );
 
   it("real configured shards preserve generated subsets, order and unmeasured files", () =>
     // External test specifications have no domain Schema. Reuse real discovery, at most 12 files.

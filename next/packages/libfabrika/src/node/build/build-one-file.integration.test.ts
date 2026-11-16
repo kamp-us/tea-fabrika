@@ -34,6 +34,13 @@ import { rolldown, type RolldownOptions, type OutputOptions, type RolldownOutput
 import { afterEach, describe, expect, vi } from "vitest";
 import * as StartsTest from "../../settings/StartsTest.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const ROOT = resolve(import.meta.dirname, "../../../../../..");
 const homes: string[] = [];
 const sha = (s: string | Uint8Array) => createHash("sha256").update(s).digest("hex");
@@ -213,7 +220,7 @@ const fixture = (value: string, count = 1) => {
   };
 };
 
-const api = async () => {
+const api = () => {
   const file = join(import.meta.dirname, "build.ts");
   assert(existsSync(file), "P16 not built: libfabrika/build reusable one-file build is absent");
   return vi.importActual<Build>(pathToFileURL(file).href);
@@ -1076,121 +1083,130 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
     { timeout: buildTimeout(boundaryWalks.numRuns * 6) },
   );
 
-  it(
+  it.live(
     "S1.7 [secrets] generated build and request walks: output, responses, errors and spans copy no unrelated credential",
-    { timeout: walkTimeout },
-    async () => {
-      const { fetch } = await import("../../cloudflare/fetch.ts");
-      const secrets = fc.record({
-        token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
-        name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
-      });
-      const reached = new Set<string>();
-      await fc.assert(
-        fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
-          const f = tabHome(value);
-          // The credentials sit where a build could pick them up: the environment, a token file in
-          // the root and a key file beside the tab's entry. Nothing imports them.
-          vi.stubEnv(name, token);
-          writeFileSync(join(f.home, ".npmrc"), `//registry.npmjs.org/:_authToken=${token}\n`);
-          writeFileSync(join(f.dir, "credentials.json"), JSON.stringify({ token }));
-          const forms = [
-            token,
-            encodeURIComponent(token),
-            Buffer.from(token).toString("base64"),
-            Buffer.from(token).toString("base64url"),
-            Buffer.from(token).toString("hex"),
-          ];
-          const clean = (output: string, label: string) => {
-            for (const form of forms) {
-              expect(output.includes(form), `${label} copies no credential`).toBe(false);
-            }
-          };
-          const tab: Tab = { label: `p14-${value}`, styles: [{ mark: `a${value}`, trap: false }] };
+    () =>
+      Effect.gen(function* () {
+        const { fetch } = yield* promised(() => import("../../cloudflare/fetch.ts"));
+        const secrets = fc.record({
+          token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
+          name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
+        });
+        const reached = new Set<string>();
+        yield* promised(() =>
+          fc.assert(
+            fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
+              const f = tabHome(value);
+              // The credentials sit where a build could pick them up: the environment, a token file in
+              // the root and a key file beside the tab's entry. Nothing imports them.
+              vi.stubEnv(name, token);
+              writeFileSync(join(f.home, ".npmrc"), `//registry.npmjs.org/:_authToken=${token}\n`);
+              writeFileSync(join(f.dir, "credentials.json"), JSON.stringify({ token }));
+              const forms = [
+                token,
+                encodeURIComponent(token),
+                Buffer.from(token).toString("base64"),
+                Buffer.from(token).toString("base64url"),
+                Buffer.from(token).toString("hex"),
+              ];
+              const clean = (output: string, label: string) => {
+                for (const form of forms) {
+                  expect(output.includes(form), `${label} copies no credential`).toBe(false);
+                }
+              };
+              const tab: Tab = { label: `p14-${value}`, styles: [{ mark: `a${value}`, trap: false }] };
 
-          for (const { move, word } of steps) {
-            // A failed attempt is possible from any state; a good one repairs the files first.
-            const fail = move % 3 === 0;
-            const styles = f.write(tab);
+              for (const { move, word } of steps) {
+                // A failed attempt is possible from any state; a good one repairs the files first.
+                const fail = move % 3 === 0;
+                const styles = f.write(tab);
 
-            if (fail) {
-              writeFileSync(f.view, `export const Tip = () => <b>{Date.now()} ${word}</b>;`);
-            }
+                if (fail) {
+                  writeFileSync(f.view, `export const Tip = () => <b>{Date.now()} ${word}</b>;`);
+                }
 
-            const { spans, tracer } = tracing();
-            const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
-            const seen = JSON.stringify(
-              spans.map((s) => ({ name: s.name, attributes: [...s.attributes], events: s.events, status: s.status })),
-              (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
-            );
-
-            if (result._tag === "Failure") {
-              reached.add("failure");
-              clean(JSON.stringify(result.failure), "an error");
-              clean(String(result.failure), "an error's text");
-              // Spans last: a span that holds a leaked output fails here too, after the output itself.
-              clean(seen, "a span");
-              continue;
-            }
-
-            const built = (result as { readonly success: Built }).success;
-            const page = built.assets[PAGE]?.body ?? "";
-
-            for (const [, url] of page.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
-              clean(url!, "a page URL");
-              clean(decodeURIComponent(url!), "a decoded page URL");
-            }
-
-            for (const [route, asset] of Object.entries(built.assets)) {
-              clean(route, "a route");
-              clean(asset.body, `${route}`);
-            }
-
-            clean(readFileSync(built.brain, "latin1"), "the brain");
-
-            // Every carried route as the brain answers it, by its plain and its encoded URL.
-            const port = 8787;
-            // A file route reaches no object: each binding answers nothing but the name lookup.
-            const config = StartsTest.fixture(
-              { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
-              (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
-            );
-            const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
-            // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
-            const env = {
-              INSTANCE: JSON.stringify(config),
-              PROJECT: binding,
-              CONNECTION: binding,
-              PROCESS: binding,
-              RECORD: binding,
-            } as unknown as Parameters<typeof fetch>[1];
-
-            for (const route of ["/", ...Object.keys(built.assets)]) {
-              for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
-                const response = await Effect.runPromise(
-                  fetch(
-                    new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
-                    env,
-                    config,
-                    built.assets,
-                  ),
+                const { spans, tracer } = tracing();
+                const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
+                const seen = JSON.stringify(
+                  spans.map((s) => ({
+                    name: s.name,
+                    attributes: [...s.attributes],
+                    events: s.events,
+                    status: s.status,
+                  })),
+                  (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
                 );
-                reached.add(route === "/" && response.headers.get("content-type") === HTML ? "page" : "file");
-                clean(response.url, "a response URL");
-                clean(JSON.stringify([...response.headers]), "response headers");
-                clean(await response.text(), `the answer at ${url}`);
-              }
-            }
 
-            clean(seen, "a span");
-          }
-        }),
-        walks,
-      );
-      expect([...reached].sort(), "the walks reached a served page and a failed attempt").toEqual(
-        expect.arrayContaining(["failure", "page"]),
-      );
-    },
+                if (result._tag === "Failure") {
+                  reached.add("failure");
+                  clean(JSON.stringify(result.failure), "an error");
+                  clean(String(result.failure), "an error's text");
+                  // Spans last: a span that holds a leaked output fails here too, after the output itself.
+                  clean(seen, "a span");
+                  continue;
+                }
+
+                const built = (result as { readonly success: Built }).success;
+                const page = built.assets[PAGE]?.body ?? "";
+
+                for (const [, url] of page.matchAll(/\b(?:src|href)="([^"]*)"/g)) {
+                  clean(url!, "a page URL");
+                  clean(decodeURIComponent(url!), "a decoded page URL");
+                }
+
+                for (const [route, asset] of Object.entries(built.assets)) {
+                  clean(route, "a route");
+                  clean(asset.body, `${route}`);
+                }
+
+                clean(readFileSync(built.brain, "latin1"), "the brain");
+
+                // Every carried route as the brain answers it, by its plain and its encoded URL.
+                const port = 8787;
+                // A file route reaches no object: each binding answers nothing but the name lookup.
+                const config = StartsTest.fixture(
+                  { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
+                  (algorithm, data) =>
+                    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+                );
+                const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
+                // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
+                const env = {
+                  INSTANCE: JSON.stringify(config),
+                  PROJECT: binding,
+                  CONNECTION: binding,
+                  PROCESS: binding,
+                  RECORD: binding,
+                } as unknown as Parameters<typeof fetch>[1];
+
+                for (const route of ["/", ...Object.keys(built.assets)]) {
+                  for (const url of [route, route.split("/").map(encodeURIComponent).join("/")]) {
+                    const response = await Effect.runPromise(
+                      fetch(
+                        new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
+                        env,
+                        config,
+                        built.assets,
+                      ),
+                    );
+                    reached.add(route === "/" && response.headers.get("content-type") === HTML ? "page" : "file");
+                    clean(response.url, "a response URL");
+                    clean(JSON.stringify([...response.headers]), "response headers");
+                    clean(await response.text(), `the answer at ${url}`);
+                  }
+                }
+
+                clean(seen, "a span");
+              }
+            }),
+            walks,
+          ),
+        );
+        expect([...reached].sort(), "the walks reached a served page and a failed attempt").toEqual(
+          expect.arrayContaining(["failure", "page"]),
+        );
+      }),
+    { timeout: walkTimeout },
   );
 });
 

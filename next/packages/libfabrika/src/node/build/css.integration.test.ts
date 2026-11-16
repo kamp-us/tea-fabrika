@@ -31,7 +31,7 @@ type Build = {
   }) => Effect.Effect<unknown, unknown, FileSystem.FileSystem | Path.Path>;
 };
 
-const product = async <A>(file: string, name: string) => {
+const product = <A>(file: string, name: string) => {
   const path = join(import.meta.dirname, file);
   assert(existsSync(path), `P16 not built: ${name} absent`);
   return vi.importActual<A>(pathToFileURL(path).href);

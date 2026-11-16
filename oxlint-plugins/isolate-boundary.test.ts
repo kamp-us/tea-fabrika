@@ -1,8 +1,17 @@
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 const CODE = "fabrika(isolate-boundary)";
 const stem = fc.stringMatching(/^[a-z]{1,8}$/);
@@ -69,12 +78,16 @@ it("U11 passes comments, strings and ordinary exports; the app tail and usage on
 });
 
 // scenario: only a CLI pass through the repository config proves activation and registration.
-it("scenario: U11 is enabled by the real config and leaves only cloudflare/ and today's version out", async () => {
-  const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
-  const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
-  const old = "packages/fabrika/src/usage.ts";
-  const result = await plant(Object.fromEntries([runtime, cloudflare, old].map((file) => [file, uses.join("\n")])));
-  expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
-  expect(result(CODE, cloudflare)).toEqual([]);
-  expect(result(CODE, old)).toEqual([]);
-});
+it.live("scenario: U11 is enabled by the real config and leaves only cloudflare/ and today's version out", () =>
+  Effect.gen(function* () {
+    const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
+    const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
+    const old = "packages/fabrika/src/usage.ts";
+    const result = yield* promised(() =>
+      plant(Object.fromEntries([runtime, cloudflare, old].map((file) => [file, uses.join("\n")]))),
+    );
+    expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(result(CODE, cloudflare)).toEqual([]);
+    expect(result(CODE, old)).toEqual([]);
+  }),
+);

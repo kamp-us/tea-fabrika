@@ -1,16 +1,25 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 // Ticket 911, B1.0. `fabrika/no-static-layer` refuses every static member of a class that extends
 // `Context.Service` (0095; owner, 2026-11-13). Law 2 runs generated classes in process through
 // oxlint's RuleTester. Laws 3 and 6 read the repo's own `.oxlintrc.json`: one real lint run over a
 // planted file per listed folder and per left-out kind, and the saved list of the folders listed on
 // the day the rule landed, which may only grow.
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
@@ -218,21 +227,25 @@ const SERVICE = [
   "",
 ].join("\n");
 
-it("scenario: the real config holds a static layer in each listed folder, and leaves tests and today's version out", async () => {
-  // Only the real config holds the list, so one real lint run reads one planted file per listed
-  // folder, saved or added since, and per left-out kind.
-  const folders = [...new Set([...LISTED, ...configured()])].filter((f) => f !== "next/**");
-  const on = folders.map((folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
-  const off = [
-    "next/packages/libfabrika/src/tasks/Planted.test.ts",
-    "next/packages/libfabrika/src/tasks/Planted.test.tsx",
-    "next/packages/libfabrika/src/tasks/PlantedTest.ts",
-    "next/packages/libfabrika/src/tasks/Planted.test-support.ts",
-    "next/apps/fabrika/src/Planted.test.ts",
-    "packages/fabrika/src/Planted.ts",
-  ];
-  const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, SERVICE])));
+it.live(
+  "scenario: the real config holds a static layer in each listed folder, and leaves tests and today's version out",
+  () =>
+    Effect.gen(function* () {
+      // Only the real config holds the list, so one real lint run reads one planted file per listed
+      // folder, saved or added since, and per left-out kind.
+      const folders = [...new Set([...LISTED, ...configured()])].filter((f) => f !== "next/**");
+      const on = folders.map((folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
+      const off = [
+        "next/packages/libfabrika/src/tasks/Planted.test.ts",
+        "next/packages/libfabrika/src/tasks/Planted.test.tsx",
+        "next/packages/libfabrika/src/tasks/PlantedTest.ts",
+        "next/packages/libfabrika/src/tasks/Planted.test-support.ts",
+        "next/apps/fabrika/src/Planted.test.ts",
+        "packages/fabrika/src/Planted.ts",
+      ];
+      const linted = yield* promised(() => plant(Object.fromEntries([...on, ...off].map((path) => [path, SERVICE]))));
 
-  expect(on.map((path) => [path, linted(CODE, path)])).toEqual(on.map((path) => [path, [4]]));
-  expect(off.map((path) => [path, linted(CODE, path)])).toEqual(off.map((path) => [path, []]));
-});
+      expect(on.map((path) => [path, linted(CODE, path)])).toEqual(on.map((path) => [path, [4]]));
+      expect(off.map((path) => [path, linted(CODE, path)])).toEqual(off.map((path) => [path, []]));
+    }),
+);

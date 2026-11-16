@@ -1,14 +1,23 @@
-// Decision 0046's syntax laws. Generated code is tested through oxlint's public RuleTester;
-// config and real-file copies go through the same lint command as the exam.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+// Decision 0046's syntax laws. Generated code is tested through oxlint's public RuleTester;
+// config and real-file copies go through the same lint command as the exam.
+import { it } from "@effect/vitest";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
-import { expect, it } from "vitest";
+import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 RuleTester.describe = (_name, fn) => fn();
 RuleTester.it = (_name, fn) => fn();
@@ -373,22 +382,24 @@ it("vector: a machine bound by destructuring is reached through its exported nam
 
 const DOUBLE = `${TEA}\nexport const first = Machine.make({});\nexport const second = Machine.make({});\n`;
 
-it("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", async () => {
-  // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
-  const paths = [
-    "next/example.ts",
-    ".agents/skills/example.ts",
-    "next/example.test.ts",
-    "next/example.test.tsx",
-    "next/ExampleTest.ts",
-    "next/example.test-support.ts",
-    ".agents/example.test.ts",
-  ];
-  const result = await plant(Object.fromEntries(paths.map((p) => [p, DOUBLE])));
-  paths.forEach((p, i) => {
-    expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
-  });
-});
+it.live("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", () =>
+  Effect.gen(function* () {
+    // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
+    const paths = [
+      "next/example.ts",
+      ".agents/skills/example.ts",
+      "next/example.test.ts",
+      "next/example.test.tsx",
+      "next/ExampleTest.ts",
+      "next/example.test-support.ts",
+      ".agents/example.test.ts",
+    ];
+    const result = yield* promised(() => plant(Object.fromEntries(paths.map((p) => [p, DOUBLE]))));
+    paths.forEach((p, i) => {
+      expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
+    });
+  }),
+);
 
 const REAL = [
   "next/packages/libfabrika/src/access/Access.ts",
@@ -406,30 +417,40 @@ const REAL = [
   ".agents/skills/lead/scripts/flow/machine.ts",
 ];
 
-it("scenario: L5 the 13 measured machine file copies have zero hits", async () => {
-  // These are the plan's measured inputs, including both factory forms.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
-  const clean = await plant(originals);
+it.live("scenario: L5 the 13 measured machine file copies have zero hits", () =>
+  Effect.gen(function* () {
+    // These are the plan's measured inputs, including both factory forms.
+    const originals = Object.fromEntries(
+      REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
+    );
+    const clean = yield* promised(() => plant(originals));
 
-  for (const p of REAL) {
-    expect([p, clean(CODE, p)]).toEqual([p, []]);
-  }
-});
+    for (const p of REAL) {
+      expect([p, clean(CODE, p)]).toEqual([p, []]);
+    }
+  }),
+);
 
-it("scenario: L5 each real file copy refuses one added second export", async () => {
-  // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
-  const originals = Object.fromEntries(REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]));
-  const clean = await plant(originals);
-  const broken = await plant(
-    Object.fromEntries(
-      Object.entries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
-    ),
-  );
+it.live("scenario: L5 each real file copy refuses one added second export", () =>
+  Effect.gen(function* () {
+    // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
+    const originals = Object.fromEntries(
+      REAL.map((p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
+    );
+    const clean = yield* promised(() => plant(originals));
+    const broken = yield* promised(() =>
+      plant(
+        Object.fromEntries(
+          Object.entries(originals).map(([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
+        ),
+      ),
+    );
 
-  for (const [p, s] of Object.entries(originals)) {
-    expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
-  }
-});
+    for (const [p, s] of Object.entries(originals)) {
+      expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
+    }
+  }),
+);
 
 it("scenario: L5 oxlint over next/ and .agents/ has zero hits for this rule", () => {
   // L4 checks the real config's scope. This count runs only this rule, with the same fixture exemptions.

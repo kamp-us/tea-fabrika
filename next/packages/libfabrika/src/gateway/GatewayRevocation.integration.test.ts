@@ -40,13 +40,22 @@ import { Answer } from "../transport/Wire.ts";
 import type { GatewayError } from "./GatewayError.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 let Gateway: typeof import("./Gateway.ts").Gateway;
 let Id: typeof import("../Id.ts");
 
-beforeEach(async () => {
-  ({ Gateway } = await vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts"));
-  Id = await vi.importActual<typeof Id>("../Id.ts");
-});
+beforeEach(() =>
+  Effect.gen(function* () {
+    ({ Gateway } = yield* promised(() => vi.importActual<typeof import("./Gateway.ts")>("./Gateway.ts")));
+    Id = yield* promised(() => vi.importActual<typeof Id>("../Id.ts"));
+  }),
+);
 
 const checks = { seed: 119120, numRuns: runsFor({ fast: 3, full: 25 }) };
 
@@ -397,11 +406,13 @@ describe("P12, door laws retained after the library move", () => {
     );
   it("view.open refuses any bad pid before invoking the program, and opens a valid pid", () =>
     fc.assert(viewOpen(), checks));
-  it("the view.open law catches a bypassed pid check", async () => {
-    const result = await fc.check(viewOpen(true), { ...checks, endOnFailure: true });
-    expect(result.failed).toBe(true);
-    expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
-  });
+  it.live("the view.open law catches a bypassed pid check", () =>
+    Effect.gen(function* () {
+      const result = yield* promised(() => fc.check(viewOpen(true), { ...checks, endOnFailure: true }));
+      expect(result.failed).toBe(true);
+      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+    }),
+  );
   const grantTarget = (plant?: "fingerprint" | "code") =>
     fc.asyncProperty(
       fc.string(),
@@ -441,11 +452,13 @@ describe("P12, door laws retained after the library move", () => {
   for (const field of ["fingerprint", "code"] as const)
   // Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
   {
-    it(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, async () => {
-      const result = await fc.check(grantTarget(field), { ...checks, endOnFailure: true });
-      expect(result.failed).toBe(true);
-      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
-    });
+    it.live(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, () =>
+      Effect.gen(function* () {
+        const result = yield* promised(() => fc.check(grantTarget(field), { ...checks, endOnFailure: true }));
+        expect(result.failed).toBe(true);
+        expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+      }),
+    );
   }
 });
 

@@ -1,8 +1,17 @@
+import { it } from "@effect/vitest";
 import type { Context, ESTree } from "@oxlint/plugins";
+import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, it, vi } from "vitest";
+import { expect, vi } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noQuestionWordKey } from "./no-question-word-key.ts";
+
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
 
 // oxlint's own rule holds a name written as an identifier; ours holds a literal key (0081).
 const NATIVE = "eslint(id-denylist)";
@@ -231,25 +240,29 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
   ));
 
 // format: these exact TypeScript spellings pin decoded names, shorthand and computed identifiers.
-it("format: quoted, escaped, shorthand and computed spellings", async () => {
-  const result = await plant({
-    [PATH]: [
-      "const why = 1;",
-      "const a = {why};",
-      'const b = {"where": 1};',
-      'const c = {"\\u0077hat": 1};',
-      'const d = {["who"]: 1};',
-      "const e = {[`how`]: 1};",
-      "const f = {[why]: 1};",
-      'interface G {readonly "\\u0077here": string}',
-      'type H = {["who"](): void};',
-      "class I {readonly [`what`] = 1;}",
-      "const j = {\\u0077ho: 1};",
-    ].join("\n"),
-  });
-  expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
-  expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
-});
+it.live("format: quoted, escaped, shorthand and computed spellings", () =>
+  Effect.gen(function* () {
+    const result = yield* promised(() =>
+      plant({
+        [PATH]: [
+          "const why = 1;",
+          "const a = {why};",
+          'const b = {"where": 1};',
+          'const c = {"\\u0077hat": 1};',
+          'const d = {["who"]: 1};',
+          "const e = {[`how`]: 1};",
+          "const f = {[why]: 1};",
+          'interface G {readonly "\\u0077here": string}',
+          'type H = {["who"](): void};',
+          "class I {readonly [`what`] = 1;}",
+          "const j = {\\u0077ho: 1};",
+        ].join("\n"),
+      }),
+    );
+    expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
+    expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
+  }),
+);
 
 // format: the user-facing diagnostic names all five words, asks for the value's noun, assumes no
 // replacement and offers no autofix.

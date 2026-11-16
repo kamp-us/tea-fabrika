@@ -149,7 +149,7 @@ const flow = async (sample: Flow) => {
     return db;
   };
   let mode = "ok";
-  const delivered = async (name: string, args: ReadonlyArray<unknown>) => {
+  const delivered = (name: string, args: ReadonlyArray<unknown>) => {
     const [chain, at, rows] = Schema.decodeUnknownSync(
       Schema.Tuple([
         Chain,

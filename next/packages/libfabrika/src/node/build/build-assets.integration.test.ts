@@ -176,7 +176,7 @@ const fixture = (name: string, value: string) => {
   return { home, file, options };
 };
 
-const load = async () => {
+const load = () => {
   const file = join(import.meta.dirname, "build.ts");
   assert(existsSync(file), "P16 not built: libfabrika/build and embedded assets absent");
   return vi.importActual<Build>(pathToFileURL(file).href);

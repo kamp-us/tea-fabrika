@@ -36,6 +36,13 @@ import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
+/** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
+class TestFailure extends Schema.TaggedError<TestFailure>()("TestFailure", { cause: Schema.Unknown }) {}
+
+/** Waits on a promise inside the test's Effect, as `Effect.tryPromise` in its object form. */
+const promised = <A>(run: () => PromiseLike<A>) =>
+  Effect.tryPromise({ try: run, catch: (cause) => new TestFailure({ cause }) });
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "connection:t1";
 const MEMBERS = "gateway/access";
@@ -761,57 +768,61 @@ const event: fc.Arbitrary<() => MemberEvent> = fc.oneof(
 );
 
 describe("p96, write tells the truth over any history", () => {
-  it("refused writes nothing and the fold skips it; an event that changes who belongs is applied", async () => {
-    let applied = 0;
-    let refused = 0;
-    await fc.assert(
-      fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const kept: Array<MemberEvent> = [FOUNDED];
-            yield* members;
+  it.live("refused writes nothing and the fold skips it; an event that changes who belongs is applied", () =>
+    Effect.gen(function* () {
+      let applied = 0;
+      let refused = 0;
+      yield* promised(() =>
+        fc.assert(
+          fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const kept: Array<MemberEvent> = [FOUNDED];
+                yield* members;
 
-            for (const make of makes) {
-              const next = make();
-              const before = yield* entries;
-              const head = before.at(-1)?.rev ?? 0;
-              const answer = yield* write(next);
-              const after = yield* entries;
-              const changes =
-                JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
-              expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
+                for (const make of makes) {
+                  const next = make();
+                  const before = yield* entries;
+                  const head = before.at(-1)?.rev ?? 0;
+                  const answer = yield* write(next);
+                  const after = yield* entries;
+                  const changes =
+                    JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
+                  expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
-              if (changes) {
-                expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
-              }
+                  if (changes) {
+                    expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
+                  }
 
-              if (answer._tag === "refused") {
-                refused++;
-                expect(after.length, next._tag).toBe(before.length);
-                expect(changes, next._tag).toBe(false);
-              }
+                  if (answer._tag === "refused") {
+                    refused++;
+                    expect(after.length, next._tag).toBe(before.length);
+                    expect(changes, next._tag).toBe(false);
+                  }
 
-              if (answer._tag === "applied") {
-                applied++;
-                const placed = after.find((e) => e.rev === answer.rev);
-                expect(placed?.id, next._tag).toBe(eventId(next));
+                  if (answer._tag === "applied") {
+                    applied++;
+                    const placed = after.find((e) => e.rev === answer.rev);
+                    expect(placed?.id, next._tag).toBe(eventId(next));
 
-                if (answer.rev > head) {
-                  kept.push(next);
+                    if (answer.rev > head) {
+                      kept.push(next);
+                    }
+                  }
                 }
-              }
-            }
 
-            expect(view(yield* members)).toEqual(view(foldAccess(kept)));
-          }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+                expect(view(yield* members)).toEqual(view(foldAccess(kept)));
+              }).pipe(Effect.provide(clientsOn(onSql(fresh())))),
+            ),
+          ),
+          // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
+          { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
         ),
-      ),
-      // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
-      { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
-    );
-    expect(applied).toBeGreaterThan(60);
-    expect(refused).toBeGreaterThan(60);
-  });
+      );
+      expect(applied).toBeGreaterThan(60);
+      expect(refused).toBeGreaterThan(60);
+    }),
+  );
 });
 
 // Gaps the mutation step found on the build (ticket 236): answers the tests above held loose.
