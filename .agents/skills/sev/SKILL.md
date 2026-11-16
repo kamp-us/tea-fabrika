@@ -123,7 +123,7 @@ node $S open 0 --reason "..." --allow fabrikalfa/ci-cache   # in the background,
 node $S next fabrikalfa/ci-legs                  # that fix alone is allowed; the one before is canceled from now
 node $S allow fabrikalfa/ci-flake                # one more fix branch, without replacing the list
 git merge origin/main && git push                # in the fix's own worktree, so its checks run on main as it is
-gh pr merge <n> --squash --admin --match-head-commit <sha>   # once its required checks are green
+node .agents/skills/lead/scripts/land.ts merge <n> --admin  # leak-checks it; refuses unless the sev0 allows it and ci-required is green
 node $S close --by lead                          # every fix merged; --by owner when he called it off
 node $S loop                                     # only if the open 0 loop died with its shell
 ```
