@@ -41,6 +41,7 @@ libfabrika
 | An edge is one line under a marked comment with its reason | `fabrika/edge-comment` |
 | No bare `of` and no `xOf` name; `Lease.of(...)` through its module is fine | `fabrika/no-of` |
 | No hand-written `_tag`: Effect Schema writes it | `fabrika/no-hand-tag` |
+| No loop or `reduce` callback spreads its running result back into itself (0559) | `oxc/no-accumulating-spread` |
 | No question word as a name | `eslint/id-denylist`, `fabrika/no-question-word-key` |
 | One exported tea machine, or one factory, per file | `fabrika/one-machine-per-file` |
 | One store hook, tea's `useRuntime` | `fabrika/one-store-hook` |

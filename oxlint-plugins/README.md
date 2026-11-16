@@ -206,6 +206,8 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 
 The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times on the tree (28 suggestions and 7 that were off), plus `globalErrorInEffectCatch` and `globalErrorInEffectFailure` for `next/` files that are not tests, through the plugin's `overrides` in `tsconfig.base.json`. `effect-tsgo diagnostics --file` does not apply an override's `exclude`; `tsc` does, and `pnpm typecheck` is what blocks.
 
+`oxc/no-accumulating-spread` went on on 2026-11-15 (0559), with its 11 hits rewritten, all in five `next/` test files. It is on by an override, the first in `.oxlintrc.json`'s `overrides`, for `next/`, `.agents/`, `oxlint-plugins/` and `.github/ci/` only: today's app keeps its hits. The Effect team has it on too, through oxlint's `perf` set. Its plant in `builtin-plants.ts` has the two `reduce` lines and four loop lines, and `plants.test.ts` plants it by path in each of the four folders and in `packages/`, `programs/` and `apps/`.
+
 ## The new version's exam rules
 
 P16 adds `fabrika/program-package-layout` for `next/programs/` only. A package exports

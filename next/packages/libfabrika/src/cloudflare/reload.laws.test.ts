@@ -452,6 +452,14 @@ const baseFixture = (): Fixture => ({
   eventPersonOnly: false,
 });
 
+/** The base fixture at `k` with both person-only policies set alike, as the policy walks install it. */
+const policyFixture = (k: number, personOnly: boolean): Fixture => ({
+  ...baseFixture(),
+  k,
+  inputPersonOnly: personOnly,
+  eventPersonOnly: personOnly,
+});
+
 const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
   by: "SHA256:brain",
   for: "brain",
@@ -621,14 +629,14 @@ describe("P15 slice 1: the brain installs and selects code", () => {
           Effect.gen(function* () {
             const i = yield* instance(baseFixture());
             const pid = i.descriptors.get("counter:1")!.id;
-            let current = baseFixture();
+            let k = baseFixture().k;
             const rounds = g(fc.integer, { min: 1, max: 4 });
 
             for (let n = 0; n < rounds; n++) {
               // Keep the process behind the selection so boot has a real swap to push.
-              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              k += g(fc.integer, { min: 1, max: 9 });
               i.refusing.add("counter:1");
-              const { digest: was } = yield* install(i, `before_boot_order_${n}`, current);
+              const { digest: was } = yield* install(i, `before_boot_order_${n}`, { ...baseFixture(), k });
               i.refusing.delete("counter:1");
               const entered = yield* Deferred.make<void>();
               const release = yield* Deferred.make<void>();
@@ -636,7 +644,8 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               yield* i.restart;
               yield* Deferred.await(entered).pipe(Effect.timeout("1 second"));
               const before = i.completed.length;
-              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              k += g(fc.integer, { min: 1, max: 9 });
+              const current = { ...baseFixture(), k };
               const digest = yield* hash(sourceFor(current));
               const arrived = yield* Deferred.make<void>();
               i.swapGates.set(digest, Deferred.succeed(arrived, undefined).pipe(Effect.asVoid));
@@ -694,11 +703,12 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
             // Saves that land while those starts are pending. An install may fail on a pending
             // object; the selection it wrote is what every process must reach.
-            let current = baseFixture();
+            let k = baseFixture().k;
             let selected = i.builtHash;
 
             for (let n = g(fc.integer, { min: 1, max: 3 }); n > 0; n--) {
-              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              k += g(fc.integer, { min: 1, max: 9 });
+              const current = { ...baseFixture(), k };
               yield* Effect.exit(install(i, `pending_save_${n}`, current));
               selected = yield* hash(sourceFor(current));
             }
@@ -805,7 +815,8 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect.hasAssertions();
             const i = yield* instance(baseFixture());
             let selected = i.builtHash;
-            let current = baseFixture();
+            let k = baseFixture().k;
+            let personOnly = false;
             const starts = new Map<
               string,
               {
@@ -820,13 +831,9 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
 
               if (move === "install") {
-                current = {
-                  ...current,
-                  k: current.k + g(fc.integer, { min: 1, max: 9 }),
-                  inputPersonOnly: !current.inputPersonOnly,
-                  eventPersonOnly: !current.eventPersonOnly,
-                };
-                selected = (yield* install(i, `start_install_${n}`, current)).digest;
+                k += g(fc.integer, { min: 1, max: 9 });
+                personOnly = !personOnly;
+                selected = (yield* install(i, `start_install_${n}`, policyFixture(k, personOnly))).digest;
               } else if (move === "start") {
                 const name = `fresh:${n}`;
                 // A client still knows the built-in hash. The brain chooses the selection in its turn.
@@ -876,18 +883,16 @@ describe("P15 slice 1: the brain installs and selects code", () => {
           Effect.gen(function* () {
             const i = yield* instance(baseFixture());
             const pid = i.descriptors.get("counter:1")!.id;
-            let current = baseFixture();
+            let k = baseFixture().k;
+            let personOnly = false;
             const facts: Array<{ id: string; line: Parameters<ProjectService["Service"]["append"]>[2] }> = [];
             const steps = g(fc.integer, { min: 2, max: 5 });
 
             for (let n = 0; n < steps; n++) {
               const was = i.running.get(pid)!;
-              current = {
-                ...current,
-                k: current.k + g(fc.integer, { min: 1, max: 9 }),
-                inputPersonOnly: !current.inputPersonOnly,
-                eventPersonOnly: !current.eventPersonOnly,
-              };
+              k += g(fc.integer, { min: 1, max: 9 });
+              personOnly = !personOnly;
+              const current = policyFixture(k, personOnly);
               const digest = yield* hash(sourceFor(current));
               const published = yield* Deferred.make<void>();
               const reply = yield* Deferred.make<void>();
@@ -1035,12 +1040,13 @@ describe("P15 slice 1: the brain installs and selects code", () => {
           Effect.gen(function* () {
             const i = yield* instance(baseFixture());
             const pid = i.descriptors.get("counter:1")!.id;
-            let current = baseFixture();
+            let k = baseFixture().k;
             const steps = g(fc.integer, { min: 1, max: 4 });
 
             for (let n = 0; n < steps; n++) {
               const was = i.running.get(pid)!;
-              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
+              k += g(fc.integer, { min: 1, max: 9 });
+              const current = { ...baseFixture(), k };
               const digest = yield* hash(sourceFor(current));
               const waiting = yield* Deferred.make<void>();
               const finished = yield* Deferred.make<void>();
@@ -1091,20 +1097,20 @@ describe("P15 slice 1: the brain installs and selects code", () => {
           Effect.gen(function* () {
             const i = yield* instance(baseFixture());
             let selected = i.builtHash;
-            let current = baseFixture();
+            let k = baseFixture().k;
             const steps = g(fc.integer, { min: 1, max: 5 });
 
             for (let n = 0; n < steps; n++) {
               // Only hashes that this Project has loaded can be selected or kept by a Process.
               if (g(fc.boolean)) {
                 i.refusing.add("counter:1");
-                current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
-                const next = yield* install(i, `before_reopen_${n}`, current);
+                k += g(fc.integer, { min: 1, max: 9 });
+                const next = yield* install(i, `before_reopen_${n}`, { ...baseFixture(), k });
                 expect(next.answer._tag).toBe("loaded");
                 selected = next.digest;
               }
 
-              const replacement = { ...current, k: current.k + g(fc.integer, { min: 10, max: 99 }) };
+              const replacement = { ...baseFixture(), k: k + g(fc.integer, { min: 10, max: 99 }) };
               const before = code(i);
               const pushes = i.pushed.length;
               const expected = i.running.get(i.descriptors.get("counter:1")!.id) === selected ? [] : [selected];
@@ -1153,12 +1159,12 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             const i = yield* instance(baseFixture());
             // Each install is selected and pushed, and counter:1 refuses it, so it stays on its first code.
             i.refusing.add("counter:1");
-            let current = baseFixture();
+            let k = baseFixture().k;
             const installs = g(fc.integer, { min: 1, max: 4 });
 
             for (let n = 0; n < installs; n++) {
-              current = { ...current, k: current.k + g(fc.integer, { min: 1, max: 9 }) };
-              const next = yield* install(i, `refused_${n}`, current);
+              k += g(fc.integer, { min: 1, max: 9 });
+              const next = yield* install(i, `refused_${n}`, { ...baseFixture(), k });
               expect(next.answer._tag).toBe("loaded");
             }
 
@@ -1171,7 +1177,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             ).toBe(true);
             // The broken home: the code counter:1 records is gone, and the next build's built-in differs.
             i.db.prepare("DELETE FROM code WHERE hash=?").run(kept);
-            const replacement = { ...current, k: current.k + g(fc.integer, { min: 10, max: 99 }) };
+            const replacement = { ...baseFixture(), k: k + g(fc.integer, { min: 10, max: 99 }) };
             const before = new Set(i.isolates.keys());
             const exit = yield* Effect.exit(i.reopen(replacement));
             expect(

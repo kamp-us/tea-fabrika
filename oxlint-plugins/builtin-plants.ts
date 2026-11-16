@@ -390,6 +390,25 @@ const oxc: readonly Plant[] = [
       ["export const b = x | 1;", false],
     ],
   },
+  // 0559: on for next/ and our tooling by an override, so plants.test.ts also plants it by path.
+  {
+    code: "oxc(no-accumulating-spread)",
+    prelude: [XS],
+    lines: [
+      ["export const a = xs.reduce((acc: number[], x) => [...acc, x], []);", true],
+      ["export const b = xs.reduce((acc: number[], x) => { acc.push(x); return acc; }, []);", false],
+      [
+        "export const c = () => { let out: number[] = []; for (const x of xs) { out = [...out, x]; } return out; };",
+        true,
+      ],
+      ["export const d = () => { const out: number[] = []; for (const x of xs) { out.push(x); } return out; };", false],
+      [
+        "export const e = () => { let m = { k: 1, v: 2 }; for (const x of xs) { m = { ...m, k: m.k + x }; } return m; };",
+        true,
+      ],
+      ["export const f = () => { let k = 1; for (const x of xs) { k += x; } return { k, v: 2 }; };", false],
+    ],
+  },
 ];
 
 const unicorn: readonly Plant[] = [
