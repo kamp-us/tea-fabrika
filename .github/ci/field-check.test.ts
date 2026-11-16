@@ -157,16 +157,9 @@ it("a push keeps its two event trees and refuses failed diff, tree or blob reads
       const calls: string[][] = [];
       const run = (args: string[]) => {
         calls.push(args);
-        const stdout =
-          args[0] === "diff"
-            ? `${file}\0`
-            : args[0] === "ls-tree"
-              ? (args[4] === base ? existed : remains)
-                ? `${file}\0`
-                : ""
-              : args[1]?.startsWith(base)
-                ? baseText
-                : headText;
+        const tree = (args[4] === base ? existed : remains) ? `${file}\0` : "";
+        const blob = args[1]?.startsWith(base) ? baseText : headText;
+        const stdout = args[0] === "diff" ? `${file}\0` : args[0] === "ls-tree" ? tree : blob;
         return { status: 0, stdout };
       };
       expect(checker.readFieldFiles(base, head, "push", run)).toEqual([
@@ -828,17 +821,10 @@ it("the field job reads the old logs and every path in a log's folder", () => {
   const paths = vectors.map(([path]) => path);
   const base = "b".repeat(40),
     head = "c".repeat(40);
-  const run = (args: string[]) => ({
-    status: 0,
-    stdout:
-      args[0] === "diff"
-        ? `${paths.join("\0")}\0`
-        : args[0] === "ls-tree"
-          ? args[4] === head
-            ? `${paths.join("\0")}\0`
-            : ""
-          : "{}",
-  });
+  const run = (args: string[]) => {
+    const tree = args[4] === head ? `${paths.join("\0")}\0` : "";
+    return { status: 0, stdout: args[0] === "diff" ? `${paths.join("\0")}\0` : args[0] === "ls-tree" ? tree : "{}" };
+  };
   expect(checker.readFieldFiles(base, head, "push", run).map((input) => input.file)).toEqual(
     vectors.filter(([, read]) => read).map(([path]) => path),
   );

@@ -688,6 +688,11 @@ const fake = (
     });
     const path = url.replace("https://api.example/repos/owner/repo/", "");
     const fail = failing.some((prefix) => path.startsWith(prefix));
+    const runJobs = path.startsWith(`actions/runs/${LAST_GREEN}/`)
+      ? fullJobs
+      : path.startsWith("actions/runs/")
+        ? jobs
+        : {};
     const json = path.startsWith("issues?")
       ? [
           // A pull request with the label is in the issues list too, and is never the report's.
@@ -697,11 +702,7 @@ const fake = (
         ]
       : path.startsWith("actions/workflows/")
         ? { workflow_runs: last === null ? [] : [{ id: LAST_GREEN, head_sha: last }] }
-        : path.startsWith(`actions/runs/${LAST_GREEN}/`)
-          ? fullJobs
-          : path.startsWith("actions/runs/")
-            ? jobs
-            : {};
+        : runJobs;
     const status = fail ? 500 : path === "labels" ? 422 : 200;
     return Promise.resolve({ ok: status < 300, status, json: () => Promise.resolve(json) });
   };

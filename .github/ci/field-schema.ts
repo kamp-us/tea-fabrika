@@ -3,7 +3,7 @@
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema } from "effect";
+import { Match, Schema } from "effect";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 export type Log = typeof Log.Type;
@@ -157,8 +157,12 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     return [error("_tag", "expected finding or rated")];
   }
 
-  const schema =
-    log === "notes" ? Note : log === "runs" ? Run : found ? (value["_tag"] === "rated" ? Rated : Found) : null;
+  const schema = Match.value(log).pipe(
+    Match.when("notes", () => Note),
+    Match.when("runs", () => Run),
+    Match.when("findings", () => (value["_tag"] === "rated" ? Rated : Found)),
+    Match.orElse(() => null),
+  );
 
   if (schema === null) {
     return [warning("row", "no detailed schema for this file")];

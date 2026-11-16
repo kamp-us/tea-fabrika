@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -625,13 +626,13 @@ it("names the next command whose step or condition is wrong", () => {
       fc.boolean(),
       (broken, named, missingGuard) => {
         const found = step(broken, "next", named);
-        found.if = missingGuard
-          ? named === "end to end"
-            ? "true"
-            : named === "chromium"
-              ? onE2e
-              : "matrix.shard == '1'"
-          : "false";
+        const wrongGuard = Match.value(named).pipe(
+          Match.when("end to end", () => "true"),
+          Match.when("chromium", () => onE2e),
+          Match.when("edges", () => "matrix.shard == '1'"),
+          Match.exhaustive,
+        );
+        found.if = missingGuard ? wrongGuard : "false";
         expect(lint(JSON.stringify(broken))).toEqual([
           `check.yaml: next runs ${found.run} once, only on ${named === "edges" ? "leg 1" : "the e2e legs"}, with its pinned condition`,
         ]);

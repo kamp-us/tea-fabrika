@@ -235,14 +235,12 @@ it("G1 property: decide starts every hand start, and on a push or the catch-up s
         reached.byHand += event === "workflow_dispatch" ? 1 : 0;
         reached.tested += tested && event !== "workflow_dispatch" ? 1 : 0;
 
-        const expected =
-          event === "workflow_dispatch"
-            ? { _tag: "start", reason: "by_hand" }
-            : tested
-              ? { _tag: "skip", reason: "tested" }
-              : since < gap * MINUTE
-                ? { _tag: "skip", reason: "too_soon" }
-                : { _tag: "start", reason: "due" };
+        const scheduledAnswer = tested
+          ? { _tag: "skip", reason: "tested" }
+          : since < gap * MINUTE
+            ? { _tag: "skip", reason: "too_soon" }
+            : { _tag: "start", reason: "due" };
+        const expected = event === "workflow_dispatch" ? { _tag: "start", reason: "by_hand" } : scheduledAnswer;
         expect(decision).toEqual(expected);
       },
     ),

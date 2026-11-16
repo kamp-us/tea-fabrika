@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
+import { Match } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -752,15 +753,15 @@ describe("fabrika/program-package-layout", () => {
             aliases: Record<string, unknown> =
               runtime === undefined
                 ? {}
-                : link === "imports alias"
-                  ? { "#cf": runtime }
-                  : link === "imports array"
-                    ? { "#cf": [runtime] }
-                    : link === "imports condition"
-                      ? { "#cf": { [beside]: "./src/program.ts", [condition]: { default: runtime } } }
-                      : link === "imports pattern"
-                        ? { "#cf/*": "*" }
-                        : {},
+                : Match.value(link).pipe(
+                    Match.when("imports alias", () => ({ "#cf": runtime })),
+                    Match.when("imports array", () => ({ "#cf": [runtime] })),
+                    Match.when("imports condition", () => ({
+                      "#cf": { [beside]: "./src/program.ts", [condition]: { default: runtime } },
+                    })),
+                    Match.when("imports pattern", () => ({ "#cf/*": "*" })),
+                    Match.orElse(() => ({})),
+                  ),
             text =
               runtime === undefined || !link.startsWith("imports")
                 ? written
@@ -768,27 +769,31 @@ describe("fabrika/program-package-layout", () => {
                     JSON.stringify(runtime),
                     JSON.stringify(link === "imports pattern" ? `#cf/${runtime}` : "#cf"),
                   ),
+            // The Worker code sits in the exported file, in a local file it loads, or
+            // outside the package.
+            loaded: Record<string, string> =
+              link === "outside" || link === "absolute"
+                ? {
+                    [`${workerPath}.${ext}`]: `export * from ${JSON.stringify(
+                      link === "outside" ? up : `${HOME}/outside/${last}.ts`,
+                    )};`,
+                    [outside]: text,
+                  }
+                : {
+                    [`${workerPath}.${ext}`]: `export * from ${JSON.stringify(impl)};`,
+                    [`${workerPath}.impl.ts`]: text,
+                  },
+            workerFiles: Record<string, string> =
+              link === "same file" || link.startsWith("imports")
+                ? { [`${workerPath}.${ext}`]: text }
+                : link === "symlink"
+                  ? { [outside]: text }
+                  : loaded,
             files: Record<string, string> = {
               "src/program.ts": "export const program = 1;",
               [`${helperPath}.ts`]: "export const helper = 1;",
               [`${windowPath}.tsx`]: "export const View = () => <b>ok</b>;",
-              // The Worker code sits in the exported file, in a local file it loads, or
-              // outside the package.
-              ...(link === "same file" || link.startsWith("imports")
-                ? { [`${workerPath}.${ext}`]: text }
-                : link === "symlink"
-                  ? { [outside]: text }
-                  : link === "outside" || link === "absolute"
-                    ? {
-                        [`${workerPath}.${ext}`]: `export * from ${JSON.stringify(
-                          link === "outside" ? up : `${HOME}/outside/${last}.ts`,
-                        )};`,
-                        [outside]: text,
-                      }
-                    : {
-                        [`${workerPath}.${ext}`]: `export * from ${JSON.stringify(impl)};`,
-                        [`${workerPath}.impl.ts`]: text,
-                      }),
+              ...workerFiles,
             },
             symlinks = link === "symlink" ? { [`${workerPath}.${ext}`]: outside } : {},
             // The Worker file's subpaths under "./*", which "null pattern" shuts off.
@@ -833,13 +838,12 @@ describe("fabrika/program-package-layout", () => {
             // refused by its name alone. With no name to ask the exports by, the pattern
             // keeps the subpath.
             boxed = shut.filter((key) => box.test(key)).map(entryMessage),
+            shutOff = manifest === "name" ? boxed : [workerMessage, ...boxed],
             expected =
               entry === "condition" || entry === "array dot"
                 ? [...(shapes[shape]!.defines ? [workerMessage] : []), ...pure]
                 : entry === "null pattern"
-                  ? manifest === "name"
-                    ? boxed
-                    : [workerMessage, ...boxed]
+                  ? shutOff
                   : [workerMessage],
             // A Worker file shaped like a window is a window nobody exports, until './window'
             // carries it.
@@ -1176,13 +1180,13 @@ describe("fabrika/program-package-layout", () => {
               "src/worker.ts": shapes[shape]!.text("Worker"),
             },
             as = (path: string) =>
-              form === "string"
-                ? path
-                : form === "array"
-                  ? [path]
-                  : form === "conditions"
-                    ? { [condition]: path, default: "./src/program.ts" }
-                    : { [condition]: [path], default: ["./src/program.ts"] },
+              Match.value(form).pipe(
+                Match.when("string", () => path),
+                Match.when("array", () => [path]),
+                Match.when("conditions", () => ({ [condition]: path, default: "./src/program.ts" })),
+                Match.when("array conditions", () => ({ [condition]: [path], default: ["./src/program.ts"] })),
+                Match.exhaustive,
+              ),
             messages = (exports: unknown) =>
               run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) })
                 .map((d) => d.message)

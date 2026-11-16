@@ -791,20 +791,22 @@ function extractParsedInlineLinks(source: string): ReadonlyArray<ParsedInlineLin
   return links;
 }
 
+/** The tags a doc block of each scope may carry. */
+const allowedTags: Record<DocScope, ReadonlyArray<string>> = {
+  declaration: ["deprecated", "see", "stability", "category", "since"],
+  member: ["deprecated", "default", "see", "stability", "since"],
+  module: ["deprecated", "see", "stability", "since"],
+  namespace: ["deprecated", "see", "stability", "category", "since"],
+  "namespace-declaration": ["deprecated", "see", "stability", "category", "since"],
+};
+
 export function buildTags(
   scope: DocScope,
   tags: ReadonlyArray<JSDocTag>,
   requireStability = false,
 ): Result<ParsedModuleTags | ParsedDeclarationTags | ParsedNamespaceTags | ParsedMemberTags, JSDocParseError> {
   const diagnostics: Array<JSDocDiagnostic> = [];
-  const allowed =
-    scope === "declaration"
-      ? new Set(["deprecated", "see", "stability", "category", "since"])
-      : scope === "member"
-        ? new Set(["deprecated", "default", "see", "stability", "since"])
-        : scope === "module"
-          ? new Set(["deprecated", "see", "stability", "since"])
-          : new Set(["deprecated", "see", "stability", "category", "since"]);
+  const allowed = new Set(allowedTags[scope]);
   let previousOrder = -1;
   const values = new Map<string, Array<string>>();
 

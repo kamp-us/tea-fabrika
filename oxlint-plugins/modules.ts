@@ -255,6 +255,12 @@ export const modules: CreateRule = {
           }
 
           if (module !== null && isExport) {
+            const named =
+              statement.type === "ExportNamedDeclaration"
+                ? statement.specifiers
+                    .map((spec) => (spec.local.type === "Identifier" ? fromOther.get(spec.local.name) : undefined))
+                    .find((found) => found !== undefined)
+                : undefined;
             const other =
               statement.type === "ExportDefaultDeclaration"
                 ? statement.declaration.type === "Identifier"
@@ -262,11 +268,7 @@ export const modules: CreateRule = {
                   : undefined
                 : statement.source != null
                   ? otherModule(statement.source.value)
-                  : statement.type === "ExportNamedDeclaration"
-                    ? statement.specifiers
-                        .map((spec) => (spec.local.type === "Identifier" ? fromOther.get(spec.local.name) : undefined))
-                        .find((found) => found !== undefined)
-                    : undefined;
+                  : named;
 
             if (other != null) {
               context.report({
