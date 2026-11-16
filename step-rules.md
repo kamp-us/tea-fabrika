@@ -106,7 +106,9 @@ Write tools: never a heredoc, `python`, `node -e`, `sed -i` or a shell redirect 
 time the same day, for `python3 <<EOF || node -e`). A command that is not git also must not carry
 the word `git` in an argument, a quoted path included: a `node` call whose argument named
 skillscheck's path holding `git` was refused the same way (fourth sighting). Run the script by a
-path or package script that does not contain it, or ask the coordinator. This is the check's own
+path or package script that does not contain it, or ask the coordinator. Never spell a path with a
+glob or pattern (`commits-g*chain`) to avoid a word a rule names: that is a way around the rule,
+and the classifier refused it as "Undermining Oversight". Edit such a file with the Edit tool only. This is the check's own
 instruction, not a work-around; a refusal after it is still a stop.
 
 **A box is small.** In one cloud box, at most two code agents run at once, and only one of them
