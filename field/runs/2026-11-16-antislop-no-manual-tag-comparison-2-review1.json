@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tag-comparison-2-review1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T01:43:31-08:00",
+  "ended": "2026-11-16T02:10:26-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The one review of slice AS-no-manual-tag-comparison-2 (anti-slop-effect/no-manual-tag-comparison over next/packages/libfabrika/src/runtime, ledger and ci, in next/) at 03bd7d67f, the whole diff against merge base 5c94f12f4: done, no blocking class. The rule, forced to error in a scratch config outside the repo, counts 56 hits at head, exactly the 56 file:line pairs the tests row lists, all on a ledger row's _tag that ledger/Log.ts:62 types as an open string (Text). These are truly undecided: 0567 point 4 refuses Predicate.isTagged on a known type, and Match.tag on an open-string _tag narrows its case to never, so no decided form fits; stopping them was right. Behavior kept: Runner.ts resume's switch was the whole body of while (supervision !== null), so each break to continue and the default return to a final return keep the control flow; each ?._tag rewrite (owesHostCmd, waitUntil, the adopted and current reads, marker, abandon, the stepping checks, the swapped check) keeps its undefined and null cases (marker is Activity | undefined); every match and valueTags rewrite is exhaustive and held by the typecheck; effect 4.1.3 bounds isAnyOf's keys, so no misspelled tag compiles. ProcessStore.ts uses Match.valueTags because its ../ledger/Log.ts import line is held in next-ledger.json and coordination/index.ts re-exports ProcessStore, so a matcher import would be a cycle (0043): right by 0567 point 2. Predicate.isTagged appears only in QuotaRunnerTest.ts, whose entries are declared Record<string, unknown>, which fits point 4. No new exported name: HandsSaved (Runner.ts) and LifeEntry (Client.ts) are module-private, and Client's reply is private with one caller passing a decoded Reply. No comment line lost (every removed comment comes back), no oxlint-disable or @effect-diagnostics line added or removed, no .oxlintrc.json or tsconfig change. Counts hold: 390 = 221 exam + 169 product; 165 + 56 = 221; build fixed 169. Every test file keeps the same number of expect calls; loosening.sh's 13 removed-expect hits are all expects reflowed or moved into a match handler, none loosened. 0567, 0562, 0563 and 0046 (as 0567 amends it) are followed. One finding row is given to the lead: the build's run row names a tezgah-focus.visual.test.ts R4 failure, but no finding row for it landed in field/findings/. A merge-tree onto today's origin/main (358a7ea80) conflicts in runtime/internal/supervisor.laws.test.ts, for the fold.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 27,
+  "note": "Ran at 03bd7d67f, one file at a time with TYPESAFE_API_KEY unset, all green: 15 law files (supervisor.laws 9, Client.laws 10, handsDelivery 1, exitReason 1, reply 2, watchers 2, BrainLife.laws 3, Chaos.laws 5, Program 44, Execution 5, Entry 1, Gateway.laws 10, EffectFunctions 11, LedgerCallSpans 2, RunnerRecovery.laws 4); integration laws Runner 117, RunnerSupervision 60, RecoveryGaps 12 plus 1 skipped by its own gate, ProcessStore 7, Ledger 31, LedgerSpans 16, Log 41, Ci 1; and 21 runners of the touched suites under src/node, src/cloudflare and runtime/Audit.test.ts. The 0178 guard refused none. One pnpm typecheck: green. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) fails only on the owed zero locks for src/ci/** and src/ledger/**. Plants by reading, no write to the branch: fresh and saved swapped in exitReason's Failure.match is red in exitReason.test L4; dropping id_reused from handsDelivery's refused handler is red in handsDelivery.test D1; narrowing Client reply's list to accepted is red in Client.laws L4. Not run: no .visual. test, by the step rules.",
+  "step": "review"
+}
