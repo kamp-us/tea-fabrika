@@ -3,7 +3,7 @@
   "run": "2026-11-15-effect-e43-tests1",
   "ticket": "1075",
   "pr": "kamp-us/tea-fabrika#1473",
-  "started": "2026-11-15T20:34:00-08:00",
+  "started": "2026-11-15T20:36:25-08:00",
   "ended": "2026-11-15T20:44:00-08:00",
   "parent": null,
   "active": null,
@@ -14,7 +14,7 @@
   "why": "Tests step for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), in next/ and our tooling, which fixes code only and adds no lock line. Counted the check alone at error through --lspconfig over the 13 tsconfigs in scope: 393 hits on main, 305 in this slice's 24 folders (154 in exam paths, 151 in product files), and none of PR 1366's files in these folders holds one. Fixed none. The check asks every exported function with two or more fixed arguments to also take a pipeable (dual) form; it has no quick fix, and the only way to quiet a hit is Function.dual or a one-argument signature, which changes an API that no caller pipes. Every exam-path hit is outside what the check is made for (decision 0565): 72 test helpers and shared suites, 53 CI scripts, 11 lint rule helpers, 11 exam program functions, 4 Schema decoder constants (Schema.decodeUnknownOption output), 2 equivalence helpers and 1 test Layer constructor. So no fix was clearly right and no law changed. The 151 product hits are left for the build, by class: 86 lead tooling scripts, 37 libfabrika module functions, 11 Layer constructors, 10 app, program and window helpers, 4 comparators or equivalences, 3 test tooling functions.",
   "tokens": null,
   "tools": null,
-  "minutes": 10,
+  "minutes": 8,
   "note": "A plant file in oxlint-plugins/, run once through the checker and deleted: a plain two-argument export is flagged, the same function made with Function.dual(2, ...) is not, and an export typed Order.Order<string> is flagged too, the shape Effect's own String.Order and Number.Order have. Effect 4.1.3's own NodeHttpServer.layer(evaluate, options) is a fixed-arity export with no pipeable overload. The checker's quick-fix client found no fix for any hit in oxlint-plugins/css-support.ts. No test ran: no file but this row changed.",
   "plants": [
     {
