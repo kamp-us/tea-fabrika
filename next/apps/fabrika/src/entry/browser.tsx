@@ -23,6 +23,7 @@ const page = Effect.scoped(
     return yield* Effect.never;
   }),
 ).pipe(
+  // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
   Effect.provide(Layer.mergeAll(browserKey, browserRows, Socket.layerWebSocketConstructorGlobal, Id.Generator.layer)),
 );
 

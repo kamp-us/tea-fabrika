@@ -12,6 +12,7 @@ NodeRuntime.runMain(
         process.stdout.write(`${built.build}\n`);
       }),
     ),
+    // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
     Effect.provide(NodeServices.layer),
   ),
 );

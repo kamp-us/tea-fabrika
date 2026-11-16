@@ -107,6 +107,7 @@ const command = Command.make("dev", flags, (options) => {
           options.repo === undefined
             ? undefined
             : yield* OpenRepository.prepare(options.repo, loadOptions).pipe(
+                // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
                 Effect.provide(RepositoriesGit.layer({ person: home })),
                 Effect.provide([TomlParser.layer, Digest.layerWebCrypto]),
               );
@@ -178,6 +179,7 @@ const command = Command.make("dev", flags, (options) => {
             confirm: (snapshot) =>
               Prompt.Confirm({ message: `Trust ${snapshot.label} at ${snapshot.commit}?`, initial: false }),
           }).pipe(
+            // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
             Effect.provide(
               RepositoryTrustLedger.layer.pipe(
                 Layer.provide(LedgerRemote.layer(calls, { reader: "brain" })),
