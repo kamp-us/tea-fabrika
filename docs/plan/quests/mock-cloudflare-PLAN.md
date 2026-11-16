@@ -248,9 +248,39 @@ export class Waits extends Context.Service<
 // `wait` ends with `return yield* (yield* Waits).ready(answer.result);`
 ```
 
+**Amendment (2026-11-16 Pacific, the lead's ruling, after slice 2's tests step):** the
+`static readonly layer` lines above are wrong. [0095](../../../.decisions/0095-a-service-file-holds-only-its-contract.md)
+is in force and covers this case: a service file holds only its contract, and each layer is its own
+sibling file, read through its module as `LedgerSql.layer` is. So `Dispatcher.ts` and `Waits.ts`
+hold the contract and nothing that runs, and their live layers go in `DispatcherLive.ts` and
+`WaitsLive.ts`, named as `HandsTasksLive.ts` and `MailDeliveryLive.ts` are. The laws' imports
+change with them (the tests rows below). The providers are not in `runtime.ts`, as first written:
+`next/apps/fabrika/src/brain.ts` runs `control` and provides `DispatcherLive.layer`, and
+`ConnectionObject.ts` provides `WaitsLive.layer`. The object implementations the four
+`./objects.ts` mocks stood in for live in `record.ts` and `ProcessObject.ts`, not in `objects.ts`,
+so the code's names win: `recordPartImplementation` and `ProcessObject.implementation`
+("implementation" is Alchemy's word for what `.make()` takes).
+
+```ts
+// next/packages/libfabrika/src/cloudflare/Waits.ts: the contract only (0095). A sketch.
+export class Waits extends Context.Service<Waits, {
+  readonly ready: (raw: unknown) => Effect.Effect<typeof Waited.cases.ready.Type, LedgerError>;
+}>()("@kampus/libfabrika/cloudflare/Waits") {}
+
+// next/packages/libfabrika/src/cloudflare/WaitsLive.ts: its live layer, today's ready decode.
+export const layer: Layer.Layer<Waits> = Layer.succeed(Waits, { ready: /* the decode */ });
+
+// next/packages/libfabrika/src/cloudflare/DispatcherLive.ts: today's `dispatch` body.
+export const layer: Layer.Layer<Dispatcher> = Layer.succeed(Dispatcher, { dispatch: /* ... */ });
+
+// a law: the Recorder wraps the live member, read once from the live layer
+const live = yield* Waits.pipe(Effect.provide(WaitsLive.layer));
+const waits = Recorder.layer(Waits, live);
+```
+
 ```ts
 // readers.laws.test.ts, the ready law, slice 2. A sketch: no spy, no `vi.mock("effect")`.
-const waits = Recorder.layer(Waits, live); // `live` is Waits.layer's own member, read once
+const waits = Recorder.layer(Waits, live); // `live` is WaitsLive.layer's own member, read once (amended 2026-11-16, 0095)
 // ...send the ledger.wait frame inside Effect.provide(waits), as today...
 const calls = yield* Recorder.calls(Waits, "ready");
 expect(calls).toEqual([[raw]]); // asked once, with exactly the law's raw value
@@ -522,23 +552,32 @@ it is, and only how it watches changes. The reviewer runs the loosening check.
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 1: the world on `Stub.make`, 6 `vi.fn` go (M3, M4); slice 2: the 3 `Effect.result` spies and `vi.mock("effect")` go (M1, M2) |
+| next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 1: the world on `Stub.make`, 6 `vi.fn` go (M3, M4); slice 2: the 3 `Effect.result` spies and `vi.mock("effect")` go (M1, M2); (amendment 2026-11-16, 0095) M1 and M2 import `WaitsLive` and `DispatcherLive` for the live members, and the RecordPart path runs `recordPartImplementation` |
 | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts | tests | tests | slice 1: 2 `vi.fn` go, the guard is `Stub.make`'s `rest` (M7) |
-| next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | slice 1: the `ProjectClient.make` spy goes, spans read from the records (M5) |
+| next/packages/libfabrika/src/cloudflare/connection.test.ts | tests | tests | slice 1: the `ProjectClient.make` spy goes, spans read from the records (M5); slice 2 (amendment 2026-11-16): provides `WaitsLive.layer` under `connectionLayer` (about line 182) |
 | next/packages/libfabrika/src/cloudflare/entry-flows.laws.test.ts | tests | tests | slice 1: the span attribute spy and (amendment 2026-11-16) the `console` spy go; and (amendment 2026-11-15, owner ruling) the `stdout` and `stderr` spies go, held by M13 (M6) |
-| next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 2, after 1366: 4 spies go (M8) |
-| next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 2, after 1366: 2 spies go (M9) |
-| next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 2: the `crypto.subtle` spy goes (M10) |
-| next/packages/libfabrika/src/cloudflare/objects.ts | build | 8 | slice 2, after 1366 (amendment 2026-11-15): the object implementations exported, so the four laws that mocked `./objects.ts` import them |
-| next/packages/libfabrika/src/cloudflare/control.ts | build | 4 | slice 2 (amendment 2026-11-15): `dispatch`'s body moves to `Dispatcher.layer`; `parserControl` yields `Dispatcher` |
-| next/packages/libfabrika/src/cloudflare/connection.ts | build | 4 | slice 2, after 1366 (amendment 2026-11-15): the ready decode moves to `Waits.layer`; `wait` yields `Waits` |
+| next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts | tests | tests | slice 2, after 1366: 4 spies go (M8); (amendment 2026-11-16) A2 runs `ProcessObject.implementation` |
+| next/packages/libfabrika/src/cloudflare/ObjectService.test.ts | tests | tests | slice 2, after 1366: 2 spies go (M9); (amendment 2026-11-16) runs `ProcessObject.implementation` |
+| next/packages/libfabrika/src/cloudflare/error-cause.test.ts | tests | tests | slice 2: the `crypto.subtle` spy goes (M10); (amendment 2026-11-16) provides `WaitsLive.layer` under `connectionLayer` (about line 331) |
+| next/packages/libfabrika/src/cloudflare/objects.ts | build | 0 | (amendment 2026-11-16) not changed: the implementations live in `record.ts` and `ProcessObject.ts`, the two rows below |
+| next/packages/libfabrika/src/cloudflare/record.ts | build | 3 | slice 2 (amendment 2026-11-16, the code's name): `export const recordPartImplementation`, the Effect handed to `RecordPart.make`, and `RecordPartLive = RecordPart.make(recordPartImplementation)` |
+| next/packages/libfabrika/src/cloudflare/ProcessObject.ts | build | 8 | slice 2 (amendment 2026-11-16, the code's name): `export const implementation = (options) => Effect.gen(...)`, with `layer = (options) => Process.make(implementation(options))`; it reads `SinkLayer` and `RunnerLayer` in its own Effect and hands them to `processLayer` |
+| next/packages/libfabrika/src/cloudflare/ConnectionObject.ts | build | 2 | slice 2 (amendment 2026-11-16): provides `WaitsLive.layer` (about line 71) |
+| next/apps/fabrika/src/brain.ts | build | 2 | slice 2 (amendment 2026-11-16): provides `DispatcherLive.layer` where it runs `control` (about line 342) |
+| next/packages/libfabrika/package.json | build | 1 | slice 2 (amendment 2026-11-16): exports `Waits` and `WaitsLive` (for example under `./workers/`), so the door law can provide them |
+| next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 2 (amendment 2026-11-16): the `connectionLayer` it builds (about line 819) gets `WaitsLive.layer` at run time |
+| next/packages/libfabrika/src/cloudflare/reload.laws.test.ts | tests | tests | slice 2 (amendment 2026-11-16): L12's `ask` helper provides `DispatcherLive.layer` under `control` |
+| next/packages/libfabrika/src/cloudflare/control.ts | build | 4 | slice 2 (amendment 2026-11-15): `dispatch`'s body moves to `DispatcherLive.layer` (amended 2026-11-16, 0095); `parserControl` yields `Dispatcher`, which stays in `control`'s requirements |
+| next/packages/libfabrika/src/cloudflare/connection.ts | build | 4 | slice 2, after 1366 (amendment 2026-11-15): the ready decode moves to `WaitsLive.layer` (amended 2026-11-16, 0095); `wait` yields `Waits`, which stays in `connectionLayer`'s requirements; `connectionRuntime` provides `WaitsLive.layer` |
 | next/packages/libfabrika/src/cloudflare/fetch.test.ts | tests | tests | read only, not changed: the folder's one file with no `vi.mock` today (amendment 2026-11-15; the lock no longer lists single files) |
-| next/packages/libfabrika/src/cloudflare/Dispatcher.ts | build | 18 | slice 2, new (amendment 2026-11-15): the contract and its live layer |
-| next/packages/libfabrika/src/cloudflare/Waits.ts | build | 14 | slice 2, new (amendment 2026-11-15): the contract and its live layer |
+| next/packages/libfabrika/src/cloudflare/Dispatcher.ts | build | 8 | slice 2, new (amendment 2026-11-15; amended 2026-11-16 for 0095): the contract only |
+| next/packages/libfabrika/src/cloudflare/DispatcherLive.ts | build | 10 | slice 2, new (amendment 2026-11-16, 0095): the live layer, today's `dispatch` body |
+| next/packages/libfabrika/src/cloudflare/Waits.ts | build | 6 | slice 2, new (amendment 2026-11-15; amended 2026-11-16 for 0095): the contract only |
+| next/packages/libfabrika/src/cloudflare/WaitsLive.ts | build | 8 | slice 2, new (amendment 2026-11-16, 0095): the live layer, today's ready decode |
 | patches/effect@4.1.3.patch | tests | 12 | slice 1 (amendment 2026-11-15), only if no earlier slice of the sweep added them: `infoLines` and `debugLines` beside app-e2e's `warnLines`, with `pnpm patch` |
 | patches/effect | tests | tests | the patch's name as pnpm writes it; the one file above |
 | scripts/effect-testconsole.test.ts | tests | tests | slice 1, with the readers above: their law, beside app-e2e's L3 |
-| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 26 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto`; (amendment 2026-11-15) provides `Dispatcher.layer` and `Waits.layer` |
+| next/packages/libfabrika/src/cloudflare/runtime.ts | build | 26 | slice 2, after 1366: `SinkLayer` and `RunnerLayer` with doc blocks, read where `SpanSink.layer` and `ProgramRunner.withLoader` are named; the two digests read `WebCrypto.WebCrypto`; (amendment 2026-11-15, amended 2026-11-16) provides neither service layer: `brain.ts` provides `DispatcherLive.layer` and `ConnectionObject.ts` provides `WaitsLive.layer` |
 | .oxlintrc.json | tests | 32 | (amendment 2026-11-15) not the lock block, which waits for the folder to reach zero after this sweep; slice 1 (amendment 2026-11-16): an `eslint/no-console` block at error for `next/packages/libfabrika/src/**`, test files left out (M12), about 8 lines; slice 1 (amendment 2026-11-15): the two `process` entries in the five `no-restricted-properties` blocks that reach libfabrika, and a libfabrika copy of the `next/**/*` block (M13), about 24 lines |
 | oxlint-plugins/builtin-plants.ts | tests | tests | slice 2: M11's lines in node's `VI_METHODS` set (amended 2026-11-15; first `VI_BAN`); slice 1: the `no-console` plant lines (M12, amendment 2026-11-16) and the `process` write plant lines (M13, amendment 2026-11-15); and (amendment 2026-11-16, lead ruling) the `VI_PROPERTIES` plant, the lock's other half |
 | oxlint-plugins/plants.test.ts | tests | tests | slice 2: node's M1 scenario (M11); slice 1: the `no-console` scenario (M12) and the `process` write scenario over every block that sets the rule (M13, amendment 2026-11-15) |
