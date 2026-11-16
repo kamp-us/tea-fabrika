@@ -1,0 +1,26 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t766-port-typecheck-tests4",
+  "ticket": 766,
+  "pr": "kamp-us/tea-fabrika#1506",
+  "started": "2026-11-16T01:29:17-08:00",
+  "ended": "2026-11-16T01:39:56-08:00",
+  "parent": "2026-11-16-t766-port-typecheck-review",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The tests step of the fix round, after the plan's amendment of 2026-11-16 ('a dead .break is broken under its own .break'), in today's tooling, at c3e19b441. New law N7 in scripts/typecheck-lock.test.ts, a scenario labeled with its reason: a .break left by breaker 9 (killed by SIGKILL), a label naming gone holder 8, and two live takers B (602) and C (603), run in the review's order on the in-memory FileSystem by four Deferred gates (C read the dead .break; B linked its own .break; C looked at the label under a .break of its own, or was refused .break; B linked a label). It is red on today's product: 'one hold returns while the other waits: expected [ 602, 603 ] to have a length of 1 but got 2', because LocksFile.ts:108-110 removes the dead .break directly, so C removes B's live .break, both look under a .break of their own, and C removes B's live label. The gates do not deadlock a fixed product: C's refused .break also lets B go on. The 0567 sites in the two test files are matched: scripts/typecheck.test.ts lines 97, 173, 177, 183 (pgrep, now a local Schema.TaggedUnion Pgrep, read with Pgrep.match and Pgrep.guards.listed) and 274-275 (ChildProcess.isStandardCommand); scripts/typecheck-lock.test.ts lines 65, 67, 71, 81, 87, 92, 94, 100, 102 and 104 (11 comparisons on 10 lines; the generators now make local Standing and Label unions, read with Standing.match, Standing.isAnyOf, Standing.guards.gone, Label.match and Label.guards). The generators draw the same values as before, so seed 119120 walks the same runs. L3: scripts/typecheck.ts, scripts/typecheck/**, scripts/typecheck.test.ts and scripts/typecheck-lock.test.ts are in the no-manual-tag-comparison block of .oxlintrc.json. Gap in the plan: oxlint-plugins/anti-slop.ts's zero lock (lock, line 93; folders, line 63) refuses any glob outside next/, .agents/, oxlint-plugins/ and .github/ci/, so pnpm lint also prints four lines '.oxlintrc.json: anti-slop-effect/no-manual-tag-comparison's block names scripts/typecheck.ts (and the other three), which is not a folder of its scope'. No step owns anti-slop.ts in the plan's Files table. The rule fires on 7 product lines, not 8: LocksFile.ts:104, 108, 117, 168, 175, Look.ts:84, Typecheck.ts:69. LocksFile.ts:19 compares _tag with a parameter, not a string, and the rule does not fire there; NodeModulesFs.ts:20 sits inside Effect.catchIf and does not fire either. The plan's _trylock cite (mercurial/lock.py lines 297-343) starts at 298; the plan is not edited for that.",
+  "plants": [
+    { "law": "scripts/typecheck-lock.test.ts N7", "plant": "none needed: today's product, which removes a stale .break directly (LocksFile.ts:108-110), gives two holders", "result": "red" },
+    { "law": "scripts/typecheck-lock.test.ts N7", "plant": "a trial fix in LocksFile.ts (a stale .break broken by breakStale(breaker), .break removed on the way out only when it names this process), undone by copy: N1 to N7 green", "result": "green" },
+    { "law": "scripts/typecheck-lock.test.ts N7", "plant": "on that trial fix, fs.remove(breaker) put back for a stale .break: both hold", "result": "red" },
+    { "law": ".oxlintrc.json L3", "plant": "r.pgrep._tag === \"listed\" put back in scripts/typecheck.test.ts: oxlint fires anti-slop-effect(no-manual-tag-comparison) at its line", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Each plant was made with the Edit tool and undone by copy or by edit; git status showed no product file before the commit. The build reruns N7's plant on its real fix. Tests run at c3e19b441 plus this change: scripts/typecheck.test.ts and scripts/typecheck-lock.test.ts, maxWorkers=1: 8 green, N7 red as above. pnpm --filter @tea-fabrika/scripts typecheck exited 0, both test files included. ratchet.ts against the merge base exited 0. pnpm format changed scripts/typecheck.test.ts only in layout. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 17 of 18 parts passed; oxlint-plugins/lint.ts failed, with 7 blocking product lines (the build's) and the 4 zero-lock lines above. No pnpm typecheck ran, as the brief asks.",
+  "step": "tests"
+}

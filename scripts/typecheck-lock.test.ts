@@ -36,24 +36,38 @@ const AT = 1_800_000_000_000;
 const SLACK = 2_000;
 
 /** How a pid stands when a waiter looks: gone, started before its file, after it, or with no start ps can read. */
+const Standing = Schema.TaggedUnion({
+  gone: {},
+  before: { startedAt: Schema.Number },
+  after: { startedAt: Schema.Number },
+  unknown: {},
+});
+
+type Standing = typeof Standing.Type;
+
 const standing = fc.oneof(
-  fc.constant({ _tag: "gone" as const }),
-  fc.integer({ min: 0, max: 100_000 }).map((d) => ({ _tag: "before" as const, startedAt: AT + SLACK - 1_000 - d })),
-  fc.integer({ min: 0, max: 100_000 }).map((d) => ({ _tag: "after" as const, startedAt: AT + SLACK + 1_000 + d })),
-  fc.constant({ _tag: "unknown" as const }),
+  fc.constant(Standing.cases.gone.make({})),
+  fc.integer({ min: 0, max: 100_000 }).map((d) => Standing.cases.before.make({ startedAt: AT + SLACK - 1_000 - d })),
+  fc.integer({ min: 0, max: 100_000 }).map((d) => Standing.cases.after.make({ startedAt: AT + SLACK + 1_000 + d })),
+  fc.constant(Standing.cases.unknown.make({})),
 );
 
-type Standing = typeof standing extends fc.Arbitrary<infer S> ? S : never;
-
 /** A label as a waiter can find it: absent, empty, unreadable, or a pid. */
+const Label = Schema.TaggedUnion({
+  absent: {},
+  empty: { text: Schema.String },
+  junk: { text: Schema.String },
+  pid: { pid: Schema.Int, text: Schema.String },
+});
+
 const labelText = fc.oneof(
-  fc.constant({ _tag: "absent" as const }),
-  fc.constantFrom("", "\n").map((text) => ({ _tag: "empty" as const, text })),
+  fc.constant(Label.cases.absent.make({})),
+  fc.constantFrom("", "\n").map((text) => Label.cases.empty.make({ text })),
   // "0" names the caller's process group to kill(2), never a holder.
   fc
     .constantFrom("abc\n", "12 34\n", "-5\n", "0x1f\n", "0\n", "4101x\n")
-    .map((text) => ({ _tag: "junk" as const, text })),
-  fc.integer({ min: 100, max: 199 }).map((pid) => ({ _tag: "pid" as const, pid, text: `${pid}\n` })),
+    .map((text) => Label.cases.junk.make({ text })),
+  fc.integer({ min: 100, max: 199 }).map((pid) => Label.cases.pid.make({ pid, text: `${pid}\n` })),
 );
 
 const childText = fc.option(
@@ -62,13 +76,14 @@ const childText = fc.option(
 );
 
 const toLiveness = (s: Standing): Liveness =>
-  s._tag === "gone"
-    ? Liveness.cases.gone.make({})
-    : s._tag === "unknown"
-      ? Liveness.cases.running.make({})
-      : Liveness.cases.running.make({ startedAt: s.startedAt });
+  Standing.match(s, {
+    gone: () => Liveness.cases.gone.make({}),
+    unknown: () => Liveness.cases.running.make({}),
+    before: ({ startedAt }) => Liveness.cases.running.make({ startedAt }),
+    after: ({ startedAt }) => Liveness.cases.running.make({ startedAt }),
+  });
 
-const holds = (s: Standing) => s._tag === "before" || s._tag === "unknown";
+const holds = Standing.isAnyOf(["before", "unknown"]);
 
 describe("T766 judge reads one look at the typecheck lock, today's tooling", () => {
   // N2. Plants (each run once, recorded in the tests run row): read an empty label as held (today's
@@ -78,33 +93,30 @@ describe("T766 judge reads one look at the typecheck lock, today's tooling", () 
     fc.assert(
       fc.property(labelText, childText, standing, standing, (label, child, labelPid, childPid) => {
         const liveness = (pid: number) =>
-          label._tag === "pid" && pid === label.pid
+          Label.guards.pid(label) && pid === label.pid
             ? toLiveness(labelPid)
             : child !== undefined && pid === child.pid
               ? toLiveness(childPid)
               : Liveness.cases.gone.make({});
         const got = judge({
-          label: label._tag === "absent" ? Option.none() : Option.some({ text: label.text, at: AT }),
+          label: Label.guards.absent(label) ? Option.none() : Option.some({ text: label.text, at: AT }),
           child: child === undefined ? Option.none() : Option.some({ text: child.text, at: AT }),
           liveness,
         });
-        const want =
-          label._tag === "absent"
-            ? Seen.cases.free.make({})
-            : label._tag === "pid" && holds(labelPid)
-              ? Seen.cases.held.make({ pid: label.pid, by: "label" })
-              : child !== undefined && holds(childPid)
-                ? Seen.cases.held.make({ pid: child.pid, by: "child" })
-                : Seen.cases.stale.make({
-                    reason:
-                      label._tag === "empty"
-                        ? "empty"
-                        : label._tag === "junk"
-                          ? "unreadable"
-                          : labelPid._tag === "gone"
-                            ? "gone"
-                            : "reused",
-                  });
+        // Held by the child where its pid holds, else stale for `reason`.
+        const byChild = (reason: "empty" | "unreadable" | "gone" | "reused"): Seen =>
+          child !== undefined && holds(childPid)
+            ? Seen.cases.held.make({ pid: child.pid, by: "child" })
+            : Seen.cases.stale.make({ reason });
+        const want = Label.match(label, {
+          absent: () => Seen.cases.free.make({}),
+          empty: () => byChild("empty"),
+          junk: () => byChild("unreadable"),
+          pid: ({ pid }) =>
+            holds(labelPid)
+              ? Seen.cases.held.make({ pid, by: "label" })
+              : byChild(Standing.guards.gone(labelPid) ? "gone" : "reused"),
+        });
         seen.add(
           Seen.match(want, { free: () => "free", held: (h) => `held by ${h.by}`, stale: (s) => `stale ${s.reason}` }),
         );
@@ -659,5 +671,109 @@ describe("T766 LocksFile keeps one holder through takes, releases, kills and reu
           }).pipe(Effect.provide(Layer.mergeAll(TestClock.layer(), TestConsole.layer))),
         { concurrency: 1, discard: true },
       ),
+    ));
+
+  // N7. The review's order (plan amendment of 2026-11-16, fix round): breaker D was killed by
+  // SIGKILL while it held `.break`, the old holder is gone, and two live takers B and C run. C reads
+  // the dead `.break`; B reads it too, removes it and links its own; C then acts on what it read.
+  // Each looks under its own `.break`, and C acts on the stale label only once B has linked its own.
+  // With a dead `.break` broken under `.break.break`, C finds B's live `.break` and removes nothing,
+  // so one `hold` returns and the other waits. A scenario, not a property: the law is this one order,
+  // pinned by gates, which N3's walk cannot reach since it kills only holders. Plant (the build's,
+  // run once): on the fixed code, put back `fs.remove(breaker)` for a stale `.break`: both hold.
+  it("scenario: a .break left by a dead breaker, a gone holder and two live takers leave one holder", () =>
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const d = disk();
+        const table = ProcessesTest.table([]);
+        const [b, c, gone, dead] = [602, 603, 8, 9];
+        const BREAK = `${LOCK}.break`;
+        table.running.set(b, AT - 60_000);
+        table.running.set(c, AT - 60_000);
+        d.files.set(LOCK, { text: `${gone}\n`, at: AT - 30_000 });
+        d.files.set(BREAK, { text: `${dead}\n`, at: AT - 20_000 });
+        const cRead = yield* Deferred.make<void>();
+        const bBreak = yield* Deferred.make<void>();
+        const cLooked = yield* Deferred.make<void>();
+        const bLabel = yield* Deferred.make<void>();
+        // B: its first step waits until C has read the dead `.break`. Once it has linked its own
+        // `.break`, its next step waits until C has looked at the label under a `.break` of its own,
+        // or been refused `.break`. It says when it links a label.
+        const forB = (): Hook => {
+          let phase: "start" | "free" | "broke" | "on" = "start";
+          return (op, path, ok) =>
+            Effect.gen(function* () {
+              if (ok === undefined && phase === "start") {
+                phase = "free";
+                yield* Deferred.await(cRead);
+              }
+
+              if (ok === undefined && phase === "broke") {
+                phase = "on";
+                yield* Deferred.await(cLooked);
+              }
+
+              if (ok === true && op === "link" && path === BREAK && phase === "free") {
+                phase = "broke";
+                yield* Deferred.succeed(bBreak, undefined);
+              }
+
+              if (ok === true && op === "link" && path === LOCK) {
+                yield* Deferred.succeed(bLabel, undefined);
+              }
+            });
+        };
+        // C: once it has read the dead `.break`, its next step waits until B has linked its own.
+        // When it is next refused `.break`, or takes it and reads the label under it, B may go on;
+        // once it has read the label after trying `.break`, its next step waits until B has linked a
+        // label.
+        const forC = (): Hook => {
+          let phase: "start" | "read" | "after" | "tried" | "looked" | "on" = "start";
+          return (op, path, ok) =>
+            Effect.gen(function* () {
+              if (ok === undefined && phase === "read") {
+                phase = "after";
+                yield* Deferred.await(bBreak);
+              }
+
+              if (ok === undefined && phase === "looked") {
+                phase = "on";
+                yield* Deferred.await(bLabel);
+              }
+
+              if (ok === true && phase === "start" && op === "readFileString" && path === BREAK) {
+                phase = "read";
+                yield* Deferred.succeed(cRead, undefined);
+              }
+
+              if (ok !== undefined && phase === "after" && op === "link" && path === BREAK) {
+                phase = "tried";
+
+                if (!ok) {
+                  yield* Deferred.succeed(cLooked, undefined);
+                }
+              }
+
+              if (ok === true && phase === "tried" && op === "readFileString" && path === LOCK) {
+                phase = "looked";
+                yield* Deferred.succeed(cLooked, undefined);
+              }
+            });
+        };
+        const got = new Map<number, Held>();
+        const takenB = yield* take(d, table, b, got, forB());
+        const takenC = yield* take(d, table, c, got, forC());
+        yield* settle;
+        expect([...got.keys()], "one hold returns while the other waits").toHaveLength(1);
+        const [first, second] = got.has(b) ? [b, c] : [c, b];
+        expect(d.files.get(LOCK)?.text, "the label names the holder").toBe(`${first}\n`);
+        yield* Scope.close((first === b ? takenB : takenC).scope, Exit.void);
+        yield* settle;
+        expect(got.has(second), "the other takes the lock once the first lets go").toBe(true);
+        expect(d.files.get(LOCK)?.text, "the label names the second holder").toBe(`${second}\n`);
+        yield* Scope.close((second === b ? takenB : takenC).scope, Exit.void);
+        expect(d.files.has(LOCK), "the last holder removed its label").toBe(false);
+      }).pipe(Effect.provide(Layer.mergeAll(TestClock.layer(), TestConsole.layer))),
     ));
 });

@@ -2883,7 +2883,11 @@
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/vitest/**",
         "next/programs/counter/**",
-        "next/programs/inbox/**"
+        "next/programs/inbox/**",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "anti-slop-effect/no-manual-tag-comparison": "error" }
     },

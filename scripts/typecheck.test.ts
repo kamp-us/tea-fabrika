@@ -6,7 +6,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { ConfigProvider, Effect, Fiber, Layer, PlatformError, Schema, Sink, Stream } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock, TestConsole } from "effect/testing";
 import fc from "fast-check";
 import { Ended } from "./typecheck/Commands.ts";
@@ -50,6 +50,15 @@ const found = fc.record({
   args: fc.constantFrom("tsgo --lsp --stdio", "tsgo -p next/tsconfig.json", "node_modules/.bin/tsgo --watch", ""),
 });
 
+/** How pgrep answers in a run: it cannot list processes here, or it lists `found` for `polls` looks. */
+const Pgrep = Schema.TaggedUnion({
+  refused: {},
+  listed: {
+    found: Schema.Array(Schema.Struct({ pid: Schema.Int, args: Schema.String })),
+    polls: Schema.Int,
+  },
+});
+
 const run = fc.record({
   shape: fc.constantFrom(...Shape.literals),
   install: fc.record({ ended, leavesFolder: fc.boolean() }),
@@ -59,12 +68,13 @@ const run = fc.record({
   lock: fc.option(fc.constantFrom("/tmp/tc-law/typecheck.lock"), { nil: undefined }),
   compiler: fc.option(fc.constantFrom("tcwlaw"), { nil: undefined }),
   pgrep: fc.oneof(
-    fc.constant({ _tag: "refused" as const }),
-    fc.record({
-      _tag: fc.constant("listed" as const),
-      found: fc.uniqueArray(found, { selector: (f) => f.pid, maxLength: 3 }),
-      polls: fc.integer({ min: 0, max: 3 }),
-    }),
+    fc.constant(Pgrep.cases.refused.make({})),
+    fc
+      .record({
+        found: fc.uniqueArray(found, { selector: (f) => f.pid, maxLength: 3 }),
+        polls: fc.integer({ min: 0, max: 3 }),
+      })
+      .map((listed) => Pgrep.cases.listed.make(listed)),
   ),
 });
 
@@ -94,21 +104,22 @@ const expected = (r: Run) => {
   let asked: Array<string> = [];
 
   if (!r.ci) {
-    if (r.pgrep._tag === "refused") {
-      asked = [compiler];
-      lines.push(`typecheck: pgrep cannot list processes here, so the wait for a running ${compiler} is skipped`);
-    } else {
-      const waited = r.pgrep.found.filter((f) => !f.args.split(" ").includes("--lsp"));
-      asked = Array.from(
-        { length: r.pgrep.found.length === 0 ? 1 : waited.length === 0 ? 1 : r.pgrep.polls + 2 },
-        () => compiler,
-      );
+    asked = Pgrep.match(r.pgrep, {
+      refused: () => {
+        lines.push(`typecheck: pgrep cannot list processes here, so the wait for a running ${compiler} is skipped`);
+        return [compiler];
+      },
+      listed: ({ found: listed, polls }) => {
+        const waited = listed.filter((f) => !f.args.split(" ").includes("--lsp"));
 
-      if (waited[0] !== undefined) {
-        const holder = waited[0].args === "" ? `pid ${waited[0].pid}` : `pid ${waited[0].pid} (${waited[0].args})`;
-        lines.push(`typecheck: waiting for ${holder}, a ${compiler} already running`);
-      }
-    }
+        if (waited[0] !== undefined) {
+          const holder = waited[0].args === "" ? `pid ${waited[0].pid}` : `pid ${waited[0].pid} (${waited[0].args})`;
+          lines.push(`typecheck: waiting for ${holder}, a ${compiler} already running`);
+        }
+
+        return Array.from({ length: listed.length === 0 ? 1 : waited.length === 0 ? 1 : polls + 2 }, () => compiler);
+      },
+    });
   }
 
   const log = [`hold ${lock}`];
@@ -169,18 +180,16 @@ const actual = (r: Run) => {
     log,
     folder,
   );
-  const listings =
-    r.pgrep._tag === "refused"
-      ? [Listing.cases.refused.make({})]
-      : [
-          ...Array.from({ length: r.pgrep.polls + 1 }, () =>
-            Listing.cases.listed.make({ pids: r.pgrep._tag === "listed" ? r.pgrep.found.map((f) => f.pid) : [] }),
-          ),
-          Listing.cases.listed.make({ pids: [] }),
-        ];
+  const listings = Pgrep.match(r.pgrep, {
+    refused: () => [Listing.cases.refused.make({})],
+    listed: ({ found: listed, polls }) => [
+      ...Array.from({ length: polls + 1 }, () => Listing.cases.listed.make({ pids: listed.map((f) => f.pid) })),
+      Listing.cases.listed.make({ pids: [] }),
+    ],
+  });
   const table = ProcessesTest.table(listings);
 
-  if (r.pgrep._tag === "listed") {
+  if (Pgrep.guards.listed(r.pgrep)) {
     for (const f of r.pgrep.found) {
       table.running.set(f.pid, 1_000);
       table.args.set(f.pid, f.args);
@@ -271,8 +280,9 @@ const spawner = (answer: (cmd: string, args: ReadonlyArray<string>) => Ran) => {
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
       Effect.suspend(() => {
-        const cmd = command._tag === "StandardCommand" ? command.command : "";
-        const args = command._tag === "StandardCommand" ? command.args.map(String) : [];
+        const standard = ChildProcess.isStandardCommand(command);
+        const cmd = standard ? command.command : "";
+        const args = standard ? command.args.map(String) : [];
         calls.push([cmd, ...args].join(" "));
         const ran = answer(cmd, args);
 
