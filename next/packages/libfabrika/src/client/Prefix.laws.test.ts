@@ -743,9 +743,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
 
 /** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
  *  but the focused one drawn under 220x120. */
-const stripCount = (view: TezgahView, size: Size) => {
-  return foldedAt(view.workspaces[0]!, size).strips.size;
-};
+const stripCount = (view: TezgahView, size: Size) => foldedAt(view.workspaces[0]!, size).strips.size;
 
 describe("Desk S4 L32: a split's letter never carries a fold", () => {
   it("L32 (the split path): in a window whose size folds some of its tiles, every letter its keys send tezgah, a split or a close, carries only did's keys and nothing about folds or strips", () => {

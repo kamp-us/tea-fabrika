@@ -7,13 +7,15 @@
       // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
       // The globs read from this folder. One entry per set of folders; its comment names its checks.
       "overrides": [
-        // Whole package: schemaNumber (E4), schemaClassMissingBrand (E6).
+        // Whole package: schemaNumber (E4), schemaClassMissingBrand (E6), unnecessaryArrowBlock
+        // (E8).
         {
           "include": ["**/*.ts", "**/*.mjs"],
           "options": {
             "diagnosticSeverity": {
               "schemaNumber": "error",
-              "schemaClassMissingBrand": "error"
+              "schemaClassMissingBrand": "error",
+              "unnecessaryArrowBlock": "error"
             }
           }
         }
