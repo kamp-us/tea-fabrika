@@ -11,7 +11,11 @@ const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 
 class Offline extends Schema.TaggedError<Offline>()("Offline", {}) {}
 
-type Route = (method: string, params: unknown, identity: typeof Who.Type) => Effect.Effect<typeof Answer.Type, Offline>;
+type Route = (
+  method: string,
+  params: Schema.Json | undefined,
+  identity: typeof Who.Type,
+) => Effect.Effect<typeof Answer.Type, Offline>;
 
 const online = () =>
   Attached.cases.online.make({
@@ -296,7 +300,7 @@ describe("P10 JSON-RPC", () => {
 
   it.effect("p82: additive request fields leave the reply id and checked writer alone", () =>
     Effect.gen(function* () {
-      const route = vi.fn((_method: string, _params: unknown, _who: typeof Who.Type) =>
+      const route = vi.fn((_method: string, _params: Schema.Json | undefined, _who: typeof Who.Type) =>
         Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
       const attached = online();
