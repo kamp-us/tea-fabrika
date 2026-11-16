@@ -372,12 +372,15 @@ type ViewChoice = typeof viewChoice extends fc.Arbitrary<infer C> ? C : never;
 /** The brain's side of one pid: its value at each revision, and every notice it made. */
 type Brain = { readonly kind: Kind; rev: number; views: Array<unknown>; made: Array<unknown> };
 
+/** A value the walk built, checked as the JSON the diff takes: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
+
 const brainStep = (b: Brain, c: ViewChoice): unknown => {
   const before = b.views[b.rev]!;
   const after = edit(b.kind, before, c.edit, c.at, c.word);
   b.views.push(after);
   b.rev += 1;
-  return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(before, after) };
+  return { type: "patch", base: b.rev - 1, rev: b.rev, patch: diff(json(before), json(after)) };
 };
 
 /** The next notice the brain would send, broken one way: an op that is not RFC 6902, a path that is

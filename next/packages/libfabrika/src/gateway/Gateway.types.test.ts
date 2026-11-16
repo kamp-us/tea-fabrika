@@ -9,6 +9,7 @@ import { expectTypeOf, it } from "@effect/vitest";
 import type { Effect, Result } from "effect";
 import type { From } from "../processes/Mailbox.ts";
 import type { Recipient } from "../processes/Process.ts";
+import type { News } from "../runtime/News.ts";
 import type { Gateway } from "./Gateway.ts";
 import type { gatewayNonce } from "./GatewayNonce.ts";
 import type { gatewayStore } from "./GatewayStore.ts";
@@ -59,4 +60,14 @@ it("type: the door's monitor option takes a ref, a pid, the client case of Recip
   expectTypeOf<Parameters<MonitorOption>[2]>().toEqualTypeOf<typeof Recipient.cases.client.Type>();
   expectTypeOf<Parameters<MonitorOption>[3]>().toEqualTypeOf<From>();
   expectTypeOf<Parameters<MonitorOption>>().toHaveProperty("length").toEqualTypeOf<4>();
+});
+
+// Ticket 1053 slice 1, next/: L5 of the plan (docs/plan/quests/t1053-PLAN.md), written before the
+// build. The door builds what a client's socket is told, so its `notify` option takes `News`, never
+// `unknown`. The type checker reads the law; the lead and CI run it with `pnpm typecheck`.
+// Plant: put `unknown` back on `Options.notify`.
+type NotifyOption = Parameters<typeof Gateway.layer>[0]["notify"];
+
+it("type: L5 the door's notify option takes a client and News", () => {
+  expectTypeOf<Parameters<NotifyOption>>().toEqualTypeOf<[client: string, news: News]>();
 });
