@@ -54,18 +54,21 @@ return Effect.gen(function* () {
 }).pipe(Effect.provide(m.layer));
 ```
 
-`Recorder.layer(Service, impl, { fails })` (`next/packages/vitest/src/Recorder.ts:208`) provides
+`Recorder.layer(Service, impl, { fails })` (`next/packages/vitest/src/Recorder.ts:212`) provides
 the service and records each run of its effectful members as `{ method, args }`. `impl` has the type
 Effect's `Layer.mock` takes, `Layer.PartialEffectful<S>`, and the Recorder hands it to `Layer.mock`
 (`Recorder.ts:219`), so a member the law leaves out dies with `UnimplementedError` when used, and
 is not recorded (law R10, `next/packages/vitest/src/Recorder.test.ts:276`). So `fails` may name
 only a method `impl` gives, and a member `impl` names that the service lacks does not compile (law
-R17, `next/packages/vitest/src/Recorder.types.test.ts:126`).
+R17, `next/packages/vitest/src/Recorder.types.test.ts:126`, and R18 on the call as a law writes it,
+`Recorder.test.ts:310`). `layer` reads only which keys `impl` gives, never their values: an inline
+`impl` widens a unique symbol member such as `[ShelfId]: ShelfId` to `symbol`, and a type read from
+the whole `impl` would then miss what it left out.
 
 - **A call is a run.** The record is written when the Effect runs, not when the method is called
-  (`Recorder.ts:170`). An Effect built and dropped leaves no record, one retried leaves two, and one
+  (`Recorder.ts:174`). An Effect built and dropped leaves no record, one retried leaves two, and one
   that never ends is recorded at its start (law R8, `Recorder.test.ts:210`). A Stream method is
-  recorded when its stream starts (`Recorder.ts:191`).
+  recorded when its stream starts (`Recorder.ts:195`).
 - **`fails` is a record of error values,** one per method, each of that method's own error type
   (`Recorder.Fails`, `Recorder.ts:93`). A named method is recorded, then fails with that very value,
   and the implementation's Effect or Stream is not run. A method that cannot fail cannot be named
@@ -98,7 +101,7 @@ and 0555 bans them in our code. A hand-written log in each test layer, as `Pushe
 string per call, such as `leakgrep <head>`), drops args it did not think of, `dir` there, and
 repeats a failure switch per method. The Recorder is typed against the service's own interface: a
 method the service lacks, a wrong arg type, a wrong error in `fails`, or a `fails` entry for a
-method `impl` leaves out does not compile (laws R1 to R3 and R17). That holds for a union of names
+method `impl` leaves out does not compile (laws R1 to R3, R17 and R18). That holds for a union of names
 and for an optional method too (laws R14 and R15). It has one limit: TypeScript's `infer` reads
 only an overloaded method's last signature, so no one argument list types every call, and a service
 with an overloaded method does not compile as a Recorder layer (law R16). Neither `Pushes` nor

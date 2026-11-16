@@ -119,8 +119,12 @@ type Single<S> = [Overloaded<S>] extends [never]
   ? unknown
   : { readonly "an overloaded method, which the Recorder cannot type": Overloaded<S> };
 
-/** A member of `impl` that the service lacks may only be `never`, so a misspelled one does not compile. */
-type Own<P, S> = { readonly [K in Exclude<keyof P, keyof S>]: never };
+/**
+ * The keys `impl` gives, read from its keys alone. Its values are not read: an inline `impl` widens a
+ * unique symbol member to `symbol`, so the type of the whole `impl` would not fit the service, and
+ * TypeScript would then read every key as given.
+ */
+type Gives<K extends PropertyKey> = { readonly [M in K]?: unknown };
 
 declare const RecordedId: unique symbol;
 
@@ -205,14 +209,10 @@ const watch = <S extends object>(
  * @stability unstable
  * @category constructors
  */
-export const layer = <
-  I,
-  S extends object,
-  P extends Layer.PartialEffectful<S> & object = Layer.PartialEffectful<S> & object,
->(
+export const layer = <I, S extends object, K extends keyof S = keyof S>(
   service: Context.Key<I, S>,
-  impl: P & Single<S> & NoInfer<Own<P, S>>,
-  options?: { readonly fails?: Fails<S, Method<S> & keyof P> },
+  impl: Layer.PartialEffectful<S> & object & Single<S> & Gives<K>,
+  options?: { readonly fails?: Fails<S, Method<S> & K> },
 ): Layer.Layer<I | Recorded<I>> =>
   Layer.unwrap(
     Effect.map(Ref.make<ReadonlyArray<Entry>>([]), (kept) =>
