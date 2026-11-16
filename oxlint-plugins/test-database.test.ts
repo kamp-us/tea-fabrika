@@ -55,6 +55,16 @@ const ARGUMENT = fc.oneof(
 const where = fc.constantFrom("next/apps/fabrika/src", "next/packages/libfabrika/src/node", "next/programs/inbox/src");
 const stem = fc.stringMatching(/^[a-z][A-Za-z]{0,7}$/);
 
+/**
+ * next/'s committed source files, for a scan of the real tree. Other tooling laws plant files in
+ * dot folders under next/ while this one runs, and oxlint walks those, so a scan of the folder read
+ * their fires as the tree's (full run 43799861377). Git's list holds only what is committed.
+ */
+const committed = () =>
+  spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+    .stdout.split("\0")
+    .filter((file) => /\.[cm]?[jt]sx?$/.test(file));
+
 /** Each kind of path, and whether the rule holds a file there. */
 const PATH = fc.oneof(
   fc
@@ -104,9 +114,14 @@ const fires = (paths: readonly string[]) => {
   const out = spawnSync(join(root, "node_modules/.bin/oxlint"), ["--format=json", ...paths], {
     cwd: root,
     encoding: "utf8",
-    // The whole tree's report passes Node's 1 MiB default on CI, which cut it mid-string (run 43799861377).
-    maxBuffer: 2 ** 28,
+    // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
+    maxBuffer: Infinity,
   });
+
+  if (out.error !== undefined) {
+    throw out.error;
+  }
+
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
@@ -154,5 +169,5 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s tests, suites
 it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)", () => {
   // The real tree is the input: 62 calls in 53 files fired on `86a7668d6`, and ticket 1029 moved
   // each one to `TestDatabase.make` or `TestDatabase.open`.
-  expect(Object.fromEntries(fires(["next"]))).toEqual({});
+  expect(Object.fromEntries(fires(committed()))).toEqual({});
 });

@@ -130,14 +130,29 @@ it("L2: code that stays in the process never fires, through an import or a look-
   );
 });
 
+/**
+ * next/'s committed source files, for a scan of the real tree. Other tooling laws plant files in
+ * dot folders under next/ while this one runs, and oxlint walks those, so a scan of the folder read
+ * their fires as the tree's (full run 43799861377). Git's list holds only what is committed.
+ */
+const committed = () =>
+  spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+    .stdout.split("\0")
+    .filter((file) => /\.[cm]?[jt]sx?$/.test(file));
+
 /** The integration-test-name fires oxlint finds, by file from the repo's top, as lines. */
 const fires = (paths: readonly string[]) => {
   const out = spawnSync(join(root, "node_modules/.bin/oxlint"), ["--format=json", ...paths], {
     cwd: root,
     encoding: "utf8",
-    // The whole tree's report passes Node's 1 MiB default on CI, which cut it mid-string (run 43799861377).
-    maxBuffer: 2 ** 28,
+    // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
+    maxBuffer: Infinity,
   });
+
+  if (out.error !== undefined) {
+    throw out.error;
+  }
+
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
@@ -173,5 +188,5 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
 it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)", () => {
   // The real tree is the input: 73 files fired on experiment 292's tree, 72 of them drive a resource;
   // the one false alarm, exam/node-kinds.test.ts reading `git ls-files`, carries its reasoned line.
-  expect(Object.fromEntries(fires(["next"]))).toEqual({});
+  expect(Object.fromEntries(fires(committed()))).toEqual({});
 });
