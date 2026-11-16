@@ -21,6 +21,7 @@ import { Attached } from "../transport/Wire.ts";
 import { ConnectionService, connectionLayer, connectionRuntime } from "./connection.ts";
 import { control } from "./control.ts";
 import { Dispatcher } from "./Dispatcher.ts";
+import * as DispatcherLive from "./DispatcherLive.ts";
 import { fetch } from "./fetch.ts";
 import { recordPartImplementation, recordRead, recordWrite } from "./record.ts";
 import {
@@ -33,6 +34,7 @@ import {
   type Env,
 } from "./runtime.ts";
 import { Waits } from "./Waits.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 const config = instanceFixture({
   name: "parse-test",
@@ -383,23 +385,24 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
   });
 }
 
-// The live members the two Recorder laws below wrap, read once from each service's own layer.
+// The live members the two Recorder laws below wrap, read once from each service's live layer, the
+// sibling file 0095 keeps apart from the contract.
 const liveWaits = Effect.runSync(
   Effect.gen(function* () {
     return yield* Waits;
-  }).pipe(Effect.provide(Waits.layer)),
+  }).pipe(Effect.provide(WaitsLive.layer)),
 );
 
 const liveDispatcher = Effect.runSync(
   Effect.gen(function* () {
     return yield* Dispatcher;
-  }).pipe(Effect.provide(Dispatcher.layer)),
+  }).pipe(Effect.provide(DispatcherLive.layer)),
 );
 
 // M1 (mock sweep slice 2). The wait asks the `Waits` service for the ready decode once, with the
 // raw answer the project gave, and the live decode fails in the typed channel. The Recorder holds
 // the call; the live member run on the recorded value holds the typed exit.
-// Plants: in `Waits.layer`'s `ready`, `Effect.orDie` in place of the `mapError` to `LedgerError`
+// Plants: in `WaitsLive.layer`'s `ready`, `Effect.orDie` in place of the `mapError` to `LedgerError`
 // (red on the typed exit); `wait` decodes the answer inline, past `Waits` (red: no recorded call).
 it("Connection ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
   await fc.assert(

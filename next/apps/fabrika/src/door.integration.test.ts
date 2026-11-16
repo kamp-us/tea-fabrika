@@ -253,6 +253,9 @@ const passkey = Effect.fn("test.passkey")(function* () {
 let Gateway: typeof import("@kampus/libfabrika/gateway/Gateway").Gateway;
 let connectionLayer: typeof import("@kampus/libfabrika/workers/gateway").connectionLayer;
 let ConnectionService: typeof import("@kampus/libfabrika/workers/gateway").ConnectionService;
+// The connection's live ready decode (mock sweep slice 2, 0095): `connectionLayer` asks `Waits`,
+// and the law hands it the live layer, as `ConnectionObject.ts` does.
+let WaitsLive: typeof import("@kampus/libfabrika/workers/WaitsLive");
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 beforeEach(async () => {
@@ -262,6 +265,9 @@ beforeEach(async () => {
   ({ connectionLayer, ConnectionService } = await vi.importActual<typeof import("@kampus/libfabrika/workers/gateway")>(
     "@kampus/libfabrika/workers/gateway",
   ));
+  WaitsLive = await vi.importActual<typeof import("@kampus/libfabrika/workers/WaitsLive")>(
+    "@kampus/libfabrika/workers/WaitsLive",
+  );
 });
 
 const top = mkdtempSync(join(tmpdir(), "p10-door-"));
@@ -817,7 +823,7 @@ const wire = Effect.fnUntraced(function* (
     },
   };
   const layer: ReturnType<typeof connectionLayer> = Reflect.apply(connectionLayer, undefined, [state, env, input]);
-  const context = yield* Layer.build(layer);
+  const context = yield* Layer.build(layer.pipe(Layer.provide(WaitsLive.layer)));
   const service = yield* ConnectionService.pipe(Effect.provideContext(context));
   let id = 0;
   const send = (method: string, params: unknown): Effect.Effect<void, unknown> => {

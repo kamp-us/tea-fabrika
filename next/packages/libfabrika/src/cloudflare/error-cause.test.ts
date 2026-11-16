@@ -23,7 +23,7 @@ import { fetch, workerLoader } from "./index.ts";
 import { BucketClient, GatewayClient, ProcessClient, ProjectClient, StorageClient } from "./platform.ts";
 import { recordWrite } from "./record.ts";
 import { type BrainOptions, checkedPut, type Env, processDescriptor, processRuntime } from "./runtime.ts";
-import { Waits } from "./Waits.ts";
+import * as WaitsLive from "./WaitsLive.ts";
 
 // Only the platform base class is fake, as in runner-reply.laws.test.ts.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -329,7 +329,7 @@ describe("T695, the object adapters keep what failed", () => {
                   }),
                 (runtime) => Effect.promise(() => runtime.dispose()),
               )
-            : Effect.scoped(Layer.build(connectionLayer(state, env, config).pipe(Layer.provide(Waits.layer)))),
+            : Effect.scoped(Layer.build(connectionLayer(state, env, config).pipe(Layer.provide(WaitsLive.layer)))),
         );
         expect(error).toBeInstanceOf(LedgerError);
         const ledger = error instanceof LedgerError ? error : undefined;
