@@ -28,7 +28,9 @@ type Driver = (name: string, cap: number) => Effect.Effect<Part, never, Scope.Sc
 const Page = Schema.Struct({ spans: Schema.Array(SpanRow), after: Schema.Int, rolled: Schema.Boolean });
 const Lookup = Schema.TaggedUnion({ found: { content: Schema.NullOr(Content) }, absent: { rolled: Schema.Boolean } });
 
-class Wire extends Context.Service<Wire, { readonly driver: Driver }>()("t502/RecordLaws.Wire") {}
+class Wire extends Context.Service<Wire, { readonly driver: Driver }>()(
+  "@kampus/fabrika/record.laws.integration.test/Wire",
+) {}
 
 const node: Driver = Effect.fnUntraced(function* (name: string, cap: number) {
   const db = yield* Effect.acquireRelease(
