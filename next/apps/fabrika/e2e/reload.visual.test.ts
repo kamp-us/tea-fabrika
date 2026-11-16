@@ -82,7 +82,7 @@ const driver = (p: Page, url: string, tab: string) =>
           return result;
         };
         const field = (data: string | Uint8Array) => {
-          const body = Predicate.isString(data) ? bytes(data) : data,
+          const body = typeof data === "string" ? bytes(data) : data,
             n = new Uint8Array(4);
           new DataView(n.buffer).setUint32(0, body.length);
           return concat(n, body);
@@ -155,7 +155,7 @@ const driver = (p: Page, url: string, tab: string) =>
               frames.push({ method: "reinitialized", result: await hello(frame.params.nonce) });
             }
 
-            if (Predicate.isNumber(frame.id)) {
+            if (typeof frame.id === "number") {
               pending.get(frame.id)?.(frame);
               pending.delete(frame.id);
             }

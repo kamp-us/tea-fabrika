@@ -19,7 +19,7 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Fiber, Predicate, Schema } from "effect";
+import { Effect, Fiber, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -132,7 +132,7 @@ const loseFirstAnswers = (pid: string) => {
     constructor(url: string | URL, protocols?: string | Array<string>) {
       super(url, protocols);
       this.addEventListener("message", (event) => {
-        if (!Predicate.isString(event.data) || event.data === "pong") {
+        if (typeof event.data !== "string" || event.data === "pong") {
           return;
         }
 
@@ -164,7 +164,7 @@ const loseFirstAnswers = (pid: string) => {
 
     // The DOM lib and the Workers types each declare `send`: this takes both overloads' data, and each branch below calls one.
     override send(data: string | Blob | ArrayBuffer | ArrayBufferView) {
-      if (Predicate.isString(data) && data !== "ping") {
+      if (typeof data === "string" && data !== "ping") {
         const frame = JSON.parse(data);
 
         if (frame.method === "process.send" && frame.params?.pid === pid) {
