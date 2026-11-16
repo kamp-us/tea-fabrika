@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-l11-speed",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1379",
+  "started": "2026-11-15T16:05:00-08:00",
+  "ended": "2026-11-15T17:15:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Flaky-test fix (0036), in next/: law L11 storage walk in next/apps/fabrika/src/start-child.laws.integration.test.ts re-cut about a third of its storage operations after every one was cut, each on a fresh Project. Each of its 100 walks now cuts exactly ceil(inventory / 100) operations, so each of the 849 operations is cut once: 900 cuts in place of 1318 at seed 119120. The inventory pass and every assert are unchanged. In full run 43779861624 it took 29584 ms, 0.21 of its 16 sibling L11 laws time, against 0.30 to 0.33 in four earlier runs (28340 to 50381 ms).",
+  "plants": [
+    {
+      "law": "L11: every storage read and write in the child and lifecycle flows keeps error text and metadata out of outputs",
+      "plant": "cloudflare/runtime.ts projectStorage keeps the thrown error text in LedgerError.message",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 70,
+  "note": "The integration file was not run on the laptop; both runs were full scheduled runs in CI. Plant run 43782621366, leg 5: red with 849 storage operations cut and 59 leaks; the run was later canceled while other legs ran. Typecheck left to CI. One after-run only; the time varies a lot by leg load.",
+  "step": "build"
+}
