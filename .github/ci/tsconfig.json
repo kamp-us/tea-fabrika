@@ -18,6 +18,15 @@
               "unnecessaryArrowBlock": "error"
             }
           }
+        },
+        // These folders: schemaStructWithTag (E11).
+        {
+          "include": ["*.ts", "workflow-lint/*.ts"],
+          "options": {
+            "diagnosticSeverity": {
+              "schemaStructWithTag": "error"
+            }
+          }
         }
       ]
     }

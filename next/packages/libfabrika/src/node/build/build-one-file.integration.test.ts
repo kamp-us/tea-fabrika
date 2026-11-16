@@ -100,9 +100,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
               Schema.fromJsonString(
                 Schema.Struct({
                   model: Schema.Struct({ count: Schema.Int }),
-                  records: Schema.Array(
-                    Schema.Struct({ _tag: Schema.Literal("ok"), value: Schema.Struct({ type: Schema.String }) }),
-                  ),
+                  records: Schema.Array(Schema.TaggedStruct("ok", { value: Schema.Struct({ type: Schema.String }) })),
                   updates: Schema.Int,
                 }),
               ),

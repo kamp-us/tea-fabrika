@@ -112,24 +112,20 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
 // A loaded program answers its init and step calls with P11's Step. Decode it, never read it raw.
 type Loaded = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
 
-const SealedTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const SealedTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ keys: Schema.Array(Schema.String), outbound: Schema.String }),
 });
 
-const CounterTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const CounterTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ count: Schema.Finite }),
 });
 
-const ChecklistTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const ChecklistTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ items: Schema.Array(Schema.Unknown) }),
 });
 
 /** Desk S2a: tezgah's first init, before any window attaches: no workspace, no tile. */
-const TezgahTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const TezgahTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ workspaces: Schema.Array(Schema.Unknown), tiles: Schema.Array(Schema.Unknown) }),
 });
 

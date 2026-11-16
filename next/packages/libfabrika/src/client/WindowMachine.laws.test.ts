@@ -1863,8 +1863,7 @@ const Wire = {
   }),
   entries: Schema.Struct({
     entries: Schema.Array(
-      Schema.Struct({
-        _tag: Schema.Literal("started"),
+      Schema.TaggedStruct("started", {
         by: Schema.Literal("brain"),
         body: Schema.Struct({ process: Schema.String, name: Schema.Literal("checklist:1") }),
         rev: Schema.Int,
@@ -1873,8 +1872,8 @@ const Wire = {
   }),
   opened: Schema.Struct({ rev: Schema.Int, view: ListView }),
   sent: Schema.Union([
-    Schema.Struct({ _tag: Schema.Literal("accepted"), rev: Schema.Int, pos: Schema.Int }),
-    Schema.Struct({ _tag: Schema.Literal("refused"), reason: Schema.String }),
+    Schema.TaggedStruct("accepted", { rev: Schema.Int, pos: Schema.Int }),
+    Schema.TaggedStruct("refused", { reason: Schema.String }),
   ]),
   whole: Schema.Struct({ rev: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), view: ListView }),
   patch: Schema.Struct({ base: Schema.Int, rev: Schema.Int }),

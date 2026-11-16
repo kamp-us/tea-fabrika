@@ -53,6 +53,15 @@
               }
             }
           },
+          // These folders: schemaStructWithTag (E11).
+          {
+            "include": ["src/client/**/*.ts", "src/node/**/*.ts", "src/processes/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaStructWithTag": "error"
+              }
+            }
+          },
           // These folders: instanceOfSchema (E10).
           {
             "include": ["src/*.ts", "src/access/**/*.ts", "src/node/**/*.ts", "src/settings/**/*.ts"],

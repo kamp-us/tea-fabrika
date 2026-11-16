@@ -77,8 +77,7 @@ const Run = Schema.Struct({
 // A finding and its rating (decision 0035). The fields table is field/README.md, "A finding".
 const Words = Schema.String.check(Schema.isPattern(/\S/));
 
-const Found = Schema.Struct({
-  _tag: Schema.Literal("finding"),
+const Found = Schema.TaggedStruct("finding", {
   id: Schema.String,
   date: Day,
   by: Words,
@@ -96,8 +95,7 @@ const Found = Schema.Struct({
   pr: Text,
 });
 
-const Rated = Schema.Struct({
-  _tag: Schema.Literal("rated"),
+const Rated = Schema.TaggedStruct("rated", {
   finding: Schema.String,
   says: Schema.Literals(["fix", "noise"]),
   by: Words,
