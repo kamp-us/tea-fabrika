@@ -61,6 +61,26 @@ describe("a tracked shell or Python file", () => {
     expect([...reached].toSorted()).toEqual([".py", ".sh"]);
   });
 
+  /**
+   * A word `env` reads before the interpreter, with its kind: a `NAME=value`, a plain flag, or an
+   * option and its value (GNU coreutils env and BSD env). A value may be a shell's name, so a check
+   * that takes it for the interpreter is caught both ways.
+   */
+  const envWord = fc.oneof(
+    fc.constantFrom("FOO=1", "LANG=C", "PATH=/bin:/usr/bin").map((word) => ({ kind: "assign", word })),
+    fc.constantFrom("-i", "-0", "-v", "-iv", "--ignore-environment", "--debug").map((word) => ({ kind: "flag", word })),
+    fc
+      .tuple(
+        fc.constantFrom("-u ", "--unset ", "--unset=", "-C ", "--chdir ", "--chdir=", "-P ", "-iu "),
+        fc.constantFrom("FOO", "/tmp", "bash", "sh", "python3"),
+      )
+      .map(([option, value]) => ({ kind: "option", word: `${option}${value}` })),
+  );
+
+  /** The `env` words before an interpreter, each followed by a space. */
+  const spoken = (words: ReadonlyArray<{ readonly word: string }>): string =>
+    words.map(({ word }) => `${word} `).join("");
+
   /** A `#!` line naming a shell or Python, directly or through `env`, with how it names it. */
   const scriptBang = fc
     .tuple(
@@ -68,11 +88,13 @@ describe("a tracked shell or Python file", () => {
       fc.constantFrom("/bin/", "/usr/bin/", "/usr/local/bin/"),
       fc.constantFrom("direct", "env", "env -S"),
       fc.constantFrom("", " ", " -e", " -eu"),
+      fc.array(envWord, { maxLength: 3 }),
     )
-    .map(([name, folder, how, args]) => ({
+    .map(([name, folder, how, args, words]) => ({
       name,
       how,
-      bang: how === "direct" ? `#!${folder}${name}${args}` : `#!/usr/bin/${how} ${name}${args}`,
+      kinds: how === "direct" ? [] : words.map(({ kind }) => kind),
+      bang: how === "direct" ? `#!${folder}${name}${args}` : `#!/usr/bin/${how} ${spoken(words)}${name}${args}`,
     }));
 
   /** A `#!` line naming an interpreter that is neither a shell nor Python. */
@@ -81,8 +103,9 @@ describe("a tracked shell or Python file", () => {
       fc.constantFrom("node", "tsx", "deno", "bun", "ruby", "perl", "shellcheck", "pythonish"),
       fc.constantFrom("/usr/bin/", "/usr/local/bin/"),
       fc.boolean(),
+      fc.array(envWord, { maxLength: 3 }),
     )
-    .map(([name, folder, env]) => (env ? `#!/usr/bin/env ${name}` : `#!${folder}${name}`));
+    .map(([name, folder, env, words]) => (env ? `#!/usr/bin/env ${spoken(words)}${name}` : `#!${folder}${name}`));
 
   // The lead's ruling on the review's finding
   // (field/findings/2026-11-16-extensionless-shell-scripts-escape-hold.json): a file with no
@@ -90,13 +113,23 @@ describe("a tracked shell or Python file", () => {
   // hold at 8e5c817, which read extensions only: the planted `#!/bin/sh` file gave no finding.
   // Plant, run once on the new hold: `env` read as the interpreter, so `#!/usr/bin/env bash`
   // passed. Red: the env form gave no finding.
+  // The review of eb4fa6e: after `env` the hold skipped flags and `NAME=value` words but not the
+  // value an option takes. Red first on the hold at eb4fa6e: `#!/usr/bin/env -u FOO bash` read
+  // `FOO` as the interpreter and gave no finding. Plant, run once on the fixed hold: the
+  // `NAME=value` skip deleted. Red: a `#!/usr/bin/env FOO=1 bash` file gave no finding.
   it("with no extension and a `#!` line naming a shell or Python fails lint unless listed or marked, and one naming node or tsx passes", () => {
     const reached = new Set<string>();
+    const words = new Set<string>();
     fc.assert(
       fc.property(base, scriptBang, otherBang, plainHead, (path, script, other, rest) => {
         const fine = `${path}-run`;
         fc.pre(!LISTED.includes(path) && !LISTED.includes(fine));
         reached.add(script.how);
+
+        for (const kind of script.kinds) {
+          words.add(kind);
+        }
+
         reached.add(script.name.startsWith("python") ? "python" : "shell");
         const body = rest.split("\n").slice(1).join("\n");
         const findings = check(
@@ -112,6 +145,8 @@ describe("a tracked shell or Python file", () => {
       runs,
     );
     expect([...reached].toSorted()).toEqual(["direct", "env", "env -S", "python", "shell"]);
+    // Every kind of word `env` reads before the interpreter was drawn.
+    expect([...words].toSorted()).toEqual(["assign", "flag", "option"]);
     // A listed file passes whatever its `#!` line says.
     const heads = Object.fromEntries(LISTED.map((path) => [path, "#!/bin/sh\necho hi"]));
     expect(check(LISTED, reader(heads))).toEqual([]);
@@ -162,8 +197,8 @@ describe("the NOT_YET_PORTED list", () => {
     "packages/pipeline/bin/tsh",
   ];
 
-  // Plant, run once: a 17th entry, `.agents/skills/lead/scripts/catchup.sh`, added to the list. Red:
-  // the entry is not one of the 16.
+  // Plant, run once: a 20th entry, `.agents/skills/lead/scripts/catchup.sh`, added to the list. Red:
+  // the entry is not one of the 19.
   it("pinned: the list only shrinks, so every entry is one of the 16 scripts the plan names, once", () => {
     expect(PLANNED).toEqual(expect.arrayContaining(LISTED));
     expect(new Set(LISTED).size).toBe(LISTED.length);

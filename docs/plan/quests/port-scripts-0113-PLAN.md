@@ -409,7 +409,7 @@ table (`Removed`, `Replacement`) with every title, which `loosening.sh` reads.
 |---|---|---|---|---|
 | A tracked `.sh` or `.py` file that is not listed and has no edge line fails lint, and names the file | S1 | test | fc.stringMatching: a file name under a generated folder, 50 runs | the check skips `.py` |
 | A listed file that git does not track fails lint as a stale entry | S1 | test | fc.subarray: of the list, 50 runs | the check ignores stale entries |
-| The list is a subset of the 16 files this plan names | S1 | test | pinned: the 16 paths of this plan | a 17th entry |
+| The list is a subset of the 16 files this plan names (plus the three tsh launchers, lead ruling 2026-11-16) | S1 | test | pinned: the 16 paths of this plan | a 17th entry |
 | `apt.sh` passes by its edge line alone, and an edge line without `(0113)` or a reason fails | S1 | test | fc.string: the reason text, 50 runs | the check accepts `# edge:` with no reason |
 | A diff's words list every decision whose slug, title or tags share a word of four letters or more, edited ones first | S2 | test | fc.array: generated decision records and diff lines, 100 runs | the stop list drops a real word |
 | `governance.ts` always exits 0 and prints the no-match line when nothing matches | S2 | test | scenario: an empty diff | exit 1 on no match |

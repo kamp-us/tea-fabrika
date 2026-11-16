@@ -55,9 +55,32 @@ const BANG = /^#!\s*(\S+)(.*)/;
 const RUNS_AS_SCRIPT = /^(?:(?:a|ba|da|k|mk|z|c|tc|y|fi)?sh|python[\d.]*|pypy[\d.]*)$/;
 
 /**
- * Whether a file with no extension is shell or Python by its first line. Through `env`, the first
- * word that is not a flag or a `NAME=value` is the interpreter, so `#!/usr/bin/env -S bash -e`
- * reads as bash.
+ * An `env` option whose value is the next word: GNU coreutils env's `-u`/`--unset NAME`,
+ * `-C`/`--chdir DIR` and `-a`/`--argv0 ARG` (https://www.gnu.org/software/coreutils/manual/html_node/env-invocation.html),
+ * and BSD env's `-u name`, `-C altwd`, `-P altpath` and `-L`/`-U user[/class]`
+ * (https://man.freebsd.org/cgi/man.cgi?query=env&sektion=1). A short one may end a cluster of
+ * flags that take none, as in `-iu NAME`. The `--unset=NAME` form is one word, a flag like any
+ * other. `-S` takes the rest of the line, which env splits and reads again, so it is a flag here.
+ */
+const TAKES_VALUE = /^(?:-[0iv]*[uCaPLU]|--(?:unset|chdir|argv0))$/;
+
+/** The interpreter `env` runs: the first word that is not a flag, an option's value or a `NAME=value`. */
+const envTarget = ([word, ...rest]: ReadonlyArray<string>): string => {
+  if (word === undefined) {
+    return "";
+  }
+
+  if (TAKES_VALUE.test(word)) {
+    return envTarget(rest.slice(1));
+  }
+
+  return word.startsWith("-") || word.includes("=") ? envTarget(rest) : word;
+};
+
+/**
+ * Whether a file with no extension is shell or Python by its first line. Through `env`, the
+ * interpreter is the first word that is not a flag, an option's value or a `NAME=value`, so
+ * `#!/usr/bin/env -S -u FOO bash -e` reads as bash.
  */
 const runsAsScript = (text: string): boolean => {
   const bang = BANG.exec(text.split("\n", 1)[0] ?? "");
@@ -67,10 +90,7 @@ const runsAsScript = (text: string): boolean => {
   }
 
   const first = bang[1]?.split("/").at(-1) ?? "";
-  const name =
-    first === "env"
-      ? ((bang[2] ?? "").split(/\s+/).find((word) => word !== "" && !word.startsWith("-") && !word.includes("=")) ?? "")
-      : first;
+  const name = first === "env" ? envTarget((bang[2] ?? "").split(/\s+/).filter((word) => word !== "")) : first;
   return RUNS_AS_SCRIPT.test(name.split("/").at(-1) ?? "");
 };
 
