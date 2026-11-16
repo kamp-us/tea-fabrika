@@ -36,7 +36,7 @@ auto-merge, approve, close, or mark ready. End the body with:
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
-**Fixes.** Two ways, and only these two (owner ruling):
+**Fixes.** Three ways, and only these three (owner rulings):
 
 1. The Effect checker's own quick fix, through its language server, with the client on this
    branch. It applies the server's own edit for one hit at a time, exactly as sent:
@@ -56,7 +56,11 @@ auto-merge, approve, close, or mark ready. End the body with:
 2. An editor-style edit with the Edit tool, one hit at a time, making exactly the change the
    check's message names. The PR lists these separately as hand edits, with their count.
 
-Then `pnpm format`. Anything else that edits files in bulk stays banned: no find-and-replace
+3. A lint rule's safe autofix, applied by `pnpm format`, as E1 did (pull request 1426), only when
+   the rule has its laws and plants in the same pull request and the review reads the whole
+   diff. A new rule written for this is the tests step's work, with its laws first.
+
+Then `pnpm format`. Anything else that edits files stays banned: no find-and-replace
 script, no other tool run over the tree. If the right fix is not clear, or it would change
 behavior a law should hold, do not fix that hit: list it in RESULT and in the PR.
 
