@@ -1620,7 +1620,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
         msg: watchMsg,
         cmds: defs,
         init: (loaded) => [loaded ?? { downs: 0 }, []],
-        // SAFETY: the answer handlers' messages come from the declared Cmds, and tea's update type lists only the Msg schema's cases.
+        // SAFETY: each key is a case of the Msg schema or the `_ok` or `_err` answer of a declared Cmd, the messages tea dispatches; the handlers are typed by hand, in shapes tea's update type does not take.
         update: {
           ...answers,
           watch: (s: typeof watchModel.Type) => [s, []],

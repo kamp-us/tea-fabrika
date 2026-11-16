@@ -235,7 +235,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
 
   // A throw or defect is not a typed failure: the plant of R5.
   expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
-  // SAFETY: the expect above failed the law unless the cause holds a typed failure, and the replies store fails only with RepliesError.
+  // SAFETY: the expect above failed the law unless the cause holds a typed failure, and refusedWith takes an Effect whose only typed failure is RepliesError.
   const error = Cause.squash(exit.cause) as Module.RepliesError;
   expect(error._tag).toBe("RepliesError");
   expect(error.reason).toBe(reason);

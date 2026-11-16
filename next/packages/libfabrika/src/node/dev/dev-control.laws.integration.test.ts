@@ -284,7 +284,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
   yield* Effect.acquireRelease(
     Effect.sync(() =>
       vi.spyOn(globalThis, "fetch").mockImplementation(async (url, options) => {
-        // SAFETY: the stubbed platform reads only control calls, whose JSON body is a Call body.
+        // SAFETY: every fetch here is a dev.ts control call, whose body is the JSON of `{ target, project, name, method, args }`, a Call body.
         const body = JSON.parse(bodyText(options)) as Call["body"];
         // The address as `fetch` parses it, given as a string or as the client's URL object.
         sent.push({ url: new URL(String(url)).href, body });
@@ -470,7 +470,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
             got: { _tag: "value", value: undefined },
             woken: null,
           });
-          // SAFETY: the walked process is the ping fixture, whose `ping` method returns a promise.
+          // SAFETY: dev.process answers dev.ts's proxy, which turns any method name that is not its own member into a function that returns a Promise.
           const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(
             (value): Answer => ({ _tag: "value", value }),
             (error: unknown): Answer => ({ _tag: "error", error }),

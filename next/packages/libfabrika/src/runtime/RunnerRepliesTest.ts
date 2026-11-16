@@ -411,7 +411,7 @@ const walk = (
         errors.push(Cause.pretty(exit.cause));
         // A throw or defect is not a typed failure.
         expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
-        // SAFETY: the expect above failed the law unless the cause holds a typed failure, and the runner's replies fail only with RepliesError.
+        // SAFETY: the expect above failed the law unless the cause holds a typed failure, a RunnerFailure, and the next expect fails it unless that failure is a RepliesError.
         const error = Cause.squash(exit.cause) as RepliesError;
         expect(error._tag).toBe("RepliesError");
         expect(error.reason).toBe("bad_row");

@@ -1001,7 +1001,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         const lifecycle = () => facts(instance, "processes/reader:1");
         const letters = async () =>
           (await facts(instance, "reader:1/inbox")).filter((r) => r.m?.type === "letter").map((r) => r.m.n);
-        // SAFETY: localInstance started this instance, and its audit read answers an array of rows.
+        // SAFETY: Instance is `any`, so the law can reach the instance's private local `project`, whose audit read answers the stream's rows as an array.
         const last = async (stream: string) =>
           Math.max(
             0,

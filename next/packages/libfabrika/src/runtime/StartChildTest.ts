@@ -221,7 +221,7 @@ const stopper = (name: string) => {
     msg: Msg,
     cmds: [StartChild.startChild, StartChild.stopChild],
     init: (loaded) => [loaded ?? { stepped: 0, answers: [] }, []],
-    // SAFETY: the answer handlers' messages come from the declared Cmds, and tea's update type lists only the Msg schema's cases.
+    // SAFETY: each key is a case of the Msg schema or the `_ok` or `_err` answer of a declared Cmd, the messages tea dispatches; the handlers are typed by hand, in shapes tea's update type does not take.
     update: {
       start: (s: Model, m: { ask: { program: string; name: string } }) => [
         { ...s, stepped: s.stepped + 1 },
@@ -472,7 +472,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
   );
   /** The door's two steps before a delivery: the input is recorded with its sender, then delivered. */
   const deliver = (input: unknown, name: string, pid: string) => {
-    // SAFETY: the door hands deliver only the Incoming it recorded.
+    // SAFETY: deliver runs only in the runner wrapper's `msg` above, and every `msg` call in this file passes an Incoming: `letter(...)`, or an Incoming written out.
     const i = input as Incoming;
     // SAFETY: SessionManager keeps its InputRecord type private; each field below is the recorded Incoming's own, in its schema's form.
     return sessions
@@ -1590,7 +1590,7 @@ const walk = (
                   name: saved.name,
                   code: { program: saved.program, hash: "another-build" },
                   requester: Recipient.cases.process.make({ process: saved.requester }),
-                  // SAFETY: a saved ask's input came from the decoded letter, which is JSON.
+                  // SAFETY: a saved start's input is its ask's, and the only input the walk's asks carry is `{ type: "ping" }`, a JSON value.
                   ...(saved.input === undefined ? {} : { input: saved.input as Schema.Json }),
                 },
                 brainFrom(),
@@ -1842,7 +1842,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
               };
         ask = {
           name,
-          // SAFETY: move was drawn from the list of Asked kinds.
+          // SAFETY: the `recover` and `retry` branches above took those two moves, so move is answer, refusal, storage or checkpoint, the Asked kinds.
           kind: move as Asked["kind"],
           before: (yield* answers(name)).length,
           incoming: {

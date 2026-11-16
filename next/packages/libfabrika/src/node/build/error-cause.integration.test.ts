@@ -59,7 +59,7 @@ const steps = fc.constantFrom<Step>(
 
 /** The build options and disk that make `step` fail with `failure` (a damaged file for a decode). */
 const world = (step: Step, failure: unknown, bad: string) => {
-  // SAFETY: the law reads the failure back only as the error's cause, and the Effect never succeeds, so its success type is free.
+  // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it, and the Effect only fails, so its success type is free.
   const fails = <A>() => Effect.fail(failure as never) as Effect.Effect<A, never>;
   const damaged = Effect.succeed(bad);
 
@@ -135,7 +135,7 @@ describe("T695, a stylesheet refusal keeps what lightningcss or the disk said", 
       Effect.gen(function* () {
         const failure = new Error(message);
         const error = yield* Effect.flip(
-          // SAFETY: the law reads the failure back only as the error's cause, so its type is never used.
+          // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it.
           Effect.provide(inlineStylesheet(`${ROOT}/${file}`), disk({ realPath: () => Effect.fail(failure as never) })),
         );
         expect(error.reason).toBe("bundle");

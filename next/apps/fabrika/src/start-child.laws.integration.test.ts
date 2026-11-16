@@ -194,7 +194,7 @@ const world = (
         const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
         const connect = (tab: string) =>
-          // SAFETY: childInstance starts the real instance, so its `instance` is an Instance.
+          // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
           Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
         yield* Effect.promise(() => test(fixture, connect));
       }),
@@ -202,7 +202,7 @@ const world = (
   );
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
-  // SAFETY: the fixture's `instance` is the real instance childInstance started.
+  // SAFETY: Instance is this same instance type plus any member by name, so the law can reach its private local capability.
   const project = () => (instance as Instance).project(PROJECT);
   const call = (method: string, ...args: ReadonlyArray<unknown>) => {
     const target = project();

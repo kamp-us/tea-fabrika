@@ -546,7 +546,7 @@ describe("L5: client views (p3)", () => {
 
           if (notice.foreign === "whole" && decodes(notice.pid, Object(notice.note).view)) {
             foreign.accepted++;
-            // SAFETY: the note was decoded for this kind above, so its rev is a number.
+            // SAFETY: a `foreign: "whole"` notice is built in the walk above with `rev: b.rev`, the brain's own rev, which Brain types as a number.
             foreign.different +=
               JSON.stringify(Object(notice.note).view) !==
               JSON.stringify(w.brains.get(notice.pid)!.views[noteRev(notice.note) as number])

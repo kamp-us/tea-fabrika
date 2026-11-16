@@ -226,7 +226,7 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
   const loaded = objects(answer).find((o) => Array.isArray(o.processes));
-  // SAFETY: the instance's info answer lists each process with its name and its outcome, a tagged value.
+  // SAFETY: a watcher answer's `processes` is the brain's `Installed.loaded` list (runtime/Code.ts), each a name and its tagged `Swapped` outcome.
   const row = (loaded?.processes as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>)?.find(
     (p) => p.name === "counter:1",
   );

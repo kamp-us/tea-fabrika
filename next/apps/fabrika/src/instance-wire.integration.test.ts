@@ -667,7 +667,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
     while (Date.now() < end) {
       const rows = await read(c, stream, seen);
       tags.push(...rows.map((row) => row._tag));
-      // SAFETY: a `restarted` row's body names the start it came `after`.
+      // SAFETY: a `restarted` row's body (ProcessEvent in libfabrika's processes/internal/processTable.ts) names the process it came `after`.
       const hit = rows.find((row) => row._tag === "restarted" && (row.body as { after?: string }).after === after);
 
       if (hit !== undefined) {

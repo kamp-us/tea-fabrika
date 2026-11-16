@@ -107,7 +107,7 @@ describe("P16 real browser from a copied one-file build", () => {
             });
             const file = join(ROOT, "next/packages/libfabrika/src/node/build/build.ts");
             assert(existsSync(file), "P16 not built: reusable library build absent");
-            // SAFETY: the `Build` type above is written from build.ts's own `build` export, the one name this law calls.
+            // SAFETY: build.ts exports `build`, and the Build type above restates its Options and its Built answer.
             const api = (await import(pathToFileURL(file).href)) as Build;
             const built = await Effect.runPromise(
               api
@@ -339,7 +339,7 @@ const servedCounter = Effect.gen(function* () {
   writeFileSync(join(tab, "entry.tsx"), TAB_ENTRY);
   writeFileSync(join(tab, "tab.css"), "output { color: rgb(12, 34, 56); }\n");
   cpSync(join(APP, "src"), join(home, "src"), { recursive: true, filter: (p) => !p.endsWith(".test.ts") });
-  // SAFETY: build.ts exports `build`, and this fixture's own entry adds only the `tab` option it passes through.
+  // SAFETY: build.ts exports `build`, whose Options mirror Build's above and add the optional `tab`, an entry and its stylesheets.
   const api = (yield* Effect.promise(
     () => import(pathToFileURL(join(ROOT, "next/packages/libfabrika/src/node/build/build.ts")).href),
   )) as {

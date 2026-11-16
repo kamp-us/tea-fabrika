@@ -46,7 +46,7 @@ describe("T695, the app's wiring keeps what failed", () => {
     fc.record({ failure: failures, out: fc.stringMatching(/^[a-z]{1,8}$/) }),
     ({ failure, out }) =>
       Effect.gen(function* () {
-        // SAFETY: the law only reads the failure back as the cause, so its type is never used.
+        // SAFETY: the made-up failure stands in for the PlatformError the disk method names; the code under test keeps what that method fails with as its error's cause and reads nothing of it.
         const disk = Layer.merge(FileSystem.layerNoop({ glob: () => Effect.fail(failure as never) }), Path.layer);
         const error = yield* Effect.flip(Effect.provide(build({ out: `/tmp-t695/${out}` }), disk));
         expect(error._tag).toBe("BuildError");

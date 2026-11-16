@@ -30,7 +30,7 @@ import { Row } from "./exam/compiler.ts";
 const cli = vi.hoisted(() => ({
   // SAFETY: work starts unset; the CLI mock below stores the Effect it was handed.
   work: undefined as Effect.Effect<unknown, unknown> | undefined,
-  // SAFETY: layer starts unset; the CLI mock below stores the layer it was handed, one of these two.
+  // SAFETY: layer starts unset; each law sets it to the layer it runs the handed work on, one of these two.
   layer: undefined as
     | Layer.Layer<FileSystem.FileSystem | Path.Path>
     | Layer.Layer<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>

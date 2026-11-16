@@ -45,7 +45,7 @@ vi.mock("rolldown", async (original) => {
         return close();
       };
       const on = watcher.on.bind(watcher);
-      // SAFETY: the law wraps only the `event` overload of Rolldown's own `on`, and hands every other call to it unchanged.
+      // SAFETY: the wrapper has only the `event` overload of Rolldown's `on`, the one watch.ts calls (`watcher.on("event", ...)`).
       watcher.on = ((
         name: "event",
         listener: (event: import("rolldown").RolldownWatcherEvent) => void | Promise<void>,

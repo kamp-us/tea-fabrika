@@ -130,7 +130,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
     return copy;
   }
 
-  // SAFETY: change is called only on a path that read() found, so value here is a non-array object.
+  // SAFETY: change walks only paths that `paths` listed, which step only into arrays and non-null objects, and the array case returned above.
   return { ...(value as Record<string, unknown>), [key]: change(Reflect.get(Object(value), key), rest, f) };
 };
 

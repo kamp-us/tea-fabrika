@@ -51,7 +51,7 @@ const CODE = {
   tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
 };
 
-// SAFETY: the table starts with no program; the hoisted mock adds only `{ hash, source }` rows.
+// SAFETY: the table starts with no program, and the code below writes only `{ hash, source }` rows into it.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));

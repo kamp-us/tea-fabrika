@@ -118,7 +118,7 @@ describe("row identity follows each reader (L2)", () => {
 describe("a file that comes, goes or does not read (L3)", () => {
   it("L3 scenario: per list, a new file is all added, a deleted file is done, an unreadable head is not a list", () => {
     for (const list of LISTS) {
-      // SAFETY: ROWS has one key for each list's `file`, written from LISTS in ratchet.test-support.ts.
+      // SAFETY: ROWS in ratchet.test-support.ts is written with one key for each `file` that LISTS in ratchet.ts names.
       const rows = ROWS[list.file as keyof typeof ROWS];
       const keys = rows.map((r) => ("scope" in r ? deadKey(r) : lintKey(r)));
       expect(answer(list, null, text(rows))).toEqual({

@@ -310,7 +310,7 @@ const savedLog = Effect.fnUntraced(function* (
     Effect.provide(context),
   );
   const model = Option.getOrUndefined(decodeModel(saved?.saved.model ?? null));
-  // SAFETY: the decoded model keeps its log as Logged rows, and an empty list stands for none.
+  // SAFETY: ReaderModel types `log` as Json, but every entry the reader's update logs (with `logged` above) is an object with a string `type`, and Logged names the fields the suite reads; `[]` stands for no model.
   return (model?.log ?? []) as ReadonlyArray<Logged>;
 });
 

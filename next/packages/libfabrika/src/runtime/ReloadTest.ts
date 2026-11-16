@@ -148,7 +148,7 @@ const Msg = Schema.Union([
 const programFor = (spec: Spec) => {
   const model = schemaFor(spec);
   const machine = Machine.make({
-    // SAFETY: schemaFor builds a codec whose type is CounterModel for every variant.
+    // SAFETY: every variant schemaFor builds is a Struct of a numeric `count` and, for `field`, an Int `step`, so each type fits CounterModel.
     model: model as Schema.Codec<CounterModel>,
     msg: Msg,
     cmds: [ping, write, send],

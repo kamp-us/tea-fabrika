@@ -88,7 +88,7 @@ export const childStarter = (config: { readonly name: string; readonly declare: 
     msg: Msg,
     cmds: config.declare ? [startChild, exit] : [],
     init: (loaded) => [loaded ?? idle, []],
-    // SAFETY: the answer handlers' messages come from the declared Cmds, and tea's update type lists only the Msg schema's cases.
+    // SAFETY: each key is a case of the Msg schema or the `_ok` or `_err` answer of a declared Cmd, the messages tea dispatches; the handlers are typed by hand, in shapes tea's update type does not take.
     update: {
       start: (s: Model, m: typeof Start.Type) => [{ ...s, stepped: s.stepped + 1 }, [asked(m.ask)]],
       // SAFETY: extra fields on purpose: the host, not the type, refuses them.

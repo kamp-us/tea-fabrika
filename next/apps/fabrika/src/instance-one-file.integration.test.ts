@@ -277,7 +277,7 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
     assert(bar.sizes.window > 0, "window bytes missing for a program with a window");
   }
 
-  // SAFETY: bar.caps was decoded above, so its own keys are the keys of its type.
+  // SAFETY: every bar the law passes is decoded with Bar, or a copy of one with `caps` kept, and a Struct decode keeps only the keys Metrics declares.
   for (const key of Object.keys(bar.caps) as Array<keyof typeof bar.caps>) {
     assert(Number.isFinite(bar.caps[key]) && bar.caps[key] > 0, "recorded cap missing");
 
