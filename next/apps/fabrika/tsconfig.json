@@ -36,6 +36,15 @@
                 "schemaClassMissingBrand": "error"
               }
             }
+          },
+          // These folders: catchToOrElseSucceed (E9).
+          {
+            "include": ["e2e/**/*.ts", "src/exam/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchToOrElseSucceed": "error"
+              }
+            }
           }
         ]
       }

@@ -52,6 +52,15 @@
                 "unnecessaryTypeofType": "error"
               }
             }
+          },
+          // These folders: catchToOrElseSucceed (E9).
+          {
+            "include": ["src/node/**/*.ts", "src/transport/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchToOrElseSucceed": "error"
+              }
+            }
           }
         ]
       }

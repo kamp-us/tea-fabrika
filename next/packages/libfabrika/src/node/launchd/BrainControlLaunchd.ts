@@ -287,7 +287,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
     // Deletes the captured entry only when it is our own plist, which was on its way out anyway.
     // Any other entry is somebody's: it keeps its place in the folder and the caller hears why.
     const discard = Effect.gen(function* () {
-      if ((yield* readPlist(captured).pipe(Effect.catch(() => Effect.succeed(null)))) !== compiled.bytes) {
+      if ((yield* readPlist(captured).pipe(Effect.orElseSucceed(() => null))) !== compiled.bytes) {
         return yield* conflict("plist path taken before restore");
       }
 

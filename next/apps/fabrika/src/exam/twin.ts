@@ -644,7 +644,7 @@ const lint = Effect.fnUntraced(function* (file: string) {
   const path = yield* Path.Path;
   const contract = yield* fs
     .readFileString(path.resolve(import.meta.dirname, "../../../../packages/libfabrika/src/cloudflare/objects.ts"))
-    .pipe(Effect.catch(() => Effect.succeed(undefined)));
+    .pipe(Effect.orElseSucceed(() => undefined));
   const findings = scan(file, yield* fs.readFileString(file), contract);
 
   for (const f of findings) {

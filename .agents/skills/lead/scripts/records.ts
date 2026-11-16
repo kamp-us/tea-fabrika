@@ -787,7 +787,7 @@ if (import.meta.main) {
       ),
       // `--help` alone is a clean exit; a command line effect/cli could not read is printed by it.
       Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
-      Effect.catch(() => Effect.succeed(2)),
+      Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),
     {

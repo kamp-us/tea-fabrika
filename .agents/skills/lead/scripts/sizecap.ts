@@ -435,7 +435,7 @@ if (import.meta.main) {
       Effect.as(0),
       Effect.catchTag("Failed", (failed) => Console.error(`sizecap: ${failed.message}`).pipe(Effect.as(2))),
       Effect.catchTag("ShowHelp", (help) => Effect.succeed(help.errors.length === 0 ? 0 : 2)),
-      Effect.catch(() => Effect.succeed(2)),
+      Effect.orElseSucceed(() => 2),
       Effect.provide(NodeServices.layer),
     ),
     {

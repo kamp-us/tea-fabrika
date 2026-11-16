@@ -218,7 +218,7 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
           const key = yield* subtle("importKey", "raw", publicKey.value, { name: "Ed25519" }, false, ["verify"]);
           const ok = yield* subtle("verify", { name: "Ed25519" }, key, signature.value, bytes);
           return ok ? Checked.cases.key.make({ signer }) : bad;
-        }).pipe(Effect.catch(() => Effect.succeed(bad))),
+        }).pipe(Effect.orElseSucceed(() => bad)),
     },
   );
 });

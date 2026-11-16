@@ -1703,7 +1703,7 @@ const runMutbox: MutboxRun = (args) =>
     return { code: Number(code), out };
   }).pipe(
     Effect.scoped,
-    Effect.catch(() => Effect.succeed({ code: 127, out: "" })),
+    Effect.orElseSucceed(() => ({ code: 127, out: "" })),
     Effect.provide(nodeServices),
   );
 

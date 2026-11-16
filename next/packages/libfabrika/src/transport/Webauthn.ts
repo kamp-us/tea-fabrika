@@ -198,7 +198,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
         return ok ? { origin, rp, be: (p.flags & 8) !== 0, bs: (p.flags & 16) !== 0, counter: p.counter } : null;
       }),
     ),
-    Effect.catch(() => Effect.succeed(null)),
+    Effect.orElseSucceed(() => null),
   );
 });
 

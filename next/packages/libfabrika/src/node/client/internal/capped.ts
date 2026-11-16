@@ -79,9 +79,7 @@ export const capped = Effect.fnUntraced(function* (
       return { printed, result: Result.cases.exited.make({ code, version: yield* version(printed.out) }) };
     }),
   ).pipe(
-    Effect.catch(() =>
-      Effect.succeed({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) }),
-    ),
+    Effect.orElseSucceed(() => ({ printed: nothing, result: Result.cases.failed.make({ reason: "spawn_failed" }) })),
   );
   const ended = yield* Clock.currentTimeMillis;
   yield* Effect.annotateCurrentSpan({
