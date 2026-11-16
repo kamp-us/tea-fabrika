@@ -16,6 +16,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Predicate,
   Result,
   Schema,
   Semaphore,
@@ -152,7 +153,7 @@ import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
 const Event = Schema.declare<Parameters<typeof lineFor>[1]>(
   (value): value is Parameters<typeof lineFor>[1] =>
-    Schema.is(Schema.JsonObject)(value) && typeof value._tag === "string",
+    Schema.is(Schema.JsonObject)(value) && Predicate.isString(value._tag),
 );
 
 const SavedDescriptor = Schema.Struct({
@@ -881,7 +882,7 @@ const projectLogic = Effect.fn("project.init")(function* (
   const checked = yield* RecordedStart;
   const config = { ...checked.input, ...checked.input.founding, port: checked.values.port };
   const { programs } = options;
-  const bootstrap = typeof options.bootstrap === "function" ? options.bootstrap(config.person) : options.bootstrap;
+  const bootstrap = Predicate.isFunction(options.bootstrap) ? options.bootstrap(config.person) : options.bootstrap;
   const name = ctx.id.name ?? config.name;
   const { sql, turn, write, ledgerLayer } = local;
   // Installs stay ordered while a Process finishes a turn that may write back to the Project.

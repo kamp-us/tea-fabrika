@@ -6,7 +6,7 @@
 // the write. A wait answers at once: `ready`, or a ring row that the next append past it takes out
 // in its own step and rings once. No fiber, timer or Deferred is left behind, so the object can
 // sleep under a parked wait. Every call ends one span with names, ids and numbers only.
-import { Effect, Equal, Exit, Option, Result, Schema } from "effect";
+import { Effect, Equal, Exit, Option, Predicate, Result, Schema } from "effect";
 import { ParentText, Rev } from "../../Rev.ts";
 import type { Sql, SqlValue } from "../../Sql.ts";
 import { causeClass, errorClass, short } from "../../telemetry/Trace.ts";
@@ -148,12 +148,12 @@ class Threw extends Schema.TaggedError<Threw>()("Threw", { error: Schema.Unknown
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {
-  if (typeof error !== "object" || error === null) {
+  if (!Predicate.isObjectOrArray(error)) {
     return Option.none();
   }
 
   const code = "errcode" in error ? error.errcode : "code" in error ? error.code : undefined;
-  return typeof code === "number" || typeof code === "string" ? Option.some(code) : Option.none();
+  return Predicate.isNumber(code) || Predicate.isString(code) ? Option.some(code) : Option.none();
 };
 
 /** @internal */
