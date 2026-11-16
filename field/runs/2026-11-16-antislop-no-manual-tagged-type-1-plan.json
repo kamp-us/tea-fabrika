@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-type-1-plan",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T00:13:27-08:00",
+  "ended": "2026-11-16T00:21:00-08:00",
+  "parent": "2026-11-15-antislop-no-manual-tagged-type-1-review-2",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Plan step for the last two hits of anti-slop-effect/no-manual-tagged-type on slice AS-no-manual-tagged-type-1 (ticket 1057, decision 0562), next/apps/fabrika/src/exam/agent-may.test.ts:452 and :466, on branch fabrikalfa/antislop-no-manual-tagged-type-1 at 55e3418c1. Question: can the exam's control and planted answers be built through the wire's own Answer schema (next/packages/libfabrika/src/transport/Wire.ts:87-96), so the loose types go, with no assertion deleted or narrowed? Yes. Decision 0562 asks for the schema's maker in tests (line 121) and has no line that keeps loose answers. Swapping only the two types fails the app's typecheck on 14 lines (608, 615, 619, 650, 654, 661, 675, 696, 699, 709, 735, 738, 739, 741): answers with no result, no reason or no stream, and literals whose tag widens to string. Building each through Wire.Answer.cases.<tag>.make keeps every verdict, because no assertion reads the fields that were missing. The amendment is docs/plan/quests/antislop-no-manual-tagged-type-1-PLAN.md, unsigned, for the lead.",
+  "plants": [
+    {
+      "law": "L1: anti-slop-effect/no-manual-tagged-type has no hit in next/apps/fabrika/src/exam/agent-may.test.ts",
+      "plant": "the file as it is at 55e3418c1, with the rule forced to error for that file in a throwaway edit of the lint config, restored after: 2 hits, at :452 and :466",
+      "result": "red"
+    },
+    {
+      "law": "L2: every control and plant answer in agent-may.test.ts is a value of the wire's Answer",
+      "plant": "the two type lines swapped to the wire's Answer with the old control literals left: tsc --noEmit -p . in next/apps/fabrika fails on 14 lines",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "The whole shape was tried in place on the exam file and then restored with git checkout, so no exam, product or config file changed: tsc --noEmit -p . in next/apps/fabrika exits 0, and nice -n 15 vitest run --maxWorkers=3 src/exam/agent-may.test.ts gives 10 passed and 1 skipped (the P25 prop, skipped as at the head), and the rule forced to error on that file reports 0. plancheck.sh --draft passes on the amendment. Not run: pnpm lint, pnpm typecheck at the root, any .integration. file; the tests step runs those.",
+  "step": "plan"
+}
