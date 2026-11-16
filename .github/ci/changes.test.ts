@@ -923,8 +923,8 @@ const envOf = (event: string, draft: boolean) => ({
 /** What a run prints for a scope: the reader paths, or all of next/. */
 const filterOf = (scope: Scope) => (scope === "readers" ? ci.readers.join(" ") : "next/");
 
-it("property: probe changes no flag: the first pass prints the same flags for any diff text", async () => {
-  await fc.assert(
+it("property: probe changes no flag: the first pass prints the same flags for any diff text", () =>
+  fc.assert(
     fc.asyncProperty(
       // A NUL ends a path in git's output, so no path holds one.
       fc
@@ -956,8 +956,7 @@ it("property: probe changes no flag: the first pass prints the same flags for an
       },
     ),
     options,
-  );
-});
+  ));
 
 it("scenario: with no parser to import, --same prints what the first pass printed", async () => {
   // scenario: the import of program.ts rejects, as it does when the parser's install failed. Then
@@ -1105,8 +1104,8 @@ const prints = (printed: Record<string, string>, expected: Record<string, boolea
 // not ended counts, any head tree counts, any base tree counts, an API error counts as tested, every
 // event asks, a tested push skips check too, the reader ignores a refused answer, the reader asks
 // with no token, and a tree git cannot read is ignored.
-it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", async () => {
-  await fc.assert(
+it("property: a push whose tree and base tree a passed queue run tested skips next, and nothing else", () =>
+  fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, {});
       const expected = ci.jobs(paths, "push", false);
@@ -1115,8 +1114,7 @@ it("property: a push whose tree and base tree a passed queue run tested skips ne
       expect(printed["probe"]).toBe("false");
     }),
     options,
-  );
-});
+  ));
 
 it("scenario: a tested push of today's and next/ files keeps check, typecheck, build and field, and names the run", async () => {
   // scenario: the shape of most queue merges, written out so the flags are read and not compared.
@@ -1130,8 +1128,8 @@ it("scenario: a tested push of today's and next/ files keeps check, typecheck, b
   });
 });
 
-it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", async () => {
-  await fc.assert(
+it("property: a queue run that did not pass, or has not ended, tests nothing, so the push runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.oneof(
@@ -1148,22 +1146,20 @@ it("property: a queue run that did not pass, or has not ended, tests nothing, so
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", async () => {
-  await fc.assert(
+it("property: with no queue run at all, as after an admin merge or a direct push, the push runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(changedPaths, async (paths) => {
       const { printed } = await pushed(paths, { runs: [] });
       prints(printed, ci.jobs(paths, "push", false));
       expect(printed["tested"]).toBe("");
     }),
     options,
-  );
-});
+  ));
 
-it("property: a passed queue run of another tree, or of no readable tree, tests nothing", async () => {
-  await fc.assert(
+it("property: a passed queue run of another tree, or of no readable tree, tests nothing", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom<QueueRun["head_commit"]>({ tree_id: tree.other }, { tree_id: tree.base }, { tree_id: "" }, null),
@@ -1174,21 +1170,19 @@ it("property: a passed queue run of another tree, or of no readable tree, tests 
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: a passed queue run of the same tree built on another base tree tests nothing", async () => {
+it("property: a passed queue run of the same tree built on another base tree tests nothing", () =>
   // A push of two queue entries at once: the last entry's run started from the first's head, so
   // its `--changed` tests missed what the first brought.
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(changedPaths, fc.constantFrom(tree.other, tree.head, ""), async (paths, baseTree) => {
       const { printed } = await pushed(paths, { baseTree });
       prints(printed, ci.jobs(paths, "push", false));
       expect(printed["tested"]).toBe("");
     }),
     options,
-  );
-});
+  ));
 
 it("property: an API error, a malformed answer or a tree git cannot read runs what jobs says", async () => {
   await fc.assert(
@@ -1248,8 +1242,8 @@ it("property: an API error, a malformed answer or a tree git cannot read runs wh
   expect(calls).toEqual([]);
 });
 
-it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", async () => {
-  await fc.assert(
+it("property: a pull request never asks GitHub, a merge queue's group asks only for its trees' record, and with none each runs what jobs says", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom("pull_request", "merge_group"),
@@ -1263,8 +1257,7 @@ it("property: a pull request never asks GitHub, a merge queue's group asks only 
       },
     ),
     options,
-  );
-});
+  ));
 
 // Experiment 292, change 5: a merge queue group passes at once when a ready pull request run already
 // tested its tree green. The pull request run's changes job records the tree it tested (the merge
@@ -1609,8 +1602,8 @@ it("property: covers holds for the same selection and any wider one, and fails w
   );
 });
 
-it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", async () => {
-  await fc.assert(
+it("property: a group passes at once only when a green ready pull request run of the same tree and base tree covered it; any one thing wrong runs its tests", () =>
+  fc.assert(
     fc.asyncProperty(
       changedPaths,
       fc.constantFrom(...faults),
@@ -1638,8 +1631,7 @@ it("property: a group passes at once only when a green ready pull request run of
         0,
       ]),
     },
-  );
-});
+  ));
 
 // GitHub's values for a run's event, status and conclusion, and a job's conclusion (its REST
 // docs for workflow runs and jobs), with names a job of this workflow can have.
@@ -1796,10 +1788,10 @@ const malformed = fc.oneof(
   fc.integer(),
 );
 
-it("property: a group whose one GitHub call fails or answers in a wrong shape runs what jobs says", async () => {
+it("property: a group whose one GitHub call fails or answers in a wrong shape runs what jobs says", () => {
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api } = world(paths, neededOf(paths), "none");
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(
       fc.constantFrom("artifacts", "run", "jobs"),
       fc.oneof(
@@ -1818,7 +1810,7 @@ it("property: a group whose one GitHub call fails or answers in a wrong shape ru
   );
 });
 
-it("property: of the artifacts GitHub lists for the group's record, only one of exactly that name, not expired, with its run's id, lets the group pass", async () => {
+it("property: of the artifacts GitHub lists for the group's record, only one of exactly that name, not expired, with its run's id, lets the group pass", () => {
   const paths = ["next/packages/libfabrika/src/b.ts"];
   const { api } = world(paths, neededOf(paths), "none");
   const name = ci.recordName(tree.head, tree.base);
@@ -1832,7 +1824,7 @@ it("property: of the artifacts GitHub lists for the group's record, only one of 
     expired: fc.boolean(),
     workflow_run: fc.constantFrom<unknown>({ id: 11 }, { id: "11" }, { id: 12 }, {}, null),
   });
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(fc.array(artifact, { maxLength: 4 }), async (listed) => {
       // The id goes into a URL, so GitHub would read run 11 for "11" too: the fake does the same,
       // and only `matched`'s own check keeps a malformed id out.
@@ -1927,8 +1919,8 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
 const flagNames = ["build", "check", "field", "next", "typecheck"];
 const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflow_dispatch", "schedule", "");
 
-it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", async () => {
-  await fc.assert(
+it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", () =>
+  fc.assert(
     fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
       expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
       expect(Object.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
@@ -1946,5 +1938,4 @@ it("property: on every event, for any paths and either draft flag, no flag and n
         [null, "workflow_dispatch", false],
       ],
     },
-  );
-});
+  ));

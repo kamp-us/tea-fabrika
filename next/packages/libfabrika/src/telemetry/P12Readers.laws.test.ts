@@ -38,8 +38,8 @@ const typed = (exit: Exit.Exit<unknown, unknown>) => {
 };
 
 for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as const) {
-  it(`record ${reader} decoder refuses malformed disk rows with a typed failure`, async () => {
-    await fc.assert(
+  it(`record ${reader} decoder refuses malformed disk rows with a typed failure`, () =>
+    fc.assert(
       fc.asyncProperty(fc.string(), async (text) => {
         const db = new DatabaseSync(":memory:"),
           real = nodeSql(db);
@@ -95,13 +95,12 @@ for (const reader of ["span", "seq", "state", "kept", "deleted", "rolled"] as co
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 }
 
 for (const reader of ["chain", "row", "part"] as const) {
-  it(`sink ${reader} decoder refuses malformed saved rows and keeps the unsent span`, async () => {
-    await fc.assert(
+  it(`sink ${reader} decoder refuses malformed saved rows and keeps the unsent span`, () =>
+    fc.assert(
       fc.asyncProperty(fc.string(), async (text) => {
         const db = new DatabaseSync(":memory:"),
           sql = nodeSql(db);
@@ -134,6 +133,5 @@ for (const reader of ["chain", "row", "part"] as const) {
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 }

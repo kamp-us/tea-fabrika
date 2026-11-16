@@ -122,9 +122,9 @@ const scopeOnly = (entries: ReadonlyArray<Entry>, file: "repo" | "person") =>
   entries.length > 0 && entries.every((e) => (file === "repo" ? e._tag === "port" : e._tag === "version"));
 
 describe("L7, every file is strict and whole, and a key outside its file's scope fails", () => {
-  it("both files pass only when every key in each is declared, valid and in scope", async () => {
+  it("both files pass only when every key in each is declared, valid and in scope", () => {
     const entries = fc.array(entry, { maxLength: 4 });
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(entries, entries, async (repo, person) => {
         const exit = await validate(text(repo), text(person), "1.2.3");
         const ok = allowed(repo, "repo") && allowed(person, "person");
@@ -142,8 +142,8 @@ describe("L7, every file is strict and whole, and a key outside its file's scope
   });
 });
 
-it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", async () => {
-  await fc.assert(
+it("T753 L3 file bytes keep exact values and origins through checked snapshots and reports", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         count: fc.integer({ min: 0, max: 1000000 }),
@@ -227,8 +227,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
       },
     ),
     check,
-  );
-});
+  ));
 
 describe("L8, the version refusal comes first, and a supported version goes on", () => {
   const triple = fc.tuple(fc.nat(12), fc.nat(12), fc.nat(12));
@@ -241,8 +240,8 @@ describe("L8, the version refusal comes first, and a supported version goes on",
     scope: { repo: "[instance]\nport = 18800\n", person: "" },
   };
 
-  it("a repo needing a newer fabrika is refused before any other error; an older or equal one goes on", async () => {
-    await fc.assert(
+  it("a repo needing a newer fabrika is refused before any other error; an older or equal one goes on", () =>
+    fc.assert(
       fc.asyncProperty(
         triple,
         fc.oneof(
@@ -272,8 +271,7 @@ describe("L8, the version refusal comes first, and a supported version goes on",
         },
       ),
       { ...check, examples: [[[0, 9, 0], [0, 10, 0], "unknown-repo"]] },
-    );
-  });
+    ));
 });
 
 describe("L10, the three S5 messages, word for word", () => {
@@ -315,7 +313,7 @@ describe("L10, the three S5 messages, word for word", () => {
     });
   });
 
-  it("a typo in the repo's file is never offered a person-only key", async () => {
+  it("a typo in the repo's file is never offered a person-only key", () => {
     // One edit away from `port`: each is a typo of a key the repo's file may not set.
     const typo = fc
       .tuple(fc.nat(3), fc.constantFrom(..."abcdefghijklmnopqrstuvwxyz"), fc.constantFrom("swap", "add", "drop"))
@@ -328,7 +326,7 @@ describe("L10, the three S5 messages, word for word", () => {
             : word.slice(0, at) + word.slice(at + 1);
       })
       .filter((w) => w !== "port" && w.length > 0);
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(typo, async (key) => {
         const exit = await validate(`[instance]\n${key} = 18800\n`, "", "0.0.0");
         const error = failure(exit);

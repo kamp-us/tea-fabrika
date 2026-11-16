@@ -187,7 +187,7 @@ const archiveRows = (db: DatabaseSync) =>
     .map((row) => ({ ...row }));
 
 describe("p101, measurements in two levels", () => {
-  it("each summary's count, errors, p50, p95, max and lag match the raw rows", async () => {
+  it("each summary's count, errors, p50, p95, max and lag match the raw rows", () => {
     const one = fc.record({
       piece: fc.constantFrom(...PIECES),
       gap: fc.integer({ min: 0, max: 5 * H }),
@@ -197,7 +197,7 @@ describe("p101, measurements in two levels", () => {
       doorLag: fc.option(fc.integer({ min: 0, max: 500 }), { nil: undefined }),
       decoy: fc.boolean(),
     });
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
         return Effect.runPromise(
           Effect.gen(function* () {
@@ -494,7 +494,7 @@ describe("p101, no raw row is ever lost", () => {
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 12 }) } },
   );
 
-  it("local rows plus every archived file's rows are every measurements row ever written, at every point", async () => {
+  it("local rows plus every archived file's rows are every measurements row ever written, at every point", () => {
     const one = fc.record({
       piece: fc.constantFrom(...PIECES),
       gap: fc.integer({ min: 0, max: 30 * H }),
@@ -502,7 +502,7 @@ describe("p101, no raw row is ever lost", () => {
       ok: fc.boolean(),
       flush: fc.boolean(),
     });
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
         const r2 = bucket();
         return Effect.runPromise(

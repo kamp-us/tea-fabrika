@@ -395,9 +395,8 @@ describe("P12, door laws retained after the library move", () => {
           }).pipe(Effect.scoped),
         ),
     );
-  it("view.open refuses any bad pid before invoking the program, and opens a valid pid", async () => {
-    await fc.assert(viewOpen(), checks);
-  });
+  it("view.open refuses any bad pid before invoking the program, and opens a valid pid", () =>
+    fc.assert(viewOpen(), checks));
   it("the view.open law catches a bypassed pid check", async () => {
     const result = await fc.check(viewOpen(true), { ...checks, endOnFailure: true });
     expect(result.failed).toBe(true);
@@ -437,9 +436,7 @@ describe("P12, door laws retained after the library move", () => {
           }).pipe(Effect.scoped),
         ),
     );
-  it("a grant target matches both the waiting fingerprint and its code", async () => {
-    await fc.assert(grantTarget(), checks);
-  });
+  it("a grant target matches both the waiting fingerprint and its code", () => fc.assert(grantTarget(), checks));
 
   for (const field of ["fingerprint", "code"] as const)
   // Pin each P12 grant-target bypass plant, retaining the generated law and both fields.
@@ -453,8 +450,8 @@ describe("P12, door laws retained after the library move", () => {
 });
 
 describe("P17a, revoke stops writes at the final door", () => {
-  it("current inputs keep their fields and a retry with missing metadata fails as a bad row", async () => {
-    await fc.assert(
+  it("current inputs keep their fields and a retry with missing metadata fails as a bad row", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.constantFrom("door", "n"),
@@ -508,10 +505,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a hello paused before its final write cannot land after revoke", async () => {
-    await fc.assert(
+    ));
+  it("a hello paused before its final write cannot land after revoke", () =>
+    fc.assert(
       fc.asyncProperty(fc.boolean(), fc.uuid(), async (revokeFirst, tab) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -566,10 +562,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // Review regression: revoke lands while this hello's final write is paused.
         examples: [[true, "paused-hello"]],
       },
-    );
-  });
-  it("a transforming program input is decoded once and delivered with its decoded value", async () => {
-    await fc.assert(
+    ));
+  it("a transforming program input is decoded once and delivered with its decoded value", () =>
+    fc.assert(
       fc.asyncProperty(fc.integer(), fc.uuid(), async (n, letter) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -610,10 +605,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // Review regression: NumberFromString turns "7" into 7 before accept.
         examples: [[7, "transformed-input"]],
       },
-    );
-  });
-  it("a route paused after its online check cannot record authenticated input after revoke", async () => {
-    await fc.assert(
+    ));
+  it("a route paused after its online check cannot record authenticated input after revoke", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -670,10 +664,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a settled retry paused after online rechecks revoke before answering its cached placing", async () => {
-    await fc.assert(
+    ));
+  it("a settled retry paused after online rechecks revoke before answering its cached placing", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -764,10 +757,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("an admitted client gets its pre-P17 settled answer after reopen without appending", async () => {
-    await fc.assert(
+    ));
+  it("an admitted client gets its pre-P17 settled answer after reopen without appending", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.uuid(),
@@ -878,10 +870,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("two Gateway layers on one ledger stop the open old client, even when it ignores close", async () => {
-    await fc.assert(
+    ));
+  it("two Gateway layers on one ledger stop the open old client, even when it ignores close", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.integer({ min: 1, max: 5 }),
@@ -923,10 +914,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a delayed inbox append, including an exact duplicate, rechecks after revoke and reopen", async () => {
-    await fc.assert(
+    ));
+  it("a delayed inbox append, including an exact duplicate, rechecks after revoke and reopen", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -975,10 +965,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", async () => {
-    await fc.assert(
+    ));
+  it("a caused event paused after receipt checking cannot cross a revoke on another Gateway", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -1066,10 +1055,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         // P17a regression: JSON-escaped text used to miss the pause after receipt checking.
         examples: [["notes", true, false, '"\n\\']],
       },
-    );
-  });
-  it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", async () => {
-    await fc.assert(
+    ));
+  it("old-key challenges cannot reconnect or regrant it; a separate admitted client keeps writing", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("counter", "notes"),
         fc.boolean(),
@@ -1124,10 +1112,9 @@ describe("P17a, revoke stops writes at the final door", () => {
         },
       ),
       checks,
-    );
-  });
-  it("the internal inbox operation refuses changed bindings and bodies before any append", async () => {
-    await fc.assert(
+    ));
+  it("the internal inbox operation refuses changed bindings and bodies before any append", () =>
+    fc.assert(
       fc.asyncProperty(fc.constantFrom("counter", "notes"), fc.string({ maxLength: 30 }), async (target, text) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -1172,6 +1159,5 @@ describe("P17a, revoke stops writes at the final door", () => {
         );
       }),
       checks,
-    );
-  });
+    ));
 });

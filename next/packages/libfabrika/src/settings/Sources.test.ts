@@ -120,8 +120,8 @@ const noise = fc.dictionary(
 );
 
 describe("L5, the highest present source wins per key, and so does its origin", () => {
-  it("flag, env, repo, person, default, per key, even when the values are equal", async () => {
-    await fc.assert(
+  it("flag, env, repo, person, default, per key, even when the values are equal", () =>
+    fc.assert(
       fc.asyncProperty(
         ports.chain((shared) => fc.tuple(choice(shared), choice(shared))),
         noise,
@@ -152,8 +152,7 @@ describe("L5, the highest present source wins per key, and so does its origin", 
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
 const unreadable: Sources.Source = {
@@ -164,8 +163,8 @@ const unreadable: Sources.Source = {
 };
 
 describe("L6, a failed source or an invalid winner never falls through", () => {
-  it("a read failure fails the resolve, whatever lower sources hold", async () => {
-    await fc.assert(
+  it("a read failure fails the resolve, whatever lower sources hold", () =>
+    fc.assert(
       fc.asyncProperty(fc.constantFrom(...ORDER), ports, ports, async (failing, below, other) => {
         // Every source above the failing one is absent, and every one below holds a valid value.
         const lower = ORDER.slice(ORDER.indexOf(failing) + 1);
@@ -187,17 +186,16 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
         }
       }),
       check,
-    );
-  });
+    ));
 
-  it("an invalid value in the winning source fails, though a lower source holds a valid one", async () => {
+  it("an invalid value in the winning source fails, though a lower source holds a valid one", () => {
     // An empty string is supplied, not absent: it is invalid too.
     const invalid = fc.oneof(
       fc.integer({ min: 65536, max: 2 ** 30 }).map(String),
       fc.integer({ min: -(2 ** 30), max: 0 }).map(String),
       fc.constantFrom('""', '"abc"', "1.5", "true"),
     );
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.constantFrom(...ORDER), invalid, ports, async (winning, raw, below) => {
         const lower = ORDER.slice(ORDER.indexOf(winning) + 1);
         // A flag or the environment holds text; a file holds TOML.

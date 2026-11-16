@@ -22,8 +22,8 @@ const body = (after: string, before: string) =>
     `describe("y", () => { ${after}(() => db.close()); });`, // 5: nested too
   ].join("\n");
 
-it("refuses an after-hook in any next/ file, test or helper, and keeps the setup hooks", async () => {
-  await fc.assert(
+it("refuses an after-hook in any next/ file, test or helper, and keeps the setup hooks", () =>
+  fc.assert(
     fc.asyncProperty(
       name,
       fc.constantFrom("afterEach", "afterAll"),
@@ -48,5 +48,4 @@ it("refuses an after-hook in any next/ file, test or helper, and keeps the setup
       },
     ),
     runs,
-  );
-});
+  ));

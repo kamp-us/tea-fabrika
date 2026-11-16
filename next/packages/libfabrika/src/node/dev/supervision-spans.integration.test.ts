@@ -293,8 +293,8 @@ const generatedThrow = fc.oneof(
 );
 
 for (const adapter of ["node", "worker"] as const) {
-  it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and measurements`, async () => {
-    await fc.assert(
+  it(`${adapter}: generated throw content is deletable; classes alone stay in receipts, dead events and measurements`, () =>
+    fc.assert(
       fc.asyncProperty(generatedThrow, (sample) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -396,8 +396,7 @@ for (const adapter of ["node", "worker"] as const) {
         ),
       ),
       { seed: 119120, numRuns: 40 },
-    );
-  });
+    ));
 }
 
 describe("P34 supervision recording", () => {

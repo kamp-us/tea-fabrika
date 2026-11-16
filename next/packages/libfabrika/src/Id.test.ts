@@ -1024,8 +1024,8 @@ describe("T518 shared Id generator", () => {
       decoding.mockRestore();
     }
   };
-  it("shared fibers allocate unique, strictly increasing ids over generated schedules", async () => {
-    await fc.assert(
+  it("shared fibers allocate unique, strictly increasing ids over generated schedules", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           type: prefix,
@@ -1043,8 +1043,7 @@ describe("T518 shared Id generator", () => {
         checkSchedule,
       ),
       { ...options, numRuns: 40 },
-    );
-  });
+    ));
   it("pinned: T518 review 5 P1, four fibers reseed the same millisecond after a scheduler yield", async () => {
     await checkSchedule({
       type: "process",

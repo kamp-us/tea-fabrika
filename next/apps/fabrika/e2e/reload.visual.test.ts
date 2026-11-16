@@ -10,6 +10,7 @@
 // These start workerd, a port, Chromium and a file watcher, so the file is a visual test (0536): the
 // `next-visual` project runs it one file at a time, on the schedule or a `visual` pull request.
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
@@ -18,7 +19,7 @@ import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import { chromium, type Page } from "playwright";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
 import {
   APP,
   cli,
@@ -261,8 +262,8 @@ const edited = (source: string, k: number, more: (s: string) => string = (s) => 
 
 describe("P15 slice 1: hot reload on the real instance", () => {
   // L17: the real build's warning printer, including importers outside the project root.
-  it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", async () => {
-    await fc.assert(
+  it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           folder: fc.stringMatching(/^[a-z][a-z0-9 -]{1,24}$/),
@@ -332,275 +333,301 @@ describe("P15 slice 1: hot reload on the real instance", () => {
           ),
       ),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
-    );
-  });
+    ));
 
   // L16. Plant: rebuild the brain file instead of installing (workerd restarts, the T421 watch fires).
-  it("scenario: L16, the real path: a fitting save keeps the count and the next press runs the new code; a refused save and a syntax error leave it running; a later good save swaps", async () => {
-    await scoped(
-      Effect.gen(function* () {
-        const source = yield* counterSource;
-        expect(source, "the counter's inc this scenario edits").toContain("inc: (s) => [{ count: s.count + 1 }, []]");
-        const copy = yield* fixture;
-        const run = yield* instance(copy);
-        // The watcher's first build is the boot's own bytes: nothing to swap.
-        expect(outcome(yield* nextAnswer(run.answers))).toEqual({ _tag: "same" });
-        // L2 permits late notifications of unchanged bytes. They do not answer the next distinct save.
-        const changed = () => nextAnswer(run.answers, 60_000, (answer) => outcome(answer)._tag !== "same");
-        const s = yield* session(run.url, run.founder.key);
-
-        for (let n = 0; n < 3; n++) {
-          yield* s.press("inc");
-        }
-
-        expect(yield* s.view()).toEqual({ count: 3 });
-
-        // A save that fits: inc adds 2. The count stays, and the next press runs the new code.
-        yield* copy.write(edited(source, 2));
-        expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
-        expect(yield* s.view()).toEqual({ count: 3 });
-        yield* s.press("inc");
-        expect(yield* s.view()).toEqual({ count: 5 });
-        const stream = yield* s.read(s.pid);
-        const swapped = stream.filter((e) => e._tag === "code.swapped");
-        expect(swapped).toHaveLength(1);
-        expect(stream.filter((e) => e._tag === "stepped").at(-1)?.body.build).toBe(swapped[0].body.hash);
-
-        // A save the counter's state cannot be read by: a new field, the same `v`, no upgrade.
-        yield* copy.write(
-          edited(source, 2, (s) =>
-            s.replace("Schema.Struct({ count: Schema.Int })", "Schema.Struct({ count: Schema.Int, step: Schema.Int })"),
-          ),
-        );
-        expect(outcome(yield* changed())).toEqual({
-          _tag: "refused",
-          was: swapped[0].body.hash,
-          reason: "shape",
-        });
-        yield* s.press("inc");
-        expect(yield* s.view(), "the old code keeps running it").toEqual({ count: 7 });
-
-        // A syntax error: nothing reaches the process; the brain records where.
-        yield* copy.write(`${source}\nexport const broken = ;\n`);
-        expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
-        const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
-        expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
-        expect(typeof failed?.body.line).toBe("number");
-        yield* s.press("inc");
-        expect(yield* s.view()).toEqual({ count: 9 });
-
-        // Its fix: inc adds 3, and it swaps.
-        yield* copy.write(edited(source, 3));
-        expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
-        yield* s.press("inc");
-        expect(yield* s.view()).toEqual({ count: 12 });
-      }),
-    );
-  }, 600_000);
-
-  // L17 [secrets]. Plant: put the compiler's message in code.failed; print the token in the install line.
-  it("L17: no code fact, answer or error copies program source or an absolute path, and code.failed's path is relative, for generated sentinels in the source and its error", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.record({
-          word: fc.stringMatching(/^[A-Z]{12}$/),
-          k: fc.integer({ min: 2, max: 9 }),
-          line: fc.integer({ min: 0, max: 20 }),
-        }),
-        ({ word, k, line }) =>
-          scoped(
-            Effect.gen(function* () {
-              const sentinel = `P15SECRET${word}`;
-              const source = yield* counterSource;
-              const copy = yield* fixture;
-              const run = yield* instance(copy);
-              const answers: Array<unknown> = [yield* nextAnswer(run.answers)];
-              const changed = () =>
-                nextAnswer(run.answers, 60_000, (answer) => {
-                  // Inspect every answer for L17, including late same-hash notifications from L2.
-                  answers.push(answer);
-                  return outcome(answer)._tag !== "same";
-                });
-              const s = yield* session(run.url, run.founder.key);
-              yield* s.press("inc");
-              // The sentinel in the source the bundle carries, then in the line its error names.
-              yield* copy.write(edited(source, k, (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(sentinel)};\n`));
-              yield* changed();
-              yield* copy.write(
-                `${source}${"\n".repeat(line)}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
-              );
-              yield* changed();
-              const outputs = [
-                ...answers.map((a) => JSON.stringify(a)),
-                ...(yield* s.read("gateway/code")).map((e) => JSON.stringify(e)),
-                ...(yield* s.read(s.pid)).map((e) => JSON.stringify(e)),
-              ];
-              const forbidden = [sentinel, run.home, copy.home, ROOT];
-
-              for (const output of outputs) {
-                for (const text of forbidden) {
-                  for (const form of [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)]) {
-                    expect(
-                      output.includes(form),
-                      `an output holds ${text === sentinel ? "the sentinel" : "a path"}`,
-                    ).toBe(false);
-                  }
-                }
-              }
-
-              const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed");
-              expect(failed.map((e) => e.body.path)).toEqual([copy.relative]);
-            }),
-          ),
-      ),
-      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
-    );
-  }, 1_800_000);
-
-  it("L17: generated save flows keep source, made-up bearer and absolute paths out of dev's actual printed lines, errors and persisted spans", async () => {
-    const cliMoves = new Set<string>();
-    await fc.assert(
-      fc.asyncProperty(fc.gen(), (g) =>
+  it.live(
+    "scenario: L16, the real path: a fitting save keeps the count and the next press runs the new code; a refused save and a syntax error leave it running; a later good save swaps",
+    () =>
+      Effect.promise(() =>
         scoped(
           Effect.gen(function* () {
-            const word = g(() => fc.stringMatching(/^[A-Z]{12}$/));
-            const sentinel = `P15SECRET${word}"/+`;
-            const fakeBytes = g(() => fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 32, maxLength: 32 }));
-            const fakeBearer = Base64Url.encode(Uint8Array.from(fakeBytes));
             const source = yield* counterSource;
+            expect(source, "the counter's inc this scenario edits").toContain(
+              "inc: (s) => [{ count: s.count + 1 }, []]",
+            );
             const copy = yield* fixture;
-            const fs = yield* FileSystem.FileSystem;
-            yield* fs.writeFileString(
-              `${copy.home}/counter/src/view.tsx`,
-              `export function Bad() { "use no memo"; return <div>{${JSON.stringify(`${sentinel} ${fakeBearer} ${copy.file}`)}}</div>; }\nglobalThis.__p15View = Bad;\n`,
-            );
-            const run = yield* cli(copy, fakeBytes);
+            const run = yield* instance(copy);
+            // The watcher's first build is the boot's own bytes: nothing to swap.
+            expect(outcome(yield* nextAnswer(run.answers))).toEqual({ _tag: "same" });
+            // L2 permits late notifications of unchanged bytes. They do not answer the next distinct save.
+            const changed = () => nextAnswer(run.answers, 60_000, (answer) => outcome(answer)._tag !== "same");
             const s = yield* session(run.url, run.founder.key);
-            const initialSpans = yield* spanOutputs(run.home).pipe(
-              Effect.map(rebuildSpans),
-              Effect.repeat({ until: (spans) => spans.length > 0, schedule: Schedule.spaced("50 millis") }),
-              Effect.timeout("60 seconds"),
-            );
-            const recorded = new Set(initialSpans.map((span) => span.spanId));
-            let k = 1;
-            let count = 0;
-            const steps = g(fc.integer, { min: 4, max: 8 });
-            const seen = new Set<string>();
 
-            for (let n = 0; n < steps; n++) {
-              // Each move uses the code and count reached so far. Failures leave both running values alone.
-              const moves = ["fit", "shape", "syntax", "load", "compiler"];
-              const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
-              const next = k + g(fc.integer, { min: 1, max: 5 });
-              const message = `${sentinel} ${fakeBearer} ${copy.file}`;
-              // L12's real door path: even a granted person cannot invoke the control-only calls.
-              const method = g(() => fc.constantFrom("codeInstall", "codeFailed"));
-              const denied = yield* s.call(method, { program: PROGRAM, source: message, hash: null, reason: "load" });
-              expect(denied.error?.data?.reason).toBe("unknown_method");
-              let text = edited(
-                source,
-                next,
-                // Rolldown's duplicate-key warning quotes this line, including its private inputs.
-                (t) =>
-                  `${t}\nglobalThis.__p15 = {${JSON.stringify(message)}: 1, ${JSON.stringify(message)}: 2};\nglobalThis.__p15Edit = ${n};\n`,
-              );
+            for (let n = 0; n < 3; n++) {
+              yield* s.press("inc");
+            }
 
-              if (move === "shape") {
-                text = text.replace(
+            expect(yield* s.view()).toEqual({ count: 3 });
+
+            // A save that fits: inc adds 2. The count stays, and the next press runs the new code.
+            yield* copy.write(edited(source, 2));
+            expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
+            expect(yield* s.view()).toEqual({ count: 3 });
+            yield* s.press("inc");
+            expect(yield* s.view()).toEqual({ count: 5 });
+            const stream = yield* s.read(s.pid);
+            const swapped = stream.filter((e) => e._tag === "code.swapped");
+            expect(swapped).toHaveLength(1);
+            expect(stream.filter((e) => e._tag === "stepped").at(-1)?.body.build).toBe(swapped[0].body.hash);
+
+            // A save the counter's state cannot be read by: a new field, the same `v`, no upgrade.
+            yield* copy.write(
+              edited(source, 2, (s) =>
+                s.replace(
                   "Schema.Struct({ count: Schema.Int })",
                   "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
-                );
-              } else if (move === "syntax") {
-                text += `\nexport const broken = ${JSON.stringify(message)} +;\n`;
-              } else if (move === "load") {
-                text += `\nthrow new Error(${JSON.stringify(message)});\n`;
-              } else if (move === "compiler") {
-                text += '\nimport "./view.tsx";\n';
-              }
+                ),
+              ),
+            );
+            expect(outcome(yield* changed())).toEqual({
+              _tag: "refused",
+              was: swapped[0].body.hash,
+              reason: "shape",
+            });
+            yield* s.press("inc");
+            expect(yield* s.view(), "the old code keeps running it").toEqual({ count: 7 });
 
-              yield* copy.write(text);
-              const printed = yield* run.nextLine(
-                (line) => line.startsWith("counter:1 ") || line.startsWith(`${PROGRAM} did not load:`),
-              );
-              expect(printed.length).toBeGreaterThan(0);
-              seen.add(move);
+            // A syntax error: nothing reaches the process; the brain records where.
+            yield* copy.write(`${source}\nexport const broken = ;\n`);
+            expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
+            const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
+            expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
+            expect(typeof failed?.body.line).toBe("number");
+            yield* s.press("inc");
+            expect(yield* s.view()).toEqual({ count: 9 });
 
-              if (move === "fit") {
-                k = next;
-              }
-
-              yield* s.press("inc");
-              count += k;
-              expect(yield* s.view()).toEqual({ count });
-              const facts = [...(yield* s.read("gateway/code")), ...(yield* s.read(s.pid))];
-              const spans = yield* spanOutputs(run.home);
-              expect(spans.length, "the real span sink wrote output").toBeGreaterThan(0);
-              const rebuilt = rebuildSpans(spans).filter((span) => !recorded.has(span.spanId));
-              expect(
-                rebuilt.length,
-                "dev saves the watcher's completed rebuild, not only control-call spans",
-              ).toBeGreaterThan(0);
-              const expectedOutcome = ["fit", "shape"].includes(move) ? "loaded" : "failed";
-              expect(rebuilt.some((span) => span.attributes.outcome === expectedOutcome)).toBe(true);
-
-              for (const span of rebuilt) {
-                expect(span.attributes.program).toBe(PROGRAM);
-                // A late file event may also rebuild the same bytes (L2).
-                expect([expectedOutcome, "same"]).toContain(span.attributes.outcome);
-                expect(span.attributes.bytes).toEqual(expect.any(Number));
-                expect(Number(span.attributes.bytes)).toBeGreaterThanOrEqual(0);
-                expect(span.attributes.ms).toEqual(expect.any(Number));
-                expect(Number(span.attributes.ms)).toBeGreaterThanOrEqual(0);
-                recorded.add(span.spanId);
-              }
-
-              const outputs = [
-                JSON.stringify(denied),
-                JSON.stringify(facts),
-                JSON.stringify(spans),
-                ...run.stdout,
-                ...run.stderr,
-              ];
-
-              for (const output of outputs) {
-                for (const forbidden of [sentinel, fakeBearer, copy.home, run.home, ROOT, text]) {
-                  for (const form of [
-                    forbidden,
-                    JSON.stringify(forbidden).slice(1, -1),
-                    encodeURIComponent(forbidden),
-                  ]) {
-                    expect(output.includes(form), "a named output copied private input").toBe(false);
-                  }
-                }
-              }
-
-              // The plan's L17 row: the path is repo-relative. A bundle error names the file it is in,
-              // which may be a file the program imports, so the path lies in the program's folder.
-              const folder = copy.relative.slice(0, copy.relative.indexOf("/") + 1);
-
-              for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
-                const named = String(fact.body.path);
-                const relative =
-                  !named.startsWith("/") &&
-                  !/^[A-Za-z]:/.test(named) &&
-                  !named.split(/[/\\]/).includes("..") &&
-                  !named.includes(copy.home);
-                expect(
-                  relative && named.startsWith(folder),
-                  `code.failed's path is repo-relative and inside ${folder}: ${named}`,
-                ).toBe(true);
-              }
-            }
-
-            // A generated run may omit a failure class; all ten walks together must exercise them.
-            for (const move of seen) {
-              cliMoves.add(move);
-            }
+            // Its fix: inc adds 3, and it swaps.
+            yield* copy.write(edited(source, 3));
+            expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
+            yield* s.press("inc");
+            expect(yield* s.view()).toEqual({ count: 12 });
           }),
         ),
       ),
-      { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
-    );
-    expect(cliMoves).toEqual(new Set(["fit", "shape", "syntax", "load", "compiler"]));
-  }, 1_800_000);
+    600_000,
+  );
+
+  // L17 [secrets]. Plant: put the compiler's message in code.failed; print the token in the install line.
+  it(
+    "L17: no code fact, answer or error copies program source or an absolute path, and code.failed's path is relative, for generated sentinels in the source and its error",
+    () =>
+      fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            word: fc.stringMatching(/^[A-Z]{12}$/),
+            k: fc.integer({ min: 2, max: 9 }),
+            line: fc.integer({ min: 0, max: 20 }),
+          }),
+          ({ word, k, line }) =>
+            scoped(
+              Effect.gen(function* () {
+                const sentinel = `P15SECRET${word}`;
+                const source = yield* counterSource;
+                const copy = yield* fixture;
+                const run = yield* instance(copy);
+                const answers: Array<unknown> = [yield* nextAnswer(run.answers)];
+                const changed = () =>
+                  nextAnswer(run.answers, 60_000, (answer) => {
+                    // Inspect every answer for L17, including late same-hash notifications from L2.
+                    answers.push(answer);
+                    return outcome(answer)._tag !== "same";
+                  });
+                const s = yield* session(run.url, run.founder.key);
+                yield* s.press("inc");
+                // The sentinel in the source the bundle carries, then in the line its error names.
+                yield* copy.write(edited(source, k, (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(sentinel)};\n`));
+                yield* changed();
+                yield* copy.write(
+                  `${source}${"\n".repeat(line)}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
+                );
+                yield* changed();
+                const outputs = [
+                  ...answers.map((a) => JSON.stringify(a)),
+                  ...(yield* s.read("gateway/code")).map((e) => JSON.stringify(e)),
+                  ...(yield* s.read(s.pid)).map((e) => JSON.stringify(e)),
+                ];
+                const forbidden = [sentinel, run.home, copy.home, ROOT];
+
+                for (const output of outputs) {
+                  for (const text of forbidden) {
+                    for (const form of [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)]) {
+                      expect(
+                        output.includes(form),
+                        `an output holds ${text === sentinel ? "the sentinel" : "a path"}`,
+                      ).toBe(false);
+                    }
+                  }
+                }
+
+                const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed");
+                expect(failed.map((e) => e.body.path)).toEqual([copy.relative]);
+              }),
+            ),
+        ),
+        { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
+      ),
+    1_800_000,
+  );
+
+  it.live(
+    "L17: generated save flows keep source, made-up bearer and absolute paths out of dev's actual printed lines, errors and persisted spans",
+    () =>
+      Effect.gen(function* () {
+        const cliMoves = new Set<string>();
+        yield* Effect.promise(() =>
+          fc.assert(
+            fc.asyncProperty(fc.gen(), (g) =>
+              scoped(
+                Effect.gen(function* () {
+                  const word = g(() => fc.stringMatching(/^[A-Z]{12}$/));
+                  const sentinel = `P15SECRET${word}"/+`;
+                  const fakeBytes = g(() =>
+                    fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 32, maxLength: 32 }),
+                  );
+                  const fakeBearer = Base64Url.encode(Uint8Array.from(fakeBytes));
+                  const source = yield* counterSource;
+                  const copy = yield* fixture;
+                  const fs = yield* FileSystem.FileSystem;
+                  yield* fs.writeFileString(
+                    `${copy.home}/counter/src/view.tsx`,
+                    `export function Bad() { "use no memo"; return <div>{${JSON.stringify(`${sentinel} ${fakeBearer} ${copy.file}`)}}</div>; }\nglobalThis.__p15View = Bad;\n`,
+                  );
+                  const run = yield* cli(copy, fakeBytes);
+                  const s = yield* session(run.url, run.founder.key);
+                  const initialSpans = yield* spanOutputs(run.home).pipe(
+                    Effect.map(rebuildSpans),
+                    Effect.repeat({ until: (spans) => spans.length > 0, schedule: Schedule.spaced("50 millis") }),
+                    Effect.timeout("60 seconds"),
+                  );
+                  const recorded = new Set(initialSpans.map((span) => span.spanId));
+                  let k = 1;
+                  let count = 0;
+                  const steps = g(fc.integer, { min: 4, max: 8 });
+                  const seen = new Set<string>();
+
+                  for (let n = 0; n < steps; n++) {
+                    // Each move uses the code and count reached so far. Failures leave both running values alone.
+                    const moves = ["fit", "shape", "syntax", "load", "compiler"];
+                    const move = moves[g(fc.nat, { max: moves.length - 1 })]!;
+                    const next = k + g(fc.integer, { min: 1, max: 5 });
+                    const message = `${sentinel} ${fakeBearer} ${copy.file}`;
+                    // L12's real door path: even a granted person cannot invoke the control-only calls.
+                    const method = g(() => fc.constantFrom("codeInstall", "codeFailed"));
+                    const denied = yield* s.call(method, {
+                      program: PROGRAM,
+                      source: message,
+                      hash: null,
+                      reason: "load",
+                    });
+                    expect(denied.error?.data?.reason).toBe("unknown_method");
+                    let text = edited(
+                      source,
+                      next,
+                      // Rolldown's duplicate-key warning quotes this line, including its private inputs.
+                      (t) =>
+                        `${t}\nglobalThis.__p15 = {${JSON.stringify(message)}: 1, ${JSON.stringify(message)}: 2};\nglobalThis.__p15Edit = ${n};\n`,
+                    );
+
+                    if (move === "shape") {
+                      text = text.replace(
+                        "Schema.Struct({ count: Schema.Int })",
+                        "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
+                      );
+                    } else if (move === "syntax") {
+                      text += `\nexport const broken = ${JSON.stringify(message)} +;\n`;
+                    } else if (move === "load") {
+                      text += `\nthrow new Error(${JSON.stringify(message)});\n`;
+                    } else if (move === "compiler") {
+                      text += '\nimport "./view.tsx";\n';
+                    }
+
+                    yield* copy.write(text);
+                    const printed = yield* run.nextLine(
+                      (line) => line.startsWith("counter:1 ") || line.startsWith(`${PROGRAM} did not load:`),
+                    );
+                    expect(printed.length).toBeGreaterThan(0);
+                    seen.add(move);
+
+                    if (move === "fit") {
+                      k = next;
+                    }
+
+                    yield* s.press("inc");
+                    count += k;
+                    expect(yield* s.view()).toEqual({ count });
+                    const facts = [...(yield* s.read("gateway/code")), ...(yield* s.read(s.pid))];
+                    const spans = yield* spanOutputs(run.home);
+                    expect(spans.length, "the real span sink wrote output").toBeGreaterThan(0);
+                    const rebuilt = rebuildSpans(spans).filter((span) => !recorded.has(span.spanId));
+                    expect(
+                      rebuilt.length,
+                      "dev saves the watcher's completed rebuild, not only control-call spans",
+                    ).toBeGreaterThan(0);
+                    const expectedOutcome = ["fit", "shape"].includes(move) ? "loaded" : "failed";
+                    expect(rebuilt.some((span) => span.attributes.outcome === expectedOutcome)).toBe(true);
+
+                    for (const span of rebuilt) {
+                      expect(span.attributes.program).toBe(PROGRAM);
+                      // A late file event may also rebuild the same bytes (L2).
+                      expect([expectedOutcome, "same"]).toContain(span.attributes.outcome);
+                      expect(span.attributes.bytes).toEqual(expect.any(Number));
+                      expect(Number(span.attributes.bytes)).toBeGreaterThanOrEqual(0);
+                      expect(span.attributes.ms).toEqual(expect.any(Number));
+                      expect(Number(span.attributes.ms)).toBeGreaterThanOrEqual(0);
+                      recorded.add(span.spanId);
+                    }
+
+                    const outputs = [
+                      JSON.stringify(denied),
+                      JSON.stringify(facts),
+                      JSON.stringify(spans),
+                      ...run.stdout,
+                      ...run.stderr,
+                    ];
+
+                    for (const output of outputs) {
+                      for (const forbidden of [sentinel, fakeBearer, copy.home, run.home, ROOT, text]) {
+                        for (const form of [
+                          forbidden,
+                          JSON.stringify(forbidden).slice(1, -1),
+                          encodeURIComponent(forbidden),
+                        ]) {
+                          expect(output.includes(form), "a named output copied private input").toBe(false);
+                        }
+                      }
+                    }
+
+                    // The plan's L17 row: the path is repo-relative. A bundle error names the file it is in,
+                    // which may be a file the program imports, so the path lies in the program's folder.
+                    const folder = copy.relative.slice(0, copy.relative.indexOf("/") + 1);
+
+                    for (const fact of facts.filter((e) => e._tag === "code.failed" && e.body.path !== undefined)) {
+                      const named = String(fact.body.path);
+                      const relative =
+                        !named.startsWith("/") &&
+                        !/^[A-Za-z]:/.test(named) &&
+                        !named.split(/[/\\]/).includes("..") &&
+                        !named.includes(copy.home);
+                      expect(
+                        relative && named.startsWith(folder),
+                        `code.failed's path is repo-relative and inside ${folder}: ${named}`,
+                      ).toBe(true);
+                    }
+                  }
+
+                  // A generated run may omit a failure class; all ten walks together must exercise them.
+                  for (const move of seen) {
+                    cliMoves.add(move);
+                  }
+                }),
+              ),
+            ),
+            { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }), endOnFailure: true },
+          ),
+        );
+        expect(cliMoves).toEqual(new Set(["fit", "shape", "syntax", "load", "compiler"]));
+      }),
+    1_800_000,
+  );
 });

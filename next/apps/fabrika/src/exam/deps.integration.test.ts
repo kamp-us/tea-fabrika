@@ -477,22 +477,28 @@ const LEDGER_IMPLEMENTATION: ReadonlyArray<string> = [
 ];
 
 describe("the real next/", () => {
-  it("P17a: the public door exists and bundles for a browser", async () => {
-    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
-    expect(library).toBeDefined();
-    const entry = exportAt(exportMap(library!), "./gateway/Gateway");
-    expect(entry.kind, "P17a exports the library gateway front").toBe("file");
-    expect(await reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : "")).toEqual(
-      [],
-    );
-  });
-  it("P11: libfabrika exports its required browser entry instead of silently skipping it", async () => {
-    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
-    expect(library).toBeDefined();
-    const entry = exportMap(library!).get(".");
-    expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
-    expect(await reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
-  });
+  it.live("P17a: the public door exists and bundles for a browser", () =>
+    Effect.gen(function* () {
+      const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+      expect(library).toBeDefined();
+      const entry = exportAt(exportMap(library!), "./gateway/Gateway");
+      expect(entry.kind, "P17a exports the library gateway front").toBe("file");
+      expect(
+        yield* Effect.promise(() =>
+          reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : ""),
+        ),
+      ).toEqual([]);
+    }),
+  );
+  it.live("P11: libfabrika exports its required browser entry instead of silently skipping it", () =>
+    Effect.gen(function* () {
+      const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+      expect(library).toBeDefined();
+      const entry = exportMap(library!).get(".");
+      expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
+      expect(yield* Effect.promise(() => reach(NEXT, "@kampus/libfabrika", entry!))).toEqual([]);
+    }),
+  );
   it("P11: every front file the browser check lists is exported and exists, so none is silently skipped", () => {
     const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
     expect(library).toBeDefined();
@@ -505,19 +511,21 @@ describe("the real next/", () => {
   // pinned: one named public contract (0095, ticket 702). Bundled alone for a browser, the Ledger
   // contract loads none of its implementation, so a tab that yields `Ledger` never carries SQL.
   // The entry must exist and the bundle must build: a missing entry or a failed bundle is red.
-  it("pinned: contract only Ledger reaches no store", async () => {
-    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
-    expect(library).toBeDefined();
-    const entry = exportAt(exportMap(library!), "./ledger/Ledger");
-    expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
-    const file = entry.kind === "file" ? entry.file : "";
-    expect(existsSync(file), "the Ledger contract file exists").toBe(true);
-    const { loaded, output } = await bundleContents(NEXT, file);
-    expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
-    expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
-    expect(loaded.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
-    expect(output.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
-  });
+  it.live("pinned: contract only Ledger reaches no store", () =>
+    Effect.gen(function* () {
+      const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+      expect(library).toBeDefined();
+      const entry = exportAt(exportMap(library!), "./ledger/Ledger");
+      expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
+      const file = entry.kind === "file" ? entry.file : "";
+      expect(existsSync(file), "the Ledger contract file exists").toBe(true);
+      const { loaded, output } = yield* Effect.promise(() => bundleContents(NEXT, file));
+      expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
+      expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
+      expect(loaded.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
+      expect(output.filter((id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
+    }),
+  );
 
   it("has packages that are private at 0.0.0, with no side effects, a typecheck, and nothing of today's", () => {
     expect(manifestFaults(NEXT)).toEqual([]);
@@ -527,9 +535,11 @@ describe("the real next/", () => {
     expect(importFaults(NEXT)).toEqual([]);
   });
 
-  it("bundles each top level for a browser without node, electron, cloudflare or MCP", async () => {
-    expect(await bundleFaults(NEXT)).toEqual([]);
-  });
+  it.live("bundles each top level for a browser without node, electron, cloudflare or MCP", () =>
+    Effect.gen(function* () {
+      expect(yield* Effect.promise(() => bundleFaults(NEXT))).toEqual([]);
+    }),
+  );
 });
 
 describe("reading imports", () => {
@@ -804,23 +814,25 @@ describe("a module's front files and its internal/ in the exports map", () => {
   );
 });
 
-it("format: L12 desktop contracts bundle for a browser without their implementations", async () => {
-  // The three public contracts are a client import protocol. Loading one must not load its driver.
-  // After build plant: route a contract through BrainServiceManaged; this must fail even if all
-  // platform imports were tree-shaken from the emitted bytes.
-  const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
-  expect(library).toBeDefined();
-  const implementation =
-    /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
+it.live("format: L12 desktop contracts bundle for a browser without their implementations", () =>
+  Effect.gen(function* () {
+    // The three public contracts are a client import protocol. Loading one must not load its driver.
+    // After build plant: route a contract through BrainServiceManaged; this must fail even if all
+    // platform imports were tree-shaken from the emitted bytes.
+    const library = packagesIn(NEXT).find((pkg) => pkg.manifest.name === "@kampus/libfabrika");
+    expect(library).toBeDefined();
+    const implementation =
+      /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
 
-  for (const name of ["BrainService", "BrainControl", "BrainProbe"]) {
-    const entry = exportAt(exportMap(library!), `./desktop/${name}`);
-    expect(entry.kind).toBe("file");
-    const file = entry.kind === "file" ? entry.file : "";
-    expect(existsSync(file)).toBe(true);
-    const { loaded, output } = await bundleContents(NEXT, file);
-    expect(loaded).toContain(shown(NEXT, file));
-    expect(loaded.filter((path) => implementation.test(path))).toEqual([]);
-    expect(output.filter((path) => implementation.test(path))).toEqual([]);
-  }
-});
+    for (const name of ["BrainService", "BrainControl", "BrainProbe"]) {
+      const entry = exportAt(exportMap(library!), `./desktop/${name}`);
+      expect(entry.kind).toBe("file");
+      const file = entry.kind === "file" ? entry.file : "";
+      expect(existsSync(file)).toBe(true);
+      const { loaded, output } = yield* Effect.promise(() => bundleContents(NEXT, file));
+      expect(loaded).toContain(shown(NEXT, file));
+      expect(loaded.filter((path) => implementation.test(path))).toEqual([]);
+      expect(output.filter((path) => implementation.test(path))).toEqual([]);
+    }
+  }),
+);

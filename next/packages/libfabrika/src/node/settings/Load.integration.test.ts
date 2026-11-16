@@ -138,8 +138,8 @@ const failures = fc.oneof(
 );
 
 describe("L11, no failed load reaches build, Alchemy startup or the settings-start write", () => {
-  it("each failure stops the start with its reason, even when a flag or env sets the same key", async () => {
-    await fc.assert(
+  it("each failure stops the start with its reason, even when a flag or env sets the same key", () =>
+    fc.assert(
       fc.asyncProperty(failures, fc.option(port, { nil: undefined }), fc.boolean(), async (failure, over, viaEnv) => {
         const bad: File = failure.kind === "read" ? { _tag: "folder" } : text(failure.body);
         const good = text("");
@@ -159,16 +159,15 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
         expect(counts).toEqual({ build: 0, alchemy: 0, write: 0 });
       }),
       check,
-    );
-  });
+    ));
 
-  it("good files start once, missing files are empty ones, and the sources keep their order", async () => {
+  it("good files start once, missing files are empty ones, and the sources keep their order", () => {
     const file = fc.oneof(
       fc.constant({ _tag: "missing" as const }),
       fc.constant(text("")),
       port.map((p) => text(`# the person's\n\n[instance]\nport = ${p}\n`)),
     );
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(
         file,
         fc.constantFrom({ _tag: "missing" as const }, text(""), text('fabrika-version = "0.0.0"\n')),
@@ -203,8 +202,8 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
   });
 });
 
-it("T753 L8 one load reads each source once, checks the repo first and reports saved values", async () => {
-  await fc.assert(
+it("T753 L8 one load reads each source once, checks the repo first and reports saved values", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         value: port,
@@ -266,8 +265,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
       },
     ),
     check,
-  );
-});
+  ));
 
 // T730 L6 and L7: the repo context a load returns, for the version warnings. A repo's minimum is
 // the version its own file states, or the declaration's default when the file states none; a flag
@@ -282,8 +280,8 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
     release.map((minimum) => ({ _tag: "stated" as const, minimum })),
   );
 
-  it("repo.minimum is the file's stated version or the default, whatever flag or env says; no repo gives none", async () => {
-    await fc.assert(
+  it("repo.minimum is the file's stated version or the default, whatever flag or env says; no repo gives none", () =>
+    fc.assert(
       fc.asyncProperty(
         repoFile,
         fc.option(release, { nil: undefined }),
@@ -326,8 +324,7 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
         },
       ),
       check,
-    );
-  });
+    ));
 });
 
 it.effect.prop(

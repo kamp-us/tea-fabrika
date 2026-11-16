@@ -380,9 +380,9 @@ describe("p68, an entry keeps its parent", () => {
     }).pipe(Effect.provide(onReferee(fresh()))),
   );
 
-  it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", async () => {
+  it("for any text, the referee places it as a parent exactly when it has the form (fast-check)", () => {
     const text = fc.oneof(fc.stringMatching(PARENT), fc.string(), fc.string({ unit: "binary" }));
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(text, { minLength: 1, maxLength: 8 }), (texts) =>
         Effect.runPromise(
           Effect.gen(function* () {

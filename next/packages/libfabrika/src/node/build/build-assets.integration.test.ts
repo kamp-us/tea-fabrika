@@ -204,8 +204,8 @@ describe("P16 assets and Compiler", () => {
   it(
     "outside metadata plants: malformed package and Compiler-ledger JSON fail in the typed channel",
     { timeout: buildTimeout(4) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, fc.constantFrom("manifest", "ledger"), async (value, kind) => {
           const f = fixture("View", value);
           previous(f, value);
@@ -224,14 +224,13 @@ describe("P16 assets and Compiler", () => {
           expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
         }),
         { ...runs, numRuns: runsFor({ fast: 3, full: 4 }) },
-      );
-    },
+      ),
   );
   it(
     "assets: entry, secondary chunks and CSS retain routes, hashes, MIME types and bytes; missing script is 404",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(names, values, async (name, value) => {
           const f = fixture(name, value),
             built = await run(f.options);
@@ -262,11 +261,10 @@ describe("P16 assets and Compiler", () => {
           ).toBe(404);
         }),
         runs,
-      );
-    },
+      ),
   );
-  it("asset byte buffers decode as UTF-8 and keep their body and hash", { timeout: buildTimeout() }, async () => {
-    await fc.assert(
+  it("asset byte buffers decode as UTF-8 and keep their body and hash", { timeout: buildTimeout() }, () =>
+    fc.assert(
       fc.asyncProperty(graphs, async ({ name, value }) => {
         const f = fixture(name, value),
           native = await vi.importActual<Roll>("rolldown"),
@@ -312,15 +310,15 @@ describe("P16 assets and Compiler", () => {
         }
       }),
       runs,
-    );
-  });
+    ),
+  );
 
   for (const form of cssForms) {
     it(
       `CSS graph plant: ${form} with spaces, escapes and media lists includes every imported rule`,
       { timeout: buildTimeout(runs.numRuns + 1) },
-      async () => {
-        await fc.assert(
+      () =>
+        fc.assert(
           fc.asyncProperty(graphs, cssImports, async ({ name, value, id }, css) => {
             const f = fixture(name, value),
               pkg = dirname(f.file),
@@ -399,16 +397,15 @@ describe("P16 assets and Compiler", () => {
             ],
             endOnFailure: true,
           },
-        );
-      },
+        ),
     );
   }
 
   it(
     "CSS imports keep remote rules and wrap local rules only when a media condition exists",
     { timeout: buildTimeout(runs.numRuns + 2) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           graphs,
           fc.constantFrom("", "print", "(min-width: 40em)"),
@@ -459,47 +456,42 @@ describe("P16 assets and Compiler", () => {
             [{ name: "View", value: "css", id: 2 }, "print", "https"],
           ],
         },
-      );
-    },
+      ),
   );
-  it(
-    "Compiler: reachable refused TSX fails before replacing the last good brain",
-    { timeout: buildTimeout(8) },
-    async () => {
-      await fc.assert(
-        fc.asyncProperty(
-          names,
-          values,
-          fc.constantFrom("ref", "clock", "directive", "stale"),
-          async (name, value, kind) => {
-            const f = fixture(name, value),
-              good = `last-good-${value}`;
-            previous(f, good);
-            const source =
-              kind === "ref"
-                ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
-                : kind === "clock"
-                  ? `export const ${name}=()=> <b>{Date.now()}</b>`
-                  : kind === "directive"
-                    ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
-                    : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
-            const path = "programs/compiler/window.tsx",
-              ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
-            expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
-            writeFileSync(f.file, source);
-            const result = await Effect.runPromise(
-              Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
-            );
-            expect(result).toMatchObject({
-              _tag: "Failure",
-              failure: { _tag: "BuildError", reason: "compiler" },
-            });
-            expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
-          },
-        ),
-        { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
-      );
-    },
+  it("Compiler: reachable refused TSX fails before replacing the last good brain", { timeout: buildTimeout(8) }, () =>
+    fc.assert(
+      fc.asyncProperty(
+        names,
+        values,
+        fc.constantFrom("ref", "clock", "directive", "stale"),
+        async (name, value, kind) => {
+          const f = fixture(name, value),
+            good = `last-good-${value}`;
+          previous(f, good);
+          const source =
+            kind === "ref"
+              ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
+              : kind === "clock"
+                ? `export const ${name}=()=> <b>{Date.now()}</b>`
+                : kind === "directive"
+                  ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
+                  : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
+          const path = "programs/compiler/window.tsx",
+            ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
+          expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
+          writeFileSync(f.file, source);
+          const result = await Effect.runPromise(
+            Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
+          );
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "BuildError", reason: "compiler" },
+          });
+          expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
+        },
+      ),
+      { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
+    ),
   );
   it("Compiler plants run independently against the moved real check for every refusal", () => {
     fc.assert(
@@ -528,8 +520,8 @@ describe("P16 cleanup and recording", () => {
   it(
     "the bundler keeps dynamic imports in one module, records its default phase and types acquisition failures",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, async (value) => {
           const f = fixture("View", value),
             entry = join(f.home, "dynamic.ts"),
@@ -568,8 +560,7 @@ describe("P16 cleanup and recording", () => {
           }
         }),
         runs,
-      );
-    },
+      ),
   );
 
   for (const point of ["after backup", "before final", "after final"] as const) {
@@ -577,8 +568,8 @@ describe("P16 cleanup and recording", () => {
       it(
         `publication plant: ${interrupt ? "interruption" : "failure"} ${point} preserves the last good file`,
         { timeout: buildTimeout(2) },
-        async () => {
-          await fc.assert(
+        () =>
+          fc.assert(
             fc.asyncProperty(values, async (value) => {
               const f = fixture("View", value);
               previous(f, value);
@@ -650,8 +641,7 @@ describe("P16 cleanup and recording", () => {
               expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(value);
             }),
             { ...runs, numRuns: runsFor({ fast: 2, full: 2 }), endOnFailure: true },
-          );
-        },
+          ),
       );
     }
   }
@@ -660,8 +650,8 @@ describe("P16 cleanup and recording", () => {
     it(
       `publication plant: interruption during an in-flight ${point} rename keeps a complete brain after delayed I/O settles`,
       { timeout: buildTimeout() },
-      async () => {
-        await fc.assert(
+      () =>
+        fc.assert(
           fc.asyncProperty(
             values,
             fc.record({
@@ -738,16 +728,15 @@ describe("P16 cleanup and recording", () => {
             },
           ),
           { ...runs, endOnFailure: true },
-        );
-      },
+        ),
     );
   }
 
   it(
     "cleanup plants run on P12's real bundler: failed and interrupted generation closes acquired handles",
     { timeout: buildTimeout(2) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, async (value) => {
           for (const interrupt of [false, true]) {
             const f = fixture("View", value),
@@ -804,14 +793,13 @@ describe("P16 cleanup and recording", () => {
           }
         }),
         { ...runs, numRuns: runsFor({ fast: 2, full: 2 }) },
-      );
-    },
+      ),
   );
   it(
     "cleanup: failures and interruption at each acquired Rolldown handle close it and preserve old output",
     { timeout: buildTimeout(6) },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, fc.integer({ min: 0, max: 2 }), fc.boolean(), async (value, phase, interrupt) => {
           const f = fixture("View", value);
           previous(f, value);
@@ -873,14 +861,13 @@ describe("P16 cleanup and recording", () => {
           ...runs,
           numRuns: runsFor({ fast: 3, full: 6 }),
         },
-      );
-    },
+      ),
   );
   it(
     "asset collision plant: duplicate emitted routes fail without publishing partial output",
     { timeout: buildTimeout() },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(values, async (value) => {
           const f = fixture("View", value);
           previous(f, value);
@@ -918,15 +905,14 @@ describe("P16 cleanup and recording", () => {
           vi.resetModules();
         }),
         runs,
-      );
-    },
+      ),
   );
   it(
     "recording: success and failure retain phases, outcomes, duration, versions, sizes and hashes without content",
     { timeout: buildTimeout() },
-    async () => {
+    () => {
       const versions = { rolldown: installed("rolldown"), effect: installed("effect") };
-      await fc.assert(
+      return fc.assert(
         fc.asyncProperty(values, async (value) => {
           for (const phase of ["success", "program", "window", "brain"] as const) {
             const f = fixture("View", value),
@@ -1198,13 +1184,12 @@ describe("P40 qualified window routes", () => {
   it(
     "L6: window programs with equal short names in different packs get their own valid routes",
     { timeout: 10 * windowRuns.numRuns * 10_000 },
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 6 }), async (tape) => {
           await Effect.runPromise(Effect.scoped(windowWalk(tape)).pipe(Effect.provide(NodeServices.layer)));
         }),
         windowRuns,
-      );
-    },
+      ),
   );
 });

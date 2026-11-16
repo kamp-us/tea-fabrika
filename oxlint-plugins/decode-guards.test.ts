@@ -21,8 +21,8 @@ const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
 });
 
 describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
-  it("fires on the parse forms oxlint resolves, and on nothing else or outside next/", async () => {
-    await fc.assert(
+  it("fires on the parse forms oxlint resolves, and on nothing else or outside next/", () =>
+    fc.assert(
       fc.asyncProperty(fc.record({ name: word.map((w) => `v${w}`), text: fc.json() }), async ({ name, text }) => {
         const body = (inside: boolean) =>
           file([
@@ -62,8 +62,7 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
         }
       }),
       { seed: 119120, numRuns: 4 },
-    );
-  });
+    ));
 
   it("scenario: replayed over the plan's decode sites, no bare JSON.parse is left in them", () => {
     const sites = [

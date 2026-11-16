@@ -280,10 +280,10 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
   );
 });
 
-it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", async () => {
+it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", () => {
   // Plant: let a failed read escape collect as a defect, as a bare JSON.parse of a missing report would.
   const key = fc.constantFrom(...Object.keys(env));
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(
       fc.uniqueArray(key),
       fc.oneof(broken, fc.constant(job)),
@@ -317,7 +317,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
   );
 });
 
-it("TT6: the jobs API is asked again, a pause apart, until the steps before this one show an end, at most TRIES times", async () => {
+it("TT6: the jobs API is asked again, a pause apart, until the steps before this one show an end, at most TRIES times", () => {
   // Plant: read the answer once, so the step just before is timed as never ended.
   const running = structuredClone(job);
   running.steps[1]!.completed_at = null;
@@ -326,7 +326,7 @@ it("TT6: the jobs API is asked again, a pause apart, until the steps before this
 
   // How many answers come before the step just before the time table shows its end: none, some, or
   // more than the tries allow.
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(fc.integer({ min: 0, max: TRIES + 3 }), async (late) => {
       const asked: number[] = [];
       const timings = await timingsOf(

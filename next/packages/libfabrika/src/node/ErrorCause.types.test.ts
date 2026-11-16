@@ -65,14 +65,13 @@ describe("T695, C8: error types accept a diagnostic cause", () => {
     expectTypeOf<Effect.Error<Next>>().toEqualTypeOf<IdError>();
   });
 
-  it("each translating class keeps a generated cause as given", async () => {
-    await fc.assert(
+  it("each translating class keeps a generated cause as given", () =>
+    fc.assert(
       fc.property(causes, (cause) => {
         for (const error of made(cause)) {
           expect(Object.is(error.cause, cause), `${error._tag} keeps its cause`).toBe(true);
         }
       }),
       { seed: SEED, numRuns: 100 },
-    );
-  });
+    ));
 });

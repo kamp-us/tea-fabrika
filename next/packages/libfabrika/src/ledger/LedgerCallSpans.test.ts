@@ -44,8 +44,8 @@ const line = (traceId: string, body: string) =>
   });
 
 describe("ledger.call, next/ tracing keep-laws", () => {
-  it("generated calls and pages have one span with argument tags already set at send", async () => {
-    await fc.assert(
+  it("generated calls and pages have one span with argument tags already set at send", () =>
+    fc.assert(
       fc.asyncProperty(
         context,
         text,
@@ -157,11 +157,10 @@ describe("ledger.call, next/ tracing keep-laws", () => {
         },
       ),
       CHECK,
-    );
-  });
+    ));
 
-  it("generated unreachable and malformed replies end failed with the typed reason", async () => {
-    await fc.assert(
+  it("generated unreachable and malformed replies end failed with the typed reason", () =>
+    fc.assert(
       fc.asyncProperty(
         context,
         text,
@@ -230,6 +229,5 @@ describe("ledger.call, next/ tracing keep-laws", () => {
         },
       ),
       CHECK,
-    );
-  });
+    ));
 });

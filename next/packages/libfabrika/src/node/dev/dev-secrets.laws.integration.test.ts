@@ -488,8 +488,8 @@ it("type: [secrets] P12 bearer-type gap, control services require a Redacted bea
   expectTypeOf<Parameters<typeof control>[2]>().toEqualTypeOf<Redacted.Redacted<string>>();
 });
 
-it("[secrets] generated flows keep bearer, private material, bodies and raw frames out of every named output", async () => {
-  await fc.assert(
+it("[secrets] generated flows keep bearer, private material, bodies and raw frames out of every named output", () =>
+  fc.assert(
     fc.asyncProperty(generated, async (sample) => {
       const { outputs, words } = await flow(sample);
       clean(outputs, words);
@@ -518,11 +518,10 @@ it("[secrets] generated flows keep bearer, private material, bodies and raw fram
         ],
       ],
     },
-  );
-});
+  ));
 
-it("[secrets] the Worker control edge accepts the generated Redacted bearer without returning it", async () => {
-  await fc.assert(
+it("[secrets] the Worker control edge accepts the generated Redacted bearer without returning it", () =>
+  fc.assert(
     fc.asyncProperty(generated, async (sample) => {
       const { answer, outputs, words } = await flow(sample);
       expect(Exit.isSuccess(answer)).toBe(true);
@@ -532,5 +531,4 @@ it("[secrets] the Worker control edge accepts the generated Redacted bearer with
       clean(outputs, words);
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
-  );
-});
+  ));

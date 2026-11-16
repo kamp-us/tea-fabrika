@@ -25,8 +25,8 @@ const services = Layer.mergeAll(NodeServices.layer, Digest.layerWebCrypto);
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
     "L1: every prefix keeps the pinned tree after checkout edits, branch switches and origin moves",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),
           fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/).map((word) => `trunk-${word}`),
@@ -85,15 +85,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
             ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * pinnedReadGitCommands * gitCommandBudget,
   );
 
   it(
     "L2: only an absent tree entry is an empty document; every requested Git failure refuses",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
@@ -221,15 +220,14 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
           ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * failedReadGitCommands * gitCommandBudget,
   );
 
   it(
     "L2: each committed legacy-file combination keeps its refusal rule despite opposite checkout files",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) =>
           Effect.runPromise(
             Effect.scoped(
@@ -285,13 +283,12 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
           ),
         ),
         runs,
-      );
-    },
+      ),
     runs.numRuns * legacyGitCommands * gitCommandBudget,
   );
 
-  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", async () => {
-    await fc.assert(
+  it("L10: success, refusal and interruption release every acquired Git child and temporary directory", () =>
+    fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (tape) => {
         await Effect.runPromise(
           Effect.gen(function* () {
@@ -382,8 +379,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
         );
       }),
       { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },
-    );
-  });
+    ));
 });
 
 // In-process Git replies exercise the adapter in a box. The real-Git laws above still run on the lead.

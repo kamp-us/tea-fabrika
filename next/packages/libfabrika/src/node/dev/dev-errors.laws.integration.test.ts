@@ -39,8 +39,8 @@ const deploy = (port: number) => (local: Context.Context<never>) =>
   });
 
 for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as const) {
-  it(`instance ${mode} exit has its exact ControlError reason`, async () => {
-    await fc.assert(
+  it(`instance ${mode} exit has its exact ControlError reason`, () =>
+    fc.assert(
       fc.asyncProperty(fc.uuid(), async (id) => {
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
@@ -85,12 +85,11 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 10 }) },
-    );
-  });
+    ));
 }
 
-it("instance reports start_timeout when deployment never opens the control listener", async () => {
-  await fc.assert(
+it("instance reports start_timeout when deployment never opens the control listener", () =>
+  fc.assert(
     fc.asyncProperty(fc.uuid(), async (build) => {
       const home = mkdtempSync(join(tmpdir(), "p12-time-"));
       vi.stubEnv("FABRIKA_HOME", home);
@@ -127,12 +126,11 @@ it("instance reports start_timeout when deployment never opens the control liste
       }
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
-  );
-});
+  ));
 
 for (const mode of ["exit", "spawn"] as const) {
-  it(`instance returns sample reason to tracing when RSS ${mode} fails and keeps the brain alive`, async () => {
-    await fc.assert(
+  it(`instance returns sample reason to tracing when RSS ${mode} fails and keeps the brain alive`, () =>
+    fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 255 }), async (code) => {
         const home = mkdtempSync(join(tmpdir(), "p12-rss-"));
         vi.stubEnv("FABRIKA_HOME", home);
@@ -216,6 +214,5 @@ for (const mode of ["exit", "spawn"] as const) {
         }
       }),
       { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) },
-    );
-  });
+    ));
 }

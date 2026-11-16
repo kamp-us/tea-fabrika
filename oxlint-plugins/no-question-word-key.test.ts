@@ -104,8 +104,8 @@ const bindings = (name: string, i: number) => [
   `function z${i}(target: {${name}: number}) {target.${name} = 1;}`,
 ];
 
-it("refuses all five words in every declaration and binding form, each by exactly one rule", async () => {
-  await fc.assert(
+it("refuses all five words in every declaration and binding form, each by exactly one rule", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.oneof(fc.constantFrom(...WORDS), unicodeKey),
       identifier,
@@ -151,11 +151,10 @@ it("refuses all five words in every declaration and binding form, each by exactl
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", async () => {
-  await fc.assert(
+it("real config holds generated next/, exam, test and skill paths, and leaves today's paths off", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.tuple(
         identifier,
@@ -199,11 +198,10 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", async () => {
-  await fc.assert(
+it("generated values, dynamic keys, external reads, comments, SQL and neighboring names pass", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({ value: unicodeKey, dynamic: identifier, near: neighbor, word: fc.constantFrom(...WORDS) }),
       async ({ value, dynamic, near, word }) => {
@@ -230,8 +228,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
       },
     ),
     runs,
-  );
-});
+  ));
 
 // format: these exact TypeScript spellings pin decoded names, shorthand and computed identifiers.
 it("format: quoted, escaped, shorthand and computed spellings", async () => {

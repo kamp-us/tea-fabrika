@@ -16,11 +16,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect } from "vitest";
 import { build } from "../src/build.ts";
 
 const SEED = 119120;
@@ -213,8 +214,9 @@ const recordShows = () => {
 };
 
 describe("Tuval's page runs on Effect's browser runtime", () => {
-  it("L2: for generated pagehide events, the page stays up while each is persisted and stops at the first that is not, reporting nothing", async () => {
-    await Effect.runPromise(
+  it.live(
+    "L2: for generated pagehide events, the page stays up while each is persisted and stops at the first that is not, reporting nothing",
+    () =>
       Effect.scoped(
         Effect.gen(function* () {
           const b = yield* browser();
@@ -272,11 +274,12 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           );
         }),
       ),
-    );
-  }, 300_000);
+    300_000,
+  );
 
-  it("L3 scenario: one real back/forward cache round trip keeps the window mounted, and it dials again; Chromium hands the listener the same persisted event on every trip, so more trips add no case", async () => {
-    await Effect.runPromise(
+  it.live(
+    "L3 scenario: one real back/forward cache round trip keeps the window mounted, and it dials again; Chromium hands the listener the same persisted event on every trip, so more trips add no case",
+    () =>
       Effect.scoped(
         Effect.gen(function* () {
           // The full Chromium, with Playwright's own `--disable-back-forward-cache` taken off: the
@@ -308,11 +311,12 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           expect(yield* children(page), "the window is still mounted once it dialed").toBeGreaterThan(0);
         }),
       ),
-    );
-  }, 120_000);
+    120_000,
+  );
 
-  it("L4: a generated failure of the page program is reported on the console", async () => {
-    await Effect.runPromise(
+  it.live(
+    "L4: a generated failure of the page program is reported on the console",
+    () =>
       Effect.scoped(
         Effect.gen(function* () {
           const b = yield* browser();
@@ -341,6 +345,6 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
           );
         }),
       ),
-    );
-  }, 300_000);
+    300_000,
+  );
 });

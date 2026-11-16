@@ -62,8 +62,8 @@ const placements = (name: string, i: number, tsx: boolean) => [
     : []),
 ];
 
-it("rejects the word in generated names, spellings and placements, and passes their neighbors", async () => {
-  await fc.assert(
+it("rejects the word in generated names, spellings and placements, and passes their neighbors", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         before: fc.option(part, { nil: undefined }),
@@ -115,11 +115,10 @@ it("rejects the word in generated names, spellings and placements, and passes th
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("an exception allows only its annotated line, at generated offsets beside unannotated uses", async () => {
-  await fc.assert(
+it("an exception allows only its annotated line, at generated offsets beside unannotated uses", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.record({
         filler: fc.array(fc.constantFrom("a();", "// instance", "b(`instance`);"), { maxLength: 6 }),
@@ -144,11 +143,10 @@ it("an exception allows only its annotated line, at generated offsets beside una
       },
     ),
     runs,
-  );
-});
+  ));
 
-it("real config holds generated next/ paths and leaves today's version, .agents/ and top-level scripts out", async () => {
-  await fc.assert(
+it("real config holds generated next/ paths and leaves today's version, .agents/ and top-level scripts out", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.tuple(letters, fc.constantFrom("ts", "tsx"), fc.constantFrom("", ".test", ".test-support")),
       async ([name, extension, kind]) => {
@@ -176,8 +174,7 @@ it("real config holds generated next/ paths and leaves today's version, .agents/
       },
     ),
     runs,
-  );
-});
+  ));
 
 it("absolute, relative and Windows spellings of a path get the same next/-only scope", () => {
   fc.assert(

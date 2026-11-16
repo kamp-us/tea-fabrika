@@ -283,17 +283,15 @@ describe("p22 real counter in the runner", () => {
       Effect.forEach(
         ["missing", generated],
         (value) =>
-          Effect.promise(async () => {
-            const { counter } = await import("./program.ts");
-            const { ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
-            await Effect.runPromise(
-              Effect.gen(function* () {
-                const loader = yield* ProgramLoader;
-                expect(yield* Effect.flip(loader.load(value))).toMatchObject({
-                  reason: "no_program",
-                });
-              }).pipe(Effect.provide(ProgramLoader.layer({ [PROGRAM]: counter }, {}))),
-            );
+          Effect.gen(function* () {
+            const { counter } = yield* Effect.promise(() => import("./program.ts"));
+            const { ProgramLoader }: typeof import("@kampus/libfabrika") = yield* Effect.promise(() => import(LIBRARY));
+            yield* Effect.gen(function* () {
+              const loader = yield* ProgramLoader;
+              expect(yield* Effect.flip(loader.load(value))).toMatchObject({
+                reason: "no_program",
+              });
+            }).pipe(Effect.provide(ProgramLoader.layer({ [PROGRAM]: counter }, {})));
           }),
         { concurrency: 1, discard: true },
       ),

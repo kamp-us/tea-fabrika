@@ -197,8 +197,8 @@ const testPath = fc
 // lost); read the excludes once at load, so the pushed exclude is ignored (red).
 // Each run gets its own folder and its own Vitest: one Vitest reused over a changed tree kept its
 // first selection, so a reused one is no reference.
-it("L3: next files equal Vitest's own selection on generated trees, new excludes included", async () => {
-  await fc.assert(
+it("L3: next files equal Vitest's own selection on generated trees, new excludes included", () =>
+  fc.assert(
     fc.asyncProperty(fc.uniqueArray(testPath, { minLength: 1, maxLength: 8 }), fc.nat(), async (paths, pick) => {
       const folder = mkdtempSync(join(tmpdir(), "t890-dots-"));
 
@@ -229,8 +229,7 @@ it("L3: next files equal Vitest's own selection on generated trees, new excludes
       }
     }),
     options,
-  );
-});
+  ));
 
 // L4. Plants, each run once on shard-rows.ts and restored: exit 0 always (red); print only the
 // first path (red).

@@ -96,8 +96,8 @@ const flush = Effect.fnUntraced(function* (home: string, record: string, row: Sp
 const ids = fc.stringMatching(/^[a-f0-9]{16}$/);
 
 describe("spanOutputs", () => {
-  it("every queue's rows are read before any record's rows, wherever the record's file sorts", async () => {
-    await fc.assert(
+  it("every queue's rows are read before any record's rows, wherever the record's file sorts", () =>
+    fc.assert(
       fc.asyncProperty(fc.uniqueArray(ids, { minLength: 3, maxLength: 3 }), ([waiting = "", early = "", late = ""]) =>
         Effect.runPromise(
           Effect.scoped(
@@ -118,11 +118,10 @@ describe("spanOutputs", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 
-  it("a flush that lands under a listing never hides the span, wherever its record's file sorts and whether or not that file was there", async () => {
-    await fc.assert(
+  it("a flush that lands under a listing never hides the span, wherever its record's file sorts and whether or not that file was there", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           spanId: ids,
@@ -174,6 +173,5 @@ describe("spanOutputs", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 8, full: 40 }) },
-    );
-  });
+    ));
 });

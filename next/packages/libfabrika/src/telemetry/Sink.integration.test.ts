@@ -1249,7 +1249,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       }),
   );
 
-  it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", async () => {
+  it("every kept tag is a string of at most 128 characters, a number or a boolean; the rest is counted", () => {
     const key = fc.constantFrom(...Array.from({ length: 8 }, (_, n) => `fab.k${n}`));
     const value = fc.oneof(
       fc.string({ maxLength: 400 }),
@@ -1262,7 +1262,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
       fc.constant(null),
       fc.bigInt(),
     );
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) => {
         return Effect.runPromise(
           Effect.gen(function* () {
@@ -1403,9 +1403,9 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
     }),
   );
 
-  it("a failure whose reason is tagged keeps the reason's tag in content, never its message or cause", async () => {
+  it("a failure whose reason is tagged keeps the reason's tag in content, never its message or cause", () => {
     const word = fc.stringMatching(/^[A-Z][A-Za-z]{0,15}$/);
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(word, word, fc.string({ maxLength: 40 }), (outer, tag, text) => {
         const reason = Object.assign(new Error(`${NOTE}-${text}`), {
           _tag: tag,

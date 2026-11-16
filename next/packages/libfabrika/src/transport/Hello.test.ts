@@ -125,8 +125,8 @@ describe("P10 hello", () => {
   // d2: for any signed hello (a fresh key, any url, tab and nonce) that admission refuses
   // (not_granted, its one refusal), the refusal carries that caller's own checked fingerprint and spends no nonce.
   // Plant: return the refusal without the fingerprint.
-  it("d2: any refused signed hello names its own checked fingerprint", async () => {
-    await fc.assert(
+  it("d2: any refused signed hello names its own checked fingerprint", () =>
+    fc.assert(
       fc.asyncProperty(fc.webUrl(), fc.string(), fc.string(), (url, tab, nonce) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -169,8 +169,7 @@ describe("P10 hello", () => {
         ),
       ),
       { seed: 119120, endOnFailure: true, numRuns: 40 },
-    );
-  });
+    ));
 
   for (const binding of ["tab", "nonce"] as const) {
     it.effect.prop(

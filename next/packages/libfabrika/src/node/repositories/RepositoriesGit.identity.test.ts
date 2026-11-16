@@ -17,8 +17,8 @@ const identityGitCommands = 6 + 1 + 1 + 11 + 4 * 4 * 11;
 describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) => {
   it(
     "L5: real clone/common-directory identity separates same basenames and destinations but keeps aliases and credential changes",
-    async () => {
-      await fc.assert(
+    () =>
+      fc.assert(
         fc.asyncProperty(
           fc.stringMatching(/^[a-z][a-z0-9]{5,15}$/),
           fc.array(fc.nat(), { minLength: 1, maxLength: 4 }),
@@ -81,8 +81,7 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
             ),
         ),
         identityRuns,
-      );
-    },
+      ),
     identityRuns.numRuns * identityGitCommands * gitCommandBudget,
   );
 });

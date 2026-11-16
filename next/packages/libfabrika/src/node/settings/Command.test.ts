@@ -264,8 +264,8 @@ const inputs = fc.record({
   envVersion: fc.option(version, { nil: undefined }),
 });
 
-it("T753 L8 explicit values equal to defaults remain visible without all", async () => {
-  await fc.assert(
+it("T753 L8 explicit values equal to defaults remain visible without all", () =>
+  fc.assert(
     fc.asyncProperty(fc.record({ viaEnv: fc.boolean(), all: fc.boolean() }), async (v) => {
       const d = Declarations.port;
       const ran = await run({
@@ -280,8 +280,7 @@ it("T753 L8 explicit values equal to defaults remain visible without all", async
       expect(ran.counts.writes).toEqual([]);
     }),
     check,
-  );
-});
+  ));
 
 type Generated = typeof inputs extends fc.Arbitrary<infer I> ? I : never;
 
@@ -305,8 +304,8 @@ const row = (line: string) =>
   line.split("\n").some((l) => Declarations.all.declarations.some((d) => l.trimStart().startsWith(d.path)));
 
 describe("L7, the command loads once, prints only after success, selects no repo and writes nothing", () => {
-  it("a run prints the library's report for its load, or fails with no report; it reads only the person's file", async () => {
-    await fc.assert(
+  it("a run prints the library's report for its load, or fails with no report; it reads only the person's file", () =>
+    fc.assert(
       fc.asyncProperty(inputs, async (g) => {
         const { input, flags } = shape(g);
         const ran = await run(input);
@@ -330,8 +329,7 @@ describe("L7, the command loads once, prints only after success, selects no repo
         }
       }),
       check,
-    );
-  });
+    ));
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
@@ -361,8 +359,8 @@ const placed = (word: string) => {
 };
 
 describe("L8 [secrets], unrelated environment values and refused file values never reach output or telemetry", () => {
-  it("stdout, stderr, the formatted failure, log fields and spans hold no form of a secret", async () => {
-    await fc.assert(
+  it("stdout, stderr, the formatted failure, log fields and spans hold no form of a secret", () =>
+    fc.assert(
       fc.asyncProperty(
         secret.chain((word) => fc.tuple(fc.constant(word), placed(word))),
         fc.subarray(
@@ -397,6 +395,5 @@ describe("L8 [secrets], unrelated environment values and refused file values nev
         },
       ),
       check,
-    );
-  });
+    ));
 });

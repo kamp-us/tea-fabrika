@@ -66,13 +66,13 @@ const brainEvent: fc.Arbitrary<typeof BrainEvent.Type> = fc.oneof(
 describe("P12 local brain life", () => {
   // The memory restart plan makes the limit a setting, `desktop.brain-memory`, so the law generates it;
   // the pinned cases keep 0292's 500 MB mark.
-  it("p81 plant: sample workerd RSS, replace at the limit, never measure the Node parent", async () => {
+  it("p81 plant: sample workerd RSS, replace at the limit, never measure the Node parent", () => {
     const child = fc.integer({ min: 1 }).filter((pid) => pid !== process.pid);
     const belowCap: [number, number, number] = [499_999_999, 417, 500_000_000];
     const atCap: [number, number, number] = [500_000_000, 417, 500_000_000];
     const aboveCap: [number, number, number] = [500_000_001, 417, 500_000_000];
     const limit = fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER });
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), child, limit, (bytes, pid, limit) =>
         runNode(
           Effect.gen(function* () {
@@ -100,8 +100,8 @@ describe("P12 local brain life", () => {
       { seed: SEED, examples: [belowCap, atCap, aboveCap] },
     );
   });
-  it("p81/content plant: remove a pending event before acknowledgement or leak error text", async () => {
-    await fc.assert(
+  it("p81/content plant: remove a pending event before acknowledgement or leak error text", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
@@ -132,15 +132,14 @@ describe("P12 local brain life", () => {
         ),
       ),
       { seed: SEED, examples: [[firstStart]] },
-    );
-  });
+    ));
 });
 
 describe("P12 durable brain outbox", () => {
   for (const reader of ["pending", "last"] as const) {
-    it(`malformed saved ${reader} returns BrainError without a defect`, async () => {
+    it(`malformed saved ${reader} returns BrainError without a defect`, () => {
       const schema = reader === "pending" ? BrainEvent : Schema.NonEmptyString;
-      await fc.assert(
+      return fc.assert(
         fc.asyncProperty(
           fc.jsonValue().filter((raw) => !Schema.is(schema)(raw)),
           async (raw) => {
@@ -170,8 +169,8 @@ describe("P12 durable brain outbox", () => {
     });
   }
 
-  it("FileSystem writes each pending and last file in durable order, including acknowledgement", async () => {
-    await fc.assert(
+  it("FileSystem writes each pending and last file in durable order, including acknowledgement", () =>
+    fc.assert(
       fc.asyncProperty(fc.uniqueArray(brainEvent, { minLength: 1, maxLength: 4, selector: (row) => row.id }), (rows) =>
         runNode(
           Effect.gen(function* () {
@@ -291,10 +290,9 @@ describe("P12 durable brain outbox", () => {
           [[firstStart, { ...firstStart, id: "next", start: "next-start", at: 43 }]],
         ],
       },
-    );
-  });
-  it("an event with an excess property is a bad_row on add and on a saved pending row", async () => {
-    await fc.assert(
+    ));
+  it("an event with an excess property is a bad_row on add and on a saved pending row", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, fc.string({ minLength: 1 }), (event, extra) =>
         runNode(
           Effect.gen(function* () {
@@ -315,10 +313,9 @@ describe("P12 durable brain outbox", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
-  it("an outbox id accepts an exact retry once and rejects changed content", async () => {
-    await fc.assert(
+    ));
+  it("an outbox id accepts an exact retry once and rejects changed content", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
@@ -345,11 +342,10 @@ describe("P12 durable brain outbox", () => {
         ),
       ),
       { seed: SEED, examples: [[firstStart]] },
-    );
-  });
+    ));
 
-  it("outbox writes release both the pending file and its directory handle", async () => {
-    await fc.assert(
+  it("outbox writes release both the pending file and its directory handle", () =>
+    fc.assert(
       fc.asyncProperty(brainEvent, (event) =>
         runNode(
           Effect.gen(function* () {
@@ -363,6 +359,5 @@ describe("P12 durable brain outbox", () => {
         ),
       ),
       { seed: SEED, examples: [[firstStart]] },
-    );
-  });
+    ));
 });

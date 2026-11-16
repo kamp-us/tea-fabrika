@@ -23,8 +23,8 @@ const homes = fc
 const byLabel = ([a]: readonly [string, string], [b]: readonly [string, string]) => (a < b ? -1 : a > b ? 1 : 0);
 
 describe("stored", () => {
-  it("[secrets] files renamed into place under a listing never fail the scan, and the stopped pass reads each file's last write", async () => {
-    await fc.assert(
+  it("[secrets] files renamed into place under a listing never fail the scan, and the stopped pass reads each file's last write", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({ secret: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/), home: homes }),
         ({ secret, home: { files, renamed } }) =>
@@ -84,11 +84,10 @@ describe("stored", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
+    ));
 
-  it("[secrets] a row deleted from a WAL database that the stop folds away is still found, by the running pass", async () => {
-    await fc.assert(
+  it("[secrets] a row deleted from a WAL database that the stop folds away is still found, by the running pass", () =>
+    fc.assert(
       fc.asyncProperty(fc.stringMatching(/^[A-Za-z0-9]{24,40}$/), (secret) =>
         Effect.runPromise(
           Effect.scoped(
@@ -125,11 +124,10 @@ describe("stored", () => {
         ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
-    );
-  });
+    ));
 
-  it("[secrets] every file the running pass reads is an output L17 checks, the span queue's WAL with its deleted row included", async () => {
-    await fc.assert(
+  it("[secrets] every file the running pass reads is an output L17 checks, the span queue's WAL with its deleted row included", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.record({
           secret: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/),
@@ -180,11 +178,10 @@ describe("stored", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 10 }) },
-    );
-  });
+    ));
 
-  it("[secrets] only a file gone in the running pass is passed over: any other failure, in either pass, fails the scan", async () => {
-    await fc.assert(
+  it("[secrets] only a file gone in the running pass is passed over: any other failure, in either pass, fails the scan", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.uniqueArray(fc.constantFrom(...NAMES), { minLength: 1 }).chain((files) =>
           fc.record({
@@ -265,6 +262,5 @@ describe("stored", () => {
           ),
       ),
       { seed: SEED, numRuns: runsFor({ fast: 4, full: 40 }) },
-    );
-  });
+    ));
 });

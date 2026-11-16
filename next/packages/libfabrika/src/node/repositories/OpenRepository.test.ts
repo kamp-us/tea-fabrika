@@ -84,8 +84,8 @@ const reader = (text: string | null, touches: Array<string>) =>
   });
 
 describe("T878 composed repository opening", () => {
-  it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", async () => {
-    await fc.assert(
+  it("L3: every load uses supplied text once, checks scope/version first, and retains exact origins and checked hash", () =>
+    fc.assert(
       fc.asyncProperty(tape, fc.integer({ min: 1, max: 65535 }), async (cells, port) => {
         await Effect.runPromise(
           Effect.scoped(
@@ -188,12 +188,11 @@ describe("T878 composed repository opening", () => {
         );
       }),
       { seed: 119120, numRuns: 200 },
-    );
-  });
+    ));
 
-  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", async () => {
+  it("L3: a malformed snapshot made upstream is refused rather than defaulted or returned unchecked", () =>
     // A fault at the saved-data boundary makes bypassing Snapshot.read observable.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), async (cells) => {
         const original = SettingsSnapshot.make;
         const spy = vi.spyOn(SettingsSnapshot, "make");
@@ -229,8 +228,7 @@ describe("T878 composed repository opening", () => {
         );
       }),
       { seed: 119120, numRuns: 200 },
-    );
-  });
+    ));
 });
 
 const forms = (word: string) => [
@@ -307,8 +305,8 @@ it.effect.prop(
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 200 }) } },
 );
 
-it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", async () => {
-  await fc.assert(
+it("L9 [secrets]: generated opening flows redact every report, pending state, error, span, ledger envelope and snapshot", () =>
+  fc.assert(
     fc.asyncProperty(
       fc.stringMatching(/^[a-zA-Z][a-zA-Z0-9]{11,23}$/),
       tape,
@@ -539,5 +537,4 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
       },
     ),
     { seed: 119120, numRuns: runsFor({ fast: 20, full: 200 }) },
-  );
-});
+  ));

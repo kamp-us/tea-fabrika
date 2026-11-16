@@ -304,7 +304,7 @@ describe("p95, every call is one span, names and numbers only", () => {
     }).pipe(Effect.provide(onSql(fresh())), Effect.withTracer(tracer));
   });
 
-  it("for any stream, id, _tag, by and reader, short or long, no tag holds the body, sentAt, SQL text, or a string over 128 characters (fast-check)", async () => {
+  it("for any stream, id, _tag, by and reader, short or long, no tag holds the body, sentAt, SQL text, or a string over 128 characters (fast-check)", () => {
     const names = fc.record({
       stream: anyText,
       id: anyText,
@@ -337,7 +337,7 @@ describe("p95, every call is one span, names and numbers only", () => {
         }).pipe(Effect.provide(onSql(fresh(), quiet, reader)), Effect.withTracer(tracer)),
       );
     };
-    await fc.assert(fc.asyncProperty(names, run), {
+    return fc.assert(fc.asyncProperty(names, run), {
       seed: SEED,
       numRuns: runsFor({ fast: 3, full: 30 }),
       // The case this test held before it took generated names.
@@ -366,7 +366,7 @@ describe("p95, every call is one span, names and numbers only", () => {
     },
   );
 
-  it("for any long stream, id, _tag, by and reader, every span on both sides cuts its tags to 128 characters and keeps each full length as <key>.length (fast-check)", async () => {
+  it("for any long stream, id, _tag, by and reader, every span on both sides cuts its tags to 128 characters and keeps each full length as <key>.length (fast-check)", () => {
     const names = fc.record({
       stream: anyText,
       id: anyText,
@@ -428,7 +428,7 @@ describe("p95, every call is one span, names and numbers only", () => {
       }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader })), Effect.withTracer(callTracer));
       return Effect.runPromise(Effect.andThen(referee, remote));
     };
-    await fc.assert(fc.asyncProperty(names, run), { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) });
+    return fc.assert(fc.asyncProperty(names, run), { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) });
   });
 
   it.effect.prop(

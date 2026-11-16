@@ -730,11 +730,11 @@ const runJobs = fc.oneof(
 
 const JOBS_CALL = "GET actions/runs/7/jobs?filter=latest&per_page=100";
 
-it("property: the report reads the run's jobs first, then makes exactly the calls its action needs, each with the job's token", async () => {
+it("property: the report reads the run's jobs first, then makes exactly the calls its action needs, each with the job's token", () =>
   // Plants: close without the comment (red: no comment call); open without the label (red: no
   // label call); ask for the last green run on a green run (red: an extra call); judge before
   // reading the jobs (red: no jobs call, and a failed step missed).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       needs,
       runJobs,
@@ -797,8 +797,7 @@ it("property: the report reads the run's jobs first, then makes exactly the call
       },
     ),
     options,
-  );
-});
+  ));
 
 it("pinned: run 43673342835's report opens the issue, naming its failing test, and does so from its jobs alone too", async () => {
   // pinned: the run that printed "stopped, nothing to report". Plants: the old verdict over needs
@@ -821,9 +820,9 @@ it("pinned: run 43673342835's report opens the issue, naming its failing test, a
   }
 });
 
-it("property: an error from GitHub fails the report, so a red run's issue never goes missing quietly", async () => {
+it("property: an error from GitHub fails the report, so a red run's issue never goes missing quietly", () =>
   // Plant: catch and ignore a failed write or read (red: the report resolved).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       fc.constantFrom("issues", "actions/workflows/", "actions/runs/"),
       fc.option(fc.integer({ min: 2, max: 9999 }), { nil: null }),
@@ -835,8 +834,7 @@ it("property: an error from GitHub fails the report, so a red run's issue never 
       },
     ),
     options,
-  );
-});
+  ));
 
 const branch = fc
   .oneof(
@@ -845,10 +843,10 @@ const branch = fc
   )
   .filter((ref) => ref !== "refs/heads/main");
 
-it("property: on any ref but main the report judges the run the same and writes nothing, reading only the run's jobs", async () => {
+it("property: on any ref but main the report judges the run the same and writes nothing, reading only the run's jobs", () =>
   // A hand-started run on a branch is judged, so it can end `failure`, and it never touches the
   // issue, which is main's. Plant: the report writes on any ref (red: a branch opened the issue).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       branch,
       fc.boolean(),
@@ -874,10 +872,9 @@ it("property: on any ref but main the report judges the run the same and writes 
       },
     ),
     options,
-  );
-});
+  ));
 
-it("property: the report job passes for a green run alone, so a red run ends failure on GitHub, on main and on a branch", async () => {
+it("property: the report job passes for a green run alone, so a red run ends failure on GitHub, on main and on a branch", () => {
   // 2026-11-15: a red run ended `cancelled` and was read as cut off. A failed leg or a test step
   // that ran out of time is a failed job by itself; this exit code covers a red run with neither,
   // such as a leg that ended odd. It cannot turn a run GitHub ended `cancelled` into a failure
@@ -887,7 +884,7 @@ it("property: the report job passes for a green run alone, so a red run ends fai
   expect(scheduled.exitCode("red")).toBe(1);
   expect(scheduled.exitCode("stopped")).toBe(1);
 
-  await fc.assert(
+  return fc.assert(
     fc.asyncProperty(
       fc.constantFrom("refs/heads/main", "refs/heads/fabrikalfa/a-branch"),
       needs,
@@ -933,11 +930,11 @@ it("pinned: run 43723335863, two legs that only timed out, fails the report job 
 // `.agents/skills/lead/scripts/ci/Speed.ts`, written here again so this file reads no lead script).
 const SPEED = "CI speed: a stage is over its goal";
 
-it("property: the report acts only on the open issue with its own title, never on the speed check's, which it leaves untouched", async () => {
+it("property: the report acts only on the open issue with its own title, never on the speed check's, which it leaves untouched", () =>
   // Plant: the report takes the first open `ci-scheduled` issue as its own, as before (red: on
   // 2026-11-15 a red main commented on the speed issue and opened none, and a green run would have
   // closed the speed issue).
-  await fc.assert(
+  fc.assert(
     fc.asyncProperty(
       fc.constantFrom("red", "green"),
       fc.integer({ min: 2, max: 4999 }),
@@ -970,8 +967,7 @@ it("property: the report acts only on the open issue with its own title, never o
       },
     ),
     options,
-  );
-});
+  ));
 
 it("pinned: 2026-11-15, a red main with only the speed issue open opens its own issue, and a green run then leaves the speed issue open", async () => {
   // pinned: the run whose red report went onto the speed issue as a comment. Plant: the old reader

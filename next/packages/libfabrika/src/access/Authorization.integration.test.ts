@@ -202,8 +202,8 @@ const boot = ClientManager.use((clients) => clients.members).pipe(
 const remove = (id = "revoked") => ClientManager.use((clients) => clients.write(revoke(old, id), from));
 
 describe("P17a, appendAdmitted", () => {
-  it("reads all current membership and appends in that same real transaction, including duplicates", async () => {
-    await fc.assert(
+  it("reads all current membership and appends in that same real transaction, including duplicates", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.integer({ min: 1, max: 5 }),
         fc.integer({ min: 1, max: 5 }),
@@ -269,10 +269,9 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       checks,
-    );
-  });
-  it("a write paused before its transaction cannot use admission from before revoke", async () => {
-    await fc.assert(
+    ));
+  it("a write paused before its transaction cannot use admission from before revoke", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.boolean(),
         fc.integer({ min: 0, max: 500 }),
@@ -324,10 +323,9 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
-  it("corrupt known membership refuses with bad_row and writes nothing, including after reopen", async () => {
-    await fc.assert(
+    ));
+  it("corrupt known membership refuses with bad_row and writes nothing, including after reopen", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("json", "known_fact", "row"),
         fc.boolean(),
@@ -361,10 +359,9 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       checks,
-    );
-  });
-  it("reopened storage keeps revocation and the earlier accepted letter", async () => {
-    await fc.assert(
+    ));
+  it("reopened storage keeps revocation and the earlier accepted letter", () =>
+    fc.assert(
       fc.asyncProperty(fc.string({ maxLength: 30 }), fc.integer({ min: 1, max: 5 }), (body, attempts) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -402,10 +399,9 @@ describe("P17a, appendAdmitted", () => {
         ),
       ),
       { ...checks, numRuns: runsFor({ fast: 3, full: 20 }) },
-    );
-  });
-  it("P37 records each ended admitted-append outcome and keeps body and error text out of tags", async () => {
-    await fc.assert(
+    ));
+  it("P37 records each ended admitted-append outcome and keeps body and error text out of tags", () =>
+    fc.assert(
       fc.asyncProperty(
         fc.constantFrom("placed", "not_granted", "bad_row", "storage"),
         fc.uuid(),
@@ -456,6 +452,5 @@ describe("P17a, appendAdmitted", () => {
           ),
       ),
       { ...checks, numRuns: runsFor({ fast: 3, full: 24 }) },
-    );
-  });
+    ));
 });

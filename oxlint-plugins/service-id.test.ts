@@ -22,8 +22,8 @@ const file = (lines: ReadonlyArray<readonly [string, boolean]>) => ({
 });
 
 describe("T737 G2 service IDs carry the package and the file's path", () => {
-  it("fires on exactly the IDs that miss the package, the path or the name, through every import form", async () => {
-    await fc.assert(
+  it("fires on exactly the IDs that miss the package, the path or the name, through every import form", () =>
+    fc.assert(
       fc.asyncProperty(
         // Two service names in one file must differ, or the file does not parse and nothing fires.
         fc
@@ -128,8 +128,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
         },
       ),
       { seed: 119120, numRuns: 4 },
-    );
-  });
+    ));
 
   // The plan's mapping, old to new, kept here because diagnostics can hold either spelling.
   // `ProgramRunner` was renamed after it, by ticket 909, and has no row.

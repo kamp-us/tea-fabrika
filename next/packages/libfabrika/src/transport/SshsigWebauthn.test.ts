@@ -239,7 +239,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       { ...runs, examples: [[line, 3]] },
     );
   });
-  it("writer: malformed DER answers with a typed BadAssertion", async () => {
+  it("writer: malformed DER answers with a typed BadAssertion", () => {
     // Plant: rename the error tag to InvalidAssertion. The BadAssertion match must fail.
     const invalid = fc.oneof(
       fc.uint8Array({ maxLength: 1 }),
@@ -251,7 +251,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .map(([head, tail]) => new Uint8Array([head, ...tail])),
       fc.uint8Array({ maxLength: 253 }).map((tail) => new Uint8Array([0x30, tail.length + 1, ...tail])),
     );
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(invalid, (signature) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -274,9 +274,9 @@ describe("P10 WebAuthn SSHSIG", () => {
       { ...runs, examples: [[new Uint8Array([0x30, 0])]] },
     );
   });
-  it("p27: an ECDSA scalar with an unnecessary leading zero is refused", async () => {
+  it("p27: an ECDSA scalar with an unnecessary leading zero is refused", () =>
     // Plant: allow a redundant sign-padding byte in fixed(). The refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(signedArb, (input) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -337,11 +337,10 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[recorded]] },
-    );
-  });
-  it("p27: a raw WebAuthn object outside SSHSIG is refused", async () => {
+    ));
+  it("p27: a raw WebAuthn object outside SSHSIG is refused", () =>
     // Plant: return a key on parser failure. A raw JSON object must still be refused.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.record({ authenticatorData: bodyArb, clientDataJSON: bodyArb, signature: bodyArb }), (raw) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -350,8 +349,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[real]] },
-    );
-  });
+    ));
   it.effect("vector: p27: the independent ordinary ECDSA vector stays refused by the shared verifier", () =>
     Effect.gen(function* () {
       const read = (file: string) =>
@@ -401,7 +399,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     ["cross origin", { crossOrigin: true }],
     ["wrong challenge", { challenge: utf8("only a hash would be wrong too") }],
   ] as const;
-  it("p27 policy: refuses invalid assertions even with a valid P-256 signature", async () => {
+  it("p27 policy: refuses invalid assertions even with a valid P-256 signature", () => {
     // Plant: require UP alone, without UV. A signed UP-only assertion must be refused.
     const invalid = fc.oneof(
       fc
@@ -415,7 +413,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       fc.constant({ crossOrigin: true }),
       fc.uint8Array({ maxLength: 64 }).map((challenge) => ({ challenge })),
     );
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(bodyArb, invalid, (body, options) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -431,9 +429,9 @@ describe("P10 WebAuthn SSHSIG", () => {
       },
     );
   });
-  it("question 19: signed backup flags and counters pass", async () => {
+  it("question 19: signed backup flags and counters pass", () =>
     // Plant: invert the returned BE flag. The signed flag match must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, fc.constantFrom(5, 13, 29), fc.nat({ max: 0xffffffff }), (body, flags, counter) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -456,14 +454,13 @@ describe("P10 WebAuthn SSHSIG", () => {
           [text, 29, 0],
         ],
       },
-    );
-  });
+    ));
   const bindingCases = [
     ["text", `${text}!`, {}],
     ["RP", text, { rp: "other.test" }],
     ["origin allowlist", text, { origins: ["https://other.test"] }],
   ] as const;
-  it("p27 binding: changing expected text, RP or origin allowlist refuses the real assertion", async () => {
+  it("p27 binding: changing expected text, RP or origin allowlist refuses the real assertion", () => {
     // Plant: ignore policy.rp. The changed-RP example must still be refused.
     const changed: fc.Arbitrary<{
       body: string;
@@ -477,7 +474,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .array(bodyArb.filter((origin) => origin !== policy.origins[0]))
         .map((origins) => ({ body: text, over: { origins } })),
     );
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(changed, ({ body, over }) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -491,9 +488,9 @@ describe("P10 WebAuthn SSHSIG", () => {
       },
     );
   });
-  it("p27: a different admitted signer cannot borrow the embedded key", async () => {
+  it("p27: a different admitted signer cannot borrow the embedded key", () =>
     // Plant: choose the first parseable signer without comparing its blob. Refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(signedArb, (input) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -504,11 +501,10 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[recorded]] },
-    );
-  });
-  it("p27: a valid signature in another namespace is refused", async () => {
+    ));
+  it("p27: a valid signature in another namespace is refused", () =>
     // Plant: trust the embedded namespace for both selection and signed bytes. Refusal must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         bodyArb,
         bodyArb.filter((space) => space !== SPACE),
@@ -522,8 +518,7 @@ describe("P10 WebAuthn SSHSIG", () => {
           ),
       ),
       { ...runs, examples: [[text, "other"]] },
-    );
-  });
+    ));
   const corruptions = [
     "version",
     "key length",
@@ -533,9 +528,9 @@ describe("P10 WebAuthn SSHSIG", () => {
     "truncated",
     "trailing",
   ] as const;
-  it("p27 bytes: refuses corrupt fields, signatures, truncation and trailing bytes", async () => {
+  it("p27 bytes: refuses corrupt fields, signatures, truncation and trailing bytes", () =>
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(fc.constantFrom(...corruptions), fc.nat({ max: 0xffffffff }), (kind, change) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -599,11 +594,10 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: corruptions.map((kind) => [kind, 0]) },
-    );
-  });
-  it("P7: the compatibility checker keeps SK out and returns an Ed25519 signer as supplied", async () => {
+    ));
+  it("P7: the compatibility checker keeps SK out and returns an Ed25519 signer as supplied", () =>
     // Plant: strip the returned signer's comment. The supplied-line equality must fail.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(bodyArb, bodyArb, (body, comment) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -628,8 +622,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         ),
       ),
       { ...runs, examples: [[text, "public-test-comment"]] },
-    );
-  });
+    ));
   it("P7: ordinary ECDSA is not a passkey line", () => {
     // Plant: ignore the outer key type word. The ordinary ECDSA line must still throw.
     fc.assert(

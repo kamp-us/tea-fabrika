@@ -42,8 +42,8 @@ const OUTSIDE = ["stylelint.config.ts", "experiments/tool.ts", "docs/tutorials/f
 
 const NAMED = "export const a = 1;\nexport type T = number;\n";
 
-it("every default export form is refused in our source, under every source folder", async () => {
-  await fc.assert(
+it("every default export form is refused in our source, under every source folder", () =>
+  fc.assert(
     fc.asyncProperty(fc.constantFrom(...SOURCE), fc.stringMatching(/^[a-z]{1,8}$/), async (folder, stem) => {
       const files = Object.fromEntries(FORMS.map((form, i) => [`${folder}/${stem}${i}.ts`, `${form}\n`]));
       const result = await plant({ ...files, [`${folder}/named.ts`]: NAMED });
@@ -55,11 +55,10 @@ it("every default export form is refused in our source, under every source folde
       expect(result(CODE, `${folder}/named.ts`)).toEqual([]);
     }),
     { seed: 119120, numRuns: 5 },
-  );
-});
+  ));
 
-it("an inline edge comment lets the default on the next line through, and no line further down", async () => {
-  await fc.assert(
+it("an inline edge comment lets the default on the next line through, and no line further down", () =>
+  fc.assert(
     fc.asyncProperty(fc.constantFrom(...SOURCE), fc.uuid(), async (folder, reason) => {
       const edge = `// oxlint-disable-next-line import/no-default-export -- edge: ${reason}`;
       const marked = `${folder}/worker.ts`;
@@ -72,8 +71,7 @@ it("an inline edge comment lets the default on the next line through, and no lin
       expect(result(CODE, farther)).toEqual([3]);
     }),
     { seed: 119120, numRuns: 5 },
-  );
-});
+  ));
 
 it("scenario: tooling and config files, and files outside our source, keep their default export", async () => {
   // A tool loads these by their default, so 0058 leaves them out by glob.

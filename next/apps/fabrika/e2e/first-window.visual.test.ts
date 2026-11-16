@@ -402,8 +402,8 @@ describe("L15: use in two tabs (W2)", () => {
   it(
     "after any adds, checks, unchecks and removes in either tab, both tabs show the checklist's fold of the accepted letters, each tab shows its own refusals, and no letter lands twice",
     { timeout: LIMIT.L15 },
-    async (context) => {
-      await fc.assert(
+    (context) =>
+      fc.assert(
         fc.asyncProperty(controls, (moves) =>
           suite(
             Effect.gen(function* () {
@@ -483,8 +483,7 @@ describe("L15: use in two tabs (W2)", () => {
           ),
         ),
         { seed: SEED, numRuns: 5, ...RED },
-      );
-    },
+      ),
   );
 });
 
@@ -492,8 +491,8 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
   it(
     "[secrets] for generated sentinel credentials in the instance's env, the page, rows, errors, URLs, console lines and sockets never copy one",
     { timeout: LIMIT.L17 },
-    async (context) => {
-      await fc.assert(
+    (context) =>
+      fc.assert(
         fc.asyncProperty(
           fc.record({
             token: fc.stringMatching(/^[A-Za-z0-9]{24,40}$/),
@@ -702,8 +701,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
           },
         ),
         { seed: SEED, numRuns: 10, ...RED },
-      );
-    },
+      ),
   );
 });
 

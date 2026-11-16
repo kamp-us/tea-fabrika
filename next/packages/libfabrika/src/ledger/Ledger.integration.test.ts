@@ -245,7 +245,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
     }).pipe(Effect.provide(onSql(fresh()))),
   );
 
-  it("for any run of appends, every answer and every read match a plain model (fast-check)", async () => {
+  it("for any run of appends, every answer and every read match a plain model (fast-check)", () => {
     const command = fc.record({
       stream: fc.constantFrom("a", "b", "c"),
       id: fc.constantFrom("w-1", "w-2", "w-3", "w-4"),
@@ -276,7 +276,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
       });
       return { answers, streams };
     };
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(command, { maxLength: 30 }), (commands) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -414,12 +414,12 @@ describe("p93, seen is bounded by the log's head", () => {
     }).pipe(Effect.provide(onSql(fresh()))),
   );
 
-  it("for any interleaving of writers, a line is placed exactly when seen is at most the head, and every entry has seen < rev (fast-check)", async () => {
+  it("for any interleaving of writers, a line is placed exactly when seen is at most the head, and every entry has seen < rev (fast-check)", () => {
     const write = fc.record({
       stream: fc.constantFrom("a", "b"),
       offset: fc.integer({ min: -3, max: 2 }),
     });
-    await fc.assert(
+    return fc.assert(
       fc.asyncProperty(fc.array(write, { maxLength: 25 }), (writes) =>
         Effect.runPromise(
           Effect.gen(function* () {
@@ -610,23 +610,28 @@ describe("p20, failures are typed, and pass", () => {
         ["a", generated],
         (value) =>
           Effect.flatMap(Effect.map(fresh(), throwingOnce), ({ sql, arm }) =>
-            Effect.promise(async () => {
+            Effect.gen(function* () {
               const runtime = ManagedRuntime.make(onSql(Effect.succeed(sql)));
               const append = (id: string) => Ledger.use((ledger) => ledger.append(value, id, line()));
-              expect(await runtime.runPromise(append("w-1"))).toEqual(placed(1, 1));
+              expect(yield* Effect.promise(() => runtime.runPromise(append("w-1")))).toEqual(placed(1, 1));
               arm();
-              const failed = await runtime.runPromise(Effect.flip(append("w-2")));
+              const failed = yield* Effect.promise(() => runtime.runPromise(Effect.flip(append("w-2"))));
               expect(failed).toBeInstanceOf(LedgerError);
               expect(failed.reason).toBe("storage");
-              expect(await runtime.runPromise(append("w-3"))).toEqual(placed(2, 2));
+              expect(yield* Effect.promise(() => runtime.runPromise(append("w-3")))).toEqual(placed(2, 2));
               arm();
-              const read = await runtime.runPromise(Effect.flip(readAll(value)));
+              const read = yield* Effect.promise(() => runtime.runPromise(Effect.flip(readAll(value))));
               expect(read.reason).toBe("storage");
               arm();
-              const waited = await runtime.runPromise(Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9))));
+              const waited = yield* Effect.promise(() =>
+                runtime.runPromise(Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9)))),
+              );
               expect(waited.reason).toBe("storage");
-              expect((await runtime.runPromise(readAll(value))).map((e) => e.id)).toEqual(["w-1", "w-3"]);
-              await runtime.dispose();
+              expect((yield* Effect.promise(() => runtime.runPromise(readAll(value)))).map((e) => e.id)).toEqual([
+                "w-1",
+                "w-3",
+              ]);
+              yield* Effect.promise(() => runtime.dispose());
             }),
           ),
         { concurrency: 1, discard: true },

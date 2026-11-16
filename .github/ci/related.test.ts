@@ -84,16 +84,15 @@ const affected = async (paths: string[]) => {
 const declaring = (changed: ReadonlyArray<string>) =>
   tests.filter((test) => changed.some((path) => readers.get(test)!.has(path))).sort();
 
-it("real script subsets select exactly their declaring tests, never an empty set", async () => {
-  await fc.assert(
+it("real script subsets select exactly their declaring tests, never an empty set", () =>
+  fc.assert(
     fc.asyncProperty(fc.subarray(readScripts, { minLength: 1, maxLength: 12 }), async (paths) => {
       const expected = declaring(paths);
       expect(expected.length).toBeGreaterThan(0);
       expect(await affected(paths)).toEqual(expected);
     }),
     options,
-  );
-});
+  ));
 
 // scenario: every real script alone, each in its own test, so another declared script in a subset
 // cannot hide a missing import. The subset property once re-checked only its sampled members
@@ -114,14 +113,13 @@ it.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockf
   expect(await affected([path])).toEqual(every);
 });
 
-it("real skill Markdown subsets select no test", async () => {
-  await fc.assert(
+it("real skill Markdown subsets select no test", () =>
+  fc.assert(
     fc.asyncProperty(fc.subarray(markdown, { minLength: 1, maxLength: 12 }), async (paths) => {
       expect(await affected(paths)).toEqual([]);
     }),
     options,
-  );
-});
+  ));
 
 // Today's CI serves both versions. The baseline deliberately has no next/ CLI filter.
 // The matrix also holds the legs `e2e-1` to `e2e-N`, which run no vitest step, so the law reads the
@@ -199,9 +197,9 @@ describe("next workflow coverage", () => {
     complete(kept, universe);
   });
 
-  it("real configured shards preserve generated subsets, order and unmeasured files", async () => {
+  it("real configured shards preserve generated subsets, order and unmeasured files", () =>
     // External test specifications have no domain Schema. Reuse real discovery, at most 12 files.
-    await fc.assert(
+    fc.assert(
       fc.asyncProperty(
         fc.subarray(nextSpecs, { maxLength: 10 }),
         fc.array(fc.nat(), { minLength: 12, maxLength: 12 }),
@@ -232,6 +230,5 @@ describe("next workflow coverage", () => {
         },
       ),
       options,
-    );
-  });
+    ));
 });
