@@ -265,7 +265,7 @@ it("every observed exit is durable once across restart or brake, with its reason
                   platform.samples++;
                   return platform.rss;
                 },
-                (command, args) => spawned.push({ command, args }),
+                { onSpawn: (command, args) => spawned.push({ command, args }) },
               ),
             ),
             Effect.provide(NodeServices.layer),
@@ -470,12 +470,11 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
     Scope.provide(life),
     // `ps` answers the generated size for the old process only; its replacement is small.
     Effect.provide(
-      rssLayer(
-        () => (world.asked === OLD.pid ? c.kib : 0),
-        (_command, args) => {
+      rssLayer(() => (world.asked === OLD.pid ? c.kib : 0), {
+        onSpawn: (_command, args) => {
           world.asked = Number(args[3]);
         },
-      ),
+      }),
     ),
   );
   world.startup = false;

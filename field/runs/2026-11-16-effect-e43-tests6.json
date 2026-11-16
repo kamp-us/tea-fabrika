@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e43-tests6",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T02:07:16-08:00",
+  "ended": "2026-11-16T02:15:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Sixth tests round for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), in next/, under the owner ruling that every hit gets Function.dual and an optional argument that a predicate cannot tell apart becomes an option object with its callers changed (the tests2 precedent: personLine, sizedLegs, again). Build 6 (b9bd9519c) was blocked on the last libfabrika hit, next/packages/libfabrika/src/node/dev/dev.fixture.ts:18 rssLayer(sample, onSpawn?): a bare function as the second argument cannot be told apart from the sample in a one-argument call. This round made the one coordinated edit itself, because the file is a test fixture (its header says so) and its two multi-argument callers are exam paths the build step may not touch: the body stays as it was under a private rssLayerBody that takes { onSpawn } as an option object (types OnSpawn and RssOptions), and the exported rssLayer is Function.dual((args) => typeof args[0] === \"function\", rssLayerBody) with written overloads, piped (options?) => (sample) => Layer first and direct (sample, options?) last. The two callers in next/packages/libfabrika/src/node/dev/dev.laws.integration.test.ts (about lines 263 and 473) now pass { onSpawn: ... } in the same commit, so the head always typechecks. Every other caller across next/ passes only a sample (rg rssLayer: dev.laws lines 75, 302, 804; dev-errors 75, 118; dev-control 532, 552; dev-secrets 406) and is unchanged. No law's assertion changed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Recount after the change, as the plan's How I counted on origin/fabrikalfa/effect-sweep (docs/plan/quests/effect-sweep-PLAN.md) runs it, but with only missingPipeableSignature at error through --lspconfig on next/packages/libfabrika/tsconfig.json and nothing written to a tsconfig: 0 missingPipeableSignature hits and 0 diagnostics at error, so libfabrika is at zero (build 6 counted 1, this one, the same way at be263650e). Tests run at the change (on b9bd9519c), on Node 26.13.0, one file at a time with TYPESAFE_API_KEY unset: dev.laws.integration.test.ts 5 passed, dev-errors.laws.integration.test.ts 8 passed, dev-control.laws.integration.test.ts 3 passed, dev-secrets.laws.integration.test.ts 3 passed. None of these starts workerd or sends a real signal: platform calls are stand-ins (the rssLayer spawner, fetch spied) and process.kill is a vi.spyOn mock; nothing was skipped. pnpm format (made the second caller's call compact), pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (18 parts passed), the list ratchet against 797c3c8a8 (exit 0) and one pnpm typecheck (exit 0) pass. No lock line, no tsconfig change, no disable or @effect-diagnostics comment, no ledger entry. Left for the build: nothing in libfabrika for this check.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/node/dev/dev.laws.integration.test.ts: every observed exit is durable once across restart or brake, with its reason and RSS; L7 a memory replace sends SIGTERM once and SIGKILL once at the grace; L8 during a replace no control call dials the old port",
+      "plant": "rssLayerBody no longer calls onSpawn, so the option object the changed callers pass is ignored",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
