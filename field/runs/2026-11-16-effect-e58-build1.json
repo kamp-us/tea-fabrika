@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e58-build1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:46:37-08:00",
+  "ended": "2026-11-16T00:48:04-08:00",
+  "parent": "2026-11-15-effect-e58-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Build step for the rulings round of judgment slice E58 of the Effect-check sweep (strictEffectProvide in oxlint-plugins/, our tooling), at branch head b2816ad69, sent back to the tests step without a change. The merge session's ruling (Q1 to Q3, the 0565 amendment) gives the one left hit, oxlint-plugins/parallel.ts:163, a reasoned strictEffectProvide:off line, but exam-paths.json:52 lists oxlint-plugins/** as an exam path, so a build commit of that file would be refused and the line is the tests step's to write. Read for the tests step: the checker's message at parallel.ts(163,33) is 'Effect.provide with a Layer should only be used at application entry points. If this is an entry point, you can safely disable this diagnostic. Otherwise, using Effect.provide may break scope lifetimes. Compose all layers at your entry point and provide them at once.', so the line to add directly above line 163 is: // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: \"If this is an entry point, you can safely disable this diagnostic.\"",
+  "tokens": null,
+  "tools": null,
+  "minutes": 2,
+  "note": "Ran: pnpm install --frozen-lockfile (modules were missing); effect-tsgo diagnostics --format text --file oxlint-plugins/parallel.ts with an --lspconfig setting strictEffectProvide to error and includeSuggestionsInTsc true, which showed the one error at 163:33 and a warning unstableApiUsage on NodeServices.layer at 163:61 (not this check). Not run: format, lint, tests and typecheck, since no product or exam file changed; the TS377000 proof is owed by the step that writes the line.",
+  "driver_caused": false,
+  "step": "build"
+}
