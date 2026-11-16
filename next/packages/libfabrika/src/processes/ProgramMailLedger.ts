@@ -41,11 +41,13 @@ const Mailed = Schema.TaggedStruct("mailed", {
 });
 
 const decodeMailed = Schema.decodeUnknownOption(Mailed);
+
 const decodeSent = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }));
 
 const outbox = (name: string): string => `${name}/outbox`;
 
 const refuse = (reason: typeof MailRefusal.Type) => ProgramMailError.refused(reason);
+
 const storage = (cause: LedgerError) => ProgramMailError.storage(cause);
 
 /** The saved receipt for this delivery's ID, or a refusal when the ID was first used otherwise. */
@@ -78,6 +80,7 @@ const saved = (
 
   const { command, source, to, ref, grant } = mailed.value;
   const l = letter.value;
+
   return Option.some(
     Result.succeed({
       id,
@@ -108,6 +111,7 @@ const saved = (
 const capped = (turn: LedgerTurn, manager: typeof ProcessManager.Service, to: string, cap: number) => {
   const end = Option.getOrElse(turn.end(inbox(to)), () => 0);
   const acked = manager.ackedPos(turn, to);
+
   return full(end, acked, cap) ? Option.some(ProgramMailError.full(unread(end, acked))) : Option.none();
 };
 
@@ -143,6 +147,7 @@ export const layer = (config: {
       const tx = yield* LedgerTransaction;
       const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
       const manager = yield* ProcessManager;
+
       const transact = <A>(step: (turn: LedgerTurn) => A) =>
         tx
           .transact(step)
@@ -155,18 +160,22 @@ export const layer = (config: {
                   : storage(error),
             ),
           );
+
       const lookup = (failure: ProcessError | LedgerError, refusal: typeof MailRefusal.Type) =>
         failure instanceof ProcessError ? refuse(refusal) : storage(failure);
+
       /** A child and the program that started it may mail each other with no host grant. The
        *  right is read by name from the first life's requester, so a restart under the name keeps it. */
       const related = (source: string, to: string) =>
         transact((turn) => {
           const table = manager.table(turn);
+
           return (
             Option.exists(table.starter(to), (name) => name === source) ||
             Option.exists(table.starter(source), (name) => name === to)
           );
         });
+
       const deliver = Effect.fn("program_mail.deliver")(
         function* (delivery: Delivery) {
           yield* Effect.annotateCurrentSpan({
@@ -194,6 +203,7 @@ export const layer = (config: {
 
           for (;;) {
             const seen = yield* transact((turn) => heads(turn, names));
+
             const source = yield* manager
               .resolve(delivery.source.process)
               .pipe(Effect.mapError((e) => lookup(e, "stale_sender")));
@@ -214,6 +224,7 @@ export const layer = (config: {
             }
 
             const target = yield* manager.status(delivery.to).pipe(Effect.mapError((e) => lookup(e, "no_name")));
+
             const committed = yield* transact((turn) => {
               const commit = () => {
                 // A lifecycle write since the checks above: check again before anything is written.
@@ -249,8 +260,10 @@ export const layer = (config: {
                     }),
                   ),
                 );
+
                 return saved(turn, delivery, m.value);
               };
+
               return quotas === undefined ? commit() : quotas.ordinary(delivery.source.process, commit);
             });
 
@@ -274,6 +287,7 @@ export const layer = (config: {
           ),
         ),
       );
+
       return ProgramMail.of({ deliver });
     }),
   );

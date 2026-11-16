@@ -11,17 +11,11 @@
  * @stability unstable
  */
 import { ByteSize, Schema } from "effect";
-import * as Setting from "./Setting.ts";
+import * as Setting from "./Fabrika.ts";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
   title: "a port",
   description: "A port is a whole number from 1 to 65535.",
-});
-
-// The u flag lets Effect write the pattern into the generated JSON Schema.
-const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u)).annotate({
-  title: "a version",
-  description: "A version is three whole numbers, as 1.2.3.",
 });
 
 /**
@@ -53,14 +47,7 @@ export const port = Setting.make("instance.port", {
  * @stability unstable
  * @category settings
  */
-export const version = Setting.make("fabrika-version", {
-  schema: Version,
-  default: "0.0.0",
-  doc: "The oldest fabrika this repo works with. It is read before every other setting.",
-  scope: ["repo"],
-  reload: "restart",
-  since: "0.0.0",
-});
+export const version = Setting.Fabrika.version;
 
 const Positive = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
 
@@ -224,6 +211,7 @@ export const brainGrace = Setting.make("desktop.brain-grace", {
 });
 
 const KIB = 1_024;
+
 const MIB = 1_024 * KIB;
 
 const Unread = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16_384 })).annotate({

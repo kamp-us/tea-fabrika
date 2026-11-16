@@ -304,6 +304,7 @@ const owned = <A, E, R>(
         Effect.sync(() => {
           const last = () => undo?.(a);
           process.on("exit", last);
+
           return { a, off: () => process.off("exit", last) };
         }),
       ),

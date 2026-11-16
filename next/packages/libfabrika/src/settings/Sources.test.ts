@@ -12,8 +12,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import * as Setting from "./Setting.ts";
-import * as Sources from "./Sources.ts";
+import * as Setting from "./Fabrika.ts";
+import * as Sources from "./Fabrika.ts";
 import { Toml } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
 

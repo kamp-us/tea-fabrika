@@ -51,10 +51,12 @@ export const layer = (sql: Sql): Layer.Layer<Referee, never, Doorbell> =>
       const bell = yield* Doorbell;
       const policy = Option.getOrUndefined(yield* Effect.serviceOption(WritePolicy));
       const store = ledgerStore(sql, bell, policy);
+
       return {
         ...store,
         append: Effect.fnUntraced(function* (stream: string, id: string, line: unknown) {
           const asked = yield* policyFor(policy);
+
           return yield* (asked === policy ? store : ledgerStore(sql, bell, asked)).append(stream, id, line);
         }),
       };

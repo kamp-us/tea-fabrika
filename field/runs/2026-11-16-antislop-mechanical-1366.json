@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-mechanical-1366",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:24:13-08:00",
+  "ended": "2026-11-16T00:41:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Anti-slop mechanical follow-up now that pull request 1366 has landed, on branch fabrikalfa/antislop-mechanical-1366 cut from 7a6af40d2. The nine folders pull request 1507 left waiting (libfabrika cloudflare, gateway, ledger, processes, runtime, settings, telemetry, transport, and next/apps/fabrika) join the anti-slop/require-readable-spacing block in .oxlintrc.json, one commit per folder, each cleaned by the rule's own autofix through pnpm format. Every diff holds only added blank lines (checked: no added or removed line that is not blank). Spacing is the only autofix rule block that left these folders waiting, so it is the only block changed; the comment near line 2512 of .oxlintrc.json names 16 tagged files of 1366 for another rule and was left alone. Full pnpm lint passed on the whole tree with the zero lock (18 parts). Plant check skipped as costly.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 17,
+  "note": "Laws: none new. Plants: none run (skipped). Tests, one file at a time under nice with one worker (the config refuses broad runs): settings/TomlEdit.test.ts, cloudflare/quotas.test.ts, processes/internal/quota.test.ts, apps/fabrika/src/exam/edge-config.test.ts, exam/node-kinds.test.ts, runtime-quotas.laws.test.ts, all green. Tool quirk seen twice (processes, apps/fabrika): pnpm format's lint --fix pass pruned one next-ledger.json row (Process.test-support.ts afterAll, runtime-recovery.laws.integration.test.ts afterEach) because the fix moved the lines in the same run; the finding still exists and a later lint without --fix waives it with the row, so the row was restored with a checkout and next-ledger.json is not in any commit. The step-commit script refused the build step for test paths ('a build may not commit exam paths'); the commits used the tests step name as the method note names, with the same subject. No typecheck ran here.",
+  "step": "build"
+}
