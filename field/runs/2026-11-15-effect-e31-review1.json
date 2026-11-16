@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e31-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:28:29-08:00",
+  "ended": "2026-11-15T21:43:13-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of judgment slice E31 (preferEffectArray in oxlint-plugins/ and stylelint.config.ts, all exam paths, no build step) at 8f7b341, tests work at 3a43e1c: merge-ready, two finding rows. Every rewrite keeps what the native call answered: Arr.map, some, every and isArray are the native calls; Arr.filter, flatMap, forEach and join differ only in passing no third argument, which no callback reads; each find, findLast, findIndex and toSorted hit became an Option followed to its use with the same answer, including findIndex's -1 paths in no-project-settings.ts, font-size-from-scale.ts and the two test helpers. No comment line was lost. The 57 expect lines loosening.sh names are the same assertions rewritten, none dropped or narrowed. No lock line, as the owner ruled for judgment slices. Left hits: gitignore.mjs lines 15 and 25 (3 hits) are a skipped fix, not an owner call: the plan's own reasoned @effect-diagnostics-next-line preferEffectArray:off line fits code that is right, and it silenced all three in a scratch copy. The seven fabrika/no-raw-try-catch disable lines are right by AGENTS.md (the rule's effect-import proxy no longer means Effect code there), but E34 left the same case as hits, so the integrator meets two answers. A merge of main conflicts in oxlint-plugins/lint.ts with PR 1373.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Read-only apart from this row, on Node 26.13.0. Count with only preferEffectArray at error through --lspconfig on oxlint-plugins/tsconfig.json: 739 at the merge base f7169af, 3 at 8f7b341 (all gitignore.mjs); the tests row's '0 after' is wrong by those 3. Ran one at a time, maxWorkers 1: the 37 changed oxlint-plugins test files, 547 tests green. pnpm typecheck and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) green at 8f7b341. Plants in a scratch worktree, each reverted: ledger.ts settle kept the unused entries (ledger.test.ts 2 red), parallel.ts ended read code - 127 (parallel.test.ts 1 red), modules.ts isTagged dropped the @internal test (modules.test.ts 1 red), law-shape.ts leading defaulted to pinned (law-shape.test.ts 4 red). leakgrep clean. Not run: a recount of the other 134 checks, any .integration. or .visual. file (the diff reaches none).",
+  "plants": [],
+  "step": "review"
+}
