@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tag-comparison-6-review1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T02:02:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of slice AS-no-manual-tag-comparison-6, anti-slop-effect/no-manual-tag-comparison over next/programs/pipeline, next/packages/libfabrika/src/processes and next/programs/tezgah, the whole diff eeb8ecdbb..e7a68b8b9 (tests 6234e5763, build e7a68b8b9): merge-ready, no blocker. Every hand edit was read against the line it replaced and keeps behavior: the merger's update_ok, checks_ok, change_ok and merge_ok answers are now CodeHost.Updated, Change.Verdict, CodeHost.Change and CodeHost.Merged match inside each state (0567 points 2 and 3), with the same order of outcomes, the lost verdict still ci_lost before the until check and pending still ci_silent at or past until; the process table's fold is ProcessEvent.match, each case as before, lifeFor still called only for restarted, exited and down. The forms follow 0567's order: the union's own isAnyOf, match and matchOrElse first, Data.taggedEnum's own $is and $match for ChildrenLedger's and MonitorsLedger's Found and Judged (the union's own matcher, as Effect's cli/Prompt.ts Action.$match), Match.valueTags and Match.type with Match.tag only where the union is narrowed, spans several unions or is not exported. Predicate.isTagged appears twice, both on a value typed unknown (ProcessTable.deliver's m, and the Mailbox letter's m in ExitReasonTest.ts, typed unknown at Mailbox.ts:53), as point 4 allows. effect is 4.1.3, so isAnyOf's keys are bound by the union's tags. The two new internal exports are the smallest way to reach a union's own matcher: quota.ts Decision (used by QuotasSql.ts) and processTable.ts liveWatch (Watch.isAnyOf, used by Process.ts); the sweep's PR body owes a New names line for liveWatch. The tezgah laws' Event.result is now the two cases take() builds from the stepper's Step, so no value changes. No assertion is removed or narrowed: loosening.sh's removed-expect hits are each the same expect moved inside a Match case, and the merger laws' 27 to 24 expects are the conflict and closed blocks' 3 and 3 joined into one block of 3 that runs for each case with that case's object. No disable or @effect-diagnostics line was added or removed, and .oxlintrc.json and tsconfig.base.json are unchanged. The 36 stopped hits (29 exam, 7 product) were recounted with the rule forced on in a scratch config and are all one class, a ledger Entry's _tag, typed as an open string at next/packages/libfabrika/src/ledger/Log.ts:62: no union matcher exists, isTagged on a known type is refused by point 4, and 0567 decides no form for an open tag, so stopping them is right; they need a ruling. pnpm lint's one red part, oxlint-plugins/lint.ts asking for next/programs/tezgah/** in the rule's block, is the expected state for a slice: the briefs forbid a lock line and 0589 puts the locks in the sweep's lock PR, which must land with or before the sweep's PR.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row. Head e7a68b8b9, full clone. Ran at that head, one batch at a time under nice -n 15 with --maxWorkers=3: pipeline's Merger.laws, Queue.laws, Change, Settings, handlers, node/queue.laws.integration and node/runner.laws.integration; tezgah's program.laws; libfabrika processes' internal/processTable.laws, internal/quota, ExitReason, and the ProcessMonitors, ProcessManager and ProcessStreams integration files; libfabrika node's Children, ExitReason and Monitors integration files and Quotas: all green. pnpm typecheck green, no TS377000. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144: 1 of 18 parts red, the tezgah ratchet only. loosening.sh eeb8ecdbb e7a68b8b9: removed-expect hits in MailboxHistory, ProcessIdGenerator, Change, Merger.laws and handlers, each a moved expect, none a loosening. leakgrep --commits eeb8ecdbb..e7a68b8b9 clean. Not run: ProcessWindow, ProcessLifecycle, ProcessSpans and ProcessTextCaps integration files (judged by reading). The tests row lists ExitReasonTest.ts:171,185 and ProcessManager.integration.test.ts:108,117,133 for stopped hits that sit at 170,184 and 110,119,135 at this head; the count of 36 is right. git merge-tree with origin/main conflicts in 13 of this slice's files, because main holds PR 1501 and 1507 squashed while the base holds them unsquashed; that is the fold's work.",
+  "plants": [
+    {
+      "law": "Merger.laws L3",
+      "plant": "Merger.ts checks_ok pending answer: at > s.until in place of at >= s.until, then restored",
+      "result": "red"
+    },
+    {
+      "law": "processTable.laws (lifecycle folds retain reasons, and four more)",
+      "plant": "processTable.ts fold's exited case dropped exited: event.reason, then restored",
+      "result": "red"
+    },
+    {
+      "law": "Queue.laws Q1, Q2, Q3, Q4, Q6",
+      "plant": "Queue.ts busy = Model.isAnyOf([\"starting\"]) without landing, then restored",
+      "result": "red"
+    }
+  ],
+  "step": "review"
+}
