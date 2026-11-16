@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-tests4",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:00:12-08:00",
+  "ended": "2026-11-15T22:07:41-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step, round 4, for judgment slice E30 (strictEffectProvide), in next/, on the remaining product-source hits. Recount at 1d7e357 with effect-tsgo diagnostics and only strictEffectProvide at error: 23 product hits, the same lines the brief names; 1152 libfabrika and 270 app test-file hits stay outside the lock, untouched. PR 1366's 67 files read with the GitHub tool (one page). In 1366's files, waiting for the after-1366 slice: cloudflare/runtime.ts 907, 911, 920, 945, 958, 1242, 1260, 1273, 2416; gateway/Gateway.ts 406, 420; runtime/ProcessStore.ts 194; runtime/Runner.ts 516, 529 (that is 14 lines in 4 files). Outside 1366's files (9 lines in 6 files): next/apps/fabrika/src/instance.ts 62 and 63 take the fix 'build at the edge': the deploy callback is handed the dev run's scope, so Layer.buildWithScope(Layer.provideMerge(localState(), engine), scope) plus Effect.provideContext keeps the signature, no caller changes, and no test needs a layer; planted, the app's tsc shows no error and local-instance.integration.test.ts (a 1366 file, only run, not touched) stays green. The other seven also wait for the after-1366 slice, because their fix is 'caller provides' and the callers' typed contracts sit in 1366's files: SettingsInput.ts 53 and 91, SettingsRecorded.ts 43, SettingsStartsLedger.ts 145 and 146 and runtime/Built.ts 35 each provide the stateless Digest.layerWebCrypto; dropping those provides (planted once) makes libfabrika's tsc fail with missing Digest in cloudflare/runtime.ts 221, 1197, 1199, 1842, 1920, 1924, 1971, 2167, 2216 and 2401 (ProjectOptions.input, the door's policy and audit, the ProjectService layer), in SettingsStartsRemote.ts, CodeStoreSql.ts, build.ts, watch.ts, and in test files including SettingsInput.test.ts, which is a 1366 file. next/apps/fabrika/src/runtime.ts 57 provides Gateway.layer inside the Project's door; the door's type in cloudflare/runtime.ts (ProjectOptions.door, a 1366 file) has no Scope and does not take a Layer, so building at the edge or letting the Project provide it changes that contract; the alternative, an entry-point disable, is the lead's call, since the door is the Durable Object's assembly but not its outermost edge. No test file changed: no fix that can land now needs a test caller to provide a layer. Hits: met 23, fixed 0 (tests step), left for the build 2 (instance.ts 62, 63), waiting on 1366 21.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6.5,
+  "note": "Ran at head 1d7e357: effect-tsgo diagnostics for next/packages/libfabrika and next/apps/fabrika; tsc --noEmit for libfabrika once with the five Digest plants (130 errors, the cascade above) and for the app once with the instance.ts plant (no error, only the expected TS377000 directive warnings); vitest next/apps/fabrika/src/local-instance.integration.test.ts with the instance.ts plant, 2 passed. Every plant restored by copy. That law mocks alchemy/Deploy, so it holds startDev's flow but not the provided Alchemy layers; the real-deploy laws that reach them (instance-one-file, instance-records, settings-start integration tests) start workerd and were not run here. pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 and the exam ratchet are in the step's result.",
+  "plants": [
+    {
+      "law": "a later dev command links its first start to the last runtime in that home (local-instance.integration.test.ts)",
+      "plant": "instance.ts:62-63 builds localState and the engine with Layer.buildWithScope in the scope startDev hands the callback, then Effect.provideContext, the build's planned change",
+      "result": "green"
+    },
+    {
+      "law": "instance readiness waits for the started event to reach the ledger (local-instance.integration.test.ts)",
+      "plant": "the same instance.ts:62-63 change",
+      "result": "green"
+    },
+    {
+      "law": "libfabrika's types: the Project's input, door and layer contracts in cloudflare/runtime.ts",
+      "plant": "SettingsInput.ts 53 and 91, SettingsRecorded.ts 43, SettingsStartsLedger.ts 145 and 146 and Built.ts 35 drop Effect.provide(Digest.layerWebCrypto), the caller-provides fix",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
