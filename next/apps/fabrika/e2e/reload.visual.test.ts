@@ -15,7 +15,6 @@ import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import type * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -23,6 +22,7 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
@@ -240,7 +240,7 @@ const scoped = <A, E>(
   work: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof NodeServices.layer> | SecureRandom.SecureRandom>,
 ) =>
   Effect.runPromise(
-    Effect.scoped(work).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
+    Effect.scoped(work).pipe(Effect.provide(NodeServices.layer.pipe(Layer.provideMerge(SecureRandom.layerWebCrypto)))),
   );
 
 /** Every object in a JSON value, depth first, so an answer is read by its shape, never its text. */

@@ -19,6 +19,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Arr from "effect/Array";
+import * as Layer from "effect/Layer";
 import { String as Str, pipe } from "effect";
 import { vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -602,11 +603,14 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
 // Each run gets its own clock, file system, process ids and secrets.
 const walked = (walk: Walk) =>
   run(walk).pipe(
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+    Effect.provide(
+      fetchClient.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
   );
 
 describe("T708 dev control laws", () => {

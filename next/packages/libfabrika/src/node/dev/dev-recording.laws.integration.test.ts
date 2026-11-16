@@ -62,8 +62,7 @@ for (const failed of [false, true]) {
         try {
           const exit = await Effect.runPromiseExit(
             Effect.scoped(devRecording(folder, "brain:test", () => Effect.succeed({ _tag: "written" }))).pipe(
-              Effect.provide(platform),
-              Effect.provide(NodeServices.layer),
+              Effect.provide(platform.pipe(Layer.provideMerge(NodeServices.layer))),
             ),
           );
 

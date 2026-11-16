@@ -28,6 +28,7 @@ import * as Scope from "effect/Scope";
 import * as Option from "effect/Option";
 import * as Formatter from "effect/Formatter";
 import type * as PlatformError from "effect/PlatformError";
+import * as Layer from "effect/Layer";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
@@ -173,9 +174,12 @@ describe("P16 real browser from a copied one-file build", () => {
                 }),
               ).pipe(
                 Effect.provideService(Scope.Scope, scope),
-                Effect.provide(localState()),
-                Effect.provide(SecureRandom.layerWebCrypto),
-                Effect.provide(NodeServices.layer),
+                Effect.provide(
+                  localState().pipe(
+                    Layer.provideMerge(SecureRandom.layerWebCrypto),
+                    Layer.provideMerge(NodeServices.layer),
+                  ),
+                ),
               ),
             );
 
@@ -438,9 +442,9 @@ const servedCounter = Effect.gen(function* () {
         port,
       }),
     ).pipe(
-      Effect.provide(localState()),
-      Effect.provide(SecureRandom.layerWebCrypto),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(
+        localState().pipe(Layer.provideMerge(SecureRandom.layerWebCrypto), Layer.provideMerge(NodeServices.layer)),
+      ),
     ),
     // localInstance registers its own release on this scope; the instance's port is what must close.
     () => Effect.void,

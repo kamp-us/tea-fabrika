@@ -15,6 +15,7 @@ import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Layer from "effect/Layer";
 import { String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
@@ -1091,7 +1092,7 @@ describe("T518 shared Id generator", () => {
           }
 
           return ids;
-        }).pipe(Effect.provide(Id.Generator.layer), Effect.provide(TestClock.layer())),
+        }).pipe(Effect.provide(Id.Generator.layer.pipe(Layer.provideMerge(TestClock.layer())))),
       );
 
       expect(allocated).toHaveLength(returned.length);

@@ -22,6 +22,7 @@ import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import * as Arr from "effect/Array";
 import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -86,11 +87,14 @@ it("the control plugin returns a typed error for malformed platform port data", 
                 }),
               ),
             ).pipe(
-              Effect.provide(fetchClient),
-              Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
-              Effect.provide(rssLayer(() => 0)),
-              Effect.provide(NodeServices.layer),
+              Effect.provide(
+                fetchClient.pipe(
+                  Layer.provideMerge(ProcessIdGenerator.layer),
+                  Layer.provideMerge(SecureRandom.layerWebCrypto),
+                  Layer.provideMerge(rssLayer(() => 0)),
+                  Layer.provideMerge(NodeServices.layer),
+                ),
+              ),
             ),
           );
 
@@ -296,10 +300,11 @@ it("every observed exit is durable once across restart or brake, with its reason
               expect(kill.mock.calls).toEqual(Arr.map(memoryPids, (pid) => [pid, "SIGTERM"]));
             }),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
             Effect.provide(
+              fetchClient.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(
               rssLayer(
                 () => {
                   platform.samples++;
@@ -309,8 +314,10 @@ it("every observed exit is durable once across restart or brake, with its reason
                 (command, args) => spawned.push({ command, args }),
               ),
             ),
-            Effect.provide(NodeServices.layer),
-            Effect.provide(TestClock.layer()),
+                Layer.provideMerge(NodeServices.layer),
+                Layer.provideMerge(TestClock.layer()),
+              ),
+            ),
           ),
           { signal },
         );
@@ -339,11 +346,14 @@ it("every observed exit is durable once across restart or brake, with its reason
               }),
             ),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
-            Effect.provide(rssLayer(() => 0)),
-            Effect.provide(NodeServices.layer),
+            Effect.provide(
+              fetchClient.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(rssLayer(() => 0)),
+                Layer.provideMerge(NodeServices.layer),
+              ),
+            ),
           ),
           { signal },
         );
@@ -581,11 +591,14 @@ const replaceWorld = Effect.fnUntraced(function* (c: {
 const replaced = <A, E, R>(work: Effect.Effect<A, E, R>) =>
   work.pipe(
     Effect.scoped,
-    Effect.provide(fetchClient),
-    Effect.provide(ProcessIdGenerator.layer),
-    Effect.provide(SecureRandom.layerWebCrypto),
-    Effect.provide(NodeServices.layer),
-    Effect.provide(TestClock.layer()),
+    Effect.provide(
+      fetchClient.pipe(
+        Layer.provideMerge(ProcessIdGenerator.layer),
+        Layer.provideMerge(SecureRandom.layerWebCrypto),
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(TestClock.layer()),
+      ),
+    ),
   );
 
 // L7. Plant: main's dev.ts, with no `replacing`: SIGTERM goes out every second, no SIGKILL comes, and

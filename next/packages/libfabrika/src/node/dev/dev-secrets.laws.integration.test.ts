@@ -445,12 +445,15 @@ const flow = async (sample: Flow) => {
           outputs.outbox.push(yield* outbox.pending);
         }),
       ).pipe(
-        Effect.provide(fetchClient),
-        Effect.provide(ProcessIdGenerator.layer),
-        Effect.provide(random),
-        Effect.provide(rssLayer(() => 0)),
-        Effect.provide(NodeServices.layer),
-        Effect.provide(logger),
+        Effect.provide(
+          fetchClient.pipe(
+            Layer.provideMerge(ProcessIdGenerator.layer),
+            Layer.provideMerge(random),
+            Layer.provideMerge(rssLayer(() => 0)),
+            Layer.provideMerge(NodeServices.layer),
+            Layer.provideMerge(logger),
+          ),
+        ),
       ),
     );
     outputs.outbox.push(

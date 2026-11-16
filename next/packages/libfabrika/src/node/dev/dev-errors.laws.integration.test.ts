@@ -86,11 +86,14 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
                 deploy(mode === "offline" ? 0 : 27002),
               ),
             ).pipe(
-              Effect.provide(fetchClient),
-              Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
-              Effect.provide(rssLayer(() => 0)),
-              Effect.provide(NodeServices.layer),
+              Effect.provide(
+                fetchClient.pipe(
+                  Layer.provideMerge(ProcessIdGenerator.layer),
+                  Layer.provideMerge(SecureRandom.layerWebCrypto),
+                  Layer.provideMerge(rssLayer(() => 0)),
+                  Layer.provideMerge(NodeServices.layer),
+                ),
+              ),
             ),
           );
 
@@ -132,12 +135,15 @@ it("instance reports start_timeout when deployment never opens the control liste
               return yield* Fiber.await(running);
             }),
           ).pipe(
-            Effect.provide(fetchClient),
-            Effect.provide(ProcessIdGenerator.layer),
-            Effect.provide(SecureRandom.layerWebCrypto),
-            Effect.provide(rssLayer(() => 0)),
-            Effect.provide(NodeServices.layer),
-            Effect.provide(TestClock.layer()),
+            Effect.provide(
+              fetchClient.pipe(
+                Layer.provideMerge(ProcessIdGenerator.layer),
+                Layer.provideMerge(SecureRandom.layerWebCrypto),
+                Layer.provideMerge(rssLayer(() => 0)),
+                Layer.provideMerge(NodeServices.layer),
+                Layer.provideMerge(TestClock.layer()),
+              ),
+            ),
           ),
         );
 
@@ -221,12 +227,15 @@ for (const mode of ["exit", "spawn"] as const) {
                 yield* TestClock.adjust("1 second");
               }),
             ).pipe(
-              Effect.provide(fetchClient),
-              Effect.provide(ProcessIdGenerator.layer),
-              Effect.provide(SecureRandom.layerWebCrypto),
-              Effect.provide(spawner),
-              Effect.provide(NodeServices.layer),
-              Effect.provide(TestClock.layer()),
+              Effect.provide(
+                fetchClient.pipe(
+                  Layer.provideMerge(ProcessIdGenerator.layer),
+                  Layer.provideMerge(SecureRandom.layerWebCrypto),
+                  Layer.provideMerge(spawner),
+                  Layer.provideMerge(NodeServices.layer),
+                  Layer.provideMerge(TestClock.layer()),
+                ),
+              ),
               Effect.withTracer(tracer),
             ),
           );

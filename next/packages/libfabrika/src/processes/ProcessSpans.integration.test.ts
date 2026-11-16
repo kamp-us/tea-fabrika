@@ -252,7 +252,7 @@ describe("p97, process calls", () => {
 
           expect(measurements).toHaveLength(1);
           expect(measurements[0]?.["lag"]).toBe(lag);
-        }).pipe(Effect.provide(world.layer), Effect.provide(TestClock.layer()));
+        }).pipe(Effect.provide(world.layer.pipe(Layer.provideMerge(TestClock.layer()))));
       },
     ),
     options,
