@@ -6,7 +6,7 @@
       {
         "name": "@effect/language-service",
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" }
+        "diagnosticSeverity": { "preferBarrelImport": "error" }
       }
     ],
     // The window export is React in a browser tab; the program entry reaches neither.

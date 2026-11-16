@@ -11,7 +11,7 @@
       {
         "name": "@effect/language-service",
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" }
+        "diagnosticSeverity": { "preferBarrelImport": "error" }
       }
     ]
   },

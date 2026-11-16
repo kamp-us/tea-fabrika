@@ -7,7 +7,6 @@
     "plugins": [
       {
         "name": "@effect/language-service",
-        "diagnosticSeverity": { "preferSchemaTaggedError": "error" },
         // A library imports each Effect module by its path (0577). On for the folders at zero, their
         // tests too, until the package is at zero and the block moves up to the whole package.
         // The globs read from this folder. Each import slice adds its folders here.

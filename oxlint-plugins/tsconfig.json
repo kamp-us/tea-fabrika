@@ -9,9 +9,9 @@
       {
         "name": "@effect/language-service",
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" }
+        "diagnosticSeverity": { "preferBarrelImport": "error" }
       }
     ]
   },
-  "include": ["*.ts", "gitignore.mjs", "css/*.ts", "../stylelint.config.ts"]
+  "include": ["*.ts", "test-helpers/*.ts", "gitignore.mjs", "css/*.ts", "../stylelint.config.ts"]
 }
