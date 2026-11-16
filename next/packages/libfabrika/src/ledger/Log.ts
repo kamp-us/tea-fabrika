@@ -99,7 +99,7 @@ export const fromHere = Effect.fn(function* (from: Omit<Line, "_tag" | "body" | 
  * @stability unstable
  * @category constructors
  */
-export const lineFor = <A extends { readonly _tag: string } & Schema.JsonObject>(
+export const lineFor = <A extends Pick<Line, "_tag"> & Schema.JsonObject>(
   from: Omit<Line, "_tag" | "body">,
   { _tag, ...body }: A,
 ) => ({ ...from, _tag, body });
