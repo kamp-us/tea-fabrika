@@ -1117,56 +1117,63 @@ it.effect.prop(
 /** No Schema.Json value: what a field holds once a caller got its type wrong. */
 const WRONG = 1n;
 
-/** A value with one of its own fields removed, or holding the wrong type. `pick` chooses the field. */
-const damaged = (value: object, pick: number, mode: "removed" | "retyped"): object => {
+/**
+ * Every way to break one field of a value: each of its fields removed, and each one holding the
+ * wrong type. Every field of News, Published and Update is required, so none of these is the value's
+ * Schema any more, whatever the Schema says: a law refuses all of them without asking it.
+ */
+const damaged = (value: object): Array<object> => {
   const fields = Object.entries(value);
-  const [name] = fields[pick % fields.length]!;
-  return Object.fromEntries(
-    fields.flatMap(([key, held]) => (key !== name ? [[key, held]] : mode === "removed" ? [] : [[key, WRONG]])),
+  return fields.flatMap(([name]) =>
+    (["removed", "retyped"] as const).map((mode) =>
+      Object.fromEntries(
+        fields.flatMap(([key, held]) => (key !== name ? [[key, held]] : mode === "removed" ? [] : [[key, WRONG]])),
+      ),
+    ),
   );
 };
 
-const Damage = {
-  pick: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 64 })),
-  mode: Schema.Literals(["removed", "retyped"]),
-};
+/** How many broken values `damaged` makes of a value: two per field. */
+const damages = (...values: Array<object>) => values.reduce((sum, value) => sum + 2 * Object.keys(value).length, 0);
 
-/** A close code no News may carry: any whole number outside 4000 to 4999, and any number that is not whole. */
-const BadCode = Schema.Union([
-  Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3999 })),
-  Schema.Int.check(Schema.isBetween({ minimum: 5000, maximum: 65_535 })),
-  Schema.Number.check(
+/**
+ * Close codes no News may carry, one of each kind in every run: a whole number below 4000, one above
+ * 4999, and a number between them that is not whole.
+ */
+const BadCodes = {
+  below: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3999 })),
+  above: Schema.Int.check(Schema.isBetween({ minimum: 5000, maximum: 65_535 })),
+  fraction: Schema.Number.check(
     Schema.isBetween({ minimum: 4000.25, maximum: 4999.75 }),
     Schema.makeFilter((n) => !Number.isInteger(n)),
   ),
-]);
+};
 
 // Plant: forward the raw value when the decode fails.
 it.effect.prop(
   "L9: a value that is not News fails the Connection's notify with LedgerError bad_row, and nothing is sent or closed on any socket",
-  { ...EachNews, ...Damage, json: Schema.Json, code: BadCode },
-  ({ close, granted, whole, patch, pick, mode, json, code }) =>
+  { ...EachNews, ...BadCodes, json: Schema.Json },
+  ({ close, granted, whole, patch, below, above, fraction, json }) =>
     Effect.gen(function* () {
       const views = [whole, patch].map((update) => News.cases.view.make({ update }));
-      const bad = [
-        // Any JSON at all.
-        json,
-        // A News with one field removed or retyped, its tag included.
-        ...[close, granted, ...views].map((news) => damaged(news, pick, mode)),
-        // A view whose update has one field removed or retyped.
-        ...[whole, patch].map((update) => ({ ...views[0]!, update: damaged(update, pick, mode) })),
-        // A view that holds an update with no pid, as a watcher is sent it before the Project adds one.
-        ...[whole, patch].map((update) => ({
-          ...views[0]!,
-          update: damaged(update, Object.keys(update).indexOf("pid"), "removed"),
-        })),
+      const made = [
+        // A News with each field removed or retyped in turn, its tag included.
+        ...[close, granted, ...views].flatMap(damaged),
+        // A view whose update has each field removed or retyped in turn. Its pid removed is the update
+        // a watcher is sent, before the Project adds one.
+        ...[whole, patch].flatMap((update) => damaged(update).map((broken) => ({ ...views[0]!, update: broken }))),
         // A close whose code no app may send.
-        { ...close, code },
+        ...[below, above, fraction].map((code) => ({ ...close, code })),
         // A value that holds what the old door read by hand.
         { close: close.code },
         { method: "client.granted", params: { nonce: granted.nonce } },
-      ].filter((value) => !Schema.is(News)(value));
-      expect(bad.length, "all but the drawn JSON are no News by construction").toBeGreaterThanOrEqual(11);
+      ];
+      expect(made, "every broken field, the three codes and the two old shapes are reached").toHaveLength(
+        damages(close, granted, ...views, whole, patch) + 5,
+      );
+      // Only the freely drawn JSON is asked whether it happens to be News: every other value is no
+      // News by construction, so a loosened Schema cannot drop one.
+      const bad = Schema.is(News)(json) ? made : [json, ...made];
 
       for (const value of bad) {
         const { w, other, exit, spans } = yield* told(value);
@@ -1308,23 +1315,25 @@ const publishOverWire = (service: Runtime.ProjectService["Service"], client: str
 // Plant: forward the raw value when the decode fails.
 it.live.prop(
   "L9: a value that is not Published fails the Project's publish with LedgerError bad_row and no Connection object is told, while a Published reaches the client's Connection object as one view news",
-  { whole: EachNews.whole, patch: EachNews.patch, ...Damage, json: Schema.Json, granted: News.cases.granted },
-  ({ whole, patch, pick, mode, json, granted }) =>
+  { whole: EachNews.whole, patch: EachNews.patch, json: Schema.Json, granted: News.cases.granted },
+  ({ whole, patch, json, granted }) =>
     Effect.gen(function* () {
       const { service, notified } = yield* project();
       yield* service.register("test-client", "test-connection", "test-session");
-      const bad = [
-        json,
-        ...[whole, patch].map((update) => damaged(update, pick, mode)),
-        // An update with no pid, as a watcher is sent it: the Project is handed it with one.
-        ...[whole, patch].map((update) => damaged(update, Object.keys(update).indexOf("pid"), "removed")),
+      const made = [
+        // An update with each field removed or retyped in turn. Its pid removed is the update a
+        // watcher is sent: the Project is handed it with one.
+        ...[whole, patch].flatMap(damaged),
         // A News is not a view update: only `notify` carries one.
         granted,
         News.cases.view.make({ update: whole }),
         // What the old `publish` passed on by hand.
         { method: "client.granted", params: { nonce: granted.nonce } },
-      ].filter((value) => !Schema.is(Published)(value));
-      expect(bad.length, "all but the drawn JSON are no Published by construction").toBeGreaterThanOrEqual(7);
+      ];
+      expect(made, "every broken field and the three other shapes are reached").toHaveLength(damages(whole, patch) + 3);
+      // Only the freely drawn JSON is asked whether it happens to be Published: every other value is
+      // no Published by construction, so a loosened Schema cannot drop one.
+      const bad = Schema.is(Published)(json) ? made : [json, ...made];
 
       for (const value of bad) {
         const exit = yield* Effect.exit(publishOverWire(service, "test-client", value));
@@ -1355,7 +1364,7 @@ it.live.prop(
 // Generator contract: the label, the code and the time are drawn from their Schemas in every run.
 // Plant: drop the waiting notice from the knock branch.
 it.effect.prop(
-  "L2: a knock the door lets wait sends the knocking socket gateway.waiting with params holding its code and until, beside the answer, and hands the Project's publish no value that is not a view update",
+  "L10: a knock the door lets wait sends the knocking socket gateway.waiting with params holding its code and until, beside the answer, and hands the Project's publish no value that is not a view update",
   {
     label: Schema.String,
     code: Schema.String,
