@@ -138,7 +138,7 @@ update a PR is overridden by this line.
 or files still hold the old content, restore them with `git checkout HEAD -- <paths>` before you
 read or test anything (seen twice on 2026-11-16).
 
-**PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. Merge `origin/main` into your branch first (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
+**PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. If your branch does not hold it yet, it takes main once, by the rule "A branch takes main once" above (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
 `oxlint-plugins/effect-checks.test.ts` unless your brief says so. A lock entry goes in
 the package's own `tsconfig.json` under the `@effect/language-service` plugin's `overrides`, the
 way pull request 1430 (E2) did, never in `tsconfig.base.json`. The tooling folders have their own
