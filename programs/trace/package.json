@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@kampus/fabrika-old": "workspace:*",
     "@kampus/pipeline": "workspace:*",
     "@manti-ui/react": "catalog:",
