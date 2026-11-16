@@ -2,6 +2,7 @@
 // Only the platform is doubled. Decoding, routing and the loader are the product's public calls.
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema, Tracer } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import { workerLoader } from "./index.ts";
@@ -178,7 +179,7 @@ it("U8 each load, reload and successor carries exactly its own tail; bootstrap l
                 const previous = live.get(name) ?? 1;
                 const n = cell.replace ? ++next : previous;
                 live.set(name, n);
-                const process = `process_0000000000e00800${String(n).padStart(10, "0")}`;
+                const process = `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
                 // oxlint-disable-next-line fabrika/no-type-assertions -- opaque platform tail identity, never invoked by this fake loader
                 const bound = tails.get(n) ?? ({ process, name } as unknown as BoundTail);
                 tails.set(n, bound);

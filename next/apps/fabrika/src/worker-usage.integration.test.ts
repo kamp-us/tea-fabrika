@@ -13,7 +13,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
@@ -58,7 +58,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -119,7 +119,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
 
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));

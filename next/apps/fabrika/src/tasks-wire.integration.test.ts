@@ -13,7 +13,7 @@ import * as Formatter from "effect/Formatter";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -54,7 +54,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     sign: (value: string) => {
       const body = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -109,7 +109,9 @@ const socket = Effect.fnUntraced(function* (
 
   const ws = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const ws = new WebSocket(`${url.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const ws = new WebSocket(
+        `${Str.replace(/^http/, "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       ws.addEventListener("message", (event) => {
         const f = Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data));
         frames.push(f);
@@ -312,7 +314,7 @@ it.live(
       yield* grant(hands, "hands");
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
-      expect(Arr.filter(first.frames, (f) => f.method?.startsWith("tasks.") === true)).toEqual([]);
+      expect(Arr.filter(first.frames, (f) => f.method !== undefined && Str.startsWith("tasks.")(f.method) === true)).toEqual([]);
       const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { expect, it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { fetch, serveAsset, workerLoader } from "./index.ts";
@@ -153,6 +154,8 @@ it("fetch serves the embedded table on GET and HEAD only after its host and orig
 
 function instanceFixture(config: StartsTest.Fixture) {
   return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
   );
 }

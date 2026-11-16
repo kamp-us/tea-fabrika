@@ -12,6 +12,7 @@
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
 import { createHash } from "node:crypto";
 import { Cause, Effect, Exit } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -269,6 +270,8 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
 
 function instanceFixture(config: StartsTest.Fixture) {
   return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
   );
 }

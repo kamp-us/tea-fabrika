@@ -8,7 +8,7 @@
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
 // may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Array as Arr, Effect, FileSystem, Formatter, Path, Schema } from "effect";
+import { Array as Arr, Effect, FileSystem, Formatter, Path, Schema, String as Str } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -51,7 +51,7 @@ const startsWith = (bytes: Uint8Array, head: Uint8Array) =>
 const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
-  return Arr.map([...new Set([root, Formatter.formatJson(root).slice(1, -1), url.href])], (text) => ({
+  return Arr.map([...new Set([root, Str.slice(1, -1)(JSON.stringify(root)), url.href])], (text) => ({
     text,
     bytes: encoder.encode(text),
   }));
@@ -96,14 +96,14 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
 
           for (const { name } of tables) {
             const table = String(name);
-            const rows = db.prepare(`SELECT * FROM "${table.replaceAll('"', '""')}"`).all();
+            const rows = db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(table)}"`).all();
 
             for (const [row, cells] of rows.entries()) {
               for (const [column, value] of Object.entries(cells)) {
                 for (const { root, forms } of roots) {
                   const holds =
                     typeof value === "string"
-                      ? Arr.some(forms, ({ text }) => value.includes(text))
+                      ? Arr.some(forms, ({ text }) => Str.includes(text)(value))
                       : value instanceof Uint8Array && Arr.some(forms, ({ bytes }) => offsets(value, bytes).length > 0);
 
                   if (holds) {

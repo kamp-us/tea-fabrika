@@ -8,6 +8,7 @@
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { PIDS } from "../Process.test-support.ts";
@@ -49,7 +50,7 @@ describe("P41 slice 1: program mail rules", () => {
         expect(id, "the documented suffix on the dispatched command").toBe(`${command}/mail`);
         expect(mailId(command), "derived once: the same command gives the same ID").toBe(id);
         expect(mailId(other) === id, "two commands never share a delivery ID").toBe(other === command);
-        expect(id.endsWith("/answer"), "never the runner's own answer namespace").toBe(false);
+        expect(Str.endsWith("/answer")(id), "never the runner's own answer namespace").toBe(false);
         expect(inRunnerSpace(id), "never a runner's answer or alarm letter").toBe(false);
         expect(inSignalSpace(id), "never a monitor signal").toBe(false);
         expect(brainOnly({ stream: `${to}/inbox`, id, tag: "send" }), "an ordinary inbox letter").toBe(false);

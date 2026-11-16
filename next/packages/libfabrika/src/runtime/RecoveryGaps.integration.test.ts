@@ -6,6 +6,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import {
   Activity,
@@ -490,7 +491,7 @@ describe("P34 interrupted recovery", () => {
         expect((yield* r.open("new")).view).toMatchObject({ replies: 0 });
         expect(w.controls.commands).toBe(1);
         const answers = Arr.filter([...(yield* read(A)), ...(yield* inbox)], (row) =>
-          JSON.stringify(row.body).includes('"type":"wait_ok"'),
+          Str.includes('"type":"wait_ok"')(JSON.stringify(row.body)),
         );
 
         expect(answers).toHaveLength(1);
@@ -535,7 +536,7 @@ describe("P34 interrupted recovery", () => {
               expect(w.controls.owns).toBe(0);
               expect(w.controls.commits).toBe(0);
               expect(
-                Arr.filter(yield* inbox, (row) => JSON.stringify(row.body).includes('"type":"write_err"')),
+                Arr.filter(yield* inbox, (row) => Str.includes('"type":"write_err"')(JSON.stringify(row.body))),
               ).toMatchObject([{ body: { m: { reason: "not_delivered" } } }]);
             }).pipe(Effect.provide(w.layer()));
           }),

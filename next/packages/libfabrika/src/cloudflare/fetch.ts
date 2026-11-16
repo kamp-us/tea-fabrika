@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from "effect";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
@@ -87,7 +88,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
     return new Response("Foreign origin", { status: 403 });
   }
 
-  if (url.pathname.startsWith("/client/")) {
+  if (Str.startsWith("/client/")(url.pathname)) {
     return yield* rpc(GatewayClient.make(env.CONNECTION.getByName(url.pathname)).fetch(request));
   }
 
@@ -100,9 +101,9 @@ export const fetch = Effect.fn("workers.fetch")(function* (
     return Response.json(yield* rpc(project.grant(input)));
   }
 
-  if (url.pathname.startsWith("/grant/client/") && request.method === "GET") {
+  if (Str.startsWith("/grant/client/")(url.pathname) && request.method === "GET") {
     const target = yield* Effect.try({
-      try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
+      try: () => decodeURIComponent(Str.slice("/grant/client/".length)(url.pathname)),
       catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
     });
 

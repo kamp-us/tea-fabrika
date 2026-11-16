@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Deferred, Effect, Fiber, Layer, type Scope } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
@@ -86,7 +87,7 @@ const T1 = "connection:t1";
 const T2 = "connection:t2";
 
 const byWaiter = (rungs: ReadonlyArray<Rung>) =>
-  [...rungs].sort((x, y) => `${x.to} ${x.stream}`.localeCompare(`${y.to} ${y.stream}`));
+  [...rungs].sort((x, y) => Str.localeCompare(`${y.to} ${y.stream}`)(`${x.to} ${x.stream}`));
 
 describe("p94, a parked wait is a row, rung once", () => {
   it.effect("a wait with news is ready with its stream's newest rev, not the log's, and leaves no ring", () => {

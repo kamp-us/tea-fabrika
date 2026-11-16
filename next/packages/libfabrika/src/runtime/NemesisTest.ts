@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -148,8 +149,13 @@ const marker = Arbitrary.schema(Schema.String.check(Schema.isMinLength(12), Sche
 const noLeak = (output: unknown, secret: string, name = "output") => {
   const text = JSON.stringify(output);
 
-  for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret), encodeURI(secret)]) {
-    expect(text.includes(form), `private content entered ${name}`).toBe(false);
+  for (const form of [
+    secret,
+    Str.slice(1, -1)(JSON.stringify(secret)),
+    encodeURIComponent(secret),
+    encodeURI(secret),
+  ]) {
+    expect(Str.includes(form)(text), `private content entered ${name}`).toBe(false);
   }
 };
 

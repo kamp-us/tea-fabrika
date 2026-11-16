@@ -17,7 +17,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -90,7 +90,7 @@ const Input = Schema.Struct({
 const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
   const repair = (value: unknown): unknown => {
     if (typeof value === "string") {
-      return value.replace(/\p{Cs}/gu, "�");
+      return Str.replace(/\p{Cs}/gu, "�")(value);
     }
 
     if (Arr.isArray(value)) {
@@ -99,7 +99,7 @@ const wellFormed = (input: typeof Input.Type): typeof Input.Type => {
 
     if (value !== null && typeof value === "object") {
       return Object.fromEntries(
-        Arr.map(Object.entries(value), ([key, item]) => [key.replace(/\p{Cs}/gu, "�"), repair(item)]),
+        Arr.map(Object.entries(value), ([key, item]) => [Str.replace(/\p{Cs}/gu, "�")(key), repair(item)]),
       );
     }
 
@@ -166,7 +166,9 @@ for (const [kind, live] of [
           const input = wellFormed(generated);
 
           const chain = input.job
-            ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
+            ? Chain.cases.job.make({
+                process: `process_01m6v5270hf3c8x2q7w9z4k5${Str.padStart(2, "0")(String(input.at))}`,
+              })
             : Chain.cases.spans.make({});
           const name = Formatter.formatJson([`law-${sequence++}`, partName(chain, input.at)]);
           const { driver } = yield* Wire;
@@ -219,7 +221,7 @@ for (const [kind, live] of [
           const rows = Arr.map(input.rows, (row, index) => ({
             ...row,
             span: { ...row.span, spanId: String(index) },
-            content: "x".repeat(cap) + (row.content ?? ""),
+            content: Str.repeat(cap)("x") + (row.content ?? ""),
           }));
 
           const fresh = { ...rows[0]!, span: { ...rows[0]!.span, spanId: "fresh" } };

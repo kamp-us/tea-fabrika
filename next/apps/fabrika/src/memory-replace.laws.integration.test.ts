@@ -12,7 +12,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Array as Arr, Effect, Layer, Option, Predicate, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Stream from "effect/Stream";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import { describe, expect } from "vitest";
@@ -61,7 +66,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -173,8 +178,7 @@ const alive = (pid: number) =>
       const [text] = yield* Effect.all([Stream.mkString(Stream.decodeText(ps.stdout)), ps.exitCode], {
         concurrency: 2,
       });
-
-      return text.trim() === String(pid);
+      return Str.trim(text) === String(pid);
     }),
   ).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
@@ -226,7 +230,7 @@ const outcome = async (instance: Instance): Promise<Outcome> => {
     }
 
     // The control call keeps its cause; Node's fetch names a refused dial ECONNREFUSED.
-    return chain(error).includes("ECONNREFUSED") ? "refused" : "other";
+    return Str.includes("ECONNREFUSED")(chain(error)) ? "refused" : "other";
   }
 };
 

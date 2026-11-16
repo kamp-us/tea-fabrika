@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { Mailbox, ProcessManager, ProcessStore, Writer } from "../coordination/index.ts";
@@ -139,7 +140,7 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               const outputs = [JSON.stringify(raw), String(raw), shown];
 
               for (const output of outputs) {
-                for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+                for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
                   expect(output).not.toContain(form);
                 }
               }

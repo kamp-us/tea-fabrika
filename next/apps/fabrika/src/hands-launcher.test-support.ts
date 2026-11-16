@@ -15,7 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -44,7 +44,7 @@ const ControlCall = Schema.fromJsonString(
 
 const hex = (bytes: Uint8Array) =>
   Arr.join(
-    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")),
+    Array.from(bytes, (byte) => Str.padStart(2, "0")(byte.toString(16))),
     "",
   );
 
@@ -100,7 +100,7 @@ export class Project extends RealProject {
     return Object.fromEntries(
       Arr.map(tables, (table) => [
         table,
-        Arr.map(sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`).toArray(), (row) =>
+        Arr.map(sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`).toArray(), (row) =>
             Object.fromEntries(
             Arr.map(Object.entries(row), ([column, value]) => [
                 column,

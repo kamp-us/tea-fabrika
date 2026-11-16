@@ -11,6 +11,7 @@
 //   A source that fails to read, or a winning value that fails its schema, fails the whole resolve.
 import { describe, expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Exit, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Setting from "./Setting.ts";
 import * as Sources from "./Sources.ts";
@@ -218,8 +219,8 @@ describe("L6, a failed source or an invalid winner never falls through", () => {
       fc.asyncProperty(fc.constantFrom(...ORDER), invalid, ports, async (winning, raw, below) => {
         const lower = ORDER.slice(ORDER.indexOf(winning) + 1);
         // A flag or the environment holds text; a file holds TOML.
-        const text = winning === "flag" || winning === "env" ? (raw.startsWith('"') ? raw.slice(1, -1) : raw) : raw;
-
+        const text =
+          winning === "flag" || winning === "env" ? (Str.startsWith('"')(raw) ? Str.slice(1, -1)(raw) : raw) : raw;
         const choices: Array<Choice> = [
           { [winning]: text, ...Object.fromEntries(lower.map((slot) => [slot, String(below)])) },
           {},

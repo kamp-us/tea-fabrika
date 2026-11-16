@@ -17,7 +17,12 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Array as Arr, Effect, Layer, Option, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
@@ -65,7 +70,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -99,13 +104,13 @@ const identity = () => {
 const span = (n: number) =>
   Schema.decodeSync(SpanRow)({
     traceId: TRACE,
-    spanId: n.toString(16).padStart(16, "0"),
+    spanId: Str.padStart(16, "0")(n.toString(16)),
     parentSpanId: null,
     name: "runner.step",
     kind: "internal",
     startTimeUnixNano: "1794096000000000000",
     endTimeUnixNano: "1794096000001000000",
-    attributes: { "fab.fill": "x".repeat(2000) },
+    attributes: { "fab.fill": Str.repeat(2000)("x") },
     events: [],
     links: [],
     resource: { attributes: { "fab.object": "record-test" } },
@@ -493,7 +498,7 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
 
 const workerdPid = () => {
   const rows = Arr.flatMap(
-    execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }).split("\n"),
+    Str.split(execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }), "\n"),
     (row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
       return m !== null ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
@@ -844,7 +849,7 @@ describe("P12 real object adapters", () => {
       const expected = createHash("sha256").update(body).digest("hex");
       await calls.put("p12/health.json", body, expected);
       expect(await calls.head("p12/health.json")).toEqual({ sha256: expected });
-      await expect(calls.put("p12/bad.json", body, "0".repeat(64))).rejects.toThrow();
+      await expect(calls.put("p12/bad.json", body, Str.repeat(64)("0"))).rejects.toThrow();
       const archive = Archive.bucket(calls);
       expect(
         await Effect.runPromise(Archive.use((a) => a.put("p12/health.json", body)).pipe(Effect.provide(archive))),
@@ -866,7 +871,7 @@ describe("P12 real object adapters", () => {
                   },
                   head: calls.head,
                 }
-              : { put: calls.put, head: async () => ({ sha256: "0".repeat(64) }) },
+              : { put: calls.put, head: async () => ({ sha256: Str.repeat(64)("0") }) },
           );
 
           const records = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));

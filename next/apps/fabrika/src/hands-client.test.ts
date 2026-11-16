@@ -67,7 +67,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Tracer from "effect/Tracer";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
@@ -110,7 +110,7 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
 
 const hex = (bytes: Uint8Array) =>
   Arr.join(
-    Arr.map([...bytes], (b) => b.toString(16).padStart(2, "0")),
+    Arr.map([...bytes], (b) => Str.padStart(2, "0")(b.toString(16))),
     "",
   );
 
@@ -143,8 +143,7 @@ const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
 
   const fingerprint = Effect.fnUntraced(function* (bytes: Uint8Array) {
     const hash = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", new Uint8Array(bytes)), catch: fail });
-
-    return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
+    return `SHA256:${Str.replace(/=+$/, "")(Base64.encode(new Uint8Array(hash)))}`;
   });
 
   const sign = (bytes: Uint8Array) =>
@@ -308,7 +307,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
   const make = (url: string): MemorySocket => {
     // The client dials `<origin>/client/<fingerprint>/<tab>`, as the Worker's door reads it.
     const [name = "", tab = ""] = Arr.map(
-      (new URL(url).pathname.split("/client/")[1] ?? "").split("/"),
+      Str.split(Str.split(new URL(url).pathname, "/client/")[1] ?? "", "/"),
       decodeURIComponent,
     );
     // The gateway's own connection id, once its `connect` has made one; nothing reaches the gateway before.
@@ -335,7 +334,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         attached = a;
       },
       send: (body) => {
-        if (lose.next > 0 && body.startsWith("{") && body.includes('"id"')) {
+        if (lose.next > 0 && Str.startsWith("{")(body) && Str.includes('"id"')(body)) {
           lose.next--;
 
           return;
@@ -347,8 +346,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
       wait: (stream, after, reader) =>
         Effect.gen(function* () {
           const id = yield* connected;
-
-          const answer = stream.startsWith("target:")
+          const answer = Str.startsWith("target:")(stream)
             ? yield* b.d.route(id, "tasks.wait", { after }, reader)
             : yield* b.d.route(id, "ledger.wait", { stream, after }, reader);
 
@@ -600,7 +598,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
       "E1: every ring names the object the sockets live on",
     ).toEqual([]);
 
-    if (Arr.some(d.rung, (r) => r.stream.startsWith("target:"))) {
+    if (Arr.some(d.rung, (r) => Str.startsWith("target:")(r.stream))) {
       done.add("ring:target");
     }
 
@@ -611,7 +609,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     const outputs: Record<string, unknown> = {
       frames: Arr.map(d.sockets, (socket) => socket.sent),
       journal: [...kept.values.entries()],
-      ledger: Arr.map(tables, (table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),
+      ledger: Arr.map(tables, (table) => b.sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`)),
       spans: Arr.map(spans, (span) => ({ name: span.name, attributes: [...span.attributes] })),
     };
 
@@ -624,7 +622,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
 
       for (const secret of hands.secrets) {
         for (const form of [secret, encodeURIComponent(secret), Base64.encode(text(secret))]) {
-          expect(encoded.includes(form), `S1: the hands key's private half is not in ${name}`).toBe(false);
+          expect(Str.includes(form)(encoded), `S1: the hands key's private half is not in ${name}`).toBe(false);
         }
       }
     }

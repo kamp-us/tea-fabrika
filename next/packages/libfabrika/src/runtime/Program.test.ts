@@ -3,6 +3,7 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -1729,7 +1730,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
             : {
                 error: Predicate.hasProperty(down, "_tag") ? down._tag : "none",
                 reason: Predicate.hasProperty(down, "reason") ? down.reason : "none",
-                names: String(Predicate.hasProperty(down, "cause") ? down.cause : down).includes("DOWN"),
+                names: Str.includes("DOWN")(String(Predicate.hasProperty(down, "cause") ? down.cause : down)),
               };
 
           expect(refusal, `M11: ${label}`).toEqual(

@@ -31,6 +31,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -72,7 +73,7 @@ const KEEP = 336 * H;
 const D = Date.UTC(2026, 9, 23);
 
 const hourStart = (at: number) => Math.floor(at / H) * H;
-const utcDay = (at: number) => DateTime.formatIso(DateTime.makeUnsafe(at)).slice(0, 10);
+const utcDay = (at: number) => Str.slice(0, 10)(DateTime.formatIso(DateTime.makeUnsafe(at)));
 const fileKey = (day: string) => `measurements/${OBJECT}/${day}.jsonl`;
 
 const hex = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
@@ -97,14 +98,13 @@ const bucket = (lie = false) => {
     },
     head: (key) => {
       const body = stored.get(key);
-
-      return Promise.resolve(body === undefined ? null : { sha256: lie ? "0".repeat(64) : hex(body) });
+      return Promise.resolve(body === undefined ? null : { sha256: lie ? Str.repeat(64)("0") : hex(body) });
     },
   };
 
   const lines = (key: string): Array<Record<string, unknown>> =>
     Arr.map(
-      Arr.filter(new TextDecoder().decode(stored.get(key)).split("\n"), (line) => line.trim() !== ""),
+      Arr.filter(Str.split(new TextDecoder().decode(stored.get(key)), "\n"), (line) => Str.trim(line) !== ""),
       (line) => JSON.parse(line) as Record<string, unknown>,
     );
   return { calls, stored, puts, lines };
@@ -178,7 +178,9 @@ const rollup = (spans: ReadonlyArray<Raw & { readonly lag: number | null }>) => 
 type Placed = { readonly piece: string | undefined; readonly hour: number | undefined };
 
 const bySummary = (x: Placed, y: Placed) =>
-  `${x.piece} ${String(x.hour).padStart(16, "0")}`.localeCompare(`${y.piece} ${String(y.hour).padStart(16, "0")}`);
+  Str.localeCompare(`${y.piece} ${Str.padStart(16, "0")(String(y.hour))}`)(
+    `${x.piece} ${Str.padStart(16, "0")(String(x.hour))}`,
+  );
 
 const PIECES = ["runner.step", "ledger.call", "gateway.envelope"] as const;
 
@@ -479,7 +481,7 @@ describe("p101, no raw row is ever lost", () => {
     { generated: Schema.String },
     ({ generated }) =>
       Effect.forEach(
-        ["0".repeat(64), generated],
+        [Str.repeat(64)("0"), generated],
         (value) =>
           Effect.gen(function* () {
             const { db, sql } = yield* fresh;
@@ -556,7 +558,7 @@ describe("p101, no raw row is ever lost", () => {
                 }
 
                 for (const k of r2.stored.keys()) {
-                  const day = Date.parse(`${k.slice(-16, -6)}T00:00:00Z`);
+                  const day = Date.parse(`${Str.slice(-16, -6)(k)}T00:00:00Z`);
                   expect(now - day, `${k} left before it was 336 hours old`).toBeGreaterThanOrEqual(KEEP);
                 }
 
@@ -630,8 +632,7 @@ describe("p101, an archive that fails is never silent", () => {
             const failing = {
               put: () => Effect.fail(new SinkError({ reason: "unreachable", held: 0 })),
             };
-
-            const wrong = { put: () => Effect.succeed({ sha256: "0".repeat(64) }) };
+            const wrong = { put: () => Effect.succeed({ sha256: Str.repeat(64)("0") }) };
             const liar = bucket(true);
 
             const down: BucketCalls = {
@@ -896,7 +897,7 @@ describe("p101, late rows of an archived day leave as a further part", () => {
               sha256: hex(r2.stored.get(second) ?? new Uint8Array()),
               rows: 1,
             },
-          ].sort((x, y) => x.key.localeCompare(y.key)),
+          ].sort((x, y) => Str.localeCompare(y.key)(x.key)),
         );
         expect(count(db, "measurements", inDay(D)), "nothing of the day stays local").toBe(0);
         yield* flush;

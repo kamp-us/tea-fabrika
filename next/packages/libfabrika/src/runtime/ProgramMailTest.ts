@@ -39,6 +39,7 @@ import {
   Tracer,
 } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Appended, InputId, Writer } from "../coordination/index.ts";
@@ -233,7 +234,7 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",
@@ -414,15 +415,15 @@ const faulting = (sql: Sql, fault: World["fault"]) => {
       if (/^\s*INSERT\b/i.test(query)) {
         const text = strings(params);
 
-        if (fault.mail && Arr.some(text, (p) => p.endsWith("/mail"))) {
+        if (fault.mail && Arr.some(text, (p) => Str.endsWith("/mail")(p))) {
           fault.mail = false;
           throw new Error("SQLITE_FULL planted at the mail save");
         }
 
         if (
           fault.ack &&
-          Arr.some(text, (p) => p.endsWith("/answer")) &&
-          Arr.some(text, (p) => p.includes('"send_ok"'))
+          Arr.some(text, (p) => Str.endsWith("/answer")(p)) &&
+          Arr.some(text, (p) => Str.includes('"send_ok"')(p))
         ) {
           fault.ack = false;
           throw new Error("SQLITE_FULL planted at the send acknowledgement");
@@ -829,7 +830,7 @@ const walk = (
             (current?.value ?? Number.NaN) + 1,
           );
           expect(
-            Arr.some(answers, (a) => a.ref === state.ref && a.id.endsWith("/mail")),
+            Arr.some(answers, (a) => a.ref === state.ref && Str.endsWith("/mail")(a.id)),
             "L2: a request completes only by its answer letter, never by `queued`",
           ).toBe(true);
         }
@@ -2240,7 +2241,7 @@ const KIB = 1_024;
 
 /** Items of a chunked send, each tagged with its send's number and its index. */
 const tagged = (n: number, pads: ReadonlyArray<number>) =>
-  Arr.map(pads, (pad, i) => ({ s: n, i, pad: "x".repeat(pad) }));
+  Arr.map(pads, (pad, i) => ({ s: n, i, pad: Str.repeat(pad)("x") }));
 
 type Sent =
   | { readonly kind: "letter" }

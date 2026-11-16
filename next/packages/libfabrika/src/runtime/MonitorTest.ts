@@ -47,6 +47,7 @@ import {
   Scope,
 } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { Model as FabrikaModel } from "../permissions/Model.ts";
@@ -227,7 +228,7 @@ const writerFrom = (): From => ({
 });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e00a${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e00a${Str.padStart(12, "0")(n.toString(16))}`);
 
 const letter = (n: number, input: unknown): Incoming => ({
   id: `letter-${n}`,
@@ -343,7 +344,7 @@ const cutting = (sql: Sql, world: World): Sql => ({
     if (
       world.fault.cut &&
       /^\s*INSERT\b/i.test(query) &&
-      Arr.some(params, (p) => typeof p === "string" && p.startsWith('["DOWN",'))
+      Arr.some(params, (p) => typeof p === "string" && Str.startsWith('["DOWN",')(p))
     ) {
       world.fault.cut = false;
       world.done.add("cut:fired");
@@ -497,7 +498,7 @@ const host = Effect.fnUntraced(function* (
         Start.cases.first.make({
           id: `boot:${name}`,
           name,
-          code: { program: name.split(":")[0] ?? "", hash: BUILD },
+          code: { program: Str.split(name, ":")[0] ?? "", hash: BUILD },
           ...(member ? { member: MEMBER } : {}),
         }),
         brainFrom(),

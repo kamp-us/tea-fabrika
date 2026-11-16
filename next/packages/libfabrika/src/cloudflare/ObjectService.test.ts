@@ -28,6 +28,7 @@ import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Context, Effect, Formatter, Layer, Option, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -116,7 +117,7 @@ const damaged = (
   if (recipe._tag === "broken") {
     // A proper prefix of a JSON object is never JSON: its closing brace is gone.
     const text = JSON.stringify(good);
-    return text.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)));
+    return Str.slice(0, 1 + Math.floor(recipe.at * (text.length - 2)))(text);
   }
 
   if (recipe._tag === "missing") {

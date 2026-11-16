@@ -12,6 +12,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema, type Scope } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -330,7 +331,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
 
                     const saved = {
                       ...save.saved,
-                      receipts: [...save.saved.receipts, receipt("huge", 0, "x".repeat(CAPACITY))],
+                      receipts: [...save.saved.receipts, receipt("huge", 0, Str.repeat(CAPACITY)("x"))],
                     };
 
                     expect(yield* both(saved, kept.save(saved)), "L6: a save past capacity is refused").toBe(false);

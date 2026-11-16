@@ -1,6 +1,7 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -228,7 +229,7 @@ describe("p79, process identity", () => {
       fc.tuple(
         fc
           .stringMatching(/^[a-z][a-z0-9:]{0,20}$/)
-          .filter((name) => !["counter:1", "processes", "gateway"].includes(name) && !name.startsWith("client:")),
+          .filter((name) => !["counter:1", "processes", "gateway"].includes(name) && !Str.startsWith("client:")(name)),
         hash.filter((build) => build !== CODE.hash),
       ),
       [["counter:2", "build-b"]],
@@ -397,7 +398,7 @@ describe("p79, predecessors and live info", () => {
                 build,
                 restarts,
               }))
-              .sort((a, b) => a.name.localeCompare(b.name)),
+              .sort((a, b) => Str.localeCompare(b.name)(a.name)),
           ).toEqual([
             { process: X, name: "counter:1", program: "counter", build: "build-a", restarts: 2 },
             { process: W, name: "watcher:1", program: "watcher", build: "build-a", restarts: 0 },

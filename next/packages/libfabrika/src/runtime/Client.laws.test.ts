@@ -27,6 +27,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
 import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
@@ -214,7 +215,7 @@ const letterMoves = (w: LetterWalk, c: LetterChoice): ReadonlyArray<Msg> => {
       type: "dated",
       n: slot.n,
       letter: `letter_${c.word}`,
-      sentAt: `2026-11-11T00:00:${String(c.rev % 60).padStart(2, "0")}Z`,
+      sentAt: `2026-11-11T00:00:${Str.padStart(2, "0")(String(c.rev % 60))}Z`,
     });
   }
 
@@ -529,8 +530,7 @@ const viewWalks = fc.tuple(
   fc.array(viewChoice, { minLength: 1, maxLength: 50 }),
 );
 
-const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
-
+const pidKind = (pid: string): Kind => Arr.lastNonEmpty(Str.split(pid, "_")) as Kind;
 const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
 
 const noteType = (note: unknown): unknown =>
@@ -595,7 +595,7 @@ describe("L5: client views (p3)", () => {
 
           for (const [pid, shown] of Object.entries(next.views)) {
             expect(decodes(pid, shown.view), `${pid} shows ${JSON.stringify(shown.view)}`).toBe(true);
-            arrays += JSON.stringify(shown.view).includes("[") && shown.rev > 0 ? 1 : 0;
+            arrays += Str.includes("[")(JSON.stringify(shown.view)) && shown.rev > 0 ? 1 : 0;
           }
         });
       }),
@@ -723,12 +723,9 @@ describe("L5: client views (p3)", () => {
 // the whole list.
 
 /** Process ids the fold can confuse: few enough that starts, exits and restarts name the same ones. */
-const F1_PIDS = Array.from({ length: 5 }, (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`);
-
+const F1_PIDS = Array.from({ length: 5 }, (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`);
 const F1_NAME = "checklist:1";
-
-const trusted = (writer: string) => writer === "brain" || writer.startsWith("brain:");
-
+const trusted = (writer: string) => writer === "brain" || Str.startsWith("brain:")(writer);
 const FROM_EMPTY: NameFold = { after: 0, live: null, ended: null };
 
 const EXITS = [

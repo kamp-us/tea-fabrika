@@ -3,7 +3,11 @@
 // The laws, and no driver (0062): a runner in the module that owns a driver calls
 // `RecordPartTest.suite(open)`, and `open` acquires each store in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, Effect, type PlatformError, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import type * as PlatformError from "effect/PlatformError";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
+import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import type { SpanRow } from "./Trace.ts";
@@ -47,7 +51,7 @@ const Roll: [fc.Arbitrary<number[]>, fc.Arbitrary<number>, fc.Arbitrary<number>]
 
 const span = (n: number): SpanRow => ({
   traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
-  spanId: n.toString(16).padStart(16, "0"),
+  spanId: Str.padStart(16, "0")(n.toString(16)),
   parentSpanId: null,
   name: "runner.step",
   kind: "internal",

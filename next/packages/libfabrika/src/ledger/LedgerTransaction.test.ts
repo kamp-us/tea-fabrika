@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import * as Str from "effect/String";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -160,7 +161,7 @@ describe("p79, LedgerTransaction", () => {
               expect(error.reason).toBe("storage");
 
               const codes = spans.flatMap((span) =>
-                [...span.attributes].filter(([key]) => key.endsWith(".code")).map(([, value]) => value),
+                [...span.attributes].filter(([key]) => Str.endsWith(".code")(key)).map(([, value]) => value),
               );
 
               expect(codes).toEqual([value]);

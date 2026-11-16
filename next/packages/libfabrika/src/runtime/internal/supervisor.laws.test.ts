@@ -27,6 +27,7 @@ import { Result, Schema } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -49,8 +50,7 @@ type Journal = Model["journal"];
 
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 
-const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
-
+const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 /** A process no fold creates. */
 const FOREIGN = pid(9_999_999_999);
 
@@ -967,12 +967,12 @@ describe("P34c slice 2: one saved recovery journal", () => {
     );
 
     const brakes = Arr.map(
-      Arr.filter([...seen], (s) => s.startsWith("brake:")),
-      (s) => Number(s.slice(6)),
+      Arr.filter([...seen], (s) => Str.startsWith("brake:")(s)),
+      (s) => Number(Str.slice(6)(s)),
     );
     const deads = Arr.map(
-      Arr.filter([...seen], (s) => s.startsWith("dead:")),
-      (s) => Number(s.slice(5)),
+      Arr.filter([...seen], (s) => Str.startsWith("dead:")(s)),
+      (s) => Number(Str.slice(5)(s)),
     );
     expect(Math.max(...brakes), "intensity coverage reaches past 32").toBeGreaterThan(32);
     expect(Math.max(...deads), "delivery limits past 16 go dead").toBeGreaterThan(16);

@@ -26,6 +26,7 @@ import {
   SchemaAST,
   SchemaRepresentation,
 } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
@@ -148,8 +149,8 @@ type Json = Record<string, unknown>;
 /** The definition a local reference names, by Effect's escaping: URI-encoded JSON Pointer. */
 const target = (document: Json, ref: string) => {
   const prefix = "#/$defs/";
-  expect(ref.startsWith(prefix), ref).toBe(true);
-  const name = decodeURIComponent(ref.slice(prefix.length)).replaceAll("~1", "/").replaceAll("~0", "~");
+  expect(Str.startsWith(prefix)(ref), ref).toBe(true);
+  const name = Str.replaceAll("~0", "~")(Str.replaceAll("~1", "/")(decodeURIComponent(Str.slice(prefix.length)(ref))));
   const defs = document.$defs;
   expect(Predicate.isObject(defs) && Object.hasOwn(defs, name), `${ref} names no definition`).toBe(true);
 

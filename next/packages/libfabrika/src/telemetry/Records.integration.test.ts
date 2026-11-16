@@ -33,6 +33,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
@@ -71,7 +72,7 @@ const home = folder.pipe(
         return known;
       }
 
-      const made = connect(join(dir, `${name.replaceAll("/", "_")}.db`));
+      const made = connect(join(dir, `${Str.replaceAll("/", "_")(name)}.db`));
       dbs.set(name, made);
 
       return made;
@@ -120,7 +121,7 @@ const row = (spanId: string, fill = 0): Row => ({
   attributes: {
     "fab.process": PROCESS,
     "fab.letter.id": "m-17",
-    ...(fill > 0 ? { "fab.fill": "f".repeat(fill) } : {}),
+    ...(fill > 0 ? { "fab.fill": Str.repeat(fill)("f") } : {}),
   },
   events: [],
   links: [],
@@ -128,7 +129,7 @@ const row = (spanId: string, fill = 0): Row => ({
   ok: true,
 });
 
-const id = (n: number) => `s${String(n).padStart(15, "0")}`;
+const id = (n: number) => `s${Str.padStart(15, "0")(String(n))}`;
 
 const CAP = 64 * 1024;
 
@@ -313,7 +314,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
         if (parts !== undefined) {
           expect(
             Arr.every(
-              Arr.filter(parts.asked, (name) => name.startsWith("spans/")),
+              Arr.filter(parts.asked, (name) => Str.startsWith("spans/")(name)),
               (name) => /^spans\/\d+$/.test(name),
             ),
           ).toBe(true);

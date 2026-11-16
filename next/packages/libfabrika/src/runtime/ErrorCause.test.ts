@@ -11,6 +11,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -332,7 +333,7 @@ law(
 // the reply's `content` as `Cause.pretty` of the cause.
 describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing text", () => {
   const words = fc.stringMatching(/^[a-z]{12}$/);
-  const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+  const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
   const calls = ["init", "step", "fold", "upgrade_row", "upgrade_gives", "encode"] as const;
 
   /** The call that feeds `seen`, keyed by `key`, to the decoder at one site. */
@@ -377,7 +378,7 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
           const reply = JSON.stringify(executionFailure(error));
 
           for (const form of [keyCore, valueCore, ...forms(keyText), ...forms(valueText)]) {
-            expect(reply.includes(form), "the RPC reply holds a cause's input-bearing text").toBe(false);
+            expect(Str.includes(form)(reply), "the RPC reply holds a cause's input-bearing text").toBe(false);
           }
         }
       }),

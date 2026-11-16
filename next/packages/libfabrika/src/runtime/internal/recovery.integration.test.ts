@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../../Id.test-support.ts";
@@ -204,7 +205,7 @@ describe("T319, next/ dead-letter identity", () => {
               expect(deadRows).toHaveLength(w.starts.length);
 
               for (const row of deadRows) {
-                expect(row.body).toMatchObject({ process: row.stream.slice(0, -"/dead".length) });
+                expect(row.body).toMatchObject({ process: Str.slice(0, -"/dead".length)(row.stream) });
               }
             }),
           ),

@@ -30,6 +30,7 @@ import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Formatter from "effect/Formatter";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -801,7 +802,7 @@ describe("Sql.size on node:sqlite, the object's bytes for P37's size row", () =>
         expect(first).toBe(statSync(path).size);
 
         for (let n = 1; n <= 50; n++) {
-          yield* ledger.append("a", `w-${n}`, line({ body: { note: "x".repeat(4_000) } }));
+          yield* ledger.append("a", `w-${n}`, line({ body: { note: Str.repeat(4_000)("x") } }));
         }
 
         const after = sql.size();

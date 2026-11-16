@@ -19,6 +19,7 @@ import {
   Stream,
 } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
@@ -658,7 +659,7 @@ const press = (w: World, type: "inc" | "dec" | "reset", letter?: number) => {
     input: {
       id: `press-${n}`,
       envelope: {
-        id: `input_0000000000e00800000000${n.toString(16).padStart(4, "0")}`,
+        id: `input_0000000000e00800000000${Str.padStart(4, "0")(n.toString(16))}`,
         by: PERSON,
         arrivedAt: n,
         input: { type },
@@ -991,7 +992,7 @@ export const suite = (rig: Rig): void => {
                 expect(new Set(Arr.map(swapped, (f) => f.id)).size).toBe(a.swaps);
 
                 for (const fact of swapped) {
-                  expect(fact.id.startsWith("code.swapped:")).toBe(true);
+                  expect(Str.startsWith("code.swapped:")(fact.id)).toBe(true);
                   expect(fact.body.program).toBe(PROGRAM);
                 }
               }),
@@ -1440,7 +1441,7 @@ export const suite = (rig: Rig): void => {
                     seen.add(late ? "late" : "early");
                     const { facts } = yield* agrees(w, a, old);
                     const answers = Arr.filter(byTag(facts, "stepped"), (f) =>
-                      String(f.body.input).endsWith("/answer"),
+                      Str.endsWith("/answer")(String(f.body.input)),
                     );
                     expect(answers, "the answer folds once").toHaveLength(1);
                     expect(answers[0]?.body.build).toBe(late ? a.build : old);

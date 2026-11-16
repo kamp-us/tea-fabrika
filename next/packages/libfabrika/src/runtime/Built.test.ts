@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 
@@ -164,18 +165,18 @@ describe("P16 checked built tables", () => {
 
     // Each break keeps the current key inside it, so a check on one end or one segment passes it.
     const breaks: ReadonlyArray<(key: string) => string> = [
-      (key) => key.split("/")[1]!,
-      (key) => key.split("/")[0]!,
+      (key) => Str.split(key, "/")[1]!,
+      (key) => Str.split(key, "/")[0]!,
       (key) => `/${key}`,
       (key) => `${key}/`,
-      (key) => key.replace("/", "//"),
+      (key) => Str.replace("/", "//")(key),
       (key) => `${key}/extra`,
       (key) => `../${key}`,
-      (key) => key.replace("/", "/./"),
-      (key) => key.replace("/", "."),
-      (key) => key.replace("/", ":"),
+      (key) => Str.replace("/", "/./")(key),
+      (key) => Str.replace("/", ".")(key),
+      (key) => Str.replace("/", ":")(key),
       (key) => `${key} `,
-      (key) => `${key}${"x".repeat(257 - key.length)}`,
+      (key) => `${key}${Str.repeat(257 - key.length)("x")}`,
     ];
 
     // The walk: start from a completed table, then each step either adds a program under a fresh

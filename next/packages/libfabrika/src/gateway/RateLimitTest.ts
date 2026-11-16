@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Array as Arr, Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type { Sql } from "../Sql.ts";
 import * as RateLimiterSql from "./RateLimiterSql.ts";
@@ -27,7 +28,7 @@ const consume = (sql: Sql, key: string, policy: { limit: number; window: number 
 const failedWrites = (sql: Sql, cause: Error): Sql => ({
   ...sql,
   exec: (query, ...params) => {
-    if (/INSERT|UPDATE/u.test(query) && query.includes("gateway_limits")) {
+    if (/INSERT|UPDATE/u.test(query) && Str.includes("gateway_limits")(query)) {
       throw cause;
     }
 
@@ -56,11 +57,11 @@ export const suite = (rig: Rig): void => {
               return result;
             },
             exec: (query, ...params) => {
-              if (query.includes("gateway_limits") && /SELECT/iu.test(query)) {
+              if (Str.includes("gateway_limits")(query) && /SELECT/iu.test(query)) {
                 events.push("read");
               }
 
-              if (query.includes("gateway_limits") && /INSERT|UPDATE|DELETE/iu.test(query)) {
+              if (Str.includes("gateway_limits")(query) && /INSERT|UPDATE|DELETE/iu.test(query)) {
                 events.push("write");
               }
 

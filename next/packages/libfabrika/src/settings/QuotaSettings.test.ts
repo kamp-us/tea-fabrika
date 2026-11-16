@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Effect, Formatter, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
 import * as Snapshot from "./Snapshot.ts";
@@ -126,7 +127,7 @@ describe("P34c Q11 settings", () => {
             const tables = new Map<string, string[]>();
 
             for (const [key, value] of selected) {
-              const segments = key.split(".");
+              const segments = Str.split(key, ".");
               const field = segments.pop()!;
               const table = ["limits", ...segments].join(".");
               const rows = tables.get(table) ?? [];

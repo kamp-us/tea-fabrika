@@ -6,6 +6,7 @@ import { type Runs, runsFor } from "@kampus/vitest";
 import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -108,7 +109,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
-      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+      ...Array.from(Str.matchAll(/https?:\/\/[^\s"<>\\]+/gu)(value), ([url]) =>
         Result.getOrElse(
           Result.try(() => decodeURIComponent(decodeURIComponent(url))),
           () => url,
@@ -146,7 +147,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
 
     const sql: Sql = {
       exec: (query, ...params) => {
-        if (cut !== "" && WRITE.test(query) && query.includes(cut)) {
+        if (cut !== "" && WRITE.test(query) && Str.includes(cut)(query)) {
           cut = "";
           hits++;
           throw new Error("SQLITE_IOERR");
@@ -341,24 +342,24 @@ const walk = Effect.fnUntraced(function* (
 
         const admission =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"stepping"')(p));
         const reply = /process_replies/.test(query);
 
         const cleanup =
           /process_activity/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"idle"')(p));
         const activity =
           /process_activity/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"stepping"'));
+          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"stepping"')(p));
         const refusal =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"writing_reply"'));
+          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"writing_reply"')(p));
         const abandonment =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"clearing_attempt"'));
+          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"clearing_attempt"')(p));
         const replyComplete =
           /process_recovery/.test(query) &&
-          Arr.some(params, (p) => typeof p === "string" && p.includes('"_tag":"idle"'));
+          Arr.some(params, (p) => typeof p === "string" && Str.includes('"_tag":"idle"')(p));
 
         if (
           control.cut === "all" ||
@@ -634,9 +635,9 @@ const walk = Effect.fnUntraced(function* (
     const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
 
     for (const body of refusedBodies) {
-      const forms = [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body), body.slice(0, 14)];
+      const forms = [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body), Str.slice(0, 14)(body)];
       expect(
-        Arr.filter(outputs, (output) => Arr.some(forms, (form) => output.includes(form))),
+        Arr.filter(outputs, (output) => Arr.some(forms, (form) => Str.includes(form)(output))),
         "input text leaked",
       ).toEqual([]);
     }
@@ -712,7 +713,7 @@ const walk = Effect.fnUntraced(function* (
       const prior = nth(unansweredFailures, cell.pick);
       const old = yield* live.journal.receipt(prior.id);
       const message = Schema.decodeUnknownSync(Save)(prior.envelope.input);
-      const advance = yield* input({ ...cell, pick: Number(message.note.slice(1)) }, false);
+      const advance = yield* input({ ...cell, pick: Number(Str.slice(1)(message.note)) }, false);
       control.expected = advance;
       const advanced = yield* live.runner.msg(advance);
       expect(advanced._tag).toBe("accepted");

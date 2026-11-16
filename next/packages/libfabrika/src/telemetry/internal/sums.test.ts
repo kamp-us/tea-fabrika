@@ -5,6 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Array as Arr, Effect, Layer, Schema, Stream } from "effect";
 import { Result } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import { Archive } from "../Archive.ts";
@@ -119,7 +120,7 @@ describe("0140 sums", () => {
           const rows = db.prepare("SELECT piece,hour,refused,count FROM sums ORDER BY refused").all();
           expect(Arr.map(rows, (row) => ({ ...row }))).toEqual(
             Arr.map(
-              [...expected].sort(([a], [b]) => a.localeCompare(b)),
+              [...expected].sort(([a], [b]) => Str.localeCompare(b)(a)),
               ([refused, count]) => ({ piece: PIECE, hour: H, refused, count }),
             ),
           );
@@ -136,7 +137,7 @@ describe("0140 sums", () => {
           yield* TestClock.setTime(H + HOUR);
           expect(yield* sink.sums(PIECE, H, H + HOUR)).toEqual(
             Arr.map(
-              [...expected].sort(([a], [b]) => a.localeCompare(b)),
+              [...expected].sort(([a], [b]) => Str.localeCompare(b)(a)),
               ([refused, count]) => ({ _tag: "sum", piece: PIECE, hour: H, refused, count }),
             ),
           );

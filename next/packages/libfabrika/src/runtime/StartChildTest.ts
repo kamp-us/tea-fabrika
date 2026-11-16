@@ -50,6 +50,7 @@ import {
   Scope,
 } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
 import * as Id from "../Id.ts";
@@ -96,7 +97,7 @@ export type Store = {
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
@@ -136,7 +137,7 @@ const DOOR = PIDS.at(-1) ?? "";
 /** The ledger's row limit (`ledger/Log.ts`). */
 const ROW_LIMIT = 2_000_000;
 // A valid 256-character program name adds more bytes to the Cmd than to its first letter.
-const BOUNDARY_PROGRAM = `m${"é".repeat(255)}`;
+const BOUNDARY_PROGRAM = `m${Str.repeat(255)("é")}`;
 
 const PROGRAMS: Record<string, unknown> = {
   starter: childStarter({ name: "starter", declare: true }),
@@ -214,7 +215,7 @@ const stopper = (name: string) => {
   const answer = (type: string, outcome: unknown) =>
     Schema.decodeUnknownSync(Schema.Json)({ type, outcome: outcome ?? null });
   const keep = (type: string) => (s: Model, m: { value?: unknown; reason?: string }) => [
-    { ...s, answers: [...s.answers, answer(type, type.endsWith("_ok") ? m.value : m.reason)] },
+    { ...s, answers: [...s.answers, answer(type, Str.endsWith("_ok")(type) ? m.value : m.reason)] },
     [],
   ];
   const machine = Machine.make({
@@ -277,7 +278,7 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: PERSON });
 const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const brainFrom = (): From => ({
   by: "SHA256:brain",
@@ -332,7 +333,7 @@ const faulting = (
       if (
         fault.exited &&
         /^\s*INSERT\b/i.test(query) &&
-        Arr.some(params, (p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+        Arr.some(params, (p) => p === "exited" || (typeof p === "string" && Str.includes('"exited"')(p)))
       ) {
         fault.exited = false;
         throw Object.assign(
@@ -351,7 +352,8 @@ const faulting = (
         /INSERT INTO process_(state|checkpoint_parts)/.test(query) &&
         Arr.some(
           params,
-          (value) => typeof value === "string" && value.includes(JSON.stringify(fault.inputCheckpoint).slice(1, -1)),
+          (value) =>
+            typeof value === "string" && Str.includes(Str.slice(1, -1)(JSON.stringify(fault.inputCheckpoint)))(value),
         )
       ) {
         fault.inputCheckpoint = undefined;
@@ -367,7 +369,7 @@ const faulting = (
 
       if (
         /^\s*INSERT\b/i.test(query) &&
-        Arr.some(params, (p) => p === "exited" || (typeof p === "string" && p.includes('"exited"')))
+        Arr.some(params, (p) => p === "exited" || (typeof p === "string" && Str.includes('"exited"')(p)))
       ) {
         fault.landed = true;
       }
@@ -743,7 +745,7 @@ const walk = (
       const rows = yield* all(Arr.map(asked, (a) => a.name));
 
       for (const row of rows) {
-        if (row._tag !== "started" || !row.stream.startsWith("processes/") || world.starts.has(row.id)) {
+        if (row._tag !== "started" || !Str.startsWith("processes/")(row.stream) || world.starts.has(row.id)) {
           continue;
         }
 
@@ -758,7 +760,9 @@ const walk = (
         const ask = Option.getOrUndefined(Arr.findFirst(asked, (a) => a.name === name));
         expect(ask, `L5: ${name} was started only by a Cmd the walk dispatched`).toBeDefined();
         expect(requester, "L5: the requester is the life that ran the step").toBe(ask?.requester);
-        expect(row.id.startsWith(`${ask?.requester}/`), "L5: the start's id is the dispatched Cmd's id").toBe(true);
+        expect(Str.startsWith(`${ask?.requester}/`)(row.id), "L5: the start's id is the dispatched Cmd's id").toBe(
+          true,
+        );
         expect(b["hash"], "L5: the hash is the loader's, never the program's").toBe(BUILD);
         const registered = Option.getOrUndefined(
           Arr.findFirst(rows, (e) => e.stream === "processes" && e._tag === "registered" && body(e)["name"] === name),
@@ -827,7 +831,7 @@ const walk = (
       );
     /** Every process row written after `rev`, outside the inboxes. */
     const processRows = (rev: number) =>
-      Effect.map(all(), (rows) => Arr.filter(rows, (e) => e.rev > rev && e.stream.startsWith("processes")));
+      Effect.map(all(), (rows) => Arr.filter(rows, (e) => e.rev > rev && Str.startsWith("processes")(e.stream)));
     /** What each known name's process state is now, read from the process table. */
     const states = Effect.fnUntraced(function* () {
       const out = new Map<string, string>();
@@ -999,7 +1003,7 @@ const walk = (
                               ask: {
                                 program: "merger",
                                 name: choose(
-                                  ["", "processes", "Merger:1", "merger/1", "client:x", "m".repeat(257)],
+                                  ["", "processes", "Merger:1", "merger/1", "client:x", Str.repeat(257)("m")],
                                   cell.alt,
                                 ),
                               },
@@ -1021,7 +1025,7 @@ const walk = (
           expect(
             Arr.filter(
               Arr.filter(yield* all(), (e) => e.rev > revBefore),
-              (e) => e.stream.startsWith("processes") || e.id.startsWith('["start",'),
+              (e) => Str.startsWith("processes")(e.stream) || Str.startsWith('["start",')(e.id),
             ),
             `L6: ${bad.tag} writes nothing`,
           ).toEqual([]);
@@ -1041,11 +1045,11 @@ const walk = (
           yield* door("plain:1", { type: "end", before: [], after: [], twice: false });
           const rows = yield* all();
           expect(
-            Arr.filter(rows, (row) => row.rev > before && row.stream.startsWith("processes")),
+            Arr.filter(rows, (row) => row.rev > before && Str.startsWith("processes")(row.stream)),
             "L8: an undeclared exit writes no process rows",
           ).toEqual([]);
           expect(yield* exitedRows(held.pid), "L8: an undeclared exit leaves its life live").toEqual([]);
-          const replies = Arr.filter(rows, (row) => row.id.endsWith("/answer") && row.stream === "plain:1/inbox");
+          const replies = Arr.filter(rows, (row) => Str.endsWith("/answer")(row.id) && row.stream === "plain:1/inbox");
           expect(body(replies.at(-1))["m"]).toMatchObject({ type: "exit_err", reason: "bad_cmd" });
           seen.add("undeclared_exit");
           break;
@@ -1061,7 +1065,7 @@ const walk = (
           const ending = { type: "end", before, after, twice: true };
           const late = { type: "start", ask: { program: "merger", name: fresh() } };
           const pid = held.pid;
-          world.worker = move.startsWith("worker_");
+          world.worker = Str.startsWith("worker_")(move);
           // The public withLoader path has the Worker's declaration and execution, with no pure stepper.
           let current = yield* host(store, world, next.next, scope);
           let runner = yield* current.runner(name);
@@ -1163,7 +1167,7 @@ const walk = (
           const name = choose(starters(), cell.pick);
           const target = fresh();
           const inputBytes = ROW_LIMIT - 400 - (cell.alt % 16);
-          const input = "x".repeat(inputBytes);
+          const input = Str.repeat(inputBytes)("x");
           const ask = { program: BOUNDARY_PROGRAM, name: target, inputBytes };
           const encoder = new TextEncoder();
           expect(
@@ -1230,7 +1234,7 @@ const walk = (
             const letters = Arr.filter(rows, (row) => row.stream === `${ask.name}/inbox`);
             expect(starts, "L6: checkpoint size loses no valid start").toHaveLength(1);
             expect(letters, "L6: each input was written once").toHaveLength(1);
-            expect(body(letters[0])["m"]).toBe("x".repeat(ask.inputBytes));
+            expect(body(letters[0])["m"]).toBe(Str.repeat(ask.inputBytes)("x"));
           }
 
           expect(yield* exitedRows(held.pid), "L7: exit still follows every valid start").toHaveLength(1);
@@ -1313,7 +1317,7 @@ const walk = (
               yield* all(),
               (e) =>
                 e.stream === `${watcher}/inbox` &&
-                JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                Str.includes('"DOWN"')(JSON.stringify(body(e)["m"] ?? null)) &&
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
             expect(downs.length, "L7: each live watch gets one DOWN").toBe(1);
@@ -1416,7 +1420,7 @@ const walk = (
           expect(
             Arr.filter(
               Arr.filter(yield* all(), (e) => e.rev > revBefore),
-              (e) => e.stream.startsWith("processes"),
+              (e) => Str.startsWith("processes")(e.stream),
             ),
             "already_present writes nothing",
           ).toEqual([]);
@@ -1532,7 +1536,7 @@ const walk = (
               yield* all(),
               (e) =>
                 e.stream === `${watcher}/inbox` &&
-                JSON.stringify(body(e)["m"] ?? null).includes('"DOWN"') &&
+                Str.includes('"DOWN"')(JSON.stringify(body(e)["m"] ?? null)) &&
                 (body(e)["m"] as { ref?: string } | undefined)?.ref === watch.ref,
             );
             expect(downs.length, "L3: each watcher of a stopped child gets one DOWN").toBe(1);
@@ -1670,7 +1674,7 @@ const Secret = fc
   .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom("", '"', "/%? ", "\n"))
   .map(([word, suffix]) => word + suffix);
 
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string>) =>
   Effect.fnUntraced(function* (secret: string, tape: Iterable<fc.AsyncCommand<object, Walk>>) {
@@ -1727,7 +1731,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       // Keep the whole answer, including its Cmd echo, and the sink's stored failure content.
       outputs.push(
         ...Arr.map(
-          Arr.filter(rows, (e) => e.id.endsWith("/answer")),
+          Arr.filter(rows, (e) => Str.endsWith("/answer")(e.id)),
           (e) => JSON.stringify(body(e)),
         ),
       );
@@ -1744,7 +1748,9 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
       for (const output of outputs) {
         for (const form of forms(secret)) {
-          expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+          expect(Str.includes(form)(output), `L11: a secret reached an output: ${Str.slice(0, 200)(output)}`).toBe(
+            false,
+          );
         }
       }
     });
@@ -1764,7 +1770,7 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
       expect(told.length, `L11: ${ask.kind} for ${ask.name} was folded exactly once`).toBe(ask.before + 1);
       const rows = yield* store.entries([ask.name]).pipe(Effect.provide(life.context));
       expect(
-        Arr.filter(rows, (e) => e.stream === `${ask.name}/inbox` && e.id.endsWith("/answer")).length,
+        Arr.filter(rows, (e) => e.stream === `${ask.name}/inbox` && Str.endsWith("/answer")(e.id)).length,
         "L11: the start's whole answer row was written and inspected",
       ).toBeGreaterThan(0);
 

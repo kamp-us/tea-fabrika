@@ -26,6 +26,7 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";
@@ -436,7 +437,10 @@ const START = StartsTest.fixture(
     port: 18787,
     build: BRAIN_BUILD,
   },
-  (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  (algorithm, data) =>
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
 );
 
 const counter = () => {

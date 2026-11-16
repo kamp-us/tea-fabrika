@@ -6,7 +6,15 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Formatter, Layer, Option, type Scope } from "effect";
+import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -74,7 +82,9 @@ const checkAlarmTime = (at: number) => {
 // The process records its start with the Project object before it runs (T753), so the law's
 // environment carries a start's input, and its Project answers that one call and no other.
 const start = StartsTest.fixture({ name: "alarm-project", port: 8787 }, (algorithm, data) =>
-  createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+  createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+    .update(data)
+    .digest(),
 );
 
 const categories = ["zero", "negative", "past", "now", "future", "far", "clear"] as const;

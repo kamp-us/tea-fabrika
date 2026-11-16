@@ -31,7 +31,7 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Formatter from "effect/Formatter";
 import { RateLimiter } from "effect/persistence";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -67,7 +67,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
     const result = [
       value,
       ...(Result.isSuccess(decoded) ? texts(decoded.success, cache) : []),
-      ...Array.from(value.matchAll(/https?:\/\/[^\s"<>\\]+/gu), ([url]) =>
+      ...Array.from(Str.matchAll(/https?:\/\/[^\s"<>\\]+/gu)(value), ([url]) =>
         Result.getOrElse(
           Result.try(() => decodeURIComponent(decodeURIComponent(url))),
           () => url,
@@ -114,7 +114,7 @@ const field = (value: string | Uint8Array) => {
 };
 
 const fingerprint = (bytes: Uint8Array) =>
-  `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`;
 
 // Generated Ed25519 seeds stay in memory. No key file is read or written.
 const key = (seed: Uint8Array, salt: number) => {
@@ -487,8 +487,8 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 );
 
                 for (const body of bodies) {
-                  for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
-                    expect(Arr.filter(outputs, (output) => output.includes(form))).toEqual([]);
+                  for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
+                    expect(Arr.filter(outputs, (output) => Str.includes(form)(output))).toEqual([]);
                   }
                 }
 
@@ -629,7 +629,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                   Exit.isSuccess(result),
                   Exit.isFailure(result) ? String(Cause.squash(result.cause)) : "success",
                 ).toBe(!fail);
-                const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
                 expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.initialize"]);
                 checkSpan(spans[0]!, a, !fail);
                 const appends = Arr.filter(c.spans, (s) => s.name === "authorization.appendAdmitted");
@@ -701,7 +701,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
                 expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.grant"]);
                 checkSpan(spans[0]!, a, !fail);
                 const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
@@ -737,7 +737,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                 );
 
                 expect(Exit.isSuccess(result)).toBe(!fail);
-                const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
                 expect(Arr.map(spans, (s) => s.name)).toEqual(["gateway.deny"]);
                 checkSpan(spans[0]!, a, true);
                 const write = Option.getOrThrow(Arr.findFirst(c.spans, (s) => s.name === "access.write"));
@@ -801,7 +801,7 @@ describe("door partial spans, next/ tracing keep-laws", () => {
                       expect(Cause.squash(result.cause)).toBeInstanceOf(LedgerError);
                     }
 
-                    const spans = Arr.filter(c.spans, (s) => s.name.startsWith("gateway."));
+                    const spans = Arr.filter(c.spans, (s) => Str.startsWith("gateway.")(s.name));
                     expect(Arr.map(spans, (s) => s.name)).toEqual(
                       call === "input_failed" ? ["gateway.input"] : ["gateway.input", "gateway.route"],
                     );

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Option, Layer, Result, Schema } from "effect";
 import type { Scope } from "effect";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import type { Ledger } from "../ledger/Ledger.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -35,7 +36,7 @@ const BRAIN = "SHA256:brain";
 const PROGRAM = "sample/alpha";
 const OTHER = "sample/beta";
 const NAMES = ["alpha:1", "alpha:2", "beta:1"];
-const program = (name: string) => (name.startsWith("alpha:") ? PROGRAM : OTHER);
+const program = (name: string) => (Str.startsWith("alpha:")(name) ? PROGRAM : OTHER);
 
 const from = () => ({
   by: "SHA256:input",
@@ -79,7 +80,7 @@ const snapshot = (sql: Sql) =>
   Object.fromEntries(
     sql
       .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-      .map(({ name }) => [String(name), sql.exec(`SELECT * FROM "${String(name).replaceAll('"', '""')}"`)]),
+      .map(({ name }) => [String(name), sql.exec(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}"`)]),
   );
 
 const world = Effect.fnUntraced(function* (
@@ -89,10 +90,10 @@ const world = Effect.fnUntraced(function* (
   alpha = PROGRAM,
 ) {
   // The alpha names may run under another full identity, such as one whose program is `project`.
-  const identityFor = (name: string) => (name.startsWith("alpha:") ? alpha : OTHER);
+  const identityFor = (name: string) => (Str.startsWith("alpha:")(name) ? alpha : OTHER);
   const store = yield* open;
   let sequence = 0;
-  const pid = () => `process_0000000000e008${(++sequence).toString(16).padStart(12, "0")}`;
+  const pid = () => `process_0000000000e008${Str.padStart(12, "0")((++sequence).toString(16))}`;
   const pids = new Map<string, string>();
   const bell = Layer.succeed(Doorbell, { ring: () => Effect.void });
   const bare = Layer.mergeAll(
@@ -263,8 +264,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const length = cell.alt % 2 === 0 ? Math.ceil(remaining / 4) + 1 : Math.min(4, remaining);
               const text =
                 cell.alt % 3 === 0 && overhead > 0
-                  ? "a".repeat(Math.max(0, remaining - overhead + (cell.pick % 13) - 6))
-                  : `${cell.text}${"😀é\n".repeat(length)}`;
+                  ? Str.repeat(Math.max(0, remaining - overhead + (cell.pick % 13) - 6))("a")
+                  : `${cell.text}${Str.repeat(length)("😀é\n")}`;
               const id = `unicode:${n}`;
               const saved = w.snapshot();
               // The door's trial is this append's own admission, at the place the message will land.
@@ -286,7 +287,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 refusal++;
               } else {
                 count++;
-                const attributable = w.rows().filter((e) => e.stream.startsWith("alpha:") && e._tag === "send");
+                const attributable = w.rows().filter((e) => Str.startsWith("alpha:")(e.stream) && e._tag === "send");
                 expect(after.bytes).toBe(attributable.reduce((sum, e) => sum + bytes(e), 0));
                 expect(after.ahead.writes).toBe(count);
                 expect(after.writes).toBe(2 * count);
@@ -299,7 +300,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
             // Force a positive growth refusal in every shortened tape.
             const before = w.snapshot();
-            expect(yield* w.input("alpha:1", "too-large", "😀".repeat(8_001))).toEqual(
+            expect(yield* w.input("alpha:1", "too-large", Str.repeat(8_001)("😀"))).toEqual(
               Appended.cases.refused.make({ reason: "quota" }),
             );
             expect(w.snapshot()).toEqual(before);

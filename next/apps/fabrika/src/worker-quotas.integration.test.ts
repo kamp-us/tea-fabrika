@@ -14,6 +14,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
+import { String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
@@ -65,7 +66,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -122,7 +123,9 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
   const frames: Array<typeof Frame.Type> = [];
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -369,7 +372,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           expect(before.process).toHaveProperty("recovery.total", { writes: 0, bytes: 0 });
 
           if (mode === "storage") {
-            expect(yield* w.send(alpha, "too-large", { type: "inc", text: "😀".repeat(6000) })).toMatchObject({
+            expect(yield* w.send(alpha, "too-large", { type: "inc", text: Str.repeat(6000)("😀") })).toMatchObject({
               error: { data: { reason: "quota" } },
             });
             expect(yield* w.facts("alpha:1/inbox")).toHaveLength(ordinary);

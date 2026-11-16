@@ -5,6 +5,7 @@
 import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
+import * as Str from "effect/String";
 import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -55,7 +56,7 @@ it.effect.prop(
   },
   ({ call, name, text }) =>
     Effect.gen(function* () {
-      const [client = "", method = ""] = call.split(".");
+      const [client = "", method = ""] = Str.split(call, ".");
       const kind = faults.find((fault) => fault.name === name)!;
 
       const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
@@ -335,8 +336,7 @@ it.effect.prop(
         fault !== undefined ? fault.make(secret) : name === "text" ? secret : { message: secret, news: secret };
 
       const captured = RepliesTest.capture();
-      const [client = "", method = ""] = call.split(".");
-
+      const [client = "", method = ""] = Str.split(call, ".");
       const service =
         client === "Gateway" ? GatewayClient.make(rejecting(thrown)) : ProcessClient.make(rejecting(thrown));
 
@@ -388,7 +388,7 @@ it.effect.prop(
         new LedgerError({ reason, message: `Error: ${text}` }),
         new LedgerError({ reason }),
         new LedgerError({ reason: "unreachable" }),
-        new LedgerError({ reason: "unreachable", message: text.replaceAll(": ", "") }),
+        new LedgerError({ reason: "unreachable", message: Str.replaceAll(": ", "")(text) }),
         new Error(`Error: ${text}`),
       ];
 

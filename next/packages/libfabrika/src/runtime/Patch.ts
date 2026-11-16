@@ -2,8 +2,11 @@
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  */
-import { Result, Schema } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
+import { pipe } from "effect";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.
@@ -16,7 +19,7 @@ export type Patch =
   | { readonly op: "replace"; readonly path: string; readonly value: unknown };
 
 /** A JSON Pointer token: `~` as `~0`, `/` as `~1` (RFC 6901). */
-const token = (key: string | number): string => String(key).replaceAll("~", "~0").replaceAll("/", "~1");
+const token = (key: string | number): string => pipe(String(key), Str.replaceAll("~", "~0"), Str.replaceAll("/", "~1"));
 
 type Plain = { [key: string]: unknown };
 
@@ -132,17 +135,17 @@ export const apply = (before: unknown, ops: unknown): Result.Result<Schema.Json,
   let root = structuredClone(json.success);
 
   for (const op of decoded.success) {
-    if (op.path !== "" && !op.path.startsWith("/")) {
+    if (op.path !== "" && !Str.startsWith("/")(op.path)) {
       return invalid();
     }
 
-    const encoded = op.path === "" ? [] : op.path.slice(1).split("/");
+    const encoded: ReadonlyArray<string> = op.path === "" ? [] : Str.split(Str.slice(1)(op.path), "/");
 
     if (Arr.some(encoded, (p) => /~(?![01])/.test(p))) {
       return invalid();
     }
 
-    const path = Arr.map(encoded, (p) => p.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const path = Arr.map(encoded, (p) => pipe(p, Str.replaceAll("~1", "/"), Str.replaceAll("~0", "~")));
 
     if (Arr.some(path, (p) => unsafe.has(p))) {
       return invalid();

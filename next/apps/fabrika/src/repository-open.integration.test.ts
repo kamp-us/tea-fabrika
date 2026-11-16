@@ -15,13 +15,14 @@ import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
-  return (yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
+  return Str.trim(
+    yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
     ChildProcess.make("git", [...args], {
       cwd,
       extendEnv: false,
@@ -36,7 +37,8 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
         GIT_COMMITTER_EMAIL: "fixture@example.invalid",
       },
     }),
-  )).trim();
+    ),
+  );
 });
 
 const entries = Effect.fnUntraced(function* (home: string) {
@@ -46,7 +48,7 @@ const entries = Effect.fnUntraced(function* (home: string) {
   const rows: Array<Entry> = [];
 
   for (const file of yield* fs.readDirectory(home, { recursive: true })) {
-    if (!file.endsWith(".sqlite")) {
+    if (!Str.endsWith(".sqlite")(file)) {
       continue;
     }
 
@@ -68,7 +70,7 @@ const entries = Effect.fnUntraced(function* (home: string) {
 
 const jsonLines = (text: string) =>
   // Prompt.Confirm writes cursor-show after its newline, directly before dev's JSON report.
-  Arr.flatMap(stripVTControlCharacters(text).split(/\r?\n/), (line) => {
+  Arr.flatMap(Str.split(stripVTControlCharacters(text), /\r?\n/), (line) => {
     const result = Schema.decodeResult(Schema.fromJsonString(Schema.Unknown))(line);
 
       return Result.isSuccess(result) ? [result.success] : [];
@@ -81,11 +83,11 @@ const reports = (text: string, commit: string, result: "ready" | "awaiting_trust
     return (
       Result.isSuccess(fields) &&
       Object.values(fields.success).includes(result) &&
-      JSON.stringify(line).includes(commit)
+      Str.includes(commit)(JSON.stringify(line))
     );
   });
 
-const quote = (word: string) => `'${word.replaceAll("'", "'\\''")}'`;
+const quote = (word: string) => `'${Str.replaceAll("'", "'\\''")(word)}'`;
 
 it.live("scenario: L11 actual dev selects the default commit, saves trust, and reopens without repo execution", () =>
   Effect.scoped(
@@ -190,7 +192,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
             return said;
           }
 
-          if (interactive && !answered && said.includes(commit)) {
+          if (interactive && !answered && Str.includes(commit)(said)) {
             yield* Queue.offer(input, new TextEncoder().encode("y\n"));
             answered = true;
           }

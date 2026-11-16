@@ -2,6 +2,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { apply, diff } from "./Patch.ts";
 
@@ -20,7 +21,9 @@ const independentApply = (before: unknown, patches: ReadonlyArray<Patch>): unkno
       continue;
     }
 
-    const keys = Arr.map(patch.path.slice(1).split("/"), (s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
+    const keys = Arr.map(Str.split(Str.slice(1)(patch.path), "/"), (s) =>
+      Str.replaceAll("~0", "~")(Str.replaceAll("~1", "/")(s)),
+    );
     let object = root;
 
     for (const key of keys.slice(0, -1)) {
@@ -229,7 +232,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
           const all = paths(before);
           const at = [...all[pick % all.length]!, unsafe, ...(last ? [] : ["polluted"])];
           const path = `/${Arr.join(
-            Arr.map(at, (k) => k.replaceAll("~", "~0").replaceAll("/", "~1")),
+            Arr.map(at, (k) => Str.replaceAll("/", "~1")(Str.replaceAll("~", "~0")(k))),
             "/",
           )}`;
           const copy = structuredClone(before);

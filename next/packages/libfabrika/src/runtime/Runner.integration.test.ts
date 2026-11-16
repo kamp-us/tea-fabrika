@@ -30,6 +30,7 @@ import {
   Stream,
 } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { SessionManagerError, Storage } from "../access/SessionManager.ts";
@@ -73,7 +74,7 @@ const owner = Writer.cases.agent.make({ key: "SHA256:owner", for: PERSON });
 
 // Trusted, repeatable UUIDv7 fixtures. The schema checks the same brand as the real door.
 const inputId = (n: number) =>
-  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${n.toString(16).padStart(12, "0")}`);
+  Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
 
 const from = (over: Partial<From> = {}): From => ({
   by: "SHA256:person",
@@ -559,7 +560,7 @@ const worldOn = async (
           send: (...args: Parameters<typeof actual.send>) =>
             actual.send(...args).pipe(
               Effect.flatMap((answer) => {
-                if (fault.answer && args[1].endsWith("/answer")) {
+                if (fault.answer && Str.endsWith("/answer")(args[1])) {
                   fault.answer = false;
                   return Effect.fail(new LedgerError({ reason: "unreachable" }));
                 }
@@ -636,8 +637,8 @@ const worldOn = async (
                 Arr.some(
                   rows,
                   (row) =>
-                    JSON.stringify(row.body).includes(`"n":${cmd.n}`) ||
-                    JSON.stringify(row.body).includes(`"at":${cmd.n}`),
+                    Str.includes(`"n":${cmd.n}`)(JSON.stringify(row.body)) ||
+                    Str.includes(`"at":${cmd.n}`)(JSON.stringify(row.body)),
                 ),
               ).toBe(true);
 
@@ -1675,7 +1676,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             ids.push(`${PROCESS}/due/${asked}/${before.rev}`);
             yield* TestClock.setTime(arrivedAt);
             yield* r.due(before.view.wake!);
-            const timers = Arr.filter(yield* inbox, (row) => row.id.includes("/due/"));
+            const timers = Arr.filter(yield* inbox, (row) => Str.includes("/due/")(row.id));
             expect((yield* r.open("delivered")).view).toMatchObject({
               count: n + 1,
               replies: n + 1,
@@ -1689,7 +1690,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
 
           expect(
             Arr.map(
-              Arr.filter(yield* inbox, (row) => row.id.includes("/due/")),
+              Arr.filter(yield* inbox, (row) => Str.includes("/due/")(row.id)),
               (row) => row.id,
             ),
           ).toEqual(ids);
@@ -1723,7 +1724,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           w.fault.record = true;
           yield* TestClock.setTime(arrivedAt);
           expect(yield* failure(r.due(asked))).toMatchObject({ _tag: "LedgerError" });
-          const first = Arr.filter(yield* inbox, (row) => row.id.includes("/due/"));
+          const first = Arr.filter(yield* inbox, (row) => Str.includes("/due/")(row.id));
           expect(first).toHaveLength(1);
           expect(first[0]!.id).toBe(`${PROCESS}/due/${asked}/${before.rev}`);
           expect(body(first[0]!).m).toEqual({ type: "timer", at: asked, arrivedAt });
@@ -1731,7 +1732,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           expect(w.workCalls()).toBe(0);
           yield* TestClock.adjust(lag);
           yield* r.due(asked);
-          expect(Arr.filter(yield* inbox, (row) => row.id.includes("/due/"))).toEqual(first);
+          expect(Arr.filter(yield* inbox, (row) => Str.includes("/due/")(row.id))).toEqual(first);
           expect((yield* r.open("repeated")).view).toMatchObject({ count: 1, wake: asked + 10 });
         }).pipe(Effect.provide(w.layer()));
       }),
@@ -1774,7 +1775,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             const before = [...w.alarms];
             const failing =
               fault === "ledger" ? "SELECT checkpoint FROM process_state" : "INSERT INTO process_recovery";
-            w.store.fault.query = (q) => q.startsWith(failing);
+            w.store.fault.query = (q) => Str.startsWith(failing)(q);
             w.store.fault.once = fault === "ledger" || fault === "recovery";
             w.fault.load =
               fault === "recovery" ? "limit" : fault === "down" ? "down" : fault === "interrupt" ? "pause" : "";
@@ -1851,7 +1852,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           yield* r.due(40);
           expect(w.workCalls()).toBe(1);
           expect((yield* r.open("a")).view).toMatchObject({ count: 1, replies: 1, wake: 50 });
-          expect(Arr.filter(yield* inbox, (row) => JSON.stringify(row.body).includes('"type":"timer"'))).toHaveLength(
+          expect(Arr.filter(yield* inbox, (row) => Str.includes('"type":"timer"')(JSON.stringify(row.body)))).toHaveLength(
             1,
           );
           expect(w.alarms.at(-1)).toBe(50);
@@ -2336,7 +2337,7 @@ describe("p69 sender survives queued work and Cmd replies", () => {
                   expect(w.signCalls.length).toBeGreaterThanOrEqual(2);
                   expect(new Set(Arr.map(w.signCalls, (call) => call.id)).size).toBe(1);
                   expect(
-                    Arr.filter(yield* resultLetters, (row) => JSON.stringify(row.body).includes("write_ok")),
+                    Arr.filter(yield* resultLetters, (row) => Str.includes("write_ok")(JSON.stringify(row.body))),
                   ).toHaveLength(1);
                 }).pipe(Effect.provide(w.layer())),
               );
@@ -2579,7 +2580,7 @@ describe("P11 review: fresh input, accepted history, and brain-only ids", () => 
           n: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
         }).pipe(
           Arbitrary.map(({ process, n }) =>
-            id.includes("/due/") ? `${process}/due/${n}/${n}` : `${process}/${n}/0/answer`,
+            Str.includes("/due/")(id) ? `${process}/due/${n}/${n}` : `${process}/${n}/0/answer`,
           ),
         ),
       },
@@ -2786,15 +2787,15 @@ describe("P11 review: write boundaries, ports, and watcher bounds", () => {
   it.live("plant, accept unlimited client text: a 257-character id is refused before registering a watcher", () =>
     onDisks(async (world) => {
       const w = await world();
-      const over = "c".repeat(257);
+      const over = Str.repeat(257)("c");
       await Effect.runPromise(
         Effect.gen(function* () {
           const r = yield* w.ProgramRunner;
-          yield* r.open("c".repeat(256));
+          yield* r.open(Str.repeat(256)("c"));
           expect((yield* Effect.exit(r.open(over)))._tag).toBe("Failure");
           yield* r.msg(w.input(1, { type: "add", n: 1 }));
           expect(w.published.has(over)).toBe(false);
-          expect(w.published.get("c".repeat(256))).toHaveLength(2);
+          expect(w.published.get(Str.repeat(256)("c"))).toHaveLength(2);
         }).pipe(Effect.provide(w.layer())),
       );
     }),
@@ -2849,7 +2850,7 @@ describe("P11 recovery gaps and durable installation", () => {
             if (cut === "before checkpoint") {
               w.store.fault.once = true;
               w.store.fault.query = (q) =>
-                q.startsWith("INSERT INTO process_state") &&
+                Str.startsWith("INSERT INTO process_state")(q) &&
                 Number(w.ledgerDisk.db().prepare("SELECT count(*) AS n FROM entries WHERE _tag='stepped'").get()?.n) >
                   0;
             }
@@ -3417,10 +3418,9 @@ describe("P11 monitoring, content and storage failures", () => {
                   { concurrency: 1 },
                 );
                 expect(Formatter.formatJson(content)).toContain(marker);
-                const contentSpan =
-                  failed[
+                const contentSpan = failed[
                     Option.getOrElse(
-                      Arr.findFirstIndex(content, (value) => JSON.stringify(value).includes(marker)),
+                      Arr.findFirstIndex(content, (value) => Str.includes(marker)(JSON.stringify(value))),
                       () => -1,
                     )
                   ]!;

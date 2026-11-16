@@ -15,7 +15,15 @@
 // start piece records that right on the child's first start.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { DateTime, Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -38,7 +46,7 @@ export type Store = { readonly sql: Sql; readonly reopen: Effect.Effect<void> };
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {

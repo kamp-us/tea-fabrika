@@ -7,6 +7,7 @@
  */
 import { Effect, Option, Predicate, Record as Rec, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import * as Codec from "./Codec.ts";
 import type * as Setting from "./Setting.ts";
 import { Origin, type Resolved } from "./Sources.ts";
@@ -79,8 +80,8 @@ const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
         return (
           file.length > 0 &&
           !/^(?:[\\/]|[A-Za-z]:)/.test(file) &&
-          (!file.startsWith("~") || file === "~" || file.startsWith("~/")) &&
-          (!file.startsWith("$") || file === "$FABRIKA_HOME" || file.startsWith("$FABRIKA_HOME/"))
+          (!Str.startsWith("~")(file) || file === "~" || Str.startsWith("~/")(file)) &&
+          (!Str.startsWith("$")(file) || file === "$FABRIKA_HOME" || Str.startsWith("$FABRIKA_HOME/")(file))
         );
       }
 

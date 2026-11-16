@@ -22,7 +22,7 @@ import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
@@ -57,7 +57,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -285,7 +285,7 @@ export const childProject = Effect.fnUntraced(function* () {
     sql: {
       exec: (query: string, ...params: Array<string | number | null>) => {
         // Keep each occurrence, including repeated reads before and after the write turn.
-        observe(query.replace(/\s+/g, " ").trim());
+        observe(Str.trim(Str.replace(/\s+/g, " ")(query)));
 
         const process = typeof params[0] === "string" ? params[0] : undefined;
 
@@ -302,7 +302,7 @@ export const childProject = Effect.fnUntraced(function* () {
         } else if (/INSERT INTO entries/.test(query)) {
           if (params[12] === "exited") {
             trip("exit_write");
-          } else if (params[12] === "send" && String(params[13]).includes('"DOWN"')) {
+          } else if (params[12] === "send" && Str.includes('"DOWN"')(String(params[13]))) {
             trip("down");
           } else if (params[12] === "demonitored") {
             trip("watch_cleanup");
@@ -421,7 +421,7 @@ export const childProject = Effect.fnUntraced(function* () {
             remote(
               Effect.sync(() => ({
                 // The loader keys an isolate by `<hash>/<process>`, so the hash says which program it holds.
-                name: id.startsWith(`${programs["p42/child"]?.hash}/`) ? "p42/child" : "fabrika/counter",
+                name: Str.startsWith(`${programs["p42/child"]?.hash}/`)(id) ? "p42/child" : "fabrika/counter",
                 v: 1,
                 writes: {},
                 inputs: { inc: { write: true, personOnly: false } },
@@ -485,7 +485,7 @@ export const childProject = Effect.fnUntraced(function* () {
       ),
     rows: () =>
       Arr.flatMap(sql.exec("SELECT name FROM sqlite_master WHERE type='table'"), ({ name }) =>
-          typeof name === "string" ? sql.exec(`SELECT * FROM "${name.replaceAll('"', '""')}"`) : [],
+          typeof name === "string" ? sql.exec(`SELECT * FROM "${Str.replaceAll('"', '""')(name)}"`) : [],
         ),
     observe: (operation?: number, error?: Error) => {
       operations = [];

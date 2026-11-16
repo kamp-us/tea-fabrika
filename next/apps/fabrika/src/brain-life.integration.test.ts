@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
-import { Array as Arr, Effect, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { Array as Arr, String as Str } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];
@@ -65,7 +67,7 @@ afterEach(async () => {
 
 const tree = (parent: number) => {
   const rows = Arr.flatMap(
-    execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }).split("\n"),
+    Str.split(execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" }), "\n"),
     (row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
       return m !== null ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
@@ -154,7 +156,7 @@ const launch = async (startupGate = false) => {
   // while the instance still makes its startup calls, and a kill in that gap fails the startup.
   await new Promise<void>((done, fail) => {
     child.stdout!.on("data", () => {
-      if (output.includes('{"ready":')) {
+      if (Str.includes('{"ready":')(output)) {
         done();
       }
     });
@@ -249,7 +251,7 @@ describe("P12 local brain life", () => {
 
     const rows = tree(s.child.pid!),
       leader = Option.getOrUndefined(
-        Arr.findFirst(rows, (row) => row.parent === s.child.pid && row.command.includes("--child")),
+        Arr.findFirst(rows, (row) => row.parent === s.child.pid && Str.includes("--child")(row.command)),
       );
     expect(leader).toBeDefined();
     groups.push(leader!.pid);

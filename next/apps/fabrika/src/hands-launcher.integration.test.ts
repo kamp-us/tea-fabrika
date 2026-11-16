@@ -39,7 +39,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Formatter from "effect/Formatter";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -96,7 +96,7 @@ const person = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     sign: (value: string) => {
       const body = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -128,7 +128,7 @@ const person = () => {
 };
 
 const keyFingerprint = (x: string) =>
-  `SHA256:${createHash("sha256").update(Buffer.from(x, "base64url")).digest("base64").replace(/=+$/, "")}`;
+  `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(Buffer.from(x, "base64url")).digest("base64"))}`;
 
 /** A call on the brain's own local handle, by its method name on the fixture's Project. */
 const method = (project: object, name: keyof LauncherProject) => Reflect.get(project, name);
@@ -378,11 +378,10 @@ const flow = Effect.fnUntraced(
         const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
           Effect.orDie,
         );
-        const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
-          String(row["name"]),
+    const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) => String(row["name"]),
         );
         return Object.fromEntries(
-          Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${t.replace(/"/g, '""')}"`).all()]),
+          Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),
         );
       }),
     );
@@ -416,9 +415,10 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
         const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
         expect(result?._tag, "E2: real git exits").toBe("exited");
         expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
-        expect(result?._tag === "exited" && result.version.startsWith("git version "), "E2: its version line").toBe(
-          true,
-        );
+        expect(
+          result?._tag === "exited" && Str.startsWith("git version ")(result.version),
+          "E2: its version line",
+        ).toBe(true);
         const [first, second] = seen.fingerprints;
         expect(second, "E2: a new start keeps the same key").toBe(first);
         expect(seen.taskAfterRestart, "E2: the restart runs nothing again").toEqual(seen.task);
@@ -472,7 +472,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                     )(value);
 
                     for (const form of forms) {
-                      expect(text.includes(form), `S2: [secrets] the private half is not in ${name}`).toBe(false);
+                      expect(Str.includes(form)(text), `S2: [secrets] the private half is not in ${name}`).toBe(false);
                     }
                   }
                 }),

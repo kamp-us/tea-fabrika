@@ -54,7 +54,7 @@ import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -117,7 +117,7 @@ const identity = (key: typeof TestKey.Type) => {
   return {
     raw: key.jwk.x,
     line: `ssh-ed25519 ${Buffer.concat([field("ssh-ed25519"), field(bytes)]).toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -175,7 +175,9 @@ const press = Effect.fnUntraced(function* (
 
   const socket = yield* Effect.acquireRelease(
     Effect.sync(() => {
-      const socket = new WebSocket(`${url.replace("http", "ws")}/client/${encodeURIComponent(id.fingerprint)}/${tab}`);
+      const socket = new WebSocket(
+        `${Str.replace("http", "ws")(url)}/client/${encodeURIComponent(id.fingerprint)}/${tab}`,
+      );
       socket.addEventListener("message", (event) => {
         if (event.data !== "pong") {
           frames.push(Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data)));
@@ -342,7 +344,7 @@ const observe = Effect.fnUntraced(function* (instance: any) {
   return yield* Schema.decodeEffect(Schema.fromJsonString(Seen))(
     Formatter.formatJson({
       table: Arr.map(rows, (row) => ({ name: row.name, process: row.process })).sort((a, b) =>
-        a.name.localeCompare(b.name),
+        Str.localeCompare(b.name)(a.name),
       ),
       streams,
     }),
@@ -407,7 +409,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
   for (const file of yield* fs.readDirectory(state, { recursive: true })) {
     const full = path.join(state, file);
 
-    if (!file.endsWith(".json") || (yield* fs.stat(full)).type !== "File") {
+    if (!Str.endsWith(".json")(file) || (yield* fs.stat(full)).type !== "File") {
       continue;
     }
 
@@ -427,7 +429,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     const relative = Option.getOrUndefined(
       Arr.findFirst(
         Arr.map(dists, (dist) => path.relative(dist, main)),
-        (one) => !one.startsWith(".."),
+        (one) => !Str.startsWith("..")(one),
       ),
     );
     expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
@@ -609,7 +611,7 @@ const rowsUnder = Effect.fnUntraced(function* <S extends Schema.Top>(
   const found: Array<{ file: string; rows: S["Type"] }> = [];
 
   for (const file of yield* fs.readDirectory(home, { recursive: true })) {
-    if (!file.endsWith(".sqlite")) {
+    if (!Str.endsWith(".sqlite")(file)) {
       continue;
     }
 
@@ -824,7 +826,7 @@ const reopenedOnItsCode = Effect.gen(function* () {
           Arr.map(
             Arr.filter(
               Arr.filter(added, (line) => !moves.includes(line)),
-              (line) => JSON.stringify([line.build, line.body]).includes(descriptor.build),
+              (line) => Str.includes(descriptor.build)(JSON.stringify([line.build, line.body])),
             ),
             (line) => [line.stream, line._tag, line.body],
           ),
@@ -928,7 +930,7 @@ const upgradedOnItsCode = Effect.gen(function* () {
     Arr.map(
       Arr.filter(
         Arr.filter(lines, (line) => line.rev >= upgraded[0]!.rev),
-        (line) => line.build !== hash || JSON.stringify(line.body).includes(counter.build),
+        (line) => line.build !== hash || Str.includes(counter.build)(JSON.stringify(line.body)),
       ),
       (line) => [line._tag, line.build, line.body],
     ),

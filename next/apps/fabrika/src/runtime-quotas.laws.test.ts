@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Schema } from "effect";
+import { ByteSize, Clock, Effect, Option, Schema, String as Str } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
@@ -61,7 +61,7 @@ const PROGRAMS = ["quota/alpha", "quota/beta"] as const;
 // Where the brain records how far each name's reader has read its inbox. An ack is the brain's own
 // record, so no account pays for one.
 const ACKS: ReadonlyArray<string> = NAMES.map(acked);
-const programFor = (name: string) => (name.startsWith("alpha:") ? "quota/alpha" : "quota/beta");
+const programFor = (name: string) => (Str.startsWith("alpha:")(name) ? "quota/alpha" : "quota/beta");
 const required = <A>(value: A | undefined): A => Option.getOrThrow(Option.fromUndefinedOr(value));
 const live = TestClock.withLive;
 
@@ -81,7 +81,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -199,7 +199,7 @@ const counts = (db: DatabaseSync) =>
       .all()
       .map(({ name }) => [
         String(name),
-        db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+        db.prepare(`SELECT count(*) AS n FROM "${Str.replaceAll('"', '""')(String(name))}"`).get()?.n,
       ]),
   );
 
@@ -384,9 +384,9 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     LOADER: {
       get: (id: string) => ({
         getEntrypoint: () => {
-          const alpha = id.startsWith(`${alphaCode.hash}/`);
+          const alpha = Str.startsWith(`${alphaCode.hash}/`)(id);
 
-          if (alpha || id.startsWith(`${betaCode.hash}/`)) {
+          if (alpha || Str.startsWith(`${betaCode.hash}/`)(id)) {
             // The real box around the fixture program.
             const Box = programBox(
               worker(alpha ? "quota/alpha" : "quota/beta"),
@@ -408,7 +408,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
             };
           }
 
-          if (id.startsWith(`${checklistCode.hash}/`)) {
+          if (Str.startsWith(`${checklistCode.hash}/`)(id)) {
             const Box = programBox(checklist, checklistCode.hash);
             return Reflect.construct(Box, []);
           }
@@ -631,7 +631,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           (entry) =>
             entry.rev > rev &&
             entry.stream !== "gateway" &&
-            !entry.stream.startsWith("gateway/") &&
+            !Str.startsWith("gateway/")(entry.stream) &&
             !ACKS.includes(entry.stream),
         ),
       ),
@@ -738,7 +738,7 @@ describe("P34c live wiring, both object stores", () => {
                   ? { type: "tell", to: peer }
                   : move === "ask"
                     ? { type: "ask" }
-                    : { type: "inc", text: "é😀".repeat(c.amount % 64) };
+                    : { type: "inc", text: Str.repeat(c.amount % 64)("é😀") };
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 
               if (move === "tell") {
@@ -883,7 +883,7 @@ describe("P34c live wiring, both object stores", () => {
               Effect.map(w.entries(0), (entries) => cost(entries.filter((e) => ids.includes(e.id))).bytes);
             const bare = yield* pair(["first", "step:first"]);
             const left = cap - required((yield* w.accounts).program["quota/alpha"]).bytes;
-            const text = "a".repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)));
+            const text = Str.repeat(Math.max(0, left - bare - (Math.floor(first.amount / 8) % 12)))("a");
 
             if (!(yield* one("alpha:1", "aimed", text))) {
               // A refusal is true only if the message did not fit: with the wall moved away the same
@@ -898,7 +898,7 @@ describe("P34c live wiring, both object stores", () => {
 
           for (const [n, c] of tape.entries()) {
             const name = required(NAMES[c.pick % 2]);
-            const text = resource === "storage" ? "é😀".repeat(c.amount) : "";
+            const text = resource === "storage" ? Str.repeat(c.amount)("é😀") : "";
             yield* one(name, `fill:${n}`, text);
 
             if (c.reopen) {
@@ -910,7 +910,7 @@ describe("P34c live wiring, both object stores", () => {
 
           // Drive to the wall: the refusal must occur, and it repeats without a new row.
           for (let n = 0; n < 12 && refusals < 2; n++) {
-            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? "😀".repeat(cap) : "");
+            yield* one("alpha:2", `wall:${n}`, resource === "storage" ? Str.repeat(cap)("😀") : "");
           }
 
           expect(refusals).toBeGreaterThanOrEqual(2);

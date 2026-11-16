@@ -32,6 +32,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -61,7 +62,7 @@ export type Store = {
 
 const PIDS: ReadonlyArray<string> = Array.from(
   { length: 40 },
-  (_, n) => `process_0000000000e00800${String(n).padStart(10, "0")}`,
+  (_, n) => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`,
 );
 
 const ids = (...values: ReadonlyArray<string>) => {
@@ -622,7 +623,7 @@ const walk = (
           program: held.program,
           owner: Owner.cases.brain.make({}),
         });
-        const letters = all.filter((e) => e.stream === `${name}/inbox` && e.id.startsWith('["start",'));
+        const letters = all.filter((e) => e.stream === `${name}/inbox` && Str.startsWith('["start",')(e.id));
         expect(
           letters.map((e) => ({ id: e.id, m: body(e)["m"] })),
           `L1, L3: ${name}'s first letters, each once and written by its start`,
@@ -820,7 +821,16 @@ const walk = (
             world.saved.size > 0 && cell.pick % 3 === 0
               ? choose([...world.saved.values()], cell.pick).child
               : childFor(cell, choose(liveProcesses(world), cell.pick));
-          const names = ["", "m".repeat(257), "processes", "gateway", "Merger:1", "merger/1", "client:x", "-merger"];
+          const names = [
+            "",
+            Str.repeat(257)("m"),
+            "processes",
+            "gateway",
+            "Merger:1",
+            "merger/1",
+            "client:x",
+            "-merger",
+          ];
           const kind = cell.alt % 7;
           const bad: { child: unknown; reason: Reason } =
             kind === 0
@@ -829,7 +839,7 @@ const walk = (
                 ? // A bad name and a bad input at once: the name is judged first.
                   { child: { ...base, name: choose(names, cell.name), input: () => 1 }, reason: "bad_name" }
                 : kind === 2
-                  ? { child: { ...base, id: cell.name % 2 === 0 ? "" : "i".repeat(257) }, reason: "bad_input" }
+                  ? { child: { ...base, id: cell.name % 2 === 0 ? "" : Str.repeat(257)("i") }, reason: "bad_input" }
                   : kind === 3
                     ? {
                         child: {
@@ -863,7 +873,7 @@ const walk = (
           const over = cell.alt % 2 === 0;
           const child: Child = {
             ...childFor(cell, choose(liveProcesses(world), cell.pick)),
-            input: "x".repeat(over ? ROW_LIMIT + 1 : ROW_LIMIT - 10_000),
+            input: Str.repeat(over ? ROW_LIMIT + 1 : ROW_LIMIT - 10_000)("x"),
           };
 
           if (over) {
@@ -968,7 +978,7 @@ const walk = (
 
           held.state = "ended";
           const exited = (yield* rowsNow([holder(world, requester)?.name ?? ""])).find(
-            (e) => e._tag === "exited" && body(e)["process"] === requester && e.stream.startsWith("processes/"),
+            (e) => e._tag === "exited" && body(e)["process"] === requester && Str.startsWith("processes/")(e.stream),
           ) as Entry;
 
           if (Result.isSuccess(answer) && answer.success._tag === "started") {
@@ -1266,7 +1276,7 @@ const Secret = fc
   .map(([word, suffix]) => word + suffix);
 
 /** Every form a secret could take in an output: raw, JSON-escaped and percent-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 const capture = Effect.fnUntraced(function* (sql: Sql) {
   const context = yield* Layer.build(SpanSink.layer(sql, { object: "p42-secrets" }));
@@ -1324,7 +1334,9 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
 
       for (const output of outputs) {
         for (const form of forms(secret)) {
-          expect(output.includes(form), `L11: a secret reached an output: ${output.slice(0, 200)}`).toBe(false);
+          expect(Str.includes(form)(output), `L11: a secret reached an output: ${Str.slice(0, 200)(output)}`).toBe(
+            false,
+          );
         }
       }
     };

@@ -11,6 +11,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -35,7 +36,7 @@ const line = (n: number, pad: number): Line =>
       traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
       build: "writer-build",
     },
-    Fact.make({ n, pad: "x".repeat(pad) }),
+    Fact.make({ n, pad: Str.repeat(pad)("x") }),
   );
 
 /** The store's Sql, counting the bytes of the values every query returns while `on` is set. */

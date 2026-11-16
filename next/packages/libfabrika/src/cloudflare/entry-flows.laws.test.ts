@@ -10,6 +10,7 @@ import {
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -50,7 +51,7 @@ const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), so
 const settingsExec =
   (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
   (query, ...args) => {
-    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
+    const settings = args.some((arg) => typeof arg === "string" && Str.startsWith("settings/instance/")(arg));
 
     if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");

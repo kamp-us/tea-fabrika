@@ -6,7 +6,11 @@
  * rewrite. A tag holds a name, an id, a number or a boolean. A failed span's message is never a
  * tag, only its record part's `content`, the one thing a person may delete.
  */
-import { Array as Arr, Cause, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
+import { Array as Arr } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 
 /**
@@ -319,9 +323,8 @@ const MOST_CHARS = 128;
 
 /** The first `MOST_CHARS` characters, one fewer when the cut would split a surrogate pair. */
 const cut = (text: string): string => {
-  const last = text.charCodeAt(MOST_CHARS - 1);
-
-  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? MOST_CHARS - 1 : MOST_CHARS);
+  const highSurrogate = Option.exists(Str.charCodeAt(text, MOST_CHARS - 1), (code) => code >= 0xd800 && code <= 0xdbff);
+  return Str.slice(0, highSurrogate ? MOST_CHARS - 1 : MOST_CHARS)(text);
 };
 
 /**

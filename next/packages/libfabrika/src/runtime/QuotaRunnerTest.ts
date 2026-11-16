@@ -4,6 +4,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Clock, Effect, Option, Schema } from "effect";
 import type { Scope } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import { Appended } from "../coordination/index.ts";
 import { Supervision } from "./internal/supervisor.ts";
@@ -115,7 +116,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
             for (const c of tape) {
               const old = yield* w.local("alpha:1");
-              const model = c.pick % 3 === 0 ? previous.saved.model : { payload: "😀é\n".repeat(c.amount % 120) };
+              const model = c.pick % 3 === 0 ? previous.saved.model : { payload: Str.repeat(c.amount % 120)("😀é\n") };
               const next = { ...previous, saved: { ...previous.saved, model } };
               const delta =
                 new TextEncoder().encode(encode(next)).length - new TextEncoder().encode(encode(previous)).length;
@@ -302,7 +303,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                   e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
               ),
             ).toBe(true);
-            expect(Arr.some(entries, (e) => typeof e.stream === "string" && e.stream.endsWith("/dead"))).toBe(true);
+            expect(Arr.some(entries, (e) => typeof e.stream === "string" && Str.endsWith("/dead")(e.stream))).toBe(true);
             expect(yield* w.checkpoint(name)).not.toBeNull();
             expect(yield* w.input("beta:1", "other", { type: "inc" })).toHaveProperty("_tag", "placed");
             yield* w.drain("beta:1");
@@ -431,7 +432,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
               for (let j = 0; j < length; j++) {
                 const id = `history:${n}:${j}`;
-                const m = j === length - 1 ? { type: "inc", text: "é😀".repeat(c.amount % 256) } : { type: "inc" };
+                const m = j === length - 1 ? { type: "inc", text: Str.repeat(c.amount % 256)("é😀") } : { type: "inc" };
                 expect(yield* w.input("alpha:1", id, m)).toHaveProperty("_tag", "placed");
                 messages.push(id);
               }

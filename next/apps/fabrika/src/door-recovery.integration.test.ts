@@ -35,7 +35,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { RateLimiter } from "effect/persistence";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Gateway } from "./door.ts";
@@ -108,8 +108,7 @@ const key = () => {
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
 
   const fingerprint = (value: Uint8Array) =>
-    `SHA256:${createHash("sha256").update(value).digest("base64").replace(/=+$/, "")}`;
-
+    `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(value).digest("base64"))}`;
   return {
     raw: bytes.toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -367,8 +366,8 @@ const world = ({ disk }: Disks) => {
     exec: (query, ...args) => {
       if (
         controls.cutRecorded &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        Arr.some(args, (arg) => typeof arg === "string" && arg.includes('"_tag":"recorded"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        Arr.some(args, (arg) => typeof arg === "string" && Str.includes('"_tag":"recorded"')(arg))
       ) {
         controls.cutRecorded = false;
         controls.cuts++;
@@ -377,8 +376,8 @@ const world = ({ disk }: Disks) => {
 
       if (
         controls.cutRetryable &&
-        query.startsWith("UPDATE gateway_bindings") &&
-        Arr.some(args, (arg) => typeof arg === "string" && arg.includes('"_tag":"retryable"'))
+        Str.startsWith("UPDATE gateway_bindings")(query) &&
+        Arr.some(args, (arg) => typeof arg === "string" && Str.includes('"_tag":"retryable"')(arg))
       ) {
         controls.cutRetryable = false;
         controls.retryableCuts++;

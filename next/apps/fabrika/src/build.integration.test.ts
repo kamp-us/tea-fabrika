@@ -17,7 +17,12 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Array as Arr, Effect, FileSystem, Layer, PlatformError, type Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as PlatformError from "effect/PlatformError";
+import type * as Path from "effect/Path";
+import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -82,8 +87,9 @@ const snapshot = (dir: string): ReadonlyArray<readonly [string, string]> =>
   Arr.map(
     Arr.filter(readdirSync(dir, { recursive: true, withFileTypes: true }), (f) => f.isFile()),
       (f) =>
-      [relative(dir, join(f.parentPath, f.name)), readFileSync(join(f.parentPath, f.name)).toString("base64")] as const,
-  ).sort(([a], [b]) => a.localeCompare(b));
+        [relative(dir, join(f.parentPath, f.name)),
+          readFileSync(join(f.parentPath, f.name)).toString("base64")] as const,
+    ).sort(([a], [b]) => Str.localeCompare(b)(a));
 
 const clean = "export const Tip = (p: {text: string}) => <b>{p.text}</b>;";
 
@@ -455,7 +461,7 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
                   expect(page!.body, "the page loads the script").toContain("/window.js");
                   expect(script!.body, "the tab bundle names no Node module").not.toMatch(/["'`]node:[a-z]/);
                   // Manti's defaults precede our token mapping (tier-1-detail.md, Styling).
-                  const styles = Arr.map([...page!.body.matchAll(/<style>([\s\S]*?)<\/style>/g)], (m) => m[1]!);
+                  const styles = Arr.map([...Str.matchAll(/<style>([\s\S]*?)<\/style>/g)(page!.body)], (m) => m[1]!);
                   expect(styles, "the tab's three stylesheets").toHaveLength(3);
                   expect(styles[1], "the design package's tokens follow Manti's styles").toContain(token);
                   good = snapshot(out);

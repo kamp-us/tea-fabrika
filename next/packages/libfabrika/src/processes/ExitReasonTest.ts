@@ -3,7 +3,16 @@
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Formatter, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -332,8 +341,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             [...world.watches.entries()].filter(([, w]) => w.live),
             step.pick,
           );
-
-          const ref = key.slice(key.lastIndexOf("|") + 1);
+          const ref = Arr.lastNonEmpty(Str.split(key, "|"));
           const caller = watch.to._tag === "client" ? brain() : watcher(watch.to.process);
           const answer = yield* as(caller, (p) => p.demonitor(ref, from()));
           expect(Result.isSuccess(answer), "a cancel of a live watch is placed").toBe(true);

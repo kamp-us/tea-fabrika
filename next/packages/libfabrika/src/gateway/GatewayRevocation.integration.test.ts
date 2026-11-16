@@ -23,6 +23,7 @@ import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import { Array as Arr } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
@@ -125,8 +126,7 @@ const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
-  const fp = (raw: Uint8Array) => `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
-
+  const fp = (raw: Uint8Array) => `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -682,7 +682,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+                if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
                   return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
@@ -763,7 +763,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(marker)) {
+                if (!paused && Str.includes(marker)(new TextDecoder().decode(bytes))) {
                   paused = true;
                   return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(
@@ -838,10 +838,8 @@ describe("P17a, revoke stops writes at the final door", () => {
               expect((yield* hello(original, w.old, "before-upgrade")).result._tag).toBe("online");
               const params = request(target, letter, text);
               const by = Writer.cases.person.make({ key: w.old.fingerprint, for: person });
-
-              const traceId = letter.replaceAll("-", ""),
-                spanId = traceId.slice(0, 16);
-
+              const traceId = Str.replaceAll("-", "")(letter),
+                spanId = Str.slice(0, 16)(traceId);
               const oldProcess = yield* ProcessIdGenerator.use((g) => g.next).pipe(Effect.provide(w.layers().env));
               const id = `in-${oldProcess}-${n}`;
 
@@ -1086,7 +1084,7 @@ describe("P17a, revoke stops writes at the final door", () => {
                   ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
                   : new Uint8Array(data);
 
-                if (!paused && new TextDecoder().decode(bytes).includes(encodedMarker)) {
+                if (!paused && Str.includes(encodedMarker)(new TextDecoder().decode(bytes))) {
                   paused = true;
                   return Effect.runPromiseWith(context)(
                     Deferred.succeed(entered, undefined).pipe(

@@ -1,4 +1,13 @@
-import { Cause, Clock, Context, Effect, Formatter, Layer, Option, Result, Schema } from "effect";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -314,9 +323,14 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
 
   return {
     fetch: Effect.fnUntraced(function* (request: Request) {
-      const path = new URL(request.url).pathname.split("/");
+      const path = Str.split(new URL(request.url).pathname, "/");
 
-      if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      if (
+        !Option.exists(
+          Option.fromNullishOr(request.headers.get("upgrade")),
+          (upgrade) => Str.toLowerCase(upgrade) === "websocket",
+        )
+      ) {
         return new Response("WebSocket required", { status: 426 });
       }
 

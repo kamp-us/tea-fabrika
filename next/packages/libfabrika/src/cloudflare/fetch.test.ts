@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
 import { Cause, Effect, Exit } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -300,6 +301,8 @@ describe("P12 public Worker fetch", () => {
 
 function instanceFixture(config: StartsTest.Fixture) {
   return StartsTest.fixture(config, (algorithm, data) =>
-    createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+      .update(data)
+      .digest(),
   );
 }

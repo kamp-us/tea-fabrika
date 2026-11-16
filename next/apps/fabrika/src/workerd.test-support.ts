@@ -5,7 +5,12 @@
 import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { Activity } from "@kampus/libfabrika/processes/Process";
-import { Array as Arr, Effect, FileSystem, Path, Schema, Stream } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Array as Arr, String as Str } from "effect";
 import { ChildProcess } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 
@@ -17,7 +22,7 @@ const processes = Effect.gen(function* () {
 
 /** The pid of the one `workerd` among `parent`'s descendants. More or fewer than one fails the test. */
 const workerd = Effect.fn("workerd.find")(function* (parent: number) {
-  const rows = (yield* processes).split("\n");
+  const rows = Str.split(yield* processes, "\n");
   const found = new Set([parent]);
   let grew = true;
 
@@ -37,7 +42,7 @@ const workerd = Effect.fn("workerd.find")(function* (parent: number) {
   const pids = Arr.filter(
     Arr.map(
       Arr.filter(rows, (row) => /\/workerd(?:\s|$)/.test(row)),
-      (row) => Number(row.trim().split(/\s+/)[0]),
+      (row) => Number(Str.split(Str.trim(row), /\s+/)[0]),
     ),
     (pid) => found.has(pid),
   );

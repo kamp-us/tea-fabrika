@@ -30,7 +30,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Tracer from "effect/Tracer";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -91,7 +91,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -324,7 +324,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
               value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
             }),
           describe: async () =>
-            id.startsWith(`${approvalCode.hash}/`)
+            Str.startsWith(`${approvalCode.hash}/`)(id)
               ? {
                   name: "p12/approvals",
                   v: 1,
@@ -557,7 +557,7 @@ const bends: ReadonlyArray<(name: string) => string> = [
   () => "fabrika/counter",
   (name) => `fabrika/${name}`,
   (name) => `${name}/x`,
-  (name) => name.replace(/[:.]/, "/"),
+  (name) => Str.replace(/[:.]/, "/")(name),
 ];
 
 // The walk: from the brain's own bootstrap, each step starts the core code under a fresh valid
@@ -610,7 +610,7 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
     expect(Arr.map(info, (p) => p.name).sort()).toEqual([...names, ...Arr.map(boots, (b) => b.name)].sort());
     expect(byName(others(info))).toEqual(byName(boots));
     expect(byName(others(w.configured))).toEqual(byName(boots));
-    expect(Arr.every(w.configured, (d) => !d.name.includes("/"))).toBe(true);
+    expect(Arr.every(w.configured, (d) => !Str.includes("/")(d.name))).toBe(true);
   }
 
   expect(refused).toBeGreaterThan(0);
@@ -971,7 +971,7 @@ describe("P12 WebCrypto failures", () => {
               } else {
                 // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
                 const bucket = { put } as unknown as R2Bucket;
-                await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
+                await expect(bucketCalls(bucket).put("measurements", body, Str.repeat(64)("0"))).rejects.toMatchObject({
                   _tag: "LedgerError",
                   reason: "crypto",
                 });
@@ -1151,7 +1151,7 @@ describe("P12 Connection recording", () => {
     await fc.assert(
       fc.asyncProperty(
         rejected,
-        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !FRAME.includes(text)),
+        fc.string({ minLength: 8, maxLength: 64 }).filter((text) => !Str.includes(text)(FRAME)),
         (kind, text) =>
           owned(async (open) => {
             const { sent } = await refusedCall(open, kind.make(text));
@@ -1175,7 +1175,7 @@ describe("P12 Connection recording", () => {
           expect(refused[0]).toMatchObject({ ok: false, attributes: { "error.type": kind.name } });
           // Failure text is deletable content (P37), never a span tag.
           expect(
-            Arr.filter(Object.values(refused[0]!.attributes), (tag) => typeof tag === "string" && tag.includes(text)),
+            Arr.filter(Object.values(refused[0]!.attributes), (tag) => typeof tag === "string" && Str.includes(text)(tag)),
           ).toEqual([]);
         }, signal),
       ),

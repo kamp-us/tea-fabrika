@@ -3,6 +3,7 @@
  */
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
+import * as Str from "effect/String";
 import { type AST, getStaticTOMLValue, ParseError, parseTOML } from "toml-eslint-parser";
 import * as Edit from "./internal/edit.ts";
 import { Conflict, Syntax, Toml, type TomlDocument, TomlError, Value } from "./Toml.ts";
@@ -64,12 +65,13 @@ const content = (node: AST.TOMLContentNode): unknown => {
 };
 
 const sectionStart = (text: string, node: AST.TOMLTable): number => {
-  let start = text.lastIndexOf("\n", node.range[0] - 1) + 1;
+  let start = Edit.lineStart(text, node.range[0]);
 
   while (start > 0) {
-    const previous = start < 2 ? 0 : text.lastIndexOf("\n", start - 2) + 1;
+    // start - 1 is the newline that ends the line above.
+    const previous = Edit.lineStart(text, start - 1);
 
-    if (!/^\s*(?:#[^\r\n]*)?\s*$/.test(text.slice(previous, start))) {
+    if (!/^\s*(?:#[^\r\n]*)?\s*$/.test(Str.slice(previous, start)(text))) {
       break;
     }
 
@@ -229,10 +231,9 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
           throw new TypeError("The encoder did not produce a TOML key.");
         }
 
-        return text.slice(...node.key.range);
+        return Str.slice(...node.key.range)(text);
       });
-
-      return { value: checked, text: source.slice(...assignment.value.range), keys };
+      return { value: checked, text: Str.slice(...assignment.value.range)(source), keys };
     },
     catch: (cause: unknown) => failure(new Value({ cause }), 1),
   });

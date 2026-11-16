@@ -12,6 +12,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
@@ -52,8 +53,7 @@ const SEED = 119120;
 const RUNS = runsFor({ fast: 10, full: 40 });
 
 const CUTS = ["after_observation", "after_dead", "after_exit", "after_start", "after_checkpoint"] as const;
-
-const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
+const pid = (n: number): string => `process_0000000000e00800${Str.padStart(10, "0")(String(n))}`;
 
 const from = (): From => ({
   by: "SHA256:brain",
@@ -405,7 +405,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
   const input = (id: string, m: unknown): Incoming => ({
     id,
     envelope: {
-      id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${(++inputs).toString(16).padStart(12, "0")}`),
+      id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${Str.padStart(12, "0")((++inputs).toString(16))}`),
       by: person,
       arrivedAt: 0,
       input: m,
@@ -507,7 +507,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
     const crashed = (phase: "step" | "saved_letter", error: string) => ExitReason.cases.crashed.make({ phase, error });
 
     for (const [index, cell] of tape.entries()) {
-      const open = Arr.filter([...a.letters], ([id, l]) => id.startsWith("poison") && l.dead === null);
+      const open = Arr.filter([...a.letters], ([id, l]) => Str.startsWith("poison")(id) && l.dead === null);
       const dead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
       const options = Arr.filter(
         allowed,
@@ -711,7 +711,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           yield* w.settle;
           recovered();
           const receipt = yield* w.recovery((s) => s.receipt(id));
-          expect(JSON.stringify([w.rows(), receipt]).includes(lost), "an uncaptured class survives nowhere").toBe(
+          expect(Str.includes(lost)(JSON.stringify([w.rows(), receipt])), "an uncaptured class survives nowhere").toBe(
             false,
           );
           break;
@@ -778,7 +778,7 @@ const check = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof w
   ]);
 
   // J4: exact per-letter accounting and the dead letter's own process.
-  const dead = Arr.filter(rows, (row) => row.stream.endsWith("/dead"));
+  const dead = Arr.filter(rows, (row) => Str.endsWith("/dead")(row.stream));
   const expectedDead = Arr.filter([...a.letters], ([, l]) => l.dead !== null);
   expect(dead, "one dead entry per dead letter").toHaveLength(expectedDead.length);
 

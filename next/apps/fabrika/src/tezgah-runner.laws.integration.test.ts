@@ -28,7 +28,13 @@ import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
 import * as RunnerTest from "@kampus/tezgah/RunnerTest";
-import { Array as Arr, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
@@ -79,7 +85,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     sign: (data: Uint8Array) => new Uint8Array(sign(null, data, pair.privateKey)),
     proof: (text: string) => {
       const payload = Buffer.concat([
@@ -143,7 +149,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
 /** One door socket as the founder, past its signed hello: `call` is one JSON-RPC call and its frame. */
 const door = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
-    `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+    `${Str.replace("http", "ws")(String(instance.url))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
 
   const frames: Array<any> = [];
@@ -252,9 +258,9 @@ const findTezgah = async (instance: Instance) => {
   const rows = await until(
     "tezgah's process in the table",
     () => calls(instance).info(),
-    (all) => Arr.some(all, (row) => String(row.name).startsWith("tezgah:")),
+    (all) => Arr.some(all, (row) => Str.startsWith("tezgah:")(String(row.name))),
   );
-  const found = Arr.filter(rows, (row) => String(row.name).startsWith("tezgah:"));
+  const found = Arr.filter(rows, (row) => Str.startsWith("tezgah:")(String(row.name)));
   expect(found, "one tezgah process, for the one person").toHaveLength(1);
 
   return { pid: String(found[0].process), name: String(found[0].name) };

@@ -3,7 +3,14 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Formatter, Layer, Path, Schedule, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import { String as Str } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 // Sets one env value for the scope; the release puts the old value back, or deletes it when it was unset.
@@ -45,10 +52,10 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           yield* fs.writeFileString(
             file,
             bare
-              ? source.replace(
+              ? Str.replace(
                   'const reply = yield* pongs.getByName("one").back(n + 1);',
                   'const pongs = yield* Pong; const reply = yield* pongs.getByName("one").back(n + 1);',
-                )
+                )(source)
               : source,
           );
           const Cloudflare = yield* Effect.promise(() => import("@alchemy.run/cloudflare"));

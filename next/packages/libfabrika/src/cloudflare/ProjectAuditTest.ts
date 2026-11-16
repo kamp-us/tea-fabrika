@@ -2,6 +2,7 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -103,8 +104,7 @@ const projectWalk = Effect.fnUntraced(function* (
   const line = Schema.decodeUnknownSync(KeyLine)(
     `ssh-ed25519 ${Buffer.concat([field(Buffer.from("ssh-ed25519")), field(raw)]).toString("base64")}`,
   );
-
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
+  const fingerprint = `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
   const message = selector === "plain" ? Msg : StampedMsg;
 
   const program = {
@@ -217,7 +217,10 @@ const projectWalk = Effect.fnUntraced(function* (
       port: 18787,
       build: BUILD,
     },
-    (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
+    (algorithm, data) =>
+      createHash(Str.toLowerCase(Str.replaceAll("-", "")(algorithm.name)))
+        .update(data)
+        .digest(),
   );
 
   const project = yield* ProjectService.pipe(

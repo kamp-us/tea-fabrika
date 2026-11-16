@@ -7,6 +7,7 @@
  */
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import * as Arr from "effect/Array";
+import * as Str from "effect/String";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
@@ -323,11 +324,11 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
               for (let offset = 0; offset < text.length;) {
                 let end = Math.min(offset + width, text.length);
 
-                if (end < text.length && /[\uD800-\uDBFF]/.test(text.slice(end - 1, end))) {
+                if (end < text.length && /[\uD800-\uDBFF]/.test(Str.slice(end - 1, end)(text))) {
                   end--;
                 }
 
-                parts.push(text.slice(offset, end));
+                parts.push(Str.slice(offset, end)(text));
                 offset = end;
               }
 

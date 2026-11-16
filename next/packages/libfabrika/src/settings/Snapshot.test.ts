@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { ByteSize, Cause, Effect, Exit, Formatter, Layer, Logger, References, Schema, Tracer } from "effect";
 import { Digest } from "effect/crypto";
+import * as Str from "effect/String";
 import { TestConsole } from "effect/testing";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -296,7 +297,7 @@ describe("T753 complete checked snapshots", () => {
         expect(different.hash).not.toBe(made.hash);
 
         for (const corrupted of [
-          { ...made, hash: `${made.hash[0] === "0" ? "1" : "0"}${made.hash.slice(1)}` },
+          { ...made, hash: `${made.hash[0] === "0" ? "1" : "0"}${Str.slice(1)(made.hash)}` },
           { ...made, values: { ...made.values, "instance.port": (v.port % 65535) + 1 } },
           { ...made, values: { ...made.values, "limits.record": String(v.count + 1n) } },
         ]) {
@@ -387,7 +388,7 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
         const flags = Object.fromEntries(paths.map(([a, b], n) => [`${a}.${b}`, String(values[n])]));
 
         const env = Object.fromEntries(
-          paths.map(([a, b], n) => [`FABRIKA_${a.toUpperCase()}_${b.toUpperCase()}`, String(values[n])]),
+          paths.map(([a, b], n) => [`FABRIKA_${Str.toUpperCase(a)}_${Str.toUpperCase(b)}`, String(values[n])]),
         );
 
         const fromFlags = await snapshot(portGroup(paths), sources({ flags: Sources.flags(flags) }));
@@ -410,12 +411,12 @@ describe("the snapshot: encoded values by path, and a hash of the values alone",
 });
 
 /** Every form a secret may take in text: raw, JSON-escaped and URL-encoded. */
-const forms = (secret: string) => [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)];
+const forms = (secret: string) => [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)];
 
 // Made-up secrets with the characters that make the three forms differ.
 const secret = fc
   .tuple(fc.stringMatching(/^[A-Za-z0-9]{6,12}$/), fc.constantFrom('"', "/", " ", "+", "\\", "&"))
-  .map(([word, mark]) => `sk-${word}${mark}${word.slice(0, 3)}`);
+  .map(([word, mark]) => `sk-${word}${mark}${Str.slice(0, 3)(word)}`);
 
 /**
  * A value as searchable text. JSON has no bigint, and a decoded byte size is one, so a bigint prints

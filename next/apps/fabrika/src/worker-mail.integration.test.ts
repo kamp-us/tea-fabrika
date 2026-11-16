@@ -12,7 +12,7 @@ import * as Formatter from "effect/Formatter";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Option from "effect/Option";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -49,7 +49,7 @@ const identity = () => {
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
-    fingerprint: `SHA256:${createHash("sha256").update(bytes).digest("base64").replace(/=+$/, "")}`,
+    fingerprint: `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(bytes).digest("base64"))}`,
     proof: (text: string) => {
       const payload = Buffer.concat([
         Buffer.from("SSHSIG"),
@@ -369,7 +369,7 @@ const world = async (
                     Effect.sync(
                       () =>
                         new WebSocket(
-                          `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                          `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                         ),
                     ),
                     (socket) => Effect.sync(() => socket.close()),
@@ -379,7 +379,7 @@ const world = async (
                 }).pipe(Effect.provideService(Scope.Scope, scope)),
               ),
             start: async (name) => {
-              const program = `p41/${name.replace(":", "-")}`;
+              const program = `p41/${Str.replace(":", "-")(name)}`;
               const code = built.programs[program];
               expect(code).toBeDefined();
 
@@ -819,7 +819,7 @@ const checklistWorld = async (
                   Effect.sync(
                     () =>
                       new WebSocket(
-                        `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+                        `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
                       ),
                   ),
                   (socket) => Effect.sync(() => socket.close()),
@@ -1039,7 +1039,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
               Effect.sync(
                 () =>
                   new WebSocket(
-                    `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/cap`,
+                    `${Str.replace("http", "ws")(instance.url)}/client/${encodeURIComponent(key.fingerprint)}/cap`,
                   ),
               ),
               (socket) => Effect.sync(() => socket.close()),

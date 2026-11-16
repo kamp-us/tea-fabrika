@@ -6,6 +6,7 @@
  * The repo's `fabrika-version` is read first. Each file's schema is derived from the declarations whose scope includes that file. A failure is explained at its key, with the line the Toml service gave.
  */
 import { Effect, Order, Predicate, Schema, SchemaAST, SchemaIssue } from "effect";
+import * as Str from "effect/String";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import type * as Setting from "./Setting.ts";
@@ -201,8 +202,7 @@ const explain = (
 type Files = Readonly<Record<Setting.File, Place>>;
 
 const triple = (version: string) => {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
-
+  const [major = 0, minor = 0, patch = 0] = Str.split(version, ".").map(Number);
   return [major, minor, patch] as const;
 };
 

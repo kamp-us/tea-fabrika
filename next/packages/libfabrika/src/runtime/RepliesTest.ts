@@ -6,6 +6,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -68,9 +69,9 @@ const Wrong = Schema.TaggedUnion({
 /** The three forms a leaked body takes in text: as it is, JSON-escaped and URL-encoded. */
 const forms = (secret: string): ReadonlyArray<string> => [
   secret,
-  JSON.stringify(secret).slice(1, -1),
+  Str.slice(1, -1)(JSON.stringify(secret)),
   encodeURIComponent(secret),
-  secret.slice(0, 14),
+  Str.slice(0, 14)(secret),
 ];
 
 /** Fails when any output holds any form of any secret, and names each output that does. It scans
@@ -78,7 +79,7 @@ const forms = (secret: string): ReadonlyArray<string> => [
  *  that looks after every move. */
 export const unleaked = (outputs: ReadonlyArray<string>, secrets: ReadonlyArray<string>) => {
   const leaks = Arr.flatMap(secrets, forms);
-  const leaked = Arr.filter(outputs, (output) => Arr.some(leaks, (form) => output.includes(form)));
+  const leaked = Arr.filter(outputs, (output) => Arr.some(leaks, (form) => Str.includes(form)(output)));
   // The outputs go in the message: a property law prints the message and not the diff.
   expect(leaked, `input text leaked: ${Arr.join(leaked, "\n")}`).toEqual([]);
 };
@@ -390,7 +391,7 @@ const walk = (
 
         const damaged =
           kind === "json"
-            ? `${value.slice(0, -1)}${secret}`
+            ? `${Str.slice(0, -1)(value)}${secret}`
             : kind === "missing"
               ? JSON.stringify(
                   Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),

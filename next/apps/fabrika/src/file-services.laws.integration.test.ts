@@ -23,6 +23,7 @@ import {
   Schema,
   Sink,
   Stream,
+  String as Str,
 } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -298,9 +299,9 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
 
   const move = (from: string, to: string) => {
     for (const [path, text] of [...files]) {
-      if (path === from || path.startsWith(`${from}/`)) {
+      if (path === from || Str.startsWith(`${from}/`)(path)) {
         files.delete(path);
-        files.set(to + path.slice(from.length), text);
+        files.set(to + Str.slice(from.length)(path), text);
       }
     }
   };
@@ -315,7 +316,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
     realPath: (path) => Effect.succeed(path),
     glob: () => Effect.succeed([relative(root, source)]),
     exists: (path) =>
-      Effect.sync(() => files.has(path) || Arr.some([...files.keys()], (file) => file.startsWith(`${path}/`))),
+      Effect.sync(() => files.has(path) || Arr.some([...files.keys()], (file) => Str.startsWith(`${path}/`)(file))),
     readFileString: (path) =>
       Effect.suspend(() => {
         note("read", path);
@@ -371,7 +372,7 @@ const recorded = (folder: string, source: string, text: string, failPublish: boo
         note("remove", path);
 
         for (const file of files.keys()) {
-          if (file === path || file.startsWith(`${path}/`)) {
+          if (file === path || Str.startsWith(`${path}/`)(file)) {
             files.delete(file);
           }
         }
@@ -434,7 +435,7 @@ for (const failed of [false, true]) {
             Arr.every(w.calls.slice(0, ledgerRead), ([call]) => call === "read"),
             "only reads come before the compiler ledger read",
           ).toBe(true);
-          const styles = Arr.filter(reads, (file) => file.endsWith(".css"));
+          const styles = Arr.filter(reads, (file) => Str.endsWith(".css")(file));
           expect(new Set(styles).size, "the tab's stylesheets are read through FileSystem").toBe(3);
           const lastRead = Arr.findLastIndex(w.calls, ([call]) => call === "read");
           const firstWrite = Arr.findFirstIndex(w.calls, ([call]) => call === "write");
@@ -931,7 +932,7 @@ it.effect.prop(
           );
 
           for (const entry of entries) {
-            for (const form of [secret, Formatter.formatJson(secret).slice(1, -1), encodeURIComponent(secret)]) {
+            for (const form of [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)]) {
               expect(entry.text).not.toContain(form);
             }
           }

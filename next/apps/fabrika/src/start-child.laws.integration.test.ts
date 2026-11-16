@@ -12,19 +12,17 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import {
-  Array as Arr,
-  Clock,
-  Effect,
-  Exit,
-  Layer,
-  Logger,
-  ManagedRuntime,
-  Option,
-  Result,
-  Schema,
-  Scope,
-} from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as ManagedRuntime from "effect/ManagedRuntime";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -106,7 +104,7 @@ const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) 
 /** A real WebSocket client at the door; it keeps every pushed frame. `close` waits for the close. */
 const socketAt = (instance: Instance, key: Key, tab: string) => {
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
-  const socket = new WebSocket(String(instance.url).replace("http", "ws") + name);
+  const socket = new WebSocket(Str.replace("http", "ws")(String(instance.url)) + name);
   const frames: any[] = [];
   const pushed: any[] = [];
   let closeCode: number | undefined;
@@ -264,8 +262,7 @@ const Secret = fc
   .tuple(fc.stringMatching(/^sk-[A-Za-z0-9]{24}$/), fc.constantFrom('"', "/%? ", "\n"))
   .map(([word, suffix]) => word + suffix);
 
-const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
-
+const forms = (text: string) => [text, Str.slice(1, -1)(JSON.stringify(text)), encodeURIComponent(text)];
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
 
@@ -494,7 +491,7 @@ const projectSecrets = Effect.fnUntraced(function* (
       expect(
         Arr.filter(
           watches,
-          (row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`),
+          (row) => row._tag === "demonitored" && Str.includes(`out-${reached.size}`)(JSON.stringify(row.body)),
         ),
       ).toHaveLength(1);
       inspectRows();
@@ -520,7 +517,7 @@ const projectSecrets = Effect.fnUntraced(function* (
 
   for (const text of outputs[output]) {
     for (const form of secretForms) {
-      assert(!text.includes(form), `L11: ${path} leaked storage text or metadata into ${output}`);
+      assert(!Str.includes(form)(text), `L11: ${path} leaked storage text or metadata into ${output}`);
     }
   }
 });
@@ -791,7 +788,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
       outputs.log.push(...(printed ?? []));
 
       for (const [output, texts] of Object.entries(outputs)) {
-        if (Arr.some(texts, (text) => Arr.some(forms(secret), (form) => text.includes(form)))) {
+        if (Arr.some(texts, (text) => Arr.some(forms(secret), (form) => Str.includes(form)(text)))) {
           leaks.add(`${cut.path}/${cut.operation} ${cut.statement} -> ${output}`);
         }
       }
@@ -1082,7 +1079,8 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       expect(
         Arr.filter(
           after,
-          (frame) => JSON.stringify(frame).includes(String(child)) || JSON.stringify(frame).includes("child:1"),
+          (frame) =>
+            Str.includes(String(child))(JSON.stringify(frame)) || Str.includes("child:1")(JSON.stringify(frame)),
         ),
         "L9: no frame about the child reaches any client",
       ).toEqual([]);

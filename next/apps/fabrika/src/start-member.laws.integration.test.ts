@@ -7,7 +7,12 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Array as Arr, Effect, Exit, Option, Schema, Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import { Array as Arr, String as Str } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -66,7 +71,7 @@ const decodeFrame = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknow
 /** A real WebSocket client at the door, initialized with a signed hello. `close` waits for the close. */
 const client = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
-    `${String(instance.url).replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
+    `${Str.replace("http", "ws")(String(instance.url))}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
 
   const frames: any[] = [];

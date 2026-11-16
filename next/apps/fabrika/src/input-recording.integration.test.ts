@@ -10,7 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { Array as Arr } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -124,7 +124,7 @@ const pendingReply = Effect.fnUntraced(function* (
   expect(reply === undefined).toBe(move === "reply_write");
   const output = Formatter.formatJson([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
 
-  for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
+  for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
     expect(output).not.toContain(form);
   }
 });
@@ -192,8 +192,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   );
 
   const project = instance.project("p13-recording");
-  const fingerprint = `SHA256:${createHash("sha256").update(raw).digest("base64").replace(/=+$/, "")}`;
-
+  const fingerprint = `SHA256:${Str.replace(/=+$/, "")(createHash("sha256").update(raw).digest("base64"))}`;
   const from = {
     by: fingerprint,
     for: PERSON,
@@ -276,7 +275,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     }
 
     if (move === "retry" || move === "lost_answer" || move === "refused_retry" || move === "refused_lost_answer") {
-      const history = move.startsWith("refused_") ? refused : accepted;
+      const history = Str.startsWith("refused_")(move) ? refused : accepted;
       const prior = history[Math.floor(entropy / choices.length) % history.length]!;
 
       if (move === "refused_lost_answer") {
@@ -347,7 +346,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     const output = Formatter.formatJson(rows);
 
     for (const body of bodies) {
-      for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
+      for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
         expect(output).not.toContain(form);
       }
     }
@@ -376,11 +375,9 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
 
   for (const form of [
-    unknown.body,
-    Formatter.formatJson(unknown.body).slice(1, -1),
-    encodeURIComponent(unknown.body),
+    unknown.body, Str.slice(1, -1)(JSON.stringify(unknown.body)), encodeURIComponent(unknown.body),
   ]) {
-    expect(Formatter.formatJson(rows)).not.toContain(form);
+    expect(JSON.stringify(rows)).not.toContain(form);
   }
 });
 

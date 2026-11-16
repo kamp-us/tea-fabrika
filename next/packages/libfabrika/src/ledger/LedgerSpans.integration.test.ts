@@ -21,6 +21,7 @@ import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
 import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -347,7 +348,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             .map((value) => String(value));
 
           expect(texts.length).toBeGreaterThan(0);
-          expect(texts.filter((text) => text.includes(BODY) || text.includes("sent-marker"))).toEqual([]);
+          expect(texts.filter((text) => Str.includes(BODY)(text) || Str.includes("sent-marker")(text))).toEqual([]);
           expect(texts.filter((text) => /\b(select|insert|update|delete|create)\b/i.test(text))).toEqual([]);
           expect(texts.filter((text) => text.length > MOST).map((text) => text.length)).toEqual([]);
         }).pipe(Effect.provide(onSql(fresh(), quiet, reader)), Effect.withTracer(tracer)),
@@ -365,9 +366,8 @@ describe("p95, every call is one span, names and numbers only", () => {
     "a 1.9 MB id and a 200-character _tag are placed, and their tags hold at most 128 characters with the full length beside",
     () => {
       const { tracer, tags } = capture();
-      const id = "x".repeat(1_900_000);
-      const kind = "t".repeat(200);
-
+      const id = Str.repeat(1_900_000)("x");
+      const kind = Str.repeat(200)("t");
       return Effect.gen(function* () {
         const ledger = yield* Ledger;
         expect(yield* ledger.append("notes:1", id, line({ _tag: kind }))).toEqual({
@@ -492,7 +492,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             expect(failed("ledger.append")).toEqual([true]);
             const values = Rec.values(tags("ledger.append")[0] ?? {});
             expect(values.some((value) => value === full.code || value === full.errcode)).toBe(true);
-            expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
+            expect(all().filter((value) => Str.includes("message-marker")(String(value)))).toEqual([]);
           }).pipe(Effect.provide(onSql(Effect.succeed(broken))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
@@ -595,7 +595,9 @@ describe("p95, every call is one span, names and numbers only", () => {
               // the whole transaction back by itself, so a ROLLBACK after it finds none.
               const { page_count: pages } = db.prepare("PRAGMA page_count").get() ?? {};
               db.exec(`PRAGMA max_page_count = ${Number(pages)}`);
-              const error = yield* Effect.flip(ledger.append("a", "w-2", line({ body: { note: "y".repeat(value) } })));
+              const error = yield* Effect.flip(
+                ledger.append("a", "w-2", line({ body: { note: Str.repeat(value)("y") } })),
+              );
               expect(error).toBeInstanceOf(LedgerError);
               expect(error.reason).toBe("storage");
               expect(failed("ledger.append")).toEqual([false, true]);
@@ -669,7 +671,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           expect(tags("ledger.append")).toEqual([
             expect.objectContaining({ [tag("answer")]: "placed", [tag("rings")]: 2 }),
           ]);
-          expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
+          expect(all().filter((value) => Str.includes("message-marker")(String(value)))).toEqual([]);
         }).pipe(Effect.provide(onReferee(fresh(), dying(location, rang))), Effect.withTracer(tracer));
       },
     );

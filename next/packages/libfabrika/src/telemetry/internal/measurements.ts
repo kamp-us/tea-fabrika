@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Struct from "effect/Struct";
+import * as Str from "effect/String";
 import { Array as Arr } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
@@ -240,7 +241,7 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
     (row) => decodeDay(row).day,
   );
   return Arr.flatMap(days, (start) => {
-    const day = DateTime.formatIso(DateTime.makeUnsafe(start)).slice(0, 10);
+    const day = Str.slice(0, 10)(DateTime.formatIso(DateTime.makeUnsafe(start)));
       const [open] = sql.exec(
         `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
 				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`,
