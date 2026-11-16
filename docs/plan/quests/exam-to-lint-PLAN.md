@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0591, 0590; body 5d3969f6e1bd
+
 Plancheck-Version: 3
 
 # Plan: the exam's code-shape checks become lint rules, a text-reading law declares `reads:`, and the `readers` list goes (0591)
@@ -137,9 +137,9 @@ text. Paths in the cells are from the top of the repo.
 | client-manager-contract.integration.test.ts | reads | Bundles `ClientManager.ts` for a browser per export selection and checks tree shaking; an import graph cannot see what a bundle keeps. Declares `next/packages/libfabrika/src/**` |
 | clock.integration.test.ts | lint | `react/purity` and `fabrika/no-clock-in-view`, both on today. The `no-clock-in-view` plants go to `oxlint-plugins/no-clock-in-view.test.ts` (new); the `react/purity` lines join `builtin-plants.ts` as a `.tsx` plant at a `next/` path. `no-wall-clock.test.ts` plants three `no-clock-in-view` lines at paths, not these |
 | commits-git-chain.integration.test.ts | reads | The commit chain on planted git repos. Through the support file it reads the real `exam-paths.json`; declares it |
-| commits-git-person.integration.test.ts | reads | The same: declares `exam-paths.json` |
-| commits-git-signatures.integration.test.ts | reads | The same: declares `exam-paths.json` |
-| commits-git-steps.integration.test.ts | reads | The same: declares `exam-paths.json` |
+| commits-git-person.integration.test.ts | reads | The same: declares `exam-paths.json`. Its table law is vitest's `it.each`, so it takes its `reads:` through the package's `it.each` (see "`it.each`" under "The shape") |
+| commits-git-signatures.integration.test.ts | reads | The same: declares `exam-paths.json`, its two `it.each` laws through the package's `it.each` |
+| commits-git-steps.integration.test.ts | reads | The same: declares `exam-paths.json`, its three `it.each` laws through the package's `it.each` |
 | commits-git.test-support.ts | reads | Reads `exam-paths.json` when it loads; the four laws files above declare it, since a declaration sits on a law |
 | commits.test.ts | reads | Pure laws on the chain by import, and a `format:` law and P12 that read `exam-paths.json`; declares it |
 | commits.ts | reads | The CI program the chain laws run (`pnpm commits`); not a test, stays, read by its laws by import |
@@ -234,6 +234,56 @@ const lawReads: Plugin = {
 - **A support file's reads are declared by the laws that use it.** `commits-git.test-support.ts`
   reads `exam-paths.json` when it loads; its four laws files each declare it.
 
+### `it.each`, vitest's own, with a law's options
+
+Slice C's tests step found that `commits-git-person`, `commits-git-signatures` and
+`commits-git-steps` (all in `next/apps/fabrika/src/exam/`) write six of their laws with vitest's
+`it.each`, and the package's `it` has no `each`, so those laws could not take `reads:`. The merge
+session ruled: the package's `it` gains `each`, with vitest's name and shape, taking the same
+`LawOptions`.
+
+Vitest 5.0.5 (the lockfile's version) types it in `dist/chunks/config.d.QBNYCgFU.d.ts`:
+`TestEachFunction` takes the cases, and its `EachFunctionReturn` takes
+`(name, options: TestCollectorOptions, fn)` or `(name, fn, timeout?: number)`. An array case is
+spread into the body's arguments, any other case is passed as one. The title is formatted by
+`formatTitle` in `dist/chunks/run.BPv-BBRv.js`: printf's `%s`, `%d`, `%i`, `%f`, `%j`, `%o`, `%#`
+(the case's index), `%$` (index plus one) and `%%`, and `$key` from an object case
+([Vitest, test.each](https://vitest.dev/api/#test-each); not fetched today, the installed source
+was read). `@effect/vitest` 4.1.3's `it` extends vitest's `TestAPI`, so `EffectVitest.it.each` is
+vitest's own.
+
+```ts
+// next/packages/vitest/src/Law.ts, a sketch of the member added.
+/** vitest's `it.each`: one law per case, the title formatted by vitest, a law's options in vitest's place. */
+interface Each {
+  <const T extends ReadonlyArray<unknown>>(cases: ReadonlyArray<T>): (
+    name: string,
+    options: LawOptions,
+    self: (...values: T) => void,
+  ) => void;
+  <T>(cases: ReadonlyArray<T>): (name: string, options: LawOptions, self: (value: T) => void) => void;
+}
+
+export interface Law {
+  // ...the members 0580 built...
+  readonly each: Each;
+}
+
+const each: Each = (cases) => (name, options, self) =>
+  EffectVitest.it.each(cases)(name, toTestOptions(options), self);
+```
+
+- **Only the `(name, options, fn)` form.** Vitest's `(name, fn, timeout)` form and its tagged
+  template form are left out: no law in the sweep uses them, and a law's options have one place.
+  The package's other members take their options last, as `@effect/vitest`'s do; `each` keeps
+  vitest's middle place because its name is vitest's (the ruling). My call, 80%: the doubt is
+  only whether a later file wants the template form, which a later pull request can add with its
+  own law.
+- The body answers `void`, as the plain `it`'s does (0579). Titles are vitest's own: the package
+  passes `name` through and formats nothing itself, so R7 compares them with vitest's.
+- `readsOf` finds `reads` in the object literal of `it.each(cases)(name, { reads: [...] }, fn)`
+  as in any law call, so `lawReads` needs no change for it; R1's generated calls include it.
+
 ### The `readers` list goes
 
 ```js
@@ -276,12 +326,14 @@ below is run once and restored by the step that writes the law (0093).
 | M3. `node-kinds.ts` refuses a name no matching file exports or no string binds, and exits 0 on the real list | test | fc.stringMatching: a made-up name `/^[A-Z][a-zA-Z]{2,12}$/`, seed 119120, 20 runs | skip the binding check: red | oxlint-plugins/node-kinds.test.ts |
 | M4. `next-manifests.ts` and `fabrika/package-deps` fire on each manifest and import break of the old planted trees and on nothing else; the exports-map laws keep Node's longest-pattern rule | test | fc.constantFrom: the old trees and module names, seed 119120, the old run counts, at least 6 runs | pick the first exports key that fits, not the longest: red | oxlint-plugins/next-manifests.test.ts oxlint-plugins/package-deps.test.ts |
 | M5. Every new lint command and rule has 0 findings on main at the build's head, so it blocks at zero (AGENTS.md "Checks") | lint | lint | add one break in a scratch copy of a real file: `pnpm lint` exits 1 | package.json .oxlintrc.json |
-| R1. `readsOf` answers exactly the literal globs of every `reads` key in a law's options, in any spelling of the declaration, and throws on any other value | test | fc.array: generated globs from fc.stringMatching, placed in generated law calls (`it`, `it.effect`, `it.prop`), seed 119120, 100 runs | read only the first `reads` in a file: red | vitest.reads.test.ts |
+| R1. `readsOf` answers exactly the literal globs of every `reads` key in a law's options, in any spelling of the declaration, and throws on any other value | test | fc.array: generated globs from fc.stringMatching, placed in generated law calls (`it`, `it.effect`, `it.prop`, `it.each(cases)`), seed 119120, 100 runs | read only the first `reads` in a file: red | vitest.reads.test.ts |
 | R2. A test whose law declares a glob is in `vitest list --changed` when a tracked file it matches changes, and not when none does | test | fc.record: a glob and a path drawn to match it or not, seed 119120, 50 runs, on a planted tree | drop the `addWatchFile` call: red | vitest.reads.test.ts |
 | R3. `reads` is a key of `LawOptions`, typed as a list of strings, and lands in `meta` | type | type | type `reads` as `unknown`: an `@ts-expect-error` goes unused | next/packages/vitest/src/Law.types.test.ts |
 | R4. The removal is safe: every path the old `readers` list named, expanded to its test files at the removal's head, is gone, sits in `oxlint-plugins/`, reads only rerun triggers, is one of the nine "no check" files, or declares `reads:` that cover each file it reads | test | scenario: the seven entries as main has them at `0683861`, written once into the law as its `vector:` input | delete the `reads` entry from `bytes.integration.test.ts`: red | .github/ci/changes.test.ts |
 | R5. A proven comment-only `next/` change runs exactly the tests whose declared reads it matches, and a lint-file change needs no `next/` test | test | fc.subarray: the tracked test files, with proven paths from fc.constantFrom, seed 119120, 100 runs | keep `lint(path)` at `readers`: red | .github/ci/changes.test.ts |
 | R6. `readers` is gone from `changes.mjs`, `legs.ts` and `proof.ts`, so nothing keeps a list by hand | lint | lint | leave `export const readers` in `changes.mjs`: `pnpm lint:dead` refuses the unused export (0006) | .github/ci/changes.mjs .github/ci/legs.ts .github/ci/proof.ts |
+| R7. The package's `it.each(cases)(name, options, fn)` registers one law per case, each titled exactly as vitest's own `it.each` titles the same cases and template, hands each body its case (an array case spread, any other whole), and puts each case's `plant`, label and `reads` in its `meta` as the plain `it` does | test | fc.record: generated cases (fc.array of tuples of fc.string and fc.integer, or of records), a template from fc.constantFrom over `%s`, `%d`, `%j`, `%#`, `%$`, `%%` and `$key` pieces, and generated options, seed 119120, 3 runs (10 on the full depth, `runsFor({ fast: 3, full: 10 })`), each run in a nested vitest of the fixture beside vitest's own `it.each` on the same cases | format the title in the package (a loop of plain `it` calls on the raw name): red; drop `toTestOptions` from `each`: red | next/packages/vitest/src/Law.runner.test.ts next/packages/vitest/src/fixtures/Law.fixture.ts next/packages/vitest/src/fixtures/LawCase.ts |
+| R8. `it.each` takes `LawOptions`: a key `LawOptions` does not hold, a `reads` that is not a list of strings, and two labels are each a type error; a body's arguments are typed from the cases | type | type | type `each`'s options as `object`: an `@ts-expect-error` goes unused | next/packages/vitest/src/Law.types.test.ts |
 | M6. `fabrika/machine-has-laws` fires on a product file in `next/` that calls `Machine.make(` and has no sibling `<name>.laws.test.ts`, `<name>.<more>.laws.test.ts` or their `.integration.` and `.visual.` forms holding a property law (`it.prop`, `it.effect.prop`, `it.live.prop`, `fc.assert` or tea's pbt runners), or whose laws files neither call `syncTest(` nor say `// sync test left out: <why>` with a reason; it passes the rest, and test files | test | fc.constantFrom: the twelve planted folders and the three laws-file forms, seed 119120, 24 runs | accept a laws file with no sync test and no reason: red | oxlint-plugins/machine-has-laws.test.ts |
 | M7. `fabrika/one-page-runtime` fires on `next/apps/fabrika/src/entry/browser.tsx` unless it imports `runMain` from `@kampus/tuval/browser` once, starts it once as a statement of the module, and calls no other `run*` | test | scenario: the real entry and the four planted entries of the plants table | count a `runMain` inside a component as the start: red | oxlint-plugins/one-page-runtime.test.ts |
 | M8. `eslint/no-restricted-imports` refuses each import of the TOML adapter or its parser a caller may not make, in every spelling, and passes the rest | test | fc.uniqueArray: the generated callers and spellings of L9, seed 119120, 100 runs | drop the start test file from the adapter's allowed files: red | oxlint-plugins/settings-imports.test.ts |
@@ -291,6 +343,20 @@ below is run once and restored by the step that writes the law (0093).
 - No law needs the real machine, so none is host-only. `bytes`, `client-manager-contract`,
   `deps` and the commit chain keep their `.integration.` names (0536).
 - No law reads a secret.
+- R7 runs in a nested vitest on a worker thread, as `Law.runner.test.ts`'s other laws do, so it
+  starts no process, port or temp folder and stays a plain test (0584).
+- **Plant runs while the sev0 is on (the merge session's ruling).** `.github/ci/plant-check.ts`
+  strips a law's options only when they are its last argument, so a law that moves onto the
+  package's `it` with its options in second place reads as a changed law that needs its own plant
+  run. No CI gate changes during the sev0. So the five files
+  `next/apps/fabrika/src/exam/bytes.integration.test.ts`,
+  `next/apps/fabrika/src/build.integration.test.ts` and, under
+  `next/packages/libfabrika/src/node/build/`, `build-assets.integration.test.ts`,
+  `build-one-file.integration.test.ts` and `css.integration.test.ts` take their heavy plant runs
+  in the tests step's box, one file at a time, each result in the step's field row. The
+  plant-check change is the finding `field/findings/2026-11-16-plant-check-options-in-body.json`
+  (on `fabrikalfa/exam-to-lint-c`), a ticket for after the sev0; this sweep does not touch
+  `plant-check.ts`.
 
 ## The machines to fix first
 
@@ -427,7 +493,7 @@ same files. So:
 ```text
 slice A   moved plant tests, plant.ts, promise-types.ts          waits on nothing
 slice B   node-kinds.ts, next-manifests.ts, package-deps, typed  waits on nothing
-slice C   `reads` on LawOptions, lawReads, the declarations      waits on 0580's slice 1 on main
+slice C   `reads` and `it.each` on Law, lawReads, the declarations  waits on 0580's slice 1 on main
 slice D   `readers` goes from changes.mjs, legs.ts, proof.ts      waits on C and on pull request 1496 on main
 slice E   the 30 machine hits, then machine-has-laws at zero      waits on nothing
 slice F   one-page-runtime and the L9 plants, from the readers    waits on nothing
@@ -451,7 +517,8 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
 1. **Tests**, per slice: writes the laws above for its slice, moves each test file with `git mv`
    and edits it in place, and runs M1's side-by-side once before deleting an old file. Every path
    here but one is an exam path, so the tests step writes nearly all of it.
-2. **Build**, per slice: the product lines in the files table (`Law.ts`'s one key, the prose).
+2. **Build**, per slice: the product lines in the files table (`Law.ts`'s one key and its `each`,
+   the prose).
 3. **One review**, per slice, of the slice's whole diff against this plan and 0591, with the
    loosening check: a moved law that compares less than it did is a send-back.
 
@@ -481,6 +548,8 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
 | next/packages/vitest/src/Law.types.test.ts | tests | tests | slice C: R3 |
 | vitest.config.ts | tests | tests | slice C: the `lawReads` plugin |
 | vitest.reads.ts vitest.reads.test.ts | tests | tests | slice C: `readsOf`, R1, R2 |
+| next/packages/vitest/src/Law.ts | build | 12 | slice C, the amendment: `each` on the `Law` interface and on `it`, over `EffectVitest.it.each` |
+| next/packages/vitest/src/Law.runner.test.ts next/packages/vitest/src/fixtures/Law.fixture.ts next/packages/vitest/src/fixtures/LawCase.ts next/packages/vitest/src/Law.types.test.ts | tests | tests | slice C, the amendment: R7 (a new `each` case for the nested run) and R8 |
 | next/apps/fabrika/src/settings-generated.test.ts next/apps/fabrika/src/build.test.ts next/apps/fabrika/src/build.integration.test.ts next/apps/fabrika/src/build-command.integration.test.ts next/apps/fabrika/src/instance-one-file.integration.test.ts next/packages/libfabrika/src/node/build/build-assets.integration.test.ts next/packages/libfabrika/src/node/build/build-one-file.integration.test.ts next/packages/libfabrika/src/node/build/css.integration.test.ts next/packages/libfabrika/src/node/build/error-cause.integration.test.ts | tests | tests | slice C: the six other `readers` entries; each text-reading law declares what it reads (`person.json`, `repo.json`, `docs/settings-reference.md`, the build's inputs and output); slice F: `build.test.ts` goes after M7, and L9 moves to M8 |
 | .github/ci/changes.mjs .github/ci/changes.test.ts .github/ci/legs.ts .github/ci/legs.test.ts .github/ci/proof.ts .github/ci/proof.test.ts | tests | tests | slice D: `readers` goes; R4, R5, R6 |
 | next/AGENTS.md | build | 2 | "What lint holds" gains `fabrika/package-deps` and the typed command's two checks |
@@ -492,6 +561,7 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
 | next/packages/libfabrika/src/access/Access.ts next/packages/libfabrika/src/gateway/internal/rateLimit.ts next/packages/libfabrika/src/gateway/internal/waiting.ts next/packages/libfabrika/src/node/dev/internal/watcher.ts next/packages/libfabrika/src/packs/internal/open.ts next/packages/libfabrika/src/permissions/internal/relationsTable.ts next/packages/libfabrika/src/runtime/ChaosMachine.ts next/packages/libfabrika/src/runtime/internal/handsDelivery.ts next/packages/libfabrika/src/runtime/internal/reply.ts next/packages/libfabrika/src/runtime/internal/watchers.ts next/packages/libfabrika/src/schedules/ScheduledJob.ts next/packages/libfabrika/src/tasks/internal/task.ts next/packages/libfabrika/src/telemetry/internal/sink.ts next/packages/libfabrika/src/transport/internal/connection.ts next/packages/libfabrika/src/client/HandsMachine.ts next/packages/libfabrika/src/client/Prefix.ts next/packages/libfabrika/src/client/Tezgah.ts next/packages/libfabrika/src/client/WindowMachine.ts next/packages/libfabrika/src/desktop/Menu.ts next/packages/libfabrika/src/node/dev/DevLife.ts next/packages/libfabrika/src/processes/internal/processTable.ts next/packages/libfabrika/src/runtime/Client.ts next/packages/libfabrika/src/runtime/Code.ts next/packages/libfabrika/src/transport/Handshake.ts next/packages/libfabrika/src/transport/Link.ts next/programs/checklist/src/tile.ts next/programs/inbox/src/program.ts next/programs/pipeline/src/Merger.ts next/programs/pipeline/src/Queue.ts next/programs/tezgah/src/program.ts | build | 0 | the 30 machines; changed only where a new sync test finds a real fault, which the tests step reports first |
 | next/apps/fabrika/src/entry/browser.tsx next/apps/fabrika/person.json next/apps/fabrika/repo.json docs/settings-reference.md | build | 0 | read by M7 and by the generated-files law; not changed |
 | .agents/skills/lead/scripts/movecheck.ts | tests | tests | read: imports `rows.ts`, which stays |
+| .github/ci/plant-check.ts | tests | tests | slice C, the amendment: named by the plant-run ruling; not changed during the sev0 |
 | .github/ .github/ci .github/ci/ oxlint-plugins/ next/apps/fabrika/src/exam/ patches/ patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch exam-paths.json layer-rules.json node-kinds.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json | tests | tests | named as folders of the scope, or as files a law reads; not changed by this sweep |
 
 ## Size
@@ -500,8 +570,9 @@ Each slice runs plan (this file), tests, build and one review, each by its own a
    changed, 0 product lines; 30 files; about 2 agent hours.
 2. Slice B, three new lint pieces from four tests: about 700 lines of rule and command code (exam
    paths, the tests step's) and 900 test lines moved; 0 product lines; 12 files; about 3 agent hours.
-3. Slice C, `reads:` and its declarations: 6 product lines, about 120 lines of plugin and reader,
-   250 test lines, and about 60 declaration lines in 20 files; about 2 agent hours.
+3. Slice C, `reads:`, `it.each` and the declarations: 18 product lines (6 for `reads`, 12 for
+   `each`), about 120 lines of plugin and reader, 250 test lines and about 80 more for R7 and R8,
+   and about 60 declaration lines in 20 files; about 2.5 agent hours.
 4. Slice D, the list goes: about 80 lines removed and 60 added in CI, 150 test lines; about 1.5
    agent hours.
 5. Slice E, the 30 machine hits and `machine-has-laws`: 13 new laws files and one moved, about
@@ -526,6 +597,21 @@ Estimate: 21 steps, $84
 - The pull request lists, per moved test, its plants run side by side (M1), and per new rule its
   fires on the tree (M5).
 - No glossary row: `reads` is the plain word, and 0591 names it.
+
+## Existing tools
+
+- `each` in `next/packages/vitest/src/Law.ts`, a new function in a file that exists. Searched the
+  package (`rg -n "each" next/packages/vitest/src` finds none on `it`), vitest 5.0.5's
+  `TestEachFunction` and `@effect/vitest` 4.1.3's `it.each` and `it.effect.each`. Vitest's own is
+  the one found, and `each` is a thin wrapper over it: it passes the name through and turns
+  `LawOptions` into vitest's options with `toTestOptions`, the one thing vitest's cannot do.
+
+## New names
+
+- `each`, a new member of the exported `Law` interface and of `it`: vitest's word, `test.each` /
+  `it.each` ([Vitest API, test.each](https://vitest.dev/api/#test-each)), with vitest's shape
+  `it.each(cases)(name, options, fn)`, as 5.0.5's `TestEachFunction` types it.
+- `reads`, the key on `LawOptions` and `TaskMeta`, from 0591.
 
 ## What this cannot tell us
 
