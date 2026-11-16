@@ -5,7 +5,7 @@ import { isMap, map } from "./shared.ts";
 
 /**
  * The two jobs that may hold the `issues` permission, each by its workflow file and its job name
- * (0534, 0541): the 3-hour run's report and the daily speed measure, both under the `ci-scheduled`
+ * (0534, 0541): the full run's report and the daily speed measure, both under the `ci-scheduled`
  * label. lintScheduled and lintCiSpeed hold what each grants.
  */
 const ISSUE_JOBS: Readonly<Record<string, string>> = {
