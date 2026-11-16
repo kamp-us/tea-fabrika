@@ -451,10 +451,12 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
+
       // The real waits, watched: each run is recorded, and its exit is kept to read its error.
       const waits = Layer.unwrap(
         Effect.gen(function* () {
           const real = yield* GatewayWaits;
+
           return Recorder.layer(GatewayWaits, {
             wait: (...args) =>
               real.wait(...args).pipe(
@@ -467,6 +469,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
           });
         }),
       ).pipe(Layer.provide(GatewayWaits.layer));
+
       const runtime = SettingsRuntime.runtime(
         gatewayLayer(w.ctx, w.env).pipe(
           Layer.provideMerge(waits),
