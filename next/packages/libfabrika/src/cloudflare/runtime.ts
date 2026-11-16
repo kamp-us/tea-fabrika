@@ -2154,7 +2154,7 @@ export class ProjectService extends Context.Service<
     /** The bootstrap process and the rev of its start. */
     readonly boot: StartAnswer;
   }
->()("@kampus/libfabrika/cloudflare/runtime.ProjectService") {}
+>()("@kampus/libfabrika/cloudflare/runtime/ProjectService") {}
 
 /**
  * Layer that provides `ProjectService` for one Project object, after its start's input is decoded and
@@ -2522,7 +2522,7 @@ export class ProcessService extends Context.Service<
     /** The saved activity marker after a wake: `idle`, or `interrupted` with the step that was cut short. */
     readonly recover: () => Effect.Effect<typeof Recovered.Type, LedgerError>;
   }
->()("@kampus/libfabrika/cloudflare/runtime.ProcessService") {}
+>()("@kampus/libfabrika/cloudflare/runtime/ProcessService") {}
 
 /**
  * Layer that provides one Process object's `ProcessService`, its start recorded with the Project.

@@ -103,7 +103,7 @@ export const rejected = (error: unknown): unknown => {
 export class ProjectClient extends Context.Service<
   ProjectClient,
   Client<Omit<ProjectBinding, keyof Rpc.DurableObjectBranded>>
->()("@kampus/libfabrika/cloudflare/platform.ProjectClient") {
+>()("@kampus/libfabrika/cloudflare/platform/ProjectClient") {
   static make(stub: ProjectBinding): ProjectClient["Service"] {
     return {
       code: (...args) =>
@@ -263,7 +263,7 @@ export class ProjectClient extends Context.Service<
  * @category services
  */
 export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<ProcessShape, "alarm">>>()(
-  "@kampus/libfabrika/cloudflare/platform.ProcessClient",
+  "@kampus/libfabrika/cloudflare/platform/ProcessClient",
 ) {
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
@@ -300,7 +300,7 @@ export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<Pro
 export class GatewayClient extends Context.Service<
   GatewayClient,
   Client<Omit<ConnectionBinding, keyof Rpc.DurableObjectBranded>>
->()("@kampus/libfabrika/cloudflare/platform.GatewayClient") {
+>()("@kampus/libfabrika/cloudflare/platform/GatewayClient") {
   static make(stub: ConnectionBinding): GatewayClient["Service"] {
     // The object's own contract: a LedgerError it fails with crosses as itself. Its `fetch` is
     // Alchemy's fetcher, which keeps a socket upgrade's own Response (a 101 is a raw body).
@@ -332,7 +332,7 @@ export class GatewayClient extends Context.Service<
  * @category services
  */
 export class RecordClient extends Context.Service<RecordClient, RecordShape>()(
-  "@kampus/libfabrika/cloudflare/platform.RecordClient",
+  "@kampus/libfabrika/cloudflare/platform/RecordClient",
 ) {
   static make(stub: RecordShape): RecordClient["Service"] {
     return stub;
@@ -360,7 +360,7 @@ export class StorageClient extends Context.Service<
     readonly setAlarm: (at: number) => Effect.Effect<void, LedgerError>;
     readonly deleteAlarm: () => Effect.Effect<void, LedgerError>;
   }
->()("@kampus/libfabrika/cloudflare/platform.StorageClient") {
+>()("@kampus/libfabrika/cloudflare/platform/StorageClient") {
   static make(storage: DurableObjectStorage): StorageClient["Service"] {
     return {
       get: <A>(key: string) =>
@@ -402,7 +402,7 @@ export class BucketClient extends Context.Service<
     readonly put: (key: string, body: Uint8Array, sha256: string) => Effect.Effect<unknown, LedgerError>;
     readonly head: (key: string) => Effect.Effect<R2Object | null, LedgerError>;
   }
->()("@kampus/libfabrika/cloudflare/platform.BucketClient") {
+>()("@kampus/libfabrika/cloudflare/platform/BucketClient") {
   static make(bucket: R2Bucket): BucketClient["Service"] {
     return {
       put: (key, body, sha256) =>

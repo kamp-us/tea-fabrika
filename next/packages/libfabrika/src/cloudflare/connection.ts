@@ -327,7 +327,7 @@ export class ConnectionService extends Context.Service<
     readonly probe: (session: string) => Effect.Effect<number | null, unknown>;
     readonly notify: (client: string, news: unknown) => Effect.Effect<void, LedgerError | SinkError>;
   }
->()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
+>()("@kampus/libfabrika/cloudflare/connection/ConnectionService") {}
 
 export const connectionLayer = (
   ctx: DurableObjectState,

@@ -126,7 +126,7 @@ const BUILT_IN = new Set(["send", "hands"]);
 export class ProgramLoader extends Context.Service<
   ProgramLoader,
   { readonly load: (name: string, build?: string) => Effect.Effect<Loaded, ProgramDown> }
->()("@kampus/libfabrika/runtime/Entry.ProgramLoader") {
+>()("@kampus/libfabrika/runtime/Entry/ProgramLoader") {
   /** The in-process loader, for Node: each program's declaration, decoded when it is loaded, and
    *  the handlers its Cmds may use. A handler names its Cmd; `fire` runs only for `fabrika/chaos`. */
   static readonly layer = <R = never>(
@@ -215,7 +215,7 @@ export class CheckedWriter extends Context.Service<
     ) => Effect.Effect<Appended, LedgerError | SessionManagerError | SigningRefused | NotGranted>;
     readonly own: (id: string, stream: string, event: Event) => Effect.Effect<Appended, LedgerError | SigningRefused>;
   }
->()("@kampus/libfabrika/runtime/Entry.CheckedWriter") {}
+>()("@kampus/libfabrika/runtime/Entry/CheckedWriter") {}
 
 export {
   /**
@@ -235,7 +235,7 @@ export {
  * @category services
  */
 export class Alarm extends Context.Service<Alarm, { readonly set: (at: number | null) => Effect.Effect<void> }>()(
-  "@kampus/libfabrika/runtime/Entry.Alarm",
+  "@kampus/libfabrika/runtime/Entry/Alarm",
 ) {}
 
 /**
@@ -248,7 +248,7 @@ export class Alarm extends Context.Service<Alarm, { readonly set: (at: number | 
 export class Recording extends Context.Service<
   Recording,
   { readonly flush: Effect.Effect<unknown, LedgerError | SinkError> }
->()("@kampus/libfabrika/runtime/Entry.Recording") {
+>()("@kampus/libfabrika/runtime/Entry/Recording") {
   static readonly layer: Layer.Layer<Recording, never, SpanSink | RecordManager | Archive> = Layer.effect(
     Recording,
     Effect.gen(function* () {

@@ -54,7 +54,7 @@ export const make = <ROut, E, RIn>(ready: Layer.Layer<ROut, E, RIn>) =>
  */
 export const runtime = <ROut, E>(ready: Layer.Layer<ROut, E>) => {
   class Holder extends Context.Service<Holder, { readonly get: Effect.Effect<Context.Context<ROut>, E> }>()(
-    "@kampus/libfabrika/cloudflare/SettingsRuntime.Holder",
+    "@kampus/libfabrika/cloudflare/SettingsRuntime/Holder",
   ) {}
   const owner = ManagedRuntime.make(
     Layer.effectContext(

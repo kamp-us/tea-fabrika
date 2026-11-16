@@ -464,7 +464,7 @@ export class RecordManager extends Context.Service<
       by: { readonly by: string; readonly reason: string },
     ) => Effect.Effect<void, SinkError>;
   }
->()("@kampus/libfabrika/telemetry/Records.RecordManager") {
+>()("@kampus/libfabrika/telemetry/Records/RecordManager") {
   /** Each part on the `Sql` that `open` gives for its name, rolled at `cap` bytes. */
   static readonly sql = (open: (name: string) => Sql, cap: number): Layer.Layer<RecordManager> =>
     Layer.sync(RecordManager)(() => manager(parts((name) => sqlStore(open(name)), cap)));

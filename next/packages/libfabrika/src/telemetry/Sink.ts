@@ -362,7 +362,7 @@ export class SpanSink extends Context.Service<
     /** One piece's refusal counts in closed hours within `[from, to)`. */
     readonly sums: (piece: string, from: number, to: number) => Effect.Effect<ReadonlyArray<SumPoint>, SinkError>;
   }
->()("@kampus/libfabrika/telemetry/Sink.SpanSink") {
+>()("@kampus/libfabrika/telemetry/Sink/SpanSink") {
   /** Provides `Tracer.Tracer` and `SpanSink` over this object's `Sql`. Building it touches nothing:
    *  the tables come with the first span. */
   static readonly layer = (sql: Sql, options: { readonly object: string }): Layer.Layer<SpanSink> =>
