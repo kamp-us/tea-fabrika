@@ -22,6 +22,13 @@ import { type Grants, ProgramMail, type Receipt } from "./ProgramMail.ts";
 import * as ProgramMailLedger from "./ProgramMailLedger.ts";
 import type { Store } from "./ProgramMailTest.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  filler: {},
+  request: {},
+});
+
 const RUNS = runsFor({ fast: 3, full: 25 });
 /** The largest history either law reaches: letters already in the outbox and the inbox. */
 const TOP = 120;
@@ -55,7 +62,7 @@ const copied = (value: unknown): Schema.Json => decodeJson(JSON.stringify(value)
 
 /** Letter bodies the walk cycles through, as a program would send them. */
 const Bodies = fc.array(
-  fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ type: "request", body: m })),
+  fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ ...Tag.cases.request.make({}), body: m })),
   { minLength: 1, maxLength: 8 },
 );
 
@@ -155,7 +162,7 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     /** T1041: one letter straight into the responder's inbox, of about `size` bytes, counted by nothing. */
     const fill = (size: number) =>
       Mailbox.use((mail) =>
-        mail.send(RESPONDER, `filler-${++filled}`, { type: "filler", pad: "x".repeat(size) }, from()),
+        mail.send(RESPONDER, `filler-${++filled}`, { ...Tag.cases.filler.make({}), pad: "x".repeat(size) }, from()),
       ).pipe(Effect.provide(context), Effect.orDie);
     /** T1041: the responder's live life reads up to `pos` and the brain records it. */
     const ack = (pos: number) =>
@@ -334,7 +341,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           ({ sizes, history }) =>
             Effect.gen(function* () {
               const { fresh, fill } = yield* mail(open);
-              const body = { type: "request", body: "same" };
+              const body = { ...Tag.cases.request.make({}), body: "same" };
 
               for (let n = 0; n < history; n++) {
                 yield* fill(16);

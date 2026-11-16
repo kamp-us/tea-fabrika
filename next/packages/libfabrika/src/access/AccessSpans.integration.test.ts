@@ -31,6 +31,13 @@ import { foldAccess } from "./AccessFold.ts";
 import { ClientManager } from "./ClientManager.ts";
 import * as ClientManagerLedger from "./ClientManagerLedger.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  delete: {},
+  save: {},
+});
+
 const READER = "connection:t1";
 const PARENT = `in-${A}-41`;
 const P = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -275,9 +282,9 @@ describe("p97, mailbox spans", () => {
       const { tracer, ended, spans } = capture();
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
-        const m = { type: "save", value: M_MARK };
+        const m = { ...Tag.cases.save.make({}), value: M_MARK };
         yield* mailbox.send(name, id, m, from());
-        yield* mailbox.send(name, id, { type: "delete", value: M_MARK }, from());
+        yield* mailbox.send(name, id, { ...Tag.cases.delete.make({}), value: M_MARK }, from());
         const sends = ended("mailbox.send");
         expect(sends.length).toBe(2);
         const [placed, refused] = sends;

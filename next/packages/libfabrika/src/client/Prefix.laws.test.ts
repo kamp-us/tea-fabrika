@@ -7,14 +7,14 @@
 // - `windowMachineFor({decode, tile, keys})` takes the window's key table as a value, `keys`, the
 //   `Table` `Keys.load` answers (the window is handed it; it never reads a file). Without `keys` a
 //   window reads no key, so every older caller is unchanged.
-// - The window parent takes two more Msgs from the page: `{type: "key", key, at}`, one press spelled
-//   the keybindings note's way (`ctrl+b`, `%`, `escape`), and `{type: "size", width, height}`, the
+// - The window parent takes two more Msgs from the page: `{_tag: "key", key, at}`, one press spelled
+//   the keybindings note's way (`ctrl+b`, `%`, `escape`), and `{_tag: "size", width, height}`, the
 //   size of the area its tiles are drawn in.
 // - `WindowModel.prefix` is the `Prefix` machine's Model (`client/Prefix.ts`): `idle`, `armed {since}`
 //   or `asking {tile, since}`. The window steps it by hand. A key only arms the window it reached:
 //   nothing but a `record` Cmd leaves before the command is known, and no key crosses the wire.
 // - A finished command goes out on the press path to the window's tezgah pid as one letter,
-//   `{type: "did", does, from, via: {_tag: "key", ...}}`, `from` the workspace's focused tile in the
+//   `{_tag: "did", does, from, via: {_tag: "key", ...}}`, `from` the workspace's focused tile in the
 //   window's drawn state, and for a split `tile`, a new tile id minted by the window's `mint` Cmd
 //   (`mint_ok {value: {tile}}`), as the window's own attach mints one.
 // - A close of a tile tezgah started (`child`) asks first: the prefix goes to `asking {tile}`; `y`
@@ -41,6 +41,25 @@ import { type Dir, type TezgahView, type Tile, type TileId, Workspace } from "..
 import * as Keys from "./Keys.ts";
 import { Prefix } from "./Prefix.ts";
 import { type WindowModel, type WindowMsg, windowMachineFor } from "./WindowMachine.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+  frame: {},
+  hello_ok: {},
+  key: {},
+  key_ok: {},
+  knock_ok: {},
+  open_ok: {},
+  read_ok: {},
+  size: {},
+  socket_opened: {},
+  view: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
 
 const SEED = 119120;
 const PREFIX = "ctrl+b";
@@ -90,11 +109,11 @@ const machine = windowMachineFor({
   keys: TABLE!,
 });
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Cmd = { readonly _tag: string; readonly [key: string]: unknown };
 type Call = { readonly _tag: string; readonly [key: string]: unknown };
 
 type Did = {
-  readonly type: "did";
+  readonly _tag: "did";
   readonly does: string;
   readonly from: string;
   readonly tile?: string;
@@ -134,7 +153,7 @@ const step = (world: World, i: number, m: WindowMsg): ReadonlyArray<Cmd> => {
   for (const c of cmds) {
     const call = c["call"] as Call | undefined;
 
-    if (c.type === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
+    if (c._tag === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
       world.sent.push({ win: i, m: call["m"] });
       apply(world, call["m"]);
     }
@@ -148,7 +167,7 @@ const apply = (world: World, m: unknown) => {
   const did = m as Did;
   const w = world.view.workspaces[0]!;
 
-  if (did?.type !== "did" || !Layout.order(w.layout).includes(did.from as TileId)) {
+  if (did?._tag !== "did" || !Layout.order(w.layout).includes(did.from as TileId)) {
     return;
   }
 
@@ -176,7 +195,7 @@ const apply = (world: World, m: unknown) => {
       pending.push([
         i,
         {
-          type: "view",
+          ...Tag.cases.view.make({}),
           pid: TEZGAH_PID,
           note: { pid: TEZGAH_PID, type: "whole", rev: world.rev, view: world.view },
         } as WindowMsg,
@@ -203,35 +222,40 @@ const drain = (world: World, i: number) => {
         const name = flight.call.stream.replace(/^processes\//, "");
         const process = name.startsWith("tezgah:") ? TEZGAH_PID : `process_of_${name}`;
         step(world, i, {
-          type: "read_ok",
+          ...Tag.cases.read_ok.make({}),
           ...on,
           value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
           ms: 1,
         } as WindowMsg);
       } else if (flight.call._tag === "open" && flight.call.pid === TEZGAH_PID) {
         w.subscribed = true;
-        step(world, i, { type: "open_ok", ...on, value: { rev: world.rev, view: world.view }, ms: 1 } as WindowMsg);
+        step(world, i, {
+          ...Tag.cases.open_ok.make({}),
+          ...on,
+          value: { rev: world.rev, view: world.view },
+          ms: 1,
+        } as WindowMsg);
       } else if (flight.call._tag === "open") {
-        step(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg);
+        step(world, i, { ...Tag.cases.open_ok.make({}), ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg);
       } else {
-        step(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg);
+        step(world, i, { ...Tag.cases.knock_ok.make({}), ...on, value: null, ms: 1 } as WindowMsg);
       }
 
       continue;
     }
 
-    const cmd = w.waiting.find((c) => ["now", "record", "write", "persist", "ping", "mint"].includes(c.type));
+    const cmd = w.waiting.find((c) => ["now", "record", "write", "persist", "ping", "mint"].includes(c._tag));
 
     if (cmd !== undefined) {
       const value =
-        cmd.type === "now"
+        cmd._tag === "now"
           ? { letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
-          : cmd.type === "mint"
+          : cmd._tag === "mint"
             ? { tile: typeId("tile", 5_000 + ++world.minted) }
-            : cmd.type === "persist"
+            : cmd._tag === "persist"
               ? true
               : null;
-      step(world, i, { type: `${cmd.type}_ok`, cmd, value } as WindowMsg);
+      step(world, i, { ...keyed(`${cmd._tag}_ok`), cmd, value } as WindowMsg);
       continue;
     }
 
@@ -260,24 +284,33 @@ const drain = (world: World, i: number) => {
 /** The hello exchange on dial 1, as the door runs it: the key, a challenge, a hello, the admission. */
 const online = (world: World, i: number) => {
   const w = world.wins[i]!;
-  const key = w.waiting.find((c) => c.type === "key");
+  const key = w.waiting.find((c) => c._tag === "key");
 
   if (key !== undefined) {
-    step(world, i, { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg);
+    step(world, i, {
+      ...Tag.cases.key_ok.make({}),
+      cmd: key,
+      value: { found: "created", fingerprint: "SHA256:k" },
+    } as WindowMsg);
   }
 
-  step(world, i, { type: "socket_opened", dial: 1, at: 0 } as WindowMsg);
+  step(world, i, { ...Tag.cases.socket_opened.make({}), dial: 1, at: 0 } as WindowMsg);
   step(world, i, {
-    type: "frame",
+    ...Tag.cases.frame.make({}),
     dial: 1,
     text: rpc({ method: "challenge", params: { nonce: `n0nce${i}` } }),
     at: 1,
   } as WindowMsg);
-  const hello = world.wins[i]!.waiting.find((c) => c.type === "hello");
+  const hello = world.wins[i]!.waiting.find((c) => c._tag === "hello");
 
   if (hello !== undefined) {
-    step(world, i, { type: "hello_ok", cmd: hello, value: null } as WindowMsg);
-    step(world, i, { type: "frame", dial: 1, text: rpc({ id: hello["id"], result: ADMITTED }), at: 2 } as WindowMsg);
+    step(world, i, { ...Tag.cases.hello_ok.make({}), cmd: hello, value: null } as WindowMsg);
+    step(world, i, {
+      ...Tag.cases.frame.make({}),
+      dial: 1,
+      text: rpc({ id: hello["id"], result: ADMITTED }),
+      at: 2,
+    } as WindowMsg);
   }
 
   drain(world, i);
@@ -320,7 +353,7 @@ const world = (view: TezgahView, count: number, size = { width: 1440, height: 86
       tezgah: { workspace: 1 },
     } as never) as readonly [WindowModel, ReadonlyArray<Cmd>];
     out.wins.push({ s, waiting: [...cmds], subscribed: false, answered: new Set() });
-    step(out, i, { type: "size", ...size } as WindowMsg);
+    step(out, i, { ...Tag.cases.size.make({}), ...size } as WindowMsg);
     online(out, i);
   }
 
@@ -339,7 +372,7 @@ let clock = 10;
 /** One press in window `i`: the key's own step, then everything it set waiting, answered. */
 const press = (w: World, i: number, key: string) => {
   const before = w.sent.length;
-  const cmds = step(w, i, { type: "key", key, at: (clock += 10) } as WindowMsg);
+  const cmds = step(w, i, { ...Tag.cases.key.make({}), key, at: (clock += 10) } as WindowMsg);
   drain(w, i);
   return { cmds, sent: w.sent.slice(before) };
 };
@@ -491,7 +524,7 @@ describe("L13: the prefix arms only the window it was pressed in", () => {
 
             if (!known) {
               expect(
-                cmds.filter((c) => c.type !== "record").map((c) => c.type),
+                cmds.filter((c) => c._tag !== "record").map((c) => c._tag),
                 `L13: ${e.key} with the prefix ${before._tag} hands out only records`,
               ).toEqual([]);
               expect(sent, `L13: ${e.key} with the prefix ${before._tag} sends nothing`).toEqual([]);
@@ -504,7 +537,7 @@ describe("L13: the prefix arms only the window it was pressed in", () => {
             if (split !== undefined && fits(shownBefore, focus, split.dir, { width: 1440, height: 868 })) {
               counts.commands++;
               expect(dids(sent), `L13: ${e.key} after the prefix is one ${split.does}`).toMatchObject([
-                { type: "did", does: split.does, from: focus, via: { _tag: "key" } },
+                { ...Tag.cases.did.make({}), does: split.does, from: focus, via: { _tag: "key" } },
               ]);
               expect(
                 shownBefore.tiles.some((t) => t.id === dids(sent)[0]!.tile),
@@ -536,7 +569,7 @@ describe("L14: the keys after the prefix (the window's half)", () => {
           expect(prefix(w.wins[0]!.s)._tag, `L14: ${key} after the prefix disarms`).toBe("idle");
           expect(sent, `L14: ${key} after the prefix sends nothing`).toEqual([]);
           expect(
-            cmds.filter((c) => c.type !== "record").map((c) => c.type),
+            cmds.filter((c) => c._tag !== "record").map((c) => c._tag),
             `L14: ${key} after the prefix hands out only records`,
           ).toEqual([]);
         }
@@ -575,7 +608,7 @@ describe("L17: a close of a tezgah child asks y/n", () => {
           if (keys[0] === "y") {
             seen.y++;
             expect(closes, "L17: y sends one close of the asked tile").toMatchObject([
-              { type: "did", does: "tezgah.close", from: focus, via: { _tag: "key" } },
+              { ...Tag.cases.did.make({}), does: "tezgah.close", from: focus, via: { _tag: "key" } },
             ]);
           } else {
             seen.no++;
@@ -604,7 +637,7 @@ describe("L17: a close of a tezgah child asks y/n", () => {
         const { sent } = press(w, 0, "x");
         expect(prefix(w.wins[0]!.s)._tag, "L17: no ask for a tile tezgah did not start").toBe("idle");
         expect(dids(sent), "L17: one close of the focused tile").toMatchObject([
-          { type: "did", does: "tezgah.close", from: focus, via: { _tag: "key" } },
+          { ...Tag.cases.did.make({}), does: "tezgah.close", from: focus, via: { _tag: "key" } },
         ]);
       }),
       { seed: SEED, numRuns: 100 },
@@ -642,7 +675,7 @@ describe("L18: a split with no room is refused in the window", () => {
             seen.sent++;
             seen.folded += folded ? 1 : 0;
             expect(dids(sent), `L18: a split with room at ${width}x${height} is sent`).toMatchObject([
-              { type: "did", does: split.does, from: at },
+              { ...Tag.cases.did.make({}), does: split.does, from: at },
             ]);
             return;
           }
@@ -650,7 +683,7 @@ describe("L18: a split with no room is refused in the window", () => {
           seen.refused++;
           expect(sent, `L18: a split with no room at ${width}x${height} sends nothing`).toEqual([]);
           expect(
-            cmds.filter((c) => c.type !== "record").map((c) => c.type),
+            cmds.filter((c) => c._tag !== "record").map((c) => c._tag),
             "L18: a refused split mints nothing",
           ).toEqual([]);
           expect(polite(w.wins[0]!.s), "L18: the refusal is said politely, naming the tile").toEqual({
@@ -730,7 +763,7 @@ describe("L18: a split with no room is refused in the window", () => {
 // never sends it, so every letter to tezgah carries only the keys of tezgah's `did` (the plan's "The
 // shape") and nothing that names a fold or a strip, whatever the window folds when it sends it.
 /** The keys of tezgah's `did`: what a letter from a window may carry. */
-const DID_KEYS = new Set(["type", "does", "from", "via", "tile", "to", "cursor"]);
+const DID_KEYS = new Set(["_tag", "does", "from", "via", "tile", "to", "cursor"]);
 const FOLDED = /fold|strip/i;
 
 /** Every key in a value, at any depth. */

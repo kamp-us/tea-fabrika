@@ -13,9 +13,19 @@ import { expectTypeOf } from "vitest";
 import * as Access from "../../access/Access.ts";
 import * as Waiting from "./waiting.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  accepted: {},
+  expire: {},
+  fold: {},
+  knock: {},
+  leave: {},
+});
+
 type Model = typeof Waiting.machine.model.Type;
 type Msg = typeof Waiting.machine.msg.Type;
-type Knock = Extract<Msg, { readonly type: "knock" }>;
+type Knock = Extract<Msg, { readonly _tag: "knock" }>;
 type Empty = Extract<Model, { readonly _tag: "empty" }>;
 type Busy = Extract<Model, { readonly _tag: "waiting" }>;
 type Pending = Busy["rows"][number];
@@ -59,7 +69,7 @@ const encoded = (s: Model) => Schema.encodeSync(Waiting.Stored)(s);
 
 const knock = (s: Model, key: string, client: string, at: number, code: string = "1234") =>
   step(s, {
-    type: "knock",
+    ...Tag.cases.knock.make({}),
     key,
     client,
     label: "Browser",
@@ -159,19 +169,19 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
   const absentKey = () => at(gone, seed.other) ?? "unknown";
 
   if (seed.kind === "expire") {
-    return { type: "expire", at: time() };
+    return { ...Tag.cases.expire.make({}), at: time() };
   }
 
   if (seed.kind === "accepted") {
     const keys = rows.filter((_, i) => (seed.pick >> i) % 2 === 1).map((r) => r.key);
-    return { type: "accepted", keys: seed.fresh === 0 ? [...keys, absentKey()] : keys };
+    return { ...Tag.cases.accepted.make({}), keys: seed.fresh === 0 ? [...keys, absentKey()] : keys };
   }
 
   if (seed.kind === "leave") {
     const target = seed.fresh === 0 || row === undefined ? absentKey() : row.key;
     const client =
       seed.other % 3 === 0 ? "nobody" : (at(row?.clients ?? [], seed.other) ?? at(rows[0]?.clients ?? [], 0) ?? "x");
-    return { type: "leave", key: target, client };
+    return { ...Tag.cases.leave.make({}), key: target, client };
   }
 
   const key =
@@ -186,7 +196,7 @@ const resolve = (s: Model, seed: Seed, memory: Memory): Msg => {
       ? (at(own.clients, seed.other) ?? "x")
       : memory.names.clients[memory.clients++]!;
   return {
-    type: "knock",
+    ...Tag.cases.knock.make({}),
     key,
     client,
     label: seed.label,
@@ -253,7 +263,7 @@ describe("ticket 707: the waiting machine walks", () => {
 
           expect(encoded(after).rows.map((r) => r.tabs)).toEqual(after.rows.map((r) => r.clients.length));
 
-          if (msg.type !== "knock") {
+          if (msg._tag !== "knock") {
             continue;
           }
 
@@ -277,13 +287,13 @@ describe("ticket 707: the waiting machine walks", () => {
           want: Array<unknown> = [];
 
         for (const { before, msg, after } of fold(walk).steps) {
-          if (msg.type === "expire") {
+          if (msg._tag === "expire") {
             got.push(after.rows);
             want.push(live(before, msg.at));
           }
 
-          if (msg.type === "knock" && !live(before, msg.at).some((r) => r.key === msg.key)) {
-            const { type: _type, client, at: t, ...row } = msg satisfies Knock;
+          if (msg._tag === "knock" && !live(before, msg.at).some((r) => r.key === msg.key)) {
+            const { _tag: _key, client, at: t, ...row } = msg satisfies Knock;
             got.push(after.rows.at(-1));
             want.push({ ...row, clients: [client], until: t + walk.ttl });
           }
@@ -299,7 +309,7 @@ describe("ticket 707: the waiting machine walks", () => {
     fc.assert(
       fc.property(Walk, (walk) => {
         for (const { before, msg, after } of fold(walk).steps) {
-          if (msg.type !== "knock") {
+          if (msg._tag !== "knock") {
             continue;
           }
 
@@ -317,7 +327,7 @@ describe("ticket 707: the waiting machine walks", () => {
     fc.assert(
       fc.property(Walk, (walk) => {
         for (const { before, msg, after } of fold(walk).steps) {
-          if (msg.type !== "leave") {
+          if (msg._tag !== "leave") {
             continue;
           }
 
@@ -344,7 +354,7 @@ describe("ticket 707: the waiting machine walks", () => {
     fc.assert(
       fc.property(Walk, (walk) => {
         for (const { before, msg, after } of fold(walk).steps) {
-          if (msg.type !== "accepted") {
+          if (msg._tag !== "accepted") {
             continue;
           }
 
@@ -395,7 +405,7 @@ it.prop(
     let pending = state(10, 8);
     let [access] = Access.access.init(null, {});
     [access] = applyCell(Access.access, access, {
-      type: "fold",
+      ...Tag.cases.fold.make({}),
       event: Access.MemberEvent.cases.founded.make({ id: "person-test", name: "test", keys: ["root"], window: null }),
     });
     const grants = new Map<string, "hands" | "window" | "agent">();
@@ -418,7 +428,7 @@ it.prop(
         const previous = rows.find((row) => row.key === key);
         const as = (["hands", "window", "agent"] as const)[choice % 3]!;
         pending = step(pending, {
-          type: "knock",
+          ...Tag.cases.knock.make({}),
           key,
           client: `client-${n}`,
           label: saw.label,
@@ -437,7 +447,7 @@ it.prop(
         );
       } else if (move === "expire") {
         at += 10;
-        pending = step(pending, { type: "expire", at });
+        pending = step(pending, { ...Tag.cases.expire.make({}), at });
       } else if (move === "grant") {
         const available = rows.filter((r) => !grants.has(r.key));
         const row = available[choice % available.length]!;
@@ -452,18 +462,18 @@ it.prop(
           sentAt: "writer-clock",
         };
         [access] = applyCell(Access.access, access, {
-          type: "fold",
+          ...Tag.cases.fold.make({}),
           event: Access.MemberEvent.cases.granted.make({
             grant,
             signed: { text: "checked", armored: "checked", signer: "root" },
           }),
         });
         grants.set(row.key, as);
-        pending = step(pending, { type: "accepted", keys: [row.key] });
+        pending = step(pending, { ...Tag.cases.accepted.make({}), keys: [row.key] });
       } else {
         const key = leaves[choice % leaves.length]!;
         [access] = applyCell(Access.access, access, {
-          type: "fold",
+          ...Tag.cases.fold.make({}),
           event: Access.MemberEvent.cases.revoked.make({
             revoke: {
               id: `revoke-${n}`,

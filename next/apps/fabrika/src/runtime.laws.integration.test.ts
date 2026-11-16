@@ -26,6 +26,15 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  approve: {},
+  prepare: {},
+  throw: {},
+  inc: {},
+});
+
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 // P16: the brain reads its embedded tables from the build's generated module
@@ -280,7 +289,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
         getEntrypoint: () => ({
           audit: async (message: unknown) =>
             Audit.Answer.cases.ok.make({
-              value: Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(message),
+              value: Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.String }))(message),
             }),
           describe: async () =>
             id.startsWith(`${approvalCode.hash}/`)
@@ -391,8 +400,8 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
           ),
         )
       ).process,
-    send: (pid: string, type: string, letter = type) =>
-      run(p.route(client, "process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 })),
+    send: (pid: string, type: "throw" | "inc" | "prepare" | "approve", letter: string = type) =>
+      run(p.route(client, "process.send", { pid, letter, m: Tag.cases[type].make({}), sentAt: SENT, seen: 0 })),
     revoke: () => {
       const text = revokeText({
         id: "revoke-1",

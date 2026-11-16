@@ -20,7 +20,7 @@ import { commands } from "./commands.ts";
 import type { tezgahMachine } from "./program.ts";
 
 type Row = (typeof commands)[number];
-type Did = Extract<typeof tezgahMachine.msg.Type, { readonly type: "did" }>;
+type Did = Extract<typeof tezgahMachine.msg.Type, { readonly _tag: "did" }>;
 
 const PLATFORMS = ["browser", "electron", "headless"] as const;
 const OSES = ["macos", "windows", "linux", "android", "ios", "unknown"] as const;

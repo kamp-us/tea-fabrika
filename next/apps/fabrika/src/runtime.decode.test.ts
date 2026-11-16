@@ -1,7 +1,7 @@
-// T737 D7, next/. The app names a door input by its `type` with Predicate now. This law takes the
+// T737 D7, next/. The app names a door input by its `_tag` with Predicate now. This law takes the
 // callback the runtime really composes: `projectRuntime` builds its project layer, the layer's door
 // builds the Gateway layer, and both are captured here. An independent copy of the guard before that
-// change is the oracle: the same name, and the same reads of `type` in the same order.
+// change is the oracle: the same name, and the same reads of `_tag` in the same order.
 import { RecordedStart } from "@kampus/libfabrika";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
@@ -87,7 +87,7 @@ const composedName = async (): Promise<(m: unknown) => string | undefined> => {
 };
 
 const oldName = (m: unknown) =>
-  typeof m === "object" && m !== null && "type" in m && typeof m.type === "string" ? m.type : undefined;
+  typeof m === "object" && m !== null && "_tag" in m && typeof m._tag === "string" ? m._tag : undefined;
 
 class Sent {
   readonly extra = 1;
@@ -107,7 +107,7 @@ const Message = fc.record({
     "number",
     "symbol",
   ),
-  type: fc.oneof(
+  tag: fc.oneof(
     { arbitrary: fc.string({ maxLength: 6 }), weight: 4 },
     { arbitrary: fc.constant(""), weight: 2 },
     { arbitrary: fc.constantFrom<unknown>(7, null, undefined, {}, "absent"), weight: 2 },
@@ -120,9 +120,9 @@ const Message = fc.record({
 });
 type Message = typeof Message extends fc.Arbitrary<infer A> ? A : never;
 
-/** A fresh message from its recipe; a proxy logs each read of `type` in `trace`. */
+/** A fresh message from its recipe; a proxy logs each read of `_tag` in `trace`. */
 const message = (r: Message, trace: Array<string>): unknown => {
-  const fields: Record<string, unknown> = r.type === "absent" ? {} : { type: r.type };
+  const fields: Record<string, unknown> = r.tag === "absent" ? {} : { _tag: r.tag };
   const target: unknown = (() => {
     switch (r.container) {
       case "plain":
@@ -140,11 +140,11 @@ const message = (r: Message, trace: Array<string>): unknown => {
       case "undefined":
         return undefined;
       case "string":
-        return String(r.type);
+        return String(r.tag);
       case "number":
         return 7;
       case "symbol":
-        return Symbol("type");
+        return Symbol("_tag");
     }
   })();
 
@@ -154,7 +154,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
 
   return new Proxy(target, {
     has: (t, key) => {
-      if (key === "type") {
+      if (key === "_tag") {
         trace.push("has");
 
         if (r.throwOn === "has") {
@@ -165,7 +165,7 @@ const message = (r: Message, trace: Array<string>): unknown => {
       return Reflect.has(t, key);
     },
     get: (t, key, receiver) => {
-      if (key === "type") {
+      if (key === "_tag") {
         trace.push("get");
 
         if (r.throwOn === "get") {
@@ -185,7 +185,7 @@ const answer = (f: (m: unknown) => string | undefined, r: Message) => {
 };
 
 describe("T737 D7 the app's message-name callback equals its old guard, next/", () => {
-  it("names generated messages as the old guard did, with the same reads of type", async () => {
+  it("names generated messages as the old guard did, with the same reads of _tag", async () => {
     const name = await composedName();
     const seen = new Set<string>();
     fc.assert(

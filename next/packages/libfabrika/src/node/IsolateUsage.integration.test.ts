@@ -44,6 +44,12 @@ import { RecordManager, Written } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import { REFUSED, SpanRow } from "../telemetry/Trace.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 const PID = "process_0000000000e008000000000001";
 const NAME = "checklist:1";
 
@@ -135,7 +141,7 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
 
 const fixture = (executed: () => void) => {
   const Model = Schema.Struct({ sum: Schema.Int });
-  const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+  const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
   return {
     name: "test/usage-fixture",
     machine: Machine.make({
@@ -167,7 +173,7 @@ const invoke = (process: string) =>
       Effect.provide(ProgramLoader.layer({ "test/usage-fixture": fixture(() => {}) }, {})),
     );
     yield* loaded.execution
-      .step({ sum: 0 }, { type: "add", n: 1 })
+      .step({ sum: 0 }, { ...Tag.cases.add.make({}), n: 1 })
       .pipe(Effect.annotateSpans({ "fab.process": process }));
   });
 
@@ -281,7 +287,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
             id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
             by: OWNER,
             arrivedAt: 0,
-            input: { type: "add", n },
+            input: { ...Tag.cases.add.make({}), n },
           },
           sentAt: FROM.sentAt,
           seen: 0,

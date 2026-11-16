@@ -11,6 +11,17 @@ import * as BrainLife from "./BrainLife.ts";
 import { Readiness, Children } from "./BrainProbe.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  tick: {},
+  stop: {},
+  up: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const options = { seed: 119120, numRuns: 150 };
 const ctx = stubCtxThrowingProxy<unknown>();
 const Failure = Schema.TaggedUnion({ Operation: {} });
@@ -18,21 +29,21 @@ const oldId = Schema.decodeUnknownSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn")
 
 const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
   const settled = <A>(value: fc.Arbitrary<A>) => fc.record({ value, failed: fc.integer({ min: 0, max: 9 }) });
-  const reply = <T extends BrainLife.Command["type"], A>(
-    cmd: Extract<BrainLife.Command, { type: T }>,
+  const reply = <T extends BrainLife.Command["_tag"], A>(
+    cmd: Extract<BrainLife.Command, { _tag: T }>,
     answer: { value: A; failed: number },
   ): BrainLife.Msg =>
     (answer.failed === 0
-      ? { type: `${cmd.type}_err`, cmd, error: Failure.cases.Operation.make({}), at: 0 }
-      : { type: `${cmd.type}_ok`, cmd, value: answer.value, at: 0 }) as BrainLife.Msg;
+      ? { ...keyed(`${cmd._tag}_err`), cmd, error: Failure.cases.Operation.make({}), at: 0 }
+      : { ...keyed(`${cmd._tag}_ok`), cmd, value: answer.value, at: 0 }) as BrainLife.Msg;
   const guided = arbGuidedSequence(
     machine,
     ctx,
     {
       outside: {
-        up: fc.constant({ type: "up" as const, at: 0 }),
-        stop: fc.constant({ type: "stop" as const, at: 0 }),
-        tick: fc.record({ type: fc.constant("tick" as const), at: fc.integer({ min: 0, max: 30 }) }),
+        up: fc.constant({ ...Tag.cases.up.make({}), at: 0 }),
+        stop: fc.constant({ ...Tag.cases.stop.make({}), at: 0 }),
+        tick: fc.integer({ min: 0, max: 30 }).map((at) => ({ ...Tag.cases.tick.make({}), at })),
       },
       answers: {
         inspect: {
@@ -148,7 +159,7 @@ describe("P19 lifecycle", () => {
             for (const old of stale) {
               checked++;
               const pending = "pending" in prev ? prev.pending : null;
-              replayed += Number(pending !== null && old.cmd.type === pending.type && old.cmd.id !== oldId);
+              replayed += Number(pending !== null && old.cmd._tag === pending._tag && old.cmd.id !== oldId);
               staleStates.add(prev._tag);
               const [after, cmds] = applyCell(machine, prev, old);
               expect(after).toEqual(prev);
@@ -173,7 +184,7 @@ describe("P19 lifecycle", () => {
   it.effect("L5 every pending command rejects replies at or after its deadline", () =>
     Effect.gen(function* () {
       const machine = BrainLife.machine({ spec: Outside.spec, settings: yield* ServiceTest.timing() });
-      const reached = new Set<BrainLife.Command["type"]>();
+      const reached = new Set<BrainLife.Command["_tag"]>();
       const acceptedExpired = new Set<string>();
       propertyTrace(
         machine,
@@ -185,15 +196,15 @@ describe("P19 lifecycle", () => {
               continue;
             }
 
-            if (msg.cmd.id !== prev.pending.id || msg.cmd.type !== prev.pending.type) {
+            if (msg.cmd.id !== prev.pending.id || msg.cmd._tag !== prev.pending._tag) {
               continue;
             }
 
-            reached.add(prev.pending.type);
+            reached.add(prev.pending._tag);
             const replies: ReadonlyArray<BrainLife.Msg> = [
               msg,
               {
-                type: `${prev.pending.type}_err`,
+                ...keyed(`${prev.pending._tag}_err`),
                 cmd: prev.pending,
                 error: Failure.cases.Operation.make({}),
                 at: msg.at,
@@ -216,10 +227,10 @@ describe("P19 lifecycle", () => {
                   after._tag !== expected ||
                   !("reason" in after) ||
                   after.reason !== "Timeout" ||
-                  after.command !== prev.pending.type ||
+                  after.command !== prev.pending._tag ||
                   cmds.length !== 0
                 ) {
-                  acceptedExpired.add(`${prev._tag}:${reply.type}:${at === prev.deadline ? "at" : "after"}`);
+                  acceptedExpired.add(`${prev._tag}:${reply._tag}:${at === prev.deadline ? "at" : "after"}`);
                 }
 
                 const [stale, staleCmds] = applyCell(machine, prev, {
@@ -251,23 +262,23 @@ describe("P19 lifecycle", () => {
         ctx,
         walks(machine),
         ({ prev, next, msg, cmds }) => {
-          const removes = cmds.some((cmd) => cmd.type === "remove");
-          const checksChildren = cmds.some((cmd) => cmd.type === "cleanup");
+          const removes = cmds.some((cmd) => cmd._tag === "remove");
+          const checksChildren = cmds.some((cmd) => cmd._tag === "cleanup");
           removals += Number(removes);
           expect(
-            !removes || (prev._tag === "checking_children" && msg.type === "cleanup_ok" && msg.value._tag === "gone"),
+            !removes || (prev._tag === "checking_children" && msg._tag === "cleanup_ok" && msg.value._tag === "gone"),
           ).toBe(true);
           expect(
             !checksChildren ||
               prev._tag === "checking_children" ||
               ((prev._tag === "inspecting" || prev._tag === "confirming_absence") &&
-                msg.type === "inspect_ok" &&
+                msg._tag === "inspect_ok" &&
                 msg.value._tag === "absent"),
           ).toBe(true);
           expect(
             next._tag !== "stopped" ||
               prev._tag === "stopped" ||
-              (prev._tag === "removing" && msg.type === "remove_ok"),
+              (prev._tag === "removing" && msg._tag === "remove_ok"),
           ).toBe(true);
 
           return true;

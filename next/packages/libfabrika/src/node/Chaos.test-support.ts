@@ -37,6 +37,13 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import * as StepFaultTest from "./stepFault.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  arm: {},
+  before: {},
+});
+
 const brain = "SHA256:test-brain";
 const trace = { traceId: "4bf92f3577b34da6a3ce929d0e0e4736", spanId: "00f067aa0ba902b7" };
 const build = "chaos-law";
@@ -103,9 +110,9 @@ const faultControl = Effect.fnUntraced(function* () {
     });
   return {
     arm: (name: string, letter: string, classes: ReadonlyArray<typeof StepFaultTest.ErrorClass.Type>) =>
-      send({ type: "arm", name, letter, errors: classes }).pipe(Effect.asVoid),
+      send({ ...Tag.cases.arm.make({}), name, letter, errors: classes }).pipe(Effect.asVoid),
     before: Effect.fnUntraced(function* (input: typeof StepFaultTest.Before.Type) {
-      const [previous, next] = yield* send({ type: "before", ...input });
+      const [previous, next] = yield* send({ ...Tag.cases.before.make({}), ...input });
 
       if (previous._tag === "armed" && next._tag === "armed" && next.attempts.length > previous.attempts.length) {
         const attempt = next.attempts.at(-1);

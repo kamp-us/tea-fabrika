@@ -15,6 +15,13 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  throw: {},
+  inc: {},
+});
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -76,7 +83,7 @@ const poisonSource = [
   'import {Machine} from "@demlik/tea/effect";',
   'import {Schema} from "effect";',
   "const Model = Schema.Struct({count: Schema.Int});",
-  'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
+  "const Msg = Schema.TaggedUnion({ throw: {}, inc: {} });",
   'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
   `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
 ].join("\n");
@@ -284,7 +291,7 @@ const livePid = async (instance: Instance, name: string): Promise<string | undef
 const send = (pid: string, letter: string, type: "throw" | "inc") => ({
   pid,
   letter,
-  m: { type },
+  m: Tag.cases[type].make({}),
   sentAt: SENT,
   seen: 0,
 });

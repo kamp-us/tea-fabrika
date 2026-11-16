@@ -34,6 +34,31 @@ import {
   windowMachineFor,
 } from "./WindowMachine.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+  focus: {},
+  frame: {},
+  hello_ok: {},
+  key: {},
+  key_ok: {},
+  knock_ok: {},
+  mint_ok: {},
+  now_ok: {},
+  open_ok: {},
+  read_ok: {},
+  send_ok: {},
+  server: {},
+  size: {},
+  socket_closed: {},
+  socket_opened: {},
+  view: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const SEED = 119120;
 /** JSON text, the only form a view takes on the wire. */
 const Json = Schema.fromJsonString(Schema.Unknown);
@@ -75,7 +100,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
         rev: 0,
         pendingMutations: [],
       });
-      const after: { readonly serverState: unknown } = step(fresh, { type: "server", rev, view: wire });
+      const after: { readonly serverState: unknown } = step(fresh, { ...Tag.cases.server.make({}), rev, view: wire });
       expect(after.serverState, "L11: the window's server state is tezgah's view").toEqual(same);
       expect(optimisticState(after as never), "L11: with nothing pending, the drawn state is the server's").toEqual(
         same,
@@ -84,7 +109,11 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
       // A wire view that drops `child` from a tile is not tezgah's view: the window keeps what it had.
       if (tiles.length > 0) {
         const dropped = { ...(wire as object), tiles: tiles.map(({ child: _child, ...rest }) => rest) };
-        const kept: { readonly serverState: unknown } = step(after, { type: "server", rev: rev + 1, view: dropped });
+        const kept: { readonly serverState: unknown } = step(after, {
+          ...Tag.cases.server.make({}),
+          rev: rev + 1,
+          view: dropped,
+        });
         expect(kept.serverState, "L11: a view without child changes nothing").toEqual(same);
       }
     },
@@ -110,7 +139,7 @@ const PatchStep = Schema.Struct({
 const both = (
   m: unknown,
   msg: unknown,
-): readonly [{ readonly serverState: unknown; readonly rev: number }, ReadonlyArray<{ readonly type: string }>] =>
+): readonly [{ readonly serverState: unknown; readonly rev: number }, ReadonlyArray<{ readonly _tag: string }>] =>
   applyCell(tezgahMachine as never, m as never, msg as never) as never;
 
 /** A view as the wire carries it, JSON. */
@@ -138,7 +167,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         { workspaces: [], tiles: [] },
       ].map(onWire);
       const [fresh] = tezgahMachine.init(null, { workspace: 1 });
-      let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
+      let [m] = both(fresh, { ...Tag.cases.server.make({}), rev: start, view: wires[0] });
       let shown = wires[0];
       expect(text(m.serverState), "L11: the first whole view is shown").toBe(
         text(Schema.decodeUnknownSync(TezgahView)(shown)),
@@ -159,7 +188,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         const rev = m.rev;
         const msg =
           kind === "whole"
-            ? { type: "server", rev: rev + skew, view: target }
+            ? { ...Tag.cases.server.make({}), rev: rev + skew, view: target }
             : kind === "next"
               ? { type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) }
               : kind === "gap_base"
@@ -168,7 +197,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
                   ? { type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }
                   : { type: "patch", base: rev - skew - 1, rev: rev - skew + 1, patch: diff(shown, target) };
         const [next, cmds] = both(m, msg);
-        const asks = cmds.filter((c) => c.type === "ask").length;
+        const asks = cmds.filter((c) => c._tag === "ask").length;
 
         if (kind === "next" || kind === "whole") {
           seen.applied++;
@@ -214,8 +243,8 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
 //   target is none, or `from` itself, changes nothing and sends nothing.
 // - Any other move is drawn on the same step that reads its key, as one entry in the tezgah child's
 //   `pendingMutations` (never a stored focus, L23), and goes out on the press path to tezgah's pid
-//   as one letter `{type: "did", does, from, to, via, cursor}`, `to` absolute (the lead's lean).
-// - The window takes one more Msg from the page, `{type: "focus", tile, cursor}`: DOM focus is now in
+//   as one letter `{_tag: "did", does, from, to, via, cursor}`, `to` absolute (the lead's lean).
+// - The window takes one more Msg from the page, `{_tag: "focus", tile, cursor}`: DOM focus is now in
 //   tile `tile`, on an element whose `data-cursor` key is `cursor` (null for none). On the drawn
 //   focus it is only noted; on another tile of the drawn workspace it is a move there, `does:
 //   "tezgah.focus"`, `via: {_tag: "click"}`. A move's `cursor` is the last one the page said for
@@ -306,7 +335,7 @@ const FOCUS_KEYS: ReadonlyArray<{
   { keys: ["ctrl+b", "arrowdown"], does: "tezgah.focus_down", to: "down" },
 ];
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+type Cmd = { readonly _tag: string; readonly [key: string]: unknown };
 type Call = { readonly _tag: string; readonly [key: string]: unknown };
 
 /** One move a window drew: where from and to, its command, the cursor the page last said in `from`
@@ -319,7 +348,7 @@ type Move = {
   letter: string | null;
 };
 
-type Did = { readonly type: string; readonly does: string; readonly from: string; readonly to?: string };
+type Did = { readonly _tag: string; readonly does: string; readonly from: string; readonly to?: string };
 
 /** One window: its model, the Cmds it handed out not answered yet, and what reached it or left it. */
 type Win = {
@@ -454,12 +483,12 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
   for (const c of cmds) {
     const call = c["call"] as Call | undefined;
 
-    if (c.type === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
+    if (c._tag === "write" && call?._tag === "send" && call["pid"] === TEZGAH_PID) {
       const did = call["m"] as Did;
       const letter = String(call["letter"]);
 
       if (
-        did?.type === "did" &&
+        did?._tag === "did" &&
         did.does.startsWith("tezgah.focus") &&
         !w.outbox.some((o) => o.letter === letter) &&
         !w.got.has(letter)
@@ -475,7 +504,7 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
     }
   }
 
-  if (m.type === "view" && Reflect.get(Object(m.note), "type") === "whole") {
+  if (m._tag === "view" && Reflect.get(Object(m.note), "type") === "whole") {
     w.seen = Math.max(w.seen, Number(Reflect.get(Object(m.note), "rev")));
   }
 
@@ -486,13 +515,18 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
 const housekeep = (world: World, i: number, each: (e: Event) => void) => {
   for (let guard = 0; guard < 200; guard++) {
     const w = world.wins[i]!;
-    const cmd = w.waiting.find((c) => ["record", "write", "ping", "persist"].includes(c.type));
+    const cmd = w.waiting.find((c) => ["record", "write", "ping", "persist"].includes(c._tag));
 
     if (cmd === undefined) {
       return;
     }
 
-    stepWin(world, i, { type: `${cmd.type}_ok`, cmd, value: cmd.type === "persist" ? true : null } as WindowMsg, each);
+    stepWin(
+      world,
+      i,
+      { ...keyed(`${cmd._tag}_ok`), cmd, value: cmd._tag === "persist" ? true : null } as WindowMsg,
+      each,
+    );
   }
 };
 
@@ -511,7 +545,7 @@ const arrive = (world: World, i: number) => {
   const tiles = Layout.order(space.layout);
 
   if (
-    did?.type !== "did" ||
+    did?._tag !== "did" ||
     did.to === undefined ||
     !tiles.includes(did.to as TileId) ||
     !tiles.includes(did.from as TileId)
@@ -572,7 +606,7 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
     world,
     i,
     {
-      type: "send_ok",
+      ...Tag.cases.send_ok.make({}),
       id: r.id,
       dial: r.dial,
       value: r.pos < 0 ? { _tag: "refused", reason: "missing" } : { _tag: "accepted", rev: r.pos + LEDGER, pos: r.pos },
@@ -594,7 +628,11 @@ const notice = (world: World, i: number, each: (e: Event) => void) => {
   stepWin(
     world,
     i,
-    { type: "view", pid: TEZGAH_PID, note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view } } as WindowMsg,
+    {
+      ...Tag.cases.view.make({}),
+      pid: TEZGAH_PID,
+      note: { pid: TEZGAH_PID, type: "whole", rev: n.rev, view: n.view },
+    } as WindowMsg,
     each,
   );
   housekeep(world, i, each);
@@ -603,7 +641,7 @@ const notice = (world: World, i: number, each: (e: Event) => void) => {
 /** Window `i` takes its oldest `now` Cmd's answer: its letter id and clock. */
 const date = (world: World, i: number, each: (e: Event) => void) => {
   const w = world.wins[i]!;
-  const cmd = w.waiting.find((c) => c.type === "now");
+  const cmd = w.waiting.find((c) => c._tag === "now");
 
   if (cmd === undefined) {
     return;
@@ -613,7 +651,7 @@ const date = (world: World, i: number, each: (e: Event) => void) => {
     world,
     i,
     {
-      type: "now_ok",
+      ...Tag.cases.now_ok.make({}),
       cmd,
       value: { letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" },
     } as WindowMsg,
@@ -638,7 +676,7 @@ const pressFocus = (world: World, i: number, k: (typeof FOCUS_KEYS)[number], eac
       }
     }
 
-    stepWin(world, i, { type: "key", key, at: (clock += 10) } as WindowMsg, each);
+    stepWin(world, i, { ...Tag.cases.key.make({}), key, at: (clock += 10) } as WindowMsg, each);
     housekeep(world, i, each);
   }
 };
@@ -652,7 +690,7 @@ const focusIn = (world: World, i: number, tile: string, cursor: string | null, e
     w.moves.push({ from, to: tile, does: "tezgah.focus", cursor: w.cursors.get(from) ?? null, letter: null });
   }
 
-  stepWin(world, i, { type: "focus", tile, cursor } as WindowMsg, each);
+  stepWin(world, i, { ...Tag.cases.focus.make({}), tile, cursor } as WindowMsg, each);
   w.cursors.set(tile, cursor);
   housekeep(world, i, each);
 };
@@ -661,32 +699,37 @@ const focusIn = (world: World, i: number, tile: string, cursor: string | null, e
  *  tezgah's view and every tile open. */
 const online = (world: World, i: number, each: (e: Event) => void) => {
   const w = world.wins[i]!;
-  const key = w.waiting.find((c) => c.type === "key");
+  const key = w.waiting.find((c) => c._tag === "key");
 
   if (key !== undefined) {
     stepWin(
       world,
       i,
-      { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg,
+      { ...Tag.cases.key_ok.make({}), cmd: key, value: { found: "created", fingerprint: "SHA256:k" } } as WindowMsg,
       each,
     );
   }
 
-  stepWin(world, i, { type: "socket_opened", dial: 1, at: 0 } as WindowMsg, each);
+  stepWin(world, i, { ...Tag.cases.socket_opened.make({}), dial: 1, at: 0 } as WindowMsg, each);
   stepWin(
     world,
     i,
-    { type: "frame", dial: 1, text: rpc({ method: "challenge", params: { nonce: `n0nce${i}` } }), at: 1 } as WindowMsg,
+    {
+      ...Tag.cases.frame.make({}),
+      dial: 1,
+      text: rpc({ method: "challenge", params: { nonce: `n0nce${i}` } }),
+      at: 1,
+    } as WindowMsg,
     each,
   );
-  const hello = w.waiting.find((c) => c.type === "hello");
+  const hello = w.waiting.find((c) => c._tag === "hello");
 
   if (hello !== undefined) {
-    stepWin(world, i, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, each);
+    stepWin(world, i, { ...Tag.cases.hello_ok.make({}), cmd: hello, value: null } as WindowMsg, each);
     stepWin(
       world,
       i,
-      { type: "frame", dial: 1, text: rpc({ id: hello["id"], result: ADMITTED }), at: 2 } as WindowMsg,
+      { ...Tag.cases.frame.make({}), dial: 1, text: rpc({ id: hello["id"], result: ADMITTED }), at: 2 } as WindowMsg,
       each,
     );
   }
@@ -709,7 +752,7 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
         world,
         i,
         {
-          type: "read_ok",
+          ...Tag.cases.read_ok.make({}),
           ...on,
           value: [{ _tag: "started", by: "brain", body: { process, name }, rev: 1 }],
           ms: 1,
@@ -722,13 +765,18 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
       stepWin(
         world,
         i,
-        { type: "open_ok", ...on, value: { rev: world.pos, view: world.view }, ms: 1 } as WindowMsg,
+        { ...Tag.cases.open_ok.make({}), ...on, value: { rev: world.pos, view: world.view }, ms: 1 } as WindowMsg,
         each,
       );
     } else if (flight.call._tag === "open") {
-      stepWin(world, i, { type: "open_ok", ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg, each);
+      stepWin(
+        world,
+        i,
+        { ...Tag.cases.open_ok.make({}), ...on, value: { rev: 0, view: {} }, ms: 1 } as WindowMsg,
+        each,
+      );
     } else {
-      stepWin(world, i, { type: "knock_ok", ...on, value: null, ms: 1 } as WindowMsg, each);
+      stepWin(world, i, { ...Tag.cases.knock_ok.make({}), ...on, value: null, ms: 1 } as WindowMsg, each);
     }
   }
 };
@@ -757,7 +805,7 @@ const makeWorld = (view: TezgahView, count: number, each: (e: Event) => void): W
       moves: [],
       cursors: new Map(),
     });
-    stepWin(world, i, { type: "size", width: 1440, height: 868 } as WindowMsg, each);
+    stepWin(world, i, { ...Tag.cases.size.make({}), width: 1440, height: 868 } as WindowMsg, each);
     online(world, i, each);
   }
 
@@ -817,7 +865,7 @@ const play = (world: World, c: Pick, each: (e: Event) => void) => {
     () => pressFocus(world, i, FOCUS_KEYS[c.pick % FOCUS_KEYS.length]!, each),
     () => focusIn(world, i, tiles[c.pick % Math.max(tiles.length, 1)] ?? "", c.cursor, each),
     () => focusIn(world, i, drawnFocus(w.s) ?? "", c.cursor, each),
-    ...(w.waiting.some((x) => x.type === "now") ? [() => date(world, i, each)] : []),
+    ...(w.waiting.some((x) => x._tag === "now") ? [() => date(world, i, each)] : []),
     ...(w.outbox.length > 0 ? [() => arrive(world, i), () => arrive(world, i), () => reject(world, i)] : []),
     ...(w.replies.length > 0 ? [() => reply(world, i, each)] : []),
     ...(w.notices.length > 0 ? [() => notice(world, i, each)] : []),
@@ -831,7 +879,7 @@ const settle = (world: World, each: (e: Event) => void, batched = false) => {
   // of one window's moves at once (plan amendment 10's case of an earlier move its next superseded).
   for (let guard = 0; batched && guard < 2_000; guard++) {
     const busy = world.wins.findIndex(
-      (w) => w.waiting.some((x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0,
+      (w) => w.waiting.some((x) => x._tag === "now") || w.outbox.length > 0 || w.replies.length > 0,
     );
 
     if (busy < 0) {
@@ -851,7 +899,7 @@ const settle = (world: World, each: (e: Event) => void, batched = false) => {
   for (let guard = 0; guard < 2_000; guard++) {
     const busy = world.wins.findIndex(
       (w) =>
-        w.waiting.some((x) => x.type === "now") || w.outbox.length > 0 || w.replies.length > 0 || w.notices.length > 0,
+        w.waiting.some((x) => x._tag === "now") || w.outbox.length > 0 || w.replies.length > 0 || w.notices.length > 0,
     );
 
     if (busy < 0) {
@@ -951,10 +999,10 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
 
           // A view before its reply keeps the mutation: the reply has not come.
           seen.early +=
-            m.type === "view" && w.moves.some((x) => x.letter !== null && !w.got.has(x.letter) && w.seen > 0) ? 1 : 0;
+            m._tag === "view" && w.moves.some((x) => x.letter !== null && !w.got.has(x.letter) && w.seen > 0) ? 1 : 0;
           expect(
             pending,
-            `L24: window ${win} after ${m.type}: one pending mutation per move not answered`,
+            `L24: window ${win} after ${m._tag}: one pending mutation per move not answered`,
           ).toHaveLength(open.length);
 
           if (open.length === 0) {
@@ -999,7 +1047,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
           for (const c of cmds) {
             const call = c["call"] as Call | undefined;
 
-            if (c.type !== "write" || call?._tag !== "send" || call["pid"] !== TEZGAH_PID) {
+            if (c._tag !== "write" || call?._tag !== "send" || call["pid"] !== TEZGAH_PID) {
               continue;
             }
 
@@ -1012,7 +1060,7 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
             checked += move!.cursor === null ? 0 : 1;
             long += (move!.cursor?.length ?? 0) > 80 ? 1 : 0;
             expect(did, "L24: the letter is the move").toMatchObject({
-              type: "did",
+              ...Tag.cases.did.make({}),
               does: move!.does,
               from: move!.from,
               to: move!.to,
@@ -1046,7 +1094,12 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
           const w = world.wins[0]!;
 
           if (down) {
-            stepWin(world, 0, { type: "socket_closed", dial: 1, code: 1006, at: 3 } as WindowMsg, () => {});
+            stepWin(
+              world,
+              0,
+              { ...Tag.cases.socket_closed.make({}), dial: 1, code: 1006, at: 3 } as WindowMsg,
+              () => {},
+            );
             housekeep(world, 0, () => {});
             expect(w.s.link._tag, "the socket dropped").not.toBe("online");
           }
@@ -1057,19 +1110,19 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
             const before = drawnFocus(w.s);
             const moves = w.moves.length;
             const check = ({ m, next, cmds }: Event) => {
-              if (m.type !== "key" && m.type !== "focus") {
+              if (m._tag !== "key" && m._tag !== "focus") {
                 return;
               }
 
               if (down) {
                 expect(
-                  cmds.filter((c) => c.type === "write"),
+                  cmds.filter((c) => c._tag === "write"),
                   "L25: nothing is written while the link is down",
                 ).toEqual([]);
               }
 
               const last =
-                m.type === "focus" ||
+                m._tag === "focus" ||
                 (FOCUS_KEYS.some((k) => k.keys.at(-1) === Reflect.get(m, "key")) && Reflect.get(m, "key") !== "ctrl+b");
 
               if (!last) {
@@ -1115,7 +1168,7 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
           const w = at.wins[win]!;
           const focusRows = cmds.flatMap((c) => {
             const record =
-              c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
+              c._tag === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
             return record?._tag === "focus" ? [record] : [];
           });
           const before = new Set(waitingMoves(prev).map(letterIn));
@@ -1146,7 +1199,7 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
             seen.superseded += !refused && !jumped && move !== dropped.at(-1) ? 1 : 0;
             expect(
               row?.["result"],
-              `L29: window ${win}'s move to ${move.to}, ${refused ? "refused" : jumped ? "jumped back" : "kept"} on ${m.type}`,
+              `L29: window ${win}'s move to ${move.to}, ${refused ? "refused" : jumped ? "jumped back" : "kept"} on ${m._tag}`,
             ).toBe(want);
           }
         });
@@ -1182,7 +1235,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
               const call = c["call"] as Call | undefined;
               const did = call?.["m"] as (Did & { readonly cursor?: string | null }) | undefined;
 
-              if (c.type !== "write" || call?._tag !== "send" || !did?.does.startsWith("tezgah.split_")) {
+              if (c._tag !== "write" || call?._tag !== "send" || !did?.does.startsWith("tezgah.split_")) {
                 continue;
               }
 
@@ -1211,11 +1264,11 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
                 const cursor = w.cursors.get(from) ?? null;
 
                 for (const key of ["ctrl+b", c.pick % 2 === 0 ? "%" : '"']) {
-                  stepWin(world, 0, { type: "key", key, at: (clock += 10) } as WindowMsg, each);
+                  stepWin(world, 0, { ...Tag.cases.key.make({}), key, at: (clock += 10) } as WindowMsg, each);
                   housekeep(world, 0, each);
                 }
 
-                const mint = w.waiting.find((x) => x.type === "mint");
+                const mint = w.waiting.find((x) => x._tag === "mint");
 
                 if (mint !== undefined) {
                   due.push({ from, cursor });
@@ -1223,7 +1276,7 @@ describe("Desk S3: a split's letter carries the cursor it leaves", () => {
                     world,
                     0,
                     {
-                      type: "mint_ok",
+                      ...Tag.cases.mint_ok.make({}),
                       cmd: mint,
                       value: { tile: typeId("tile", 6_000 + world.letters++) },
                     } as WindowMsg,
@@ -1342,7 +1395,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
     for (const c of e.cmds) {
       const call = c["call"] as Call | undefined;
 
-      if (c.type === "write" && call?._tag === "send") {
+      if (c._tag === "write" && call?._tag === "send") {
         letters.push(call["m"]);
       }
     }
@@ -1361,7 +1414,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
 
   for (const pick of picks) {
     for (const key of CHORDS[pick.chord % CHORDS.length]!) {
-      const press: KeyPress = { type: "key", key, at: (at += 10) };
+      const press: KeyPress = { ...Tag.cases.key.make({}), key, at: (at += 10) };
       const judged = handle(focusWindow, TABLE!, w.s, unread, press);
       unread = judged.unread;
       handlings.push({ key, handling: judged.handling, waiting: line.length });
@@ -1383,7 +1436,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
   read(line.length);
 
   for (let minted = 0, guard = 0; guard < 200; guard++) {
-    const mint = w.waiting.find((c) => c.type === "mint");
+    const mint = w.waiting.find((c) => c._tag === "mint");
 
     if (mint === undefined) {
       break;
@@ -1393,7 +1446,7 @@ const typed = (desk: TezgahView, picks: ReadonlyArray<Typed>, schedule: Schedule
     stepWin(
       world,
       0,
-      { type: "mint_ok", cmd: mint, value: { tile: typeId("tile", 7_000 + ++minted) } } as WindowMsg,
+      { ...Tag.cases.mint_ok.make({}), cmd: mint, value: { tile: typeId("tile", 7_000 + ++minted) } } as WindowMsg,
       each,
     );
     housekeep(world, 0, each);

@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-s2-tests2",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1431",
+  "started": "2026-11-15T19:58:00-08:00",
+  "ended": "2026-11-15T20:47:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests round for slice 2 of docs/plan/quests/tea-msg-tag-PLAN.md. 125 test files (the lead's 80 plus 45 more that hold tea Msgs, Cmds or answers) moved to _tag: each Msg, Cmd, Sub and answer is made by a schema maker (a per-file Tag TaggedUnion spread, or the file's own schema), test-local Msg schemas became Schema.TaggedUnion or TaggedStruct, and answers named from a Cmd use a keyed helper. Wire notes (whole/patch), WebAuthn, rollup, file-entry and JSON-schema type keys were left. 26 test files run green now; the rest are red because next/ product code still reads and writes type (NoCellError on an undefined _tag, Mail and Msg schemas still type-keyed). One plan gap: Mail.Reply carries both type reply and a _tag kind, so the flat form was written and named.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/runtime/internal/watchers.test.ts",
+      "plant": "tea chunk-SKI5V64W.js lookupCell back to msg.type (K2 plant a)",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/tasks/internal/task.test.ts",
+      "plant": "same",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/packs/internal/open.test.ts",
+      "plant": "same",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 49,
+  "note": "The plant ran once on a copy of the installed tea file and was restored by copy (cmp clean, watchers.test green again). One pnpm typecheck ran with pgrep -x tsgo empty: red, failing first in .agents on chain.ts and drive.ts, which stopped the other projects; per-project tsc then showed only product-side errors. pnpm format, pnpm lint (17 parts) and the ratchet pass. No integration, visual, workerd or spawned-process file ran.",
+  "step": "tests"
+}

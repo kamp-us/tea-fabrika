@@ -26,6 +26,13 @@ import type { Sql } from "../Sql.ts";
 import { type From, type Letter, Mailbox, RunnerMail } from "./Mailbox.ts";
 import { brainOnly, inRunnerSpace } from "./Process.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  delete: {},
+  save: {},
+});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const READER = "connection:t1";
 const PARENT = `in-${Effect.runSync(processId)}-41`;
@@ -203,7 +210,7 @@ describe("p21, send", () => {
     ),
   );
   it.effect("writes one send line in the name's inbox, with every field the writer gave", () =>
-    check(json, [{ type: "save", value: { text: "hello", n: 3 } }], (m) =>
+    check(json, [{ ...Tag.cases.save.make({}), value: { text: "hello", n: 3 } }], (m) =>
       Effect.gen(function* () {
         const answer = yield* send("notes:1", LETTER, m);
         expect(answer).toEqual({ _tag: "placed", rev: 1, pos: 1 });
@@ -255,7 +262,7 @@ describe("p21, send", () => {
   it.effect("a resend gets the first placing and writes nothing; another m under that id is refused", () =>
     check(
       fc.tuple(json, json).filter(([a, b]) => JSON.stringify(a) !== JSON.stringify(b)),
-      [[{ type: "save" }, { type: "delete" }]],
+      [[Tag.cases.save.make({}), Tag.cases.delete.make({})]],
       ([saved, changed]) =>
         Effect.gen(function* () {
           const first = yield* send("notes:1", LETTER, saved);
@@ -293,7 +300,7 @@ describe("p21, send", () => {
 
 describe("p21, receive", () => {
   it.effect("plant, parent or traceId dropped: each Letter is its entry, field for field", () =>
-    check(fc.tuple(json, json), [[{ type: "save", value: 1 }, [1, "two", null]]], ([a, b]) =>
+    check(fc.tuple(json, json), [[{ ...Tag.cases.save.make({}), value: 1 }, [1, "two", null]]], ([a, b]) =>
       Effect.gen(function* () {
         yield* send("notes:1", "letter_a", a);
         yield* raw("other", "x-1", { _tag: "saved" });

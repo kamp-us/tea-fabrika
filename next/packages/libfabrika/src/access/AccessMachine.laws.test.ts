@@ -4,7 +4,7 @@
 // - `Access.ts` exports one machine, `access`, made with `Machine.make` and no Cmds. Its Model is
 //   `Folded`: `unfounded { reply }` or `founded { person, name, keys, ids, reply }`. Each key is one
 //   of `live`, `revoked`, `spent` or `replaced`, keeping its `rank` and `under`. Its one Msg is
-//   `{ type: "fold", event }`, and `reply` answers the last event: `accepted` or `refused { reason }`.
+//   `{ _tag: "fold", event }`, and `reply` answers the last event: `accepted` or `refused { reason }`.
 // - `members(model)` in `Access.ts` is the public `Access` view: `{ person, name, keys, spent }`,
 //   each key `{ rank, live, under }`, with empty strings and no keys before founding.
 // - `AccessFold.ts` drives the machine: `EMPTY` is its init, `allows` steps it once, `foldAccess`
@@ -17,11 +17,17 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result } from "effect";
+import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  fold: {},
+});
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
@@ -284,7 +290,7 @@ const walk = (choices: ReadonlyArray<Choice>): { readonly start: Folded; readonl
     const event = choose(model, c, n, accepted, refused);
     const refusedBefore = new Set(refused);
     const kept = plain(model);
-    const [post, sent] = applyCell(access, model, { type: "fold", event });
+    const [post, sent] = applyCell(access, model, { ...Tag.cases.fold.make({}), event });
     expect(sent).toEqual([]);
     steps.push({ pre: model, event, post, kept, refusedBefore });
 

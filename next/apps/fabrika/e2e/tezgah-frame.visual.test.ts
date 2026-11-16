@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 // Desk S2b, next/ (the desk program fabrika/tezgah, ticket named by its title): law L21 of the approved
 // plan, and the slice's shots. Written before the tab draws tezgah's workspace and before it reads a
 // key. Starts the real `dev.ts` in its own temp home on its own port and drives headless Chromium;
@@ -37,6 +37,12 @@ import {
   statusBar,
   typeId,
 } from "./tezgah.test-support.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  did: {},
+});
 
 /** The law's own limit in ms: a brain, a browser and about twenty waits of at most 30 s each. */
 const LIMIT = 300_000;
@@ -187,7 +193,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
             r,
             pid,
             {
-              type: "did",
+              ...Tag.cases.did.make({}),
               does: "tezgah.split_right",
               from: t1.id,
               tile: typeId("tile", 4_242),

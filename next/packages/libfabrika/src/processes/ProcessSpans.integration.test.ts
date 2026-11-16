@@ -27,6 +27,12 @@ import {
 import { Down } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 // Retain refs and marker suffixes through 40 characters, including the old 11..12.
 const options = { arbitrary: { seed: 119120, runs: 20, size: 40 } };
 
@@ -255,7 +261,7 @@ describe("p99, process content stays out of span tags and measurements", () => {
           const processes = yield* ProcessManager;
           const mailbox = yield* Mailbox;
           yield* processes.start(first(), from());
-          yield* mailbox.send("counter:1", "message-17", { type: "save", text: MESSAGE }, from());
+          yield* mailbox.send("counter:1", "message-17", { ...Tag.cases.save.make({}), text: MESSAGE }, from());
           expect(yield* receive(A)).toHaveLength(1);
           store.fault.after = 0;
           store.fault.error = new Error(MESSAGE, { cause: Redacted.make(SECRET) });

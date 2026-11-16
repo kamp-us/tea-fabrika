@@ -22,15 +22,10 @@ export const Model = Schema.TaggedUnion({
   },
 });
 
-export const Msg = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("arm"),
-    name: Schema.String,
-    letter: Schema.String,
-    errors: Schema.Array(ErrorClass),
-  }),
-  Schema.Struct({ type: Schema.Literal("before"), ...Before.fields }),
-]);
+export const Msg = Schema.TaggedUnion({
+  arm: { name: Schema.String, letter: Schema.String, errors: Schema.Array(ErrorClass) },
+  before: Before.fields,
+});
 
 export const controller = Machine.make({
   model: Model,

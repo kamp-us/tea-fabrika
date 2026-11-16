@@ -52,7 +52,7 @@ const Letter = Schema.Struct({
   body: Schema.Struct({ m: Schema.Unknown }),
 });
 
-const Timer = Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number });
+const Timer = Schema.TaggedStruct("timer", { at: Schema.Number });
 
 const View = Schema.Struct({
   rev: Schema.Number,

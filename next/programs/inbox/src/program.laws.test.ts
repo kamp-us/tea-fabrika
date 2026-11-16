@@ -22,7 +22,7 @@ const Fields = {
 
 const Row = Schema.TaggedUnion({ added: Fields });
 const Model = Schema.Struct({ rows: Schema.Array(Row) });
-const Msg = Schema.Struct({ type: Schema.Literal("added"), ...Fields });
+const Msg = Schema.TaggedStruct("added", Fields);
 
 const Moves = Arbitrary.array(
   Arbitrary.schema(
@@ -57,7 +57,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
           msgs.push(msg);
 
           if (!rows.has(msg.id)) {
-            const { type: _type, ...fields } = msg;
+            const { _tag: _key, ...fields } = msg;
             rows.set(msg.id, Row.cases.added.make(fields));
           }
 

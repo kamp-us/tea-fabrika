@@ -1,7 +1,7 @@
 // Exam amendment, P33 / ticket 252. Replaces P9's per-build start identity only.
 // Mail, writer fields, ledger refusals and lazy layer failures stay covered.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Layer, Stream, Tracer } from "effect";
+import { Cause, Effect, Layer, Stream, Tracer, Schema } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -21,6 +21,12 @@ import {
   storage,
 } from "./Process.test-support.ts";
 import { CoordinationLayer, ProcessManager } from "./ProcessManager.ts";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
 
 const hash = fc.string({ minLength: 1, maxLength: 80 });
 
@@ -143,7 +149,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
 
 describe("p21, CoordinationLayer", () => {
   it.effect("gives mail and starts over the same ledger", () =>
-    check(fc.jsonValue(), [{ type: "save" }], (m) => {
+    check(fc.jsonValue(), [Tag.cases.save.make({})], (m) => {
       const { first } = fixture("build-a");
       const store = storage();
       return Effect.gen(function* () {

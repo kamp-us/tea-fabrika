@@ -8,6 +8,15 @@ import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  update: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 describe("L12: handlers map faults", () => {
   it("keeps only the declared reason; defects and invalid inputs have one fixed failure; interrupts pass through", () => {
     fc.assert(
@@ -47,7 +56,13 @@ describe("L12: handlers map faults", () => {
             merge: () => fail(hostFault),
           });
           const ci = Layer.succeed(Ci.Ci, { start: () => fail(ciFault), at: () => fail(ciFault) });
-          const cmd: Record<string, unknown> = { type: cell.method, attempt: 1, change: 1, head, start: cell.start };
+          const cmd: Record<string, unknown> = {
+            ...keyed(cell.method),
+            attempt: 1,
+            change: 1,
+            head,
+            start: cell.start,
+          };
 
           if (cell.kind === "bad_head") {
             if (cell.method === "change") {
@@ -109,9 +124,12 @@ it.effect.prop(
         Layer.merge(CodeHostTest.layer({ token: Redacted.make(token) }), CiTest.layer({ token: Redacted.make(token) })),
       );
       yield* Context.get(services, CodeHostTest.Control).fail("update", { kind: "fault", reason });
-      const outcome = yield* handlers.update!({ type: "update", attempt: 1, change: 1, head: "a".repeat(40) }).pipe(
-        Effect.provide(services),
-      );
+      const outcome = yield* handlers.update!({
+        ...Tag.cases.update.make({}),
+        attempt: 1,
+        change: 1,
+        head: "a".repeat(40),
+      }).pipe(Effect.provide(services));
       RepliesTest.unleaked([JSON.stringify(outcome)], [token]);
       expect(outcome).toEqual({ _tag: "Err", error: { _tag: reason } });
     }),

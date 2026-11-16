@@ -38,6 +38,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  approve: {},
+  prepare: {},
+  answer: {},
+  inc: {},
+  request: {},
+  start: {},
+  throw: {},
+  write_err: {},
+});
+
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 // Only the platform base class is fake. The box methods run the real programBox.
@@ -190,10 +203,10 @@ const Model = Schema.Struct({
   failures: Schema.Array(Schema.String),
 });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("prepare"), parent: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) }),
-]);
+const Msg = Schema.TaggedUnion({
+  prepare: { parent: Schema.optionalKey(Schema.String) },
+  approve: { parent: Schema.optionalKey(Schema.String) },
+});
 
 const write = Cmd.make("write", {
   input: Schema.Struct({ stream: Schema.String, write: Schema.Json }),
@@ -242,8 +255,7 @@ const RequestModel = Schema.TaggedUnion({
 type RequestModel = typeof RequestModel.Type;
 
 /** `to` and `claim` let a law aim one request elsewhere, or have it claim another sender. */
-const RequestStart = Schema.Struct({
-  type: Schema.Literal("start"),
+const RequestStart = Schema.TaggedStruct("start", {
   ref: Schema.NonEmptyString,
   value: Schema.Int,
   to: Schema.optionalKey(Schema.NonEmptyString),
@@ -251,8 +263,7 @@ const RequestStart = Schema.Struct({
   parent: Schema.optionalKey(Schema.String),
 });
 
-const Answer = Schema.Struct({
-  type: Schema.Literal("answer"),
+const Answer = Schema.TaggedStruct("answer", {
   ref: Schema.String,
   value: Schema.Int,
   parent: Schema.optionalKey(Schema.String),
@@ -276,7 +287,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
           return [s, []];
         }
 
-        const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+        const body = { ...Tag.cases.request.make({}), ref: m.ref, value: m.value, reply: config.self };
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined
@@ -304,7 +315,7 @@ const mailRequester = (config: { readonly self: string; readonly peer: string })
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
-    refuse: (s, m) => (m.type === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
+    refuse: (s, m) => (m._tag === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
     inputs: { start: "Start a request", answer: "An answer from a responder" },
     outputs: {},
     writes: {},
@@ -323,15 +334,14 @@ const ResponseModel = Schema.TaggedStruct("ready", {
 /** @internal */
 type ResponseModel = typeof ResponseModel.Type;
 
-const Request = Schema.Struct({
-  type: Schema.Literal("request"),
+const Request = Schema.TaggedStruct("request", {
   ref: Schema.NonEmptyString,
   value: Schema.Int,
   reply: Schema.NonEmptyString,
   parent: Schema.optionalKey(Schema.String),
 });
 
-const Approve = Schema.Struct({ type: Schema.Literal("approve"), parent: Schema.optionalKey(Schema.String) });
+const Approve = Schema.TaggedStruct("approve", { parent: Schema.optionalKey(Schema.String) });
 /** @internal */
 const ResponseMsg = Schema.Union([Request, Approve]);
 
@@ -343,7 +353,7 @@ const machine = Machine.make({
   update: {
     request: (s, m) => [
       { ...s, answered: s.answered + 1 },
-      [send({ to: m.reply, m: { type: "answer", ref: m.ref, value: m.value + 1 } })],
+      [send({ to: m.reply, m: { ...Tag.cases.answer.make({}), ref: m.ref, value: m.value + 1 } })],
     ],
     approve: (s) => [s, []],
     send_ok: (s) => [{ ...s, queued: s.queued + 1 }, []],
@@ -357,7 +367,7 @@ const mailResponder = Program.make({
   machine,
   state: { v: 1, upgrades: [] },
   view: (s) => s,
-  refuse: (_s, m) => (m.type === "request" && m.value < 0 ? { reason: "negative" } : null),
+  refuse: (_s, m) => (m._tag === "request" && m.value < 0 ? { reason: "negative" } : null),
   inputs: {
     request: "Answer a request",
     approve: { description: "Approve", personOnly: true },
@@ -412,10 +422,10 @@ const storage = (db: DatabaseSync, alarms?: AlarmHooks) => {
 // A program that throws a TypeError on "throw" and counts on "inc", run inside the real box.
 const PoisonModel = Schema.Struct({ count: Schema.Int });
 
-const PoisonMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("throw"), parent: Schema.optionalKey(Schema.String) }),
-  Schema.Struct({ type: Schema.Literal("inc"), parent: Schema.optionalKey(Schema.String) }),
-]);
+const PoisonMsg = Schema.TaggedUnion({
+  throw: { parent: Schema.optionalKey(Schema.String) },
+  inc: { parent: Schema.optionalKey(Schema.String) },
+});
 
 const poisonProgram = (limit: number | null) => ({
   name: "p34/poison-fixture",
@@ -1142,7 +1152,7 @@ StartsTest.law(
             w.project.route(client, "process.send", {
               pid,
               letter: `settings-step-${index}`,
-              m: { type: "inc" },
+              m: Tag.cases.inc.make({}),
               sentAt: SENT,
               seen: 0,
             }),
@@ -1243,7 +1253,7 @@ describe("P12 Project configure recovery", () => {
         await w.project.route(client, "process.send", {
           pid: descriptor.id,
           letter: "after-restore",
-          m: { type: "inc" },
+          m: Tag.cases.inc.make({}),
           sentAt: SENT,
           seen: 0,
         }),
@@ -1274,7 +1284,7 @@ describe("P12 Process RPC refusal answers", () => {
         .route(client, "process.send", {
           pid,
           letter: "request",
-          m: { type: reason === "person_only" ? "prepare" : "approve" },
+          m: (reason === "person_only" ? Tag.cases.prepare : Tag.cases.approve).make({}),
           sentAt: SENT,
           seen: 0,
         })
@@ -1287,9 +1297,9 @@ describe("P12 Process RPC refusal answers", () => {
       expect(w.calls()).toEqual({ signs: 1, commits: reason === "not_granted" ? 1 : 0 });
       expect(await w.project.read("events", 0, "audit")).toEqual([]);
       const inbox = await w.project.read("approvals:1/inbox", 0, "audit");
-      const isReply = Schema.is(Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("write_err") }) }));
+      const isReply = Schema.is(Schema.Struct({ m: Schema.TaggedStruct("write_err", {}) }));
       expect(inbox.filter((row) => isReply(row.body))).toMatchObject([
-        { body: { m: { type: "write_err", reason: reason, error: { _tag: reason } } } },
+        { body: { m: { ...Tag.cases.write_err.make({}), reason: reason, error: { _tag: reason } } } },
       ]);
       const checkpoint = w.process(pid).db.prepare("SELECT checkpoint FROM process_state WHERE process=?").get(pid);
       expect(JSON.parse(String(checkpoint!.checkpoint))).toMatchObject({
@@ -1369,7 +1379,7 @@ const runFlow = async (flow: RecoveryFlow) => {
       (error: unknown) => ({ error: String(error) }),
     );
   const send = (pid: string, letter: string, type: "throw" | "inc") =>
-    route("process.send", { pid, letter, m: { type }, sentAt: SENT, seen: 0 });
+    route("process.send", { pid, letter, m: Tag.cases[type].make({}), sentAt: SENT, seen: 0 });
   const restarts = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
@@ -1650,7 +1660,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
                 .route(client, "process.send", {
                   pid: target.process,
                   letter: `throw-${exits.size}`,
-                  m: { type: "throw" },
+                  m: Tag.cases.throw.make({}),
                   sentAt: SENT,
                   seen: 0,
                 })
@@ -1725,7 +1735,7 @@ const mailModel = (w: ReturnType<typeof world>, pid: string) => {
 const mailRequest = (pid: string, ref: string) => ({
   pid,
   letter: `start-${ref}`,
-  m: { type: "start", ref, value: 7 },
+  m: { ...Tag.cases.start.make({}), ref, value: 7 },
   sentAt: SENT,
   seen: 0,
 });

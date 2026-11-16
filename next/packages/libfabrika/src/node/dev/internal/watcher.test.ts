@@ -5,22 +5,29 @@ import { expect, expectTypeOf, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  attempted: {},
+  rebuilt: {},
+});
+
 it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attempt advances boot to watch", async () => {
   const { watcher } = await import("./watcher.ts");
   type Model =
     | { readonly _tag: "booting"; readonly failedInputs?: string | null }
     | { readonly _tag: "watching"; readonly failedInputs?: string | null };
-  type Msg = { readonly type: "attempted" } | { readonly type: "rebuilt"; readonly failedInputs: string | null };
+  type Msg = { readonly _tag: "attempted" } | { readonly _tag: "rebuilt"; readonly failedInputs: string | null };
   expectTypeOf<Model>().toEqualTypeOf<typeof watcher.model.Type>();
   expectTypeOf<Msg>().toEqualTypeOf<typeof watcher.msg.Type>();
   const json = Schema.fromJsonString(Schema.toType(watcher.model));
 
   // tea's guided generator accepts fast-check data, not Effect Arbitrary.
   // Successful and failed attempt results both send the same payload-free Msg.
-  const attempted = fc.boolean().map((): Extract<Msg, { type: "attempted" }> => ({ type: "attempted" }));
+  const attempted = fc.boolean().map((): Extract<Msg, { _tag: "attempted" }> => Tag.cases.attempted.make({}));
   const rebuilt = fc
     .option(fc.string(), { nil: null })
-    .map((failedInputs): Extract<Msg, { type: "rebuilt" }> => ({ type: "rebuilt", failedInputs }));
+    .map((failedInputs): Extract<Msg, { _tag: "rebuilt" }> => ({ ...Tag.cases.rebuilt.make({}), failedInputs }));
   const attempts = arbGuidedSequence(watcher, {}, { outside: { attempted, rebuilt } }, { maxLength: 60, size: "max" });
   const rebuildsSeen = new Set<string>();
   const run = propertyTrace(
@@ -35,7 +42,7 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
       let attemptedCount = 0;
 
       for (const step of steps) {
-        if (step.msg.type === "attempted") {
+        if (step.msg._tag === "attempted") {
           expect(
             step.prev._tag,
             attemptedCount === 0 ? "the first attempt uses boot" : "later attempts use watch",

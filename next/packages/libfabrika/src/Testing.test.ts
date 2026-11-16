@@ -6,9 +6,15 @@ import { describe, expect, it } from "@effect/vitest";
 import { Schema } from "effect";
 import * as fc from "fast-check";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 const SEED = 119120;
 const Model = Schema.Struct({ count: Schema.Int, carry: Schema.Int });
-const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
 
 const report = Cmd.make("report", {
   input: Schema.Struct({ n: Schema.Int }),
@@ -33,9 +39,9 @@ const encode = Schema.encodeSync(Model);
 const decode = Schema.decodeUnknownSync(Model);
 
 const msgs = [
-  { type: "add", n: 1 },
-  { type: "add", n: 2 },
-  { type: "add", n: -3 },
+  { ...Tag.cases.add.make({}), n: 1 },
+  { ...Tag.cases.add.make({}), n: 2 },
+  { ...Tag.cases.add.make({}), n: -3 },
 ] as const;
 
 describe("S2 syncTest catches its plants", () => {
@@ -44,7 +50,11 @@ describe("S2 syncTest catches its plants", () => {
     fc.assert(
       fc.property(fc.array(fc.integer({ min: -10, max: 10 }), { maxLength: 12 }), (ns) => {
         expect(() =>
-          syncTest(machine, {}, { msgs: ns.map((n) => ({ type: "add", n })), encode, decode, equals, seed: SEED }),
+          syncTest(
+            machine,
+            {},
+            { msgs: ns.map((n) => ({ ...Tag.cases.add.make({}), n })), encode, decode, equals, seed: SEED },
+          ),
         ).not.toThrow();
       }),
       { seed: SEED, numRuns: 80 },

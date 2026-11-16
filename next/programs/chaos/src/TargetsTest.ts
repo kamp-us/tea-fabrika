@@ -7,6 +7,15 @@ import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, Schema, type Scope } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  check: {},
+  remove: {},
+  uncheck: {},
+});
+
 type World = Effect.Success<RunnerOpen>;
 
 type Before = {
@@ -98,22 +107,30 @@ export const suite = (open: Open, checklist: unknown) =>
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* world.session(NAME, PROGRAM, checklist, {});
-                expect((yield* send(runner, { type: "add", name: "first" })).answer._tag).toBe("accepted");
-                const checked = yield* send(runner, { type: "check", name: "first", note }, world.agent);
+                expect((yield* send(runner, { ...Tag.cases.add.make({}), name: "first" })).answer._tag).toBe(
+                  "accepted",
+                );
+                const checked = yield* send(runner, { ...Tag.cases.check.make({}), name: "first", note }, world.agent);
                 expect(checked.answer._tag).toBe("accepted");
                 expect(
-                  (yield* send(runner, { type: "check", name: "first", note: "replacement" }, world.agent)).answer._tag,
+                  (yield* send(
+                    runner,
+                    { ...Tag.cases.check.make({}), name: "first", note: "replacement" },
+                    world.agent,
+                  )).answer._tag,
                 ).toBe("accepted");
                 expect(shown((yield* runner.open("first-note")).view).items[0]?.note).toBe(note);
                 const kept = (yield* world.letters(NAME)).find((row) => row.id === checked.input.id);
                 expect(kept).toMatchObject({
                   by: world.agent.key,
                   parent: checked.input.envelope.id,
-                  m: { type: "check", note },
+                  m: { ...Tag.cases.check.make({}), note },
                 });
-                const refusal = yield* send(runner, { type: "add", name: "first" });
+                const refusal = yield* send(runner, { ...Tag.cases.add.make({}), name: "first" });
                 expect(refusal.answer).toEqual(Sent.cases.refused.make({ reason: "taken" }));
-                expect((yield* send(runner, { type: "remove", name: "first" })).answer._tag).toBe("accepted");
+                expect((yield* send(runner, { ...Tag.cases.remove.make({}), name: "first" })).answer._tag).toBe(
+                  "accepted",
+                );
                 // This add is now legal, but the same identity must still receive its first refusal.
               }),
             );
@@ -151,11 +168,11 @@ export const suite = (open: Open, checklist: unknown) =>
                     const free = ["one", "two", "three"].filter((name) => !items.has(name));
                     const available = [...items.keys()];
                     const legal = [
-                      ...free.map((name) => ({ type: "add", name })),
+                      ...free.map((name) => ({ ...Tag.cases.add.make({}), name })),
                       ...available.flatMap((name) => [
-                        { type: "check", name, note },
-                        { type: "uncheck", name },
-                        { type: "remove", name },
+                        { ...Tag.cases.check.make({}), name, note },
+                        { ...Tag.cases.uncheck.make({}), name },
+                        { ...Tag.cases.remove.make({}), name },
                       ]),
                     ];
                     const input = legal[move.pick % legal.length];
@@ -164,12 +181,12 @@ export const suite = (open: Open, checklist: unknown) =>
                       return yield* Effect.die(new Error("the checklist walk has no legal input"));
                     }
 
-                    const by = input.type === "check" || input.type === "uncheck" ? world.agent : world.person;
+                    const by = input._tag === "check" || input._tag === "uncheck" ? world.agent : world.person;
                     expect((yield* send(runner, input, by)).answer._tag).toBe("accepted");
 
-                    if (input.type === "remove") {
+                    if (input._tag === "remove") {
                       items.delete(input.name);
-                    } else if (input.type === "check") {
+                    } else if (input._tag === "check") {
                       items.set(input.name, items.get(input.name) ?? note);
                     } else {
                       items.set(input.name, null);
@@ -215,15 +232,23 @@ export const suite = (open: Open, checklist: unknown) =>
         Effect.scoped(
           Effect.gen(function* () {
             const world = yield* open;
-            const poison = world.letter(20, { type: "check", name: "kept", note: "first-agent-note" }, world.agent);
+            const poison = world.letter(
+              20,
+              { ...Tag.cases.check.make({}), name: "kept", note: "first-agent-note" },
+              world.agent,
+            );
             const errors = classes.slice(0, times);
             yield* world.fault.arm(NAME, poison.id, errors);
             const start = () => world.session(NAME, PROGRAM, checklist, {}, undefined, world.fault.before);
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const { runner } = yield* start();
-                expect((yield* runner.msg(world.letter(1, { type: "add", name: "kept" })))._tag).toBe("accepted");
-                expect((yield* runner.msg(world.letter(2, { type: "add", name: "other" })))._tag).toBe("accepted");
+                expect((yield* runner.msg(world.letter(1, { ...Tag.cases.add.make({}), name: "kept" })))._tag).toBe(
+                  "accepted",
+                );
+                expect((yield* runner.msg(world.letter(2, { ...Tag.cases.add.make({}), name: "other" })))._tag).toBe(
+                  "accepted",
+                );
               }),
             );
             const processes: Array<string> = [];
@@ -306,7 +331,11 @@ export const suite = (open: Open, checklist: unknown) =>
 
                 expect(
                   (yield* runner.msg(
-                    world.letter(30, { type: "check", name: "other", note: "unrelated-note" }, world.agent),
+                    world.letter(
+                      30,
+                      { ...Tag.cases.check.make({}), name: "other", note: "unrelated-note" },
+                      world.agent,
+                    ),
                   ))._tag,
                 ).toBe("accepted");
                 expect(
@@ -314,7 +343,11 @@ export const suite = (open: Open, checklist: unknown) =>
                 ).toBe("unrelated-note");
                 expect(Schema.decodeUnknownSync(Controller)(yield* world.fault.saved).attempts).toEqual(armed.attempts);
                 // Rearm an already saved input, then force the real successor to fold it from history.
-                const saved = world.letter(30, { type: "check", name: "other", note: "unrelated-note" }, world.agent);
+                const saved = world.letter(
+                  30,
+                  { ...Tag.cases.check.make({}), name: "other", note: "unrelated-note" },
+                  world.agent,
+                );
                 yield* world.fault.arm(NAME, saved.id, errors);
                 yield* runner.restart({ id: "person-fold-saved", build: "chaos-law" });
                 yield* runner.open("folded");

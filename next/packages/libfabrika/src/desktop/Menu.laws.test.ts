@@ -10,12 +10,20 @@ import * as Menu from "./Menu.ts";
 import { PersonCheck } from "./PersonCheck.ts";
 import * as PersonCheckTest from "./PersonCheckTest.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  rows: {},
+  open_browser: {},
+  opened: {},
+});
+
 const options = (numRuns: number) => ({ seed: Test.seed, numRuns });
 
 const signed = (cmds: ReadonlyArray<Test.Command>) =>
   cmds.filter(
-    (c): c is Extract<Test.Command, { type: "sign_grant" | "sign_revoke" }> =>
-      c.type === "sign_grant" || c.type === "sign_revoke",
+    (c): c is Extract<Test.Command, { _tag: "sign_grant" | "sign_revoke" }> =>
+      c._tag === "sign_grant" || c._tag === "sign_revoke",
   );
 
 const waiting = (s: Test.Model) =>
@@ -54,14 +62,14 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         return "init signed without a checked person";
       }
 
-      const pending = new Set(initCmds.flatMap((c) => (c.type === "check" ? [c.cmd] : [])));
+      const pending = new Set(initCmds.flatMap((c) => (c._tag === "check" ? [c.cmd] : [])));
 
       for (const { prev, msg, next, cmds } of steps) {
-        if (msg.type === "enter" && (!Test.same(prev, next) || cmds.length > 0)) {
+        if (msg._tag === "enter" && (!Test.same(prev, next) || cmds.length > 0)) {
           return "Enter acted";
         }
 
-        if (msg.type === "not_checked") {
+        if (msg._tag === "not_checked") {
           const stale = prev._tag !== "checking" || msg.cmd !== prev.cmd;
 
           if (cmds.length > 0 || (stale ? !Test.same(prev, next) : next._tag !== "idle")) {
@@ -70,7 +78,7 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         }
 
         if (
-          msg.type === "checked" &&
+          msg._tag === "checked" &&
           (prev._tag !== "checking" || msg.cmd !== prev.cmd) &&
           (!Test.same(prev, next) || cmds.length > 0)
         ) {
@@ -78,12 +86,12 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         }
 
         // Live-pass grants are checked separately by L6. A rows message can never revoke.
-        const writes = signed(cmds).filter((c) => msg.type !== "rows" || c.type === "sign_revoke");
+        const writes = signed(cmds).filter((c) => msg._tag !== "rows" || c._tag === "sign_revoke");
 
         if (
           writes.length > 0 &&
           !(
-            msg.type === "checked" &&
+            msg._tag === "checked" &&
             prev._tag === "checking" &&
             msg.cmd === prev.cmd &&
             pending.has(msg.cmd) &&
@@ -94,12 +102,12 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
           return "a signature had no matching check command";
         }
 
-        if (msg.type === "checked" || msg.type === "not_checked") {
+        if (msg._tag === "checked" || msg._tag === "not_checked") {
           pending.delete(msg.cmd);
         }
 
         for (const command of cmds) {
-          if (command.type === "check") {
+          if (command._tag === "check") {
             pending.add(command.cmd);
           }
         }
@@ -118,18 +126,18 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
     Test.ctx,
     Test.walks,
     ({ prev, msg, next, cmds }) => {
-      if (prev._tag === "idle" && (msg.type === "approve" || msg.type === "remove")) {
+      if (prev._tag === "idle" && (msg._tag === "approve" || msg._tag === "remove")) {
         const shown =
-          msg.type === "approve"
+          msg._tag === "approve"
             ? prev.rows.find((r) => r.key === msg.key)
             : prev.clients.find((c) => c.key === msg.key && !c.own);
         return (
           shown === undefined ||
           (next._tag === "checking" &&
-            next.act._tag === msg.type &&
+            next.act._tag === msg._tag &&
             next.act.key === shown.key &&
             cmds.length === 1 &&
-            cmds[0]?.type === "check" &&
+            cmds[0]?._tag === "check" &&
             cmds[0].cmd === msg.cmd &&
             next.cmd === msg.cmd &&
             Test.same(next.act.shown, shown)) ||
@@ -141,14 +149,14 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
         return true;
       }
 
-      if (msg.type === "rows" || msg.type === "clients") {
+      if (msg._tag === "rows" || msg._tag === "clients") {
         return (
           (next._tag === "checking" && Test.same(next.act, prev.act) && next.cmd === prev.cmd) ||
           "news replaced the clicked row"
         );
       }
 
-      if (msg.type !== "checked" || msg.cmd !== prev.cmd) {
+      if (msg._tag !== "checked" || msg.cmd !== prev.cmd) {
         return true;
       }
 
@@ -158,7 +166,7 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
       if (act._tag === "approve") {
         return (
           (signed(cmds).length === 1 &&
-            command?.type === "sign_grant" &&
+            command?._tag === "sign_grant" &&
             command.key === act.key &&
             command.as === act.as &&
             Test.same(command.saw, {
@@ -175,7 +183,7 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
 
       return (
         (signed(cmds).length === 1 &&
-          command?.type === "sign_revoke" &&
+          command?._tag === "sign_revoke" &&
           command.key === act.key &&
           command.saw.label === act.shown.label &&
           command.saw.location === act.shown.location &&
@@ -203,7 +211,7 @@ it("L3: Deny writes once without a finger in both states, and tabs share one wai
         return "tabs split a waiting key into multiple items";
       }
 
-      if (msg.type !== "deny") {
+      if (msg._tag !== "deny") {
         return true;
       }
 
@@ -216,7 +224,7 @@ it("L3: Deny writes once without a finger in both states, and tabs share one wai
       const [command] = cmds;
       return (
         (cmds.length === 1 &&
-          command?.type === "deny" &&
+          command?._tag === "deny" &&
           command.key === row.key &&
           Test.same(command.saw, {
             code: row.code,
@@ -250,7 +258,7 @@ it("L4: the app's own client stays visible and cannot be removed", () => {
       }
 
       return (
-        msg.type !== "remove" ||
+        msg._tag !== "remove" ||
         !prev.clients.some((c) => c.own && c.key === msg.key) ||
         (cmds.length === 0 && Test.same(prev, next)) ||
         "Remove acted on the own client"
@@ -267,7 +275,7 @@ it("L5: one pending check blocks a second click and marks other rows busy in wor
     Test.ctx,
     Test.walks,
     ({ prev, msg, next, cmds }) => {
-      if (prev._tag === "checking" && (msg.type === "approve" || msg.type === "remove")) {
+      if (prev._tag === "checking" && (msg._tag === "approve" || msg._tag === "remove")) {
         return (cmds.length === 0 && Test.same(prev, next)) || "a second click replaced the pending act";
       }
 
@@ -299,11 +307,11 @@ it("L6: only a matching opened reply creates a pass, live passes sign once, expi
       const passes = new Map<string, number>();
 
       for (const { msg, next, cmds } of steps) {
-        if (msg.type === "opened" && pending.delete(msg.cmd)) {
+        if (msg._tag === "opened" && pending.delete(msg.cmd)) {
           passes.set(msg.digest, msg.at + Test.ttl);
         }
 
-        if (msg.type === "rows") {
+        if (msg._tag === "rows") {
           for (const [digest, until] of passes) {
             if (until <= msg.at) {
               passes.delete(digest);
@@ -330,9 +338,9 @@ it("L6: only a matching opened reply creates a pass, live passes sign once, expi
             }
           }
 
-          const actual = cmds.flatMap((c) => (c.type === "sign_grant" ? [{ key: c.key, as: c.as, saw: c.saw }] : []));
+          const actual = cmds.flatMap((c) => (c._tag === "sign_grant" ? [{ key: c.key, as: c.as, saw: c.saw }] : []));
 
-          if (!Test.same(actual, expected) || cmds.some((c) => c.type === "check")) {
+          if (!Test.same(actual, expected) || cmds.some((c) => c._tag === "check")) {
             return "a missing, spent or expired pass signed, or a live pass asked for a finger";
           }
 
@@ -344,7 +352,7 @@ it("L6: only a matching opened reply creates a pass, live passes sign once, expi
         }
 
         for (const command of cmds) {
-          if (command.type === "open") {
+          if (command._tag === "open") {
             pending.add(command.cmd);
           }
         }
@@ -379,9 +387,9 @@ it.effect.prop(
       const hash = yield* digest.digestHex(Digest.sha256, raw);
       const flows = Test.walks.map((messages) =>
         messages.map((msg) =>
-          msg.type === "opened"
+          msg._tag === "opened"
             ? { ...msg, digest: hash, secret, bytes: Array.from(raw) }
-            : msg.type === "rows"
+            : msg._tag === "rows"
               ? { ...msg, rows: msg.rows.map((r) => ({ ...r, pass: r.pass === null ? null : hash })) }
               : msg,
         ),
@@ -506,9 +514,9 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
   const flows = hostile.chain(({ label }) =>
     Test.walks.map((messages) =>
       messages.map((msg) =>
-        msg.type === "rows"
+        msg._tag === "rows"
           ? { ...msg, rows: msg.rows.map((r) => ({ ...r, label })) }
-          : msg.type === "clients"
+          : msg._tag === "clients"
             ? { ...msg, clients: msg.clients.map((c) => ({ ...c, label })) }
             : msg,
       ),
@@ -545,7 +553,7 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
       }
 
       for (const command of cmds) {
-        if (command.type === "check") {
+        if (command._tag === "check") {
           if (/[\p{Cc}\p{Cf}]/u.test(command.reason)) {
             return "raw control characters reached the check prompt";
           }
@@ -606,9 +614,9 @@ describe("browser link start switch", () => {
       const machine = Menu.machine({ linkTtl: Test.ttl, browserLink: enabled });
       const initial = machine.init(null, Test.ctx)[0];
       expect(Menu.view(initial).some((i) => i._tag === "action" && i.id === "open_browser")).toBe(enabled);
-      const msgs: ReadonlyArray<Test.Msg> = [{ type: "open_browser", cmd: Test.cmdId(3) }];
+      const msgs: ReadonlyArray<Test.Msg> = [{ ...Tag.cases.open_browser.make({}), cmd: Test.cmdId(3) }];
       const trace = foldEvents(machine, Test.ctx, null, msgs);
-      expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "open")).toHaveLength(enabled ? 1 : 0);
+      expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c._tag === "open")).toHaveLength(enabled ? 1 : 0);
     },
     { arbitrary: { seed: Test.seed, runs: 200 } },
   );
@@ -629,20 +637,21 @@ it.effect.prop(
         Test.ctx,
         {
           outside: {
-            open_browser: fc.record({ type: fc.constant("open_browser"), cmd: Test.command }),
-            rows: fc.record({
-              type: fc.constant("rows"),
-              at: fc.constantFrom(lifetime - 1, lifetime, lifetime + 1),
-              rows: fc.array(
-                Test.row.map((r) => ({ ...r, pass: "loaded-digest" })),
-                { maxLength: 1 },
-              ),
-            }),
+            open_browser: Test.command.map((cmd) => ({ ...Tag.cases.open_browser.make({}), cmd })),
+            rows: fc
+              .record({
+                at: fc.constantFrom(lifetime - 1, lifetime, lifetime + 1),
+                rows: fc.array(
+                  Test.row.map((r) => ({ ...r, pass: "loaded-digest" })),
+                  { maxLength: 1 },
+                ),
+              })
+              .map((fields) => ({ ...Tag.cases.rows.make({}), ...fields })),
           },
           answers: {
             open: {
               draw: fc.constant("loaded-digest"),
-              make: (pending, digest): Test.Msg => ({ type: "opened", cmd: pending.cmd, digest, at: 0 }),
+              make: (pending, digest): Test.Msg => ({ ...Tag.cases.opened.make({}), cmd: pending.cmd, digest, at: 0 }),
             },
           },
         },
@@ -656,7 +665,7 @@ it.effect.prop(
           let live = false;
 
           for (const { msg, next, cmds } of steps) {
-            if (msg.type === "opened") {
+            if (msg._tag === "opened") {
               live = true;
 
               if (!next.passes.some((p) => p.digest === "loaded-digest" && p.until === lifetime)) {
@@ -664,10 +673,10 @@ it.effect.prop(
               }
             }
 
-            if (msg.type === "rows") {
+            if (msg._tag === "rows") {
               const count: number = live && msg.at < lifetime && msg.rows.length > 0 ? 1 : 0;
 
-              if (cmds.filter((c) => c.type === "sign_grant").length !== count) {
+              if (cmds.filter((c) => c._tag === "sign_grant").length !== count) {
                 return "the loaded lifetime did not decide whether a pass signs";
               }
 

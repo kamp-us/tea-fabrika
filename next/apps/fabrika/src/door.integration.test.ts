@@ -54,6 +54,13 @@ import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
+
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  comment: {},
+});
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const runs = (counts: Runs) => ({ seed: SEED, endOnFailure: true, numRuns: runsFor(counts) });
 const SpanPage = Schema.Struct({ spans: Schema.Array(SpanRow), next: Schema.Int });
@@ -444,7 +451,7 @@ const world = Effect.fnUntraced(function* (
         // The approval's answer is deliberately public metadata; the text of a comment is content.
         return checked._tag === "approve"
           ? Schema.encodeSync(Schema.toCodecJson(Input))(checked)
-          : { type: checked._tag };
+          : Schema.TaggedStruct(checked._tag, {}).make({});
       }),
     inputs: {
       schema: Input,
@@ -566,8 +573,8 @@ const world = Effect.fnUntraced(function* (
 
 type World = Effect.Success<ReturnType<typeof world>>;
 
-const AuditMessage = Schema.Struct({ type: Schema.Literal("comment"), ticket: Schema.String, body: Schema.String });
-const AuditMetadata = Schema.Struct({ type: Schema.Literal("comment"), ticket: Schema.String });
+const AuditMessage = Schema.TaggedStruct("comment", { ticket: Schema.String, body: Schema.String });
+const AuditMetadata = Schema.TaggedStruct("comment", { ticket: Schema.String });
 
 const failedSelection = (body: string): never => {
   throw new Error(body);
@@ -612,16 +619,16 @@ describe("P13 selected input recording", () => {
                 }
 
                 if (mode === "output") {
-                  return { type: "comment", ticket: 1n };
+                  return { ...Tag.cases.comment.make({}), ticket: 1n };
                 }
 
-                return { type: "comment", ticket: m.ticket };
+                return { ...Tag.cases.comment.make({}), ticket: m.ticket };
               });
               const execution = nodeExecution(program);
               const audit = (_target: string, input: unknown) => {
                 const checked = Schema.decodeUnknownSync(Input.cases.comment)(input);
                 return execution.audit({
-                  type: "comment",
+                  ...Tag.cases.comment.make({}),
                   ticket: mode === "decode" ? 1 : checked.ticket.id,
                   body: checked.text,
                 });
@@ -697,7 +704,7 @@ describe("P13 selected input recording", () => {
 
                 for (const row of rows) {
                   expect(JSON.parse(String(row.body))).toMatchObject({
-                    input: { type: "comment", ticket: "ticket-7" },
+                    input: { ...Tag.cases.comment.make({}), ticket: "ticket-7" },
                   });
                 }
 

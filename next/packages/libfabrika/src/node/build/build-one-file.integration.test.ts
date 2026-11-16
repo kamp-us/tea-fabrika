@@ -87,7 +87,7 @@ const module=new SourceTextModule(readFileSync(process.argv[1],"utf8"),{context}
 await module.link(name=>{if(name!=="cloudflare:workers")throw Error("unexpected module");return new SyntheticModule(["WorkerEntrypoint"],function(){this.setExport("WorkerEntrypoint",class{});},{context});});
 await module.evaluate();const Box=module.namespace.default;const box=new Box();
 let model=(await box.init(null)).model;const records=[];let updates=0;
-for(const n of JSON.parse(process.argv[2])){const type=model.count===0?"inc":n%2===0?"inc":"dec";const msg={type,body:"private \\"/雪"};const checked=await box.fresh(model,msg);if(checked._tag!=="admitted")throw Error("fresh did not admit");const selected=await box.audit(msg);records.push(selected);const prepared=await box.update(model,msg);if(prepared._tag!=="stepped")throw Error("update did not prepare");model=prepared.model;updates++;}
+for(const n of JSON.parse(process.argv[2])){const type=model.count===0?"inc":n%2===0?"inc":"dec";const msg={_tag:type,body:"private \\"/雪"};const checked=await box.fresh(model,msg);if(checked._tag!=="admitted")throw Error("fresh did not admit");const selected=await box.audit(msg);records.push(selected);const prepared=await box.update(model,msg);if(prepared._tag!=="stepped")throw Error("update did not prepare");model=prepared.model;updates++;}
 process.stdout.write(JSON.stringify({model,records,updates}));
 `,
                   file,
@@ -101,21 +101,23 @@ process.stdout.write(JSON.stringify({model,records,updates}));
                 Schema.Struct({
                   model: Schema.Struct({ count: Schema.Int }),
                   records: Schema.Array(
-                    Schema.Struct({ _tag: Schema.Literal("ok"), value: Schema.Struct({ type: Schema.String }) }),
+                    Schema.Struct({ _tag: Schema.Literal("ok"), value: Schema.Struct({ _tag: Schema.String }) }),
                   ),
                   updates: Schema.Int,
                 }),
               ),
             )(output);
             let count = 0;
-            const types = tape.map((n) => {
-              const type = count === 0 || n % 2 === 0 ? "inc" : "dec";
-              count += type === "inc" ? 1 : -1;
-              return type;
+            const tags = tape.map((n) => {
+              const tag = count === 0 || n % 2 === 0 ? "inc" : "dec";
+              count += tag === "inc" ? 1 : -1;
+              return tag;
             });
             expect(actual.model).toEqual({ count });
             expect(actual.updates).toBe(tape.length);
-            expect(actual.records.map((r) => r.value)).toEqual(types.map((type) => ({ type })));
+            expect(actual.records.map((r) => r.value)).toEqual(
+              tags.map((tag) => Schema.TaggedStruct(tag, {}).make({})),
+            );
           }),
         ).pipe(Effect.provide(NodeServices.layer)),
       ),

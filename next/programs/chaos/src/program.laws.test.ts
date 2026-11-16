@@ -11,6 +11,14 @@ import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  start: {},
+  stop: {},
+  timer: {},
+});
+
 const SEED = 119120;
 const RUNS = 100;
 const options = { seed: SEED, numRuns: RUNS };
@@ -71,7 +79,7 @@ const json = (value: unknown) => JSON.stringify(value);
 const answer = (cmd: Command, at: number): Msg => {
   const { now, fire, inspect } = Fabrika.ChaosMachine;
 
-  switch (cmd.type) {
+  switch (cmd._tag) {
     case "now":
       return now.ok(cmd, at, at);
     case "fire":
@@ -87,9 +95,9 @@ const guided = (chaos: ChaosProgram) =>
     {},
     {
       outside: {
-        start: starts.map((start) => ({ type: "start" as const, ...start })),
-        timer: fc.integer({ min: 0, max: 1_000_000 }).map((at) => ({ type: "timer" as const, at })),
-        stop: fc.constant({ type: "stop" as const }),
+        start: starts.map((start) => ({ ...Tag.cases.start.make({}), ...start })),
+        timer: fc.integer({ min: 0, max: 1_000_000 }).map((at) => ({ ...Tag.cases.timer.make({}), at })),
+        stop: fc.constant(Tag.cases.stop.make({})),
       },
       answers: {
         now: {
@@ -125,7 +133,7 @@ const completed = (
     commands.push(...out);
     return out;
   };
-  let pending = [...step({ type: "start", ...start })];
+  let pending = [...step({ ...Tag.cases.start.make({}), ...start })];
   let clock = 100;
 
   for (let turn = 0; turn < start.most * 4 + 10; turn++) {
@@ -134,7 +142,7 @@ const completed = (
       pending = rest;
 
       if (cmd !== undefined) {
-        if (cmd.type === "fire" && cmd.ordinal === missing) {
+        if (cmd._tag === "fire" && cmd.ordinal === missing) {
           continue;
         }
 
@@ -151,7 +159,7 @@ const completed = (
     }
 
     clock = Math.max(clock, wake) + (late[turn % Math.max(1, late.length)] ?? 0);
-    const out = step({ type: "timer", at: clock });
+    const out = step({ ...Tag.cases.timer.make({}), at: clock });
     ticks.push({ at: clock, cmds: out, model });
     pending.push(...out);
   }
@@ -161,14 +169,14 @@ const completed = (
 
 it("brands and public Model/Msg schemas stay exact through the program", () => {
   expectTypeOf<Model>().toEqualTypeOf<typeof chaos.state.schema.Type>();
-  expectTypeOf<Extract<Msg, { type: "start" }>["id"]>().toEqualTypeOf<typeof Fabrika.Chaos.ExperimentId.Type>();
+  expectTypeOf<Extract<Msg, { _tag: "start" }>["id"]>().toEqualTypeOf<typeof Fabrika.Chaos.ExperimentId.Type>();
   expectTypeOf<typeof Fabrika.Incoming.Type.envelope.id>().toEqualTypeOf<typeof Fabrika.Id.Input.Type>();
   // Slice 1's ProcessId is still a checked string, pending the shared ID conversion.
-  expectTypeOf<Extract<Msg, { type: "start" }>["target"]>().toEqualTypeOf<typeof Fabrika.Chaos.Target.Type>();
+  expectTypeOf<Extract<Msg, { _tag: "start" }>["target"]>().toEqualTypeOf<typeof Fabrika.Chaos.Target.Type>();
   fc.assert(
     fc.property(starts, (start) => {
-      expect(Schema.is(Fabrika.ChaosMachine.Msg)({ type: "start", ...start })).toBe(true);
-      expect(Schema.is(Fabrika.ChaosMachine.Msg)({ type: "start", ...start, id: process })).toBe(false);
+      expect(Schema.is(Fabrika.ChaosMachine.Msg)({ ...Tag.cases.start.make({}), ...start })).toBe(true);
+      expect(Schema.is(Fabrika.ChaosMachine.Msg)({ ...Tag.cases.start.make({}), ...start, id: process })).toBe(false);
     }),
     options,
   );
@@ -179,7 +187,7 @@ it("same seed/version/target draws the same bounded faults after every saved cut
     fc.property(starts, fc.array(fc.nat({ max: 10000 }), { minLength: 1, maxLength: 12 }), (start, late) => {
       const a = completed(chaos, start, late);
       const b = completed(chaos, { ...start, id: id(20000) }, late.toReversed());
-      const faults = (cs: ReadonlyArray<Command>) => cs.flatMap((cmd) => (cmd.type === "fire" ? [cmd.fault] : []));
+      const faults = (cs: ReadonlyArray<Command>) => cs.flatMap((cmd) => (cmd._tag === "fire" ? [cmd.fault] : []));
       expect(faults(a.commands)).toHaveLength(start.most);
       expect(faults(a.commands)).toEqual(faults(b.commands));
       syncTest(
@@ -207,9 +215,9 @@ it("cap, actual-turn gap, one fault per timer, pure wake and answered terminatio
       const before = json(next);
       expect(chaos.wake(structuredClone(next))).toBe(chaos.wake(next));
       expect(json(next), "wake leaves saved control state alone").toBe(before);
-      expect(cmds.filter((cmd) => cmd.type === "fire").length).toBeLessThanOrEqual(msg.type === "timer" ? 1 : 0);
+      expect(cmds.filter((cmd) => cmd._tag === "fire").length).toBeLessThanOrEqual(msg._tag === "timer" ? 1 : 0);
 
-      if (msg.type === "timer") {
+      if (msg._tag === "timer") {
         const due = chaos.wake(prev);
 
         if (due === null || msg.at < due) {
@@ -218,7 +226,7 @@ it("cap, actual-turn gap, one fault per timer, pure wake and answered terminatio
         }
       }
 
-      if (msg.type === "start" && ["starting", "active", "checking"].includes(prev.phase._tag)) {
+      if (msg._tag === "start" && ["starting", "active", "checking"].includes(prev.phase._tag)) {
         expect(next).toEqual(prev);
         expect(cmds).toEqual([]);
       }
@@ -230,14 +238,14 @@ it("cap, actual-turn gap, one fault per timer, pure wake and answered terminatio
   fc.assert(
     fc.property(starts, fc.array(fc.nat({ max: 50000 }), { minLength: 1, maxLength: 20 }), (start, late) => {
       const run = completed(chaos, start, late);
-      const firings = run.ticks.filter((t) => t.cmds.some((cmd) => cmd.type === "fire"));
+      const firings = run.ticks.filter((t) => t.cmds.some((cmd) => cmd._tag === "fire"));
       expect(firings).toHaveLength(start.most);
 
       for (let n = 1; n < firings.length; n++) {
         expect((firings[n]?.at ?? 0) - (firings[n - 1]?.at ?? 0)).toBeGreaterThanOrEqual(start.gap);
       }
 
-      expect(run.commands.filter((cmd) => cmd.type === "inspect")).toHaveLength(1);
+      expect(run.commands.filter((cmd) => cmd._tag === "inspect")).toHaveLength(1);
       expect(run.model.phase._tag).toBe("done");
       expect(chaos.wake(run.model)).toBeNull();
     }),
@@ -252,12 +260,12 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
       let [model] = chaos.machine.init(null, {});
 
       for (let cut = 0; cut <= run.msgs.length; cut++) {
-        const [stopped, out] = applyCell(chaos.machine, model, { type: "stop" });
+        const [stopped, out] = applyCell(chaos.machine, model, Tag.cases.stop.make({}));
         expect(out).toEqual([]);
         expect(chaos.wake(stopped)).toBeNull();
-        const replies = run.msgs.filter((m) => m.type.endsWith("_ok") || m.type.endsWith("_err"));
+        const replies = run.msgs.filter((m) => m._tag.endsWith("_ok") || m._tag.endsWith("_err"));
         const tail = arbMsgSequence(
-          fc.constantFrom<Msg>({ type: "timer", at: 10_000_000 }, { type: "stop" }, ...replies),
+          fc.constantFrom<Msg>({ ...Tag.cases.timer.make({}), at: 10_000_000 }, Tag.cases.stop.make({}), ...replies),
           { minLength: 10, maxLength: 20 },
         );
         // Each cut is reached by folding the real machine; the tail names its actual old Cmds.
@@ -272,7 +280,7 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
 
               if (
                 current.phase._tag === "stopped" &&
-                (msg.type === "fire_ok" || msg.type === "fire_err") &&
+                (msg._tag === "fire_ok" || msg._tag === "fire_err") &&
                 msg.cmd.id === current.phase.start.id &&
                 current.phase.asked.some((asked) => asked.ordinal === msg.cmd.ordinal) &&
                 !current.phase.answers.some((did) => did.ordinal === msg.cmd.ordinal)
@@ -303,8 +311,8 @@ it("a missing fire answer at any ordinal, including the last, never yields a cle
     fc.property(starts, fc.nat(), (start, pick) => {
       const missing = (pick % start.most) + 1;
       const run = completed(chaos, start, [0], null, missing);
-      expect(run.commands.filter((cmd) => cmd.type === "fire")).toHaveLength(start.most);
-      expect(run.commands.filter((cmd) => cmd.type === "inspect")).toHaveLength(1);
+      expect(run.commands.filter((cmd) => cmd._tag === "fire")).toHaveLength(start.most);
+      expect(run.commands.filter((cmd) => cmd._tag === "inspect")).toHaveLength(1);
       expect(run.model.phase._tag).toBe("incomplete");
       expect(chaos.wake(run.model)).toBeNull();
       syncTest(
@@ -358,7 +366,7 @@ it("a previous experiment or duplicate reply cannot consume a new request", () =
 
         [current] = applyCell(chaos.machine, current, msg);
 
-        if (msg.type.endsWith("_ok") || msg.type.endsWith("_err")) {
+        if (msg._tag.endsWith("_ok") || msg._tag.endsWith("_err")) {
           const [again, extra] = applyCell(chaos.machine, current, msg);
           expect(again).toEqual(current);
           expect(extra).toEqual([]);
@@ -376,17 +384,24 @@ it("unsafe deadline arithmetic ends incomplete and produces no fire or unsafe wa
   fc.assert(
     fc.property(starts, fc.integer({ min: 1, max: 10000 }), (start, gap) => {
       const initial = chaos.machine.init(null, {})[0];
-      const [starting, cmds] = applyCell<Model, Msg, Command>(chaos.machine, initial, { type: "start", ...start, gap });
+      const [starting, cmds] = applyCell<Model, Msg, Command>(chaos.machine, initial, {
+        ...Tag.cases.start.make({}),
+        ...start,
+        gap,
+      });
       const cmd = cmds[0];
-      expect(cmd?.type).toBe("now");
+      expect(cmd?._tag).toBe("now");
 
       if (cmd === undefined) {
         throw new Error("start did not request time");
       }
 
       const [model, out] = applyCell(chaos.machine, starting, answer(cmd, Number.MAX_SAFE_INTEGER));
-      const [after, effects] = applyCell(chaos.machine, model, { type: "timer", at: Number.MAX_SAFE_INTEGER });
-      expect([...out, ...effects].some((c) => c.type === "fire")).toBe(false);
+      const [after, effects] = applyCell(chaos.machine, model, {
+        ...Tag.cases.timer.make({}),
+        at: Number.MAX_SAFE_INTEGER,
+      });
+      expect([...out, ...effects].some((c) => c._tag === "fire")).toBe(false);
       expect(chaos.wake(after)).toBeNull();
       expect(after.phase._tag).toBe("incomplete");
     }),
@@ -405,7 +420,7 @@ it("the public stepper refuses a second active start without saving it", () => {
         throw new Error("initial state was refused");
       }
 
-      const first = pure.step(initial.model, { type: "start", ...start });
+      const first = pure.step(initial.model, { ...Tag.cases.start.make({}), ...start });
       expect(first._tag).toBe("stepped");
 
       if (first._tag !== "stepped") {
@@ -413,7 +428,7 @@ it("the public stepper refuses a second active start without saving it", () => {
       }
 
       const before = json(first.model);
-      const second = pure.step(first.model, { type: "start", ...start, id: id(40000) });
+      const second = pure.step(first.model, { ...Tag.cases.start.make({}), ...start, id: id(40000) });
       expect(second._tag).toBe("refused");
       expect(json(first.model)).toBe(before);
     }),

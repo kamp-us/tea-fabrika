@@ -165,7 +165,7 @@ const door: ProjectAuditTest.Harness["door"] =
             schema: input,
             raw: [],
             personOnly: [],
-            name: (m: typeof input.Type) => m.type,
+            name: (m: typeof input.Type) => m._tag,
           },
           events: { personOnly: [] },
         }).pipe(

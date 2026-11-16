@@ -25,6 +25,12 @@ import {
 import { Activity, Down, Owner, ProcessEvent, ProcessTable, Recipient, signalId, Start, State } from "../Process.ts";
 import { processTableFor } from "./processTable.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  recorded: {},
+});
+
 const RUNS = { seed: 119120, numRuns: 100 };
 const NAMES = ["counter:1", "counter:2", "echo:1"];
 const REFS = ["watch-a", "watch-b"];
@@ -321,7 +327,7 @@ const folded = (model: Model): Folded => ({
 const init = (machine: Machine): Model => machine.init(null, undefined)[0];
 
 const record = (machine: Machine, model: Model, entry: Entry): Model =>
-  applyCell(machine, model, { type: "recorded", entry })[0];
+  applyCell(machine, model, { ...Tag.cases.recorded.make({}), entry })[0];
 
 const thrown = (run: () => unknown): unknown => {
   const result = Result.try(run);

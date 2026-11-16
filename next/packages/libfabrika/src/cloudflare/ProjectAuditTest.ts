@@ -19,6 +19,12 @@ import { programBox } from "./box.ts";
 import { ProjectService, projectLayer, type ProjectOptions } from "./runtime.ts";
 import { Props, receive } from "./tail.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+});
+
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
 
 const NAME = "counter:1";
@@ -28,17 +34,15 @@ const PROGRAM = "test/counter";
 const SOURCE = "";
 const CODE = { hash: createHash("sha256").update(SOURCE).digest("hex"), source: SOURCE };
 const Model = Schema.Struct({ count: Schema.Int });
-const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+const Msg = Schema.TaggedStruct("add", { n: Schema.Int });
 const StampedMsg = Schema.Struct({ ...Msg.fields, parent: InputId, body: Schema.String });
 const Metadata = Schema.Struct({ ...Msg.fields, parent: InputId });
 const Recorded = Schema.Struct({ input: Schema.optionalKey(Schema.Json) });
 type Selector = "plain" | "default" | "custom";
 
-const ProjectInput = Schema.Struct({
-  type: Schema.String,
-  n: Schema.optionalKey(Schema.Int),
-  body: Schema.optionalKey(Schema.String),
-});
+/** A raw wire input: any JSON object, so a frame whose tag no program knows can ride through the door. */
+const ProjectInput = Schema.Record(Schema.String, Schema.Json);
+const WireAdd = Schema.TaggedStruct("add", { n: Schema.Int, body: Schema.String });
 
 /** Storage, Gateway wiring and platform handles belong to the module running this suite. */
 export interface Harness {
@@ -113,7 +117,7 @@ const projectWalk = Effect.fnUntraced(function* (
       ? {
           audit: {
             data: Metadata,
-            select: (m: typeof StampedMsg.Type) => Metadata.make({ type: m.type, n: m.n, parent: m.parent }),
+            select: (m: typeof StampedMsg.Type) => Metadata.make({ n: m.n, parent: m.parent }),
           },
         }
       : {}),
@@ -252,10 +256,10 @@ const projectWalk = Effect.fnUntraced(function* (
     const m =
       prior?.m ??
       (move === "unknown"
-        ? ProjectInput.make({ type: `unknown-${accepted}`, body: `BODY-${entropy}-${n}` })
+        ? Schema.TaggedStruct(`unknown-${accepted}`, { body: Schema.String }).make({ body: `BODY-${entropy}-${n}` })
         : selector === "plain"
-          ? Msg.make({ type: "add", n: accepted + 1 })
-          : ProjectInput.make({ type: "add", n: accepted + 1, body: `BODY-${entropy}-${n}/雪\n` }));
+          ? Msg.make({ n: accepted + 1 })
+          : WireAdd.make({ n: accepted + 1, body: `BODY-${entropy}-${n}/雪\n` }));
     const answer = yield* project.route(client, "process.send", {
       pid: project.boot.process,
       letter,
@@ -321,7 +325,7 @@ const projectWalk = Effect.fnUntraced(function* (
 
         if (move === "valid") {
           expect(recorded.input).toEqual(
-            selector === "default" ? { type: "add" } : { type: "add", n: m.n, parent: binding.id },
+            selector === "default" ? Tag.cases.add.make({}) : { ...Tag.cases.add.make({}), n: m.n, parent: binding.id },
           );
         }
 

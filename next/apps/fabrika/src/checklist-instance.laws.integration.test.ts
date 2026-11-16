@@ -44,6 +44,17 @@ import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  check: {},
+  uncheck: {},
+  add: {},
+  inc: {},
+  remove: {},
+  unrelated: {},
+});
+
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = {
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
@@ -82,17 +93,17 @@ it("pinned: L20 windowMachineFor checks the registration's decoder and tile pres
   windowMachineFor<typeof checklist>({ decode: () => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int })) });
 
   const wrongPress = Cmd.make("press", {
-    input: Schema.Struct({ m: Schema.Struct({ type: Schema.Literal("unrelated") }) }),
+    input: Schema.Struct({ m: Schema.TaggedStruct("unrelated", {}) }),
     ok: Schema.Null,
     err: [],
   });
   const wrongTile = Machine.make({
     model: Schema.Struct({}),
-    msg: Schema.Struct({ type: Schema.Literal("submit") }),
+    msg: Schema.TaggedStruct("submit", {}),
     cmds: [wrongPress],
     init: () => [{}, []],
     update: {
-      submit: (s) => [s, [wrongPress({ m: { type: "unrelated" } })]],
+      submit: (s) => [s, [wrongPress({ m: Tag.cases.unrelated.make({}) })]],
       press_ok: (s) => [s, []],
       press_err: (s) => [s, []],
     },
@@ -505,7 +516,7 @@ describe("L21: the boot list", () => {
                       p.route(client, "process.send", {
                         pid,
                         letter: `letter_${seen.input}_${m.pick}`,
-                        m: isChecklist ? { type: "add", name: `item ${m.pick}` } : { type: "inc" },
+                        m: isChecklist ? { ...Tag.cases.add.make({}), name: `item ${m.pick}` } : Tag.cases.inc.make({}),
                         sentAt: SENT,
                         seen: 0,
                       }),
@@ -570,7 +581,7 @@ describe("L13: notices name their process", () => {
 
               for (const [n] of names.entries()) {
                 const name = names.filter((candidate) => !model.items.some((item) => item.name === candidate))[0]!;
-                const msg = { type: "add" as const, name };
+                const msg = { ...Tag.cases.add.make({}), name };
                 const answer = yield* call(w, (p) =>
                   p.route(client, "process.send", {
                     pid,
@@ -642,15 +653,15 @@ describe("L13: notices name their process", () => {
                 for (const m of moves) {
                   const names = [...items.keys()];
                   const held = names.length === 0 ? null : names[m.pick % names.length]!;
-                  const options: Array<{ readonly type: string; readonly name: string } | null> = [
-                    { type: "add", name: m.name },
+                  const options: Array<{ readonly _tag: string; readonly name: string } | null> = [
+                    { ...Tag.cases.add.make({}), name: m.name },
                     null, // a timer: the alarm the program asked for fires on its own
                     ...(held === null
                       ? []
                       : [
-                          { type: "add", name: held },
-                          { type: items.get(held) ? "uncheck" : "check", name: held },
-                          { type: "remove", name: held },
+                          { ...Tag.cases.add.make({}), name: held },
+                          { ...(items.get(held) ? Tag.cases.uncheck : Tag.cases.check).make({}), name: held },
+                          { ...Tag.cases.remove.make({}), name: held },
                         ]),
                   ];
                   const input = options[m.move % options.length]!;
@@ -669,12 +680,12 @@ describe("L13: notices name their process", () => {
                     seen.refused += refused ? 1 : 0;
 
                     if (!refused) {
-                      if (input.type === "add") {
+                      if (input._tag === "add") {
                         items.set(input.name, false);
-                      } else if (input.type === "remove") {
+                      } else if (input._tag === "remove") {
                         items.delete(input.name);
                       } else {
-                        items.set(input.name, input.type === "check");
+                        items.set(input.name, input._tag === "check");
                       }
                     }
                   }

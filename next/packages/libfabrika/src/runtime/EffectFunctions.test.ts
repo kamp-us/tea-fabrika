@@ -29,6 +29,16 @@ import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManage
 import { ProcessStore } from "./ProcessStore.ts";
 import { ProgramRunner } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  throw: {},
+  unknown: {},
+  work: {},
+  work_ok: {},
+  write: {},
+});
+
 const CHECK = { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) };
 
 const text = fc.string({
@@ -759,18 +769,12 @@ describe("T285, sink keep-law", () => {
 // mailbox, session manager, process store, sink and record manager are the real ones.
 const Model = Schema.Struct({ replies: Schema.Int });
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("work"), value: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("write"),
-    value: Schema.Int,
-    own: Schema.Boolean,
-    stream: Schema.String,
-    parent: Schema.optionalKey(Schema.String),
-  }),
-  Schema.Struct({ type: Schema.Literal("throw") }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
-]);
+const Msg = Schema.TaggedUnion({
+  work: { value: Schema.Int },
+  write: { value: Schema.Int, own: Schema.Boolean, stream: Schema.String, parent: Schema.optionalKey(Schema.String) },
+  throw: {},
+  timer: { at: Schema.Number },
+});
 
 const work = Cmd.make("work", {
   input: Schema.Struct({ value: Schema.Int }),
@@ -1076,7 +1080,7 @@ describe("T285, runner tracing keep-laws", () => {
                 _tag: "placed",
                 pos: 1,
               });
-              const error = yield* Effect.flip(runner.msg(w.input(1, { type: "work", value: a.value })));
+              const error = yield* Effect.flip(runner.msg(w.input(1, { ...Tag.cases.work.make({}), value: a.value })));
               expect(error).toMatchObject({
                 _tag: "LedgerError",
                 reason: "refused",
@@ -1119,14 +1123,14 @@ describe("T285, runner tracing keep-laws", () => {
 
                 for (const [index, call] of calls.entries()) {
                   now = call.at;
-                  yield* runner.msg(w.input(index + 1, { type: "work", value: call.value }));
+                  yield* runner.msg(w.input(index + 1, { ...Tag.cases.work.make({}), value: call.value }));
                   const entries = yield* Stream.runCollect(ledger.read("reply-test/inbox", 0));
                   const answers = entries.filter((entry) => entry.id.endsWith("/answer"));
                   expect(answers).toHaveLength(index + 1);
                   expect(answers.at(-1)?.body).toEqual({
                     m: {
-                      type: "work_ok",
-                      cmd: { type: "work", value: call.value },
+                      ...Tag.cases.work_ok.make({}),
+                      cmd: { ...Tag.cases.work.make({}), value: call.value },
                       value: 1,
                       at: call.at,
                     },
@@ -1214,12 +1218,12 @@ describe("T285, runner tracing keep-laws", () => {
                   const handling = ["work", "handler_fail", "handler_die"].includes(call.op);
                   const stream = `facts/${a.name}`;
                   const m = writing
-                    ? { type: "write", value: call.value, own: call.op === "own", stream }
+                    ? { ...Tag.cases.write.make({}), value: call.value, own: call.op === "own", stream }
                     : call.op === "step_throw"
-                      ? { type: "throw" }
+                      ? Tag.cases.throw.make({})
                       : call.op === "refuse"
-                        ? { type: "unknown", value: call.value }
-                        : { type: "work", value: call.value };
+                        ? { ...Tag.cases.unknown.make({}), value: call.value }
+                        : { ...Tag.cases.work.make({}), value: call.value };
                   const input = w.input(n, m);
                   // The letter is delivered to the process that will step it: the successor, when this op starts it.
                   const target = starting ? w.upcoming() : pid;

@@ -42,6 +42,12 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import { mailLayer, wakeups } from "./mail.ts";
 import { type Env, ProjectService, projectLayer } from "./runtime.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  request: {},
+});
+
 const Cases = fc.constantFrom(
   "no_name",
   "forbidden",
@@ -59,7 +65,7 @@ const delivery: Delivery = {
   command: "requester/1/0",
   source: { name: "requester:1", process: "requester" },
   to: "responder:1",
-  m: { type: "request", ref: "r1", value: 7 },
+  m: { ...Tag.cases.request.make({}), ref: "r1", value: 7 },
   from: {
     by: "SHA256:fixture",
     for: "fixture",
@@ -174,7 +180,7 @@ for (const flow of [
               code: { program: "responder", hash: "mail-test" },
             }),
           },
-          m: { type: "request", ref: secret, value: fields.value },
+          m: { ...Tag.cases.request.make({}), ref: secret, value: fields.value },
           ref: fields.ref,
           grant: { source: delivery.source.name, to: fields.target },
           from: delivery.from,
@@ -417,7 +423,7 @@ const START = StartsTest.fixture(
 const counter = () => {
   const machine = Machine.make({
     model: Schema.Struct({ count: Schema.Int }),
-    msg: Schema.Struct({ type: Schema.Literal("inc") }),
+    msg: Schema.TaggedStruct("inc", {}),
     cmds: [],
     init: (kept) => [kept ?? { count: 0 }, []],
     update: { inc: (s) => [{ count: s.count + 1 }, []] },

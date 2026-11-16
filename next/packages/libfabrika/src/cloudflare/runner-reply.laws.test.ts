@@ -18,6 +18,14 @@ import { ProgramRunner } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+  work: {},
+  work_err: {},
+});
+
 const SEED = 119120;
 // Only the platform base class is fake. Every RPC method runs the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -25,7 +33,7 @@ const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
 const NAME = "reply:1";
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: "person-test" });
 const Model = Schema.Struct({ replies: Schema.Int, reason: Schema.NullOr(Schema.String) });
-const Msg = Schema.Struct({ type: Schema.Literal("work"), n: Schema.Int });
+const Msg = Schema.TaggedStruct("work", { n: Schema.Int });
 
 const work = Cmd.make("work", {
   input: Schema.Struct({ n: Schema.Int }),
@@ -58,8 +66,8 @@ const program = {
 
 const input = fc.record({ n: fc.integer(), letter: fc.uuid() });
 
-const AuditInput = Schema.Struct({ type: Schema.Literal("save"), base: Schema.Int, body: Schema.String });
-const AuditMetadata = Schema.Struct({ type: Schema.Literal("save"), base: Schema.Int });
+const AuditInput = Schema.TaggedStruct("save", { base: Schema.Int, body: Schema.String });
+const AuditMetadata = Schema.TaggedStruct("save", { base: Schema.Int });
 
 const auditThrow = (body: string): never => {
   throw new Error(body);
@@ -91,8 +99,8 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
                   mode === "throw"
                     ? auditThrow(m.body)
                     : mode === "output"
-                      ? { type: "save", base: m.body }
-                      : { type: m.type, base: m.base },
+                      ? { ...Tag.cases.save.make({}), base: m.body }
+                      : AuditMetadata.make({ base: m.base }),
               },
             };
             const Box = programBox(p, "audit-build");
@@ -114,7 +122,7 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               mode = modes[entropy % modes.length]!;
               reached.add(mode);
               const body = `BODY-${entropy}-${n} "/雪\n`;
-              const input = AuditInput.make({ type: "save", base, body });
+              const input = AuditInput.make({ base, body });
               const submitted = mode === "decode" ? { ...input, base: body } : input;
               const raw = yield* Effect.promise(() => box.audit(submitted));
               const answer = yield* Effect.exit(remote.audit(submitted));
@@ -129,7 +137,7 @@ it("A5, A12 [secrets]: checked audit replies and printed Worker failures never c
               }
 
               if (mode === "ok") {
-                expect(raw).toEqual({ _tag: "ok", value: { type: "save", base } });
+                expect(raw).toEqual({ _tag: "ok", value: { ...Tag.cases.save.make({}), base } });
                 base++;
               } else if (Exit.isFailure(answer)) {
                 expect(Cause.hasDies(answer.cause)).toBe(false);
@@ -306,7 +314,7 @@ const replyCase = (
             id: inputId,
             by: owner,
             arrivedAt: 1794099600000,
-            input: { type: "work", n },
+            input: { ...Tag.cases.work.make({}), n },
           },
           sentAt: "2026-11-08T00:00:00Z",
           seen: 0,
@@ -348,7 +356,7 @@ const replyCase = (
           expect(rows).toHaveLength(2);
           expect(rows[1]).toMatchObject({
             id: `${PID}/1/0/answer`,
-            body: { m: { type: "work_err", cmd: work({ n }), reason: reason, error: { _tag: reason } } },
+            body: { m: { ...Tag.cases.work_err.make({}), cmd: work({ n }), reason: reason, error: { _tag: reason } } },
           });
           expect(yield* store.load).toMatchObject({
             saved: { after: rows[1]!.rev, model: { replies: 1, reason } },

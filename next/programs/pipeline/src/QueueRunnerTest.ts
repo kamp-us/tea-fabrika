@@ -6,6 +6,14 @@ import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
 import type { queue } from "./Queue.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  land: {},
+  start_child: {},
+  start_child_err: {},
+});
+
 type QueueModel = ReturnType<typeof queue>["machine"]["model"]["Type"];
 
 type Fault<R> =
@@ -167,7 +175,7 @@ export const suite = (driver: Driver) =>
           expect(refused.letters).toContainEqual(
             expect.objectContaining({
               name: "queue:1",
-              m: expect.objectContaining({ type: "start_child_err", reason: "forbidden" }),
+              m: expect.objectContaining({ ...Tag.cases.start_child_err.make({}), reason: "forbidden" }),
             }),
           );
           expect(refused.model?._tag).toBe("stopped");
@@ -210,11 +218,9 @@ export const suite = (driver: Driver) =>
             const queue = s.starts.find((p) => p.name === "queue:1");
             expect(queue).toBeDefined();
             const inbox = s.letters.filter((l) => l.name === "queue:1");
-            const requests = inbox.filter((l) =>
-              Schema.is(Schema.Struct({ type: Schema.Literals(["enqueue", "resume"]) }))(l.m),
-            );
+            const requests = inbox.filter((l) => Schema.is(Schema.TaggedUnion({ enqueue: {}, resume: {} }))(l.m));
             const answers = inbox.filter((l) =>
-              Schema.is(Schema.Struct({ type: Schema.Literals(["start_child_ok", "start_child_err"]) }))(l.m),
+              Schema.is(Schema.TaggedUnion({ start_child_ok: {}, start_child_err: {} }))(l.m),
             );
             expect(requests).toHaveLength(attempts);
             expect(answers.map((l) => l.id)).toEqual(requests.map((l) => `${queue?.process}/${l.pos}/0/answer`));
@@ -223,12 +229,12 @@ export const suite = (driver: Driver) =>
 
             for (const answer of answers.slice(0, refused)) {
               expect(answer.m).toMatchObject({
-                type: "start_child_err",
-                cmd: { type: "start_child" },
+                ...Tag.cases.start_child_err.make({}),
+                cmd: Tag.cases.start_child.make({}),
                 reason: "forbidden",
               });
               expect(Schema.decodeUnknownSync(Schema.Struct({ cmd: Schema.Unknown }))(answer.m).cmd).toEqual({
-                type: "start_child",
+                ...Tag.cases.start_child.make({}),
               });
             }
 
@@ -299,16 +305,21 @@ export const suite = (driver: Driver) =>
         for (let change = 1; change <= 3; change++) {
           expect(replies(s, change)).toHaveLength(1);
           expect(replies(s, change)[0]).toHaveProperty("_tag", "merged");
-          expect(replies(s, change)[0]).toMatchObject({ type: "reply", ref: `own:${change}` });
+          expect(replies(s, change)[0]).toMatchObject({ ref: `own:${change}` });
           const first = s.letters.filter(
             (l) =>
               l.name === `merger:${change}.${change}` &&
               typeof l.m === "object" &&
               l.m !== null &&
-              Reflect.get(l.m, "type") === "land",
+              Reflect.get(l.m, "_tag") === "land",
           );
           expect(first).toHaveLength(1);
-          expect(first[0]?.m).toMatchObject({ type: "land", change, ref: String(change), reply: "queue:1" });
+          expect(first[0]?.m).toMatchObject({
+            ...Tag.cases.land.make({}),
+            change,
+            ref: String(change),
+            reply: "queue:1",
+          });
         }
 
         allNormal(s);

@@ -44,6 +44,17 @@ import { Refusal } from "./Program.ts";
 import { RecoveryStore, recoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  add: {},
+  poison: {},
+  refuse: {},
+  save: {},
+  work: {},
+  write_ok: {},
+});
+
 const NAME = "counter:1";
 /** A saved letter's fold that throws RangeError, as `crashAdd` and `savedThrows` do. */
 const SAVED_RANGE = ExitReason.cases.crashed.make({ phase: "saved_letter", error: "RangeError" });
@@ -60,21 +71,15 @@ const person = Writer.cases.person.make({ key: "SHA256:person", for: from().for 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 type Model = typeof Model.Type;
 
-const Msg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int }),
-  Schema.Struct({ type: Schema.Literal("save"), token: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("poison"), key: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("work") }),
-  Schema.Struct({ type: Schema.Literal("refuse") }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Int }),
-  Schema.Struct({
-    type: Schema.Literal("DOWN"),
-    ref: Schema.String,
-    process: Schema.String,
-    reason: Down.fields.reason,
-    to: Recipient,
-  }),
-]);
+const Msg = Schema.TaggedUnion({
+  add: { n: Schema.Int },
+  save: { token: Schema.String },
+  poison: { key: Schema.String },
+  work: {},
+  refuse: {},
+  timer: { at: Schema.Int },
+  DOWN: { ref: Schema.String, process: Schema.String, reason: Down.fields.reason, to: Recipient },
+});
 
 const work = Cmd.make("work", { input: Schema.Struct({}), ok: Schema.Null, err: ["failed"] });
 
@@ -169,7 +174,7 @@ const world = (
     : undefined;
   const alarms: Array<number | null> = [];
   let alarm: number | null = null;
-  const input = (id = "poison", m: unknown = { type: "poison", key: id }): Incoming => ({
+  const input = (id = "poison", m: unknown = { ...Tag.cases.poison.make({}), key: id }): Incoming => ({
     id,
     envelope: {
       id: Schema.decodeUnknownSync(InputId)(
@@ -256,7 +261,7 @@ const world = (
       state: { v: 1, schema: Model, upgrades: [] },
       msg: Msg,
       view: { data: Model, select: (s: Model) => s },
-      refuse: (_s: Model, m: typeof Msg.Type) => (m.type === "refuse" ? { reason: refusalReason } : null),
+      refuse: (_s: Model, m: typeof Msg.Type) => (m._tag === "refuse" ? { reason: refusalReason } : null),
       inputs: {
         add: { _tag: "write", schema: Msg, description: "Add", personOnly },
         poison: { _tag: "write", schema: Msg, description: "Poison", personOnly: false },
@@ -602,7 +607,7 @@ describe("P34 runner supervision", () => {
                   );
                 const process = path === "restart" ? B : A;
                 const request = { id: `restart-${id}`, build: BUILD };
-                const input = w.input(id, { type: "save", token: id });
+                const input = w.input(id, { ...Tag.cases.save.make({}), token: id });
                 const checkpoint = ProcessStore.use((s) =>
                   s.select(process).pipe(Effect.flatMap((selected) => selected.load)),
                 );
@@ -668,7 +673,7 @@ describe("P34 runner supervision", () => {
                   expect(w.controls.writes, "the call dispatches each pending write once").toEqual([...before, job]);
                   expect(w.controls.flushes.at(-1), "flush follows dispatch").toEqual([...before, job]);
                   expect((yield* inbox).filter((row) => row.id === `${job}/answer`)).toMatchObject([
-                    { body: { m: { type: "write_ok" } } },
+                    { body: { m: Tag.cases.write_ok.make({}) } },
                   ]);
                   expect(yield* checkpoint).toMatchObject({ cmds: [] });
                   const spans = held();
@@ -742,7 +747,7 @@ describe("P34 runner supervision", () => {
                   }
 
                   w.controls.loseWriteReply = true;
-                  yield* failed(r.msg(w.input(id, { type: "save", token: id })));
+                  yield* failed(r.msg(w.input(id, { ...Tag.cases.save.make({}), token: id })));
                   expect(w.controls.loseWriteReply).toBe(false);
                   expect(w.controls.writes).toHaveLength(1);
                   expect(yield* read("facts")).toMatchObject([{ _tag: "saved", body: { token: id } }]);
@@ -760,7 +765,7 @@ describe("P34 runner supervision", () => {
                     if (path === "open") {
                       yield* r.open(id);
                     } else if (path === "msg") {
-                      yield* r.msg(w.input(`next-${id}`, { type: "add", n: delay }));
+                      yield* r.msg(w.input(`next-${id}`, { ...Tag.cases.add.make({}), n: delay }));
                     } else if (path === "restart") {
                       yield* r.restart(request);
                     } else {
@@ -771,7 +776,7 @@ describe("P34 runner supervision", () => {
                   yield* wake;
                   expect(w.controls.writes, "the wake must retry the original write ID").toEqual([writeId, writeId]);
                   const answers = (yield* inbox).filter((row) => row.id === `${writeId}/answer`);
-                  expect(answers).toMatchObject([{ body: { m: { type: "write_ok" } } }]);
+                  expect(answers).toMatchObject([{ body: { m: Tag.cases.write_ok.make({}) } }]);
                   expect(yield* checkpoint).toMatchObject({ cmds: [] });
                   yield* wake;
                   expect(w.controls.writes, "a second wake must not retry an answered write").toEqual([
@@ -829,7 +834,7 @@ describe("P34 runner supervision", () => {
                   yield* w.boot;
 
                   if (history) {
-                    yield* ProgramRunner.use((r) => r.msg(w.input(id, { type: "add", n }))).pipe(
+                    yield* ProgramRunner.use((r) => r.msg(w.input(id, { ...Tag.cases.add.make({}), n }))).pipe(
                       Effect.provide(w.layer()),
                     );
                   }
@@ -1002,7 +1007,7 @@ describe("P34 runner supervision", () => {
             const w = world(true);
             yield* w.boot;
             w.controls.crashAdd = 2;
-            const letter = w.input(id, { type: "add", n });
+            const letter = w.input(id, { ...Tag.cases.add.make({}), n });
             const before = yield* Effect.gen(function* () {
               yield* ProgramRunner.use((r) => failed(r.msg(letter)));
               expect(w.controls.adds).toBe(2);
@@ -1018,7 +1023,7 @@ describe("P34 runner supervision", () => {
                 body: { process: A, reason: SAVED_RANGE },
               });
               const rows = yield* inbox;
-              expect(rows).toMatchObject([{ id, body: { m: { type: "add", n } } }]);
+              expect(rows).toMatchObject([{ id, body: { m: { ...Tag.cases.add.make({}), n } } }]);
               return rows;
             }).pipe(Effect.provide(w.layer()));
             // A trusted caller starts B outside the runner's recovery action.
@@ -1077,7 +1082,7 @@ describe("P34 runner supervision", () => {
               yield* w.boot;
               const before = yield* Effect.gen(function* () {
                 const runner = yield* ProgramRunner;
-                yield* runner.msg(w.input(id, { type: "add", n }));
+                yield* runner.msg(w.input(id, { ...Tag.cases.add.make({}), n }));
                 expect(w.alarms.at(-1)).toBe(time);
                 yield* failed(runner.msg(w.input(`crash-${id}`)));
                 expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
@@ -1126,7 +1131,7 @@ describe("P34 runner supervision", () => {
             const w = world(true);
             yield* w.boot;
             w.controls.crashAdd = 2;
-            const letter = w.input(id, { type: "add", n });
+            const letter = w.input(id, { ...Tag.cases.add.make({}), n });
             const before = yield* Effect.gen(function* () {
               yield* ProgramRunner.use((r) => failed(r.msg(letter)));
               expect(w.controls.adds).toBe(2);
@@ -1235,7 +1240,7 @@ describe("P34 runner supervision", () => {
             w.reopen();
             const records = yield* Effect.gen(function* () {
               const runner = yield* ProgramRunner;
-              expect(yield* runner.msg(w.input(id, { type: "add", n }))).toMatchObject({
+              expect(yield* runner.msg(w.input(id, { ...Tag.cases.add.make({}), n }))).toMatchObject({
                 _tag: "accepted",
               });
               const records = yield* read(B);
@@ -1276,7 +1281,7 @@ describe("P34 runner supervision", () => {
             yield* recover(w);
             // B is A's successor. Preparation succeeds; B's first accepted fold throws.
             w.controls.crashAdd = 2;
-            const letter = w.input(id, { type: "add", n });
+            const letter = w.input(id, { ...Tag.cases.add.make({}), n });
             const before = yield* Effect.gen(function* () {
               const runner = yield* ProgramRunner;
               yield* failed(runner.msg(letter));
@@ -1295,7 +1300,7 @@ describe("P34 runner supervision", () => {
               });
               expect(yield* store.placedByAny(id)).toBeNull();
               const rows = yield* inbox;
-              expect(rows).toMatchObject([{ id, body: { m: { type: "add", n } } }]);
+              expect(rows).toMatchObject([{ id, body: { m: { ...Tag.cases.add.make({}), n } } }]);
               return rows;
             }).pipe(Effect.provide(w.layer()));
             w.reopen();
@@ -1405,7 +1410,7 @@ describe("P34 runner supervision", () => {
             yield* recover(w);
             const goodId = (n: number) => `good-${String(n).padStart(3, "0")}`;
             const good = (n: number) =>
-              ProgramRunner.use((r) => r.msg(w.input(goodId(n), { type: "add", n: 1 }))).pipe(
+              ProgramRunner.use((r) => r.msg(w.input(goodId(n), { ...Tag.cases.add.make({}), n: 1 }))).pipe(
                 Effect.tap((answer) => Effect.sync(() => expect(answer).toMatchObject({ _tag: "accepted", pos: n }))),
                 Effect.provide(w.layer()),
               );
@@ -1453,11 +1458,11 @@ describe("P34 runner supervision", () => {
             w.reopen();
             yield* Effect.gen(function* () {
               const r = yield* ProgramRunner;
-              expect(yield* r.msg(w.input(goodId(1), { type: "add", n: 2 }))).toMatchObject({
+              expect(yield* r.msg(w.input(goodId(1), { ...Tag.cases.add.make({}), n: 2 }))).toMatchObject({
                 _tag: "refused",
                 reason: "id_reused",
               });
-              expect(yield* r.msg(w.input(goodId(1), { type: "add", n: 1 }))).toMatchObject({
+              expect(yield* r.msg(w.input(goodId(1), { ...Tag.cases.add.make({}), n: 1 }))).toMatchObject({
                 _tag: "accepted",
                 pos: 1,
               });
@@ -1492,7 +1497,7 @@ describe("P34 runner supervision", () => {
               expect(
                 yield* r.msg({
                   ...poison,
-                  envelope: { ...poison.envelope, input: { type: "poison", key: "changed" } },
+                  envelope: { ...poison.envelope, input: { ...Tag.cases.poison.make({}), key: "changed" } },
                 }),
               ).toMatchObject({ _tag: "refused", reason: "id_reused" });
               expect(w.controls.steps).toEqual([value, value, value]);
@@ -1632,7 +1637,7 @@ describe("P34 runner supervision", () => {
                 yield* Effect.gen(function* () {
                   return yield* (yield* S).input(value);
                 }).pipe(Effect.provide(S.layer(w.state.sql, { name: NAME, capacity: 1024 ** 3, schema: Supervision }))),
-              ).toMatchObject({ id: value, envelope: { input: { type: "poison", key: value } } });
+              ).toMatchObject({ id: value, envelope: { input: { ...Tag.cases.poison.make({}), key: value } } });
             }).pipe(Effect.provide(w.layer()));
           }),
         { concurrency: 1, discard: true },
@@ -1661,7 +1666,7 @@ describe("P34 runner supervision", () => {
               w.reopen();
               yield* recover(w);
               yield* ProgramRunner.use((r) =>
-                r.msg(w.input(`good-${id}-${w.controls.steps.length}`, { type: "add", n: 1 })),
+                r.msg(w.input(`good-${id}-${w.controls.steps.length}`, { ...Tag.cases.add.make({}), n: 1 })),
               ).pipe(Effect.provide(w.layer()));
             }
 
@@ -1756,13 +1761,13 @@ describe("P34 runner supervision", () => {
               const r = yield* ProgramRunner;
 
               for (let n = 0; n < 4; n++) {
-                expect(yield* r.msg(w.input("refusal", { type: "refuse" }))).toMatchObject({
+                expect(yield* r.msg(w.input("refusal", Tag.cases.refuse.make({})))).toMatchObject({
                   _tag: "refused",
                   reason: value,
                 });
               }
 
-              yield* r.msg(w.input("work", { type: "work" }));
+              yield* r.msg(w.input("work", Tag.cases.work.make({})));
               expect(yield* dead).toEqual([]);
               expect((yield* lives).filter((row) => row._tag === "exited")).toEqual([]);
               expect(w.controls.cmds).toBe(1);
@@ -1783,14 +1788,14 @@ describe("P34 runner supervision", () => {
           Effect.gen(function* () {
             const w = world();
             yield* w.boot;
-            yield* ProgramRunner.use((r) => r.msg(w.input("good", { type: "add", n: 7 }))).pipe(
+            yield* ProgramRunner.use((r) => r.msg(w.input("good", { ...Tag.cases.add.make({}), n: 7 }))).pipe(
               Effect.provide(w.layer()),
             );
             let before: unknown;
             yield* Effect.gen(function* () {
               const saved = yield* ProcessStore.use((s) => s.load);
               before = saved;
-              yield* accepted("saved-bad", { type: "add", n: value }, saved);
+              yield* accepted("saved-bad", { ...Tag.cases.add.make({}), n: value }, saved);
             }).pipe(Effect.provide(w.layer()));
             w.controls.savedThrows = true;
             w.reopen();
@@ -1817,7 +1822,7 @@ describe("P34 runner supervision", () => {
       const w = world();
       yield* w.boot;
       yield* ProcessStore.use((s) => s.load).pipe(
-        Effect.flatMap((saved) => accepted("saved", { type: "add", n: 1 }, saved)),
+        Effect.flatMap((saved) => accepted("saved", { ...Tag.cases.add.make({}), n: 1 }, saved)),
         Effect.provide(w.layer()),
       );
       w.controls.savedThrows = true;
@@ -1887,7 +1892,7 @@ describe("P34 runner supervision", () => {
       Effect.gen(function* () {
         const w = world();
         yield* w.boot;
-        yield* ProgramRunner.use((r) => r.msg(w.input("accepted", { type: "add", n: 7 }))).pipe(
+        yield* ProgramRunner.use((r) => r.msg(w.input("accepted", { ...Tag.cases.add.make({}), n: 7 }))).pipe(
           Effect.provide(w.layer()),
         );
         yield* ProcessStore.use((s) =>
@@ -2081,9 +2086,9 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
         let process = A;
         let letters = 0;
         /** One good step, so the live process has a checkpoint a saved letter can sit behind. */
-        const good = ProgramRunner.use((r) => r.msg(w.input(`good-${++letters}`, { type: "add", n: 1 }))).pipe(
-          Effect.provide(w.layer()),
-        );
+        const good = ProgramRunner.use((r) =>
+          r.msg(w.input(`good-${++letters}`, { ...Tag.cases.add.make({}), n: 1 })),
+        ).pipe(Effect.provide(w.layer()));
         yield* good;
         const watch = (target: string) =>
           ProcessManager.use((p) => p.monitor(`watch:${target}`, target, from())).pipe(Effect.provide(w.manager()));
@@ -2132,7 +2137,9 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
                 const store = yield* ProcessStore;
                 const own = yield* store.select(process);
                 const saved = yield* own.load;
-                const sent = yield* Mailbox.use((box) => box.send(NAME, id, { type: "add", n: 1 }, from()));
+                const sent = yield* Mailbox.use((box) =>
+                  box.send(NAME, id, { ...Tag.cases.add.make({}), n: 1 }, from()),
+                );
                 expect(saved !== null && sent._tag === "placed", "the saved letter is placed behind a checkpoint").toBe(
                   true,
                 );

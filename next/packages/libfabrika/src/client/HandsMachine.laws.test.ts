@@ -48,6 +48,25 @@ import {
 } from "./HandsDoor.test-support.ts";
 import { handsMachine } from "./HandsMachine.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  execute_ok: {},
+  frame: {},
+  hello_ok: {},
+  journal_read_err: {},
+  journal_read_ok: {},
+  journal_write_err: {},
+  journal_write_ok: {},
+  ping_ok: {},
+  socket_closed: {},
+  socket_opened: {},
+  write_ok: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const SEED = 119120;
 /** The client's own hands key, as the door admits it, and another key the brain also holds work for. */
 const KEY = "SHA256:hands-own-key-0000000000000000000000000000";
@@ -76,8 +95,8 @@ const HELD: ReadonlySet<string> = new Set([
 ]);
 
 type Model = typeof handsMachine.model.Type;
-/** A Msg as the walk builds it: the machine reads it by its `type`. */
-type Sent = { readonly type: string } & Readonly<Record<string, unknown>>;
+/** A Msg as the walk builds it: the machine reads it by its `_tag`. */
+type Sent = { readonly _tag: string } & Readonly<Record<string, unknown>>;
 type Out = Cmd & Readonly<Record<string, unknown>>;
 
 const step = (s: Model, m: Sent) => applyCell<Model, Sent, Out>(handsMachine, s, m);
@@ -100,13 +119,13 @@ const about = (s: Model) => ({
 /** A built-in timer's deps: fire `msg` once, `ms` after it starts. */
 const isTimer = (d: unknown): d is { readonly ms: number; readonly msg: Sent } => {
   const r = record(d);
-  return typeof r.get("ms") === "number" && typeof record(r.get("msg")).get("type") === "string";
+  return typeof r.get("ms") === "number" && typeof record(r.get("msg")).get("_tag") === "string";
 };
 
-/** The deps of each of the machine's Subs of `type` that is on in `s`. */
+/** The deps of each of the machine's Subs of `_tag` that is on in `s`. */
 const subs = (s: Model, type: string): ReadonlyArray<unknown> =>
   (handsMachine.subs ?? []).flatMap((sub) => {
-    const deps: unknown = sub.type === type ? sub.deps(s) : null;
+    const deps: unknown = sub._tag === type ? sub.deps(s) : null;
     return deps === null || deps === undefined ? [] : [deps];
   });
 
@@ -203,7 +222,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     at: 1_000,
     n: 0,
   };
-  const frame = (dial: number, body: string): Sent => ({ type: "frame", dial, text: body, at: w.at });
+  const frame = (dial: number, body: string): Sent => ({ ...Tag.cases.frame.make({}), dial, text: body, at: w.at });
   const socketDial = (): number | null => {
     const [deps] = subs(w.s, "socket");
     const dial = record(deps).get("dial");
@@ -213,9 +232,9 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
   /** The checks every step answers to, whichever law walks: H1, H3 and H4 hold at once. */
   const check = (next: Model, cmds: ReadonlyArray<Out>) => {
     for (const c of cmds) {
-      expect(KNOWN.has(c.type), `a Cmd the plan names, not ${c.type}`).toBe(true);
+      expect(KNOWN.has(c._tag), `a Cmd the plan names, not ${c._tag}`).toBe(true);
 
-      if (c.type === "execute") {
+      if (c._tag === "execute") {
         const { id, execution } = about(next);
         const task = w.door.read(id ?? "");
         const saved = record(w.journal.get(id ?? ""));
@@ -232,7 +251,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         done.add("execute");
       }
 
-      if (c.type === "write" && record(c).get("method") === "tasks.take") {
+      if (c._tag === "write" && record(c).get("method") === "tasks.take") {
         const process = text(record(record(c).get("params")).get("process"));
         const { id } = about(next);
         expect(w.twins.has(process), "H4: no take names a process with two open tasks: it cannot succeed").toBe(false);
@@ -249,7 +268,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         ).toBe(false);
       }
 
-      if (c.type === "journal_write") {
+      if (c._tag === "journal_write") {
         // The data shape: when the command started, on the client's own clock, outlives the entry
         // that first held it. A result keeps the start its `executing` entry saved, and every entry
         // after the result keeps the result's.
@@ -278,7 +297,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         }
       }
 
-      if (c.type === "write" && record(c).get("method") === "tasks.finish") {
+      if (c._tag === "write" && record(c).get("method") === "tasks.finish") {
         const params = record(record(c).get("params"));
         const task = text(params.get("task"));
         expect(w.held.has(task), "H3: a held result sends nothing more").toBe(false);
@@ -300,7 +319,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         }
       }
 
-      if (c.type === "journal_write" && tagIn(record(c).get("entry")) === "acknowledged") {
+      if (c._tag === "journal_write" && tagIn(record(c).get("entry")) === "acknowledged") {
         expect(w.acked.has(text(record(c).get("task"))), "H3: acknowledged only after the brain said ok").toBe(true);
       }
     }
@@ -329,7 +348,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
   const settle = (c: Out, cell: Cell): Sent => {
     const r = record(c);
 
-    if (c.type === "write") {
+    if (c._tag === "write") {
       const call: Call = {
         dial: typeof r.get("dial") === "number" ? Number(r.get("dial")) : -1,
         id: text(r.get("id")),
@@ -337,22 +356,22 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         params: r.get("params"),
       };
       (call.dial === socketDial() ? w.wire : w.stale).push(call);
-      return { type: "write_ok", cmd: c, value: null, at: w.at };
+      return { ...Tag.cases.write_ok.make({}), cmd: c, value: null, at: w.at };
     }
 
-    if (c.type === "hello") {
+    if (c._tag === "hello") {
       const dial = typeof r.get("dial") === "number" ? Number(r.get("dial")) : -1;
       w.wire.push({ dial, id: text(r.get("id")), method: "initialize", params: null });
-      return { type: "hello_ok", cmd: c, value: null, at: w.at };
+      return { ...Tag.cases.hello_ok.make({}), cmd: c, value: null, at: w.at };
     }
 
-    if (c.type === "ping") {
+    if (c._tag === "ping") {
       const dial = typeof r.get("dial") === "number" ? Number(r.get("dial")) : -1;
       w.wire.push({ dial, id: "", method: "ping", params: null });
-      return { type: "ping_ok", cmd: c, value: null, at: w.at };
+      return { ...Tag.cases.ping_ok.make({}), cmd: c, value: null, at: w.at };
     }
 
-    if (c.type === "journal_read") {
+    if (c._tag === "journal_read") {
       const task = text(r.get("task"));
 
       // H4: a saved value that reads as no entry cannot change by itself: the task is not taken
@@ -360,29 +379,39 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       if (moves.forge && cell.variant % 5 === 0 && w.s.work._tag === "recalling" && about(w.s).id === task) {
         w.refused.set(task, w.listRev ?? -1);
         done.add("recall:bad_entry");
-        return { type: "journal_read_err", cmd: c, error: { _tag: "JournalError", reason: "bad_entry" }, at: w.at };
+        return {
+          ...Tag.cases.journal_read_err.make({}),
+          cmd: c,
+          error: { _tag: "JournalError", reason: "bad_entry" },
+          at: w.at,
+        };
       }
 
       const entry = w.journal.get(task) ?? null;
       done.add(`recall:${entry === null ? "nothing" : tagIn(entry)}`);
-      return { type: "journal_read_ok", cmd: c, value: entry, at: w.at };
+      return { ...Tag.cases.journal_read_ok.make({}), cmd: c, value: entry, at: w.at };
     }
 
-    if (c.type === "journal_write") {
+    if (c._tag === "journal_write") {
       if (cell.variant % 7 === 0) {
         done.add("journal_failed");
-        return { type: "journal_write_err", cmd: c, error: { _tag: "JournalError", reason: "storage" }, at: w.at };
+        return {
+          ...Tag.cases.journal_write_err.make({}),
+          cmd: c,
+          error: { _tag: "JournalError", reason: "storage" },
+          at: w.at,
+        };
       }
 
       w.journal.set(text(r.get("task")), r.get("entry"));
-      return { type: "journal_write_ok", cmd: c, value: null, at: w.at };
+      return { ...Tag.cases.journal_write_ok.make({}), cmd: c, value: null, at: w.at };
     }
 
-    if (c.type === "execute") {
-      return { type: "execute_ok", cmd: c, value: fakeResult(w.executes.size), at: w.at };
+    if (c._tag === "execute") {
+      return { ...Tag.cases.execute_ok.make({}), cmd: c, value: fakeResult(w.executes.size), at: w.at };
     }
 
-    return { type: `${c.type}_ok`, cmd: c, value: null, at: w.at };
+    return { ...keyed(`${c._tag}_ok`), cmd: c, value: null, at: w.at };
   };
 
   /** The door's answer to one call on the wire, as the brain gives it, or forged for H4. */
@@ -441,7 +470,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 6,
         run: () => {
           w.opened.add(dial);
-          return { type: "socket_opened", dial, at: w.at };
+          return { ...Tag.cases.socket_opened.make({}), dial, at: w.at };
         },
       });
     }
@@ -460,7 +489,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (w.waiting.length > 0) {
       const c = w.waiting[cell.pick % w.waiting.length];
       out.push({
-        label: `settle:${c?.type ?? ""}`,
+        label: `settle:${c?._tag ?? ""}`,
         weight: 8,
         run: () => {
           w.waiting = w.waiting.filter((x) => x !== c);
@@ -586,7 +615,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           // A refusal for good is kept for its link; a held result stays held on the next one.
           w.refused = new Map();
           w.listRev = null;
-          return { type: "socket_closed", dial, code: 1006, at: w.at };
+          return { ...Tag.cases.socket_closed.make({}), dial, code: 1006, at: w.at };
         },
       });
     }
@@ -605,7 +634,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         run: () => {
           // A cut after a journal write: the entry landed, and the process died before it heard.
           if (cell.variant % 2 === 0) {
-            for (const c of w.waiting.filter((x) => x.type === "journal_write")) {
+            for (const c of w.waiting.filter((x) => x._tag === "journal_write")) {
               w.journal.set(text(record(c).get("task")), record(c).get("entry"));
             }
           }
@@ -653,7 +682,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
     // H3: a finish answer on the live call, read before the machine takes it: an ok lets it save
     // `acknowledged` in the same step.
-    const reply = m.type === "frame" ? record(Option.getOrNull(parse(text(m.text)))) : new Map<string, unknown>();
+    const reply = m._tag === "frame" ? record(Option.getOrNull(parse(text(m.text)))) : new Map<string, unknown>();
     const reason = text(record(record(reply.get("error")).get("data")).get("reason"));
     const answered = record(reply.get("result"));
     const rev = typeof answered.get("rev") === "number" ? Number(answered.get("rev")) : null;
@@ -677,7 +706,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
     if (onLive) {
       const task = live.id ?? "";
-      const writes = cmds.filter((c) => c.type === "journal_write");
+      const writes = cmds.filter((c) => c._tag === "journal_write");
 
       if (reason === "lacks_capability") {
         // A need this link did not offer: nothing is held, and nothing goes again on this link.
@@ -733,7 +762,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (listing && pointers.length > 0 && pointers.every(blocked)) {
       expect(next.work._tag, "H4: nothing a take can get: take none, wait for new work").toBe("watching");
       expect(
-        cmds.filter((c) => c.type === "write").map((c) => record(c).get("method")),
+        cmds.filter((c) => c._tag === "write").map((c) => record(c).get("method")),
         "H4: the one call is a wait",
       ).toEqual(["tasks.wait"]);
       done.add(pointers.some((p) => w.twins.has(p.process)) ? "twin:watching" : "blocked:watching");
@@ -756,7 +785,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (chosen.label.startsWith("forge:") || chosen.label === "stale") {
       const forged = take !== undefined && take.id === live.call && chosen.label.startsWith("forge:");
       const busy = ["recalling", "saving", "starting", "executing", "reporting"];
-      expect(cmds.some((c) => c.type === "execute" || c.type === "journal_write")).toBe(false);
+      expect(cmds.some((c) => c._tag === "execute" || c._tag === "journal_write")).toBe(false);
       expect(
         forged || chosen.label === "stale" ? busy.includes(next.work._tag) && !busy.includes(prev.work._tag) : false,
         `H4: ${chosen.label} in ${prev.work._tag} starts no task`,

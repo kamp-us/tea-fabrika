@@ -15,6 +15,12 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const PROGRAM = "p13/recording";
 const NAME = "recording:1";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -28,12 +34,7 @@ const Journal = Schema.Struct({
   journal: Schema.Struct({ _tag: Schema.String, reply: Schema.optionalKey(Schema.Json) }),
 });
 
-const Metadata = Schema.Struct({
-  type: Schema.Literal("save"),
-  note: Schema.String,
-  base: Schema.Int,
-  reason: Schema.String,
-});
+const Metadata = Schema.TaggedStruct("save", { note: Schema.String, base: Schema.Int, reason: Schema.String });
 
 const invoke = (target: object, method: string, args: ReadonlyArray<unknown>) =>
   Effect.tryPromise({
@@ -45,9 +46,9 @@ const program = `
 import {Machine} from "@demlik/tea/effect";
 import {Schema} from "effect";
 const Model=Schema.Struct({count:Schema.Int});
-const Msg=Schema.Struct({type:Schema.Literal("save"),note:Schema.String,base:Schema.Int,body:Schema.String,reason:Schema.String});
-const Metadata=Schema.Struct({type:Schema.Literal("save"),note:Schema.String,base:Schema.Int,reason:Schema.String});
-export const program={name:"p13/recording",machine:Machine.make({model:Model,msg:Msg,cmds:[],init:s=>[s??{count:0},[]],update:{save:s=>[{count:s.count+1},[]]}}),state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:(s,m)=>m.base===s.count?null:{reason:"changed_elsewhere",now:s.count},inputs:{save:{_tag:"write",schema:Msg,description:"Save",personOnly:false}},outputs:{},writes:{},wake:()=>null,audit:{data:Metadata,select:m=>{if(m.note==="fail")throw new Error(m.body);return {type:m.type,note:m.note,base:m.base,reason:m.reason};}}};
+const Msg=Schema.TaggedStruct("save", { note:Schema.String,base:Schema.Int,body:Schema.String,reason:Schema.String });
+const Metadata=Schema.TaggedStruct("save", { note:Schema.String,base:Schema.Int,reason:Schema.String });
+export const program={name:"p13/recording",machine:Machine.make({model:Model,msg:Msg,cmds:[],init:s=>[s??{count:0},[]],update:{save:s=>[{count:s.count+1},[]]}}),state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:(s,m)=>m.base===s.count?null:{reason:"changed_elsewhere",now:s.count},inputs:{save:{_tag:"write",schema:Msg,description:"Save",personOnly:false}},outputs:{},writes:{},wake:()=>null,audit:{data:Metadata,select:m=>{if(m.note==="fail")throw new Error(m.body);return {_tag:m._tag,note:m.note,base:m.base,reason:m.reason};}}};
 `;
 
 const field = (bytes: Uint8Array) => {
@@ -258,7 +259,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       const body = `BODY-${entropy}-${serial} "/雪\n`;
       bodies.push(body);
       const m = {
-        type: "save",
+        ...Tag.cases.save.make({}),
         note: move === "audit_failed" ? "fail" : "record",
         base: move === "refuse" || move === "reply_write" || move === "reply_complete" ? count + 1 : count,
         reason: "user-save",
@@ -282,7 +283,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
         expect(result._tag).toBe("Failure");
       } else {
         expect(result).toMatchObject({ _tag: "Success", success: { _tag: "ok" } });
-        received.push(Metadata.make({ type: m.type, note: m.note, base: m.base, reason: m.reason }));
+        received.push(Metadata.make({ note: m.note, base: m.base, reason: m.reason }));
 
         if (move === "admit") {
           count++;
@@ -311,7 +312,9 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   }
 
   // A13 reaches the project call below the wire. An unknown type must remain a normal refusal.
-  const unknown = { type: `unknown-${count}-${serial}`, body: `BODY-unknown-${tape.at(-1)} "/雪\n` };
+  const unknown = Schema.TaggedStruct(`unknown-${count}-${serial}`, { body: Schema.String }).make({
+    body: `BODY-unknown-${tape.at(-1)} "/雪\n`,
+  });
   expect(
     yield* invoke(project, "route", [
       client,
@@ -322,7 +325,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   reached.add("unknown");
 
   // The same client can still submit a valid input after the refusal.
-  const control = { type: "save", note: "record", base: count, reason: "user-save", body: "control" };
+  const control = { ...Tag.cases.save.make({}), note: "record", base: count, reason: "user-save", body: "control" };
   expect(
     yield* invoke(project, "route", [
       client,

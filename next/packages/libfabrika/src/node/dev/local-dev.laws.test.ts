@@ -10,6 +10,15 @@ import { TestClock } from "effect/testing";
 import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  exited: {},
+  listened: {},
+  started: {},
+  stop: {},
+});
+
 const SEED = 119120;
 const between = (minimum: number, maximum: number) => Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 
@@ -25,8 +34,8 @@ type Entry = {
 // A running process the brain samples: started and listening, so `replacing` may fold.
 const running = Effect.fnUntraced(function* (pid: number) {
   const life = yield* lifeCell(null);
-  yield* life.send({ type: "started", start: "start-1", pid, build: "build-1", at: 0 });
-  yield* life.send({ type: "listened", port: 40_001 });
+  yield* life.send({ ...Tag.cases.started.make({}), start: "start-1", pid, build: "build-1", at: 0 });
+  yield* life.send({ ...Tag.cases.listened.make({}), port: 40_001 });
   const log: Array<Entry> = [];
   const now = Clock.currentTimeMillis;
   const vouches = (name: Signal) =>
@@ -43,7 +52,7 @@ const running = Effect.fnUntraced(function* (pid: number) {
       log.push({ step: name, at: yield* now, vouched: yield* vouches(name) });
     });
   // The runtime reports the exit, and the brain folds it, as its event fiber does.
-  const exits = life.send({ type: "exited", replacement: "start-1" });
+  const exits = life.send({ ...Tag.cases.exited.make({}), replacement: "start-1" });
   return { life, log, record, heard, exits };
 });
 
@@ -176,10 +185,10 @@ describe("the memory restart's bounded stop, next/", () => {
         const w = yield* running(pid);
         const msg =
           event === "exited"
-            ? ({ type: "exited", replacement: "start-1" } as const)
+            ? ({ ...Tag.cases.exited.make({}), replacement: "start-1" } as const)
             : event === "stop"
-              ? ({ type: "stop" } as const)
-              : ({ type: "started", start: "start-2", pid: pid + 1, build: "build-1", at: 0 } as const);
+              ? Tag.cases.stop.make({})
+              : ({ ...Tag.cases.started.make({}), start: "start-2", pid: pid + 1, build: "build-1", at: 0 } as const);
         const landed: Array<Fiber.Fiber<unknown>> = [];
         // It lands as the runtime's event fiber or the scope's close sends it: in a fiber of its own,
         // which waits its turn on the life state.
@@ -213,7 +222,7 @@ describe("the memory restart's bounded stop, next/", () => {
         const life: typeof w.life = {
           ...w.life,
           step: (next, moved, then) =>
-            (point === "timeout" && next.type === "killed" ? w.life.send(msg) : Effect.void).pipe(
+            (point === "timeout" && next._tag === "killed" ? w.life.send(msg) : Effect.void).pipe(
               Effect.andThen(w.life.step(next, moved, then)),
             ),
         };

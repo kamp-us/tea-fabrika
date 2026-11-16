@@ -7,10 +7,15 @@ import * as Audit from "./Audit.ts";
 import { nodeExecution, workerExecution } from "./Execution.ts";
 import { capture, unleaked } from "./RepliesTest.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  save: {},
+});
+
 const Model = Schema.Struct({ versions: Schema.Record(Schema.String, Schema.Int) });
 
-const Metadata = Schema.Struct({
-  type: Schema.Literal("save"),
+const Metadata = Schema.TaggedStruct("save", {
   note: Schema.String,
   base: Schema.Int,
   reason: Schema.optionalKey(Schema.String),
@@ -62,7 +67,6 @@ const declared = (select: (msg: typeof Save.Type) => unknown, data: Schema.Codec
 
 const metadata = (m: typeof Save.Type) =>
   Metadata.make({
-    type: m.type,
     note: m.note,
     base: m.base,
     ...(m.reason === undefined ? {} : { reason: m.reason }),
@@ -94,7 +98,7 @@ describe("P13 safe audit", () => {
 
         // A program without an audit declaration records only the message type.
         const { audit: _audit, ...minimal } = declared(metadata);
-        expect(yield* nodeExecution(minimal).audit(samples[0]!)).toEqual({ type: "save" });
+        expect(yield* nodeExecution(minimal).audit(samples[0]!)).toEqual(Tag.cases.save.make({}));
       }),
     { arbitrary: { seed: 119120, runs: 100 } },
   );
@@ -115,7 +119,7 @@ describe("P13 safe audit", () => {
                 const note = `note-${cell.pick % 3}`;
                 const base = versions.get(note) ?? 0;
                 const body = JSON.stringify({ private: cell.pick, line: `"/雪\n${n}` });
-                const input = Save.make({ type: "save", note, base, body });
+                const input = Save.make({ note, base, body });
                 bodies.push(body);
                 const modes = ["decode", "selector", "output", "json", "rpc", "reply"] as const;
                 const mode = modes[cell.move % modes.length]!;
@@ -124,7 +128,7 @@ describe("P13 safe audit", () => {
                   mode === "selector"
                     ? declared(() => raised(body))
                     : mode === "output"
-                      ? declared(() => ({ type: "save", note, base: body }))
+                      ? declared(() => ({ ...Tag.cases.save.make({}), note, base: body }))
                       : mode === "json"
                         ? declared(() => ({ hidden: 1n }), Schema.Unknown)
                         : declared(metadata);

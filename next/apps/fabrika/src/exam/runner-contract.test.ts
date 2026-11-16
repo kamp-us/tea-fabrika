@@ -21,6 +21,17 @@ import {
   writer,
 } from "./runner-contract.test-support.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by a schema (0569, 0562).
+ *  A law hands over only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  guard: {},
+  peek: {},
+  save: {},
+});
+
+/** The key of an answer named from its Cmd, such as `${cmd._tag}_ok`. */
+const keyed = (name: string) => Schema.TaggedStruct(name, {}).make({});
+
 const refusal = (actual: unknown, want: Refusal) => expect(actual).toEqual({ _tag: "refused", ...want });
 
 const replayRefuse = (spy: { calls: number }): never => {
@@ -62,8 +73,8 @@ it.prop(
   ({ c }) => {
     const { body, ...want } = c;
     const pure = Result.getOrThrow(stepper(makeProgram(() => want)));
-    refusal(pure.step(empty, { type: "save", body: 17 }), { reason: "bad_msg" });
-    refusal(pure.step(empty, { type: "save", body, base: 0, work: false }), want);
+    refusal(pure.step(empty, { ...Tag.cases.save.make({}), body: 17 }), { reason: "bad_msg" });
+    refusal(pure.step(empty, { ...Tag.cases.save.make({}), body, base: 0, work: false }), want);
     expect(() => refusal({ _tag: "refused", reason: `${want.reason}!` }, want)).toThrow();
   },
   opts,
@@ -84,7 +95,7 @@ const Wrong = Schema.Union([
 
 const BadMsgCases = Arbitrary.schema(
   Schema.Struct({
-    type: Schema.Union([
+    tag: Schema.Union([
       Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(96)),
       Schema.Literals(["__proto__", "constructor", "toString", "hasOwnProperty", "probe_ok"]),
     ]),
@@ -116,22 +127,22 @@ const wrongFor = (field: BadMsgCase["field"], wrong: BadMsgCase["wrong"]) =>
 
 const badInput = (c: BadMsgCase, kind: Bad): unknown => {
   // work is true, so a bad input that got through would also run a Cmd.
-  const save = { type: "save", body: c.body, base: c.base, work: true };
+  const save = { ...Tag.cases.save.make({}), body: c.body, base: c.base, work: true };
 
   if (kind === "untyped") {
     return c.wrong;
   }
 
   if (kind === "unknown") {
-    return { ...save, type: ["save", "guard", "peek"].includes(c.type) ? `${c.type}.undeclared` : c.type };
+    return { ...save, ...keyed(["save", "guard", "peek"].includes(c.tag) ? `${c.tag}.undeclared` : c.tag) };
   }
 
   if (kind === "read") {
-    return { type: "peek" };
+    return Tag.cases.peek.make({});
   }
 
   if (kind === "person_only") {
-    return { type: "guard", body: c.body };
+    return { ...Tag.cases.guard.make({}), body: c.body };
   }
 
   if (kind === "parent") {
