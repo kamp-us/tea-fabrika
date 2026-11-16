@@ -82,8 +82,12 @@ import * as Option from "effect/Option"; // line 2
 - **Effect's sub-barrels.** Effect 4.1.3 ships lowercase entry points such as `effect/testing`,
   `effect/crypto` and `effect/process`. `preferBarrelImport` does not flag them, so a program keeps
   `import { TestClock } from "effect/testing"`. `preferNamespaceImport` flags that line in a
-  library and suggests `effect/testing/TestClock`, which the installed `effect` does not export.
-  `import * as Testing from "effect/testing"` passes, so that is the library form.
+  library and suggests `effect/testing/TestClock`. That path resolves: effect 4.1.3's `exports`
+  has `"./*": "./dist/*.js"`, which covers it, and `dist/testing/TestClock.js` ships. So the
+  library form is the checker's own suggestion, `import * as TestClock from "effect/testing/TestClock"`.
+  *Wrong, corrected 2026-11-15:* this file first said the path was not exported and took
+  `import * as Testing from "effect/testing"` instead; a scratch build with tsc and a Node import
+  of the suggested path both passed.
 
 **The count,** on main at `61d551ff3`, every `import` or `export ... from` of `effect` in `.ts` and
 `.tsx` files, multi-line ones too. The rough count the ruling came with was about 614 barrel and
@@ -108,8 +112,8 @@ form is held as an error by the Effect checker, set in the package's own `tsconf
 
 - **Libraries:** `next/packages/libfabrika`, `next/packages/tuval` and `next/packages/vitest` set
   `"namespaceImportPackages": ["effect"]` and `"preferNamespaceImport": "error"`. A module is
-  imported as `import * as Effect from "effect/Effect"`; a sub-barrel as
-  `import * as Testing from "effect/testing"`.
+  imported as `import * as Effect from "effect/Effect"`; a module under a sub-barrel as the checker
+  suggests, `import * as TestClock from "effect/testing/TestClock"`.
 - **Programs and apps:** each package under `next/programs/` and `next/apps/` sets
   `"barrelImportPackages": ["effect"]` and `"preferBarrelImport": "error"`. A module is imported as
   `import { Effect } from "effect"`; a sub-barrel by name, as today.
@@ -128,8 +132,7 @@ form is held as an error by the Effect checker, set in the package's own `tsconf
   `namespaceImportPackages`.
 - Neither check goes to `warning` or is turned off to let a pull request pass
   ([0524](0524-no-list-lets-broken-code-pass.md)).
-- The checker's suggested fix is not taken where it names a path the installed `effect` does not
-  export. The sub-barrel namespace form is used instead.
+- The checker's suggested fix is taken as it is.
 
 ## Consequences
 
@@ -143,5 +146,8 @@ form is held as an error by the Effect checker, set in the package's own `tsconf
   `.github/ci/`), which 0565 covers but the ruling did not name; and today's app.
 - **What this cannot tell us:** the proof ran in a scratch project, not the repo's own packages, and
   on the installed 0.63.0. The merge code was read on the checker's main branch, not at the 0.63.0
-  tag, though the runs agree with it. The count is from one commit. Whether the wrong suggestion for
-  sub-barrels is a checker bug was not reported upstream.
+  tag, though the runs agree with it. The count is from one commit. The sub-barrel suggestion was
+  thought to be a checker bug and was not: see the correction above.
+
+## Amendments
+- 2026-11-15: the sub-barrel library form is the checker's own suggestion (`effect/testing/TestClock`), which resolves through effect's `"./*"` export; the first text called that path unexported, which was wrong.
