@@ -9,6 +9,7 @@
     "dev": "node dev.ts",
     "build": "node build.ts",
     "grant": "node grant.ts",
+    "hands": "node hands.ts",
     "settings": "node cli.ts settings",
     "settings:generate": "node settings-generate.ts",
     "typecheck": "tsc --noEmit -p ."
@@ -37,6 +38,7 @@
     "@kampus/inbox": "workspace:*",
     "@kampus/chaos": "workspace:*",
     "@kampus/counter": "workspace:*",
+    "@kampus/tezgah": "workspace:*",
     "@kampus/vitest": "workspace:*",
     "@alchemy.run/cloudflare": "catalog:",
     "alchemy": "catalog:",

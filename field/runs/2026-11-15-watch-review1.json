@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-watch-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1341",
+  "started": "2026-11-15T14:20:00-08:00",
+  "ended": "2026-11-15T14:47:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-fable-5-2",
+  "effort": "medium",
+  "outcome": "fail",
+  "why": "Watch quest review of cca92ec79, in next/: sent to build, two blocking classes, one finding row. One: on workerd nothing wakes the watcher when ProcessManager.exit writes its DOWN, so a parked reader never folds it; law M13 is green only because its own view.open poll catches the reader up. Two: no law reaches the demonitor path on workerd (the brain.ts programDemonitor forward, its edge, the Project call, the remote demonitor) or a refused watch over RPC, though amendment A-Workerd says M13 holds both forwards. The row: the plan's exported `down` port is not built. The first class is about 85% sure, by reading; an M13 that sees the DOWN without calling into the reader would settle it.",
+  "tokens": 211749,
+  "tools": 41,
+  "minutes": 8,
+  "note": "Read-only. Ran alone: runtime/Program.test.ts and runtime/Monitor.types.test.ts, 45 tests green. Planted by reading only. git merge-tree with origin/main f9a50cb55: no conflict. Not run by the reviewer: any .integration. file, workerd, pnpm typecheck. No tests report was found, so recorded plant runs for M1 to M14 were not checked. Tokens, tool uses and minutes are the lead's, from the agent's usage line; the started and ended times are the reviewer's estimate.",
+  "step": "review"
+}

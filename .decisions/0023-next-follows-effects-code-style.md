@@ -1,7 +1,7 @@
 ---
 id: 0023
 title: next/ follows the Effect codebase's code style and doc comments as strictly as it can, and each kept difference names its reason
-status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md), [0039](0039-keep-semicolons-and-es5-commas.md), [0095](0095-a-service-file-holds-only-its-contract.md), [0118](0118-no-since-tag-before-a-release.md)
+status: amended-in-part by [0021](0021-a-blank-line-between-top-level-statements.md), [0029](0029-format-and-names-follow-effect.md), [0032](0032-libraries-take-effects-file-layout.md), [0039](0039-keep-semicolons-and-es5-commas.md), [0095](0095-a-service-file-holds-only-its-contract.md), [0118](0118-no-since-tag-before-a-release.md), [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)
 date: 2026-11-09
 tags: [style, format, lint, doc-comments, jsdoc, effect, next, readability, open-source]
 ---
@@ -38,6 +38,8 @@ export interface Deferred<in out A, in out E = never> extends Deferred.Variance<
 ```
 
 *[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds. [0039](0039-keep-semicolons-and-es5-commas.md) then keeps semicolons and trailing commas.*
+
+*[0560](0560-an-order-for-effect-code.md) says whose way wins when the Effect team, a trusted repo and a decision of ours disagree; every rule in this file still holds.*
 
 ## Context
 
@@ -148,3 +150,4 @@ stays only with a written reason in this file.**
   table above on 2026-11-14, after this file first landed. The docs rule `fabrika/jsdocs`
   (`oxlint-plugins/jsdocs.ts`, ticket 913) reads the pair as one declaration. "Directly" means the
   statement right before the type.
+- 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) drops `@stability` from every doc block in `next/` and our tooling until `libfabrika` has a released version, as 0118 did for `@since`. The two tags come back together at the first release.

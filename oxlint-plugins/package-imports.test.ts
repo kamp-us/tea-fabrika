@@ -59,6 +59,13 @@ const TABLE: { scope: string; parts: Part[] } = {
         `${LIBRARY}/client/WindowMachine`,
         `${LIBRARY}/client/WindowStart`,
         `${LIBRARY}/client/Headless`,
+        // Desk S2a, S2b and S4: the key table, the window's side of tezgah, and tezgah's wire shapes
+        // and drawn geometry.
+        `${LIBRARY}/client/Keys`,
+        `${LIBRARY}/client/Tezgah`,
+        `${LIBRARY}/tezgah/Layout`,
+        `${LIBRARY}/tezgah/Workspace`,
+        `${LIBRARY}/tezgah/Fold`,
         "@kampus/fabrika-design",
         "@kampus/fabrika-design/tokens.css",
       ],
@@ -205,6 +212,8 @@ const target = fc.oneof(
       `${LIBRARY}/transport/Dial`,
       `${LIBRARY}/client`,
       `${LIBRARY}/client/WindowStart.test-support`,
+      `${LIBRARY}/client/Prefix`,
+      `${LIBRARY}/tezgah/internal/tree`,
       `${LIBRARY}/coordination/index`,
       `${LIBRARY}/ledger/Log`,
       `${LIBRARY}/processes/Process`,
@@ -372,8 +381,8 @@ it("the library's and a program's code may not import the test primitives, and t
       numRuns: 200,
       examples: [
         // pinned: the review of PR 1274 named this file, which lint let import the test package.
-        [["library", "next/packages/libfabrika/src/jobs/Job.ts", 0, VITEST]],
-        [["library suites", "next/packages/libfabrika/src/jobs/JobsTest.ts", 0, VITEST]],
+        [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0, VITEST]],
+        [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0, VITEST]],
         [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, VITEST]],
         // Ticket 1029 moves this test kit onto the SQLite module, so its suites' part must take it.
         [["library suites", "next/packages/libfabrika/src/node/RecordPart.test-support.ts", 0, TEST_DATABASE]],

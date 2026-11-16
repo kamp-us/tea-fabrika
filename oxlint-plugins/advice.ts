@@ -5,14 +5,30 @@
 // deleted.
 import { matchesGlob } from "node:path";
 
-/** The six, as oxlint prints their codes: the five old advice rules and the docs rule (ticket 948). */
-const ADVICE: ReadonlySet<string> = new Set([
-  "eslint(no-restricted-properties)",
-  "fabrika(jsdocs)",
-  "fabrika(law-shape)",
-  "fabrika(no-effect-promise)",
-  "fabrika(no-raw-try-catch)",
-  "fabrika(prefer-schema-arbitrary)",
+/** One fire as oxlint reports it, its filename from the top of the repo. */
+export interface Fire {
+  readonly code?: string;
+  readonly severity?: string;
+  readonly filename?: string;
+  readonly message?: string;
+}
+
+const always = (): boolean => true;
+
+/**
+ * The six, as oxlint prints their codes: the five old advice rules and the docs rule (ticket 948).
+ * Each says which of its fires may advise.
+ */
+const ADVICE: ReadonlyMap<string, (fire: Fire) => boolean> = new Map([
+  // Only the JSON.parse guard advises (0523). Any other entry of this rule, such as the Reflect ban
+  // (0554), blocks at every level. Oxlint writes the fire's message itself, as
+  // `'JSON.parse' is restricted from being used.`, and keeps the entry's own text apart as a hint.
+  ["eslint(no-restricted-properties)", (fire: Fire) => (fire.message ?? "").startsWith("'JSON.parse' ")],
+  ["fabrika(jsdocs)", always],
+  ["fabrika(law-shape)", always],
+  ["fabrika(no-effect-promise)", always],
+  ["fabrika(no-raw-try-catch)", always],
+  ["fabrika(prefer-schema-arbitrary)", always],
 ]);
 
 /**
@@ -32,20 +48,17 @@ const CODES: ReadonlyMap<string, string> = new Map([
 /**
  * The frozen version's paths (0525), where the config's one frozen override keeps the two top-level
  * rules at "warn". That override is not a dirty-folder line: no fill brings it to zero, so these
- * globs are never read as warn lines. It and this set go when the freeze lane takes the paths out
+ * globs are never read as warn lines. It and this set go when the freeze quest takes the paths out
  * of lint.
  */
 const FROZEN: ReadonlySet<string> = new Set(["apps/**", "programs/**", "packages/**", "bin/**"]);
 
-/** One fire as oxlint reports it, its filename from the top of the repo. */
-export interface Fire {
-  readonly code?: string;
-  readonly severity?: string;
-  readonly filename?: string;
-}
-
-/** True only for one of the six, graded "warning" by a dirty folder's override. */
-export const advises = (fire: Fire): boolean => ADVICE.has(fire.code ?? "") && fire.severity === "warning";
+/**
+ * True only for a fire of the six that may advise, graded "warning" by a dirty folder's override.
+ * Of oxlint's own `no-restricted-properties`, that is the JSON.parse fire alone.
+ */
+export const advises = (fire: Fire): boolean =>
+  fire.severity === "warning" && (ADVICE.get(fire.code ?? "")?.(fire) ?? false);
 
 /** One warn line of the config: one of the six, one folder glob. */
 export interface WarnLine {

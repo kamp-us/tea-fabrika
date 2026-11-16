@@ -29,8 +29,9 @@ Seeded 2026-11-09 from the notes above, checked against main at `5b1171ed`.
 | Where work runs | Required and preferred node affinity ([affinity]) | Not built: hands and the order a turn is offered in are a later tier | differs, because not built yet |
 | Leases | A `Lease` with a holder, a duration and a renew time ([leases]) | Not built: C3's 30 s claim renewed every 10 s waits for hands, a later tier | differs, because not built yet |
 | A wait on an outside service | A failed image pull is tried again with a growing wait, up to 300 seconds; a restart's wait doubles to the same 5 minutes ([images], [restart]) | The merger waits after each outside fault (the code host or CI down, a lost check): doubling from `merger.poll`, 30 s, capped at `merger.backoff`, 300 s, kept as the one saved alarm (`next/programs/pipeline/src/Merger.ts:107-111`, `next/programs/pipeline/src/Settings.ts:40-42`) | same cap and shape; differs in the start, 30 s for Kubernetes' 10 s, because 30 s is the poll today's landing script uses, and both numbers are settings |
+| List, then watch from its version | A client lists with a selector, such as the kubelet's pods for its own node (`spec.nodeName`), takes the list's `resourceVersion`, then watches from it and gets each change as an event; a watch too old for the server is `410 Gone`, and the client lists again ([changes]) | The hands client calls `tasks.list`, which answers its key's open tasks as pointers and the `rev` of its `target:` stream, then `tasks.wait { after: rev }`, which parks until a request for that key lands and answers only the new `rev`; the client then lists again (`gateway/Tasks.ts`, `gateway/Gateway.ts`, `client/HandsMachine.ts`). A take refused for a reason that cannot change by itself skips that task until a list answers another rev | differs, because the wait is a doorbell, not an event stream: it says only that something changed, and the list stays the one place that says what, so a lost wake costs one list. The selector is the authenticated key, never a param ([0102](../../../.decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md)). No `410`: the ledger keeps every rev. Today a list reads the key's whole `target:` stream from rev 0 (finding `2026-11-15-jobs-list-reads-a-keys-whole-history`) |
 
-Count: 14 rows, 2 same, 12 differ. Of the 12, 6 are not built yet (limits, a quota per namespace, a
+Count: 15 rows, 2 same, 13 differ. Of the 13, 6 are not built yet (limits, a quota per namespace, a
 CPU limit per container, labels, node affinity, leases).
 
 Coming: [0016](../../../.decisions/0016-tier-1-supervision-is-otps-top-level-supervisor.md)
@@ -48,3 +49,4 @@ quota and CPU limit rows ([0020](../../../.decisions/0020-programs-get-hard-wall
 [leases]: https://kubernetes.io/docs/concepts/architecture/leases/
 [quotas]: https://kubernetes.io/docs/concepts/policy/resource-quotas/
 [images]: https://kubernetes.io/docs/concepts/containers/images/#imagepullbackoff
+[changes]: https://kubernetes.io/docs/reference/using-api/api-concepts/#efficient-detection-of-changes

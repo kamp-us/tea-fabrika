@@ -1,5 +1,5 @@
 // T953 slice 1, next/: the permission core's check, laws L1 to L4 of the approved plan
-// (docs/plan/lanes/t953-PLAN.md), on generated relation histories.
+// (docs/plan/quests/t953-PLAN.md), on generated relation histories.
 //
 // The contract these laws pin, from the plan's "The shape":
 //   Rebac.ts: `make(name).type(name, { relations, permissions })` builds one model, and `Model.ref(type, id)`
@@ -248,6 +248,8 @@ const turnHolding = (entries: ReadonlyArray<Entry>): LedgerTurn => ({
   read: (stream, after) => entries.filter((e) => e.stream === stream && e.rev > after),
   get: (stream, id) => Option.fromNullishOr(entries.find((e) => e.stream === stream && e.id === id)),
   head: (stream) => entries.reduce((rev, e) => (e.stream === stream ? Math.max(rev, e.rev) : rev), 0),
+  // T1041: the newest entry's pos, or none, as the store's position-only read answers.
+  end: (stream) => Option.fromUndefinedOr(entries.filter((e) => e.stream === stream).at(-1)?.pos),
   append: () => {
     throw new Error("a check never appends");
   },

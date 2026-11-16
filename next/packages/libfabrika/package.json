@@ -12,6 +12,8 @@
     "./transport/internal/*": null,
     "./client/*": "./src/client/*.ts",
     "./client/internal/*": null,
+    "./tezgah/*": "./src/tezgah/*.ts",
+    "./tezgah/internal/*": null,
     "./telemetry/*": "./src/telemetry/*.ts",
     "./telemetry/internal/*": null,
     "./ledger/*": "./src/ledger/*.ts",
@@ -22,8 +24,8 @@
     "./processes/internal/*": null,
     "./presence/*": "./src/presence/*.ts",
     "./presence/internal/*": null,
-    "./jobs/*": "./src/jobs/*.ts",
-    "./jobs/internal/*": null,
+    "./tasks/*": "./src/tasks/*.ts",
+    "./tasks/internal/*": null,
     "./packs/*": "./src/packs/*.ts",
     "./packs/internal/*": null,
     "./repositories/*": "./src/repositories/*.ts",
@@ -75,7 +77,9 @@
     "./desktop/*": "./src/desktop/*.ts",
     "./desktop/internal/*": null,
     "./node/launchd/*": "./src/node/launchd/*.ts",
-    "./node/launchd/internal/*": null
+    "./node/launchd/internal/*": null,
+    "./node/client/*": "./src/node/client/*.ts",
+    "./node/client/internal/*": null
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."

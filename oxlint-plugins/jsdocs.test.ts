@@ -1,7 +1,7 @@
 // `fabrika/jsdocs`, the docs rule of E6 (0023, 0120): ticket 913, slice B2.1 of
 // `docs/plan/effect-rules-big.md`, with laws 3 to 9 of the draft that plan cites (laws 1 and 2 are the
 // rule itself, in `pnpm lint`). Laws 3 to 7 run in process through oxlint's RuleTester on generated
-// files, seed 119120; law 8 runs the real oxlint over Effect 4.1.2's own source; law 9 lints planted
+// files, seed 119120; law 8 runs the real oxlint over Effect 4.1.3's own source; law 9 lints planted
 // files at their real paths with the repo's own `.oxlintrc.json`.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -404,7 +404,7 @@ type Report = {
   readonly number_of_files: number;
 };
 
-describe("law 8: on Effect 4.1.2's own source, with since required", () => {
+describe("law 8: on Effect 4.1.3's own source, with since required", () => {
   const scratch = mkdtempSync(join(tmpdir(), "jsdocs-"));
   afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -436,7 +436,7 @@ describe("law 8: on Effect 4.1.2's own source, with since required", () => {
       fired.set(d.filename, (fired.get(d.filename) ?? 0) + (d.code === "fabrika(jsdocs)" ? 1 : 0));
     }
 
-    expect(report.number_of_files).toBe(432);
+    expect(report.number_of_files).toBe(439);
     expect(Object.fromEntries(fired)).toEqual({
       "StandardSchema.ts": 6,
       "encoding/Ini.ts": 1,
@@ -474,7 +474,7 @@ describe("law 9: the real config turns the rule on for every next/packages folde
     `${SRC}/ci/Planted.ts`,
     `${SRC}/codehost/Planted.ts`,
     // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
-    `${SRC}/jobs/Planted.ts`,
+    `${SRC}/tasks/Planted.ts`,
     ...warn.map(({ folder }) => `${folder}/Planted.ts`),
     "next/packages/planted/src/Planted.ts",
   ];

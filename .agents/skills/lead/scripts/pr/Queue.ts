@@ -5,7 +5,7 @@
 //
 //   add      the pull request is open, ready and into main -> leak grep on its net change, on each
 //            of its commits and on its title and description, each failing closed -> `ci-required`
-//            is green on its head (read once; a lane may wait for it to end, within a limit) -> one
+//            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
 //            description names (0015) and start one box cleanup sweep (0101); else say how it stands
@@ -31,8 +31,8 @@ export class NotQueued extends Schema.TaggedError<NotQueued>()("NotQueued", { re
  */
 export type Wait = { readonly minutes: number; readonly every: number };
 
-/** The wait a lane gives the required check: the hour catchup.sh gave every check, read once a minute. */
-export const LANE_WAIT: Wait = { minutes: 60, every: 60 };
+/** The wait a quest gives the required check: the hour catchup.sh gave every check, read once a minute. */
+export const QUEST_WAIT: Wait = { minutes: 60, every: 60 };
 
 export type Ask = {
   /** A checkout of the repo, to fetch the head into and read its change from. */

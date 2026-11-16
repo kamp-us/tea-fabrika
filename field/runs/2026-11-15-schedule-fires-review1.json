@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-schedule-fires-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1380",
+  "started": "2026-11-15T16:22:49-08:00",
+  "ended": "2026-11-15T16:27:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Review of ad9f242c5, today's CI: merge-ready, no blocking class, two finding rows. `queue: max` is a documented workflow-level concurrency key (GitHub changelog 2026-05-07, the concurrency how-to and the workflow syntax page), allowed with cancel-in-progress false; SC12 refuses every value but max; SC2 and the check.yaml readers are untouched. Rows: branch runs use their own file, so branches without the change still join the group with the default queue; and a branch that drops the block runs outside the one-run cap.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Read-only. Ran alone: .github/ci/workflow-lint/scheduled.test.ts, 85 tests green. Planted by reading: SC12 dropped (both plants turn red), SC12 loosened to any defined value (the single plant turns red), SC2 untouched by the new key. git merge-tree with origin/main: no conflict. loosening.sh: three additive hits, nothing loosened. Read-only gh calls on the run list, jobs and two branches' files. No workflow run started or canceled.",
+  "step": "review"
+}

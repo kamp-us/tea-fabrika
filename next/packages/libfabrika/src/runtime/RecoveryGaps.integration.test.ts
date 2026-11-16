@@ -18,6 +18,7 @@ import {
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { InputId, lineFor } from "../ledger/Log.ts";
 import { A, B, W, X, brain, data, first, from, ids, PIDS, read, storage } from "../processes/Process.test-support.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Event, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
@@ -58,6 +59,7 @@ const write = Cmd.make("write", {
 type Wiring = {
   policy: typeof policy;
   recovery: { sql: Sql; name: string; capacity: number };
+  chunk: typeof mailChunk.default;
   fault: (cut: string) => Effect.Effect<void, LedgerError>;
 };
 
@@ -175,6 +177,7 @@ const world = Effect.fnUntraced(function* () {
       {
         policy,
         recovery: { sql: processSql, name: NAME, capacity: 1024 ** 3 },
+        chunk: mailChunk.default,
         fault: (cut) =>
           Effect.suspend(() => {
             if (cut !== controls.cut) {

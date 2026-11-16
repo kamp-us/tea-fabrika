@@ -29,6 +29,7 @@ import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { StepFault } from "../runtime/StepFault.ts";
 import * as StepFaultNone from "../runtime/StepFaultNone.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
@@ -191,7 +192,7 @@ export const open = Effect.gen(function* () {
     const context = yield* Layer.build(
       ProgramRunner.layer(
         { id: process, name, program: programName, build, owner: person },
-        { recovery: { sql: store, name, capacity: 1024 ** 3 } },
+        { recovery: { sql: store, name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provide(services)),
     );
     const live = Context.get(context, ProgramRunner);

@@ -15,13 +15,13 @@ Run oxlint and oxfmt through `lint.ts` and `format.ts`, not on their own. These 
 
 They began as GritQL rules in the `biome-plugins/` folder of [kamp-us/phoenix](https://github.com/kamp-us/phoenix), the pipeline this repo rebuilds, copied here unchanged. On 2026-10-31 they became TypeScript rules here, so this folder is where they change now. Each one fired on the same lines as its GritQL rule, on the whole tree and on a set of odd spellings; the note above has the numbers. The counts below are from when the GritQL rules were added and are kept as history. A name like `no-secret-env.grit` in them means the rule that is now `no-secret-env.ts`, and a mention of `biome-ignore` means what is now `oxlint-disable-next-line`.
 
-Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` advised from ticket 737 until ticket 909, and blocks since. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
+Five rules that only advised now block wherever their folder is at zero ([0523](../.decisions/0523-advice-rules-block-where-clean.md)): `law-shape`, `no-effect-promise`, `no-raw-try-catch`, `prefer-schema-arbitrary`, and oxlint's own `no-restricted-properties` (a bare `JSON.parse` in `next/`; of that rule only the `JSON.parse` fire can advise, and every other entry, such as the Reflect ban below, blocks at any level). Each is `"error"` in its base scope. The config's last overrides set it to `"warn"` for the folders that still have fires, and `lint.ts` prints a fire there as `advice, this folder is not at zero yet`, without failing. Any other fire fails, a warning included. `service-id` advised from ticket 737 until ticket 909, and blocks since. Oxlint has no level below `warn`, so `lint.ts` runs oxlint once and decides (`advice.ts`). Experiment 125 found `no-effect-promise` and `no-raw-try-catch` wrong far too often to block when they were written (8 of 8 and 21 of 21 fires kept their code); 0523 sets that count aside, and each pull request that makes a folder block reports what it met.
 
 ## Where a rule still advises
 
 A warn line names one folder: a package's `src/<name>/**`, the files right in `src/` as `src/*`, or, outside a `src/`, one folder's own files as `<folder>/*`. So a dirty folder never holds back its clean siblings. `law-shape` and `prefer-schema-arbitrary` lines keep the rule's file kinds (`<folder>/**/*{.test.ts,.test.tsx,Test.ts}`), so a warn line never turns a rule on where its base scope has it off. A warn line goes the moment its folder reaches zero: a whole `pnpm lint` run reads the lines from `oxlint --print-config` and fails on one with no fire left, or one that names a file, and says which line to delete. A run on a path skips that check, since it does not see every fire. A folder that blocks never goes back to a warn line (0523).
 
-`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen (0525): one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live (0456). That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze lane takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
+`no-effect-promise` and `no-raw-try-catch` are `"error"` at the top level, so a new folder blocks from its first file. Today's version is frozen (0525): one override sets the two to `"warn"` for `apps/**`, `programs/**`, `packages/**` and `bin/**`, and a later one takes `packages/fabrika-design/**` back to `"error"`, since the design package stays live (0456). That frozen override is not a dirty-folder line: `advice.ts` names its globs, so the stale check never reads them, and both go when the freeze quest takes those paths out of lint. No warn line names a frozen path, and its 107 fires still print as advice.
 
 Count on 2026-11-13, ticket 930, on `origin/main` at `7ae7cea0f` (the same as `59cb6a311`, a docs-only change), outside today's version:
 
@@ -205,6 +205,8 @@ The other is `no-bare-tell.grit`. A `tell` or `offer` to a program's input is an
 `builtin-plants.ts` holds a plant for each of oxlint's own rules that went on with 0 hits on 2026-11-09 (ticket 438): 124 rules from the eslint, oxc, unicorn, typescript, vitest, react, `import` and `promise` sets. With 0 hits a rule had shown nothing, so the plant is the only proof it works. Four quirks of oxlint 1.90.0 that the plants found: `no-implied-eval` reads `globalThis.setTimeout("...")` but not a bare `setTimeout("...")`; `no-non-null-asserted-nullish-coalescing` leaves a `declare const` alone; `promise/no-multiple-resolved` goes quiet when a second Promise follows in the file; and `require-awaited-expect-poll` and `import/no-commonjs` report one line twice. `react/preserve-manual-memoization` and `react/no-object-type-as-default-prop` stayed off: no plant made the first fire, and the second had 1 hit (`apps/fabrika/src/keys/window.tsx:98`). Two more stayed off after main moved on: `unicorn/prefer-type-error` had 12 hits once every `if` body got braces (it reads only a braced `throw`), and `eslint/no-unused-expressions` had 0 hits on the tree but refuses the bare `helper;` that `one-store-hook.test.ts` plants on purpose.
 
 The same change turned on, as errors, Effect's 35 diagnostics that fired 0 times on the tree (28 suggestions and 7 that were off), plus `globalErrorInEffectCatch` and `globalErrorInEffectFailure` for `next/` files that are not tests, through the plugin's `overrides` in `tsconfig.base.json`. `effect-tsgo diagnostics --file` does not apply an override's `exclude`; `tsc` does, and `pnpm typecheck` is what blocks.
+
+`oxc/no-accumulating-spread` went on on 2026-11-15 (0559), with its 11 hits rewritten, all in five `next/` test files. It is on by an override, the first in `.oxlintrc.json`'s `overrides`, for `next/`, `.agents/`, `oxlint-plugins/` and `.github/ci/` only: today's app keeps its hits. The Effect team has it on too, through oxlint's `perf` set. Its plant in `builtin-plants.ts` has the two `reduce` lines and four loop lines, and `plants.test.ts` plants it by path in each of the four folders and in `packages/`, `programs/` and `apps/`.
 
 ## The new version's exam rules
 
@@ -538,7 +540,7 @@ the build step rather than making every unknown return a finding:
 | File | Lines | Real or false | Why |
 |---|---|---|---|
 | `next/packages/libfabrika/src/app/program.ts` | 411 | real | A Standard Schema validator can create a Promise behind its `unknown` return type. |
-| `next/packages/libfabrika/src/node/dev/dev.ts` | 349, 352, 353, 354, 359, 360, 362, 367 | real | `Reflect.get` erases the proxy's returned Promise thunks to `any`. |
+| `next/packages/libfabrika/src/node/dev/dev.ts` | none left | real, since fixed | `Reflect.get` erased the proxy's returned Promise thunks to `any`. The file has no `Reflect.get` today (counted on 2026-11-15 with the Reflect ban's rule, below). |
 
 `no-ledger-sql` refuses SQL strings naming the ledger's `entries` or `rings` outside
 its three service files in `next/`. Tests, test support files and today's code are left alone. Its
@@ -791,7 +793,7 @@ returns a Layer (owner, 2026-11-13): a syntax rule cannot read a member's type, 
 names would miss.
 
 ```ts
-export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/jobs/Retries") {
+export class Retries extends Context.Service<Retries, Shape>()("@kampus/libfabrika/tasks/Retries") {
   static readonly layer = Layer.succeed(Retries, shape); // fires: move it to RetriesMemory.ts
 }
 ```
@@ -833,7 +835,7 @@ All paths are under `next/packages/libfabrika/src/`. Nothing fired in `next/apps
 `next/programs/` or the other libfabrika folders.
 
 **The folder list.** One block in `.oxlintrc.json`, its `files` the 13 folders at zero:
-`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `jobs`,
+`next/apps/`, `next/programs/`, and libfabrika's `ci`, `codehost`, `coordination`, `tasks`,
 `ledger`, `node`, `packs`, `repositories`, `schedules`, `settings` and `transport`. Its
 `excludeFiles` leaves out tests, shared suites and test support (`*.test.ts`, `*.test.tsx`,
 `*Test.ts`, `*.test-support.ts`): a test may build a stand-in service any way it likes. The top
@@ -876,7 +878,7 @@ Tools looked at first (0040), neither used:
 
 | Tool | Why not |
 |---|---|
-| oxlint's [`no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties) | `lint.ts` decides advice by rule code, and this rule's code only advises, for `JSON.parse`. It also misses `import { squash } from "effect/Cause"` |
+| oxlint's [`no-restricted-properties`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-properties) | When this rule was picked, `lint.ts` decided advice by rule code alone, so a new entry would only have advised where `JSON.parse` does. Since the Reflect ban, only the `JSON.parse` fire advises (`advice.ts`). It also misses `import { squash } from "effect/Cause"` |
 | oxlint's [`no-restricted-imports`](https://oxc.rs/docs/guide/usage/linter/rules/eslint/no-restricted-imports) | It bans a named import, not a member read on a namespace, and every site reads `Cause.squash` |
 
 First-day count, 2026-11-13, on main at `c0aaf4a24`, one oxlint run over `next`, `.agents`,
@@ -1061,6 +1063,11 @@ file with `open` and sets its own pragma line, as `next/apps/fabrika/e2e/stored.
 does; if a line must still write the constructor, it carries
 `// oxlint-disable-next-line fabrika/test-database -- <why>`, and the lead reads it at merge.
 
+Main, merged in on 2026-11-15, had added six more test files that opened SQLite by hand, and the
+rule fired on each. Each moved the same way: the three stores to `make`, the hands journal and the
+span read's planted files to `open`, and `LedgerTurnReads.integration.test.ts`, whose law needs WAL
+as a Durable Object keeps it, to `open` with its own pragma line.
+
 `test-database.test.ts` holds its law, a property through oxlint's `RuleTester` at seed 119120 over
 the import form (named, renamed, namespace, default), the module (`node:sqlite`, `sqlite`, two
 look-alikes), the argument (`":memory:"` in three spellings, a variable, a literal or built path,
@@ -1069,3 +1076,42 @@ plants are named in its header. Two scenarios run oxlint with the repo's own con
 planted `next/` folder, where a hand-opened file is refused in a test, a suite and a test kit and
 passes in product code, and one over the real tree, which is at zero. `integration-test-name` and `runs-from-depth` read the module too,
 so a file that moves to it keeps its integration name and its depth-read count.
+
+## No `Reflect.get`, `Reflect.set` or `Reflect.has`, decision 0554
+
+Oxlint's own `no-restricted-properties` holds the ban, with four entries: `Reflect.get`,
+`Reflect.set`, `Reflect.has`, and `globalThis.Reflect`, which would hide the call from the rule.
+It is on, at zero, for the tooling (`.agents/`, `.github/`, `oxlint-plugins/`) and for every
+`next/` folder with no fire. Three blocks near the end of `.oxlintrc.json` list those folders. A
+folder is listed whole the day its own slice brings it to zero, and none is ever taken off. The
+last slice folds the lists into the base blocks
+([the plan](../docs/plan/quests/reflect-ban-PLAN.md)).
+
+An override replaces a rule's options, so each `next/` block writes out again what the rule held
+there: the `JSON.parse` entry, and `client/`'s two retry entries once that folder joins. In the
+folders where `JSON.parse` still advises, the block says `warn`. `advice.ts` lets only the
+`JSON.parse` fire advise, so a `Reflect` fire there fails `pnpm lint` and CI, though a plain
+`oxlint` run in an editor shows it yellow. Oxlint prints the fire's message as
+`'JSON.parse' is restricted from being used.` and the entry's own text apart as a hint, so the
+check does not lean on our wording.
+
+What oxlint 1.90.0 sees, from a probe and from `REFLECT` in `builtin-plants.ts`:
+
+- It fires on `Reflect.get(x)`, `Reflect["get"](x)`, `Reflect?.get(x)`, `globalThis.Reflect` and
+  a destructure, `const { get } = Reflect`, renamed or not.
+- It does not fire on `Reflect.apply`, `Reflect.ownKeys`, a comment, a string, `typeof Reflect.get`
+  or another object's `get`. 0554 does not decide the rest of `Reflect`.
+- It misses an alias, `const R = Reflect; R.get(x)`. No built-in rule sees that, nothing does it
+  today, and the review reads for it.
+
+First-day count, 2026-11-15, on main at `24f39b2cc`, one oxlint run with only the four entries
+over `next`, `.agents`, `oxlint-plugins` and `.github`: **165 fires in 39 files**, all in
+`next/`, the same as the plan's count at `ca4444777`. The tooling has none. The folders with fires
+wait for their own slices: `tuval/src/browser`, `programs/counter`, `programs/pipeline`, the
+direct files of `apps/fabrika/src` and `apps/fabrika/e2e`, and libfabrika's `client`,
+`cloudflare`, `codehost`, `node`, `runtime`, `settings` and `transport`.
+
+`plants.test.ts` reads the ban blocks from oxlint's own `--print-config` and plants `REFLECT` in
+every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
+blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held
+before.

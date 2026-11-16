@@ -76,7 +76,7 @@ One sitting, traced (today's version, after the build):
    with a ✦.
 2. claude sends `pipeline --ticket 7 | ticket`. It shows whole in t1, after a "✦ claude" label.
    The owner's half-typed line stays where it was.
-3. The lane asks "approve plan v1". The ticket window shows "Your turn" and the Approve button.
+3. The quest asks "approve plan v1". The ticket window shows "Your turn" and the Approve button.
    The plan card has no "✦ claude" label: the plan step's own agent writes it, not claude.
 4. The owner presses Approve, there. The row lands by the owner (cause
    in-3f9a12c0-41). claude cannot press
@@ -309,7 +309,7 @@ agent's link in the tile, and its jobs stay in the table, told.
 - 2.3.3: the presence label's fade has a still twin under reduced motion.
 - 3.2.1 and 3.2.5: no focus move when an agent arrives.
 - Needs a real screen reader run: VoiceOver on the accessible name as claude's state changes, and
-  whether a polite message per line is too chatty during a lane.
+  whether a polite message per line is too chatty during a quest.
 
 ## Where this differs from settled notes
 

@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-memory-restart-recheck",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1316",
+  "started": "2026-11-15T08:36:00-08:00",
+  "ended": "2026-11-15T08:42:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Recheck of the memory restart's fix round at fdda8ce97, in next/: sound for the owner's yes once CI's full run is green. Both blockers are fixed. The only line that sends a signal by pid is local-dev.ts:146, reached only from a lifeCell step whose fold moved the state for that pid; no SIGKILL can follow a folded exit, by reading DevLife.ts:402 and local-dev.ts:222 and by two plants. The OTP rows match OTP's docs and the code. Two finding rows: the life lock can wait behind an outbox flush's HTTP call that has no timeout, and the first start's latch has no bound.",
+  "plants": [
+    {
+      "law": "L12 (node/dev/local-dev.laws.test.ts)",
+      "plant": "local-dev.ts lifeCell send folds without the life lock",
+      "result": "red"
+    },
+    {
+      "law": "L13 (node/dev/dev.laws.integration.test.ts)",
+      "plant": "dev.ts lets a start with any pid past the driver's Pid check",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Ran, Node 26.13.0, TYPESAFE_API_KEY unset, one file at a time: DevLife.laws 6 of 6, local-dev.laws 3 of 3, DesktopBrain 4 of 4, dev.laws.integration 5 of 5, dev-control.laws.integration 3 of 3. Each reaches process.kill only through a spy or a stand-in. Each plant restored with git checkout; git status clean. The L13 plant went red as a 60 s timeout, because the first start's latch (dev.ts:473) has no bound. loosening.sh 43e7f84c8 HEAD: 10 hits; the removed L5 and L6 titles are the two laws changed on purpose, and none of the hits weakens a check. Not run: L10, L11 and local-instance.integration.test.ts (read only), pnpm typecheck.",
+  "step": "review"
+}

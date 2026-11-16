@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { depth } from "@kampus/vitest";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { configDefaults } from "vitest/config";
@@ -9,10 +10,27 @@ import { E2E_SETUP, room } from "./.github/ci/legs.ts";
 import { nextFiles, visualFiles } from "./.github/ci/shard-rows.ts";
 import { e2eLegs, nextMinutes, vitestLegs } from "./.github/ci/workflow-lint.ts";
 import { projects } from "./vitest.config.ts";
-import { assign, inLaneStep, measured, median, Shards, wall, WORKERS, restLoads } from "./vitest.shards.ts";
+import {
+  assign,
+  full,
+  inLaneStep,
+  measured,
+  median,
+  restLoads,
+  rowsAt,
+  Shards,
+  wall,
+  WORKERS,
+} from "./vitest.shards.ts";
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (path: string): number | undefined => (Object.hasOwn(measured, path) ? measured[path] : undefined);
+
+/** `Shards` over `rows` in place of the rows of this run's depth, so a law can name the depth it is about. */
+const shardsOver = (rows: Readonly<Record<string, number>>) =>
+  class extends Shards {
+    override readonly rows = rows;
+  };
 
 /** What a file with no row counts as in `assign` by default: the median of every row. */
 const noRow = median(Object.values(measured));
@@ -32,8 +50,8 @@ it("vector: L5 known next timings are the median of three runs, or the larger of
   // the StartChild row (red here and in the all-rows vector); set chaos.laws to 1.0 (red in the
   // all-rows vector).
   for (const [path, samples] of [
-    ["next/packages/libfabrika/src/node/Watchers.integration.test.ts", [488.0, 685.9, 492.4]],
-    ["next/packages/libfabrika/src/node/StartChild.integration.test.ts", [349.9, 341.0, 598.2]],
+    ["next/packages/libfabrika/src/node/Watchers.integration.test.ts", [217.6]],
+    ["next/packages/libfabrika/src/node/StartChild.integration.test.ts", [262.9]],
     ["next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts", [258.9]],
     ["next/apps/fabrika/src/start-child.laws.integration.test.ts", [175.9, 108.2, 190.2]],
     ["next/apps/fabrika/src/door.integration.test.ts", [177.7, 117.3, 174.9]],
@@ -58,8 +76,8 @@ it("scenario: L6 the five measured heaviest next files occupy the five vitest ma
     "next/packages/libfabrika/src/node/Watchers.integration.test.ts",
     "next/packages/libfabrika/src/node/StartChild.integration.test.ts",
     "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts",
+    "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts",
     "next/apps/fabrika/src/start-child.laws.integration.test.ts",
-    "next/apps/fabrika/src/door.integration.test.ts",
   ];
   const machines = vitestLegs(readFileSync(join(import.meta.dirname, ".github/workflows/check.yaml"), "utf8")).length;
   expect(machines).toBe(heaviest.length);
@@ -203,17 +221,17 @@ const nextSamples = {
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/gateway/Gateway.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
-  "next/packages/libfabrika/src/gateway/JobAccess.test.ts": [0.1, 0.1, 0.1],
+  "next/packages/libfabrika/src/gateway/TaskAccess.test.ts": [0.1, 0.1, 0.1],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/gateway/internal/rateLimit.test.ts": [0.2, 0.1, 0.2],
   // A job 132637025465, B job 132638385663, C job 132639432580.
   "next/packages/libfabrika/src/gateway/internal/waiting.test.ts": [2.9, 2.3, 2.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/jobs/Job.test.ts": [9.2, 7.2, 9.4],
+  "next/packages/libfabrika/src/tasks/Task.test.ts": [9.2, 7.2, 9.4],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/jobs/Jobs.types.test.ts": [0.0, 0.0, 0.0],
+  "next/packages/libfabrika/src/tasks/Tasks.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025443, B job 132638385672, C job 132639432685.
-  "next/packages/libfabrika/src/jobs/internal/job.test.ts": [31.6, 23.7, 37.2],
+  "next/packages/libfabrika/src/tasks/internal/task.test.ts": [31.6, 23.7, 37.2],
   // A job 132637025443, B job 132638385672, C job 132639432685.
   "next/packages/libfabrika/src/ledger/Ledger.types.test.ts": [0.0, 0.0, 0.0],
   // A job 132637025465, B job 132638385663, C job 132639432580.
@@ -490,7 +508,7 @@ const integrationSamples = {
   // A job 132292933270, B job 132315559508, C job 132330501001.
   "next/apps/fabrika/src/instance-wire.integration.test.ts": [145.4, 151.9, 155.0],
   // C job 132330501014.
-  "next/apps/fabrika/src/jobs-wire.integration.test.ts": [3.7],
+  "next/apps/fabrika/src/tasks-wire.integration.test.ts": [3.7],
   // A job 132292933221, B job 132315559497, C job 132330501014.
   "next/apps/fabrika/src/local-instance.integration.test.ts": [2.6, 1.3, 1.5],
   // A job 132292933169, B job 132315559486, C job 132330500983.
@@ -557,10 +575,14 @@ const integrationSamples = {
   "next/packages/libfabrika/src/node/Replies.integration.test.ts": [84.4, 47.5, 70.8],
   // C job 132330501001.
   "next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts": [258.9],
-  // A job 132292933169, B job 132315559467, C job 132330501025.
-  "next/packages/libfabrika/src/node/StartChild.integration.test.ts": [349.9, 341.0, 598.2],
-  // A job 132292933326, B job 132315559508, C job 132330500993.
-  "next/packages/libfabrika/src/node/Watchers.integration.test.ts": [488.0, 685.9, 492.4],
+  // Run 43728081584 attempt 1, job 132854293834: PR 1252 split StartChild in three files.
+  "next/packages/libfabrika/src/node/StartChild.integration.test.ts": [262.9],
+  // Job 132854293834.
+  "next/packages/libfabrika/src/node/StartChildBoundary.integration.test.ts": [215.0],
+  // Job 132854293830.
+  "next/packages/libfabrika/src/node/StartChildExit.integration.test.ts": [95.0],
+  // Run 43728081584 attempt 1, job 132854293826, after PR 1252 cut W3's fill.
+  "next/packages/libfabrika/src/node/Watchers.integration.test.ts": [217.6],
   // A job 132292933192, B job 132315559467, C job 132330500983. Sampled at access/, before PR 1189
   // moved the file to node/access/.
   "next/packages/libfabrika/src/node/access/SessionManager.integration.test.ts": [8.0, 9.6, 14.7],
@@ -587,11 +609,13 @@ const integrationSamples = {
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/packages/libfabrika/src/node/dev/supervision-spans.integration.test.ts": [3.0, 3.2, 4.1],
   // C job 132330501014.
-  "next/packages/libfabrika/src/node/gateway/Jobs.integration.test.ts": [147.5],
+  "next/packages/libfabrika/src/node/gateway/Tasks.integration.test.ts": [147.5],
   // A job 132292933221, B job 132315559486, C job 132330500983.
   "next/packages/libfabrika/src/node/gateway/RateLimit.integration.test.ts": [5.8, 3.0, 6.2],
+  // Run 43728081584 attempt 1, job 132854293834: the file PR 1252 split off JobsLedger.
+  "next/packages/libfabrika/src/node/tasks/TasksDiscovery.integration.test.ts": [30.8],
   // A job 132292933192, B job 132315559534, C job 132330501001.
-  "next/packages/libfabrika/src/node/jobs/JobsLedger.integration.test.ts": [39.2, 35.4, 99.9],
+  "next/packages/libfabrika/src/node/tasks/TasksLedger.integration.test.ts": [39.2, 35.4, 99.9],
   // B job 132315559497, C job 132330501025.
   "next/packages/libfabrika/src/node/launchd/BrainControlLaunchd.laws.integration.test.ts": [30.5, 35.6],
   // C job 132330500983.
@@ -1023,7 +1047,8 @@ describe("assign, for a file with no row", () => {
   it("scenario: Shards spreads two new next/ files with no row over two machines", async () => {
     // Today's CI. clock and compiler have rows of 0.0 s, so both stay on shard 1/2 with the
     // machines tied at 0. The first new file counts the median and goes to shard 1/2, which leaves
-    // shard 2/2 the least for the second.
+    // shard 2/2 the least for the second. The rows are the merge line's, so the sequencer is built
+    // over them: the config's own is over the full-depth rows when the schedule runs this test.
     const paths = [
       "next/apps/fabrika/src/exam/clock.integration.test.ts",
       "next/apps/fabrika/src/exam/compiler.test.ts",
@@ -1038,7 +1063,7 @@ describe("assign, for a file with no row", () => {
       const vitest = await createVitest("test", { root: ROOT, watch: false, shard: `${index}/2` });
 
       try {
-        const Sequencer = vitest.config.sequence.sequencer;
+        const Sequencer = shardsOver(measured);
         const mine = await new Sequencer(vitest).shard(paths.map((path) => ({ moduleId: join(ROOT, path) })) as never);
         kept.push(mine.map((spec) => relative(ROOT, spec.moduleId)));
       } finally {
@@ -1059,6 +1084,88 @@ describe("measured", () => {
   });
 });
 
+describe("full, the rows at full depth", () => {
+  const WATCH = "next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts";
+  const GIT = "next/packages/libfabrika/src/node/repositories/RepositoriesGit.test.ts";
+
+  it("names only files that are in the repo, so a renamed file cannot quietly keep a row", () => {
+    const keys = Object.keys(full);
+    expect(keys.length).toBeGreaterThan(0);
+    const isFile = (path: string) => statSync(join(ROOT, path), { throwIfNoEntry: false })?.isFile() === true;
+    expect(keys.filter((path) => !isFile(path))).toEqual([]);
+  });
+
+  it("vector: F1 a run at full depth reads a file's full row first, then its merge-line row, and a fast run only the merge-line rows", () => {
+    // The two files of scheduled runs 43723335863 and 43771306886: watch.laws had no row at all, and
+    // RepositoriesGit's row was its 28 s on memory git, while the schedule runs real git beside it.
+    // The visual file has no full row, so its merge-line row stands at both depths.
+    // Plant, run once and restored: `rowsAt` answers `measured` at both depths (red, both files).
+    const visual = "next/apps/fabrika/e2e/resources.laws.visual.test.ts";
+    expect(rowsAt("fast")).toBe(measured);
+    expect([WATCH, GIT, visual].map((path) => measured[path])).toEqual([undefined, 28, 366.6]);
+    expect([WATCH, GIT, visual].map((path) => rowsAt("full")[path])).toEqual([380.2, 167.8, 366.6]);
+
+    for (const [path, seconds] of Object.entries(full)) {
+      expect(rowsAt("full")[path], path).toBe(seconds);
+    }
+  });
+
+  it("scenario: F2 at full depth the schedule's vitest legs balance by full seconds, and each starts its heaviest file first", async () => {
+    // Today's CI, the schedule: the real config, the real next/ files and the count of vitest legs,
+    // check.yaml's, which workflow-lint holds scheduled.yaml's next matrix to (SC7), each leg as
+    // vitest runs it at full depth, `sort` after `shard`. On scheduled
+    // runs 43723335863 (leg 4) and 43771306886 (leg 5) the split by merge-line rows gave one leg
+    // about 2100 s of files at full depth where the others had 1000 to 1500 s, and started
+    // watch.laws, 363 to 395 s and with no row, last: 702 s and 632 s into a step that has about
+    // 1000 s, so the job's limit canceled both legs with no failed test.
+    // Plants, each run once and restored: the sequencer over `measured` (red: leg 1's order by
+    // full seconds); `rowsAt` answers `measured` at both depths (red: watch.laws is file 45 of leg
+    // 5, as on the canceled run, and F1 is red too).
+    const legs = vitestLegs(readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8")).length;
+    expect(legs).toBeGreaterThan(0);
+    const rows = rowsAt("full");
+    const Sequencer = shardsOver(rows);
+    const loads: number[] = [];
+    const seen: string[] = [];
+
+    for (let index = 1; index <= legs; index++) {
+      const vitest = await createVitest("test", {
+        root: ROOT,
+        watch: false,
+        project: ["next", "next-integration"],
+        shard: `${index}/${legs}`,
+      });
+
+      try {
+        const specs = (await vitest.globTestSpecifications()).filter((spec) =>
+          relative(ROOT, spec.moduleId).startsWith("next/"),
+        );
+        const sequencer = new Sequencer(vitest);
+        const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
+        const seconds = order.map((path) => rows[path] ?? noRow);
+        expect(seconds, `leg ${index}`).toEqual(seconds.toSorted((a, b) => b - a));
+        loads.push(seconds.reduce((sum, each) => sum + each, 0));
+
+        if (order.includes(WATCH)) {
+          // A file this heavy is among the first its leg's workers start, never the last.
+          expect(order.indexOf(WATCH), `watch.laws on leg ${index}`).toBeLessThan(WORKERS);
+        }
+
+        seen.push(...order);
+      } finally {
+        await vitest.close();
+      }
+    }
+
+    expect(seen.toSorted()).toEqual((await nextFiles(ROOT)).toSorted());
+    const mean = loads.reduce((sum, load) => sum + load, 0) / legs;
+    const heaviest = Math.max(...seen.map((path) => rows[path] ?? noRow));
+    expect(Math.max(...loads), `loads ${loads.map((load) => load.toFixed(0)).join(", ")}`).toBeLessThanOrEqual(
+      mean + heaviest,
+    );
+  });
+});
+
 describe("Shards", () => {
   it("pinned: is vitest's own sequencer with its sharding and its sort changed", () => {
     // The two methods vitest documents for a custom sequencer; L18 and L19 say what `sort` does.
@@ -1073,7 +1180,9 @@ describe("Shards", () => {
     // vitest's own order, by file size with no cache in CI, started StartChild 266 s and 284 s in on
     // leg 3, which then took 748 s and 816 s while leg 4 took 415 s and 468 s.
     // Plants, each run once and restored: `sort` returns `super.sort(files)` (red: leg 1 starts
-    // smaller files before Watchers); `sort` orders lightest first (red).
+    // smaller files before Watchers); `sort` orders lightest first (red). The seconds are the rows of
+    // this run's depth, the ones the config's sequencer orders by.
+    const rows = rowsAt(depth);
     const legs = vitestLegs(readFileSync(join(ROOT, ".github/workflows/check.yaml"), "utf8")).length;
     const seen: string[] = [];
 
@@ -1092,7 +1201,7 @@ describe("Shards", () => {
         );
         const sequencer = new vitest.config.sequence.sequencer(vitest);
         const order = (await sequencer.sort(await sequencer.shard(specs))).map((spec) => relative(ROOT, spec.moduleId));
-        const seconds = order.map((path) => rowOf(path) ?? noRow);
+        const seconds = order.map((path) => rows[path] ?? noRow);
         expect(seconds, `leg ${index}`).toEqual(seconds.toSorted((a, b) => b - a));
         seen.push(...order);
       } finally {
@@ -1113,7 +1222,7 @@ describe("Shards", () => {
     // first); key the pool by project too (red: admission, in project c, comes after runner); drop
     // the one-at-a-time pool (red: StartChild comes before admission); drop the failed-first term
     // (red: the failed light file comes after the heavier one); break equal seconds by path (red:
-    // clock comes before compiler).
+    // clock comes before compiler). The rows are the merge line's, so the sequencer is built over them.
     const project = (name: string, groupOrder: number, maxWorkers: number) => ({
       name,
       config: { sequence: { groupOrder }, isolate: true, maxWorkers },
@@ -1133,7 +1242,7 @@ describe("Shards", () => {
       [watchers, admission, startChild, runner, clock, compiler, failedLight].map((s) =>
         rowOf(relative(ROOT, s.moduleId)),
       ),
-    ).toEqual([492.4, 258.9, 349.9, 123.8, 0, 0, 3.2]);
+    ).toEqual([217.6, 258.9, 262.9, 123.8, 0, 0, 3.2]);
     const vitest = await createVitest("test", { root: ROOT, watch: false });
 
     try {
@@ -1141,7 +1250,7 @@ describe("Shards", () => {
       vitest.cache.getTestSpecificationResult = (s) =>
         s === (failedLight as never) ? { failed: true, duration: 3200 } : lastRun(s);
       const ties = await new BaseSequencer(vitest).sort([clock, compiler] as never);
-      const order = await new vitest.config.sequence.sequencer(vitest).sort([
+      const order = await new (shardsOver(measured))(vitest).sort([
         clock,
         watchers,
         startChild,
@@ -1250,12 +1359,16 @@ it("L9: wall equals the largest file or the shared worker load", () => {
 it("vector: L12 stale non-lane rows hold the three T554 run medians", () => {
   // Runs 42803733957, 42807559589, 42801440878. Gap >20 s; a file with no row counts the median row.
   // The last four rows (box, boxrm, loosening, program-package-layout) come from PR 757's
-  // check run 42874119130, attempts 5 to 14, a median of 10.
+  // check run 42874119130, attempts 5 to 14, a median of 10. PR 1252 split boxrm and plancheck: the
+  // boxrm and plancheck.draft rows are one reading each, from run 43728081584 attempt 1 (tooling legs).
   // Plant: restore plancheck's older median. Lane rows await the PR's own run.
   // catchup.test.ts had a row here until catchup.sh was retired for GitHub's merge queue (0162).
   const expected = {
     ".agents/skills/lead/scripts/box.test.ts": 348.7,
-    ".agents/skills/lead/scripts/boxrm.test.ts": 295.0,
+    ".agents/skills/lead/scripts/boxrm.test.ts": 170.2,
+    ".agents/skills/lead/scripts/boxrm.storage.test.ts": 250.2,
+    ".agents/skills/lead/scripts/boxrm.guards.test.ts": 206.6,
+    ".agents/skills/plan/scripts/plancheck.draft.test.ts": 193.3,
     ".agents/skills/lead/scripts/loosening.test.ts": 234.6,
     "oxlint-plugins/program-package-layout.test.ts": 80.3,
     "packages/fabrika/src/host/fence.laws.test.ts": 117.1,
@@ -1398,42 +1511,47 @@ describe("the end-to-end legs", () => {
   });
 });
 
-it("scenario: L20 a change to the shard table alone selects the tests that import vitest.shards.ts, not every test", async () => {
-  // Today's CI. vitest.config.ts imports vitest.shards.ts, and Vitest selects every test when a
-  // file its config imports changes. The table is data read from disk, vitest.shards.json, and the
-  // config makes it that module's watched file, so a row edit selects the tests that import it and
-  // no other. The real config, the real files: the law is about this repo's graph. Plants, each run
-  // once and restored: vitest.shards.ts imports the JSON (red: every test); the config's
-  // `shardTable` adds no watched file (red: no test).
-  const vitest = await createVitest("test", {
-    root: ROOT,
-    watch: false,
-    related: [join(ROOT, "vitest.shards.json")],
-    project: ["tooling", "next"],
-  });
+it.each(["vitest.shards.json", "vitest.shards.full.json"])(
+  "scenario: L20 a change to the shard table %s alone selects the tests that import vitest.shards.ts, not every test",
+  async (table) => {
+    // Today's CI. vitest.config.ts imports vitest.shards.ts, and Vitest selects every test when a
+    // file its config imports changes. The table is data read from disk, vitest.shards.json, and the
+    // config makes it that module's watched file, so a row edit selects the tests that import it and
+    // no other. The real config, the real files: the law is about this repo's graph. Plants, each run
+    // once and restored: vitest.shards.ts imports the JSON (red: every test); the config's
+    // `shardTable` adds no watched file (red: no test). The full-depth table is held the same way.
+    const vitest = await createVitest("test", {
+      root: ROOT,
+      watch: false,
+      related: [join(ROOT, table)],
+      project: ["tooling", "next"],
+    });
 
-  try {
-    const picked = (await vitest.specifications.getRelevantTestSpecifications()).map((s) => relative(ROOT, s.moduleId));
-    const all = (await vitest.globTestSpecifications()).map((s) => relative(ROOT, s.moduleId));
-    // Files that import vitest.shards.ts, directly or through legs.ts, shard-rows.ts or shard-times.ts.
-    expect(picked).toEqual(
-      expect.arrayContaining([
-        "vitest.shards.test.ts",
-        ".github/ci/legs.test.ts",
-        ".github/ci/shard-rows.test.ts",
-        ".github/ci/shard-times.test.ts",
-        ".github/ci/related.test.ts",
-      ]),
-    );
+    try {
+      const picked = (await vitest.specifications.getRelevantTestSpecifications()).map((s) =>
+        relative(ROOT, s.moduleId),
+      );
+      const all = (await vitest.globTestSpecifications()).map((s) => relative(ROOT, s.moduleId));
+      // Files that import vitest.shards.ts, directly or through legs.ts, shard-rows.ts or shard-times.ts.
+      expect(picked).toEqual(
+        expect.arrayContaining([
+          "vitest.shards.test.ts",
+          ".github/ci/legs.test.ts",
+          ".github/ci/shard-rows.test.ts",
+          ".github/ci/shard-times.test.ts",
+          ".github/ci/related.test.ts",
+        ]),
+      );
 
-    // Files that import nothing of it.
-    for (const path of ["vitest.changed.test.ts", "scripts/testhome.test.ts", "oxlint-plugins/no-of.test.ts"]) {
-      expect(picked).not.toContain(path);
+      // Files that import nothing of it.
+      for (const path of ["vitest.changed.test.ts", "scripts/testhome.test.ts", "oxlint-plugins/no-of.test.ts"]) {
+        expect(picked).not.toContain(path);
+      }
+
+      expect(picked.filter((path) => path.startsWith("next/"))).toEqual([]);
+      expect(picked.length).toBeLessThan(all.length);
+    } finally {
+      await vitest.close();
     }
-
-    expect(picked.filter((path) => path.startsWith("next/"))).toEqual([]);
-    expect(picked.length).toBeLessThan(all.length);
-  } finally {
-    await vitest.close();
-  }
-});
+  },
+);

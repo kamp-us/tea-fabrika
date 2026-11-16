@@ -38,7 +38,7 @@ const onBase = checkRun("tests_on_base", {input: TestFiles, verdict: Results});
     test fails before the fix exists.
 - **Its answers.** Most runs end `done`. A surprise becomes a box on the
   ticket's timeline with three choices, and the owner picks
-  ([the ticket is the lane's one view](./the-ticket-is-the-lane-view.md)):
+  ([the ticket is the quest's one view](./the-ticket-is-the-lane-view.md)):
 
   ```ts
   done                    // every test fails or passes as the plan says; build starts
@@ -141,7 +141,7 @@ us.
   planner picks the tool; no TLA+ for code that exists; a Property about
   machines working together is a property test on the running host, as in
   experiment 116.
-- **Where red and green live:** in the criteria book, or only in the lane.
+- **Where red and green live:** in the criteria book, or only in the quest.
   The mutation step's walk reads them and settles it.
 - **A fixture outside `includes`.** Whether some tests need one the default
   does not cover.

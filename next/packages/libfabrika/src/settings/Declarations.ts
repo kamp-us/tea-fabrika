@@ -1,6 +1,7 @@
 /**
  * The settings fabrika itself declares: `instance.port`, `fabrika-version`, `gateway.limit`, `gateway.window`, the
- * four local brain settings under `desktop.brain-*`, `desktop.link-ttl`, and `all`, the group of the nine.
+ * six local brain settings under `desktop.brain-*`, `desktop.link-ttl`, the two mail settings `mail.unread` and
+ * `mail.chunk`, `hands.target`, and `all`, the group of the fourteen.
  *
  * **Details**
  *
@@ -8,7 +9,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { ByteSize, Schema } from "effect";
 import * as Setting from "./Setting.ts";
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).annotate({
@@ -171,13 +172,150 @@ export const brainStopTimeout = Setting.make("desktop.brain-stop-timeout", {
   since: "0.0.0",
 });
 
+// A limit of zero would replace every runtime at its first sample, so the floor is one byte.
+const Memory = Schema.ByteSize.check(Schema.makeFilter((size: ByteSize.ByteSize) => !ByteSize.isZero(size))).annotate({
+  title: "a memory limit",
+  description: 'A memory limit is a byte size above zero, written with its unit, as "500 MB".',
+});
+
+/**
+ * Setting for the memory the local runtime may hold before the brain replaces it.
+ *
+ * **Details**
+ *
+ * The value is a byte size above zero, written with its unit, as `"500 MB"` or `"1 GiB"`. The
+ * default is 500 MB. Once a sample of the runtime's memory reaches it, the brain ends the runtime
+ * with SIGTERM, then SIGKILL after `desktop.brain-grace`, and Alchemy starts a new one on the same
+ * ports.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainMemory = Setting.make("desktop.brain-memory", {
+  schema: Memory,
+  format: "text",
+  default: ByteSize.bytes(500_000_000),
+  doc: 'The memory the local runtime may hold before the brain replaces it, a byte size such as "500 MB".',
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the milliseconds the brain waits after a SIGTERM to the local runtime before it
+ * sends SIGKILL.
+ *
+ * **Details**
+ *
+ * The default is 5000, an OTP worker's shutdown default. Control calls wait through a replace, so
+ * this is also about how long one replace keeps the control connection closed.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const brainGrace = Setting.make("desktop.brain-grace", {
+  schema: Positive,
+  default: 5000,
+  doc: "The time in milliseconds the local runtime gets to end after a SIGTERM, before it is killed.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+const KIB = 1_024;
+const MIB = 1_024 * KIB;
+
+const Unread = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16_384 })).annotate({
+  title: "a letter count",
+  description: "A letter count is a whole number from 1 to 16384.",
+});
+
+const ChunkBytes = Schema.ByteSize.check(
+  Schema.isBetweenBigInt({ minimum: BigInt(KIB), maximum: BigInt(MIB) }),
+).annotate({
+  title: "a chunk size",
+  description: "A chunk size is a byte size from 1 KiB to 1 MiB, as 64 KiB.",
+});
+
+/**
+ * Setting for the most unread letters one inbox holds.
+ *
+ * **Details**
+ *
+ * A send to an inbox at its cap answers `full`, and nothing is saved. The value is a whole number
+ * from 1 to 16,384, the largest count experiment 295 measured, and the default is 256, which
+ * experiment 295 picked: 256 letters of the default chunk size are 16 MiB, what one catch-up may
+ * hold at once. It is set in the repo's file only.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const mailUnread = Setting.make("mail.unread", {
+  schema: Unread,
+  default: 256,
+  doc: "The most unread letters one inbox holds. A send past it answers full, and nothing is saved.",
+  scope: ["repo"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+/**
+ * Setting for the most bytes in one letter of a chunked send.
+ *
+ * **Details**
+ *
+ * The value is a byte size from 1 KiB to 1 MiB, written as text, as `64 KiB`. 1 MiB is about half
+ * the ledger's row cap, and 1 KiB leaves room for a chunk's own fields. The default is 64 KiB,
+ * which experiment 295 picked. It is set in the repo's file only.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const mailChunk = Setting.make("mail.chunk", {
+  schema: ChunkBytes,
+  format: "text",
+  default: ByteSize.bytes(64 * KIB),
+  doc: "The most bytes in one letter of a chunked send.",
+  scope: ["repo"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
+// The u flag lets Effect write the pattern into the generated JSON Schema.
+const Fingerprint = Schema.String.check(Schema.isPattern(/^SHA256:[A-Za-z0-9+/]{43}$/u)).annotate({
+  title: "a key fingerprint",
+  description: "A key fingerprint is SHA256: and 43 base64 characters, as ssh-keygen -l prints it.",
+});
+
+/**
+ * Setting for the hands key a program's hands command targets: the fingerprint of the hands that
+ * run its tasks.
+ *
+ * **Details**
+ *
+ * The default is none: a program's hands command is then refused with `no_hands`, and no task is
+ * made. TOML has no null, so a person sets it by writing the key and unsets it by leaving it out.
+ *
+ * @stability unstable
+ * @category settings
+ */
+export const handsTarget = Setting.make("hands.target", {
+  schema: Schema.NullOr(Fingerprint),
+  default: null,
+  doc: "The fingerprint of the hands key that runs a program's hands commands. Unset, they are refused.",
+  scope: ["person"],
+  reload: "restart",
+  since: "0.0.0",
+});
+
 /**
  * Group of every setting fabrika declares, ready to load, validate and print.
  *
  * **Details**
  *
- * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the four local brain settings
- * (`brainThrottle`, `brainPoll`, `brainStartTimeout` and `brainStopTimeout`) and `desktopLinkTtl`.
+ * Holds `port`, `version`, `gatewayLimit`, `gatewayWindow`, the six local brain settings
+ * (`brainThrottle`, `brainPoll`, `brainStartTimeout`, `brainStopTimeout`, `brainMemory` and
+ * `brainGrace`), `desktopLinkTtl`, the two mail settings, `mailUnread` and `mailChunk`, and `handsTarget`.
  * Making the group checked their paths, environment names and defaults together.
  *
  * @stability unstable
@@ -192,5 +330,10 @@ export const all = Setting.group({
   brainPoll,
   brainStartTimeout,
   brainStopTimeout,
+  brainMemory,
+  brainGrace,
   desktopLinkTtl,
+  mailUnread,
+  mailChunk,
+  handsTarget,
 });

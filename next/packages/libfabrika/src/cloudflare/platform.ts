@@ -175,6 +175,9 @@ export class ProjectClient extends Context.Service<
       mail: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project mail RPC enters Effect
         Effect.tryPromise({ try: () => stub.mail(...args), catch: unreachable }),
+      hands: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project hands RPC enters Effect
+        Effect.tryPromise({ try: () => stub.hands(...args), catch: unreachable }),
       inbox: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project inbox RPC enters Effect
         Effect.tryPromise({ try: () => stub.inbox(...args), catch: unreachable }),
@@ -217,6 +220,9 @@ export class ProjectClient extends Context.Service<
       processIsLive: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project processIsLive RPC enters Effect
         Effect.tryPromise({ try: () => stub.processIsLive(...args), catch: unreachable }),
+      processAck: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project processAck RPC enters Effect
+        Effect.tryPromise({ try: () => stub.processAck(...args), catch: unreachable }),
       processMonitor: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project processMonitor RPC enters Effect
         Effect.tryPromise({ try: () => stub.processMonitor(...args), catch: unreachable }),
@@ -232,6 +238,15 @@ export class ProjectClient extends Context.Service<
       processChild: (...args) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Project processChild RPC enters Effect
         Effect.tryPromise({ try: () => stub.processChild(...args), catch: unreachable }),
+      processStop: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project processStop RPC enters Effect
+        Effect.tryPromise({ try: () => stub.processStop(...args), catch: unreachable }),
+      programMonitor: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project programMonitor RPC enters Effect
+        Effect.tryPromise({ try: () => stub.programMonitor(...args), catch: unreachable }),
+      programDemonitor: (...args) =>
+        // oxlint-disable-next-line fabrika/no-promises -- edge: Project programDemonitor RPC enters Effect
+        Effect.tryPromise({ try: () => stub.programDemonitor(...args), catch: unreachable }),
     };
   }
 }

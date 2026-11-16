@@ -10,8 +10,10 @@
 import { applyCell } from "@demlik/tea";
 import { Equal, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
+import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
 import { ProcessId } from "../ProcessId.ts";
+import { Rev } from "../Rev.ts";
 import { ExitReason, sameReason } from "./ExitReason.ts";
 import {
   Code,
@@ -159,7 +161,7 @@ export const NoProc = Schema.TaggedStruct("noproc", {});
  *
  * It carries the watch's `ref`, the process, the recipient it is for, and the reason: the
  * process's exit reason, unchanged, or `noproc` when the process was not live when the watch was
- * made.
+ * made. A watch a program made by name also carries that `name`, as OTP's `{RegName, Node}`.
  *
  * **Gotchas**
  *
@@ -172,6 +174,7 @@ export const NoProc = Schema.TaggedStruct("noproc", {});
 export const Down = Schema.TaggedStruct("DOWN", {
   ref: Text,
   process: ProcessId,
+  name: Schema.optionalKey(ProcessName),
   reason: Schema.Union([ExitReason, NoProc]),
   to: Recipient,
 });
@@ -338,18 +341,18 @@ export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessErr
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-/** A live watch as queries return it; `canceled` is always false and never stored. */
-type Watch = typeof ProcessEvent.cases.monitored.Type & {
+/** A watch as queries return it, with `canceled` read from its state; it is never stored. */
+type Watch = Omit<typeof ProcessEvent.cases.monitored.Type, "member"> & {
   readonly canceled: boolean;
   readonly round: number;
 };
 
 type Held = Model["watches"] extends ReadonlyMap<string, infer W> ? W : never;
 
-const shown = (watch: Held): Watch => ({
-  ...ProcessEvent.cases.monitored.make({ ref: watch.ref, process: watch.process, to: watch.to }),
-  canceled: false,
-  round: watch.round,
+const shown = ({ _tag, round, ...watch }: Held): Watch => ({
+  ...ProcessEvent.cases.monitored.make(watch),
+  canceled: _tag === "canceled",
+  round,
 });
 
 /**
@@ -387,6 +390,46 @@ const isText = Schema.is(Text);
  * @category getters
  */
 export const clientInbox = (client: string): string => `${CLIENTS}${client}/inbox`;
+
+/**
+ * Returns the stream where the brain keeps how far a name's reader has read its inbox,
+ * `processes/<name>/acked`. Its prefix makes it brain-only, so no program write and no mail
+ * forges an ack.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const acked = (name: string): string => `${eventStream(name)}/acked`;
+
+/**
+ * Schema for one ack: the reader's live process, and the inbox pos its saved checkpoint reached.
+ * An inbox's unread letters are its newest pos minus the newest ack's.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Acked = Schema.TaggedStruct("acked", { process: ProcessId, pos: Rev });
+
+const decodeAcked = Schema.decodeUnknownOption(Acked);
+
+/**
+ * Returns the newest pos the brain acked for `name`, or 0 before any ack.
+ *
+ * **Details**
+ *
+ * It reads only the acked stream's newest entry, by an index, so it costs the same however many
+ * acks the stream holds. Only a line `by` wrote counts.
+ *
+ * @stability unstable
+ * @category getters
+ */
+export const ackedPos = (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev => {
+  const stream = acked(name);
+  const newest = [...turn.read(stream, Math.max(0, turn.head(stream) - 1))].at(-1);
+  return newest === undefined || newest.by !== by
+    ? 0
+    : Option.match(decodeAcked(valueFor(newest)), { onNone: () => 0, onSome: (ack) => ack.pos });
+};
 
 const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
 
@@ -678,8 +721,12 @@ export class ProcessTable {
 
   /** The caller's own live watch under `ref`, if any. Another recipient's ref is never touched. */
   demonitor(ref: string, to: typeof Recipient.Type): Option.Option<Watch> {
-    const watch = this.#model.watches.get(watchKey(to, ref));
-    return watch?._tag === "live" ? Option.some(shown(watch)) : Option.none();
+    return Option.filter(this.watch(ref, to), (watch) => !watch.canceled);
+  }
+
+  /** The watch saved under (`to`, `ref`), live or canceled, so a retried watch finds its own. */
+  watch(ref: string, to: typeof Recipient.Type): Option.Option<Watch> {
+    return Option.map(Option.fromUndefinedOr(this.#model.watches.get(watchKey(to, ref))), shown);
   }
 
   inbound(process: string): ReadonlyArray<Watch> {
@@ -691,6 +738,20 @@ export class ProcessTable {
   outbound(process: string): ReadonlyArray<Watch> {
     return [...this.#model.watches.values()]
       .filter(({ _tag, to }) => _tag === "live" && to._tag === "process" && to.process === process)
+      .map(shown);
+  }
+
+  /**
+   * The live watches a client session holds: those whose recipient is a client with `session` and
+   * whose process still runs. A watch whose process exited already fired its DOWN, and in OTP a
+   * monitor that fired is gone, so the session's leave has nothing left to end there.
+   */
+  held(session: string): ReadonlyArray<Watch> {
+    return [...this.#model.watches.values()]
+      .filter(
+        ({ _tag, to, process }) =>
+          _tag === "live" && to._tag === "client" && to.session === session && this.isLive(process),
+      )
       .map(shown);
   }
 

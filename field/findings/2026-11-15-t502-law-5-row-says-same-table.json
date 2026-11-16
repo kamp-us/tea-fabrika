@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-t502-law-5-row-says-same-table",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "docs/plan/ticket-502-alchemy-port.md",
+    "line": 373
+  },
+  "says": "In next/, ticket 502's law 5 row still said a saved home opens with the same process table, while the law now allows the rows a newer build adds to its boot, named in `booted`. Fixed in the same pull request: the row now says each saved process keeps its saved id and the added rows are exactly the names in `booted`.",
+  "proof": "At the reviewed head, ticket-502-alchemy-port.md:373 read 'with the same entries, process table and waits'; port-home.laws.integration.test.ts checks the saved rows exactly and the other rows against `booted(saved.founding)`.",
+  "cost": "The next reader of the plan thinks an extra boot row breaks law 5, and the law and the plan disagree.",
+  "head": "c360986057227efb2000154a48c3defb90596fb6",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1313"
+}

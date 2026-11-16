@@ -184,6 +184,15 @@ export const EventPolicy = Schema.Struct({ schema: Schemas, personOnly: Schema.B
  */
 export type EventPolicy = typeof EventPolicy.Type;
 
+/** A program that may monitor gets a `DOWN` when a watched process ends, so it declares the port
+ *  that message arrives on: the load refuses one that does not, before any `DOWN` can be dropped. */
+const downDeclared = Schema.makeFilter(
+  (program: { readonly machine: Steps; readonly inputs: Readonly<Record<string, unknown>> }) =>
+    !(program.machine.cmds ?? []).some((cmd) => cmd.cmdType === "monitor") ||
+    Object.hasOwn(program.inputs, "DOWN") ||
+    "a program whose cmds hold monitor must declare a DOWN input",
+);
+
 const Declaration = Schema.Struct({
   name: Schema.NonEmptyString,
   /** How many times one letter is tried before it is dead. Absent: the selected policy's limit. */
@@ -209,6 +218,9 @@ const Declaration = Schema.Struct({
   writes: Schema.Record(Schema.String, EventPolicy),
   wake: code<Code<[model: unknown], unknown>>("a wake time"),
 });
+
+/** A declaration the runner can load: one that also declares every port its built-in Cmds answer on. */
+const Loadable = Declaration.check(downDeclared);
 
 type Typed = { readonly type: string };
 
@@ -323,6 +335,21 @@ export type Program<
   readonly wake: (model: T["model"]["Type"]) => number | null;
 };
 
+/**
+ * One of a program's commands, as a row of its default keys (0267's `commands`, 0278): its name,
+ * which carries its program's name (`tezgah.split_right`), its keys, its shell word and its
+ * palette label. A window is handed a program's rows as a value and loads them into its key table.
+ *
+ * @stability unstable
+ * @category models
+ */
+export type Binding = {
+  readonly does: string;
+  readonly keys: ReadonlyArray<string>;
+  readonly word: string;
+  readonly label: string;
+};
+
 const Authoring = Schema.Struct({
   name: Declaration.fields.name,
   maxDeliveries: Declaration.fields.maxDeliveries,
@@ -350,6 +377,7 @@ const Authoring = Schema.Struct({
 });
 
 const decodeDeclaration = Schema.decodeUnknownResult(Declaration);
+const decodeLoadable = Schema.decodeUnknownResult(Loadable);
 const decodeAuthoring = Schema.decodeUnknownResult(Authoring);
 
 const construct = (raw: unknown) =>
@@ -640,7 +668,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
 
 /**
  * Builds a program's pure stepper from its declaration, or fails with the schema error when the
- * declaration does not pass its check.
+ * declaration does not pass its check, or when its Cmds hold `monitor` and its inputs no `DOWN`.
  *
  * **Details**
  *
@@ -659,7 +687,7 @@ const settled = (defs: ReadonlyArray<AnyCmdDef>, msg: unknown): Option.Option<bo
  * @category constructors
  */
 export const stepper = (declared: unknown): Result.Result<Stepper, Schema.SchemaError> => {
-  const loaded = decodeDeclaration(declared);
+  const loaded = decodeLoadable(declared);
 
   if (Result.isFailure(loaded)) {
     return Result.fail(loaded.failure);

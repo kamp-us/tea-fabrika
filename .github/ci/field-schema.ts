@@ -26,13 +26,17 @@ const Day = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/));
 const Text = Schema.NullOr(Schema.String);
 const Count = Schema.NullOr(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
 
+// A note lists its quests (0546). A row written before the rename lists them as `lanes`, and a row
+// is never edited, so a note holds exactly one of the two keys, checked in `checkRow`.
+const Quests = Schema.Array(Schema.Unknown);
+const questKeys = ["quests", "lanes"] as const;
+
 const Note = Schema.Struct({
   id: Schema.String,
   date: Day,
   stage: Schema.String,
   kind: Schema.String,
   what: Schema.String,
-  lanes: Schema.Array(Schema.Unknown),
   fix: Text,
   cause: Schema.optionalKey(Text),
   person: Schema.optionalKey(Schema.Boolean),
@@ -164,6 +168,17 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     Schema.is(Schema.Struct({ [field]: rule }))(value) ? [] : [error(field, "invalid or missing core field")],
   );
 
+  if (schema === Note) {
+    const keys = questKeys.filter((key) => key in value);
+    const key = keys.length > 1 ? "quests" : (keys[0] ?? "quests");
+
+    if (keys.length > 1) {
+      failures.push(error(key, "a note lists its quests under `quests` or `lanes`, never both"));
+    } else if (!Schema.is(Quests)(value[key])) {
+      failures.push(error(key, "invalid or missing core field"));
+    }
+  }
+
   // The proposed shape said `at`. AGENTS.md keeps `at` for a time, so the place is `location`.
   if (schema === Found && "at" in value) {
     failures.push(error("at", "a finding's place is `location`"));
@@ -212,8 +227,12 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     }
   }
 
-  if (Array.isArray(value["lanes"]) && value["lanes"].some((lane) => typeof lane !== "string")) {
-    findings.push(warning("lanes", "lane member is not text"));
+  for (const key of questKeys) {
+    const quests = value[key];
+
+    if (Array.isArray(quests) && quests.some((quest) => typeof quest !== "string")) {
+      findings.push(warning(key, "quest member is not text"));
+    }
   }
 
   const id = note ? "id" : "run";

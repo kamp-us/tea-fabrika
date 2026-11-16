@@ -74,7 +74,7 @@ export const PLATFORM = "linux/arm64";
 
 /**
  * The container's limits. 4 of the laptop's 12 cores: a person is using it and up to 12 agents
- * run beside it, and lane t411's sample used 67 CPU seconds over 104 (under one core), so 4 is
+ * run beside it, and quest t411's sample used 67 CPU seconds over 104 (under one core), so 4 is
  * room to spare. 4 GB: that run peaked at 1.9 GB, and Docker's own VM here has 8.
  */
 export const LIMITS = { cpus: 4, memory: "4g", pids: 512 } as const;
@@ -84,7 +84,7 @@ export const secondsFor = (base: boolean) => (base ? 900 : 480);
 
 /**
  * How long one Docker call may take before it is stopped. On 2026-11-10 a `docker ps` in gc never
- * returned, and two lanes sat 1 h 50 min with no agent alive. No saved row times a single Docker
+ * returned, and two quests sat 1 h 50 min with no agent alive. No saved row times a single Docker
  * call; the bounds come from whole runs in the boxes folder's mutbox.json files. The shortest,
  * t589-mutation1, did every quick call (version, ps, image inspect, rm) and the container's own
  * sample in 22 s, so `call` is 30 s, past anything a working Docker gave us. The one image build

@@ -251,7 +251,7 @@ describe("T548 the leak check reads each pushed commit on its own, today's tooli
       commit({ "a.md": [`main says ${word}`] });
       push();
       commit({ "a.md": [`main says ${word}`, `pushed before ${leaks[2]}`] });
-      push("fabrikalfa/lane");
+      push("fabrikalfa/quest");
       commit({ "a.md": [`main says ${word}`, `pushed before ${leaks[2]}`, "plain"] });
       expect(read(...pushed)).toMatchObject({ total: 0, commits: 1 });
     });

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-sev-saved-home-review",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1313",
+  "started": "2026-11-15T04:59:00-08:00",
+  "ended": "2026-11-15T05:04:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Sev1 fix review of c36098605, in next/: merge-ready, two finding rows. The law was the wrong side: desk-PLAN.md's 2026-11-14 amendment after S2a's first review says the founder's tezgah boots from the boot list like every other entry, with no condition, so an old home gains its row. Nothing the old whole-table check guarded is lost: a saved name missing, moved to another process id, or run twice, and any extra row, all still fail. The new row's process id is fresh, so there is no saved value to pin, and observe still opens its Process object. Two plants went red: checklist:1 under another id in saved.json (the first check), and counter:2 added to runtime.ts's boot (the second check). start-member passed. The tezgah hash is SHA-256 of its source, as in start-child and checklist-instance. Findings: port-home's new comment says 'the desk program' (0491 retires desk for tezgah), and ticket 502's law 5 row still says 'the same process table'.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Only the next full scheduled run proves the fix. Not run by the reviewer: pnpm typecheck, pnpm lint, and the other integration files the fix row lists.",
+  "step": "review"
+}

@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-quota-refusal-is-counted-as-other",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-fable-5-2",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/telemetry/Sink.ts",
+    "line": 456
+  },
+  "says": "In next/, a quota refusal is tagged on its span as quota, but the span sink's hourly count keeps only reserved, rate_limited or other, so every quota refusal is counted under other and the count cannot say how many refusals were for quota. Smallest fix: add quota to the closed list of counted reasons and keep it in countRefusal, by the decision 0143 asks for.",
+  "proof": "cloudflare/connection.ts:48 tags the span with the answer's reason when it is reserved, rate_limited or quota, and cloudflare/runtime.ts:746-747 treats a quota answer as a counted refusal; telemetry/Sink.ts:456 turns any value that is not reserved or rate_limited into other; telemetry/Trace.ts:240 is the closed list reserved, rate_limited, other; telemetry/QuotaRefusalTest.ts:108 expects refused: other for a quota answer.",
+  "cost": "The reason is known only when the refusal is counted, and the refused call leaves no other row (0143), so how often a program hit its quota is lost for every hour counted this way.",
+  "head": "ccc6670bee6fa1682587c967c3c4a89553c14401",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1092"
+}

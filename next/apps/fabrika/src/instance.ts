@@ -7,7 +7,7 @@ import { AuthProvidersLive } from "alchemy/Auth/Registry";
 import { deploy } from "alchemy/Deploy";
 import * as Interaction from "alchemy/Interaction";
 import { localState } from "alchemy/State/LocalState";
-import { DateTime, Effect, Layer, Path } from "effect";
+import { ByteSize, DateTime, Effect, Layer, Option, Path } from "effect";
 import { stack } from "../alchemy.run.ts";
 import type { Built } from "./build.ts";
 import { Settings, type Options } from "./settings.ts";
@@ -37,7 +37,15 @@ export const startDev = Effect.fn("instance.startDev")(function* (built: Omit<Bu
   });
   const checked = yield* readSettings({ INSTANCE: JSON.stringify(config) });
   return yield* start(
-    { name: config.name, build: config.build, port: checked.values.port, home: options.home },
+    {
+      name: config.name,
+      build: config.build,
+      port: checked.values.port,
+      home: options.home,
+      // A limit past 2^53 bytes is one no process reaches, so the largest safe number stands for it.
+      memory: Option.getOrElse(ByteSize.toNumber(checked.values.brainMemory), () => Number.MAX_SAFE_INTEGER),
+      grace: checked.values.brainGrace,
+    },
     (local, scope) => {
       const engine = Layer.mergeAll(
         Layer.succeed(AlchemyContext, {

@@ -7,13 +7,14 @@ import { Saw } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
-import { Jobs } from "@kampus/libfabrika/jobs/Jobs";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
@@ -286,13 +287,16 @@ const fixture = Effect.fnUntraced(function* (a: Sample) {
         Id.Generator.layer,
         records,
         archive,
-        Layer.succeed(Jobs, {
-          request: () => Effect.die("unexpected job request in legacy gateway law"),
-          take: () => Effect.die("unexpected job take in legacy gateway law"),
-          started: () => Effect.die("unexpected job start in legacy gateway law"),
-          finish: () => Effect.die("unexpected job finish in legacy gateway law"),
-          read: () => Effect.die("unexpected job read in legacy gateway law"),
-          forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+        Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
+        Layer.succeed(Tasks, {
+          request: () => Effect.die("unexpected task request in legacy gateway law"),
+          take: () => Effect.die("unexpected task take in legacy gateway law"),
+          started: () => Effect.die("unexpected task start in legacy gateway law"),
+          finish: () => Effect.die("unexpected task finish in legacy gateway law"),
+          read: () => Effect.die("unexpected task read in legacy gateway law"),
+          forProcess: () => Stream.die("unexpected task lookup in legacy gateway law"),
+          collected: () => Effect.die("unexpected task collect in legacy gateway law"),
+          forTarget: () => Effect.die("unexpected task index read in legacy gateway law"),
         }),
         SpanSink.layer(sql, { object: PROCESS }),
         RateLimiter.layer.pipe(

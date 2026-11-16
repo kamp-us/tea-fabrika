@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-watch-down-port-not-exported",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-fable-5-2",
+  "rule": "doc_drift",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/Monitor.ts",
+    "line": 54
+  },
+  "says": "In next/, the approved watch plan's Monitor.ts exports a `down` input port with the DOWN schema for a program that monitors, and the built file exports none, so each program hand-writes the DOWN Msg shape.",
+  "proof": "docs/plan/quests/watch-PLAN.md line 131 reads `export const down = { schema: Down, description: \"A process this program monitors has ended\" };`. The exports of next/packages/libfabrika/src/runtime/Monitor.ts are MonitorInput (20), Monitored (29), MonitorRefusal (38), monitor (54), DemonitorInput (62) and demonitor (77): no `down`. Law M13's reader writes the shape by hand at next/apps/fabrika/src/worker-monitor.integration.test.ts line 82.",
+  "cost": "The pipe slice and every later program that monitors guesses the DOWN Msg shape; the load check only looks for a DOWN port key, so a wrong shape loads and is found only when a DOWN arrives.",
+  "head": "cca92ec79a91fdb58d4e544982f9cd7342266eed",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1341"
+}

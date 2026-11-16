@@ -1,4 +1,4 @@
-// The plant records a review's brief carries (ticket 850), pure: the lane's state file steps and
+// The plant records a review's brief carries (ticket 850), pure: the quest's state file steps and
 // report texts in, the brief's section out. No files, git or agent.
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -57,18 +57,18 @@ const sjob1 = [
   "| L8 | not a plant table |",
 ].join("\n");
 
-describe("a review's brief carries the lane's plant records, today's tooling", () => {
+describe("a review's brief carries the quest's plant records, today's tooling", () => {
   // Plants run once, all red: take the oldest answer per law; merge every answer's plants for a
   // law; keep only the first law of each answer.
   it("property: each law's record is the plants of the newest tests answer that named it", () => {
     fc.assert(
-      fc.property(steps, (lane) => {
-        const found = Plants.records(lane, none);
-        const named = lane.flatMap((s) => ("plants" in s ? s.plants.map((p) => p.law) : []));
+      fc.property(steps, (quest) => {
+        const found = Plants.records(quest, none);
+        const named = quest.flatMap((s) => ("plants" in s ? s.plants.map((p) => p.law) : []));
         expect(found.map((r) => r.law).toSorted()).toEqual([...new Set(named)].toSorted());
 
         for (const r of found) {
-          const newest = lane.findLast((s) => "plants" in s && s.plants.some((p) => p.law === r.law));
+          const newest = quest.findLast((s) => "plants" in s && s.plants.some((p) => p.law === r.law));
           expect(newest).toBeDefined();
           expect(r.head).toBe(newest?.head);
           expect(r.plants).toEqual("plants" in newest! ? newest.plants.filter((p) => p.law === r.law) : []);
@@ -81,12 +81,12 @@ describe("a review's brief carries the lane's plant records, today's tooling", (
   // Plants run once, both red: mark every record before any build older; ignore the head.
   it("property: a record is older only when it ran before the last build and that build moved the head", () => {
     fc.assert(
-      fc.property(steps, (lane) => {
-        const lastBuild = lane.findLastIndex((s) => s.step === "build" && "outcome" in s && s.outcome === "done");
+      fc.property(steps, (quest) => {
+        const lastBuild = quest.findLastIndex((s) => s.step === "build" && "outcome" in s && s.outcome === "done");
 
-        for (const r of Plants.records(lane, none)) {
-          const at = lane.findLastIndex((s) => "plants" in s && s.plants.some((p) => p.law === r.law));
-          expect(r.older).toBe(at < lastBuild && r.head !== lane[lastBuild]?.head);
+        for (const r of Plants.records(quest, none)) {
+          const at = quest.findLastIndex((s) => "plants" in s && s.plants.some((p) => p.law === r.law));
+          expect(r.older).toBe(at < lastBuild && r.head !== quest[lastBuild]?.head);
         }
       }),
       options,
@@ -106,7 +106,7 @@ describe("a review's brief carries the lane's plant records, today's tooling", (
 
   // Plant run once, red: read the report even when the file is gone (the reader gives null).
   it("scenario: a record carries its report's failure text, and none once the report is gone", () => {
-    const lane = [
+    const quest = [
       {
         step: "tests",
         head: "a".repeat(40),
@@ -121,10 +121,10 @@ describe("a review's brief carries the lane's plant records, today's tooling", (
       },
     ];
     const read = (path: string) => (path.endsWith("tests2.md") ? acpcancel : null);
-    const [l1, l6] = Plants.records(lane, read);
+    const [l1, l6] = Plants.records(quest, read);
     expect(l1?.failures).toEqual(["Failed on the first run: it picked `cancel`"]);
     expect(l6?.failures).toEqual([]);
-    expect(Plants.section(Plants.records(lane, read), null)).toContain(
+    expect(Plants.section(Plants.records(quest, read), null)).toContain(
       "  - the report's failure: Failed on the first run: it picked `cancel`",
     );
   });
@@ -132,8 +132,8 @@ describe("a review's brief carries the lane's plant records, today's tooling", (
   // Plants run once, all red: leave out the head; leave out the older mark; give a section with none.
   it("property: the section names each record's law, short head, plants and failures, and is null with none", () => {
     fc.assert(
-      fc.property(steps, fc.option(sha, { nil: null }), (lane, build) => {
-        const found = Plants.records(lane, none);
+      fc.property(steps, fc.option(sha, { nil: null }), (quest, build) => {
+        const found = Plants.records(quest, none);
         const text = Plants.section(found, build);
 
         if (found.length === 0) {
@@ -142,7 +142,7 @@ describe("a review's brief carries the lane's plant records, today's tooling", (
         }
 
         expect(text).toContain("## Plant records");
-        expect(text).toContain(build === null ? "No build has moved the lane yet." : build.slice(0, 8));
+        expect(text).toContain(build === null ? "No build has moved the quest yet." : build.slice(0, 8));
 
         for (const r of found) {
           const line = `- ${r.law}, at ${r.head.slice(0, 8)}${r.older ? ", older than the last build" : ""}:`;

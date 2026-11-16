@@ -19,7 +19,6 @@ import * as fc from "fast-check";
 import * as ClientManagerLedger from "../access/ClientManagerLedger.ts";
 import { NotGranted, SignRequest, Writer } from "../access/SessionManager.ts";
 import { grantText, revokeText } from "../access/Text.ts";
-import { Jobs } from "../jobs/Jobs.ts";
 import { Doorbell, Ledger, type LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
@@ -31,7 +30,9 @@ import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
 import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { Sent } from "../runtime/Runner.ts";
+import { Tasks } from "../tasks/Tasks.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
@@ -189,13 +190,16 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       SpanSink.layer(saved.sql, { object: processes.counter }),
       RecordManager.memory(4 * 1024 * 1024),
       Archive.memory,
-      Layer.succeed(Jobs, {
-        request: () => Effect.die("unexpected job request in legacy gateway law"),
-        take: () => Effect.die("unexpected job take in legacy gateway law"),
-        started: () => Effect.die("unexpected job start in legacy gateway law"),
-        finish: () => Effect.die("unexpected job finish in legacy gateway law"),
-        read: () => Effect.die("unexpected job read in legacy gateway law"),
-        forProcess: () => Stream.die("unexpected job lookup in legacy gateway law"),
+      Layer.succeed(MailWakeups, { wake: () => Effect.die("unexpected wake in legacy gateway law") }),
+      Layer.succeed(Tasks, {
+        request: () => Effect.die("unexpected task request in legacy gateway law"),
+        take: () => Effect.die("unexpected task take in legacy gateway law"),
+        started: () => Effect.die("unexpected task start in legacy gateway law"),
+        finish: () => Effect.die("unexpected task finish in legacy gateway law"),
+        read: () => Effect.die("unexpected task read in legacy gateway law"),
+        forProcess: () => Stream.die("unexpected task lookup in legacy gateway law"),
+        collected: () => Effect.die("unexpected task collect in legacy gateway law"),
+        forTarget: () => Effect.die("unexpected task index read in legacy gateway law"),
       }),
       ProcessIdGenerator.layer,
       Id.Generator.layer,

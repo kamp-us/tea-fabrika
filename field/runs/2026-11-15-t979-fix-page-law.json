@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t979-fix-page-law",
+  "ticket": "kamp-us/tea-fabrika#979",
+  "pr": "kamp-us/tea-fabrika#1248",
+  "started": "2026-11-15T02:28:00-08:00",
+  "ended": "2026-11-15T02:33:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round, one agent, in next/: the recheck found that the window law compared the wire's page size with Rev.ts's, while the door cuts by ledger/Log.ts's, so a page number of Log.ts's own would have stayed green. The new law compares the two names the door and the window import: `PAGE` from ledger/Log.ts and `PAGE` from transport/Wire.ts. It lives in cloudflare/connection.test.ts, a fast test of the platform the door runs on, which already imports ledger/ and transport/; cloudflare/ is not under rule 11 and has no list rows. The gateway's own tests would fire rule 11's import ban on a ledger/ import. The window law is dropped, since the new law holds the claim the window cares about, so WindowMachine.laws.test.ts is again as it was before this ticket's page size fix.",
+  "plants": [
+    {
+      "law": "cloudflare/connection.test.ts pinned: the page size the door cuts by is the page size the window reads",
+      "plant": "ledger/Log.ts: its own `export const PAGE = 128` in place of the re-export",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Ran: connection.test.ts 10 of 10, WindowMachine.laws.test.ts 51 of 51, pnpm lint, one pnpm typecheck, all green. The list ratchet was run after the commit. Not run: --changed.",
+  "step": "build"
+}

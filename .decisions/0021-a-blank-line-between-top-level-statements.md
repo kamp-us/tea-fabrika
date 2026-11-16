@@ -100,3 +100,7 @@ return total;
   applies one fix per overlapping range a pass. The first sweep took 8 runs; new code rarely needs two.
 - Blank lines between other statements inside a function body are not decided here.
 - Long reasoning: [oxlint and oxfmt](../docs/direction/oxlint-and-oxfmt.md).
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/padding-line-between-statements` with anti-slop's `require-readable-spacing`, only once that rule is on and a check on main shows it flags every line ours does. The places a blank line goes stay as written here until then.

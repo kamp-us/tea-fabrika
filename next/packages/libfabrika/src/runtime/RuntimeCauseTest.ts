@@ -34,6 +34,7 @@ import { Activity, Owner, Recipient, recoverActivity, Start } from "../processes
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Input, ProgramDown } from "./Program.ts";
@@ -580,6 +581,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
         { id: PROCESS, name: NAME, program: "cause", build: "test", owner },
         {
           recovery: { sql, name: NAME, capacity: 1024 ** 3 },
+          chunk: ANY_CHUNK,
           ...(policy === undefined ? {} : { policy }),
         },
       ).pipe(

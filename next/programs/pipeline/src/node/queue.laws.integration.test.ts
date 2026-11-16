@@ -30,6 +30,7 @@ import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import { ProcessStore } from "@kampus/libfabrika/runtime/ProcessStore";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
 import { ProgramRunner } from "@kampus/libfabrika/runtime/Runner";
+import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
@@ -194,7 +195,11 @@ const life = Effect.fnUntraced(function* (
           Layer.provide(RelationsMemory.layer([])),
           Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
         ),
-        ProgramMailLedger.layer({ grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`) } }),
+        // T1041: mail.unread's largest value, so no law here meets a full inbox.
+        ProgramMailLedger.layer({
+          grants: { [NAME]: Array.from({ length: 6 }, (_, i) => `quest:${i + 1}`) },
+          cap: 16_384,
+        }),
         Layer.succeed(MailWakeups, { wake: () => Effect.void }),
       ),
     ),
@@ -206,7 +211,7 @@ const life = Effect.fnUntraced(function* (
 
   const registrations: ReadonlyArray<readonly [string, string]> = [
     [NAME, "pipeline/queue"],
-    ...Array.from({ length: 6 }, (_, i) => [`lane:${i + 1}`, "lane"] as const),
+    ...Array.from({ length: 6 }, (_, i) => [`quest:${i + 1}`, "quest"] as const),
   ];
 
   for (const [name, program] of registrations) {
@@ -262,7 +267,7 @@ const life = Effect.fnUntraced(function* (
     const built = yield* Layer.buildWithScope(
       ProgramRunner.layer(
         { id: pid, name, program: status.state.code.program, build: BUILD, owner },
-        { recovery: { sql: store.sql(`recovery:${pid}`), name, capacity: 1024 ** 3 } },
+        { recovery: { sql: store.sql(`recovery:${pid}`), name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
       ).pipe(Layer.provide(own)),
       scope,
     );
@@ -370,7 +375,7 @@ const open = Effect.fnUntraced(function* (
     const info = yield* statuses.pipe(Effect.provide(current.context));
     const names = [
       NAME,
-      ...Array.from({ length: 6 }, (_, i) => `lane:${i + 1}`),
+      ...Array.from({ length: 6 }, (_, i) => `quest:${i + 1}`),
       ...info.filter((i) => i.program === "pipeline/merger").map((i) => i.name),
     ];
     const letters = yield* Effect.forEach(
@@ -465,7 +470,7 @@ const open = Effect.fnUntraced(function* (
           type: "enqueue",
           change,
           head: found!.head,
-          ...(ref === null ? {} : { reply: { to: `lane:${change}`, ref } }),
+          ...(ref === null ? {} : { reply: { to: `quest:${change}`, ref } }),
         });
       }),
     drop: (change) => deliver({ type: "drop", change }),

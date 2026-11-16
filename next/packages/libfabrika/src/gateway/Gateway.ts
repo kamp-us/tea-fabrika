@@ -28,21 +28,22 @@ import {
 import { Change, enrollmentText } from "../access/Text.ts";
 import * as Id from "../Id.ts";
 import { InputId } from "../Id.ts";
-import { Jobs } from "../jobs/Jobs.ts";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { fromHere, Line, lineFor, PAGE, valueFor } from "../ledger/Log.ts";
 import { type From } from "../processes/Mailbox.ts";
-import { type ProcessError, brainOnly } from "../processes/Process.ts";
+import { type ProcessError, brainOnly, Recipient } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProcessId } from "../ProcessId.ts";
 import * as Audit from "../runtime/Audit.ts";
 import { Incoming } from "../runtime/Entry.ts";
+import { MailWakeups } from "../runtime/MailWakeups.ts";
 import { type ProgramDown } from "../runtime/Program.ts";
 import { type RecoveryStoreError } from "../runtime/RecoveryStore.ts";
 import { type RepliesError } from "../runtime/Replies.ts";
 import { type RunnerError, Sent } from "../runtime/Runner.ts";
 import { type WatchersError } from "../runtime/Watchers.ts";
+import { Tasks } from "../tasks/Tasks.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";
 import { SinkError, SpanSink } from "../telemetry/Sink.ts";
@@ -55,8 +56,8 @@ import { type GatewayError } from "./GatewayError.ts";
 import { gatewayNonce } from "./GatewayNonce.ts";
 import { gatewayStore } from "./GatewayStore.ts";
 import * as Waiting from "./internal/waiting.ts";
-import * as JobRoutes from "./Jobs.ts";
 import { Policy as RatePolicy } from "./RateLimit.ts";
+import * as TaskRoutes from "./Tasks.ts";
 
 const ConnectionId = Schema.NonEmptyString.pipe(Schema.brand("ConnectionId"));
 /**
@@ -239,6 +240,19 @@ const Read = Schema.Struct({
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
+/** `process.monitor`'s params: exactly these two keys. The recipient is never one of them. */
+const Monitor = Schema.Struct({ ref: Schema.String, pid: ProcessId });
+const decodeMonitor = Schema.decodeUnknownResult(Monitor, { onExcessProperty: "error" });
+
+/** Who a window's watches deliver to: its hello's tab and its socket's session, saved at its hello. */
+const ClientRecipient = Recipient.cases.client;
+
+/**
+ * What the door trusts about a connection, from the object that holds its socket, never from the
+ * client: the url, the tab and the key's fingerprint, and the socket's session when there is one.
+ */
+type Trusted = { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string };
+
 const SpanRead = Schema.Struct({
   chain: Chain,
   after: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -252,6 +266,7 @@ const methods: ReadonlySet<string> = new Set([
   "view.open",
   "ledger.read",
   "ledger.wait",
+  "process.monitor",
   "spans.read",
   "spans.content",
   "spans.deleteContent",
@@ -280,6 +295,16 @@ type Options<A, RNext, RDeliver, RNotify> = {
   ) => Effect.Effect<{ readonly inputs: ReadonlyArray<string>; readonly events: ReadonlyArray<string> }, LedgerError>;
   readonly isLive?: (process: string) => Effect.Effect<boolean, LedgerError>;
   readonly open?: (process: string, client: string) => Effect.Effect<Schema.Json, LedgerError, RDeliver>;
+  /**
+   * Watches `pid` under the caller's `ref` for `to`, the recipient the door built from the checked
+   * connection. The door never builds `to` from params.
+   */
+  readonly monitor?: (
+    ref: string,
+    pid: string,
+    to: typeof ClientRecipient.Type,
+    from: From,
+  ) => Effect.Effect<void, ProcessError | LedgerError, RDeliver>;
   readonly wait?: (stream: string, after: number, reader: string) => Effect.Effect<unknown, LedgerError>;
   readonly nextProcess: () => Effect.Effect<string, never, RNext>;
   readonly deliver: (
@@ -318,7 +343,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const [initialWaiting] = Waiting.machine.init(null, options.waiting);
   const context = yield* Effect.context<RNext | RDeliver | RNotify>();
   const ledger = yield* Ledger;
-  const jobs = yield* Jobs;
+  const tasks = yield* Tasks;
+  const wakeups = yield* MailWakeups;
   const transaction = yield* LedgerTransaction;
   const ids = yield* Id.Generator;
   const appendChecked = Effect.fnUntraced(function* (key: string, write: Parameters<typeof appendAdmitted>[1]) {
@@ -399,6 +425,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       ),
     );
   });
+  // A connection's checked state: its attachment, its key and its watches' recipient.
+  const forget = (client: string) => {
+    sql.exec(
+      "DELETE FROM gateway_state WHERE name IN (?,?,?)",
+      `client/${client}`,
+      `key/${client}`,
+      `recipient/${client}`,
+    );
+  };
   const prunePending = (at: number) => {
     const expired = sql.exec(
       "SELECT client FROM gateway_pending WHERE until<=? OR client IN (SELECT client FROM gateway_pending ORDER BY rowid DESC LIMIT -1 OFFSET ?)",
@@ -408,8 +443,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     for (const row of expired) {
       const client = String(row.client);
-      sql.exec("DELETE FROM gateway_state WHERE name=?", `client/${client}`);
-      sql.exec("DELETE FROM gateway_state WHERE name=?", `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     }
   };
@@ -456,16 +490,12 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
     yield* store.atomic(() => {
       // A reconnect retires this checked connection, never another client's proof.
-      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
     return yield* silent(nonces.issue(client));
   });
-  const initialize = Effect.fnUntraced(function* (
-    client: ConnectionId,
-    input: unknown,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
-  ) {
+  const initialize = Effect.fnUntraced(function* (client: ConnectionId, input: unknown, trusted: Trusted) {
     if (trusted.url !== options.url) {
       return no("bad_nonce");
     }
@@ -503,7 +533,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
   const initializeChecked = Effect.fnUntraced(function* (
     client: ConnectionId,
     hello: typeof Hello.Type,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    trusted: Trusted,
     until: number,
     attempt: { current: boolean },
   ) {
@@ -511,7 +541,9 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const result = yield* silent(
       checkHello({
         hello,
-        ...trusted,
+        url: trusted.url,
+        tab: trusted.tab,
+        name: trusted.name,
         nonce: hello.nonce,
         versions: options.versions,
         ping: options.ping,
@@ -619,6 +651,17 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       yield* store.atomic(() => {
         sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
         store.set(`key/${client}`, Schema.String, result.hello.key);
+
+        // A door with no socket has no session, so its watches have no recipient: `no_session`.
+        const recipient =
+          trusted.session === undefined
+            ? Option.none()
+            : ClientRecipient.makeOption({ client: trusted.tab, session: trusted.session });
+
+        if (Option.isSome(recipient)) {
+          store.set(`recipient/${client}`, ClientRecipient, recipient.value);
+        }
+
         store.set(
           `client/${client}`,
           Attached,
@@ -723,7 +766,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         saveWaiting(stepWaiting(waiting(at), { type: "leave", key: attached.key, client }));
       }
 
-      sql.exec("DELETE FROM gateway_state WHERE name IN (?,?)", `client/${client}`, `key/${client}`);
+      forget(client);
       sql.exec("DELETE FROM gateway_pending WHERE client=?", client);
     });
   });
@@ -1068,6 +1111,18 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       .write(MemberEvent.cases.denied.make({ id: random(), key, saw, by: from.by }), from)
       .pipe(write);
   });
+  /** One wait past `after` on `stream`, as `ledger.wait` and `tasks.wait` both park it: ready at once,
+   *  or parked until an append past it rings `reader`. */
+  const parkOn = Effect.fnUntraced(function* (stream: string, after: number, reader: string) {
+    const waited =
+      options.wait === undefined
+        ? yield* ledger.wait(stream, after)
+        : yield* options.wait(stream, after, reader).pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} }))),
+            Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+          );
+    return waited._tag === "parked" ? Answer.cases.parked.make({ stream, after }) : ok({ rev: waited.rev });
+  });
   const route = Effect.fnUntraced(function* (
     client: ConnectionId,
     method: string,
@@ -1116,18 +1171,40 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* refuse("reserved");
     }
 
-    if (method.startsWith("jobs.")) {
-      const answer = yield* Effect.gen(function* () {
-        const fresh = yield* silent(Effect.result(authenticated(client)));
+    // A hands key's wait for new work parks outside the write turn, as `ledger.wait` does, on the
+    // caller's own `target:` stream: the referee rings it when a request for that key lands.
+    if (method === "tasks.wait") {
+      const asked = TaskRoutes.waitOn(attached, params);
+      return Result.isFailure(asked)
+        ? no(asked.failure)
+        : yield* parkOn(asked.success.stream, asked.success.after, reader);
+    }
 
-        if (Result.isFailure(fresh)) {
-          return no("not_granted");
-        }
+    if (method.startsWith("tasks.")) {
+      // One span for the whole tasks call: the write turn, the finish's record and the wake, so the
+      // wake joins the trace the finish saved. `flush` runs after it, so the span is written too.
+      const routeTasks = Effect.fn("gateway.route")(
+        function* () {
+          const { answer, wake } = yield* Effect.gen(function* () {
+            const fresh = yield* silent(Effect.result(authenticated(client)));
 
-        return yield* JobRoutes.route(jobs, fresh.success.attached, method, params);
-      }).pipe(write);
+            if (Result.isFailure(fresh)) {
+              return { answer: no("not_granted"), wake: null };
+            }
+
+            return yield* TaskRoutes.route(tasks, fresh.success.attached, method, params);
+          }).pipe(write);
+          // A taken finish answers only once its requester is scheduled, outside the write turn. A
+          // wake that failed answers `unavailable`: the result is saved, and the same finish sent
+          // again repeats and wakes again, as MailDelivery's `queued` comes only after both.
+          const woke = wake === null ? Result.succeed(undefined) : yield* Effect.result(wakeups.wake(wake));
+          return Result.isSuccess(woke) ? answer : no("unavailable");
+        },
+        Effect.tap((answer) => Effect.annotateCurrentSpan("fab.gateway.outcome", answer._tag)),
+      );
+      const routed = yield* Effect.exit(routeTasks());
       yield* flush;
-      return answer;
+      return yield* Exit.isSuccess(routed) ? Effect.succeed(routed.value) : Effect.failCause(routed.cause);
     }
 
     if (attached.identity.as === "hands") {
@@ -1139,6 +1216,10 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     let refusal: string | null = methods.has(method) ? null : "unknown_method";
 
     if ((method === "ledger.read" || method === "ledger.wait") && !Schema.is(Read)(params)) {
+      refusal ??= "bad_input";
+    }
+
+    if (method === "process.monitor" && Result.isFailure(decodeMonitor(params))) {
       refusal ??= "bad_input";
     }
 
@@ -1509,6 +1590,28 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           return ok(yield* options.open(opened.success.pid, String(client)).pipe(Effect.provideContext(context)));
         }
 
+        if (method === "process.monitor" && options.monitor !== undefined) {
+          const asked = decodeMonitor(params);
+
+          if (Result.isFailure(asked)) {
+            return no("bad_input");
+          }
+
+          const to = yield* store.atomic(() => store.get(`recipient/${client}`, ClientRecipient));
+
+          if (to === null) {
+            return no("no_session");
+          }
+
+          // The call's own `from`, as a letter's: the window's key, which the brain keeps as `asked`.
+          const from = { ...fromInput(binding), parent: binding.id };
+          return yield* options.monitor(asked.success.ref, asked.success.pid, to, from).pipe(
+            Effect.provideContext(context),
+            Effect.as(ok(null)),
+            Effect.catchTag("ProcessError", (error) => Effect.succeed(no(error.reason))),
+          );
+        }
+
         if (method === "ledger.read" || method === "ledger.wait") {
           const p = Schema.decodeUnknownResult(Read)(params);
 
@@ -1522,16 +1625,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
             });
           }
 
-          const waited =
-            options.wait === undefined
-              ? yield* ledger.wait(p.success.stream, p.success.after)
-              : yield* options.wait(p.success.stream, p.success.after, reader).pipe(
-                  Effect.flatMap(
-                    Schema.decodeUnknownEffect(Schema.TaggedUnion({ ready: { rev: Schema.Int }, parked: {} })),
-                  ),
-                  Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
-                );
-          return waited._tag === "parked" ? Answer.cases.parked.make(p.success) : ok({ rev: waited.rev });
+          return yield* parkOn(p.success.stream, p.success.after, reader);
         }
 
         if (method === "spans.read") {
@@ -1852,7 +1946,7 @@ export class Gateway extends Context.Service<
     readonly initialize: (
       client: ConnectionId,
       input: unknown,
-      trusted: { readonly url: string; readonly tab: string; readonly name: string },
+      trusted: Trusted,
     ) => Effect.Effect<
       typeof Answer.cases.refused.Type | typeof CheckedHello.Type,
       GatewayError | LedgerError | NotGranted | SinkError | Cause.NoSuchElementError | WebCryptoError

@@ -39,3 +39,7 @@ C1 to C3.
 ## Consequences
 
 - `react/refs`, `react/immutability` and `react/purity` hold it ([0464](0464-every-compiler-finding-fails-the-build.md)).
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-clock-in-view`, the rule named here, with the Effect checker's date, random and UUID checks, in the pull request that turns them on at zero hits.

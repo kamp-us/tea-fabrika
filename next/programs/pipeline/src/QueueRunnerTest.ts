@@ -65,7 +65,7 @@ export type Driver = {
 };
 
 const replies = (snapshot: Snapshot, change: number) =>
-  snapshot.letters.filter((l) => l.name === `lane:${change}`).map((l) => Schema.decodeUnknownSync(Mail.Reply)(l.m));
+  snapshot.letters.filter((l) => l.name === `quest:${change}`).map((l) => Schema.decodeUnknownSync(Mail.Reply)(l.m));
 
 const finish = Effect.fnUntraced(function* (h: World) {
   for (let turn = 0; turn < 96; turn++) {
@@ -514,7 +514,7 @@ export const suite = (driver: Driver) =>
 
               const s = seen;
               expect(s.letters.some((l) => l.name === "queue:1")).toBe(true);
-              expect(s.letters.some((l) => l.name === "lane:1")).toBe(true);
+              expect(s.letters.some((l) => l.name === "quest:1")).toBe(true);
               expect(started(s).length).toBeGreaterThan(0);
               const spans = capture.text().join("\n");
               expect(spans).toContain("start_child");

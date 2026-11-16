@@ -9,15 +9,17 @@ import { Session, SigningRefused, type Writer } from "../access/SessionManager.t
 import type { LedgerCalls } from "../ledger/Ledger.ts";
 import { Appended, Line } from "../ledger/Log.ts";
 import type { Connections } from "../presence/Connections.ts";
-import { type Child, ChildrenError, Started } from "../processes/Children.ts";
+import { type Child, ChildrenError, type ChildStop, Started } from "../processes/Children.ts";
 import type { From, Letter } from "../processes/Mailbox.ts";
+import { MonitorsError, type Unwatch, type Watch, Watched } from "../processes/Monitors.ts";
 import { ProcessError, State, type Activity, type Start } from "../processes/Process.ts";
-import type { ProcessManager } from "../processes/ProcessManager.ts";
+import type { ProcessCalls } from "../processes/ProcessManager.ts";
 import { type Delivery, MailRefusal } from "../processes/ProgramMail.ts";
 import type { BrainEvent } from "../runtime/BrainEvent.ts";
 import type { BuiltProgram } from "../runtime/Built.ts";
 import type { CodeEvent, Install, Installed } from "../runtime/Code.ts";
 import type { Incoming } from "../runtime/Entry.ts";
+import type { Ask, Reply as HandsReply } from "../runtime/HandsTasks.ts";
 import type * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import type { Descriptor, ProgramRunner } from "../runtime/Runner.ts";
 import type { Publication } from "../runtime/WatcherManager.ts";
@@ -27,8 +29,8 @@ import type { checkHello } from "../transport/Hello.ts";
 import type { Answer } from "../transport/Wire.ts";
 
 /**
- * Schema for a mail delivery's answer over Project RPC: `ok` with the delivery's receipt, or `refused`
- * with its `MailRefusal`.
+ * Schema for a mail delivery's answer over Project RPC: `ok` with the delivery's receipt, `refused`
+ * with its `MailRefusal`, or `full` with the target's unread letters and its inbox cap.
  *
  * @stability unstable
  * @category schemas
@@ -50,6 +52,7 @@ export const MailReplies = Schema.TaggedUnion({
     }),
   },
   refused: { reason: MailRefusal },
+  full: { unread: Schema.Int, cap: Schema.Int },
 });
 
 /**
@@ -131,6 +134,30 @@ export const ChildReplies = Schema.TaggedUnion({
 });
 
 /**
+ * Schema for a child stop's answer over Project RPC: done, or its `ChildrenError` refusal as data. A
+ * storage failure fails the call itself.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const StopReplies = Schema.TaggedUnion({
+  ok: {},
+  ChildrenError: { reason: ChildrenError.fields.reason },
+});
+
+/**
+ * Schema for a program's watch answer over Project RPC: `Watched`, or its `MonitorsError` refusal
+ * as data. A storage failure fails the call itself.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const MonitorReplies = Schema.TaggedUnion({
+  ok: { value: Watched },
+  MonitorsError: { reason: MonitorsError.fields.reason },
+});
+
+/**
  * The door's calls on the Project, as Effects: connecting a client, its hello, routing its calls,
  * knocks and grants, and the signing and appends a process asks for.
  *
@@ -143,7 +170,7 @@ export interface GatewayCalls {
   readonly initialize: (
     client: ConnectionId,
     input: unknown,
-    trusted: { readonly url: string; readonly tab: string; readonly name: string },
+    trusted: { readonly url: string; readonly tab: string; readonly name: string; readonly session?: string },
   ) => Effect.Effect<Effect.Success<ReturnType<typeof checkHello>>, unknown>;
   readonly target: (
     name: string,
@@ -189,7 +216,8 @@ type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => P
 
 type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
 type DoorService = GatewayCalls;
-type Processes = (typeof ProcessManager)["Service"];
+/** The manager's calls an object may make over RPC: no guard, and no trusted watcher. */
+type Processes = ProcessCalls;
 type Gateways = (typeof Connections)["Service"];
 type Runner = (typeof ProgramRunner)["Service"];
 
@@ -231,6 +259,15 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
       ) => Effect.Effect<typeof CommitReply.Type>
     >;
     mail: RemoteCall<(delivery: Delivery, trace?: { traceId: string; spanId: string }) => Effect.Effect<MailReply>>;
+    /** One hands Cmd's ask: its task saved or read back, and collected once finished. A failure that
+     *  answered nothing rejects the call, and the Process side reads it as `unavailable`. */
+    hands: RemoteCall<
+      (
+        ask: typeof Ask.Type,
+        from: From,
+        trace?: { traceId: string; spanId: string },
+      ) => Effect.Effect<typeof HandsReply.Type>
+    >;
     inbox: RemoteCall<(pid: string, input: Incoming) => Effect.Effect<Appended>>;
     own: RemoteCall<
       (
@@ -251,11 +288,15 @@ export type ProjectBinding = Rpc.DurableObjectBranded &
     processResolve: ProcessCall<Processes["resolve"]>;
     processDead: ProcessCall<Processes["dead"]>;
     processIsLive: RemoteCall<Processes["isLive"]>;
+    processAck: ProcessCall<Processes["ack"]>;
     processMonitor: ProcessCall<Processes["monitor"]>;
     processDemonitor: ProcessCall<Processes["demonitor"]>;
     processDown: ProcessCall<Processes["down"]>;
     processReceive: ProcessCall<(process: string, after: number) => Effect.Effect<ReadonlyArray<Letter>, ProcessError>>;
     processChild: RemoteCall<(child: Child, from: From) => Effect.Effect<typeof ChildReplies.Encoded>>;
+    processStop: RemoteCall<(stop: ChildStop, from: From) => Effect.Effect<typeof StopReplies.Encoded>>;
+    programMonitor: RemoteCall<(watch: Watch, from: From) => Effect.Effect<typeof MonitorReplies.Encoded>>;
+    programDemonitor: RemoteCall<(unwatch: Unwatch, from: From) => Effect.Effect<void>>;
   };
 
 /**

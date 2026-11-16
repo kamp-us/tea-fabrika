@@ -35,6 +35,7 @@ import * as IsolateUsage from "../runtime/IsolateUsage.ts";
 import * as IsolateUsageTest from "../runtime/IsolateUsageTest.ts";
 import { ProcessStore } from "../runtime/ProcessStore.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
+import { mailChunk } from "../settings/Declarations.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { Sql } from "../Sql.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -241,6 +242,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         { load: (name) => loader.load(name, PID, bound) },
         {
           recovery: { sql: state.sql, name: NAME, capacity: 1024 ** 3 },
+          chunk: mailChunk.default,
         },
       ).pipe(Layer.provideMerge(dependencies)),
     );

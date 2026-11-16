@@ -36,3 +36,7 @@ covers product code.
 - One way to do a job across the repo, so code reads the same everywhere.
 - What would change it: a job where Effect's module keeps falling short, so the Node edge keeps
   growing.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-node-imports`, the rule named here, with oxlint's `import/no-nodejs-modules`, in the pull request that turns it on at zero hits.

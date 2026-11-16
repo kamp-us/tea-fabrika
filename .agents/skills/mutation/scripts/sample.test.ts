@@ -301,7 +301,7 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
     location: { start: { line: from, column: 0 }, end: { line: to, column: 99 } },
   });
 
-  // Lane t389, 2026-11-10: block ranges over the first files' rewritten lines took the whole cap,
+  // Quest t389, 2026-11-10: block ranges over the first files' rewritten lines took the whole cap,
   // and the launcher, the hook and the rule got no mutant in five rounds. Here each file is a run
   // of changed lines, some with no mutant (imports), each other line with one cheap mutant, all
   // inside one block range; the first file's block alone costs the whole cap.
@@ -384,7 +384,7 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
     return { dir, git, put };
   };
 
-  // Lane t389's hook was apps/fabrika/src/testing/electron-hook.cjs, outside the old `*.ts` filter.
+  // Quest t389's hook was apps/fabrika/src/testing/electron-hook.cjs, outside the old `*.ts` filter.
   // Stryker 10.1.1's Instrumenter parses .cjs, .mjs, .cts, .mts, .js and .jsx too.
   // Plant: the old pathspec, `*.ts *.tsx :!*.test.ts :!*.test.tsx`.
   it("scenario: a changed .cjs, .mjs or .cts file is sampled; its test and its type declaration are not", () => {
@@ -417,8 +417,8 @@ describe("T655 every changed file holds a mutant before any holds two, today's t
     }
   }, 60_000);
 
-  // 0089: of the lead tooling, only lane code is sampled. Plant: drop `inScope` from the diff's loop.
-  it("scenario: a changed lane script and product file are sampled; another lead script is not", () => {
+  // 0089: of the lead tooling, only quest code is sampled. Plant: drop `inScope` from the diff's loop.
+  it("scenario: a changed quest script and product file are sampled; another lead script is not", () => {
     const { dir, git, put } = repo();
     const code = (n: number) => `export const f = (a: number) => (a > ${n} ? a + 1 : a - 1);\n`;
 
@@ -519,7 +519,7 @@ describe("mutation sampling across lines, today's tooling", () => {
   });
 });
 
-describe("T568 the sample reads the lane's own lines from its base, today's tooling", () => {
+describe("T568 the sample reads the quest's own lines from its base, today's tooling", () => {
   const ref = fc.stringMatching(/^[0-9a-f]{7,40}$/);
 
   // Plants: ignore --since; diff since against its own parent; drop the build side.
@@ -532,9 +532,9 @@ describe("T568 the sample reads the lane's own lines from its base, today's tool
     );
   });
 
-  // p14-mutation-r1, 2026-11-10: the lane's tip was "Merge main into fabrikalfa/p14", and the
+  // p14-mutation-r1, 2026-11-10: the quest's tip was "Merge main into fabrikalfa/p14", and the
   // sample took main's lines. The real CLI, with Stryker's real Instrumenter, on a merge tip.
-  it("scenario: a tip that merged main samples the lane's file from its base, and main's file without one", () => {
+  it("scenario: a tip that merged main samples the quest's file from its base, and main's file without one", () => {
     const dir = mkdtempSync(join(tmpdir(), "sample568-"));
     const git = (...args: string[]) => {
       const ran = spawnSync("/usr/bin/git", ["-C", dir, ...args], { encoding: "utf8" });
@@ -553,19 +553,19 @@ describe("T568 the sample reads the lane's own lines from its base, today's tool
       git("config", "user.name", "Fixture");
       git("config", "user.email", "fixture@example.test");
       put(".gitignore", "packages/\n");
-      put("src/ours.ts", "export const lane = (a: number) => a;\n");
+      put("src/ours.ts", "export const quest = (a: number) => a;\n");
       put("src/theirs.ts", "export const main = (a: number) => a;\n");
       git("add", "--all");
       git("commit", "-qm", "root");
       const base = git("rev-parse", "HEAD");
-      git("checkout", "-q", "-b", "lane");
-      put("src/ours.ts", "export const lane = (a: number) => (a > 1 ? a + 1 : a - 1);\n");
+      git("checkout", "-q", "-b", "quest");
+      put("src/ours.ts", "export const quest = (a: number) => (a > 1 ? a + 1 : a - 1);\n");
       git("commit", "-qam", "build");
       git("checkout", "-q", "main");
       put("src/theirs.ts", "export const main = (a: number) => (a > 2 ? a * 2 : a / 2);\n");
       git("commit", "-qam", "main moves on");
       const merged = git("rev-parse", "HEAD");
-      git("checkout", "-q", "lane");
+      git("checkout", "-q", "quest");
       git("merge", "-q", "--no-edit", "main");
       const tip = git("rev-parse", "HEAD");
       const files = (since: string[]) => {
@@ -577,7 +577,7 @@ describe("T568 the sample reads the lane's own lines from its base, today's tool
         expect(ran.status, ran.stderr).toBe(0);
         return new Set((JSON.parse(`[${ran.stdout.trim()}]`) as string[]).map((r) => r.split(":")[0]));
       };
-      // The lane's base after the catch-up is the main it merged, so only the lane's file is left.
+      // The quest's base after the catch-up is the main it merged, so only the quest's file is left.
       expect(files(["--since", merged])).toEqual(new Set(["src/ours.ts"]));
       expect(files(["--since", base])).toEqual(new Set(["src/ours.ts", "src/theirs.ts"]));
       expect(files([])).toEqual(new Set(["src/theirs.ts"]));

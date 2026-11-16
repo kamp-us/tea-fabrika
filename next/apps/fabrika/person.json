@@ -5,6 +5,18 @@
     "desktop": {
       "type": "object",
       "properties": {
+        "brain-grace": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991,
+          "description": "The time in milliseconds the local runtime gets to end after a SIGTERM, before it is killed.",
+          "default": 5000
+        },
+        "brain-memory": {
+          "type": "string",
+          "description": "The memory the local runtime may hold before the brain replaces it, a byte size such as \"500 MB\".",
+          "default": "500000000 bytes"
+        },
         "brain-poll": {
           "type": "integer",
           "minimum": 1,
@@ -59,6 +71,27 @@
           "maximum": 9007199254740991,
           "description": "The gateway window in milliseconds.",
           "default": 60000
+        }
+      },
+      "additionalProperties": false
+    },
+    "hands": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^SHA256:[A-Za-z0-9+/]{43}$",
+              "title": "a key fingerprint",
+              "description": "A key fingerprint is SHA256: and 43 base64 characters, as ssh-keygen -l prints it."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The fingerprint of the hands key that runs a program's hands commands. Unset, they are refused.",
+          "default": null
         }
       },
       "additionalProperties": false

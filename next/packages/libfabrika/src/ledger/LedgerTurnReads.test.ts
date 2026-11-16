@@ -13,6 +13,7 @@ import { property } from "../Testing.test-support.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";
 import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
+import * as LedgerTurnEndTest from "./LedgerTurnEndTest.ts";
 import type { Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
@@ -210,3 +211,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
       }),
   );
 });
+
+// T1041: the turn's position-only read, on a fresh in-memory database; its SQLite-file twin is
+// LedgerTurnReads.integration.test.ts.
+LedgerTurnEndTest.suite(Effect.map(memory, nodeSql));

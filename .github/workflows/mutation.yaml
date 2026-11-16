@@ -48,22 +48,16 @@ jobs:
           # mutbox.ts fetches the base and the head from this checkout, so it must hold both.
           fetch-depth: 0
 
-      # The pnpm version comes from `packageManager` in package.json.
-      - uses: pnpm/action-setup@v6
-        with:
-          run_install: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26.13.0
-          cache: pnpm
+      # pnpm and Node, with no store cache: restoring one did not pay, and even a save on main
+      # holds about half a gigabyte of the repository's 10 GB (.github/actions/pnpm).
+      - uses: ./.github/actions/pnpm
 
       # For mutbox.ts itself (Effect and oxc-parser); the container installs its own copy offline.
       - run: pnpm install --frozen-lockfile
 
       # The tests beside the changed files (0066): for each changed product file, its own
       # `name.test.ts` or `name.test.tsx` at head, and each changed test file. Of the lead tooling,
-      # only lane code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
+      # only quest code is in (0089). scope.ts holds that rule and sample.ts's PRODUCT list, so this
       # pick and the sample's diff are one rule. A path mutbox.ts's --related would refuse is left
       # out.
       - id: range

@@ -811,3 +811,248 @@ it("scenario: H1, two checklist adds with an immediate wake both land on the sam
     });
   });
 }, 180_000);
+
+// --- T1041 L14: a repo file's `mail.unread` reaches the Project's cap --------------------------
+//
+// Written before the build (docs/plan/quests/t1041-PLAN.md). The repo's file says `mail.unread = 2`;
+// the settings load reads it, the start hands its snapshot to the instance, and the Project's
+// program mail answers the third unread letter `full`. Nothing reads while the writer sends: the
+// reader crashes on a `crash` letter, and its own supervisor holds the successor for the policy's
+// backoff, as the runtime does after any crash inside its restart budget. Once the backoff ends the
+// runtime starts the successor, which reads and acks, and a resend of the third letter lands. No
+// call from outside ends or starts the reader: the Project sets up a name's object only on a first
+// start, the trusted restart needs a live process, and the runner moves to a new life only when
+// its own supervisor waits for one.
+const BACKOFF = 8_000;
+
+const capSource = (role: "writer" | "reader") =>
+  role === "writer"
+    ? `
+import {Machine} from "@demlik/tea/effect";
+import {Schema} from "effect";
+import {Program} from "@kampus/libfabrika/runtime/Program";
+import {send} from "@kampus/libfabrika/runtime/Send";
+const Answer = Schema.Struct({n: Schema.Int, answer: Schema.String});
+const Model = Schema.Struct({answers: Schema.Array(Answer)});
+const Msg = Schema.Struct({type: Schema.Literal("letter"), n: Schema.Int});
+const nOf = (cmd) => cmd.m.n;
+const machine = Machine.make({model: Model, msg: Msg, cmds: [send],
+ init: (loaded) => [loaded ?? {answers: []}, []],
+ update: {
+  letter: (s, m) => [s, [send({to: "reader:1", m: {type: "letter", n: m.n}})]],
+  send_ok: (s, m) => [{answers: [...s.answers, {n: nOf(m.cmd), answer: "queued"}]}, []],
+  send_err: (s, m) => [{answers: [...s.answers, {n: nOf(m.cmd), answer: m.error._tag}]}, []]
+ }});
+export const program = Program.make({name: "t1041/writer", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
+ inputs: {letter: "Send a letter"}, outputs: {}, writes: {}, wake: () => null});
+`
+    : `
+import {Machine} from "@demlik/tea/effect";
+import {Schema} from "effect";
+import {Program} from "@kampus/libfabrika/runtime/Program";
+const Model = Schema.Struct({read: Schema.Array(Schema.Int)});
+const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("letter"), n: Schema.Int}), Schema.Struct({type: Schema.Literal("crash")})]);
+const machine = Machine.make({model: Model, msg: Msg, cmds: [],
+ init: (loaded) => [loaded ?? {read: []}, []],
+ update: { letter: (s, m) => [{read: [...s.read, m.n]}, []], crash: () => { throw new TypeError("fixture crash"); } }});
+export const program = Program.make({name: "t1041/reader", machine, state: {v: 1, upgrades: []}, view: (s) => s, refuse: () => null,
+ policy: {maxDeliveries: 2, intensity: 5, periodMs: 120_000, backoff: {minMs: ${BACKOFF}, maxMs: ${BACKOFF}, resetAfterMs: 120_000}},
+ inputs: {letter: "A letter", crash: "Crash"}, outputs: {}, writes: {}, wake: () => null});
+`;
+
+it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread letter between two real programs answer full, and once the reader reads a resend lands", async () => {
+  process.env.DO_NOT_TRACK = "1";
+  const { localState } = await import("alchemy/State/LocalState");
+  const { build } = await import("./build.ts");
+  const { localInstance } = await import("./local-instance.ts");
+  const Declarations = await import("@kampus/libfabrika/settings/Declarations");
+  const Snapshot = await import("@kampus/libfabrika/settings/Snapshot");
+  const Sources = await import("@kampus/libfabrika/settings/Sources");
+  const { Digest } = await import("effect/crypto");
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const home = yield* Effect.acquireRelease(
+        Effect.sync(() => mkdtempSync(join(tmpdir(), "t1041-"))),
+        (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+      );
+      yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          const previous = process.env.FABRIKA_HOME;
+          process.env.FABRIKA_HOME = home;
+          return previous;
+        }),
+        (previous) =>
+          Effect.sync(() => {
+            if (previous === undefined) {
+              delete process.env.FABRIKA_HOME;
+            } else {
+              process.env.FABRIKA_HOME = previous;
+            }
+          }),
+      );
+      symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+      const selections: Record<string, string> = {};
+
+      for (const role of ["writer", "reader"] as const) {
+        const path = join(home, `${role}.ts`);
+        writeFileSync(path, capSource(role));
+        selections[`t1041/${role}`] = path;
+      }
+
+      const built = yield* build({ out: join(home, "dist"), programs: selections });
+      const key = identity();
+      const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+      // The repo's own file, `[mail] unread = 2`, as its parse gives it (only the settings module
+      // and start code read TOML, lint L15), resolved in the common source order and saved as the
+      // start's snapshot.
+      const resolved = yield* Sources.resolve(Declarations.all, {
+        flags: Sources.flags({
+          "instance.port": String(at.port),
+          "gateway.limit": "100000",
+          "gateway.window": "60000",
+        }),
+        env: Sources.env({}),
+        repo: Sources.file(".fabrika/fabrika.toml", {
+          value: { mail: { unread: 2 } },
+          spans: [{ path: ["mail", "unread"], line: 2 }],
+        }),
+        person: Sources.file("~/.fabrika/fabrika.toml", { value: {}, spans: [] }),
+      });
+      const loaded = {
+        snapshot: yield* Snapshot.make(Declarations.all, resolved).pipe(Effect.provide(Digest.layerWebCrypto)),
+      };
+      expect(resolved.values.mailUnread, "the repo file's value is read").toBe(2);
+      const instance = yield* localInstance(built, {
+        ...RecordWireTest.startupFixture({
+          home,
+          name: PROJECT,
+          person: PERSON,
+          founder: key.line,
+          window: key.raw,
+          port: at.port,
+          mail: { grants: { "writer:1": ["reader:1"] } },
+        }),
+        settings: loaded.snapshot,
+      });
+      const scope = yield* Effect.scope;
+      const from: From = {
+        by: key.fingerprint,
+        for: PERSON,
+        sentAt: SENT,
+        seen: 0,
+        parent: null,
+        traceId: TRACE,
+        build: built.build,
+      };
+      yield* Effect.promise(async () => {
+        const project = instance.project(PROJECT);
+        const start = async (request: object) =>
+          Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(
+            await Reflect.get(project, "start")(request, from),
+          ).process;
+        const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
+        const writer = await start({
+          _tag: "first",
+          id: "start-writer",
+          name: "writer:1",
+          code: code("writer"),
+        });
+        const reader = await start({
+          _tag: "first",
+          id: "start-reader",
+          name: "reader:1",
+          code: code("reader"),
+        });
+        const client = await Effect.runPromise(
+          Effect.gen(function* () {
+            const socket = yield* Effect.acquireRelease(
+              Effect.sync(
+                () =>
+                  new WebSocket(
+                    `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/cap`,
+                  ),
+              ),
+              (socket) => Effect.sync(() => socket.close()),
+            );
+            return yield* Effect.promise(() => wire(instance, key, "cap", socket));
+          }).pipe(Effect.provideService(Scope.Scope, scope)),
+        );
+        let sent = 0;
+        // One send at a time: the writer's newest answer is this letter's.
+        const send = async (n: number) => {
+          sent += 1;
+          expect(
+            await client.call("process.send", {
+              pid: writer,
+              letter: `letter-${sent}`,
+              m: { type: "letter", n },
+              sentAt: SENT,
+              seen: 0,
+            }),
+          ).toMatchObject({ result: { _tag: "accepted" } });
+          const view = await until(
+            `the writer's answer for send ${sent}`,
+            async () => (await client.call("view.open", { pid: writer })).result?.view,
+            (v) => v?.answers?.length === sent,
+          );
+          return view.answers.at(-1).answer;
+        };
+        const lifecycle = () => facts(instance, "processes/reader:1");
+        const letters = async () =>
+          (await facts(instance, "reader:1/inbox")).filter((r) => r.m?.type === "letter").map((r) => r.m.n);
+        const last = async (stream: string) =>
+          Math.max(
+            0,
+            ...((await (instance as Instance).project(PROJECT).read(stream, 0, "audit")) as Array<any>).map(
+              (row) => row.body.pos ?? row.pos,
+            ),
+          );
+        // The reader crashes inside the door's call, and its supervisor holds the successor for
+        // BACKOFF ms: nothing reads while the writer sends.
+        expect(
+          (
+            await client.call("process.send", {
+              pid: reader,
+              letter: "crash",
+              m: { type: "crash" },
+              sentAt: SENT,
+              seen: 0,
+            })
+          ).result,
+          "the crash is not accepted",
+        ).toBeUndefined();
+        await until("the reader's crash", lifecycle, (rows) =>
+          rows.some((r) => r._tag === "exited" && r.process === reader),
+        );
+        expect(await send(1), "the first letter is saved").toBe("queued");
+        expect(await send(2), "the second letter is saved").toBe("queued");
+        expect(await send(3), "L14: the repo file's cap of 2 unread answers the third letter full").toBe("full");
+        expect(
+          (await lifecycle()).filter((r) => r._tag === "restarted"),
+          "the reader had not started again, so the full answer is the cap's and no read had happened",
+        ).toEqual([]);
+        expect(await letters(), "L14: the full letter was not saved").toEqual([1, 2]);
+        // The runtime starts the successor itself once the backoff ends; it reads both letters and acks.
+        await until(
+          "the reader's successor",
+          lifecycle,
+          (rows) => rows.some((r) => r._tag === "restarted" && r.after === reader),
+          BACKOFF * 3,
+        );
+        const end = await last("reader:1/inbox");
+        await until(
+          "the successor's ack of the whole inbox",
+          () => last("processes/reader:1/acked"),
+          (acked) => acked >= end,
+        );
+        expect(await send(3), "L14: once the reader read, a resend of the third letter lands").toBe("queued");
+        expect(await letters(), "the resend is saved").toEqual([1, 2, 3]);
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(localState()),
+      Effect.provide(SecureRandom.layerWebCrypto),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+}, 180_000);

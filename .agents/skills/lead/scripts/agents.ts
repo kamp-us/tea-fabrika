@@ -57,7 +57,7 @@ export const Answer = Schema.Struct({
 });
 export type Answer = typeof Answer.Type;
 
-/** Where a step may send the lane: any step but itself. A step that needs another round of itself
+/** Where a step may send the quest: any step but itself. A step that needs another round of itself
  * is not done yet, and a send to itself only loops (2026-11-11, a tests step on Codex). */
 export const sendsFrom = (step: string) => (["tests", "build", "plan"] as const).filter((to) => to !== step);
 
@@ -66,8 +66,8 @@ export const answerFor = (step: string) =>
   Schema.Struct({ ...Answer.fields, to: Schema.NullOr(Schema.Literals(sendsFrom(step))) });
 
 /**
- * The judgment agent's answer: send a lane step again with a note, or park the lane for the lead.
- * A lane has no mutation step (.decisions/0066), so the answer cannot name one.
+ * The judgment agent's answer: send a quest step again with a note, or park the quest for the lead.
+ * A quest has no mutation step (.decisions/0066), so the answer cannot name one.
  */
 export const Judgment = Schema.Struct({
   answer: Schema.Literals(["send", "park"]),

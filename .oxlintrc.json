@@ -421,6 +421,13 @@
   },
   "overrides": [
     {
+      // 0559: no reduce callback or loop spreads its running result back into itself. An error, with
+      // no warn line and no inline ignore: a hit is rewritten, or it goes to the owner. Today's app
+      // keeps its hits and is not in `files`.
+      "files": ["next/**", ".agents/**", "oxlint-plugins/**", ".github/ci/**"],
+      "rules": { "oxc/no-accumulating-spread": "error" }
+    },
+    {
       // L5 plant: import homedir or a filesystem namespace to inspect inherited homes.
       "files": ["scripts/vitest.setup.ts", "scripts/testhome.ts"],
       "rules": {
@@ -776,6 +783,14 @@
                   "@kampus/libfabrika/client/WindowMachine",
                   "@kampus/libfabrika/client/WindowStart",
                   "@kampus/libfabrika/client/Headless",
+                  // Desk S2b: the window's key table and prefix router (0278) and its side of tezgah
+                  // (0167, 0274). Desk S2a and S4: tezgah's wire shapes and the one drawn geometry a
+                  // window folds its layout with (0277).
+                  "@kampus/libfabrika/client/Keys",
+                  "@kampus/libfabrika/client/Tezgah",
+                  "@kampus/libfabrika/tezgah/Layout",
+                  "@kampus/libfabrika/tezgah/Workspace",
+                  "@kampus/libfabrika/tezgah/Fold",
                   "@kampus/fabrika-design",
                   "@kampus/fabrika-design/tokens.css"
                 ]
@@ -836,6 +851,98 @@
                 "name": "program",
                 "files": ["next/programs/**"],
                 "may": ["@kampus/libfabrika"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // Desk S2b L22 (the plan's fifth amendment): Tuval never imports libfabrika's brain side. The
+      // brain's side is what layer-rules.json puts there: `cloudflare/` (next-workers, layer 9) and
+      // `node/` (next-node, layer 10), the platforms, and `gateway/` (next-door), the brain's door.
+      // After next/**, since an override replaces options: this repeats that block's import bans.
+      "files": ["next/packages/tuval/**"],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@kampus/libfabrika/cloudflare",
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "name": "@kampus/libfabrika/node",
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "name": "@kampus/libfabrika/gateway",
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "name": "@radix-ui/colors",
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "name": "@decimalturn/toml-patch",
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "name": "toml-eslint-parser",
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "name": "react",
+                "importNames": ["useState"],
+                "message": "P14 L19: state lives in a tea machine, never useState (Elm first). Read it through tea's useRuntime."
+              },
+              {
+                "name": "playwright",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              },
+              {
+                "name": "@playwright/test",
+                "importNames": ["_electron"],
+                "message": "Launch a test window through apps/fabrika/test-window.ts."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/exam/plant.ts", "**/exam/plant"],
+                "message": "CI paths, law 20: only a test on the reader list in .github/ci/changes.mjs imports the exam's plant helper, so a comment-only change still runs it. Put the test on that list, and in the exemption override at the end of this file."
+              },
+              {
+                "group": [
+                  "@kampus/libfabrika/cloudflare/**",
+                  "@kampus/libfabrika/node/**",
+                  "@kampus/libfabrika/gateway/**",
+                  "**/libfabrika/src/cloudflare/**",
+                  "**/libfabrika/src/node/**",
+                  "**/libfabrika/src/gateway/**"
+                ],
+                "message": "Desk S2b L22: Tuval draws the window and runs in a tab; it never imports the brain's side of libfabrika. cloudflare/ and node/ are the platforms the brain runs on (layer-rules.json layers 9 and 10) and gateway/ is the brain's door. Reach the brain through the client/ module's window machine and the wire, and import only shapes and pure functions (client/, tezgah/, transport/)."
+              },
+              {
+                "group": ["@radix-ui/colors/*"],
+                "message": "Code never reaches a primitive: read a token. Only packages/fabrika-design/src/build/ imports Radix."
+              },
+              {
+                "group": ["@decimalturn/toml-patch/**"],
+                "message": "L10 (T877): only settings/TomlParser.ts imports the TOML serializer. Edit through the Toml service."
+              },
+              {
+                "group": ["toml-eslint-parser/**"],
+                "message": "L15 (T664): only settings/TomlParser.ts imports toml-eslint-parser. Read TOML through the settings module's Toml service."
+              },
+              {
+                "group": [
+                  "**/settings/TomlParser.ts",
+                  "**/settings/TomlParser",
+                  "@kampus/libfabrika/settings/TomlParser"
+                ],
+                "message": "L15 (T664): only the settings module, its Node loader and start code in next/apps choose the TOML adapter. A machine never reads a settings file: it is handed its values."
               }
             ]
           }
@@ -1090,6 +1197,7 @@
       "files": [
         "next/apps/fabrika/dev.ts",
         "next/apps/fabrika/cli.ts",
+        "next/apps/fabrika/hands.ts",
         "next/apps/fabrika/src/settings-start.integration.test.ts"
       ],
       "rules": {
@@ -1158,7 +1266,7 @@
         "next/packages/libfabrika/src/ci/**",
         "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
-        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/packs/**",
@@ -1213,13 +1321,14 @@
               "permissions",
               "processes",
               "presence",
-              "jobs",
+              "tasks",
               "packs",
               "access",
               "runtime",
               "gateway",
               "schedules",
-              "client"
+              "client",
+              "tezgah"
             ],
             "folders": ["node", "cloudflare", "coordination"],
             "files": ["index", "Id", "Testing", "ProcessId", "Sql", "Rev", "SpanTag"],
@@ -1502,7 +1611,7 @@
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/presence/**",
-        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/transport/**",
@@ -1524,7 +1633,7 @@
         "next/packages/libfabrika/src/permissions/internal/**",
         "next/packages/libfabrika/src/processes/internal/**",
         "next/packages/libfabrika/src/presence/internal/**",
-        "next/packages/libfabrika/src/jobs/internal/**",
+        "next/packages/libfabrika/src/tasks/internal/**",
         "next/packages/libfabrika/src/access/internal/**",
         "next/packages/libfabrika/src/runtime/internal/**",
         "next/packages/libfabrika/src/transport/internal/**",
@@ -2129,7 +2238,7 @@
     },
     {
       // Today's frozen version (0525): the two top-level rules print as advice there, and a fire
-      // there needs no fix. This override goes when the freeze lane takes these paths out of lint;
+      // there needs no fix. This override goes when the freeze quest takes these paths out of lint;
       // oxlint-plugins/advice.ts names the same globs so the stale check does not read them.
       "files": ["apps/**", "programs/**", "packages/**", "bin/**"],
       "rules": {
@@ -2158,7 +2267,7 @@
         "next/apps/fabrika/src/exam/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/cloudflare/**",
-        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/presence/**",
@@ -2192,7 +2301,7 @@
         "next/packages/libfabrika/src/*",
         "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/gateway/**",
-        "next/packages/libfabrika/src/jobs/**",
+        "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
         "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/processes/**",
@@ -2213,6 +2322,106 @@
       }
     },
     {
+      // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
+      // would hide the call from this rule. Each of the next three blocks lists the folders where the
+      // ban is on: every folder at zero. A folder is listed whole and joins the day its own slice
+      // brings it to zero; none is ever taken off, and no block turns the ban off or down for a
+      // folder with fires (0168, 0524). The last slice folds the lists into the base blocks.
+      // This one is the tooling, which has no other entry for the rule.
+      "files": [".agents/**", ".github/**", "oxlint-plugins/**"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // The Reflect ban in next/, where JSON.parse blocks. An override replaces a rule's options, so
+      // the JSON.parse entry of next/**/* is written out again.
+      "files": [
+        "next/apps/fabrika/*",
+        "next/apps/fabrika/e2e/node/**",
+        "next/apps/fabrika/src/entry/**",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/src/*",
+        "next/packages/tuval/src/window/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/inbox/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
+      // The Reflect ban in next/, where JSON.parse still advises: the folders of the warn block above
+      // that have no Reflect fire. The level stays "warn" for the JSON.parse entry alone. lint.ts
+      // blocks every other fire of this rule at any level (advice.ts), so a Reflect call here fails
+      // `pnpm lint`, though a plain oxlint run in an editor shows it as a warning. A folder leaves
+      // this list for the one above when its JSON.parse line goes.
+      "files": [
+        "next/apps/fabrika/src/exam/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/gateway/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/processes/**",
+        "next/packages/libfabrika/src/telemetry/**"
+      ],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
       // Each glob keeps the rule's own file kinds, so a warn line never turns it on for other files.
       "files": [
         ".agents/skills/lead/scripts/*.test.ts",
@@ -2222,7 +2431,7 @@
         "next/apps/fabrika/src/exam/**/*{.test.ts,.test.tsx,Test.ts}",
         "next/packages/libfabrika/src/*{.test.ts,.test.tsx,Test.ts}",
         "next/packages/libfabrika/src/gateway/**/*{.test.ts,.test.tsx,Test.ts}",
-        "next/packages/libfabrika/src/jobs/**/*{.test.ts,.test.tsx,Test.ts}",
+        "next/packages/libfabrika/src/tasks/**/*{.test.ts,.test.tsx,Test.ts}",
         "next/packages/libfabrika/src/ledger/**/*{.test.ts,.test.tsx,Test.ts}",
         "next/packages/libfabrika/src/node/**/*{.test.ts,.test.tsx,Test.ts}",
         "next/packages/libfabrika/src/runtime/**/*{.test.ts,.test.tsx,Test.ts}",

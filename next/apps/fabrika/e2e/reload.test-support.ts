@@ -216,31 +216,40 @@ export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
   return { home, founder, stdout, stderr, nextLine, url: `http://127.0.0.1:${port.port}` };
 });
 
+// A flush moves a span while the instance runs: its record writes the row, and only then does the
+// queue delete it. So every queue is read before any record. A span that left a queue before that
+// read is already in its record, and the read of the records comes later. Read the other way
+// around, a flush between the two reads hides the span from both.
+const QUEUED = ["unsent"];
+const DELIVERED = ["spans", "content", "measurements"];
+
 /** Span rows and error content only. No key file, control socket file or built source is read. */
 export const spanOutputs = Effect.fnUntraced(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
-  const files = yield* fs.glob("**/*.sqlite", { root: home, dot: true });
   const outputs: Array<unknown> = [];
 
-  for (const file of files) {
-    yield* Effect.scoped(
-      Effect.gen(function* () {
-        // The real instance's persisted span output, which it owns: opened read-only, with nothing set.
-        const db = yield* TestDatabase.open(`${home}/${file}`, { readOnly: true }).pipe(Effect.orDie);
-        const tables = new Set(
-          db
-            .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-            .all()
-            .map((row) => row.name),
-        );
+  for (const wanted of [QUEUED, DELIVERED]) {
+    // Listed again for the records: a first delivery makes its record's file.
+    for (const file of yield* fs.glob("**/*.sqlite", { root: home, dot: true })) {
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          // The real instance's persisted span output, which it owns: opened read-only, with nothing set.
+          const db = yield* TestDatabase.open(`${home}/${file}`, { readOnly: true }).pipe(Effect.orDie);
+          const tables = new Set(
+            db
+              .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+              .all()
+              .map((row) => row.name),
+          );
 
-        for (const table of ["spans", "content", "unsent", "measurements"]) {
-          if (tables.has(table)) {
-            outputs.push(...db.prepare(`SELECT * FROM ${table}`).all());
+          for (const table of wanted) {
+            if (tables.has(table)) {
+              outputs.push(...db.prepare(`SELECT * FROM ${table}`).all());
+            }
           }
-        }
-      }),
-    );
+        }),
+      );
+    }
   }
 
   return outputs;

@@ -1,4 +1,6 @@
-// T753, next/, L3, L14, L17 and L19. No new declaration belongs to this cut.
+// T753, next/, L3, L14, L17 and L19. No new declaration belongs to this cut. P39 slice 3 (ticket
+// 1040) declares `hands.target`, so the declared paths gain it. The memory restart plan declares
+// `desktop.brain-memory` and `desktop.brain-grace`, so they join it too.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
@@ -15,6 +17,8 @@ describe("instance start envelope, next/", () => {
     ([recipe, cap]) =>
       Effect.gen(function* () {
         expect(Declarations.all.declarations.map((setting) => setting.path).sort()).toEqual([
+          "desktop.brain-grace",
+          "desktop.brain-memory",
           "desktop.brain-poll",
           "desktop.brain-start-timeout",
           "desktop.brain-stop-timeout",
@@ -23,7 +27,11 @@ describe("instance start envelope, next/", () => {
           "fabrika-version",
           "gateway.limit",
           "gateway.window",
+          "hands.target",
           "instance.port",
+          // T1041: the inbox cap and the chunk size.
+          "mail.chunk",
+          "mail.unread",
         ]);
         const base = yield* StartsTest.input(recipe);
         const wire = { ...base, ...(cap === undefined ? {} : { limits: { recordBytes: cap } }) };

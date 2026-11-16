@@ -7,11 +7,13 @@
 import { makeDurableObjectBridge, makeWorkerBridge } from "@alchemy.run/cloudflare/Bridge";
 import type { SettingsStart } from "@kampus/libfabrika";
 import { type Incoming } from "@kampus/libfabrika";
-import type { Child } from "@kampus/libfabrika/processes/Children";
+import type { Child, ChildStop } from "@kampus/libfabrika/processes/Children";
 import type { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Unwatch, Watch } from "@kampus/libfabrika/processes/Monitors";
 import type { Start } from "@kampus/libfabrika/processes/Process";
 import { fetch } from "@kampus/libfabrika/workers";
+import type { ProjectBinding } from "@kampus/libfabrika/workers/bindings";
 import { control } from "@kampus/libfabrika/workers/control";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
@@ -25,10 +27,15 @@ import { projectRuntime, type Env } from "./runtime.ts";
  * Durable Object for the Project: each RPC method runs the matching `ProjectService` call, and
  * `settingsStart` and `settingsRead` run on the runtime's settings calls.
  *
+ * **Details**
+ *
+ * It implements `ProjectBinding`, the type every caller's stub has, so a call the binding names and
+ * this class does not forward is a type error here, never a rejected call at run time.
+ *
  * @stability unstable
  * @category objects
  */
-export class Project extends DurableObject<Env> {
+export class Project extends DurableObject<Env> implements ProjectBinding {
   readonly owner = projectRuntime(this.ctx, this.env);
   readonly runtime = settingsWire(this.owner.contextEffect);
 
@@ -57,7 +64,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.challenge(client)));
   }
 
-  initialize(client: ConnectionId, input: unknown, trusted: { url: string; tab: string; name: string }) {
+  initialize(
+    client: ConnectionId,
+    input: unknown,
+    trusted: { url: string; tab: string; name: string; session?: string },
+  ) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.initialize(client, input, trusted)));
   }
@@ -152,6 +163,11 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.mail(...args)));
   }
 
+  hands(...args: Parameters<ContextProject["hands"]>) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.hands(...args)));
+  }
+
   inbox(pid: string, input: Incoming) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.inbox(pid, input)));
@@ -197,6 +213,23 @@ export class Project extends DurableObject<Env> {
     return this.runtime.runPromise(ProjectService.use((p) => p.processChild(child, from)));
   }
 
+  processStop(stop: ChildStop, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.processStop(stop, from)));
+  }
+
+  /** A program's watch by name, in the Project's write turn; a refusal is reply data. */
+  programMonitor(watch: Watch, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programMonitor(watch, from)));
+  }
+
+  /** Ends a program's own watch under its ref, in the Project's write turn. */
+  programDemonitor(unwatch: Unwatch, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.programDemonitor(unwatch, from)));
+  }
+
   processExit(pid: string, reason: ExitReason, from: From) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processExit(pid, reason, from)));
@@ -220,6 +253,11 @@ export class Project extends DurableObject<Env> {
   processIsLive(pid: string) {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
     return this.runtime.runPromise(ProjectService.use((p) => p.processIsLive(pid)));
+  }
+
+  processAck(pid: string, pos: number, from: From) {
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Durable Object RPC returns a Promise
+    return this.runtime.runPromise(ProjectService.use((p) => p.processAck(pid, pos, from)));
   }
 
   processMonitor(ref: string, pid: string, from: From) {

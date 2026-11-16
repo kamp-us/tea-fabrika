@@ -9,6 +9,7 @@
  */
 import { applyCell, type Outcome } from "@demlik/tea";
 import {
+  ByteSize,
   Cause,
   Clock,
   Context,
@@ -48,6 +49,7 @@ import {
   type ProcessError,
   Recipient,
   RuntimeRecord,
+  Rev,
   RunnerMail,
   SessionManager,
   sha256,
@@ -60,9 +62,12 @@ import {
 import { InputId } from "../Id.ts";
 import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
+import { Monitors } from "../processes/Monitors.ts";
 import { ProcessName } from "../processes/Process.ts";
 import { MailRefusal } from "../processes/ProgramMail.ts";
+import { Result as TaskResult } from "../tasks/Task.ts";
 import * as Chaos from "./Chaos.ts";
+import * as Chunk from "./Chunk.ts";
 import type { WatcherManager } from "./Entry.ts";
 import {
   Alarm,
@@ -74,17 +79,21 @@ import {
   Recording,
   type View,
 } from "./Entry.ts";
+import { HandsInput } from "./Hands.ts";
+import { HandsTasks } from "./HandsTasks.ts";
 import { fromFailure } from "./internal/exitReason.ts";
+import { handsDelivery } from "./internal/handsDelivery.ts";
 import { Failure, Policy, type Receipt } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
+import { DemonitorInput, MonitorInput } from "./Monitor.ts";
 import { diff } from "./Patch.ts";
 import { Admission, ProgramDown, Refusal, Step, Write } from "./Program.ts";
 import { recoveryStore, RecoveryStoreError } from "./RecoveryStore.ts";
 import { Replies, type RepliesError } from "./Replies.ts";
 import * as RepliesSql from "./RepliesSql.ts";
-import { Queued, SendInput } from "./Send.ts";
-import { ExitInput, StartChildInput } from "./StartChild.ts";
+import { Chunked, ChunksInput, Queued, SendInput } from "./Send.ts";
+import { ExitInput, StartChildInput, StopChildInput } from "./StartChild.ts";
 import { StepFault } from "./StepFault.ts";
 import type { WatchersError } from "./Watchers.ts";
 import { Watchers } from "./Watchers.ts";
@@ -188,9 +197,13 @@ const Dispatched = Schema.Struct({
   /** A host Cmd this life owes until it is answered, kept under its first name from when only Send
    *  was one; a replayed letter's was the life before's. */
   mail: Schema.optionalKey(Schema.Literal(true)),
-  /** A start_child or exit whose operands can never fit a row, saved without them so its row
-   *  fits: the one refusal it can get, after the loader for a program it kept. */
-  oversize: Schema.optionalKey(Schema.Literals(["bad_cmd", "no_program", "bad_name", "bad_input"])),
+  /** A start_child, exit or send_chunks whose operands can never fit a row, saved without them so
+   *  its row fits: the one refusal it can get, after the loader for a program it kept. */
+  oversize: Schema.optionalKey(Schema.Literals(["bad_cmd", "no_program", "bad_name", "bad_input", "too_big"])),
+  /** A send_chunks's chunk size when it was dispatched, so every try cuts the same letters. */
+  chunk: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+  /** A hands Cmd's saved delivery, which only its machine changes. Absent reads as `pending`. */
+  hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev, arrivedAt: Schema.Int } })),
 });
 type Dispatched = typeof Dispatched.Type;
 const decodeDispatched = Schema.decodeUnknownResult(Schema.Array(Dispatched));
@@ -210,19 +223,56 @@ const WRITE = "write";
 const WriteCmd = Schema.Struct({ stream: Schema.NonEmptyString, write: Write });
 const decodeWriteCmd = Schema.decodeUnknownResult(WriteCmd);
 
-/** The Cmd the runner mails itself, as the sender the host bound. */
+/** The Cmds the runner mails itself, as the sender the host bound: one letter, or a list cut into
+ *  chunk letters. */
 const SEND = "send";
+const SEND_CHUNKS = "send_chunks";
+const MAIL = new Set([SEND, SEND_CHUNKS]);
 const decodeSendInput = Schema.decodeUnknownResult(SendInput);
+const decodeChunksInput = Schema.decodeUnknownResult(ChunksInput);
+const decodeTarget = Schema.decodeUnknownOption(Schema.Struct({ type: Schema.String, to: Schema.String }));
 const isRefusal = Schema.is(MailRefusal);
 
-/** The Cmds a program asks its supervisor for: a child by name, and the end of its own life. */
+/** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
+const STOP_CHILD = "stop_child";
 const EXIT = "exit";
 
+/** The Cmd the runner hands to the Project as a task for the person's hands. */
+const HANDS = "hands";
+
+/** The Cmds a program watches another process with, by its registered name, and ends that watch. */
+const MONITOR = "monitor";
+const DEMONITOR = "demonitor";
+
 /** The Cmds the runner performs as the host: each is owed by this life until it is answered. */
-const HOST = new Set([SEND, START_CHILD, EXIT]);
-/** This life still owes a host Cmd (a send, a start_child or an exit): the next alarm tries it again. */
-const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean => cmds.some((cmd) => cmd.mail === true);
+const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, MONITOR, DEMONITOR]);
+
+/** This life still owes a host Cmd (a send, a send_chunks, a start_child, a stop_child, an exit,
+ *  a monitor, a demonitor, or a hands Cmd the Project has not saved yet): the next alarm tries it
+ *  again. A hands task that only waits on the hands is owed nothing: a wake or a due asks it again
+ *  (0105). */
+const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
+  cmds.some((cmd) => cmd.mail === true && cmd.hands?._tag !== "waiting");
+
+/** The name a send or a send_chunks mails, or none for any other Cmd. */
+const mailTarget = (job: Dispatched): Option.Option<string> =>
+  Option.flatMap(decodeTarget(job.cmd), (c) => (MAIL.has(c.type) ? Option.some(c.to) : Option.none()));
+
+/** A send or send_chunks that an earlier send_chunks to the same name, still owed, holds back: a
+ *  chunked send waits on a full inbox, and the letters one writer sends one reader arrive in the
+ *  order its Cmds were made, as OTP keeps per pair. */
+const behind = (cmds: ReadonlyArray<Dispatched>, job: Dispatched): boolean => {
+  const to = Option.getOrUndefined(mailTarget(job));
+  const index = cmds.findIndex((cmd) => cmd.id === job.id);
+  return (
+    to !== undefined &&
+    index > 0 &&
+    cmds
+      .slice(0, index)
+      .some((cmd) => cmd.mail === true && cmdType(cmd) === SEND_CHUNKS && Option.contains(mailTarget(cmd), to))
+  );
+};
 
 /**
  * A Cmd's operands, without the `type` its maker adds, when its input schema names every one. The
@@ -239,8 +289,17 @@ const operands = (cmd: unknown, fields: object): Option.Option<Record<string, un
 
 const strictStartChild = Schema.decodeUnknownOption(StartChildInput, { onExcessProperty: "error" });
 const strictExit = Schema.decodeUnknownOption(ExitInput, { onExcessProperty: "error" });
+const strictStopChild = Schema.decodeUnknownOption(StopChildInput, { onExcessProperty: "error" });
 const decodeStartChild = (cmd: unknown) => Option.flatMap(operands(cmd, StartChildInput.fields), strictStartChild);
 const decodeExit = (cmd: unknown) => Option.flatMap(operands(cmd, ExitInput.fields), strictExit);
+const decodeStopChild = (cmd: unknown) => Option.flatMap(operands(cmd, StopChildInput.fields), strictStopChild);
+const strictHands = Schema.decodeUnknownOption(HandsInput, { onExcessProperty: "error" });
+const decodeHands = (cmd: unknown) => Option.flatMap(operands(cmd, HandsInput.fields), strictHands);
+const strictMonitor = Schema.decodeUnknownOption(MonitorInput, { onExcessProperty: "error" });
+const decodeMonitor = (cmd: unknown) => Option.flatMap(operands(cmd, MonitorInput.fields), strictMonitor);
+const strictDemonitor = Schema.decodeUnknownOption(DemonitorInput, { onExcessProperty: "error" });
+const decodeDemonitor = (cmd: unknown) => Option.flatMap(operands(cmd, DemonitorInput.fields), strictDemonitor);
+const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
@@ -257,6 +316,20 @@ const withoutInput = (cmd: unknown): unknown => {
 
 const fitsText = (value: string): boolean => value.length <= 256;
 const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value) ?? "").length;
+const decodeAddress = Schema.decodeUnknownOption(Schema.Struct({ to: Schema.String, as: Schema.String }));
+
+/** A send_chunks's operands without its items: what every answer echoes, `{type, to, as}`, so the
+ *  answer's row stays small however close to the input cap the items came. A `to` or `as` that is
+ *  not short text stays out too, as an oversize start_child's long name does. */
+const withoutItems = (cmd: unknown): { readonly type: string; readonly to?: string; readonly as?: string } => {
+  const address = Option.getOrUndefined(decodeAddress(cmd));
+  return {
+    type: SEND_CHUNKS,
+    ...(address !== undefined && fitsText(address.to) ? { to: address.to } : {}),
+    ...(address !== undefined && fitsText(address.as) ? { as: address.as } : {}),
+  };
+};
+
 const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.String }));
 
 /** Keeps oversized invalid operands out of the checkpoint and answer. A valid first letter stays
@@ -265,8 +338,15 @@ const decodeKept = Schema.decodeUnknownOption(Schema.Struct({ program: Schema.St
 const oversized = (cmd: unknown): Option.Option<Pick<Dispatched, "cmd" | "oversize">> => {
   const type = Option.getOrUndefined(Option.map(decodeTyped(cmd), (c) => c.type));
 
-  if ((type !== START_CHILD && type !== EXIT) || bytes(cmd) <= INPUT_BYTES) {
+  if ((type !== START_CHILD && type !== EXIT && type !== SEND_CHUNKS) || bytes(cmd) <= INPUT_BYTES) {
     return Option.none();
+  }
+
+  // A chunked send's operands are its letters to be: past the input cap, it cannot be sent at all.
+  // It keeps its short `to` and `as`, so it waits behind an earlier send to that name and its
+  // answer echoes them; only the items are dropped.
+  if (type === SEND_CHUNKS) {
+    return Option.some({ cmd: withoutItems(cmd), oversize: "too_big" });
   }
 
   const input = type === START_CHILD ? decodeStartChild(cmd) : Option.none();
@@ -327,7 +407,7 @@ const failure = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
 
 /**
  * What the wiring gives a runner beside its services: the restart policy, where recovery is kept,
- * and a hook that cuts a recovery short.
+ * a hook that cuts a recovery short, and the chunk size of a chunked send.
  *
  * @stability unstable
  * @category models
@@ -345,6 +425,11 @@ export type RunnerOptions = {
    * stops the turn there, which is how a test cuts a recovery short. Left out, nothing is called.
    */
   readonly fault?: (cut: string) => Effect.Effect<void, LedgerError>;
+  /**
+   * The most bytes in one letter of a chunked send: the `mail.chunk` setting's value, which the
+   * brain reads at its edge. A send_chunks keeps the size it was dispatched with.
+   */
+  readonly chunk: ByteSize.ByteSize;
 };
 
 /**
@@ -446,7 +531,9 @@ export class ProgramRunner extends Context.Service<
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);
         const delivery = yield* Effect.serviceOption(MailDelivery);
+        const handsTasks = yield* Effect.serviceOption(HandsTasks);
         const children = yield* Effect.serviceOption(Children);
+        const monitors = yield* Effect.serviceOption(Monitors);
         // Read the lifecycle from its machine; the runner keeps no second copy.
         const ended = Effect.map(
           Effect.suspend(() => manager.status(process.name)),
@@ -484,6 +571,27 @@ export class ProgramRunner extends Context.Service<
         });
 
         const fault = (cut: string) => options.fault?.(cut) ?? Effect.void;
+        const chunkBytes = Number(ByteSize.toBigInt(options.chunk));
+        /** The newest inbox pos this life told the brain it read. Only a saved checkpoint moves it. */
+        let acked = 0;
+        /**
+         * Tells the brain this life has read its inbox through `pos`, once that is saved, so a full
+         * inbox makes room. A lost ack is only late: the next turn acks again, and a `full` answer
+         * wakes this reader, so its failure fails no turn.
+         */
+        const ack = Effect.fnUntraced(function* (pos: number) {
+          if (pos <= acked) {
+            return;
+          }
+
+          const told = yield* manager.ack(process.id, pos, yield* from(null, yield* traceId)).pipe(Effect.result);
+
+          if (Result.isSuccess(told)) {
+            acked = pos;
+          } else {
+            yield* Effect.annotateCurrentSpan({ [tag("ack")]: "lost", [tag("ack.pos")]: pos });
+          }
+        });
         const coordinator = Effect.succeed(manager);
         const currentRecovery = Effect.suspend(() =>
           supervision === null ? Effect.fail(new LedgerError({ reason: "bad_row" })) : Effect.succeed(supervision),
@@ -570,6 +678,8 @@ export class ProgramRunner extends Context.Service<
           process = { ...process, id, build };
           live = null;
           retry = [];
+          // A new life has told the brain nothing yet.
+          acked = 0;
         });
         /** The existing supervisor keeps the unfinished swap until its writes and notice finish. */
         const finishSwap = Effect.fnUntraced(function* (prepared?: Live) {
@@ -969,6 +1079,14 @@ export class ProgramRunner extends Context.Service<
           }
         });
 
+        /** Abandons the attempt the journal has open, as the next step would. */
+        const abandon = Effect.suspend(() => {
+          const j = supervision?.journal;
+          return j?._tag === "stepping" || j?._tag === "checking"
+            ? complete({ type: "abandoned", seq: j.attempt.seq }).pipe(Effect.andThen(continueRecovery()))
+            : Effect.void;
+        });
+
         const step = Effect.fnUntraced(function* (
           reason: ProgramDown["reason"],
           letter: string,
@@ -990,7 +1108,13 @@ export class ProgramRunner extends Context.Service<
             yield* complete({ type: "begin", process: process.id, letter, build: process.build, phase, at: status.at });
           }
 
-          yield* store.activity(Activity.cases.stepping.make({ process: process.id, letter, build: process.build }));
+          yield* store
+            .activity(Activity.cases.stepping.make({ process: process.id, letter, build: process.build }))
+            .pipe(
+              // The step has not run: its attempt is abandoned, so a later life never takes the begun
+              // attempt for an interrupted step and ends this process over a failed write.
+              Effect.tapError(() => abandon),
+            );
           const result = yield* Effect.gen(function* () {
             if (Option.isSome(stepFault)) {
               yield* stepFault.value.before({
@@ -1329,12 +1453,15 @@ export class ProgramRunner extends Context.Service<
             view = folded.view;
             wake = folded.wake;
             placed.push({ id: letter.id, rev: letter.rev, pos: letter.pos });
+            // The brain saves a monitor's answer in its own turn, so any catch-up may fold it first:
+            // what its step made is still this life's to run, as if `settle` had folded it.
+            const settled = own && cmds.some((cmd) => letter.id === `${cmd.id}/answer` && cmdType(cmd) === MONITOR);
 
             if (own && letter.id.endsWith("/answer")) {
               cmds = cmds.filter((cmd) => cmd.id !== letter.id.slice(0, -"/answer".length));
             }
 
-            const owed = !accepted || letter.id === options.mine;
+            const owed = !accepted || settled || letter.id === options.mine;
             // Host Cmds retry by stable id after a prepared turn's checkpoint failed.
             const preparedTurn = Option.exists(prepared, (turn) => turn.id === letter.id);
             const dispatched = folded.cmds.map((cmd, index): Dispatched => ({
@@ -1347,6 +1474,7 @@ export class ProgramRunner extends Context.Service<
               ...((owed || preparedTurn) && Option.exists(decodeTyped(cmd), (c) => HOST.has(c.type))
                 ? { mail: true as const }
                 : {}),
+              ...(Option.exists(decodeTyped(cmd), (c) => c.type === SEND_CHUNKS) ? { chunk: chunkBytes } : {}),
               ...Option.getOrElse(oversized(cmd), () => ({})),
             }));
             cmds = [...cmds, ...dispatched];
@@ -1355,7 +1483,7 @@ export class ProgramRunner extends Context.Service<
               mine = Option.some(letter);
               fresh.push(...dispatched);
             } else {
-              drain.push(...dispatched.filter((job) => !accepted || job.mail === true));
+              drain.push(...dispatched.filter((job) => !accepted || settled || job.mail === true));
             }
           }
 
@@ -1374,6 +1502,8 @@ export class ProgramRunner extends Context.Service<
             cmds,
           };
           yield* store.save(checkpoint(next, null), placed);
+          // The ack follows the save, never runs ahead of it: a crash between them leaves it behind.
+          yield* ack(next.pos);
           drained = [...drained, ...drain];
 
           // 0528: the mail wake clears once nothing is left behind it. The permit is held, and a
@@ -1421,10 +1551,13 @@ export class ProgramRunner extends Context.Service<
 
           let state: Live;
 
+          // A saved place ahead of the last ack is an ack that was lost: tell the brain again first.
           if (live !== null) {
+            yield* ack(live.pos);
             state = (yield* catchUp(live)).state;
           } else {
             const { live: loaded, dirty } = yield* load();
+            yield* ack(loaded.pos);
             state = (yield* catchUp(loaded, { dirty })).state;
           }
 
@@ -1449,11 +1582,23 @@ export class ProgramRunner extends Context.Service<
         // --- Cmds ---------------------------------------------------------------------------
 
         const at = Clock.currentTimeMillis;
-        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's or exit's
-         *  `err` keeps only its type, since a refused operand may hold anything its program put there. */
+        /** The Cmd an answer echoes. A start_child's `ok` drops its input; a start_child's, stop_child's
+         *  or exit's `err` keeps only its type, since a refused operand may hold anything its program
+         *  put there. A send_chunks keeps `{type, to, as}` and never its items, on `ok` and on `err`:
+         *  operands just under the input cap plus the answer's own fields would pass the row cap, and
+         *  the answer would never be saved. */
         const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
           const type = cmdType(job);
-          return type !== START_CHILD && type !== EXIT ? job.cmd : outcome === "err" ? { type } : withoutInput(job.cmd);
+
+          if (type === SEND_CHUNKS) {
+            return withoutItems(job.cmd);
+          }
+
+          return type !== START_CHILD && type !== STOP_CHILD && type !== EXIT
+            ? job.cmd
+            : outcome === "err"
+              ? { type }
+              : withoutInput(job.cmd);
         };
         const ok = Effect.fnUntraced(function* (job: Dispatched, value: unknown) {
           return yield* Effect.map(at, (time) => ({
@@ -1570,8 +1715,40 @@ export class ProgramRunner extends Context.Service<
           return yield* ok(job, answer.success);
         });
 
-        /** The built-in Send, mailed as this life, never as a sender the Cmd claims. A refusal is its
-         *  answer; a storage or wake failure is not, so the Send stays dispatched. */
+        /** One letter, mailed as this life under `command`, never as a sender the Cmd claims. A
+         *  refusal or `full` is an answer; a storage or wake failure is not, so the Cmd stays
+         *  dispatched. */
+        const deliver = Effect.fnUntraced(function* (
+          mailer: MailDelivery["Service"],
+          job: Dispatched,
+          mailing: { readonly command: string; readonly to: string; readonly m: unknown },
+        ) {
+          const sent = yield* mailer
+            .send({
+              ...mailing,
+              source: { name: process.name, process: process.id },
+              from: yield* from(job.parent, job.traceId),
+            })
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(sent)) {
+            return Result.succeed(sent.success);
+          }
+
+          const { reason } = sent.failure;
+
+          if (isRefusal(reason) || reason === "full") {
+            return Result.fail(reason);
+          }
+
+          return yield* new LedgerError({
+            reason: reason === "storage" ? "storage" : "unreachable",
+            message: Cause.pretty(Cause.fail(sent.failure)),
+          });
+        });
+
+        /** The built-in Send. A refusal is its answer, and so is `full`: the program decides whether
+         *  to send again. */
         const mail = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
           const input = decodeSendInput(job.cmd);
 
@@ -1579,30 +1756,135 @@ export class ProgramRunner extends Context.Service<
             return yield* err(job, "bad_cmd");
           }
 
-          const queued = yield* delivery.value
-            .send({
-              command: job.id,
-              source: { name: process.name, process: process.id },
-              to: input.success.to,
-              m: input.success.m,
-              from: yield* from(job.parent, job.traceId),
-            })
+          const queued = yield* deliver(delivery.value, job, {
+            command: job.id,
+            to: input.success.to,
+            m: input.success.m,
+          });
+          return Result.isSuccess(queued)
+            ? yield* ok(job, Schema.encodeSync(Queued)(queued.success))
+            : yield* err(job, queued.failure);
+        });
+
+        /**
+         * The built-in chunked send: it cuts the items with the size the Cmd was dispatched with and
+         * delivers part `seq` under `<cmd id>/part/<seq>`, in order. Each try starts at part 0, and a
+         * saved part answers its first receipt. A full inbox answers none, so the Cmd stays owed and
+         * its alarm tries again, as a blocked pipe writer waits. A refusal is the answer, the parts
+         * already saved stay, and the reader's `Chunk.join` says the send is cut.
+         */
+        const chunks = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeChunksInput(job.cmd);
+
+          if (job.oversize === "too_big") {
+            return Option.some(yield* err(job, "too_big"));
+          }
+
+          if (
+            Result.isFailure(input) ||
+            !state.loaded.declaration.cmds.includes(SEND_CHUNKS) ||
+            Option.isNone(delivery)
+          ) {
+            return Option.some(yield* err(job, "bad_cmd"));
+          }
+
+          const { to, as, items } = input.success;
+          const cut = Chunk.cut({ id: job.id, type: as, items }, job.chunk ?? chunkBytes);
+
+          if (Result.isFailure(cut)) {
+            return Option.some(yield* err(job, "too_big"));
+          }
+
+          for (const letter of cut.success) {
+            const queued = yield* deliver(delivery.value, job, {
+              command: `${job.id}/part/${letter.part.seq}`,
+              to,
+              m: letter,
+            });
+
+            if (Result.isFailure(queued)) {
+              const reason = queued.failure;
+              yield* Effect.annotateCurrentSpan({ [tag("part")]: letter.part.seq, [tag("answer")]: reason });
+              return reason === "full" ? Option.none() : Option.some(yield* err(job, reason));
+            }
+          }
+
+          return Option.some(
+            yield* ok(job, Schema.encodeSync(Chunked)(Chunked.make({ id: job.id, letters: cut.success.length }))),
+          );
+        });
+
+        /** Saves a hands Cmd's waiting task on its dispatched entry, so this life owes it nothing until
+         *  a wake or a due asks again. The permit is held. */
+        const wait = Effect.fnUntraced(function* (job: Dispatched, waiting: NonNullable<Dispatched["hands"]>) {
+          const saved = live?.cmds.find((cmd) => cmd.id === job.id);
+
+          if (live === null || saved === undefined || saved.hands?._tag === waiting._tag) {
+            return;
+          }
+
+          const next = {
+            ...live,
+            cmds: live.cmds.map((cmd) => (cmd.id === job.id ? { ...cmd, hands: waiting } : cmd)),
+          };
+          yield* store.save(checkpoint(next, null));
+          live = next;
+          yield* setAlarm();
+        });
+
+        /** The built-in hands Cmd: the Project keeps its task under the Cmd's own id, for the person's
+         *  hands. A finished task or a refusal is its answer. A waiting task answers nothing yet, and a
+         *  failed ask is not an answer either: the Cmd stays dispatched, and an alarm asks again. The
+         *  ask is the life that dispatched it, `origin`, even if a restart or a swap moved on since. */
+        const hands = Effect.fnUntraced(function* (state: Live, job: Dispatched, origin: Descriptor) {
+          const input = decodeHands(job.cmd);
+
+          if (Option.isNone(input) || !state.loaded.declaration.cmds.includes(HANDS) || Option.isNone(handsTasks)) {
+            return Option.some(yield* err(job, "bad_cmd"));
+          }
+
+          const replied = yield* handsTasks.value
+            .ask(
+              {
+                id: job.id,
+                process: origin.id,
+                name: origin.name,
+                program: origin.program,
+                build: origin.build,
+                command: input.value.command,
+                parent: job.parent,
+                traceId: job.traceId,
+              },
+              { ...(yield* from(job.parent, job.traceId)), build: origin.build },
+            )
             .pipe(Effect.result);
 
-          if (Result.isSuccess(queued)) {
-            return yield* ok(job, Schema.encodeSync(Queued)(queued.success));
+          // A failed ask may pass, so it is no reply and changes nothing the delivery saved. A waiting
+          // Cmd is owed nothing, so this alarm is what asks it again. A refusal for good, `id_reused`
+          // included, is a reply, and the program reads it.
+          if (Result.isFailure(replied)) {
+            yield* permit.withPermit(retryLater);
+            return yield* new LedgerError({
+              reason: replied.failure.reason === "storage" ? "storage" : "unreachable",
+              message: Cause.pretty(Cause.fail(replied.failure)),
+            });
           }
 
-          const { reason } = queued.failure;
+          const [before] = handsDelivery.init(job.hands ?? null, undefined);
+          const [next] = applyCell(handsDelivery, before, { type: "replied", reply: replied.success });
 
-          if (isRefusal(reason)) {
-            return yield* err(job, reason);
+          if (next._tag === "result") {
+            const { answer } = next;
+            return Option.some(
+              answer._tag === "ok" ? yield* ok(job, encodeResult(answer.result)) : yield* err(job, answer.reason),
+            );
           }
 
-          return yield* new LedgerError({
-            reason: reason === "storage" ? "storage" : "unreachable",
-            message: Cause.pretty(Cause.fail(queued.failure)),
-          });
+          if (next._tag === "waiting") {
+            yield* permit.withPermit(wait(job, next));
+          }
+
+          return Option.none();
         });
 
         /** The built-in start_child: the loader names the program and its hash, this life is the
@@ -1665,6 +1947,78 @@ export class ProgramRunner extends Context.Service<
 
           const { reason } = started.failure;
           return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
+        });
+
+        /** The built-in stop_child, OTP's terminate_child: this life is the requester, and only a child
+         *  its name started ends, with `shutdown`. A refusal is its answer; storage is not, so the Cmd
+         *  stays dispatched. */
+        const stopChild = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeStopChild(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(STOP_CHILD) || Option.isNone(children) || Option.isNone(input)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          const stopped = yield* children.value
+            .stop(
+              { name: input.value.name, requester: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(stopped)) {
+            return yield* ok(job, null);
+          }
+
+          const { reason } = stopped.failure;
+          return reason === "storage" ? yield* new LedgerError({ reason: "storage" }) : yield* err(job, reason);
+        });
+
+        /** The built-in monitor, OTP's monitor(process, Name): this life is the watcher and this Cmd's
+         *  id is the ref. The brain saves the answer in the watch's own turn, so a watch answers none
+         *  here; a refusal is the answer to place. Storage is not an answer, so the Cmd stays
+         *  dispatched and asks again under the same ref. */
+        const watch = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeMonitor(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(MONITOR) || Option.isNone(monitors) || Option.isNone(input)) {
+            return Option.some(yield* err(job, "bad_cmd"));
+          }
+
+          const watched = yield* monitors.value
+            .monitor(
+              { id: job.id, name: input.value.name, watcher: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.result);
+
+          if (Result.isSuccess(watched)) {
+            return Option.none();
+          }
+
+          const { reason } = watched.failure;
+          return reason === "storage"
+            ? yield* new LedgerError({ reason: "storage" })
+            : Option.some(yield* err(job, reason));
+        });
+
+        /** The built-in demonitor, OTP's demonitor(Ref, [flush]): only this life's own watch under the
+         *  ref ends, and the receive filter keeps an unread DOWN for it from folding. It refuses
+         *  nothing; storage leaves the Cmd dispatched. */
+        const unwatch = Effect.fnUntraced(function* (state: Live, job: Dispatched) {
+          const input = decodeDemonitor(job.cmd);
+
+          if (!state.loaded.declaration.cmds.includes(DEMONITOR) || Option.isNone(monitors) || Option.isNone(input)) {
+            return yield* err(job, "bad_cmd");
+          }
+
+          yield* monitors.value
+            .demonitor(
+              { ref: input.value.ref, watcher: Recipient.cases.process.make({ process: process.id }) },
+              yield* from(job.parent, job.traceId),
+            )
+            .pipe(Effect.mapError(() => new LedgerError({ reason: "storage" })));
+          return yield* ok(job, null);
         });
 
         /** The built-in exit: this life ends with `normal`, as OTP's `{stop, normal, State}`, and
@@ -1751,20 +2105,50 @@ export class ProgramRunner extends Context.Service<
           const originStore = store;
           const state = live;
 
-          if (state === null) {
+          // Mail to one name keeps its Cmd order: it waits behind an earlier chunked send still owed.
+          if (state === null || behind(state.cmds, job)) {
             return [];
           }
 
           const type = cmdType(job);
-          const m = yield* type === WRITE
-            ? cmdSpan(job, write(state, job))
-            : type === SEND
-              ? cmdSpan(job, mail(state, job))
-              : type === START_CHILD
-                ? cmdSpan(job, startChild(state, job))
-                : type === EXIT
-                  ? cmdSpan(job, stop(state, job))
-                  : handle(state, job);
+
+          if (type === HANDS) {
+            const answer = yield* cmdSpan(job, hands(state, job, origin));
+            return Option.isNone(answer) ? [] : yield* place(job, origin, originStore, answer.value);
+          }
+
+          if (type === MONITOR) {
+            const refusal = yield* cmdSpan(job, watch(state, job));
+            return Option.isSome(refusal)
+              ? yield* place(job, origin, originStore, refusal.value)
+              : yield* settle(job, origin);
+          }
+
+          const answered: Option.Option<unknown> =
+            type === SEND_CHUNKS
+              ? yield* cmdSpan(job, chunks(state, job))
+              : Option.some(
+                  yield* type === WRITE
+                    ? cmdSpan(job, write(state, job))
+                    : type === SEND
+                      ? cmdSpan(job, mail(state, job))
+                      : type === START_CHILD
+                        ? cmdSpan(job, startChild(state, job))
+                        : type === STOP_CHILD
+                          ? cmdSpan(job, stopChild(state, job))
+                          : type === DEMONITOR
+                            ? cmdSpan(job, unwatch(state, job))
+                            : type === EXIT
+                              ? cmdSpan(job, stop(state, job))
+                              : handle(state, job),
+                );
+
+          // A chunked send waiting on a full inbox has no answer yet: its owed entry's alarm tries again.
+          if (Option.isNone(answered)) {
+            return [];
+          }
+
+          const m = answered.value;
 
           if (m === null) {
             // The life ended: what it still owed, the Cmds listed after its exit included, never runs.
@@ -1781,7 +2165,13 @@ export class ProgramRunner extends Context.Service<
             );
           }
 
-          return yield* permit.withPermit(
+          return yield* place(job, origin, originStore, m);
+        });
+
+        /** Saves one Cmd's answer as its letter and folds it, or, when the life that dispatched it
+         *  ended meanwhile, records it in that life's stream. Answers the Cmds the fold made. */
+        const place = (job: Dispatched, origin: Descriptor, originStore: ProcessStore["Service"], m: unknown) =>
+          permit.withPermit(
             Effect.gen(function* () {
               const answer = `${job.id}/answer`;
 
@@ -1821,7 +2211,21 @@ export class ProgramRunner extends Context.Service<
               return (yield* catchUp(current, { mine: answer })).fresh;
             }),
           );
-        });
+
+        /** Folds an answer the brain already saved as this Cmd's letter, as `place` folds the one it
+         *  sends. Answers the Cmds the fold made. A life that ended meanwhile never folds it, and a
+         *  recovering one folds it on its next catch-up, as it does every answer of its own. */
+        const settle = (job: Dispatched, origin: Descriptor) =>
+          permit.withPermit(
+            Effect.gen(function* () {
+              if (origin.id !== process.id || recovering(supervision)) {
+                return [];
+              }
+
+              const current = live ?? (yield* ready());
+              return (yield* catchUp(current, { mine: `${job.id}/answer` })).fresh;
+            }),
+          );
 
         /** Sets the alarm that tries a failed drain again. The permit is held. */
         const retryLater = Effect.gen(function* () {

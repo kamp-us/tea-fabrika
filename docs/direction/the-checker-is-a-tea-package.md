@@ -94,7 +94,7 @@ const found = yield* sample((choices) => walk(machine, choices), {ms: 10_000, se
 
 - **What an agent writes for each machine.** Random walks still need a
   world, which is our list of every message and every answer, about 1,500
-  lines for the lanes. A test on the running host with generated inputs,
+  lines for the quests. A test on the running host with generated inputs,
   like experiment 116's, needs no world but needs stand-ins. Nobody has
   measured which one is cheaper to write and trust.
 - **The name.**

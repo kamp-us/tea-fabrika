@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-a-held-job-has-no-way-to-end",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "bug",
+  "location": {
+    "path": "next/packages/libfabrika/src/client/HandsMachine.ts",
+    "line": 433
+  },
+  "says": "In next/, a job whose finish the brain refused for good is saved as a held journal entry on the hands' machine and never sent again, so at the brain the job stays started forever and the program that asked for it waits with no error. Decision 0102 says an uncertain job is recovered by hand until Tier 4, but no hand way to end a held job exists yet: no call, no command and no window shows it.",
+  "proof": "client/HandsMachine.ts:433 saves Entry.cases.held and lists again; recover and saved both answer a held entry with hold, which sends nothing; gateway/Jobs.ts has no method that ends a started job other than jobs.finish from its own execution; .decisions/0102-hands-is-a-grant-rank-and-work-is-taken.md line 94: recovery from an uncertain job is by hand until Tier 4.",
+  "cost": "Each held job leaves one program waiting for good and one job started at the brain; a person cannot see it or end it without editing stored data.",
+  "head": "bd3d8a1419cc9110735459abda65b1ccbe423c1f",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315"
+}

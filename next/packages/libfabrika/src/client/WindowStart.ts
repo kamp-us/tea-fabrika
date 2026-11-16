@@ -7,15 +7,16 @@
  * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
-import { Clock, DateTime, Deferred, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
+import { Clock, DateTime, Deferred, Effect, Schema, type Stream } from "effect";
 import { Socket } from "effect/socket";
 import * as Id from "../Id.ts";
+import { TileId } from "../tezgah/Workspace.ts";
 import { ClientKey, type Identity } from "../transport/ClientKey.ts";
 import { ClientRow, ClientRows, ErrorClass } from "../transport/ClientRows.ts";
 import { helloText } from "../transport/Hello.ts";
-import { backoff, CAP } from "../transport/Link.ts";
 import { writeSshsig } from "../transport/Sshsig.ts";
 import { Hello } from "../transport/Wire.ts";
+import { dialer, type Handle, send as sendOn } from "./internal/dial.ts";
 import type { WindowMsg, windowMachineFor, write } from "./WindowMachine.ts";
 
 /**
@@ -33,7 +34,7 @@ export const ClientInfo = Schema.Struct({
 });
 
 /**
- * What a start is given: the tiles to show, the window parent, the brain's origin, the build that
+ * What a start is given: the tiles to show or a tezgah workspace, the window parent, the brain's origin, the build that
  * runs and the client's own facts. Plain data and the machine, so any client can pass it.
  *
  * @stability unstable
@@ -41,6 +42,8 @@ export const ClientInfo = Schema.Struct({
  */
 export type StartOptions = {
   readonly tiles: ReadonlyArray<{ readonly id: string; readonly name: string }>;
+  /** The window shows this workspace of its person's tezgah, in place of `tiles`. */
+  readonly tezgah?: { readonly workspace: number };
   readonly window: ReturnType<typeof windowMachineFor>;
   readonly origin: string;
   readonly build: string;
@@ -60,57 +63,33 @@ const Failure = Schema.TaggedUnion({
 const F = Failure.cases;
 type Write = ReturnType<typeof write>;
 
-/** One dial's open socket: its writer, the key it dialed with, and when each call id was written. */
-type Handle = {
-  readonly writer: Socket.Writer;
-  readonly key: Identity;
-  readonly written: Map<number, number>;
+/** One call as the JSON-RPC method and params the door takes. */
+const wire = (call: Write["call"], label: string) => {
+  switch (call._tag) {
+    case "read":
+      return { method: "ledger.read", params: { stream: call.stream, after: call.after } };
+    case "wait":
+      return { method: "ledger.wait", params: { stream: call.stream, after: call.after } };
+    case "monitor":
+      return { method: "process.monitor", params: { ref: call.ref, pid: call.pid } };
+    case "open":
+      return { method: "view.open", params: { pid: call.pid } };
+    case "knock":
+      return { method: "gateway.knock", params: { label } };
+    case "send":
+      return {
+        method: "process.send",
+        params: {
+          pid: call.pid,
+          letter: call.letter,
+          m: call.m,
+          sentAt: call.sentAt,
+          seen: call.seen,
+          ...(call.traceId ? { traceId: call.traceId } : {}),
+        },
+      };
+  }
 };
-
-/** The id of a frame that answers a call, read only to time the answer. */
-const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
-
-/** The class of a socket that failed to open: the thrown error's own class, or a network failure. */
-const openFailure = (error: Socket.SocketError): ErrorClass => {
-  const reason = error.reason;
-
-  if (reason._tag === "SocketOpenError" && reason.kind === "Timeout") {
-    return "TimeoutError";
-  }
-
-  const cause = "cause" in reason ? reason.cause : undefined;
-  const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
-  return Schema.is(ErrorClass)(name) ? name : "NetworkError";
-};
-
-/** The close code a reader's failure carries, or 1006 when the socket ended without one. */
-const closeCode = (error: Socket.SocketError): number =>
-  error.reason._tag === "SocketCloseError" ? error.reason.code : 1006;
-
-/** One socket for `url`, from the platform's constructor. A throwing constructor is an open failure. */
-const acquire = (make: Socket.WebSocketConstructor["Service"], url: string) =>
-  Effect.acquireRelease(
-    Effect.try({
-      try: () => make(url),
-      catch: (cause) => new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: "Unknown", cause }) }),
-    }),
-    (ws) => Effect.sync(() => ws.close(1000)),
-  );
-
-/** The retry timer already waited the backoff. Only the socket adds jitter. */
-const dialWait = Effect.fn("WindowStart.dialWait")(function* (tries: number) {
-  if (tries === 0) {
-    return;
-  }
-
-  const base = backoff(tries);
-  const bound = Math.min(1000, base / 2, CAP - base);
-
-  if (bound > 0) {
-    const ms = yield* Random.nextIntBetween(0, bound);
-    yield* Effect.sleep(ms);
-  }
-});
 
 /**
  * Boots a window parent and runs every Cmd to hand-off; the door's answers arrive as Msgs.
@@ -147,79 +126,13 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
     return waiting;
   };
 
-  /** Writes one text on the dial's open socket, or fails at once when it has none. */
-  const send = (dial: number, text: string): Effect.Effect<void, "none" | Socket.SocketError> =>
-    Effect.suspend((): Effect.Effect<void, "none" | Socket.SocketError> => {
-      const handle = handles.get(dial);
-      return handle === undefined ? Effect.fail("none" as const) : handle.writer.write(text);
-    });
-
-  const socket = (dial: number, rejected: string | null, tries: number): Stream.Stream<WindowMsg> =>
-    Stream.callback<WindowMsg>((queue) =>
-      Effect.gen(function* () {
-        const emit = (m: WindowMsg): void => {
-          Queue.offerUnsafe(queue, m);
-        };
-        const key = yield* Deferred.await(identityFor(rejected));
-        yield* dialWait(tries);
-        const url = `${options.origin.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${encodeURIComponent(tab)}`;
-        const connection = yield* Socket.fromWebSocket(acquire(sockets, url));
-        const pull = yield* Socket.readerString(connection).pipe(
-          Effect.catch((error) =>
-            Effect.gen(function* () {
-              const at = yield* Clock.currentTimeMillis;
-
-              if (error.reason._tag !== "SocketCloseError") {
-                emit({ type: "socket_failure", dial, op: "connect", error: openFailure(error) });
-              }
-
-              emit({ type: "socket_closed", dial, code: closeCode(error), at });
-              return yield* Effect.never;
-            }),
-          ),
-        );
-        const writer = yield* connection.writer;
-        const written = new Map<number, number>();
-        yield* Effect.acquireRelease(
-          Effect.sync(() => handles.set(dial, { writer, key, written })),
-          () => Effect.sync(() => handles.delete(dial)),
-        );
-        emit({ type: "socket_opened", dial, at: yield* Clock.currentTimeMillis });
-        return yield* pull.pipe(
-          Effect.flatMap((texts) =>
-            Effect.map(Clock.currentTimeMillis, (at) => {
-              for (const text of texts) {
-                // A call's write time lives until its answer comes, so the map only holds calls in
-                // flight.
-                const sent = Option.flatMap(answerId(text), ({ id }) => {
-                  const at = Option.fromUndefinedOr(written.get(id));
-                  written.delete(id);
-                  return at;
-                });
-                emit({
-                  type: "frame",
-                  dial,
-                  text,
-                  at,
-                  ...Option.match(sent, { onNone: () => ({}), onSome: (t) => ({ ms: Math.max(0, at - t) }) }),
-                });
-              }
-            }),
-          ),
-          Effect.forever,
-          Effect.catch((error) =>
-            Effect.gen(function* () {
-              handles.delete(dial);
-              emit({ type: "socket_closed", dial, code: closeCode(error), at: yield* Clock.currentTimeMillis });
-              return yield* Effect.never;
-            }),
-          ),
-        );
-      }),
-    );
+  const send = (dial: number, text: string) => sendOn(handles, dial, text);
+  const dial = dialer({ sockets, origin: options.origin, tab, handles });
+  const socket = (n: number, rejected: string | null, tries: number): Stream.Stream<WindowMsg> =>
+    dial(n, Deferred.await(identityFor(rejected)), tries);
 
   return yield* run(options.window, {
-    ctx: { tiles: options.tiles },
+    ctx: { tiles: options.tiles, tab, ...(options.tezgah === undefined ? {} : { tezgah: options.tezgah }) },
     interpret: {
       key: Effect.fn("ClientKey.current")(function* (cmd) {
         const key = yield* keys.current(cmd.rejected).pipe(Effect.mapError((error) => ({ ...error })));
@@ -230,26 +143,12 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
         const letter = yield* ids.next(Id.Letter).pipe(Effect.mapError(() => F.entropy.make({})));
         return { letter, sentAt: yield* sentAt };
       }),
+      mint: Effect.fn("Client.mint")(function* () {
+        const tile = yield* ids.next(TileId).pipe(Effect.mapError(() => F.entropy.make({})));
+        return { tile };
+      }),
       write: Effect.fn("Client.write")(function* (cmd: Write) {
-        const call = cmd.call;
-        const message =
-          call._tag === "read"
-            ? { method: "ledger.read", params: { stream: call.stream, after: call.after } }
-            : call._tag === "open"
-              ? { method: "view.open", params: { pid: call.pid } }
-              : call._tag === "knock"
-                ? { method: "gateway.knock", params: { label: options.client.label } }
-                : {
-                    method: "process.send",
-                    params: {
-                      pid: call.pid,
-                      letter: call.letter,
-                      m: call.m,
-                      sentAt: call.sentAt,
-                      seen: call.seen,
-                      ...(call.traceId ? { traceId: call.traceId } : {}),
-                    },
-                  };
+        const message = wire(cmd.call, options.client.label);
         const written = handles.get(cmd.dial)?.written;
         written?.set(cmd.id, yield* Clock.currentTimeMillis);
         yield* send(cmd.dial, JSON.stringify({ jsonrpc: "2.0", id: cmd.id, ...message })).pipe(
