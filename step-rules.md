@@ -26,6 +26,8 @@ continue from its head; if not, create it from `origin/main`. Push only to that 
 3. `git push -u origin <branch>`, retry up to 4 times on a network error.
 Never amend, rebase, reset or force-push. Stage your own paths by name.
 
+**GitHub only through its MCP tool.** Open or change a pull request, its title or its body only with the GitHub MCP tools (`create_pull_request`, `update_pull_request`). Never `gh pr`, `gh api` or curl for that: in this cloud environment `gh` is for search only.
+
 **Pull request: one per sweep, never one per slice (owner ruling).** A slice opens NO pull
 request. It works on its own branch and pushes there; an integrator folds reviewed slice branches
 into the sweep's one PR (`fabrikalfa/effect-mechanical`, `fabrikalfa/effect-judgment`,
