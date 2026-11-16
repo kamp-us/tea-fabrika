@@ -19,6 +19,11 @@ its plan and its steps.
   directory is its own worktree root. Never hand a step a worktree you made in a scratchpad: its
   shell resets to the main checkout, and the step-rules' plain-git rule then cannot be met
   (seen five times on 2026-11-16). A read-only review may share the worktree of the step it reads.
+- **Every review leaves a committed row.** The review step stays read-only on code, but its
+  verdict must live in the repo: the reviewer writes its run row text into its RESULT, and you
+  commit it as `field/runs/<date>-<slice>-review<n>.json` with the step-commit skill before you
+  report the slice reviewed. A slice whose review has no committed row is not reviewed for a
+  fold (twelve heads were held back on 2026-11-16 for this).
 - **Each step's prompt** must stand alone: the slice, the plan path and row, the branch, that the
   step reads `step-rules.md` and its step brief from `fabrikalfa/twin-tools`
   (`git fetch -q origin fabrikalfa/twin-tools; git show FETCH_HEAD:<file>`), and these two lines:
