@@ -435,6 +435,8 @@ const nextSamples = {
 // has no sample from it. Two more, chaos-revoke and stored under e2e/, take their rows from
 // e2eSamples below; the six others with no samples have no row, and count the median.
 // This fixed snapshot copies the observations, never the measured table's computed weights.
+// Ticket 591 removed `exam/laws-scan.integration.test.ts` and its three samples, once
+// `fabrika/machine-has-laws` held its check.
 const integrationSamples = {
   // A job 132292933169, B job 132315559486, C job 132330501025.
   "next/apps/fabrika/src/brain-life.integration.test.ts": [26.5, 25.5, 44.2],
@@ -475,8 +477,6 @@ const integrationSamples = {
   "next/apps/fabrika/src/exam/edges.integration.test.ts": [2.8, 2.9, 4.2],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/effect-functions.integration.test.ts": [0.0, 0.0, 0.0],
-  // A job 132292933326, B job 132315559534, C job 132330500993.
-  "next/apps/fabrika/src/exam/laws-scan.integration.test.ts": [0.0, 0.0, 0.0],
   // A job 132292933326, B job 132315559534, C job 132330500993.
   "next/apps/fabrika/src/exam/layers.integration.test.ts": [3.6, 4.0, 5.7],
   // A job 132292933326, B job 132315559534, C job 132330500993.
