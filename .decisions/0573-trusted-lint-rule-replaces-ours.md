@@ -69,8 +69,9 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
 - **Also go, where theirs is the same or wider:**
   - `no-implicit-effect-concurrency`, to the checker's `missingConcurrencyOption`, after
     `@effect/tsgo` moves to 0.69.0.
-  - `no-wall-clock` and `no-clock-in-view`, to the checker's `globalDate`, `globalDateInEffect`,
-    `globalRandom` and UUID checks.
+  - ~~`no-wall-clock` and `no-clock-in-view`, to the checker's `globalDate`, `globalDateInEffect`,
+    `globalRandom` and UUID checks.~~ Wrong: both stay, since theirs is narrower (amendment
+    2026-11-16).
   - `no-node-imports`, to oxlint's `import/no-nodejs-modules`.
   - `no-cause-squash` and `no-effect-run-outside-edge`, to oxlint's `no-restricted-properties` and
     `no-restricted-imports`.
@@ -120,3 +121,15 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
 
 - 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) overrides "`service-id` stays for now". The checker's `deterministicKeys` is an error and `service-id` is deleted.
 - 2026-11-15: `padding-line-between-statements` stays. The check this file asks for found that anti-slop's `require-readable-spacing` misses class-member lines (a method after a field, a method after a method), so it does not flag every line ours does. Upstream issue https://github.com/dmmulroy/anti-slop/issues/78, filed 2026-11-15.
+- 2026-11-16: `no-wall-clock` and `no-clock-in-view` stay, beside the checker's clock checks. The
+  list above put them under "theirs is the same or wider", and that was wrong. A probe in
+  `libfabrika/src/gateway`, run once with `globalDate`, `globalDateInEffect`, `globalRandom` and
+  `globalTimers` at error, flagged `Date.now()`, `new Date()`, `Math.random()` and
+  `crypto.randomUUID()`, but not `Date()`, `globalThis.Date()`, `performance.now()` or
+  `window.performance.now()`. Ours refuse all four (`oxlint-plugins/no-clock-in-view.ts`, its
+  `Date` call check and its `performance.now` set), and
+  `next/apps/fabrika/src/worker-mail.integration.test.ts` keeps a `performance.now()` that the
+  checker's zero recount passes. So this decision's own principle, ours stays wherever it catches
+  more, keeps both. The proof is the Effect sweep's E89 review row,
+  `field/runs/2026-11-16-effect-e89-review1.json` on `fabrikalfa/effect-e89`. Ruled by the merge
+  session's coordinator for E89, as an application of the owner's principle here, not a new call.
