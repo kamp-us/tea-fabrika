@@ -368,3 +368,10 @@ run's CI jobs before anyone pays for an install (0175). The Effect checks ask fo
 counterparts, and those cannot load before install. The lead ruled that each lock lists these four
 files by exact path in its `exclude`, never by a glob, with this reason. A new script then needs
 its own diff and its own reason.
+
+### 2026-11-15: `missingPipeableSignature` covers every folder
+
+The owner ruled on 2026-11-15 that Effect's `missingPipeableSignature` check covers everything:
+library code, scripts, test helpers, Layer constructors and comparators. All 135 hits left after
+slice E43 get a `Function.dual` signature, and the lock covers every folder. This overrules the
+lead's lean, which would have covered exported library code only.
