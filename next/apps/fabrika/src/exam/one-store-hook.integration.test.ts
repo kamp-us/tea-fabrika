@@ -182,6 +182,8 @@ describe("one-store-hook", async () => {
     try {
       copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
       symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));
+      // The config loads the vendored anti-slop plugins from here (0563).
+      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       mkdirSync(dirname(join(at, OTHER_CALLS)), { recursive: true });
       writeFileSync(join(at, OTHER_CALLS), otherCalls);
       // A program package has its manifest, with a real pure entry at '.' (P16's layout rule),

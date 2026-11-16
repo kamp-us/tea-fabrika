@@ -5,8 +5,7 @@
 // The glob is package-relative, as in code-graph 0.15.0's `conventionMatcher`: "src/brain.ts" matches
 // `src/brain.ts` inside the nearest folder with a package.json. Test files are left out, as code-graph
 // and exam-paths.json class them.
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
 import { Array as Arr, Option, Schema, pipe } from "effect";
 import { parseSync } from "oxc-parser";
@@ -25,12 +24,18 @@ const Kinds = Schema.fromJsonString(
   }),
 );
 
-// The repository's own tracked list, read as text: a reader, which 0536 keeps on pull requests.
-const tracked = Arr.filter(
-  // oxlint-disable-next-line fabrika/integration-test-name -- git ls-files only reads the repository's own index
-  spawnSync("git", ["ls-files", "-z"], { cwd: ROOT, encoding: "utf8" }).stdout.split("\0"),
-  (p) => p !== "",
-);
+/** A folder git never tracks here: installs, builds, run logs at the top, and dot folders. */
+const untracked = (path: string, name: string) =>
+  name === "node_modules" || name === "dist" || name.startsWith(".") || path === "runs";
+
+/** The checkout's files, from the top, read in this process with no git, so the law is plain (0584). */
+const walk = (dir: string): ReadonlyArray<string> =>
+  Arr.flatMap(readdirSync(join(ROOT, dir), { withFileTypes: true }), (entry) => {
+    const path = dir === "" ? entry.name : `${dir}/${entry.name}`;
+    return entry.isDirectory() ? (untracked(path, entry.name) ? [] : walk(path)) : entry.isFile() ? [path] : [];
+  });
+
+const tracked = walk("");
 
 const packages = pipe(
   tracked,

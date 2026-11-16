@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-build2",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1391",
+  "started": "2026-11-15T17:55:00-08:00",
+  "ended": "2026-11-15T18:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Second build round for slice 1 after the plan was amended: today's version keeps its 0.25.0 patch on catalog:old. Pulled the tests step's restored patch, workspace row and lockfile, then changed lines 52-53 of decision 0256 to say tea 0.27.0 ships demlik 897 and today's version keeps the local patch on 0.25.0 until it goes. pnpm format, pnpm lint and one pnpm typecheck all exit 0, so law E2 is green. The plant was not rerun, since the tests step owns the amended plan's E2 plant record.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": null,
+  "step": "build"
+}
