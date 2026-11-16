@@ -30,6 +30,7 @@ import {
   Fiber,
   Layer,
   Logger,
+  Match,
   Option,
   References,
   Result,
@@ -283,11 +284,13 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
     }
 
     for (const span of spans) {
-      if (span.name !== "mail_delivery.send" || span.status._tag !== "Ended" || !Exit.isSuccess(span.status.exit)) {
+      const ended = Match.valueTags(span.status, { Started: () => null, Ended: (status) => status });
+
+      if (span.name !== "mail_delivery.send" || ended === null || !Exit.isSuccess(ended.exit)) {
         continue;
       }
 
-      const queued = Schema.decodeUnknownSync(Queued)(span.status.exit.value);
+      const queued = Schema.decodeUnknownSync(Queued)(ended.exit.value);
       expect(span.attributes.get("fab.mail.receipt"), "T1a: queued is tied to its receipt").toBe(queued.id);
       const wake = wakes.find((w) => w.span === span.spanId);
       expect(wake, "T1a: every queued Send saved its target alarm").toBeDefined();
@@ -784,7 +787,7 @@ const walk = (
       for (const k of pairs) {
         const state = yield* requesterState(k);
 
-        if (state === null || state._tag !== "waiting") {
+        if (state === null || !RequesterModel.isAnyOf(["waiting"])(state)) {
           idle.push(k);
         }
       }
@@ -2688,14 +2691,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             return same(prev, next) || "L2: `queued` is a delivery receipt and changes nothing";
           }
 
-          if (prev._tag === "answered") {
+          if (RequesterModel.isAnyOf(["answered"])(prev)) {
             return msg.type === "start" || same(prev, next) || "L2: a late message undid an answered request";
           }
 
-          if (next._tag === "answered") {
+          if (RequesterModel.isAnyOf(["answered"])(next)) {
             return (
               (msg.type === "answer" &&
-                prev._tag === "waiting" &&
+                RequesterModel.isAnyOf(["waiting"])(prev) &&
                 prev.ref === msg.ref &&
                 same(next, RequesterModel.cases.answered.make({ ref: msg.ref, value: msg.value }))) ||
               "L9: only the waiting reference's own answer completes it"

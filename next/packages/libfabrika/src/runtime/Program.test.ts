@@ -7,7 +7,7 @@ import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { Declaration } from "./Execution.ts";
-import { Input, Program, Refusal, stepper } from "./Program.ts";
+import { Input, Program, Refusal, Step, stepper } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, replies: Schema.Int });
 type Model = typeof Model.Type;
@@ -1495,7 +1495,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
 
         const p = loaded.success;
         const start = p.init(null);
-        let model = start._tag === "stepped" ? start.model : null;
+        let model = Step.isAnyOf(["stepped"])(start) ? start.model : null;
         const pending: Array<unknown> = [];
 
         for (const { fresh, n, pick, answer: a } of moves) {
@@ -1504,7 +1504,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
             const stepped = p.step(model, { type: "add", n, extra: "kept out by the Msg schema" });
             expect(stepped).toMatchObject({ _tag: "stepped" });
 
-            if (stepped._tag === "stepped") {
+            if (Step.isAnyOf(["stepped"])(stepped)) {
               model = stepped.model;
               pending.push(...stepped.cmds);
             }
@@ -1543,7 +1543,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           } else {
             expect(Result.isSuccess(folded)).toBe(true);
 
-            if (Result.isSuccess(folded) && folded.success._tag === "stepped") {
+            if (Result.isSuccess(folded) && Step.isAnyOf(["stepped"])(folded.success)) {
               if (expected === "applied") {
                 // The machine gets the saved Msg itself, inherited and extra fields included.
                 expect(received.slice(before)).toHaveLength(1);

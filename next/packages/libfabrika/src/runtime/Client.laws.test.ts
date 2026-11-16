@@ -24,11 +24,11 @@
 // move that state allows; stale and malformed input is built from what the walk delivered.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Match, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
-import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
-import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
+import type { Client, ClientMsg, NameFold } from "./Client.ts";
+import { clientMachineFor, foldName, Pending, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
 const SEED = 119120;
@@ -174,8 +174,8 @@ const answerFor = (c: LetterChoice): Answer =>
 type LetterWalk = { c: Model; letters: Map<number, Ready>; settled: Array<string> };
 
 const letterMoves = (w: LetterWalk, c: LetterChoice): ReadonlyArray<Msg> => {
-  const dating = w.c.pending.filter((p) => p._tag === "dating");
-  const ready = w.c.pending.filter((p): p is Ready => p._tag === "ready");
+  const dating = w.c.pending.filter(Pending.isAnyOf(["dating"]));
+  const ready = w.c.pending.filter(Pending.isAnyOf(["ready"]));
   const pid = LETTER_PIDS[c.pick % LETTER_PIDS.length]!;
   const out: Array<Msg> = [
     {
@@ -231,13 +231,16 @@ const letterWalk = (
     each({ c: w.c, letters: new Map(w.letters), settled: [...w.settled] }, m, next, out);
 
     for (const p of next.pending) {
-      if (p._tag === "ready" && !w.letters.has(p.n)) {
+      if (Pending.isAnyOf(["ready"])(p) && !w.letters.has(p.n)) {
         w.letters.set(p.n, p);
       }
     }
 
     for (const r of w.c.pending) {
-      if (r._tag === "ready" && !next.pending.some((p) => p._tag === "ready" && p.letter === r.letter)) {
+      if (
+        Pending.isAnyOf(["ready"])(r) &&
+        !next.pending.some((p) => Pending.isAnyOf(["ready"])(p) && p.letter === r.letter)
+      ) {
         w.settled.push(r.letter);
       }
     }
@@ -256,7 +259,7 @@ describe("L4: client letters (p1)", () => {
     fc.assert(
       fc.property(letterWalks, (list) => {
         letterWalk(list, (prev, m, next) => {
-          const dated = next.pending.filter((p) => p._tag === "ready" && prev.letters.has(p.n));
+          const dated = next.pending.filter((p) => Pending.isAnyOf(["ready"])(p) && prev.letters.has(p.n));
           expect(dated, "a slot changed after its first date").toEqual(dated.map((p) => prev.letters.get(p.n)));
 
           if (m.type === "dated" && prev.letters.has(m.n)) {
@@ -275,15 +278,15 @@ describe("L4: client letters (p1)", () => {
       fc.property(letterWalks, (list) => {
         letterWalk(list, (_prev, _m, next) => {
           const out = sendable(next);
-          const firstDating = next.pending.findIndex((p) => p._tag === "dating");
+          const firstDating = next.pending.findIndex(Pending.isAnyOf(["dating"]));
           const expected = (firstDating < 0 ? next.pending : next.pending.slice(0, firstDating)).filter(
-            (p): p is Ready => p._tag === "ready",
+            Pending.isAnyOf(["ready"]),
           );
           expect(out).toEqual(expected);
           expect(out.map((p) => p.n)).toEqual([...out.map((p) => p.n)].sort((a, b) => a - b));
           expect(next.pending.map((p) => p.n)).toEqual([...next.pending.map((p) => p.n)].sort((a, b) => a - b));
 
-          if (firstDating >= 0 && next.pending.slice(firstDating).some((p) => p._tag === "ready")) {
+          if (firstDating >= 0 && next.pending.slice(firstDating).some(Pending.isAnyOf(["ready"]))) {
             blocked++;
           }
         });
@@ -299,8 +302,17 @@ describe("L4: client letters (p1)", () => {
       fc.property(letterWalks, (list) => {
         letterWalk(list, (prev, m, next) => {
           const gone = prev.c.pending.filter((p) => !next.pending.some((q) => q.n === p.n));
-          const terminal = m.type === "reply" && (m.answer._tag === "accepted" || m.answer._tag === "refused");
-          const own = prev.c.pending.filter((p) => p._tag === "ready" && m.type === "reply" && p.letter === m.letter);
+          const terminal =
+            m.type === "reply" &&
+            Match.valueTags(m.answer, {
+              accepted: () => true,
+              refused: () => true,
+              unreachable: () => false,
+              unknown: () => false,
+            });
+          const own = prev.c.pending.filter(
+            (p) => Pending.isAnyOf(["ready"])(p) && m.type === "reply" && p.letter === m.letter,
+          );
 
           seen.removed += terminal && own.length > 0 ? 1 : 0;
           seen.kept += !terminal && m.type === "reply" && own.length > 0 ? 1 : 0;

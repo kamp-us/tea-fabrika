@@ -8,6 +8,7 @@ import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   Activity,
+  Appended,
   Mailbox,
   ProcessManager,
   ProcessStore,
@@ -308,7 +309,7 @@ describe("P34 interrupted recovery", () => {
                 yield* Effect.gen(function* () {
                   const sent = yield* Mailbox.use((m) => m.send(NAME, "saved", { type: "add", n: value }, from()));
 
-                  if (sent._tag === "placed") {
+                  if (Appended.isAnyOf(["placed"])(sent)) {
                     yield* ProcessStore.use((s) =>
                       s.save(
                         {

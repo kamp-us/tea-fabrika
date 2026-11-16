@@ -199,7 +199,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, done: Set<string>)
         // Whatever the target is now, a saved request keeps the target and hash it was first made with.
         const after = yield* read(a.id);
 
-        if (R.isSuccess(after) && after.success.state._tag !== "absent") {
+        if (R.isSuccess(after) && !State.isAnyOf(["absent"])(after.success.state)) {
           const first = saved.get(a.id);
           expect(after.success.state.request.target, "S1: the request's target is the first one").toBe(first?.target);
           expect(after.success.state.request.settings, "S1: the request's settings hash is the first one").toBe(

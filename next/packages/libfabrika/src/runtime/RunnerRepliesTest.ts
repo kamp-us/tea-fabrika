@@ -376,7 +376,10 @@ const walk = (
       if (base === current(note)) {
         accepted++;
         expect(answer).toEqual(
-          Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos: accepted }),
+          Sent.cases.accepted.make({
+            rev: Sent.match(answer, { accepted: ({ rev }) => rev, refused: () => -1 }),
+            pos: accepted,
+          }),
         );
         versions.set(note, current(note) + 1);
         expect(patches(), "an accepted save publishes one patch").toBe(before + 1);
@@ -421,8 +424,8 @@ const walk = (
 
     for (const [n, step] of steps.entries()) {
       const intact = answered.filter((a) => !damaged.has(a.letter.id));
-      const stored = intact.filter((a) => a.first._tag === "refused");
-      const futures = answered.filter((a) => a.first._tag === "refused" && a.base > current(a.note));
+      const stored = intact.filter((a) => Sent.isAnyOf(["refused"])(a.first));
+      const futures = answered.filter((a) => Sent.isAnyOf(["refused"])(a.first) && a.base > current(a.note));
       const moves = enabled.filter((move) =>
         move === "older"
           ? NOTES.some((note) => current(note) > 0)
@@ -458,7 +461,7 @@ const walk = (
         // The same letter with one bound part changed: its payload, or for a refusal its caller.
         const prior = nth(intact, step.kind);
         const input = prior.letter.envelope.input as typeof Save.Type;
-        const parts = prior.first._tag === "refused" ? 3 : 1;
+        const parts = Sent.isAnyOf(["refused"])(prior.first) ? 3 : 1;
         const part = step.pick % parts;
         const changed: Incoming =
           part === 0
@@ -525,7 +528,10 @@ const walk = (
         } else {
           accepted++;
           expect(answer).toEqual(
-            Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos: accepted }),
+            Sent.cases.accepted.make({
+              rev: Sent.match(answer, { accepted: ({ rev }) => rev, refused: () => -1 }),
+              pos: accepted,
+            }),
           );
           versions.set(note, current(note) + 1);
         }

@@ -15,7 +15,7 @@
 // delivery; let a second finished reply settle a settled one again.
 import { arbGuidedSequence, propertyInvariant, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Match, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcResult } from "../../tasks/TasksTest.ts";
 import { Reply } from "../HandsTasks.ts";
@@ -65,7 +65,7 @@ const loaded = fc.oneof(
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 const key = (msg: Msg) =>
-  msg.reply._tag === "refused" ? `replied:refused:${msg.reply.reason}` : `replied:${msg.reply._tag}`;
+  Reply.matchOrElse(msg.reply, { refused: ({ reason }) => `replied:refused:${reason}` }, (r) => `replied:${r._tag}`);
 
 describe("P39 slice 3: one hands Cmd's delivery", () => {
   it("D1: a settled delivery never moves again, a saved task never goes back to pending, and a refusal settles only an unsaved task or one that is another process's", () => {
@@ -79,37 +79,39 @@ describe("P39 slice 3: one hands Cmd's delivery", () => {
         reached.add(`${prev._tag}+${key(msg)}`);
         const r = msg.reply;
 
-        if (prev._tag === "result") {
+        if (State.isAnyOf(["result"])(prev)) {
           return same(prev, next) || "D1: nothing moves a settled delivery";
         }
 
-        if (prev._tag === "waiting" && next._tag === "pending") {
+        if (State.isAnyOf(["waiting"])(prev) && State.isAnyOf(["pending"])(next)) {
           return "D1: a saved task never goes back to pending";
         }
 
-        if (r._tag === "waiting") {
-          return prev._tag === "waiting"
+        if (Reply.isAnyOf(["waiting"])(r)) {
+          return State.isAnyOf(["waiting"])(prev)
             ? same(prev, next) || "D1: waiting stays waiting, at its first receipt, on another waiting reply"
-            : (next._tag === "waiting" && next.rev === r.rev && next.arrivedAt === r.arrivedAt) ||
+            : (State.isAnyOf(["waiting"])(next) && next.rev === r.rev && next.arrivedAt === r.arrivedAt) ||
                 "D1: pending moves to waiting with the request's receipt";
         }
 
-        if (r._tag === "finished") {
+        if (Reply.isAnyOf(["finished"])(r)) {
           return (
-            (next._tag === "result" &&
-              next.answer._tag === "ok" &&
-              same(next.answer.result, r.result) &&
-              Object.keys(next.answer).sort().join() === "_tag,result") ||
+            (State.isAnyOf(["result"])(next) &&
+              Match.valueTags(next.answer, {
+                ok: (answer) => same(answer.result, r.result) && Object.keys(answer).sort().join() === "_tag,result",
+                err: () => false,
+              })) ||
             "D1: a finished reply settles the delivery with that result"
           );
         }
 
-        if (prev._tag === "pending" || r.reason === "id_reused") {
+        if (State.isAnyOf(["pending"])(prev) || r.reason === "id_reused") {
           return (
-            (next._tag === "result" &&
-              next.answer._tag === "err" &&
-              next.answer.reason === r.reason &&
-              Object.keys(next.answer).sort().join() === "_tag,reason") ||
+            (State.isAnyOf(["result"])(next) &&
+              Match.valueTags(next.answer, {
+                ok: () => false,
+                err: (answer) => answer.reason === r.reason && Object.keys(answer).sort().join() === "_tag,reason",
+              })) ||
             `D1: a ${r.reason} refusal settles a ${prev._tag} delivery with that reason`
           );
         }

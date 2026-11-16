@@ -2,7 +2,7 @@
 // Page, wildcard-prefix and error-cause plant trials are recorded in the tests-step report.
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Layer, Schema, type Scope, Stream } from "effect";
+import { Arbitrary, Effect, Layer, Result, Schema, type Scope, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -129,7 +129,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
         );
         expect(result._tag).toBe("Failure");
 
-        if (result._tag === "Failure") {
+        if (Result.isFailure(result)) {
           expect(result.failure).toBeInstanceOf(LedgerStreamsError);
           expect(result.failure.reason).toBeInstanceOf(Storage);
           expect(result.failure.reason.cause).toBe(failure);

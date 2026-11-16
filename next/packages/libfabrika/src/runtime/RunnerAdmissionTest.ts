@@ -3,7 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream, Match } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -22,6 +22,7 @@ import { capture, nth } from "./RepliesTest.ts";
 import { ProgramRunner, Sent } from "./Runner.ts";
 import { BRAIN, type Harness } from "./RunnerRepliesTest.ts";
 
+const Journal = Supervision.fields.journal;
 const NAME = "admission:1";
 const PROGRAM = "admission";
 const SENT_AT = "2026-11-11T00:00:00Z";
@@ -153,16 +154,13 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
 
   for (const [n, cell] of tape.entries()) {
     const j = model.journal;
-    const options =
-      j._tag === "idle"
-        ? ["begin", "crash"]
-        : j._tag === "checking"
-          ? ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]
-          : j._tag === "stepping"
-            ? ["finished", "crash"]
-            : j._tag === "writing_reply"
-              ? ["reply_written", "crash"]
-              : ["attempt_cleared", "crash"];
+    const options = Match.value(j).pipe(
+      Match.tag("idle", () => ["begin", "crash"]),
+      Match.tag("checking", () => ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]),
+      Match.tag("stepping", () => ["finished", "crash"]),
+      Match.tag("writing_reply", () => ["reply_written", "crash"]),
+      Match.orElse(() => ["attempt_cleared", "crash"]),
+    );
     const move = nth(options, cell.move);
     reached.add(`${move}:${j._tag}`);
 
@@ -182,7 +180,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
     let message: unknown;
     let admitting: { letter: string; input: Schema.Json } | null = null;
 
-    if (j._tag === "idle") {
+    if (Journal.isAnyOf(["idle"])(j)) {
       const input: Incoming = {
         id: `cut-${n}`,
         envelope: {
@@ -197,7 +195,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
       };
       pending.set(input.id, input);
       message = { type: "begin", process, letter: input.id, build: "test", phase: "fresh", at: n };
-    } else if (j._tag === "checking") {
+    } else if (Journal.isAnyOf(["checking"])(j)) {
       const input = pending.get(j.attempt.letter);
       expect(input).toBeDefined();
       const delivery = Schema.decodeUnknownSync(Schema.Json)(input);
@@ -252,7 +250,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
 
     const result = yield* Effect.result(store.save(next));
 
-    if (result._tag === "Failure") {
+    if (Result.isFailure(result)) {
       expect(hits).toBeGreaterThan(0);
       expect(yield* store.load, "a failed transaction installs neither admission nor its input").toEqual(before);
 
@@ -271,7 +269,7 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
 
     cut = "";
 
-    if (model.journal._tag === "checking") {
+    if (Journal.isAnyOf(["checking"])(model.journal)) {
       expect(yield* store.input(model.journal.attempt.letter)).toBeNull();
     }
 
@@ -709,7 +707,7 @@ const walk = Effect.fnUntraced(function* (
                 };
       const retried = move === "retry" ? prior.input : changed;
       // Accepted placement permits new clocks on a resend; its body stays bound.
-      const sameAnswer = move === "retry" || (prior.first._tag === "accepted" && component < 2);
+      const sameAnswer = move === "retry" || (Sent.isAnyOf(["accepted"])(prior.first) && component < 2);
       expect(yield* live.runner.msg(retried)).toEqual(
         sameAnswer ? prior.first : Sent.cases.refused.make({ reason: "id_reused" }),
       );

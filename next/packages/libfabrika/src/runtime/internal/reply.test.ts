@@ -3,7 +3,7 @@
 // the state it has reached: a new reply while empty, then the stored reply with one field changed.
 import { applyCell, type Machine, type Sub } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Match, Schema } from "effect";
 import * as fc from "fast-check";
 import { InputId } from "../../Id.ts";
 import { syncTest } from "../../Testing.ts";
@@ -66,19 +66,19 @@ const Walk = fc.array(Move, { minLength: 1, maxLength: 40 });
 const FIELDS = ["name", "id", "parent", "by", "for", "digest", "answer"] as const;
 
 /** The next remember, read from the state the fold has reached. */
-const next = (model: Model, [pick, fresh]: readonly [number, Reply]): Msg => {
-  if (model._tag === "empty") {
-    return { type: "remember", reply: fresh };
-  }
-
-  // Same machine, so the same key: change one bound field or the answer, or repeat it exactly.
-  const field = FIELDS[pick % (FIELDS.length + 1)];
-  const stored = model.reply;
-  return {
-    type: "remember",
-    reply: field === undefined || field === "name" || field === "id" ? stored : { ...stored, [field]: fresh[field] },
-  };
-};
+const next = (model: Model, [pick, fresh]: readonly [number, Reply]): Msg =>
+  Match.valueTags(model, {
+    empty: (): Msg => ({ type: "remember", reply: fresh }),
+    remembered: ({ reply: stored }): Msg => {
+      // Same machine, so the same key: change one bound field or the answer, or repeat it exactly.
+      const field = FIELDS[pick % (FIELDS.length + 1)];
+      return {
+        type: "remember",
+        reply:
+          field === undefined || field === "name" || field === "id" ? stored : { ...stored, [field]: fresh[field] },
+      };
+    },
+  });
 
 /** Folds the walk through the real machine and returns the msgs it chose. */
 const fold = (machine: Subject["reply"], walk: ReadonlyArray<readonly [number, Reply]>) => {

@@ -29,7 +29,7 @@ import { Doorbell, Ledger } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
 import * as LedgerTransactionFront from "./LedgerTransaction.ts";
 import * as LogFront from "./Log.ts";
-import type { Entry, InputId, Line } from "./Log.ts";
+import { Appended, type Entry, type InputId, type Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 import * as RefereeFront from "./Referee.ts";
 import { Referee } from "./Referee.ts";
@@ -387,10 +387,8 @@ describe("p68, an entry keeps its parent", () => {
         Effect.runPromise(
           Effect.gen(function* () {
             const { answers, entries } = yield* handIn(texts.map((parent) => ({ ...json(), parent })));
-            expect(answers.map((answer) => answer._tag === "placed")).toEqual(
-              texts.map((parent) => PARENT.test(parent)),
-            );
-            expect(answers.filter((answer) => answer._tag === "refused")).toEqual(
+            expect(answers.map(Appended.isAnyOf(["placed"]))).toEqual(texts.map((parent) => PARENT.test(parent)));
+            expect(answers.filter(Appended.isAnyOf(["refused"]))).toEqual(
               texts.filter((parent) => !PARENT.test(parent)).map(() => refused("bad_parent")),
             );
             expect(entries.map((entry) => entry.parent)).toEqual(texts.filter((parent) => PARENT.test(parent)));

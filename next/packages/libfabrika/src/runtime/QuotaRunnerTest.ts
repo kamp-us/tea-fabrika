@@ -1,7 +1,7 @@
 // P34c, next/. Node and live-object fixtures supply real runners and real stores to these laws.
 // The fixture may supply transport and an archive double. It must not implement quota decisions.
 import { describe, expect, it } from "@effect/vitest";
-import { Clock, Effect, Option, Schema } from "effect";
+import { Clock, Effect, Option, Predicate, Result, Schema } from "effect";
 import type { Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { Appended } from "../coordination/index.ts";
@@ -204,9 +204,9 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               const settled = yield* w.program("sample/alpha");
               expect(settled.writes).toBe(2);
               expect(settled.ahead.writes).toBe(before.ahead.writes);
-              expect((yield* w.entries).filter((e) => e._tag === "stepped" && e.id === `step:pair:${n}`)).toHaveLength(
-                1,
-              );
+              expect(
+                (yield* w.entries).filter((e) => e.id === `step:pair:${n}` && Predicate.isTagged(e, "stepped")),
+              ).toHaveLength(1);
               const saved = yield* w.snapshot;
               expect(yield* w.input(name, `refused:${n}`, { type: "inc" })).toEqual(
                 Appended.cases.refused.make({ reason: "quota" }),
@@ -246,14 +246,14 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             for (const c of tape) {
               const saved = Schema.decodeUnknownSync(Schema.NullOr(supervision))(yield* w.journal(name));
 
-              if (saved !== null && saved.journal._tag !== "idle") {
+              if (saved !== null && !Supervision.fields.journal.isAnyOf(["idle"])(saved.journal)) {
                 yield* w.drain(name);
               } else if (!terminal) {
                 w.cut(c.amount % 8);
                 const result = yield* Effect.result(w.msg(name, "poison", { type: "throw" }));
                 w.cut(null);
                 terminal =
-                  result._tag === "Success" &&
+                  Result.isSuccess(result) &&
                   Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
               }
 
@@ -270,7 +270,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
               yield* w.drain(name);
               const result = yield* Effect.result(w.msg(name, "poison", { type: "throw" }));
               terminal =
-                result._tag === "Success" &&
+                Result.isSuccess(result) &&
                 Schema.is(Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }))(result.success);
             }
 
@@ -283,20 +283,21 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
             expect((yield* w.local(name)).recovery.total.writes).toBeGreaterThan(0);
             expect((yield* w.projectRecovery(name)).total.writes).toBeGreaterThan(0);
             const entries = yield* w.entries;
-            expect(entries.some((e) => e._tag === "exited")).toBe(true);
-            expect(entries.some((e) => e._tag === "restarted")).toBe(true);
+            expect(entries.some((e) => Predicate.isTagged(e, "exited"))).toBe(true);
+            expect(entries.some((e) => Predicate.isTagged(e, "restarted"))).toBe(true);
             expect(
               entries.some(
                 (e) =>
-                  e._tag === "send" &&
                   e.stream === "beta:1/inbox" &&
-                  Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body),
+                  Schema.is(Schema.Struct({ m: Schema.Struct({ ref: Schema.Literal("inbound") }) }))(e.body) &&
+                  Predicate.isTagged(e, "send"),
               ),
             ).toBe(true);
             expect(
               entries.some(
                 (e) =>
-                  e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
+                  Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body) &&
+                  Predicate.isTagged(e, "demonitored"),
               ),
             ).toBe(true);
             expect(entries.some((e) => typeof e.stream === "string" && e.stream.endsWith("/dead"))).toBe(true);
@@ -462,7 +463,7 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
 
               for (const id of messages) {
                 expect(
-                  after.filter((e) => e._tag === "stepped" && e.id === `step:${id}`).length,
+                  after.filter((e) => e.id === `step:${id}` && Predicate.isTagged(e, "stepped")).length,
                 ).toBeGreaterThanOrEqual(1);
               }
 
@@ -504,7 +505,9 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                 expect(yield* w.checkpoint("alpha:1")).toEqual(saved);
                 expect(yield* w.journal("alpha:1")).toEqual(journal);
                 expect((yield* w.local("alpha:1")).recovery).toEqual(usage.recovery);
-                expect((yield* w.entries).filter((e) => e._tag === "dead" || e._tag === "exited")).toEqual([]);
+                expect(
+                  (yield* w.entries).filter((e) => Predicate.isTagged(e, "dead") || Predicate.isTagged(e, "exited")),
+                ).toEqual([]);
               }
 
               yield* TestClock.setTime(at + 60_001);

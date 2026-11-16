@@ -3,7 +3,7 @@
 // Answer letters, shown program state and URLs belong to later slices.
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Result, Schema } from "effect";
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -388,7 +388,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             // Each named output is visited separately; an empty list cannot stand in for stored spans.
             // Failed fire keeps its private cause in memory; it produces no public outcome.
             // Its real stored span and health row are inspected below, including the failure branch.
-            const returned = outputs.answers.flatMap((answer) => (answer._tag === "Success" ? [answer.success] : []));
+            const returned = outputs.answers.flatMap((answer) => (Result.isSuccess(answer) ? [answer.success] : []));
             const publicOutputs = {
               report: outputs.report,
               returned,

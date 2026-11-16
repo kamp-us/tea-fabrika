@@ -9,7 +9,15 @@ import { runsFor } from "@kampus/vitest";
 import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
+import {
+  Appended,
+  Archive,
+  Mailbox,
+  ProcessStore,
+  RecordManager,
+  SessionManager,
+  Writer,
+} from "../coordination/index.ts";
 import { processIds } from "../Id.test-support.ts";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { InputId, lineFor, valueFor } from "../ledger/Log.ts";
@@ -438,7 +446,7 @@ const accepted = (
       cmds: [],
     };
 
-    if (sent._tag === "placed") {
+    if (Appended.isAnyOf(["placed"])(sent)) {
       yield* ProcessStore.use((s) => s.save(checkpoint, [{ id, rev: sent.rev, pos: sent.pos }]));
     }
   });
@@ -2133,11 +2141,12 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
                 const own = yield* store.select(process);
                 const saved = yield* own.load;
                 const sent = yield* Mailbox.use((box) => box.send(NAME, id, { type: "add", n: 1 }, from()));
-                expect(saved !== null && sent._tag === "placed", "the saved letter is placed behind a checkpoint").toBe(
-                  true,
-                );
+                expect(
+                  saved !== null && Appended.isAnyOf(["placed"])(sent),
+                  "the saved letter is placed behind a checkpoint",
+                ).toBe(true);
 
-                if (saved !== null && sent._tag === "placed") {
+                if (saved !== null && Appended.isAnyOf(["placed"])(sent)) {
                   yield* own.save(saved, [{ id, rev: sent.rev, pos: sent.pos }]);
                 }
               }).pipe(Effect.provide(w.layer()));
@@ -2193,7 +2202,7 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
           expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
           const restarted = rows.filter((row) => row._tag === "restarted").map((row) => valueFor(row));
           expect(restarted, "a person's restart keeps its request's reason for starting again").toHaveLength(
-            expected.restarts.length + expected.exits.filter((e) => e.reason._tag === "crashed").length,
+            expected.restarts.length + expected.exits.filter((e) => ExitReason.isAnyOf(["crashed"])(e.reason)).length,
           );
           const signals = (yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())))
             .map((row) => valueFor(row) as { m: typeof Down.Type })

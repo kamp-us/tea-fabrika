@@ -23,7 +23,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Match, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -37,7 +37,11 @@ const PROGRAM = "counter";
 const BUILD = "build-a";
 
 type Model = typeof Supervision.Type;
-type Journal = Model["journal"];
+// The machine's own unions, read off its exported schema so each check is the union's own matcher (0567).
+const Journal = Supervision.fields.journal;
+type Journal = typeof Journal.Type;
+const Origin = Journal.cases.writing_exit.fields.origin;
+const StartTiming = Journal.cases.waiting_start.fields.timing;
 type Msg = { readonly type: string; readonly [key: string]: unknown };
 
 const pid = (n: number): string => `process_0000000000e00800${String(n).padStart(10, "0")}`;
@@ -190,14 +194,12 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 
   // A swap names the process the journal holds, or one it does not, with a build the fold makes.
   const j = w.model.journal;
-  const own =
-    j._tag === "idle"
-      ? j.process
-      : j._tag === "stepping"
-        ? j.attempt.process
-        : j._tag === "writing_exit"
-          ? j.process
-          : w.process;
+  const own = Match.value(j).pipe(
+    Match.tag("idle", (j) => j.process),
+    Match.tag("stepping", (j) => j.attempt.process),
+    Match.tag("writing_exit", (j) => j.process),
+    Match.orElse(() => w.process),
+  );
   const build = `build-swap-${cell.pick % 4}`;
   return [
     ...base,
@@ -213,8 +215,8 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
   const stale = old.length === 0 ? [] : [{ name: "stale", msg: old[cell.pick % old.length]!, stale: true }];
   const later = { name: "advance", msg: { type: "healthy", at: w.at + cell.gap }, apply: () => (w.at += cell.gap) };
 
-  switch (j._tag) {
-    case "idle": {
+  return Match.valueTags(j, {
+    idle: (j): ReadonlyArray<Move> => {
       const letter = LETTERS[cell.pick % LETTERS.length]!;
       const receipt = w.model.receipts.find((r) => r.letter === letter);
       const fresh: Array<Move> =
@@ -283,8 +285,8 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         { name: "limited", msg: { type: "limited", maxDeliveries: cell.gap % 3 === 0 ? null : 1 + (cell.gap % 4) } },
         ...stale,
       ];
-    }
-    case "stepping": {
+    },
+    stepping: (j): ReadonlyArray<Move> => {
       const seq = j.attempt.seq;
       return [
         { name: "finished", msg: { type: "finished", seq } },
@@ -307,36 +309,43 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         },
         ...stale,
       ];
-    }
-    case "swapping":
-      return [{ name: "swap_completed", msg: { type: "swap_completed", load: j.change.load } }, ...stale];
-    case "checking":
-      return [
-        {
-          name: "admitted",
-          msg: { type: "admitted", seq: j.attempt.seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) },
+    },
+    swapping: (j): ReadonlyArray<Move> => [
+      { name: "swap_completed", msg: { type: "swap_completed", load: j.change.load } },
+      ...stale,
+    ],
+    checking: (j): ReadonlyArray<Move> => [
+      {
+        name: "admitted",
+        msg: { type: "admitted", seq: j.attempt.seq, receipt: receiptFor(j.attempt.letter, j.attempt.process) },
+      },
+      {
+        name: "check_threw",
+        weight: 4,
+        msg: {
+          type: "check_threw",
+          seq: j.attempt.seq,
+          receipt: receiptFor(j.attempt.letter, j.attempt.process),
+          error: cell.error,
+          reason: reasonFor("fresh", cell.error),
+          from: meta,
         },
-        {
-          name: "check_threw",
-          weight: 4,
-          msg: {
-            type: "check_threw",
-            seq: j.attempt.seq,
-            receipt: receiptFor(j.attempt.letter, j.attempt.process),
-            error: cell.error,
-            reason: reasonFor("fresh", cell.error),
-            from: meta,
-          },
-        },
-        ...stale,
-      ];
-    case "writing_reply":
-      return [{ name: "reply_written", msg: { type: "reply_written", seq: j.attempt.seq } }, ...stale];
-    case "clearing_attempt":
-      return [{ name: "attempt_cleared", msg: { type: "attempt_cleared", seq: j.attempt.seq } }, ...stale];
-    case "writing_dead":
-      return [{ name: "dead_written", msg: { type: "dead_written", seq: j.failure.seq } }, ...stale];
-    case "writing_exit": {
+      },
+      ...stale,
+    ],
+    writing_reply: (j): ReadonlyArray<Move> => [
+      { name: "reply_written", msg: { type: "reply_written", seq: j.attempt.seq } },
+      ...stale,
+    ],
+    clearing_attempt: (j): ReadonlyArray<Move> => [
+      { name: "attempt_cleared", msg: { type: "attempt_cleared", seq: j.attempt.seq } },
+      ...stale,
+    ],
+    writing_dead: (j): ReadonlyArray<Move> => [
+      { name: "dead_written", msg: { type: "dead_written", seq: j.failure.seq } },
+      ...stale,
+    ],
+    writing_exit: (j): ReadonlyArray<Move> => {
       // The exit lands 0 to 50 ms after the throw, so a wait counted from the throw shows.
       const late = cell.gap % 51;
       return [
@@ -356,28 +365,29 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
         },
         ...stale,
       ];
-    }
-    case "writing_down":
-      return [{ name: "down_written", msg: { type: "down_written", process: j.recovery.process } }, ...stale];
-    case "waiting_recovery":
-      return [
-        later,
-        { name: "due", msg: { type: "due", at: w.at, program: PROGRAM, from: meta } },
-        {
-          name: "adopted",
-          msg: { type: "adopted", process: pid(w.pids + 1), build: BUILD, restarts: [...w.restarts, w.at] },
-        },
-        ...stale,
-      ];
-    case "waiting_start": {
-      const until = j.timing._tag === "scheduled" ? j.timing.until : w.at;
+    },
+    writing_down: (j): ReadonlyArray<Move> => [
+      { name: "down_written", msg: { type: "down_written", process: j.recovery.process } },
+      ...stale,
+    ],
+    waiting_recovery: (): ReadonlyArray<Move> => [
+      later,
+      { name: "due", msg: { type: "due", at: w.at, program: PROGRAM, from: meta } },
+      {
+        name: "adopted",
+        msg: { type: "adopted", process: pid(w.pids + 1), build: BUILD, restarts: [...w.restarts, w.at] },
+      },
+      ...stale,
+    ],
+    waiting_start: (j): ReadonlyArray<Move> => {
+      const until = StartTiming.match(j.timing, { immediate: () => w.at, scheduled: ({ until }) => until });
       const ready = w.at >= until;
       return [
         later,
         ready
           ? { name: "started", msg: { type: "started", id: j.request.id, process: pid(w.pids + 1), at: w.at } }
           : { name: "started_early", msg: { type: "started", id: j.request.id, process: pid(w.pids + 1), at: w.at } },
-        ...(j.timing._tag === "scheduled"
+        ...(StartTiming.isAnyOf(["scheduled"])(j.timing)
           ? [
               {
                 name: "adopted",
@@ -387,16 +397,15 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
           : []),
         ...stale,
       ];
-    }
-    case "checkpointing":
-      return [
-        {
-          name: "checkpointed",
-          msg: { type: "checkpointed", after: j.after, process: j.process, restarts: [...w.restarts], at: w.at },
-        },
-        ...stale,
-      ];
-  }
+    },
+    checkpointing: (j): ReadonlyArray<Move> => [
+      {
+        name: "checkpointed",
+        msg: { type: "checkpointed", after: j.after, process: j.process, restarts: [...w.restarts], at: w.at },
+      },
+      ...stale,
+    ],
+  });
 };
 
 type Observer = (before: Model, move: Move, after: Model, w: World) => void;
@@ -457,7 +466,7 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
     case "check_threw":
     case "interrupted_attempt":
     case "interrupted_activity": {
-      if (before.journal._tag === "stepping" || before.journal._tag === "checking") {
+      if (Journal.isAnyOf(["stepping", "checking"])(before.journal)) {
         const attempt = before.journal.attempt;
 
         if (w.captured.has(attempt.seq)) {
@@ -471,7 +480,7 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
         }
       }
 
-      if (move.name === "interrupted_activity" && after.journal._tag === "idle") {
+      if (move.name === "interrupted_activity" && Journal.isAnyOf(["idle"])(after.journal)) {
         return;
       }
 
@@ -499,7 +508,7 @@ const account = (before: Model, move: Move, after: Model, w: World, p: typeof Po
       return;
     case "advance":
     case "healthy":
-      if (before.journal._tag === "idle" && w.at - w.healthyAt >= p.backoff.resetAfterMs) {
+      if (Journal.isAnyOf(["idle"])(before.journal) && w.at - w.healthyAt >= p.backoff.resetAfterMs) {
         w.crashes = 0;
         w.healthyAt = w.at;
       }
@@ -564,7 +573,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             seen.add(`${target.journal.origin._tag} ${target.journal._tag}`);
           }
 
-          for (const value of mutations(roundTrip(target), pick)) {
+          for (const value of mutations(roundTrip(target), target.journal, pick)) {
             expect(decodes(value), `mutated ${target.journal._tag} must be refused`).toBe(false);
           }
         }
@@ -610,7 +619,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           // p80: a fresh throw at its letter's limit writes dead for that exact failure, and only then.
           if (
             (move.name === "threw" || move.name === "check_threw") &&
-            (before.journal._tag === "stepping" || before.journal._tag === "checking") &&
+            Journal.isAnyOf(["stepping", "checking"])(before.journal) &&
             before.journal.attempt.phase === "fresh"
           ) {
             const attempt = before.journal.attempt;
@@ -638,9 +647,8 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
           // A second report of a captured attempt, from either source, is a no-op.
           if (
-            (before.journal._tag === "stepping" || before.journal._tag === "checking") &&
-            after.journal._tag !== "stepping" &&
-            after.journal._tag !== "checking" &&
+            Journal.isAnyOf(["stepping", "checking"])(before.journal) &&
+            !Journal.isAnyOf(["stepping", "checking"])(after.journal) &&
             move.name !== "finished"
           ) {
             const seq = before.journal.attempt.seq;
@@ -694,11 +702,11 @@ describe("P34c slice 2: one saved recovery journal", () => {
             return;
           }
 
-          if (move.name === "exit_written" && before.journal._tag === "writing_exit") {
+          if (move.name === "exit_written" && Journal.isAnyOf(["writing_exit"])(before.journal)) {
             // Backoff and the brake's deadline count from the exit's time, never the throw's.
             expect(move.msg.at, "the fold's clock is the exit's").toBe(w.at);
 
-            if (before.journal.origin._tag === "manual") {
+            if (Origin.isAnyOf(["manual"])(before.journal.origin)) {
               expect(after.journal).toMatchObject({ _tag: "waiting_start", timing: { _tag: "immediate" } });
               return;
             }
@@ -720,14 +728,17 @@ describe("P34c slice 2: one saved recovery journal", () => {
             }
           }
 
-          if (move.name === "due" && before.journal._tag === "waiting_recovery") {
+          if (move.name === "due" && Journal.isAnyOf(["waiting_recovery"])(before.journal)) {
             const until = before.journal.recovery.until;
             expect(after.journal).toMatchObject(
               w.at >= until ? { _tag: "waiting_start", timing: { _tag: "scheduled", until } } : before.journal,
             );
           }
 
-          if (move.name === "started_early" || (move.name === "advance" && before.journal._tag !== "idle")) {
+          if (
+            move.name === "started_early" ||
+            (move.name === "advance" && !Journal.isAnyOf(["idle"])(before.journal))
+          ) {
             expect(after).toEqual(before);
           }
         });
@@ -840,7 +851,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           const open = [...tries].filter(([, n]) => n < p.maxDeliveries).map(([letter]) => letter);
           const letter = cycle.reuse && open.length > 0 ? open[cycle.pick % open.length]! : `letter-${tries.size + 1}`;
           expect(model.journal._tag).toBe("idle");
-          const process = model.journal._tag === "idle" ? model.journal.process : A;
+          const process = Journal.isAnyOf(["idle"])(model.journal) ? model.journal.process : A;
 
           if (!tries.has(letter)) {
             send({ type: "received", receipt: receiptFor(letter, process) });
@@ -886,7 +897,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             timing: { _tag: "scheduled", until: earliest },
           });
 
-          if (j._tag !== "waiting_start" || j.timing._tag !== "scheduled") {
+          if (!Journal.isAnyOf(["waiting_start"])(j) || !StartTiming.isAnyOf(["scheduled"])(j.timing)) {
             return;
           }
 
@@ -954,17 +965,21 @@ describe("P34c slice 2: one saved recovery journal", () => {
             if (move.msg.type === "swapped") {
               const j = before.journal;
 
-              if (j._tag === "idle" && j.process === move.msg.process) {
+              if (Journal.isAnyOf(["idle"])(j) && j.process === move.msg.process) {
                 expect(after).toEqual({ ...before, build: move.msg.build });
                 build = String(move.msg.build);
                 seen.add("swapped_idle");
               } else {
                 expect(after, `swapped in ${j._tag} for ${move.name}`).toEqual(before);
-                seen.add(j._tag === "idle" ? "swapped_foreign" : "swapped_busy");
+                seen.add(Journal.isAnyOf(["idle"])(j) ? "swapped_foreign" : "swapped_busy");
               }
-            } else if (!move.stale && move.name === "checkpointed" && before.journal._tag === "checkpointing") {
+            } else if (
+              !move.stale &&
+              move.name === "checkpointed" &&
+              Journal.isAnyOf(["checkpointing"])(before.journal)
+            ) {
               const origin = before.journal.origin;
-              build = origin._tag === "manual" ? origin.request.build : build;
+              build = Origin.isAnyOf(["manual"])(origin) ? origin.request.build : build;
             } else if (!move.stale && move.name === "adopted" && after !== before) {
               build = String(move.msg.build);
             }
@@ -972,7 +987,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             expect(after.build, `after ${move.name}`).toBe(build);
             const j = after.journal;
 
-            if (j._tag === "waiting_start" && j.origin._tag === "crash" && move.name !== "stale") {
+            if (Journal.isAnyOf(["waiting_start"])(j) && Origin.isAnyOf(["crash"])(j.origin) && move.name !== "stale") {
               expect(j.request.code.hash, "a crash restart starts on the code the process runs now").toBe(build);
 
               if (build !== BUILD) {
@@ -1013,8 +1028,11 @@ describe("P34c slice 2: one saved recovery journal", () => {
   });
 });
 
-/** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
-const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
+/**
+ * Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity.
+ * `typed` is the journal the copy was saved from, so each case is picked by the union's own matcher.
+ */
+const mutations = (saved: unknown, typed: Journal, pick: number): ReadonlyArray<unknown> => {
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
   const fields = Object.keys(journal).filter((key) => key !== "_tag");
@@ -1025,7 +1043,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
     { ...raw, v: 1 },
   ];
 
-  if (journal._tag === "writing_dead") {
+  if (Journal.isAnyOf(["writing_dead"])(typed)) {
     const failure = journal.failure as { letter: string };
     // The exact fresh failure's receipt must be there, terminal and its own.
     broken.push({ ...raw, receipts: raw.receipts.filter((r) => r.letter !== failure.letter) });
@@ -1039,11 +1057,11 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
     });
   }
 
-  if (journal._tag === "checkpointing") {
+  if (Journal.isAnyOf(["checkpointing"])(typed)) {
     broken.push({ ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== "after")) });
   }
 
-  if (journal._tag === "stepping") {
+  if (Journal.isAnyOf(["stepping"])(typed)) {
     broken.push({ ...raw, journal: { ...journal, attempt: { ...(journal.attempt as object), seq: 0 } } });
   }
 
@@ -1056,7 +1074,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   }
 
   // A person's restart starts with its own saved request ID and build.
-  if (journal._tag === "waiting_start" && origin._tag === "manual") {
+  if (Journal.isAnyOf(["waiting_start"])(typed) && Origin.isAnyOf(["manual"])(typed.origin)) {
     const request = journal.request as { id: string; code: Record<string, unknown> };
     broken.push({ ...raw, journal: { ...journal, request: { ...request, id: `${request.id}:other` } } });
     broken.push({
@@ -1069,7 +1087,7 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   }
 
   // A checkpoint's successor is never its predecessor.
-  if (journal._tag === "checkpointing") {
+  if (Journal.isAnyOf(["checkpointing"])(typed)) {
     broken.push({ ...raw, journal: { ...journal, after: journal.process } });
   }
 
@@ -1080,17 +1098,17 @@ const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
 const sameWork = (j: Journal, msg: Msg): boolean => {
   switch (msg.type) {
     case "finished":
-      return j._tag === "stepping" && j.attempt.seq === msg.seq;
+      return Journal.isAnyOf(["stepping"])(j) && j.attempt.seq === msg.seq;
     case "dead_written":
-      return j._tag === "writing_dead" && j.failure.seq === msg.seq;
+      return Journal.isAnyOf(["writing_dead"])(j) && j.failure.seq === msg.seq;
     case "exit_written":
-      return j._tag === "writing_exit" && j.process === msg.process;
+      return Journal.isAnyOf(["writing_exit"])(j) && j.process === msg.process;
     case "down_written":
-      return j._tag === "writing_down" && j.recovery.process === msg.process;
+      return Journal.isAnyOf(["writing_down"])(j) && j.recovery.process === msg.process;
     case "started":
-      return j._tag === "waiting_start" && j.request.id === msg.id;
+      return Journal.isAnyOf(["waiting_start"])(j) && j.request.id === msg.id;
     case "checkpointed":
-      return j._tag === "checkpointing" && j.after === msg.after && j.process === msg.process;
+      return Journal.isAnyOf(["checkpointing"])(j) && j.after === msg.after && j.process === msg.process;
     default:
       return false;
   }
@@ -1127,7 +1145,7 @@ describe("P13 A11 saved admission work", () => {
       for (const cell of tape) {
         const j = model.journal;
 
-        if (j._tag === "idle") {
+        if (Journal.isAnyOf(["idle"])(j)) {
           send({
             type: "begin",
             process: j.process,
@@ -1136,7 +1154,7 @@ describe("P13 A11 saved admission work", () => {
             phase: "fresh",
             at: cell.gap,
           });
-        } else if (j._tag === "checking") {
+        } else if (Journal.isAnyOf(["checking"])(j)) {
           const choices = ["admitted", "refused", "abandoned"];
           const move = choices[cell.move % choices.length]!;
           const seq = j.attempt.seq;
@@ -1160,11 +1178,11 @@ describe("P13 A11 saved admission work", () => {
           } else {
             send({ type: move, seq });
           }
-        } else if (j._tag === "stepping") {
+        } else if (Journal.isAnyOf(["stepping"])(j)) {
           send({ type: cell.move % 2 === 0 ? "finished" : "abandoned", seq: j.attempt.seq });
-        } else if (j._tag === "writing_reply") {
+        } else if (Journal.isAnyOf(["writing_reply"])(j)) {
           send({ type: "reply_written", seq: j.attempt.seq });
-        } else if (j._tag === "clearing_attempt") {
+        } else if (Journal.isAnyOf(["clearing_attempt"])(j)) {
           send({ type: "attempt_cleared", seq: j.attempt.seq });
         }
       }
@@ -1208,11 +1226,7 @@ describe("P13 A11 saved admission work", () => {
             expect(after.receipts).toEqual(before.receipts);
           }
 
-          if (
-            after.journal._tag === "checking" ||
-            after.journal._tag === "writing_reply" ||
-            after.journal._tag === "clearing_attempt"
-          ) {
+          if (Journal.isAnyOf(["checking", "writing_reply", "clearing_attempt"])(after.journal)) {
             expect(step(after, { type: "finished", seq: after.journal.attempt.seq })).toEqual(after);
           }
 

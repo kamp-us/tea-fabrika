@@ -48,6 +48,7 @@ import {
   Result,
   Schema,
   Scope,
+  Match,
 } from "effect";
 import * as fc from "fast-check";
 import { InputId, NotGranted, SessionManager, SignRequest, Writer } from "../coordination/index.ts";
@@ -1691,7 +1692,11 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
 
       if (Exit.isFailure(outcome)) {
         for (const reason of outcome.cause.reasons) {
-          const error = reason._tag === "Fail" ? reason.error : reason._tag === "Die" ? reason.defect : undefined;
+          const error = Match.value(reason).pipe(
+            Match.tag("Fail", (reason) => reason.error),
+            Match.tag("Die", (reason) => reason.defect),
+            Match.orElse(() => undefined),
+          );
 
           if (error instanceof Error) {
             outputs.push(error.message);

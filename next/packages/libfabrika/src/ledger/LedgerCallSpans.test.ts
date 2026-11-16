@@ -1,6 +1,6 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
-import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Match, Option, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -72,7 +72,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
           let append: Appended = Appended.cases.placed.make({ rev: 1, pos: 1 });
           let wait: Waited = Waited.cases.parked.make({});
           const sending = (method: string, stream: string) => {
-            const active = spans.filter((s) => s.status._tag === "Started");
+            const active = spans.filter((s) => Match.valueTags(s.status, { Started: () => true, Ended: () => false }));
             sent.push({
               method,
               stream,
@@ -150,9 +150,10 @@ describe("ledger.call, next/ tracing keep-laws", () => {
             expect(Option.getOrThrow(span.parent).spanId).toBe(parent.spanId);
             expect(span.status._tag).toBe("Ended");
 
-            if (span.status._tag === "Ended") {
-              expect(Exit.isSuccess(span.status.exit)).toBe(true);
-            }
+            Match.valueTags(span.status, {
+              Started: () => undefined,
+              Ended: ({ exit }) => expect(Exit.isSuccess(exit)).toBe(true),
+            });
           }
         },
       ),
@@ -221,9 +222,10 @@ describe("ledger.call, next/ tracing keep-laws", () => {
             });
             expect(span.status._tag).toBe("Ended");
 
-            if (span.status._tag === "Ended") {
-              expect(Exit.isFailure(span.status.exit)).toBe(true);
-            }
+            Match.valueTags(span.status, {
+              Started: () => undefined,
+              Ended: ({ exit }) => expect(Exit.isFailure(exit)).toBe(true),
+            });
           }
 
           expect(spans).toHaveLength(calls.length);

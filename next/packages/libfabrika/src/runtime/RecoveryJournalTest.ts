@@ -13,10 +13,10 @@ import { runsFor } from "@kampus/vitest";
 import { Clock, type Context, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
-import { InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
+import { Appended, InputId, LedgerError, type Sql, Writer } from "../coordination/index.ts";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
-import { Activity, Start } from "../processes/Process.ts";
+import { Activity, Start, State } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
@@ -340,7 +340,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
 
       const sent = yield* Mailbox.use((box) => box.send(NAME, id, { type: "add", n: 1 }, from()));
 
-      if (sent._tag !== "placed") {
+      if (!Appended.isAnyOf(["placed"])(sent)) {
         return false;
       }
 
@@ -356,7 +356,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
       const opened = yield* runner((r) => r.open(`settle-${round}`));
       const status = yield* manager((p) => p.status(NAME));
 
-      if (Exit.isSuccess(opened) && status.state._tag === "live") {
+      if (Exit.isSuccess(opened) && State.isAnyOf(["live"])(status.state)) {
         return;
       }
 
@@ -595,7 +595,7 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           a.exits.push({ process: a.process, reason: crashed("step", cell.error) });
           const status = yield* w.manager((p) => p.status(NAME));
 
-          if (status.state._tag !== "live") {
+          if (!State.isAnyOf(["live"])(status.state)) {
             yield* w.manager((p) =>
               p.start(
                 Start.cases.again.make({

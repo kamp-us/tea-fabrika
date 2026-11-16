@@ -48,7 +48,7 @@ import { data as ledger, ids, PIDS } from "../processes/Process.test-support.ts"
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql, SqlValue } from "../Sql.ts";
-import { Command, type Task, Result as TaskResult } from "../tasks/Task.ts";
+import { Command, State, type Task, Result as TaskResult } from "../tasks/Task.ts";
 import { Tasks } from "../tasks/Tasks.ts";
 import { choose, fcFingerprint, fcResult } from "../tasks/TasksTest.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
@@ -58,7 +58,7 @@ import * as HandsTasksLive from "./HandsTasksLive.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { ProcessStore } from "./ProcessStore.ts";
 import { Program } from "./Program.ts";
-import { ProgramRunner } from "./Runner.ts";
+import { ProgramRunner, Sent } from "./Runner.ts";
 
 /** Real stores: `sql(part)` is one database per part, `reopen` closes and reopens every part, and
  *  `tasks(sql)` is the durable task store on that part, built by the module that owns the ledger. */
@@ -583,7 +583,9 @@ const walk = (
               j.events.filter((e) => e.event === "requested"),
               `${label}: L12 one request for ${d.id}`,
             ).toHaveLength(1);
-            const request = j.state._tag === "absent" ? expect.fail("a read task has a state") : j.state.request;
+            const request = State.isAnyOf(["absent"])(j.state)
+              ? expect.fail("a read task has a state")
+              : j.state.request;
             expect(request.id, `${label}: L12 the task's id is the Cmd's`).toBe(d.id);
             expect(request.process, `${label}: L12 the task names the process that asked`).toBe(d.process);
             expect(request.target, `${label}: S1 the task targets the person's hands key`).toBe(world.target);
@@ -593,7 +595,7 @@ const walk = (
               1,
             );
 
-            if (j.state._tag === "collected") {
+            if (State.isAnyOf(["collected"])(j.state)) {
               // L14: only the process that asked ever takes the result.
               expect(j.state.collection, `${label}: L14 the asking process collected ${d.id}`).toEqual({
                 process: d.process,
@@ -728,7 +730,7 @@ const walk = (
           world.sentBy.set(`letter-${++world.n}`, current);
           const sent = yield* answers(runner(name).msg(letter(world.n, { type: move })), `${name}'s ${move}`);
 
-          if (move === "poke" && Result.isSuccess(sent) && sent.success._tag === "accepted") {
+          if (move === "poke" && Result.isSuccess(sent) && Sent.isAnyOf(["accepted"])(sent.success)) {
             // L20: a later input steps, whatever hands work this program or another has out.
             expect((yield* model(name))?.pokes, "L20: the poke stepped").toBe(before + 1);
             done.add(world.seen.size > 0 ? "poke:while_out" : "poke");
@@ -760,7 +762,7 @@ const walk = (
           const saved = yield* task(d.id);
           const state = Result.isSuccess(saved) ? saved.success.state : null;
 
-          if (state !== null && state._tag !== "absent" && state._tag !== "requested") {
+          if (state !== null && !State.isAnyOf(["absent", "requested"])(state)) {
             const by = said(cell);
             yield* inContext(Tasks.use((j) => j.finish(d.id, state.assignment.execution, d.result ?? cell.result, by)));
             yield* answers(runner(d.name).mailed, `${d.name}'s repeated wake`);
@@ -1015,9 +1017,10 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
     expect(yield* inContext(Tasks.use((j) => j.read(id))), "L21: the other process's task is left as it was").toEqual(
       foreign,
     );
-    expect(foreign.state._tag !== "absent" && foreign.state.request.process, "the task is the other process's").toBe(
-      FOREIGN,
-    );
+    expect(
+      !State.isAnyOf(["absent"])(foreign.state) && foreign.state.request.process,
+      "the task is the other process's",
+    ).toBe(FOREIGN);
   });
 
 const Tape = (target: fc.Arbitrary<string | null>) =>

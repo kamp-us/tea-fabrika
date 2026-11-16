@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { Cause, Clock, Effect, Exit, Layer, Match, Option, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -83,11 +83,12 @@ const parentId = (span: Tracer.Span) => Option.getOrNull(Option.map(span.parent,
 
 const ended = (span: Tracer.Span, ok: boolean) => {
   expect(span.status._tag, span.name).toBe("Ended");
-  const status = span.status;
-
-  if (status._tag !== "Ended") {
-    throw new Error(`span did not end: ${span.name}`);
-  }
+  const status = Match.valueTags(span.status, {
+    Started: (): never => {
+      throw new Error(`span did not end: ${span.name}`);
+    },
+    Ended: (status) => status,
+  });
 
   expect(Exit.isSuccess(status.exit), span.name).toBe(ok);
   expect(status.endTime >= status.startTime, span.name).toBe(true);
@@ -240,7 +241,7 @@ describe("T285, ledger tracing keep-laws", () => {
                         ? {}
                         : { ...cut("fab.ledger.by", a.by), "fab.ledger.tag": "saved" }),
                       "fab.ledger.answer": call.op === "resend" ? "resent" : answer._tag,
-                      ...(answer._tag === "refused"
+                      ...(Appended.isAnyOf(["refused"])(answer)
                         ? { "fab.ledger.reason": answer.reason }
                         : { "fab.ledger.rev": head, "fab.ledger.pos": head }),
                       ...(accepted
@@ -1411,11 +1412,10 @@ describe("T285, runner tracing keep-laws", () => {
                       parentSpanId: parentId(span),
                     });
                     expect(row.attributes).toMatchObject(tags(span));
-                    const status = span.status;
-
-                    if (status._tag !== "Ended") {
-                      expect.unreachable("runner span still open");
-                    }
+                    const status = Match.valueTags(span.status, {
+                      Started: () => expect.unreachable("runner span still open"),
+                      Ended: (status) => status,
+                    });
 
                     expect(row.startTimeUnixNano).toBe(String(status.startTime));
                     expect(row.endTimeUnixNano).toBe(String(status.endTime));

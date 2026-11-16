@@ -162,7 +162,9 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
     };
     const answer = yield* live.runner.msg(incoming);
     pos++;
-    expect(answer).toEqual(Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos }));
+    expect(answer).toEqual(
+      Sent.cases.accepted.make({ rev: Sent.match(answer, { accepted: ({ rev }) => rev, refused: () => -1 }), pos }),
+    );
     const recipients = [...expected.keys()].filter((c) => routes.has(c) && !unknown.has(c));
     expect(frames.map((f) => f.client).sort()).toEqual(recipients.sort());
 

@@ -20,7 +20,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
+import { Duration, Effect, Layer, ManagedRuntime, Match, References, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -28,7 +28,7 @@ import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
 import * as LedgerRemote from "./LedgerRemote.ts";
 import * as LedgerSql from "./LedgerSql.ts";
-import type { Line } from "./Log.ts";
+import { Appended, type Line } from "./Log.ts";
 import { nodeSql } from "./NodeSqlite.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -160,7 +160,10 @@ const capture = () => {
       return span;
     },
   });
-  const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
+  const ended = (name: string) =>
+    spans.filter(
+      (span) => span.name === name && Match.valueTags(span.status, { Started: () => false, Ended: () => true }),
+    );
   return { tracer, ended };
 };
 
@@ -291,7 +294,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
               const seen = known ? head : head + ahead;
               const answer = yield* ledger.append(stream, id, line({ body, seen }));
 
-              if (answer._tag === "placed") {
+              if (Appended.isAnyOf(["placed"])(answer)) {
                 ids.add(`${stream} ${id}`);
                 head = Math.max(head, answer.rev);
               }
@@ -376,7 +379,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
       const answers = yield* Effect.forEach(writes, (i) => ledger.append(`s${i % 3}`, `w-${i}`, line({ body: i })), {
         concurrency: "unbounded",
       }).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
-      const revs = answers.map((answer) => (answer._tag === "placed" ? answer.rev : -1));
+      const revs = answers.map((answer) => Appended.match(answer, { placed: ({ rev }) => rev, refused: () => -1 }));
       expect([...revs].sort((x, y) => x - y)).toEqual(writes.map((i) => i + 1));
 
       for (const stream of ["s0", "s1", "s2"]) {
@@ -431,7 +434,7 @@ describe("p93, seen is bounded by the log's head", () => {
               const answer = yield* ledger.append(stream, `w-${i}`, line({ seen }));
               expect(answer).toEqual(seen > head ? refused("seen_ahead") : placed(head + 1, expect.any(Number)));
 
-              if (answer._tag === "placed") {
+              if (Appended.isAnyOf(["placed"])(answer)) {
                 head = answer.rev;
               }
             }

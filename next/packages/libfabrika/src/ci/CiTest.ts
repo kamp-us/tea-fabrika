@@ -37,8 +37,10 @@ export class Control extends Context.Service<
   }
 >()("@kampus/libfabrika/ci/CiTest.Control") {}
 
+const done = Status.isAnyOf(["done"]);
+
 const rank = (run: typeof CheckRun.Type) => {
-  if (run.status._tag !== "done") {
+  if (!done(run.status)) {
     return 3;
   }
 
@@ -186,7 +188,7 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
         ? unknown
         : group.filter((r) => r.order === Math.max(...group.map((p) => p.order ?? -Infinity)));
     const priority = (r: typeof CheckRun.Type) =>
-      r.status._tag !== "done"
+      !done(r.status)
         ? 4
         : ["failure", "timed_out"].includes(r.status.conclusion)
           ? 3

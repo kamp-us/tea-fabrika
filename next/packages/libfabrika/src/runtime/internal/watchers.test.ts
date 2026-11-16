@@ -20,7 +20,8 @@ const Walk = Arbitrary.array(
   { minLength: 4, maxLength: 40 },
 );
 
-const clients = (model: typeof Model.Type) => (model._tag === "empty" ? [] : model.clients);
+const clients = (model: typeof Model.Type) =>
+  Model.match(model, { empty: () => [], watching: ({ clients }) => clients });
 
 describe("saved view membership, next/", () => {
   it.prop(

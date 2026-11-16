@@ -40,6 +40,8 @@ export const Msg = Schema.Union([Start, Answer]);
 
 const idle = Model.cases.idle.make({});
 
+const waiting = Model.isAnyOf(["waiting"]);
+
 /** @internal The requester named `self`, whose requests go to `peer`. */
 export const mailRequester = (config: { readonly self: string; readonly peer: string }) => {
   const machine = Machine.make({
@@ -49,7 +51,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
     init: (loaded) => [loaded ?? idle, []],
     update: {
       start: (s, m) => {
-        if (s._tag === "waiting") {
+        if (waiting(s)) {
           return [s, []];
         }
 
@@ -62,16 +64,10 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
         return [Model.cases.waiting.make({ ref: m.ref }), [send(input)]];
       },
       answer: (s, m) =>
-        s._tag === "waiting" && s.ref === m.ref
-          ? [Model.cases.answered.make({ ref: m.ref, value: m.value }), []]
-          : [s, []],
+        waiting(s) && s.ref === m.ref ? [Model.cases.answered.make({ ref: m.ref, value: m.value }), []] : [s, []],
       send_ok: (s) => [s, []],
       send_err: (s, m) =>
-        s._tag === "waiting" &&
-        m.cmd.m !== null &&
-        typeof m.cmd.m === "object" &&
-        "ref" in m.cmd.m &&
-        m.cmd.m.ref === s.ref
+        waiting(s) && m.cmd.m !== null && typeof m.cmd.m === "object" && "ref" in m.cmd.m && m.cmd.m.ref === s.ref
           ? [Model.cases.failed.make({ ref: s.ref, reason: m.error._tag }), []]
           : [s, []],
     },
@@ -81,7 +77,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
-    refuse: (s, m) => (m.type === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
+    refuse: (s, m) => (m.type === "start" && waiting(s) ? { reason: "busy" } : null),
     inputs: { start: "Start a request", answer: "An answer from a responder" },
     outputs: {},
     writes: {},

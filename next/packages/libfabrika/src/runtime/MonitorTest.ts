@@ -57,7 +57,7 @@ import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Monitors, MonitorsError } from "../processes/Monitors.ts";
 import * as MonitorsLedger from "../processes/MonitorsLedger.ts";
 import { data as ledger, ids, PIDS } from "../processes/Process.test-support.ts";
-import { NoProc, Owner, Recipient, Start } from "../processes/Process.ts";
+import { NoProc, Owner, Recipient, Start, State } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import { ProgramMail } from "../processes/ProgramMail.ts";
 import * as ProgramMailLedger from "../processes/ProgramMailLedger.ts";
@@ -629,7 +629,7 @@ const walk = (
         done.add("end:cut");
         const now = yield* life.manager.status(name).pipe(Effect.orDie);
 
-        if (now.state._tag === "live" && now.state.process === target.pid) {
+        if (State.isAnyOf(["live"])(now.state) && now.state.process === target.pid) {
           return;
         }
       }

@@ -320,7 +320,7 @@ describe("P12 Connection attachment laws", () => {
         }
 
         const a = f.saved();
-        expect(a._tag === "online" && a.waits.length <= 64).toBe(true);
+        expect(Attached.isAnyOf(["online"])(a) && a.waits.length <= 64).toBe(true);
       }
     }),
   );

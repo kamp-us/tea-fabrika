@@ -1291,9 +1291,9 @@ export const suite = (rig: Rig): void => {
                       const fresh = (updates.get(client) ?? []).slice(counts.get(client));
                       // A same-hash swap sends nothing (L2); a swap sends one whole at the current rev.
                       expect(fresh, `${client} after the swap`).toEqual(
-                        answer._tag === "same" ? [] : [{ type: "whole", rev, view: a.model }],
+                        SwapAnswer.isAnyOf(["same"])(answer) ? [] : [{ type: "whole", rev, view: a.model }],
                       );
-                      seen.add(answer._tag === "same" ? "same" : "whole");
+                      seen.add(SwapAnswer.isAnyOf(["same"])(answer) ? "same" : "whole");
                     }
                   }
                 }

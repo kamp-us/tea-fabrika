@@ -22,6 +22,7 @@ import {
   Exit,
   Fiber,
   Layer,
+  Match,
   Option,
   Result,
   Schema,
@@ -1273,10 +1274,12 @@ describe("p14 turns and watcher revisions", () => {
           const answers = yield* Effect.forEach(messages, (m) => r.msg(m), {
             concurrency: "unbounded",
           });
-          expect(answers.every((a) => a._tag === "accepted")).toBe(true);
-          expect(answers.map((a) => (a._tag === "accepted" ? a.pos : -1)).sort((a, b) => a - b)).toEqual(
-            Array.from({ length: 24 }, (_, i) => i + 1),
-          );
+          expect(answers.every((a) => Match.valueTags(a, { accepted: () => true, refused: () => false }))).toBe(true);
+          expect(
+            answers
+              .map((a) => Match.valueTags(a, { accepted: ({ pos }) => pos, refused: () => -1 }))
+              .sort((a, b) => a - b),
+          ).toEqual(Array.from({ length: 24 }, (_, i) => i + 1));
           expect(yield* inbox).toHaveLength(24);
           expect((yield* r.open("inspect")).view.count).toBe(24);
 
@@ -1395,7 +1398,7 @@ describe("p22 refusal and p25 thrown steps", () => {
                 ] as const) {
                   const sent = yield* m.send(NAME, id, { type: "add", n: value }, from());
 
-                  if (sent._tag === "placed") {
+                  if (Appended.isAnyOf(["placed"])(sent)) {
                     placed.push({ id, rev: sent.rev, pos: sent.pos });
                   }
                 }
@@ -1534,7 +1537,11 @@ describe("p35 Cmd order, replay and recorded failures", () => {
             yield* r.open("a");
             const alarmCount = w.alarms.length;
             const result = yield* Effect.exit(r.msg(w.input(1, { type: "work", n: 19 })));
-            expect(Exit.isFailure(result) || (Exit.isSuccess(result) && result.value._tag === "refused")).toBe(true);
+            expect(
+              Exit.isFailure(result) ||
+                (Exit.isSuccess(result) &&
+                  Match.valueTags(result.value, { accepted: () => false, refused: () => true })),
+            ).toBe(true);
             expect(w.workCalls()).toBe(0);
             expect(yield* inbox).toEqual([]);
             expect(w.published.get("a")).toHaveLength(1);
@@ -1626,7 +1633,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           const sent = yield* Mailbox.use((m) => m.send(NAME, "prior-work", { type: "work", n: 27 }, from()));
           expect(sent._tag).toBe("placed");
 
-          if (sent._tag === "placed") {
+          if (Appended.isAnyOf(["placed"])(sent)) {
             yield* ProcessStore.use((s) =>
               s.save({ saved: { v: 1, build: BUILD, model: initial, after: 0 }, turn: null, cmds: [] }, [
                 { id: "prior-work", rev: sent.rev, pos: sent.pos },

@@ -19,7 +19,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
+import { Duration, Effect, Exit, Layer, Match, Schema, type Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -100,11 +100,16 @@ const capture = () => {
       return span;
     },
   });
-  const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
+  const ended = (name: string) =>
+    spans.filter(
+      (span) => span.name === name && Match.valueTags(span.status, { Started: () => false, Ended: () => true }),
+    );
   const tags = (name: string): ReadonlyArray<Record<string, unknown>> =>
     ended(name).map((span) => Object.fromEntries(span.attributes));
   const failed = (name: string): ReadonlyArray<boolean> =>
-    ended(name).map((span) => span.status._tag === "Ended" && Exit.isFailure(span.status.exit));
+    ended(name).map((span) =>
+      Match.valueTags(span.status, { Started: () => false, Ended: ({ exit }) => Exit.isFailure(exit) }),
+    );
   const all = () => spans.flatMap((span) => [...span.attributes.values()]);
   return { tracer, ended, tags, failed, all };
 };

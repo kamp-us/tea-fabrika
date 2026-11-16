@@ -3,7 +3,20 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Layer,
+  Match,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import type * as Module from "./Replies.ts";
@@ -106,7 +119,10 @@ export const capture = () => {
       span.name,
       JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
       JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
+      Match.valueTags(span.status, {
+        Started: () => "",
+        Ended: ({ exit }) => (Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""),
+      }),
     ].join("\n");
   /** Each span as text: its name, tags, events and, once it ended, its exit. */
   const text = () =>
@@ -119,9 +135,12 @@ export const capture = () => {
 
       const made = write(span);
 
-      if (span.status._tag === "Ended") {
-        ended.set(span, made);
-      }
+      Match.valueTags(span.status, {
+        Started: () => undefined,
+        Ended: () => {
+          ended.set(span, made);
+        },
+      });
 
       return made;
     });
