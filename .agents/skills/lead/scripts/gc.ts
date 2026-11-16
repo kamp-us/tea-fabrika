@@ -24,8 +24,8 @@
 // scope; a pin a killed quest left goes once no running process names it and it is older than IDLE
 // (decidePin).
 //
-// Before any folder goes, keepruns.sh moves its runs/ (raw samples, never in git) into the main
-// checkout's runs/<folder>/; when that fails, the folder is kept.
+// Before any folder goes, the Runs service (box/RunsFs.ts) moves its runs/ (raw samples, never in
+// git) into the main checkout's runs/<folder>/; when that fails, the folder is kept.
 //
 // Every keep is printed with its reason, so a box that never goes is seen (field note
 // 2026-11-09-254: gc's own git status reset the idle clock, so for a day no box was ever removed).
@@ -38,7 +38,10 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Result, Schema } from "effect";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Console, Effect, Result, Schema } from "effect";
+import { Runs } from "./box/Runs.ts";
+import * as RunsFs from "./box/RunsFs.ts";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
@@ -403,17 +406,17 @@ const sizeMb = (paths: readonly string[]) => {
 };
 
 /** Move a folder's runs/ into the main checkout's runs/ before it is removed; false: keep it. */
-const keepRuns = (dir: string): boolean => {
-  const r = sh("sh", [join(import.meta.dirname, "keepruns.sh"), dir]);
+const keepRuns = Effect.fn("gc.keepRuns")(function* (runs: Runs["Service"], dir: string) {
+  const { said, kept } = yield* runs.keep(dir);
 
-  if (r.out.trim()) {
-    console.log(r.out.trim());
+  if (said.trim()) {
+    yield* Console.log(said.trim());
   }
 
-  return r.code === 0;
-};
+  return kept;
+});
 
-const main = () => {
+const main = Effect.fn("gc.main")(function* () {
   const args = process.argv.slice(2);
   const dry = args.includes("--dry-run");
 
@@ -428,6 +431,8 @@ const main = () => {
     console.log("gc: no boxes folder");
     return;
   }
+
+  const runs = yield* Effect.provide(Runs, RunsFs.layer(env.MAIN));
 
   const repo = (...a: string[]) => sh("git", ["-C", env.MAIN, ...SAFE, ...a]);
   const common = resolve(env.MAIN, repo("rev-parse", "--git-common-dir").out.trim());
@@ -603,7 +608,7 @@ const main = () => {
     const twin = gitDir === join(env.BOXES, `${name}-gitdata`) ? [gitDir] : [];
     const mb = sizeMb([box, ...twin]);
 
-    if (!dry && !keepRuns(box)) {
+    if (!dry && !(yield* keepRuns(runs, box))) {
       console.log(`keep ${name}: could not keep its runs/`);
       keptCount += 1;
       continue;
@@ -724,7 +729,7 @@ const main = () => {
 
     const mb = sizeMb([path]);
 
-    if (!dry && !keepRuns(path)) {
+    if (!dry && !(yield* keepRuns(runs, path))) {
       console.log(`keep worktree ${path}: could not keep its runs/`);
       keptCount += 1;
       continue;
@@ -762,8 +767,8 @@ const main = () => {
   console.log(
     `gc: ${dry ? "would remove" : "removed"} ${removed} boxes and ${trees} worktrees, ${freed} MB; kept ${keptCount}`,
   );
-};
+});
 
 if (import.meta.main) {
-  main();
+  NodeRuntime.runMain(main().pipe(Effect.provide(NodeServices.layer)));
 }

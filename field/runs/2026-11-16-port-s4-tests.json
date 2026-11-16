@@ -1,0 +1,65 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-port-s4-tests",
+  "ticket": "kamp-us/tea-fabrika#766",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T23:12:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice S4 of docs/plan/quests/port-scripts-0113-PLAN.md, keepruns.sh's port, on branch fabrikalfa/port-0113-s04. keepruns.test.ts keeps both old laws with their titles, generators, seed and run counts, now on the build's box/RunsFs.ts over a disk in memory built on FileSystem.layerNoop (no process, no real disk), and adds one property for the refusals keepruns.sh names that no law pinned: a runs/ that is a file, a runs/ link, a dangling runs/ link, MAIN's own runs/ and a refused write each keep the folder and change nothing on the disk, every kind reached with its name free and taken. box/BoxTestGit.ts, the rm suite's real-git world, now uses RunsFs.layer(main) on the real disk. Both law files are red for the one reason the build must fix: box/RunsFs.ts does not exist yet (Cannot find module './box/RunsFs.ts' and './RunsFs.ts'). keepruns.sh is deleted and its line leaves NOT_YET_PORTED in oxlint-plugins/tracked-scripts.ts in this same commit, since that file is an exam path the build may not commit.",
+  "plants": [
+    {
+      "law": ".agents/skills/lead/scripts/keepruns.test.ts: moves every file of a folder's runs/ into MAIN's runs/<name>/ and never overwrites one there",
+      "plant": "a taken name is overwritten: the suffix loop dropped and the taken folder removed before the move",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/keepruns.test.ts: moves every file of a folder's runs/ into MAIN's runs/<name>/ and never overwrites one there",
+      "plant": "the move dropped, with the kept line still printed",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/keepruns.test.ts: property: a runs/ that is a file, any runs/ link, MAIN's own runs/ or a refused write keeps the folder and changes nothing",
+      "plant": "a dangling runs/ link read as no runs/ (exists in place of lstat)",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/keepruns.test.ts: property: a runs/ that is a file, any runs/ link, MAIN's own runs/ or a refused write keeps the folder and changes nothing",
+      "plant": "a failed write answered kept: true",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/keepruns.test.ts: property: a runs/ that is a file, any runs/ link, MAIN's own runs/ or a refused write keeps the folder and changes nothing",
+      "plant": "a runs/ that is a file moved into MAIN's runs/",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/keepruns.test.ts: scenario: a folder with no runs/ is left alone, and a runs/ symlink or MAIN itself fails",
+      "plant": "the MAIN-is-the-folder check dropped",
+      "result": "green"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/box.rm.test.ts: box rm on git, every vector",
+      "plant": "RunsFs answers kept: false for every folder",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/lead/scripts/box.rm.test.ts: box rm on git, every vector",
+      "plant": "RunsFs drops the move but prints the kept line",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Cloud twin tests step, one session, no subagents. The date is the UTC day; the end time is Pacific; the start was not read, so it is null. box/RunsFs.ts is the build's file, so every plant ran on a scratch reference port put at that path only for the run and removed after (checked with cmp, never committed); against it both law files pass (3 of 3, 44 of 44). The MAIN-check plant stays green because a move of MAIN's runs/ into its own subtree is refused by rename itself, on the disk in memory as on Linux, so the outcome the law holds does not change. The rm-suite move-dropped plant stays green because the rm suite checks only the kept line, never that MAIN's runs/ holds the files; keepruns.test.ts's first law catches that plant on RunsFs. pnpm format, the oxlint pass on the three files, the list ratchet and lint:kind and lint:promise-types run alone pass; the full pnpm lint passed every other part and lost those two to EPIPE under memory pressure in this box. No .integration. or .visual. law is reached, so the 0178 guard refused nothing. Committed with stepcommit.sh --commit-only, so nothing is signed.",
+  "step": "tests",
+  "costUsd": null,
+  "billed": null,
+  "driver_caused": false
+}
