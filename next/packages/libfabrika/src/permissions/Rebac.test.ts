@@ -16,7 +16,10 @@
 // tuples are the brain's rows folded in the referee's order, and a permission's holders are the least
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Result } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
@@ -276,7 +279,7 @@ const rightsOn = (thing: Thing): ReadonlyArray<Right> => RIGHTS.filter((r) => r.
 const check = (
   right: Right,
   tuples: Relation.Tuples,
-  sender: typeof Sender.Type,
+  sender: Sender,
   thing: Thing,
 ): Result.Result<unknown, Rebac.Denied> =>
   right.on === "fabrika" && thing.type === "fabrika"

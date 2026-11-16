@@ -34,14 +34,16 @@ const DISABLE = /^\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
 const REASON = /\s--\s+/;
 const CODE = /\.[cm]?[jt]sx?$/;
 
-class Unparsed extends Schema.TaggedError<Unparsed>()("Unparsed", { path: Schema.String }) {}
+class Unparsed extends Schema.TaggedError<Unparsed, { readonly brand: unique symbol }>()("Unparsed", {
+  path: Schema.String,
+}) {}
 
 /** The edge comments in one file, in line order. */
 const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
   const parsed = parseSync(path, text);
 
   if (parsed.errors.length > 0) {
-    return yield* new Unparsed({ path });
+    return yield* Unparsed.make({ path });
   }
 
   return parsed.comments.flatMap((comment): Edge[] => {
@@ -102,9 +104,9 @@ export const asks = Effect.fn("exam.asks")(function* (
   return found;
 });
 
-class GitFailed extends Schema.TaggedError<GitFailed>()("GitFailed", {
+class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique symbol }>()("GitFailed", {
   args: Schema.String,
-  code: Schema.Number,
+  code: Schema.Finite,
 }) {}
 
 /** One git command's output; any exit but 0 fails. */
@@ -115,7 +117,7 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   });
 
   if (code !== 0) {
-    return yield* new GitFailed({ args: args.join(" "), code });
+    return yield* GitFailed.make({ args: args.join(" "), code });
   }
 
   return out;

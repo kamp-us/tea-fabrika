@@ -94,7 +94,7 @@ const from = (parent: string | null): From => ({
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 /** An input the test delivered, as the gateway keeps it. */
-type Input = { readonly process: string; readonly sender: typeof Sender.Type; state: "live" | "removed" | "ended" };
+type Input = { readonly process: string; readonly sender: Sender; state: "live" | "removed" | "ended" };
 
 /** The gateway's answer: none unless the input was delivered to that process. */
 const gateway = (inputs: ReadonlyMap<string, Input>) =>
@@ -104,11 +104,11 @@ const gateway = (inputs: ReadonlyMap<string, Input>) =>
         const input = parent === null ? undefined : inputs.get(parent);
 
         if (input === undefined || input.process !== process) {
-          return Effect.succeed(Option.none());
+          return Effect.succeedNone;
         }
 
         return input.state === "live"
-          ? Effect.succeed(Option.some(input.sender))
+          ? Effect.succeedSome(input.sender)
           : Effect.fail(new SendersError({ reason: input.state }));
       }),
   });
@@ -208,7 +208,7 @@ const world = Effect.fnUntraced(function* (
       Effect.map((parts) => parts.flat().sort((a, b) => a.rev - b.rev)),
     );
   let n = 0;
-  const start = (name: string, options: { readonly requester?: string; readonly member?: typeof Sender.Type } = {}) =>
+  const start = (name: string, options: { readonly requester?: string; readonly member?: Sender } = {}) =>
     run(
       ProcessManager.use((p) =>
         p.start(
@@ -255,7 +255,7 @@ const world = Effect.fnUntraced(function* (
       ),
     ).pipe(Effect.orDie);
   /** Delivers an input to `process` as the gateway would, and answers its id. */
-  const deliver = (process: string, sender: typeof Sender.Type, state: Input["state"] = "live") => {
+  const deliver = (process: string, sender: Sender, state: Input["state"] = "live") => {
     const id = `in-${process}-${++n}`;
     inputs.set(id, { process, sender, state });
     return id;

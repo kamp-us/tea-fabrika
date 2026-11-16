@@ -256,7 +256,7 @@ describe("L6 nothing of this repo's runs or checks the vendored files", () => {
     const reached = configs.flatMap((config) => {
       const shown = spawnSync(TSC, ["--showConfig", "-p", config], { cwd: ROOT, encoding: "utf8" });
       expect(shown.status, `${config}: ${shown.stderr}`).toBe(0);
-      const files = Schema.decodeUnknownSync(Shown)(shown.stdout).files ?? [];
+      const files = Schema.decodeSync(Shown)(shown.stdout).files ?? [];
       return files
         .map((file) => relative(ROOT, join(ROOT, dirname(config), file)))
         .filter((file) => file === "vendor" || file.startsWith("vendor/"))

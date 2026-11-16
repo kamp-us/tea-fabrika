@@ -24,7 +24,7 @@ const git = (root: string, args: ReadonlyArray<string>) => spawnSync("git", args
 /** One line for each way vendor/anti-slop/ is not the pinned commit's code; none when it is. */
 export const verify = (root: string): ReadonlyArray<string> => {
   const path = join(root, FOLDER, "pin.json");
-  const pin = existsSync(path) ? Schema.decodeUnknownExit(Pin)(readFileSync(path, "utf8")) : undefined;
+  const pin = existsSync(path) ? Schema.decodeExit(Pin)(readFileSync(path, "utf8")) : undefined;
 
   if (pin === undefined || Exit.isFailure(pin)) {
     return [`${FOLDER}/pin.json: could not read its repository, commit and tree`];

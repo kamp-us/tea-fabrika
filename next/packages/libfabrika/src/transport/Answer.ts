@@ -1,9 +1,11 @@
 /**
  * Turns one incoming JSON-RPC text frame into the text to send back and the attachment to keep.
- *
- * @stability unstable
  */
-import { Effect, Exit, Option, Result, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { REFUSED } from "../SpanTag.ts";
 import type { Admission, Who } from "./Wire.ts";
 import { Answer, Attached, RateCountFailure } from "./Wire.ts";
@@ -11,7 +13,7 @@ import { Answer, Attached, RateCountFailure } from "./Wire.ts";
 const Request = Schema.fromJsonString(
   Schema.Struct({
     jsonrpc: Schema.Literal("2.0"),
-    id: Schema.Union([Schema.String, Schema.Number]),
+    id: Schema.Union([Schema.String, Schema.Finite]),
     method: Schema.String,
     params: Schema.optional(Schema.Unknown),
   }),
@@ -60,7 +62,6 @@ const isOnline = <E, R, E2, R2>(frame: Incoming<E, R, E2, R2>): frame is Frame<O
  * A `reserved` or `rate_limited` refusal, and a failure that is a `RateCountFailure`, are also
  * recorded on the current span as the refused tag. The tag is `rate_limited` for that failure.
  *
- * @stability unstable
  * @category combinators
  */
 export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E2, R2, A extends typeof Attached.Type>(

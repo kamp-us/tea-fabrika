@@ -78,7 +78,7 @@ const Last = Schema.Struct({ link: Schema.String, handshake: Schema.String, rows
 type Last = typeof Last.Type;
 
 /** The suite's own failure: a wait that ran out, named by what it waited for, and what it last saw. */
-export class SuiteError extends Schema.TaggedError<SuiteError>()("SuiteError", {
+export class SuiteError extends Schema.TaggedError<SuiteError, { readonly brand: unique symbol }>()("SuiteError", {
   waited: Schema.String,
   last: Schema.optionalKey(Last),
 }) {}
@@ -94,7 +94,7 @@ const until = (label: string, check: Effect.Effect<boolean>, last?: Effect.Effec
       yield* Effect.sleep("250 millis");
     }
 
-    return yield* new SuiteError({ waited: label, ...(last === undefined ? {} : { last: yield* last }) });
+    return yield* SuiteError.make({ waited: label, ...(last === undefined ? {} : { last: yield* last }) });
   });
 
 /** The one round trip: dial, wait, grant, sign the hello, ping in text, open, submit, read back. */
@@ -105,7 +105,7 @@ export const roundTrip = (h: Home, dev: Dev, backend: Backend) =>
     const granted = yield* grant(h, w);
 
     if (!granted.ok) {
-      return yield* new SuiteError({ waited: `${backend.name}: the person's grant` });
+      return yield* SuiteError.make({ waited: `${backend.name}: the person's grant` });
     }
 
     // The door admits only a hello signed with the waiting key, so online means the hello was signed.
@@ -201,7 +201,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
         const view = pid ? s.client.views[pid]?.view : undefined;
-        const data = Option.getOrUndefined(Schema.decodeUnknownOption(checklistWindow.data)(view));
+        const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
         return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
       dials: count,
@@ -245,7 +245,7 @@ const PROJECT = "p18-follow";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** One entry of a stream as the suite reads it: its tag, its place in the whole log and its body. */
-type Fact = typeof Entry.Type;
+type Fact = Entry;
 
 const field = (body: unknown, key: string): unknown => Reflect.get(Object(body), key);
 
@@ -263,7 +263,7 @@ export const served = (h: Home) =>
     const { localState } = yield* Effect.tryPromise({
       // oxlint-disable-next-line fabrika/no-promises -- edge: Alchemy loads only after localInstance's telemetry switch
       try: () => import("alchemy/State/LocalState"),
-      catch: () => new SuiteError({ waited: "Alchemy's local state" }),
+      catch: () => SuiteError.make({ waited: "Alchemy's local state" }),
     });
     const instance = yield* localInstance(
       built,
@@ -322,13 +322,13 @@ const invoke = Effect.fnUntraced(function* (binding: Binding, method: string, ar
   const target = binding[method];
 
   if (target === undefined) {
-    return yield* new SuiteError({ waited: `the control endpoint's ${method}, which the binding does not have` });
+    return yield* SuiteError.make({ waited: `the control endpoint's ${method}, which the binding does not have` });
   }
 
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance's Durable Object RPC answers a Promise
   return yield* Effect.tryPromise({
     try: () => Reflect.apply(target, binding, args),
-    catch: () => new SuiteError({ waited: `the control endpoint's ${method}` }),
+    catch: () => SuiteError.make({ waited: `the control endpoint's ${method}` }),
   });
 });
 
@@ -351,7 +351,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     const granted = yield* grant(h, w);
 
     if (!granted.ok) {
-      return yield* new SuiteError({ waited: `${backend.name}: the person's grant` });
+      return yield* SuiteError.make({ waited: `${backend.name}: the person's grant` });
     }
 
     yield* backend.online;
@@ -359,7 +359,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     const first = newest(yield* s.facts(`processes/${PROCESS}`));
 
     if (first === undefined) {
-      return yield* new SuiteError({ waited: `${backend.name}: a live ${PROCESS}` });
+      return yield* SuiteError.make({ waited: `${backend.name}: a live ${PROCESS}` });
     }
 
     yield* invoke(s.control, "exit", [first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()]);

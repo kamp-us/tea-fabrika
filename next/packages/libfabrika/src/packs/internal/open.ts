@@ -1,5 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
 import { Branch, Hash, ObjectId } from "../../repositories/Repositories.ts";
 import { Snapshot } from "../../settings/Snapshot.ts";
@@ -74,7 +74,7 @@ export const machine = Machine.make({
       }
 
       const snapshot = s.snapshot;
-      let decision: typeof TrustDecision.Type | undefined;
+      let decision: TrustDecision | undefined;
       const selections = new Map<Id.InputId, typeof Event.cases.selected.Type>();
 
       for (const event of m.events) {

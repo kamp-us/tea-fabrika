@@ -459,7 +459,7 @@ StartsTest.law(
           expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
         }
 
-        const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
+        const input = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
         const receipt = yield* w.settingsRead(input.start);
         expect(receipt).toMatchObject({ _tag: "ok" });
         expect(receipt).not.toHaveProperty("value.starts");
@@ -720,11 +720,11 @@ describe("P12 Project authority", () => {
     const w = await open(TRACE, build),
       before = await w.run(w.p.info),
       configured = w.configured.length;
-    const result = await Effect.runPromise(
+    const result = await Effect.runPromiseExit(
       Effect.tryPromise({
         try: w.reopen,
         catch: (cause) => new Error("project reopen failed", { cause }),
-      }).pipe(Effect.exit),
+      }),
     );
     expect(result).toMatchObject({ _tag: "Success" });
 

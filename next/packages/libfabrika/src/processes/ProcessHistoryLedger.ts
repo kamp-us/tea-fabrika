@@ -1,6 +1,5 @@
 /**
  * Paged history reads stopped at each stream's captured head.
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -44,7 +43,6 @@ const validate = Effect.fnUntraced(function* (entry: Entry) {
  * Layer that answers `ProcessHistory` from the ledger's paged streams, keeping the failure of any
  * page.
  *
- * @stability unstable
  * @category layers
  */
 export const layer: Layer.Layer<ProcessHistory, never, Ledger> = Layer.effect(

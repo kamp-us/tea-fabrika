@@ -1,9 +1,12 @@
 // P34c, next/. Only the Node runner imports the driver; all policy and recovery are real code.
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Clock, Effect, Layer, Schema } from "effect";
-import { Digest } from "effect/crypto";
-import { TestClock } from "effect/testing";
+import * as Clock from "effect/Clock";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import { Writer } from "../access/SessionManager.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -43,7 +46,7 @@ const person = Writer.cases.person.make({ key: "SHA256:input", for: "test-person
 const Model = Schema.Struct({
   count: Schema.Int,
   replies: Schema.Int,
-  wake: Schema.NullOr(Schema.Number),
+  wake: Schema.NullOr(Schema.Finite),
   text: Schema.String,
 });
 
@@ -51,8 +54,8 @@ const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("inc"), text: Schema.optionalKey(Schema.String) }),
   Schema.Struct({ type: Schema.Literal("throw") }),
   Schema.Struct({ type: Schema.Literal("work") }),
-  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("schedule"), at: Schema.Finite }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
   Schema.Struct({ ...Down.fields, type: Schema.Literal("DOWN") }),
 ]);
 

@@ -102,15 +102,15 @@ export const KILL_GRACE_SECONDS = 2;
  */
 export const GC_SECONDS = 3 * DOCKER_SECONDS.call + DOCKER_SECONDS.prune + 4 * KILL_GRACE_SECONDS + 10;
 
-class Stuck extends Schema.TaggedError<Stuck>()("Stuck", {
+class Stuck extends Schema.TaggedError<Stuck, { readonly brand: unique symbol }>()("Stuck", {
   reason: Schema.String,
   detail: Schema.String,
 }) {}
 
 /** A command passed its time limit and was stopped; nothing it would have said was read. */
-export class CallTimeout extends Schema.TaggedError<CallTimeout>()("CallTimeout", {
+export class CallTimeout extends Schema.TaggedError<CallTimeout, { readonly brand: unique symbol }>()("CallTimeout", {
   command: Schema.String,
-  seconds: Schema.Number,
+  seconds: Schema.Finite,
 }) {}
 
 /** The one line a timed-out call leaves in a report. Pure. */
@@ -230,7 +230,7 @@ export const runArgs = (ask: {
   "/usr/local/bin/mutbox-entry",
 ];
 
-const Position = Schema.Struct({ line: Schema.Number, column: Schema.Number });
+const Position = Schema.Struct({ line: Schema.Finite, column: Schema.Finite });
 
 const mutantFields = {
   mutatorName: Schema.String,
@@ -246,14 +246,14 @@ const Report = Schema.Struct({
 const Tested = Schema.Struct({ ...mutantFields, fileName: Schema.String });
 
 const Sample = Schema.Struct({
-  seed: Schema.Number,
+  seed: Schema.Finite,
   ranges: Schema.Array(Schema.String),
-  total: Schema.Number,
-  selected: Schema.Number,
-  left: Schema.Number,
+  total: Schema.Finite,
+  selected: Schema.Finite,
+  left: Schema.Finite,
   /** Every changed file's mutants and how many were selected; a sampler from before ticket 655 has none. */
   files: Schema.optional(
-    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Number, selected: Schema.Number })),
+    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Finite, selected: Schema.Finite })),
   ),
 });
 
@@ -299,10 +299,10 @@ const Manifest = Schema.Struct({
 /** One mutant's answer, as the report gives it to a reader. */
 const Row = Schema.Struct({
   file: Schema.String,
-  line: Schema.Number,
-  column: Schema.Number,
-  endLine: Schema.Number,
-  endColumn: Schema.Number,
+  line: Schema.Finite,
+  column: Schema.Finite,
+  endLine: Schema.Finite,
+  endColumn: Schema.Finite,
   mutator: Schema.String,
   replacement: Schema.String,
   status: Schema.String,
@@ -311,13 +311,13 @@ type Row = typeof Row.Type;
 
 const Arm = Schema.Struct({
   /** run.sh's exit code: 0, or 124 when its five minutes ran out. */
-  exit: Schema.Number,
+  exit: Schema.Finite,
   /** `report`: Stryker finished. `events`: the cap stopped it, and this is what it kept. */
   from: Schema.Literals(["report", "events", "nothing"]),
-  counts: Schema.Record(Schema.String, Schema.Number),
-  tested: Schema.Number,
+  counts: Schema.Record(Schema.String, Schema.Finite),
+  tested: Schema.Finite,
   /** Selected mutants the cap stopped before they were tested. */
-  unreached: Schema.Number,
+  unreached: Schema.Finite,
   survivors: Schema.Array(Row),
 });
 type Arm = typeof Arm.Type;
@@ -334,14 +334,14 @@ const Summary = Schema.Struct({
   image: Schema.NullOr(Schema.String),
   network: Schema.Literal("none"),
   limits: Schema.Struct({
-    cpus: Schema.Number,
+    cpus: Schema.Finite,
     memory: Schema.String,
-    pids: Schema.Number,
-    seconds: Schema.Number,
+    pids: Schema.Finite,
+    seconds: Schema.Finite,
   }),
-  seconds: Schema.Number,
+  seconds: Schema.Finite,
   /** From the container's own cgroup: `memory.peak` and `cpu.stat`. */
-  usage: Schema.NullOr(Schema.Struct({ memoryPeakBytes: Schema.Number, cpuSeconds: Schema.Number })),
+  usage: Schema.NullOr(Schema.Struct({ memoryPeakBytes: Schema.Finite, cpuSeconds: Schema.Finite })),
   related: Schema.Array(Schema.String),
   /** Related tests left out before the run, each with why. They did not run. */
   excluded: Schema.Array(Named),
@@ -616,7 +616,7 @@ const sh = Effect.fnUntraced(
     return { out, err, code: Number(code) };
   },
   Effect.scoped,
-  Effect.catch(() => Effect.succeed({ out: "", err: "the command could not start", code: 127 })),
+  Effect.orElseSucceed(() => ({ out: "", err: "the command could not start", code: 127 })),
 );
 
 /**
@@ -632,7 +632,7 @@ export const bounded = (
   sh(cmd, args, stdin).pipe(
     Effect.timeoutOrElse({
       duration: `${seconds} seconds`,
-      orElse: () => Effect.fail(new CallTimeout({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
+      orElse: () => Effect.fail(CallTimeout.make({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
     }),
   );
 
@@ -644,13 +644,13 @@ const tail = (s: string) => s.trim().split("\n").slice(-3).join(" | ").slice(-40
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   );
 
 /** Whether a live process holds the lock; a lock whose owner is dead is removed. */
 const heldBy = Effect.fnUntraced(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
-  const owner = Number(yield* fs.readFileString(lock).pipe(Effect.catch(() => Effect.succeed(""))));
+  const owner = Number(yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => "")));
 
   if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
     return owner;
@@ -671,14 +671,14 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
           const owner = yield* heldBy(lock);
 
           if (owner !== null) {
-            return yield* new Stuck({
+            return yield* Stuck.make({
               reason: "docker_busy",
               detail: `another Docker box is running (pid ${owner}); one at a time`,
             });
           }
 
           return yield* write.pipe(
-            Effect.mapError(() => new Stuck({ reason: "docker_busy", detail: "the lock could not be taken" })),
+            Effect.mapError(() => Stuck.make({ reason: "docker_busy", detail: "the lock could not be taken" })),
           );
         }),
       ),
@@ -703,14 +703,14 @@ const dockerReady = Effect.fnUntraced(function* () {
   const server = yield* docker(["version", "--format", "{{.Server.Os}}/{{.Server.Arch}}"]);
 
   if (server.code !== 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "docker_down",
       detail: "Docker is not installed or not running; the sample is never run on the host",
     });
   }
 
   if (server.out.trim() !== PLATFORM) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "not_arm64",
       detail: `the Docker server is ${server.out.trim()}; only ${PLATFORM} was measured`,
     });
@@ -723,27 +723,27 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
   const path = yield* Path.Path;
   const file = path.join(box, name);
 
-  if (!(yield* fs.exists(file).pipe(Effect.catch(() => Effect.succeed(false))))) {
+  if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
     return null;
   }
 
-  const real = yield* fs.realPath(file).pipe(Effect.catch(() => Effect.succeed("")));
+  const real = yield* fs.realPath(file).pipe(Effect.orElseSucceed(() => ""));
 
   if (real !== file) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_output",
       detail: `the output holds a link at ${name}; nothing was read through it`,
     });
   }
 
-  return yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(null)));
+  return yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => null));
 });
 
 /** Decode one output file; text that does not fit is `null`, and never quoted anywhere. */
 const decoded = <S extends Schema.Top>(schema: S, raw: string | null) =>
   raw === null
     ? Effect.succeed(null)
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.catch(() => Effect.succeed(null)));
+    : Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.orElseSucceed(() => null));
 
 const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selected: number) {
   const fs = yield* FileSystem.FileSystem;
@@ -762,7 +762,7 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
   }
 
   const events = path.join(box, name, "events");
-  const names = (yield* fs.readDirectory(events).pipe(Effect.catch(() => Effect.succeed([])))).filter((n) =>
+  const names = (yield* fs.readDirectory(events).pipe(Effect.orElseSucceed(() => []))).filter((n) =>
     /^\d+-onMutantTested\.json$/.test(n),
   );
   const rows: Array<Row> = [];
@@ -832,7 +832,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const all = parseRelated(ask.related);
 
   if (all === null || !/^\d+$/.test(ask.ticket)) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_related",
       detail: "--related takes test file paths inside the repo, separated by commas, and --ticket a number",
     });
@@ -852,19 +852,19 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
         );
 
   if (ask.plan !== undefined && owners === null) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_plan",
       detail: "plancheck.sh --owners-json could not read the plan's files table",
     });
   }
 
   yield* fs.makeDirectory(ask.out, { recursive: true }).pipe(Effect.ignore);
-  const out = yield* fs.realPath(ask.out).pipe(Effect.catch(() => Effect.succeed(ask.out)));
+  const out = yield* fs.realPath(ask.out).pipe(Effect.orElseSucceed(() => ask.out));
   const box = path.join(out, "box");
   const input = path.join(out, "in");
 
   if (!mountable(out)) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_path",
       detail: "the output folder's path holds a comma, a quote or a newline, which docker --mount cannot take",
     });
@@ -896,7 +896,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const base = ask.base === undefined ? null : yield* resolve(ask.base);
 
   if (build === null || (ask.base !== undefined && base === null)) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_commit",
       detail: "--build or --base is not a commit in the checkout",
     });
@@ -919,7 +919,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const fetchedBase = base === null ? fetched : yield* fetch(base, "base", 1);
 
   if (fetched.code !== 0 || fetchedBase.code !== 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_commit",
       detail: `git fetch failed: ${tail(fetched.err + fetchedBase.err)}`,
     });
@@ -955,7 +955,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   if (related.length === 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "no_tests",
       detail: `every related test was left out: ${excluded.map((e) => `${e.path} (${e.reason})`).join("; ")}`,
     });
@@ -969,14 +969,14 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const node = baseNode(dockerfile);
 
   if (manifest === null || pnpm === null || node === null) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_manifest",
       detail: "the commit's package.json names no exact pnpm and Node, or the Dockerfile's base has no digest",
     });
   }
 
   if (manifest.engines.node !== node) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "node_mismatch",
       detail: `the commit runs Node ${manifest.engines.node} and the image's base is ${node}; change mutbox.Dockerfile`,
     });
@@ -986,7 +986,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const hash = yield* sh("git", ["hash-object", "--stdin"], [PLATFORM, pnpm, ids.out, dockerfile, entry].join("\n"));
 
   if (ids.code !== 0 || hash.code !== 0) {
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "bad_manifest",
       detail: "the commit has no pnpm-lock.yaml, pnpm-workspace.yaml or patches folder",
     });
@@ -1013,7 +1013,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     );
 
     if (built.code !== 0) {
-      return yield* new Stuck({ reason: "image_build_failed", detail: tail(built.err) });
+      return yield* Stuck.make({ reason: "image_build_failed", detail: tail(built.err) });
     }
   }
 
@@ -1038,14 +1038,14 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   if (Option.isNone(ran)) {
     // The time limit is the answer; a hung kill is stopped at its bound, and the rm finalizer follows.
     yield* docker(["kill", name]).pipe(Effect.ignore);
-    return yield* new Stuck({
+    return yield* Stuck.make({
       reason: "time_limit",
       detail: `the container passed ${limit} s and was killed; no report was read`,
     });
   }
 
   if (ran.value.code === 125 || ran.value.code === 127) {
-    return yield* new Stuck({ reason: "docker_run_failed", detail: tail(ran.value.err) });
+    return yield* Stuck.make({ reason: "docker_run_failed", detail: tail(ran.value.err) });
   }
 
   const sample = yield* decoded(Sample, yield* readOut(box, "b/sample.json"));

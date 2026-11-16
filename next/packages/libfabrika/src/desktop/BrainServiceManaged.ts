@@ -1,7 +1,5 @@
 /**
  * Effect driver for the single brain lifecycle machine.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
@@ -28,7 +26,7 @@ import { BrainService, BrainServiceError, Conflict, Operation, Timeout } from ".
 import type { BrainSpec } from "./BrainSpec.ts";
 
 const operation = (action: Operation["action"], cause: unknown) =>
-  new BrainServiceError({ reason: new Operation({ action, cause: Redacted.make(cause) }) });
+  BrainServiceError.make({ reason: Operation.make({ action, cause: Redacted.make(cause) }) });
 
 const pending = (model: typeof BrainLife.Model.Type): boolean => "pending" in model;
 
@@ -104,8 +102,8 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       const cmds = yield* send({ type: `${cmd.type}_ok`, cmd, value: answer.success ?? null, at } as BrainLife.Msg);
 
       if (cmd.type === "remove" && model._tag === "failed_stop") {
-        return yield* new BrainServiceError({
-          reason: new Timeout({ action: "stop", cause: Redacted.make("deadline") }),
+        return yield* BrainServiceError.make({
+          reason: Timeout.make({ action: "stop", cause: Redacted.make("deadline") }),
         });
       }
 
@@ -151,15 +149,15 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
           if (model._tag === "failed_up" || model._tag === "failed_stop") {
             const reason =
               model.reason === "Timeout"
-                ? new Timeout({ action, cause })
+                ? Timeout.make({ action, cause })
                 : model.reason === "Conflict"
-                  ? new Conflict({ cause })
-                  : new Operation({
+                  ? Conflict.make({ cause })
+                  : Operation.make({
                       action:
                         model.command === "ready" ? "start" : model.command === "remove" ? "cleanup" : model.command,
                       cause,
                     });
-            return yield* new BrainServiceError({ reason });
+            return yield* BrainServiceError.make({ reason });
           }
         }).pipe(
           Effect.timeoutOption(deadline - began),
@@ -170,7 +168,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
             settle({ type: "tick", at: deadline });
             return Effect.fail(
-              new BrainServiceError({ reason: new Timeout({ action, cause: Redacted.make("deadline") }) }),
+              BrainServiceError.make({ reason: Timeout.make({ action, cause: Redacted.make("deadline") }) }),
             );
           }),
         );
@@ -246,7 +244,6 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 /**
  * Serializes complete operations and captures lower services once.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (spec: BrainSpec, settings: Snapshot.Snapshot) =>

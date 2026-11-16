@@ -204,19 +204,63 @@ export const limits = (env) =>
  * result to Succeeded), so a broken time table never turns a run red. With none of those, a leg
  * canceled before its limit means a person or a sev0's freeze stopped the run: `stopped`, which
  * reports nothing, since it proved neither. Green only when no leg was canceled and every job in
- * `needs` passed; `needs` that cannot be read is `stopped` too.
+ * `needs` passed, or skipped where the run meant it to (`skippable`); `needs` that cannot be read
+ * is `stopped` too.
  * @param {Outcome} outcome
  * @returns {Verdict}
  */
 export const verdict = ({ needs, jobs, failed, limits: limit }) => {
-  const results = isMap(needs) ? Object.values(needs).map((job) => (isMap(job) ? job["result"] : undefined)) : [];
+  const entries = isMap(needs) ? Object.entries(needs) : [];
+  const results = entries.map(([, job]) => (isMap(job) ? job["result"] : undefined));
 
   if (failed.length > 0 || causes(jobs, limit).length > 0 || results.includes("failure")) {
     return "red";
   }
 
+  const skipped = skippable(needs);
+  const passed = entries.every(
+    ([name, job]) => isMap(job) && (job["result"] === "success" || (job["result"] === "skipped" && skipped.has(name))),
+  );
   const canceled = jobs.some((job) => job.status === "completed" && ending(job, limit) === "canceled");
-  return !canceled && results.length > 0 && results.every((result) => result === "success") ? "green" : "stopped";
+  return !canceled && entries.length > 0 && passed ? "green" : "stopped";
+};
+
+/**
+ * The jobs a run skips on purpose, by what its `select` job did (0590). `select` runs only on a
+ * branch's hand start. Skipped, the run is main's or a hand start on main, which runs the full set,
+ * so `changed` skips. Run and passed, it said `full`, so `changed` skips, or `changed`, so `tests`
+ * skips, and `changed` too when its set has no file (`legs` is `[]`): that run is green with no test
+ * leg. A `needs` with no `select`, the shape before 0590, or a `select` that failed or said anything
+ * else, skips nothing: every job must pass.
+ * @param {unknown} needs
+ * @returns {ReadonlySet<string>}
+ */
+export const skippable = (needs) => {
+  const select = isMap(needs) ? needs["select"] : undefined;
+
+  if (!isMap(select)) {
+    return new Set();
+  }
+
+  if (select["result"] === "skipped") {
+    return new Set(["select", "changed"]);
+  }
+
+  const outputs = isMap(select["outputs"]) ? select["outputs"] : {};
+
+  if (select["result"] !== "success") {
+    return new Set();
+  }
+
+  if (outputs["scope"] === "full") {
+    return new Set(["changed"]);
+  }
+
+  if (outputs["scope"] === "changed") {
+    return outputs["legs"] === "[]" ? new Set(["tests", "changed"]) : new Set(["tests"]);
+  }
+
+  return new Set();
 };
 
 /**

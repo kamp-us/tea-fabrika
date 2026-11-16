@@ -1,7 +1,5 @@
 /**
  * The Process object's Layer: Alchemy's Effect object around `ProcessService`.
- *
- * @stability unstable
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
@@ -47,7 +45,6 @@ const called = <A, E>(call: Effect.Effect<A, E>): Effect.Effect<A, LedgerError> 
  * and any other failure of a call dies too. `abort` resets the instance, as the platform's own
  * abort does.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: {
@@ -77,7 +74,7 @@ export const layer = (options: {
       const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
       const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));
 
-      return Effect.succeed({
+      return {
         alarm: () =>
           service.pipe(
             Effect.flatMap((process) => process.alarm()),
@@ -96,6 +93,6 @@ export const layer = (options: {
         recover: () => use((process) => process.recover()),
         savedAlarm: () => called(savedAlarm(raw)),
         abort: () => state.abort("storage wake"),
-      } satisfies ProcessShape);
-    }),
+      } satisfies ProcessShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

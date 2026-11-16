@@ -6,8 +6,15 @@ import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Stream } from "effect";
-import { TestClock } from "effect/testing";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
 import { workerLoader } from "../cloudflare/index.ts";
@@ -112,8 +119,8 @@ const open = Effect.gen(function* () {
   } satisfies IsolateUsageTest.Store;
 }).pipe(Effect.provide(NodeServices.layer));
 
-const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
-  return Effect.acquireUseRelease(
+const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>
+  Effect.acquireUseRelease(
     Effect.sync(() => new AbortController()),
     (controller) => {
       // oxlint-disable-next-line fabrika/no-type-assertions -- fake platform namespace routes to the real recorder under the receiving object's tracer
@@ -131,7 +138,6 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
     },
     (controller) => Effect.sync(() => controller.abort()),
   );
-};
 
 const fixture = (executed: () => void) => {
   const Model = Schema.Struct({ sum: Schema.Int });

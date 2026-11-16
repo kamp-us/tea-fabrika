@@ -1,10 +1,14 @@
 /**
  * `RepositoryTrust` on the ledger: one stream per person and clone.
- *
- * @stability unstable
  */
-import { Effect, Layer, Option, Redacted, Schema, Stream } from "effect";
-import { Digest } from "effect/crypto";
+
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { Ledger } from "../ledger/Ledger.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
 import * as Declarations from "../settings/Declarations.ts";
@@ -21,10 +25,12 @@ import {
 // A bounded read fails closed instead of trusting a truncated history. Never discard old decisions.
 const LIMIT = 4096;
 const stream = (key: string, person: string) => `repository/${person}/${key}`;
-const storage = (cause: unknown) => new RepositoryTrustError({ reason: new Storage({ cause: Redacted.make(cause) }) });
+
+const storage = (cause: unknown) =>
+  RepositoryTrustError.make({ reason: Storage.make({ cause: Redacted.make(cause) }) });
 
 const invalid = (cause: unknown) =>
-  new RepositoryTrustError({ reason: new InvalidHistory({ cause: Redacted.make(cause) }) });
+  RepositoryTrustError.make({ reason: InvalidHistory.make({ cause: Redacted.make(cause) }) });
 
 /**
  * Layer that provides `RepositoryTrust` on the ledger, in the stream `repository/<person>/<key>`.
@@ -43,7 +49,6 @@ const invalid = (cause: unknown) =>
  * `history` reads at most 4096 entries. Past that it fails as `InvalidHistory`: it never answers a
  * cut-off history, and old decisions are never dropped to make room.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.effect(
@@ -69,7 +74,7 @@ export const layer = Layer.effect(
         const events: Array<Event> = [];
         const selections = new Map<string, typeof Event.cases.selected.Type>();
         const traces = new Map<string, string>();
-        let repository: (typeof Event.Type)["repository"] | undefined;
+        let repository: Event["repository"] | undefined;
 
         for (const row of rows) {
           const event = yield* Schema.decodeUnknownEffect(Event)(valueFor(row), { onExcessProperty: "error" }).pipe(

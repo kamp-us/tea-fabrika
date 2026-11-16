@@ -8,8 +8,6 @@
  * member writes only under that check's proof, and its write turn checks the proof again on the
  * rows of that turn. Whatever that turn answers, the start reads again once. A stop is checked in
  * one turn and ended in `ProcessManager.exit`'s own.
- *
- * @stability unstable
  */
 import { Cause, Data, Effect, Equal, Exit, Layer, Option, Result, Schema, Tracer } from "effect";
 import type { LedgerError } from "../ledger/Ledger.ts";
@@ -36,6 +34,12 @@ const decodeLetter = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }
 
 const refuse = (reason: Exclude<ChildrenError["reason"], "storage">) => new ChildrenError({ reason });
 const storage = (cause: LedgerError | RelationsError | SendersError) => new ChildrenError({ reason: "storage", cause });
+
+type Asked = Result.Result<Option.Option<Sender>, SendersError>;
+
+/** A storage failure fails the start; any other answer, a refusal included, is kept as it came. */
+const unlessStorage = (asked: Asked): Result.Result<Asked, SendersError> =>
+  Result.isFailure(asked) && asked.failure.reason === "storage" ? Result.fail(asked.failure) : Result.succeed(asked);
 
 /** The proof a start's write needs. */
 type Proof = (typeof StartProgram)["Service"];
@@ -290,7 +294,7 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
     });
     return yield* work.pipe(
       Effect.withTracer(safe),
-      Effect.catchCause((cause) => (Cause.hasDies(cause) ? Effect.die(new Error(defect)) : Effect.failCause(cause))),
+      Effect.catchCauseIf(Cause.hasDies, () => Effect.die(new Error(defect))),
     );
   });
 
@@ -321,7 +325,6 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
  * the permission step's ids, never the cause, and a defect inside a start is replaced by a plain
  * one with no detail. A key removed after `Senders` answered is not seen by that start.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (config: {
@@ -400,14 +403,9 @@ export const layer = (config: {
             }),
           );
           // Outside any turn, and kept as it came: it decides nothing before the saved-id check.
-          const sender = yield* senders.sender(from.parent, child.requester.process).pipe(
-            Effect.result,
-            Effect.flatMap((asked) =>
-              Result.isFailure(asked) && asked.failure.reason === "storage"
-                ? Effect.fail(storage(asked.failure))
-                : Effect.succeed(asked),
-            ),
-          );
+          const sender = yield* senders
+            .sender(from.parent, child.requester.process)
+            .pipe(Effect.result, Effect.filterMapOrFail(unlessStorage, storage));
 
           // Two passes at most: after the write turn the id is saved, the name is taken, or the
           // requester has ended, so the second pass always answers.

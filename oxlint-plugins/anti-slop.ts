@@ -113,7 +113,7 @@ const Printed = Schema.fromJsonString(
 /** What the lock's oxlint run reports, as `--format=json` prints it. */
 const Report = Schema.fromJsonString(
   Schema.Struct({
-    number_of_files: Schema.Number,
+    number_of_files: Schema.Finite,
     diagnostics: Schema.Array(
       Schema.Struct({ code: Schema.optionalKey(Schema.String), filename: Schema.optionalKey(Schema.String) }),
     ),
@@ -149,7 +149,7 @@ const count = (
     { cwd: root, encoding: "utf8", maxBuffer: 2 ** 30 },
   );
   rmSync(home, { recursive: true, force: true });
-  const report = Schema.decodeUnknownExit(Report)(ran.stdout);
+  const report = Schema.decodeExit(Report)(ran.stdout);
 
   if (Exit.isFailure(report) || report.value.number_of_files === 0) {
     return null;
@@ -182,7 +182,7 @@ const UNREAD = "anti-slop.ts: could not read oxlint --print-config, so nothing s
  * one. `printed` is the text of `oxlint --print-config` for the config at the top of `root`.
  */
 export const strays = (root: string, printed: string): ReadonlyArray<string> => {
-  const config = Schema.decodeUnknownExit(Printed)(printed);
+  const config = Schema.decodeExit(Printed)(printed);
 
   if (Exit.isFailure(config)) {
     return [UNREAD];
@@ -207,7 +207,7 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
  * fork's plugins, as a test's small repo has, runs none of their code, so there is nothing to hold.
  */
 export const audit = (root: string, printed: string): ReadonlyArray<string> => {
-  const config = Schema.decodeUnknownExit(Printed)(printed);
+  const config = Schema.decodeExit(Printed)(printed);
 
   if (Exit.isFailure(config)) {
     return [UNREAD];

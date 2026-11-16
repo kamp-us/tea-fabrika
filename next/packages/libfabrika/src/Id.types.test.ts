@@ -3,7 +3,10 @@ import { expectTypeOf, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import type { IdError, IdSchema, IdValue } from "@kampus/libfabrika";
 import type * as Public from "@kampus/libfabrika";
-import { type Context, Effect, Schema, type SchemaIssue } from "effect";
+import type * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import type * as SchemaIssue from "effect/SchemaIssue";
 import type * as Front from "./Id.ts";
 import type { ProcessIdGenerator } from "./processes/ProcessIdGenerator.ts";
 import type { ProcessId as TraceProcessId } from "./ProcessId.ts";
@@ -34,7 +37,7 @@ const checkTypes = (raw: string) => {
   expectTypeOf<"IdGenerator" extends keyof typeof Public ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Front ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"IdGenerator" extends keyof typeof Id ? true : false>().toEqualTypeOf<false>();
-  expectTypeOf<typeof Id.InputId.Type>().toEqualTypeOf<IdValue<"input">>();
+  expectTypeOf<Id.InputId>().toEqualTypeOf<IdValue<"input">>();
   const takeProcess = (_id: typeof ProcessId.Type): void => {};
   const takeLetter = (_id: typeof LetterId.Type): void => {};
   const checkBrands = (process: typeof ProcessId.Type, letter: typeof LetterId.Type) => {

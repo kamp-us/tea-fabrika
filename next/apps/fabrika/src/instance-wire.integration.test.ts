@@ -420,7 +420,7 @@ const connected = async (s: Awaited<ReturnType<typeof instance>>, tab = "tab-a")
   return client;
 };
 
-const read = async (client: Client, stream: string, after = 0): Promise<ReadonlyArray<typeof Entry.Type>> => {
+const read = async (client: Client, stream: string, after = 0): Promise<ReadonlyArray<Entry>> => {
   const response = await client.call("ledger.read", { stream, after });
   expect(response.error).toBeUndefined();
   return Schema.decodeUnknownSync(Schema.Array(Entry))(response.result.entries);
@@ -695,7 +695,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
     throw new Error(`no restarted after ${after} on ${stream} in ${WAIT} ms; saw ${JSON.stringify(tags)}`);
   });
 
-const restartedRows = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((row) => row._tag === "restarted");
+const restartedRows = (rows: ReadonlyArray<Entry>) => rows.filter((row) => row._tag === "restarted");
 
 const crashStarts = (c: Client, firstStart: string) =>
   Effect.promise(async (signal) => {
@@ -864,7 +864,7 @@ describe("P12 real dev.ts wire", () => {
     expect((await fetch(s.url, { headers: { origin: "https://foreign.test" } })).status).toBe(403);
     // Every routed call is recorded, so reader c's own reads add rows here. Only rows
     // written by anyone other than c's key could come from a stranger.
-    const notC = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((r) => r.by !== s.key.fingerprint);
+    const notC = (rows: ReadonlyArray<Entry>) => rows.filter((r) => r.by !== s.key.fingerprint);
     const before = await read(c, "gateway/inputs");
     const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
     const strangerKey = identity(),

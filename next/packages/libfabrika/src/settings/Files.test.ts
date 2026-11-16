@@ -53,7 +53,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const reason = exit.cause.reasons.find((r) => r._tag === "Fail");
-  return reason?._tag === "Fail" && reason.error instanceof Files.SettingsError ? reason.error : "not a SettingsError";
+  return reason?._tag === "Fail" && Schema.is(Files.SettingsError)(reason.error) ? reason.error : "not a SettingsError";
 };
 
 // A word no setting uses, for unknown keys and tables.
@@ -129,13 +129,13 @@ describe("L7, every file is strict and whole, and a key outside its file's scope
         const exit = await validate(text(repo), text(person), "1.2.3");
         const ok = allowed(repo, "repo") && allowed(person, "person");
         const error = failure(exit);
-        expect(error instanceof Files.SettingsError, `repo:\n${text(repo)}\nperson:\n${text(person)}`).toBe(!ok);
+        expect(Schema.is(Files.SettingsError)(error), `repo:\n${text(repo)}\nperson:\n${text(person)}`).toBe(!ok);
         expect(Exit.isSuccess(exit)).toBe(ok);
         // A file whose only fault is a key the other file owns says so.
         const scope =
           (allowed(repo, "repo") && scopeOnly(person, "person")) ||
           (allowed(person, "person") && scopeOnly(repo, "repo"));
-        expect(!scope || (error instanceof Files.SettingsError && error.reason === "scope")).toBe(true);
+        expect(!scope || (Schema.is(Files.SettingsError)(error) && error.reason === "scope")).toBe(true);
       }),
       check,
     );
@@ -259,7 +259,7 @@ describe("L8, the version refusal comes first, and a supported version goes on",
           const exit = await validate(repo, COMPANION[other]!.person, running.join("."));
 
           const error = failure(exit);
-          const got = error === undefined ? "started" : error instanceof Files.SettingsError ? error.reason : error;
+          const got = error === undefined ? "started" : Schema.is(Files.SettingsError)(error) ? error.reason : error;
           // Newer: the refusal. Otherwise the companion's own error, or a clean pass with none.
           expect(
             newer
@@ -334,8 +334,8 @@ describe("L10, the three S5 messages, word for word", () => {
         const error = failure(exit);
         expect(error).toMatchObject({ reason: "unknown" });
         // The whole key, so the typo `instance.portt` itself is not counted as the offer.
-        expect(error instanceof Files.SettingsError ? error.message : "").not.toMatch(/instance\.port(?![a-z0-9-])/);
-        expect(error instanceof Files.SettingsError ? error.message : "").toContain(`instance.${key}`);
+        expect(Schema.is(Files.SettingsError)(error) ? error.message : "").not.toMatch(/instance\.port(?![a-z0-9-])/);
+        expect(Schema.is(Files.SettingsError)(error) ? error.message : "").toContain(`instance.${key}`);
       }),
       check,
     );

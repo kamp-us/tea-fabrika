@@ -9,7 +9,7 @@
 import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
-import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
+import { type Measurements, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -61,10 +61,10 @@ export const readSums = (sql: Sql, piece: string, from: number, to: number): Arr
 const HealthColumns = Schema.Struct({
   piece: Schema.String,
   at: Schema.Int,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   ok: Schema.Literals([0, 1]),
   error: Schema.NullOr(Schema.String),
-  lag: Schema.NullOr(Schema.Number),
+  lag: Schema.NullOr(Schema.Finite),
   spanId: Schema.NullOr(Schema.String),
 });
 
@@ -80,10 +80,10 @@ const decodeSummary = Schema.decodeUnknownSync(
     hour: Schema.Int,
     count: Schema.Int,
     errors: Schema.Int,
-    p50: Schema.Number,
-    p95: Schema.Number,
-    max: Schema.Number,
-    lag: Schema.NullOr(Schema.Number),
+    p50: Schema.Finite,
+    p95: Schema.Finite,
+    max: Schema.Finite,
+    lag: Schema.NullOr(Schema.Finite),
   }),
 );
 
@@ -321,11 +321,10 @@ export const archiveDays = Effect.fn(
       try: () => sql.transaction(() => due(sql, object, now)),
       catch: sinkError,
     });
-    yield* Effect.forEach(
-      parts,
-      (part) => archivePart(sql, archive, part).pipe(Effect.catch((_: SinkError) => Effect.void)),
-      { concurrency: 1, discard: true },
-    );
+    yield* Effect.forEach(parts, (part) => archivePart(sql, archive, part).pipe(Effect.ignore), {
+      concurrency: 1,
+      discard: true,
+    });
   },
-  Effect.catch((_: SinkError) => Effect.void),
+  (effect) => Effect.ignore(effect),
 );

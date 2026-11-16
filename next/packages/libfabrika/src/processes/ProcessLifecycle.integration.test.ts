@@ -215,8 +215,8 @@ describe("p79, process identity", () => {
       });
     }),
   );
-  it.effect("plant, reuse a request ID with changed code or name: both changes are refused", () => {
-    return check(
+  it.effect("plant, reuse a request ID with changed code or name: both changes are refused", () =>
+    check(
       fc.tuple(
         fc
           .stringMatching(/^[a-z][a-z0-9:]{0,20}$/)
@@ -241,8 +241,8 @@ describe("p79, process identity", () => {
           expect(store.rows()).toEqual(before);
         }).pipe(Effect.provide(manager(store, brain(), ids(A).next)));
       },
-    );
-  });
+    ),
+  );
   it.effect("plant, retry allocates after wake: a rebuilt manager returns the saved answer without IDs", () =>
     check(
       fc.record({ sentAt: fc.string(), build: hash, seen: fc.nat() }),
@@ -267,8 +267,8 @@ describe("p79, process identity", () => {
 });
 
 describe("p79, predecessors and live info", () => {
-  it.effect("plant, restart a live process: an ended current predecessor is required", () => {
-    return check(hash, [CODE.hash], (build) => {
+  it.effect("plant, restart a live process: an ended current predecessor is required", () =>
+    check(hash, [CODE.hash], (build) => {
       const store = storage();
       return Effect.gen(function* () {
         const processes = yield* ProcessManager;
@@ -277,10 +277,10 @@ describe("p79, predecessors and live info", () => {
         expect((yield* Effect.flip(processes.start(again(A), from()))).reason).toBe("alive");
         expect(store.rows()).toEqual(before);
       }).pipe(Effect.provide(manager(store)));
-    });
-  });
-  it.effect("plant, restart under another program: the name stays its program's", () => {
-    return check(
+    }),
+  );
+  it.effect("plant, restart under another program: the name stays its program's", () =>
+    check(
       fc.string({ minLength: 1 }).filter((program) => program !== CODE.program),
       ["other"],
       (program) => {
@@ -298,8 +298,8 @@ describe("p79, predecessors and live info", () => {
           expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
         }).pipe(Effect.provide(manager(store)));
       },
-    );
-  });
+    ),
+  );
   it.effect("plant, two successors: concurrent attempts accept only one and reject a stale predecessor", () =>
     check(
       fc.uniqueArray(
@@ -407,8 +407,8 @@ describe("p79, predecessors and live info", () => {
 });
 
 describe("p79, names, parents and replay", () => {
-  it.effect("plant, free a name on exit: reservation keeps its original program and owner", () => {
-    return check(hash, [CODE.hash], (build) => {
+  it.effect("plant, free a name on exit: reservation keeps its original program and owner", () =>
+    check(hash, [CODE.hash], (build) => {
       const store = storage();
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store)));
@@ -431,10 +431,10 @@ describe("p79, names, parents and replay", () => {
 
         expect(store.rows()).toEqual(before);
       });
-    });
-  });
-  it.effect("plant, trust From.by: a sibling cannot spoof the parent to exit or restart", () => {
-    return check(fc.string({ minLength: 1 }), [BRAIN], (by) => {
+    }),
+  );
+  it.effect("plant, trust From.by: a sibling cannot spoof the parent to exit or restart", () =>
+    check(fc.string({ minLength: 1 }), [BRAIN], (by) => {
       const store = storage();
       return Effect.gen(function* () {
         yield* Effect.gen(function* () {
@@ -456,8 +456,8 @@ describe("p79, names, parents and replay", () => {
           )).reason,
         ).toBe("not_parent");
       });
-    });
-  });
+    }),
+  );
   it.effect("plant, reject additive tags or keep authority only in memory: replay skips unknown events", () =>
     check(fc.jsonValue(), [{ v: 2 }], (body) => {
       const store = storage();
@@ -569,8 +569,8 @@ const lawsFor = (
 
 describe("P33, the process fold ignores events not written by the brain", () => {
   for (const tag of Object.keys(ProcessEvent.cases) as Array<keyof typeof ProcessEvent.cases>) {
-    it.effect(`the fold ignores an event tagged ${tag} whose by is not the brain's writer`, () => {
-      return check(
+    it.effect(`the fold ignores an event tagged ${tag} whose by is not the brain's writer`, () =>
+      check(
         fc.tuple(
           fc.string({ minLength: 1 }).filter((by) => by !== BRAIN),
           fc.constantFrom("counter:1", "processes/counter:1"),
@@ -590,15 +590,15 @@ describe("P33, the process fold ignores events not written by the brain", () => 
             yield* lawsFor(store, by, stream)[tag];
           });
         },
-      );
-    });
+      ),
+    );
   }
 });
 
 describe("P33, names and client ids are checked against a pattern", () => {
   for (const name of ["processes", "a/b", "counter:1/inbox"]) {
-    it.effect(`a start named ${JSON.stringify(name)} is refused with a typed error`, () => {
-      return check(
+    it.effect(`a start named ${JSON.stringify(name)} is refused with a typed error`, () =>
+      check(
         fc.oneof(
           fc.constant("processes"),
           fc.tuple(fc.string(), fc.string()).map(([a, b]) => `${a}/${b}`),
@@ -616,8 +616,8 @@ describe("P33, names and client ids are checked against a pattern", () => {
             expect(store.rows()).toEqual([]);
           });
         },
-      );
-    });
+      ),
+    );
   }
 
   for (const client of ["processes", "w/x", "counter:1"]) {

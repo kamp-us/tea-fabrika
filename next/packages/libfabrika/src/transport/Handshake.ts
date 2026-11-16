@@ -11,11 +11,10 @@
  *
  * The window parent steps this machine by hand and turns each outcome into the Link machine's own
  * Msg (`transport/Link.ts`).
- *
- * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { ErrorClass } from "./ClientRows.ts";
 
 const Dial = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -39,7 +38,6 @@ const doorWord = (said: string): string => (Schema.is(Reason)(said) ? said : "ot
  * failure, never its text. `refused` keeps the door's reason for refusing the hello when it is one
  * of the door's words, else `other`.
  *
- * @stability unstable
  * @category models
  */
 export const Handshake = Schema.TaggedUnion({
@@ -50,9 +48,9 @@ export const Handshake = Schema.TaggedUnion({
   /** The door said not granted, and `gateway.knock` went out with `id`. */
   knocking: { dial: Dial, since: Ms, sent: Count, id: Schema.String },
   /** The door shows `code` until `until`; only a grant moves on. */
-  waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Number, ms: Ms },
+  waiting: { dial: Dial, since: Ms, sent: Count, code: Schema.String, until: Schema.Finite, ms: Ms },
   /** The door admitted the hello. `ping` is its interval in ms; `person` is who the door admitted. */
-  admitted: { dial: Dial, since: Ms, ping: Schema.Number, ms: Ms, person: Schema.String },
+  admitted: { dial: Dial, since: Ms, ping: Schema.Finite, ms: Ms, person: Schema.String },
   /** The key could not sign the hello. */
   failed: { dial: Dial, error: ErrorClass },
   /** The door refused the hello for `reason`, its own word or `other`, `ms` after the dial began. */
@@ -62,7 +60,6 @@ export const Handshake = Schema.TaggedUnion({
 /**
  * The type of a hello exchange's state.
  *
- * @stability unstable
  * @category models
  */
 export type Handshake = typeof Handshake.Type;
@@ -71,7 +68,6 @@ export type Handshake = typeof Handshake.Type;
  * Schema for what reaches the exchange: the socket opened, the door's challenge, its grant and its
  * waiting notice, and the door's answer to a request with a string id.
  *
- * @stability unstable
  * @category models
  */
 export const HandshakeMsg = Schema.Union([
@@ -82,7 +78,7 @@ export const HandshakeMsg = Schema.Union([
     type: Schema.Literal("waiting"),
     dial: Dial,
     code: Schema.String,
-    until: Schema.Number,
+    until: Schema.Finite,
     at: Ms,
   }),
   Schema.Struct({
@@ -98,7 +94,6 @@ export const HandshakeMsg = Schema.Union([
 /**
  * The type of a Msg the hello exchange takes.
  *
- * @stability unstable
  * @category models
  */
 export type HandshakeMsg = typeof HandshakeMsg.Type;
@@ -111,7 +106,6 @@ export type HandshakeMsg = typeof HandshakeMsg.Type;
  * It fails `key` when the key cannot sign, with the platform's class as `error`, and `closed` when
  * the dial has no open socket.
  *
- * @stability unstable
  * @category constructors
  */
 export const hello = Cmd.make("hello", {
@@ -123,7 +117,6 @@ export const hello = Cmd.make("hello", {
 /**
  * Cmd that sends `gateway.knock` with `id` on the dial's socket, asking the door for a code.
  *
- * @stability unstable
  * @category constructors
  */
 export const knock = Cmd.make("knock", {
@@ -135,12 +128,12 @@ export const knock = Cmd.make("knock", {
 /** The door's admission, as it answers `initialize`. */
 const Admitted = Schema.Struct({
   version: Schema.Int,
-  ping: Schema.Number,
+  ping: Schema.Finite,
   identity: Schema.Struct({ key: Schema.String, person: Schema.String, as: Schema.String }),
 });
 
 /** The door's waiting code, as it answers a knock. */
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 
 /** The class a key error carries beside its tag, or `other`. */
 const KeyFailure = Schema.Struct({ error: ErrorClass });
@@ -172,7 +165,6 @@ const helloFor = (s: Handshake, dial: number, since: number, nonce: string): Ste
  * dial over. A Msg for another dial than the state's, and an answer whose id is not the live one,
  * change nothing.
  *
- * @stability unstable
  * @category constructors
  */
 export const handshakeMachine = Machine.make({

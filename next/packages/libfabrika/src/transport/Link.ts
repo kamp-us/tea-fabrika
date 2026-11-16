@@ -11,7 +11,7 @@
 // to reach it, timed by the handler that dialed, or the wait the link's own timer ran for a stall it
 // fired. The machine reads no clock and does not read `ms`; a window copies it into its records.
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 
 /** No wait is longer than this: p5's 30-second cap. */
 export const CAP = 30_000;
@@ -37,11 +37,11 @@ export const Link = Schema.TaggedUnion({
     dial: Dial,
     fingerprint: Schema.String,
     code: Schema.String,
-    until: Schema.Number,
+    until: Schema.Finite,
     knocks: Schema.optionalKey(Count),
   },
   /** Admitted. `ping` is the brain's interval in ms; `pings` the checks still unanswered. */
-  online: { dial: Dial, ping: Schema.Number, pings: Schema.optionalKey(Count) },
+  online: { dial: Dial, ping: Schema.Finite, pings: Schema.optionalKey(Count) },
   /** The last dial failed; the next one waits `backoff(tries)`. */
   retrying: { dial: Dial, tries: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)) },
   /** The key was removed (close 4003). Nothing dials again until Ask again. */
@@ -56,13 +56,13 @@ const OnDial = { dial: Dial };
 const Ms = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0));
 
 export const LinkMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Number, ms: Ms }),
+  Schema.Struct({ type: Schema.Literal("admitted"), ...OnDial, ping: Schema.Finite, ms: Ms }),
   Schema.Struct({
     type: Schema.Literal("not_granted"),
     ...OnDial,
     fingerprint: Schema.String,
     code: Schema.String,
-    until: Schema.Number,
+    until: Schema.Finite,
     ms: Ms,
   }),
   Schema.Struct({ type: Schema.Literal("granted"), ...OnDial }),

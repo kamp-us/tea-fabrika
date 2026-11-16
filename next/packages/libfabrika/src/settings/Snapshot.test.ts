@@ -478,7 +478,7 @@ describe("L14 [secrets], only declared settings reach values, errors and spans",
             outputs.push(String(exit.cause), printed(error?._tag === "Fail" ? error.error : null));
             // The key is named; the value found there is not.
             expect(
-              error?._tag === "Fail" && error.error instanceof Files.SettingsError ? error.error.message : "",
+              error?._tag === "Fail" && Schema.is(Files.SettingsError)(error.error) ? error.error.message : "",
             ).toContain(place.named);
           }
 

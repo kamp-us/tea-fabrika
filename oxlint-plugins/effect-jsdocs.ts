@@ -794,7 +794,6 @@ function extractParsedInlineLinks(source: string): ReadonlyArray<ParsedInlineLin
 export function buildTags(
   scope: DocScope,
   tags: ReadonlyArray<JSDocTag>,
-  requireStability = false,
 ): Result<ParsedModuleTags | ParsedDeclarationTags | ParsedNamespaceTags | ParsedMemberTags, JSDocParseError> {
   const diagnostics: Array<JSDocDiagnostic> = [];
   const allowed =
@@ -865,15 +864,6 @@ export function buildTags(
   if (stability !== undefined && stability !== "stable" && stability !== "unstable" && stability !== "experimental") {
     diagnostics.push(
       diagnostic("invalid-stability", "@stability must have the value stable, unstable, or experimental"),
-    );
-  }
-
-  if (requireStability && stability === undefined) {
-    diagnostics.push(
-      diagnostic(
-        "missing-tag",
-        scope === "module" ? "Module JSDoc must include @stability" : "Public JSDoc must include @stability",
-      ),
     );
   }
 

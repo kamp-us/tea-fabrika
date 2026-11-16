@@ -60,7 +60,7 @@ const Report = Schema.fromJsonString(
       Schema.Struct({
         code: Schema.String,
         filename: Schema.String,
-        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Number }) })),
+        labels: Schema.Array(Schema.Struct({ span: Schema.Struct({ line: Schema.Finite }) })),
       }),
     ),
   }),
@@ -73,7 +73,7 @@ const printout = spawnSync(OXLINT, [`--config=${join(ROOT, ".oxlintrc.json")}`, 
   maxBuffer: 2 ** 28,
 }).stdout;
 
-const printed = Schema.decodeUnknownSync(Printed)(printout);
+const printed = Schema.decodeSync(Printed)(printout);
 
 const levelOf = (setting: typeof Setting.Type): string => (Predicate.isString(setting) ? setting : setting[0]);
 const ofThePlugins = (rule: string): boolean => rule.startsWith("anti-slop/") || rule.startsWith("anti-slop-effect/");
@@ -228,7 +228,7 @@ beforeAll(() => {
     encoding: "utf8",
     maxBuffer: 2 ** 28,
   });
-  const { diagnostics } = Schema.decodeUnknownSync(Report)(ran.stdout);
+  const { diagnostics } = Schema.decodeSync(Report)(ran.stdout);
   fires = new Map(
     sites.map((site, i) => [
       site,

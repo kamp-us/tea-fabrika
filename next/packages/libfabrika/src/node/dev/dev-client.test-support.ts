@@ -1,6 +1,6 @@
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 // P12, next/. The HTTP client `startDev`'s laws provide, over each run's own `fetch` stub.
-import { Layer } from "effect";
-import { FetchHttpClient } from "effect/http";
+import * as Layer from "effect/Layer";
 
 /**
  * The entry's own client, `FetchHttpClient.layer`, whose `fetch` is the global one at the moment

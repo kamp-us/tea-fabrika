@@ -3,9 +3,12 @@ import { Ci, CodeHost, type Handler } from "@kampus/libfabrika";
 import { Cause, Effect, Schema } from "effect";
 import { Inputs } from "./Merger.ts";
 
-export class HandlerDefect extends Schema.TaggedError<HandlerDefect>()("HandlerDefect", {
-  cmd: Schema.Literals(["change", "update", "checks", "merge"]),
-}) {}
+export class HandlerDefect extends Schema.TaggedError<HandlerDefect, { readonly brand: unique symbol }>()(
+  "HandlerDefect",
+  {
+    cmd: Schema.Literals(["change", "update", "checks", "merge"]),
+  },
+) {}
 
 const Fault = Schema.TaggedUnion({ unavailable: {}, rate_limited: {}, refused: {} });
 
@@ -31,7 +34,7 @@ const outcome =
           return Effect.interrupt;
         }
 
-        return Effect.fail(new HandlerDefect({ cmd }));
+        return Effect.fail(HandlerDefect.make({ cmd }));
       }),
     );
 

@@ -1,4 +1,6 @@
-import { Context, type Effect, Schema } from "effect";
+import * as Context from "effect/Context";
+import type * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 /** The class of a failure, from a fixed list of words. Never a message, a stack or a value. */
 export const ErrorClass = Schema.Literals([
@@ -99,10 +101,13 @@ export const ClientRow = Schema.Struct({
 });
 export type ClientRow = typeof ClientRow.Type;
 
-export class ClientRowsError extends Schema.TaggedError<ClientRowsError>()("ClientRowsError", {
-  op: Schema.Literals(["open", "write"]),
-  error: ErrorClass,
-}) {}
+export class ClientRowsError extends Schema.TaggedError<ClientRowsError, { readonly brand: unique symbol }>()(
+  "ClientRowsError",
+  {
+    op: Schema.Literals(["open", "write"]),
+    error: ErrorClass,
+  },
+) {}
 
 export class ClientRows extends Context.Service<
   ClientRows,

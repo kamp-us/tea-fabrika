@@ -1,7 +1,5 @@
 /**
  * Effect's rate-limit store backed by the Project's shared Sql.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
@@ -102,7 +100,6 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
 /**
  * Supplies Effect's fixed-window store from the Project's shared synchronous Sql.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (

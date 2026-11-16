@@ -24,8 +24,13 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Schema from "effect/Schema";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
@@ -100,9 +105,7 @@ process.stdout.write(JSON.stringify({model,records,updates}));
               Schema.fromJsonString(
                 Schema.Struct({
                   model: Schema.Struct({ count: Schema.Int }),
-                  records: Schema.Array(
-                    Schema.Struct({ _tag: Schema.Literal("ok"), value: Schema.Struct({ type: Schema.String }) }),
-                  ),
+                  records: Schema.Array(Schema.TaggedStruct("ok", { value: Schema.Struct({ type: Schema.String }) })),
                   updates: Schema.Int,
                 }),
               ),

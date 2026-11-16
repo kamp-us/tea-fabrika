@@ -7,7 +7,7 @@ import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { Answer } from "@kampus/libfabrika/transport/Wire";
 import { projectRuntime, settings, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { Deferred, Effect, Layer, Predicate, Schema } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
+import { RateLimiter } from "effect/persistence";
 import { programs } from "virtual:fabrika-built";
 import { Project as RealProject } from "../src/brain.ts";
 import * as Hold from "./chaos-revoke.test-support.ts";
@@ -18,7 +18,7 @@ export { default } from "../src/brain.ts";
 
 const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<typeof projectRuntime>[1]) =>
   projectRuntime(ctx, env, {
-    input: settings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
+    input: settings(env).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause }))),
     programs,
     bootstrap: [
       { name: "counter:1", id: "counter:1", program: "fabrika/counter" },
@@ -95,7 +95,7 @@ const heldOwner = (ctx: Parameters<typeof projectRuntime>[0], env: Parameters<ty
               if (method === "p90.arm") {
                 const { process } = yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(
                   params,
-                ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+                ).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })));
                 yield* move({ type: "arm", process });
               } else if (method === "p90.release") {
                 yield* move({ type: "release" });

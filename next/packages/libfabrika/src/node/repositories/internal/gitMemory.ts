@@ -1,8 +1,13 @@
-import { Effect, FileSystem, Path, Predicate, Sink, Stream } from "effect";
-import type { PlatformError } from "effect";
-import { Digest } from "effect/crypto";
-import { ChildProcessSpawner } from "effect/process";
-import type { ChildProcess } from "effect/process";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
+import * as Predicate from "effect/Predicate";
+import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 
 type Format = "sha1" | "sha256";
 type Mode = "100644" | "100755" | "120000" | "040000" | "160000";

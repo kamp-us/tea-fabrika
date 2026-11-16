@@ -85,9 +85,7 @@ const notLead = FlowMachine.make({ lead: false });
 
 /** The state file's trip: the Model as JSON text and back, through its schema. */
 const saved = (m: FlowMachine.Model) =>
-  Schema.decodeUnknownSync(Schema.fromJsonString(FlowMachine.Model))(
-    JSON.stringify(Schema.encodeSync(FlowMachine.Model)(m)),
-  );
+  Schema.decodeSync(Schema.fromJsonString(FlowMachine.Model))(JSON.stringify(Schema.encodeSync(FlowMachine.Model)(m)));
 
 describe("the flow machine", () => {
   it("a flow ends at its first ask or stuck, and runs no step after it", () => {

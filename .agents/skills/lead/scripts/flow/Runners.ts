@@ -8,7 +8,9 @@ import type { Answer } from "./Outcome.ts";
 import type { Step } from "./Step.ts";
 
 /** A runner could not do its work at all (it could not start, or its args do not parse). */
-export class StepFailed extends Schema.TaggedError<StepFailed>()("StepFailed", { reason: Schema.String }) {}
+export class StepFailed extends Schema.TaggedError<StepFailed, { readonly brand: unique symbol }>()("StepFailed", {
+  reason: Schema.String,
+}) {}
 
 /** One step's work: the step in, its answer out. */
 export type Runner<R = never> = (step: Step) => Effect.Effect<Answer, StepFailed, R>;
@@ -32,7 +34,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
         const runner = table[step.name];
 
         if (runner === undefined) {
-          return yield* new StepFailed({ reason: `no runner for step ${step.name}` });
+          return yield* StepFailed.make({ reason: `no runner for step ${step.name}` });
         }
 
         return yield* runner(step).pipe(Effect.provideContext(services));
