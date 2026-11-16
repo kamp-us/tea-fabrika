@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-resumed",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-16T00:40:53-08:00",
+  "ended": null,
+  "parent": "2026-11-16-law-options-0580-parked",
+  "active": null,
+  "role": "session",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "2026-11-16: resumed, owner's sev0 list item 8. The park in row 2026-11-16-law-options-0580-parked was a mistake: the owner's scope ruling moved only the new published packages, and 0580 (tests on @kalfa/vitest, it.prop, plants and labels as options) is item 8 on the sev0 list itself. The job goes on exactly as before the park: the same reviewer rechecks 949487d90..d41837351, a send-back on plant-check's unclaimed logic goes to the owner, and slice 1's reviewed head goes to the merge session for the exam-to-lint plan's slice C, then slices 2 and 3.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Written by the coordinator, read-only apart from this row; no law ran in this row. The park row stays as written, since run rows are never edited; this row is the dated line under it."
+}
