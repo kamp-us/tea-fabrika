@@ -19,7 +19,9 @@
  * @stability unstable
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Array as Arr, Option, Result, Schema } from "effect";
+import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { apply } from "../runtime/Patch.ts";
 import { focus } from "../tezgah/Layout.ts";
 import { CursorKey, TezgahView, TileId } from "../tezgah/Workspace.ts";

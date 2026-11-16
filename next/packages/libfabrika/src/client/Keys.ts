@@ -14,7 +14,8 @@
  *
  * @stability unstable
  */
-import { Array as Arr, Result, Schema } from "effect";
+import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";

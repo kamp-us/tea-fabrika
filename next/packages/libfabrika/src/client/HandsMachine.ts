@@ -13,7 +13,8 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Array as Arr, Option, Schema } from "effect";
+import { Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";

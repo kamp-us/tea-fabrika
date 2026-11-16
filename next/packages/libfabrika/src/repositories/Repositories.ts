@@ -4,8 +4,9 @@
  *
  * @stability unstable
  */
-import { Array as Arr, Context, Schema } from "effect";
+import { Context, Schema } from "effect";
 import type { Effect } from "effect";
+import * as Arr from "effect/Array";
 
 /**
  * Schema for a branch name under git's ref name rules (`git check-ref-format`): components

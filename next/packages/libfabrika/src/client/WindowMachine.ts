@@ -9,7 +9,8 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Array as Arr, Option, Predicate, Result, Schema } from "effect";
+import { Option, Predicate, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
