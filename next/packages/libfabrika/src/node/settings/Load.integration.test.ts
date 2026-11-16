@@ -14,7 +14,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schema } from "effect";
+import { Effect, Exit, FileSystem, Layer, Match, Path, Ref, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -188,8 +188,8 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             expect(exit.value.values.port).toBe(want);
             expect(exit.value.snapshot.values["instance.port"]).toBe(want);
             const origin = exit.value.snapshot.origins["instance.port"];
-            const tag =
-              flag !== undefined ? "flag" : env !== undefined ? "env" : fromFile !== undefined ? "file" : "default";
+            const unflagged = env !== undefined ? "env" : fromFile !== undefined ? "file" : "default";
+            const tag = flag !== undefined ? "flag" : unflagged;
             expect(origin?._tag).toBe(tag);
 
             if (tag === "file") {
@@ -352,8 +352,12 @@ it.effect.prop(
         flags: source === "flag" ? { [d.path]: String(value + 2) } : {},
         env: source === "env" || source === "flag" ? { [d.env]: String(value + 1) } : {},
       }).pipe(Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)));
-      const want =
-        source === "default" ? d.default : source === "flag" ? value + 2 : source === "env" ? value + 1 : value;
+      const want = Match.value(source).pipe(
+        Match.when("default", () => d.default),
+        Match.when("flag", () => value + 2),
+        Match.when("env", () => value + 1),
+        Match.orElse(() => value),
+      );
       expect(loaded.values.desktopLinkTtl).toBe(want);
       expect(loaded.snapshot.values[d.path]).toBe(want);
       expect(loaded.snapshot.origins[d.path]?._tag).toBe(source);

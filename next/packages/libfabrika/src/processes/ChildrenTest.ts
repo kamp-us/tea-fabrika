@@ -23,6 +23,7 @@ import {
   Fiber,
   Layer,
   Logger,
+  Match,
   Option,
   Result,
   Schema,
@@ -344,12 +345,14 @@ const Tape = fc
   .filter((commands) => [...commands].length >= 8);
 
 /** The input a cell picks: absent, `null`, `{}`, `[]`, or a generated JSON value. */
-const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
-  const kind = cell.input % 6;
-  return kind === 0
-    ? {}
-    : { input: kind === 1 ? null : kind === 2 ? {} : kind === 3 ? [] : (copied({ v: cell.m }).v as Schema.Json) };
-};
+const inputFor = (cell: Cell): { readonly input?: Schema.Json } =>
+  Match.value(cell.input % 6).pipe(
+    Match.when(0, (): { readonly input?: Schema.Json } => ({})),
+    Match.when(1, (): { readonly input?: Schema.Json } => ({ input: null })),
+    Match.when(2, (): { readonly input?: Schema.Json } => ({ input: {} })),
+    Match.when(3, (): { readonly input?: Schema.Json } => ({ input: [] })),
+    Match.orElse((): { readonly input?: Schema.Json } => ({ input: copied({ v: cell.m }).v as Schema.Json })),
+  );
 
 /** The writer's own facts for one call: its clock, build and trace vary; its person and parent do not. */
 const said = (cell: Cell, parent: string): From =>
@@ -466,14 +469,17 @@ const expected = (world: World, child: Child): Expected => {
 };
 
 /** An answer as a failure message shows it: its tag or reason, never a cause. */
-const shown = (answer: Answer | undefined): string =>
-  answer === undefined
-    ? "no answer"
-    : Result.isSuccess(answer)
-      ? JSON.stringify(answer.success)
-      : answer.failure instanceof ChildrenError
-        ? `ChildrenError ${answer.failure.reason}`
-        : String(answer.failure);
+const shown = (answer: Answer | undefined): string => {
+  if (answer === undefined) {
+    return "no answer";
+  }
+
+  return Result.isSuccess(answer)
+    ? JSON.stringify(answer.success)
+    : answer.failure instanceof ChildrenError
+      ? `ChildrenError ${answer.failure.reason}`
+      : String(answer.failure);
+};
 
 const refused = (answer: Answer, reason: Reason, message: string) => {
   expect(Result.isFailure(answer), `${message}; got ${shown(answer)}`).toBe(true);
@@ -738,6 +744,19 @@ const walk = (
           const processes = [...world.names.values()]
             .flatMap((h) => h.lives)
             .filter((p) => p !== first.child.requester.process);
+          const otherInput: Child =
+            first.child.input === undefined
+              ? { ...first.child, input: {} }
+              : cell.input % 2 === 0
+                ? (({ input: _input, ...rest }) => rest)(first.child)
+                : { ...first.child, input: ["changed", first.child.input] };
+          const otherRequester: Child =
+            field === 2 && processes.length > 0
+              ? {
+                  ...first.child,
+                  requester: Recipient.cases.process.make({ process: choose(processes, cell.pick) }),
+                }
+              : otherInput;
           const changed: Child =
             field === 0 && others.length > 0
               ? { ...first.child, name: choose(others, cell.name) }
@@ -746,16 +765,7 @@ const walk = (
                     ...first.child,
                     code: { ...first.child.code, program: first.child.code.program === MERGER ? WORKER : MERGER },
                   }
-                : field === 2 && processes.length > 0
-                  ? {
-                      ...first.child,
-                      requester: Recipient.cases.process.make({ process: choose(processes, cell.pick) }),
-                    }
-                  : first.child.input === undefined
-                    ? { ...first.child, input: {} }
-                    : cell.input % 2 === 0
-                      ? (({ input: _input, ...rest }) => rest)(first.child)
-                      : { ...first.child, input: ["changed", first.child.input] };
+                : otherRequester;
           const answer = yield* startChild(changed, said(cell, first.from.parent ?? "none"));
           refused(answer, "id_reused", `L3: saved ${id} asked again with another caller field`);
           unchanged("L3: id_reused writes nothing");
@@ -817,36 +827,38 @@ const walk = (
               : childFor(cell, choose(liveProcesses(world), cell.pick));
           const names = ["", "m".repeat(257), "processes", "gateway", "Merger:1", "merger/1", "client:x", "-merger"];
           const kind = cell.alt % 7;
-          const bad: { child: unknown; reason: Reason } =
-            kind === 0
-              ? { child: { ...base, name: choose(names, cell.name) }, reason: "bad_name" }
-              : kind === 1
-                ? // A bad name and a bad input at once: the name is judged first.
-                  { child: { ...base, name: choose(names, cell.name), input: () => 1 }, reason: "bad_name" }
-                : kind === 2
-                  ? { child: { ...base, id: cell.name % 2 === 0 ? "" : "i".repeat(257) }, reason: "bad_input" }
-                  : kind === 3
-                    ? {
-                        child: {
-                          ...base,
-                          code:
-                            cell.name % 2 === 0
-                              ? { program: "", hash: HASH }
-                              : { program: base.code.program, hash: "" },
-                        },
-                        reason: "bad_input",
-                      }
-                    : kind === 4
-                      ? {
-                          child: { ...base, requester: raw("process", { process: "process_bad" }) },
-                          reason: "bad_input",
-                        }
-                      : kind === 5
-                        ? {
-                            child: { ...base, input: choose([() => 1, 1n, Symbol("x"), { f: () => 1 }], cell.name) },
-                            reason: "bad_input",
-                          }
-                        : { child: { ...base, input: { type: "land", deep: [1n] } }, reason: "bad_input" };
+          type BadChild = { child: unknown; reason: Reason };
+          const bad: BadChild = Match.value(kind).pipe(
+            Match.when(0, (): BadChild => ({ child: { ...base, name: choose(names, cell.name) }, reason: "bad_name" })),
+            // A bad name and a bad input at once: the name is judged first.
+            Match.when(1, (): BadChild => ({
+              child: { ...base, name: choose(names, cell.name), input: () => 1 },
+              reason: "bad_name",
+            })),
+            Match.when(2, (): BadChild => ({
+              child: { ...base, id: cell.name % 2 === 0 ? "" : "i".repeat(257) },
+              reason: "bad_input",
+            })),
+            Match.when(3, (): BadChild => ({
+              child: {
+                ...base,
+                code: cell.name % 2 === 0 ? { program: "", hash: HASH } : { program: base.code.program, hash: "" },
+              },
+              reason: "bad_input",
+            })),
+            Match.when(4, (): BadChild => ({
+              child: { ...base, requester: raw("process", { process: "process_bad" }) },
+              reason: "bad_input",
+            })),
+            Match.when(5, (): BadChild => ({
+              child: { ...base, input: choose([() => 1, 1n, Symbol("x"), { f: () => 1 }], cell.name) },
+              reason: "bad_input",
+            })),
+            Match.orElse((): BadChild => ({
+              child: { ...base, input: { type: "land", deep: [1n] } },
+              reason: "bad_input",
+            })),
+          );
           const answer = yield* startChild(bad.child as Child, said(cell, parentFor()));
           refused(answer, bad.reason, `L6: ${bad.reason}`);
           unchanged(`L6: ${bad.reason} writes nothing`);

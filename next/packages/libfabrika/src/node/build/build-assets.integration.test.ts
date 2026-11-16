@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Match, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -475,14 +475,19 @@ describe("P16 assets and Compiler", () => {
             const f = fixture(name, value),
               good = `last-good-${value}`;
             previous(f, good);
-            const source =
-              kind === "ref"
-                ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
-                : kind === "clock"
-                  ? `export const ${name}=()=> <b>{Date.now()}</b>`
-                  : kind === "directive"
-                    ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
-                    : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
+            const source = Match.value(kind).pipe(
+              Match.when(
+                "ref",
+                () =>
+                  `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`,
+              ),
+              Match.when("clock", () => `export const ${name}=()=> <b>{Date.now()}</b>`),
+              Match.when(
+                "directive",
+                () => `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`,
+              ),
+              Match.orElse(() => `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`),
+            );
             const path = "programs/compiler/window.tsx",
               ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
             expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);

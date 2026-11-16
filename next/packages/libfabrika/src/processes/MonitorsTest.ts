@@ -455,8 +455,13 @@ const M5Case = fc
 type M5Case = typeof M5Case extends fc.Arbitrary<infer A> ? A : never;
 
 /** The first refusal a case earns, in the plan's order. */
-const firstRefusal = (c: M5Case) =>
-  c.bad ? "bad_name" : c.stale !== "no" ? "stale_sender" : c.denied ? "forbidden" : "no_name";
+const firstRefusal = (c: M5Case) => {
+  if (c.bad) {
+    return "bad_name";
+  }
+
+  return c.stale !== "no" ? "stale_sender" : c.denied ? "forbidden" : "no_name";
+};
 
 /**
  * M5 on one case: a request that fails several checks gets the first refusal of `bad_name`,

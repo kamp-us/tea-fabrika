@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { Effect, FileSystem, Match, Path, Schema, Tracer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -828,29 +828,33 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             const chosen: TabMove = allowed[move % allowed.length]!;
             reached.add(chosen);
             const before = tab;
-            tab =
-              chosen === "add"
-                ? { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: move % 2 === 0 }] }
-                : chosen === "bare" || chosen === "drop"
-                  ? null
-                  : chosen === "label"
-                    ? { ...tab!, label: `p14-${word}-${tab!.label.length}` }
-                    : chosen === "style"
-                      ? { ...tab!, styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }] }
-                      : chosen === "reorder"
-                        ? { ...tab!, styles: [...tab!.styles.slice(1), tab!.styles[0]!] }
-                        : chosen === "trap" || chosen === "split"
-                          ? {
-                              ...tab!,
-                              styles: tab!.styles.map((s, n) =>
-                                n !== move % tab!.styles.length
-                                  ? s
-                                  : chosen === "trap"
-                                    ? { ...s, trap: !s.trap }
-                                    : { ...s, split: s.split !== true },
-                              ),
-                            }
-                          : tab;
+            tab = Match.value(chosen).pipe(
+              Match.when("add", (): Tab | null => ({
+                label: `p14-${word}`,
+                styles: [{ mark: `a${word}`, trap: move % 2 === 0 }],
+              })),
+              Match.when(Match.is("bare", "drop"), (): Tab | null => null),
+              Match.when("label", (): Tab | null => ({ ...tab!, label: `p14-${word}-${tab!.label.length}` })),
+              Match.when("style", (): Tab | null => ({
+                ...tab!,
+                styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }],
+              })),
+              Match.when("reorder", (): Tab | null => ({
+                ...tab!,
+                styles: [...tab!.styles.slice(1), tab!.styles[0]!],
+              })),
+              Match.when(Match.is("trap", "split"), (): Tab | null => ({
+                ...tab!,
+                styles: tab!.styles.map((s, n) =>
+                  n !== move % tab!.styles.length
+                    ? s
+                    : chosen === "trap"
+                      ? { ...s, trap: !s.trap }
+                      : { ...s, split: s.split !== true },
+                ),
+              })),
+              Match.orElse((): Tab | null => tab),
+            );
             const styles = tab === null ? [] : f.write(tab);
 
             if (tab?.styles.some((s) => s.trap) === true) {

@@ -79,15 +79,17 @@ const forms = (d: string): ReadonlyArray<string> => {
 
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
 const text = (value: unknown): string =>
-  JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === "bigint"
-      ? String(v)
-      : v instanceof Map
-        ? Object.fromEntries(v)
-        : v instanceof Error
-          ? { ...v, name: v.name, message: v.message, stack: v.stack, cause: v.cause }
-          : v,
-  ) ?? String(value);
+  JSON.stringify(value, (_k, v: unknown) => {
+    if (typeof v === "bigint") {
+      return String(v);
+    }
+
+    return v instanceof Map
+      ? Object.fromEntries(v)
+      : v instanceof Error
+        ? { ...v, name: v.name, message: v.message, stack: v.stack, cause: v.cause }
+        : v;
+  }) ?? String(value);
 
 /** An exit as every text a reader could see of it: its JSON, its pretty cause, and each error's own fields. */
 const exitText = (exit: Exit.Exit<unknown, unknown>): string =>

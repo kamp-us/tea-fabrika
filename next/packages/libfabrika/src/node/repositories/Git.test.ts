@@ -174,15 +174,14 @@ const session = (
       for (const file of files) {
         const at = path.join(repo, file);
         const stat = yield* fs.lstat(at).pipe(Effect.option);
+        const info = stat._tag === "None" ? undefined : stat.value;
+        const fileShown =
+          info?.type === "File"
+            ? `file ${(info.mode & 0o100) === 0 ? "644" : "755"} ${decoder.decode(yield* fs.readFile(at))}`
+            : info?.type;
         transcript.push(
           `disk ${file}: ${
-            stat._tag === "None"
-              ? "absent"
-              : stat.value.type === "SymbolicLink"
-                ? `link ${yield* fs.readLink(at)}`
-                : stat.value.type === "File"
-                  ? `file ${(stat.value.mode & 0o100) === 0 ? "644" : "755"} ${decoder.decode(yield* fs.readFile(at))}`
-                  : stat.value.type
+            info === undefined ? "absent" : info.type === "SymbolicLink" ? `link ${yield* fs.readLink(at)}` : fileShown
           }`,
         );
         yield* step(repo, ["ls-tree", "-z", "HEAD", "--", file], "objects");

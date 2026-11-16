@@ -472,15 +472,16 @@ const expected = (s: Folded) => {
       reserved === undefined ? undefined : "name_taken",
       ...OWNERS.map((owner) => {
         const after = s.current.get(name) ?? A;
-        return reserved === undefined || !sameOwner(reserved.owner, owner)
-          ? "not_parent"
-          : reserved.program !== CODE.program
-            ? "name_taken"
-            : s.current.get(name) !== after
-              ? "stale"
-              : live(after)
-                ? "alive"
-                : undefined;
+
+        if (reserved === undefined || !sameOwner(reserved.owner, owner)) {
+          return "not_parent";
+        }
+
+        if (reserved.program !== CODE.program) {
+          return "name_taken";
+        }
+
+        return s.current.get(name) !== after ? "stale" : live(after) ? "alive" : undefined;
       }),
     ];
   });
@@ -491,15 +492,17 @@ const expected = (s: Folded) => {
     const held = s.watches.get(keyFor(w.to, w.ref));
     return {
       demonitor: held?.tag === "live" ? shown(held) : undefined,
-      monitor: [w.process, B].map((process) =>
-        held !== undefined && held.process !== process
-          ? "bad_ref"
-          : held?.tag === "live"
-            ? undefined
-            : w.to._tag === "process" && !live(w.to.process)
-              ? "ended"
-              : (held?.round ?? 0) + 1,
-      ),
+      monitor: [w.process, B].map((process) => {
+        if (held !== undefined && held.process !== process) {
+          return "bad_ref";
+        }
+
+        return held?.tag === "live"
+          ? undefined
+          : w.to._tag === "process" && !live(w.to.process)
+            ? "ended"
+            : (held?.round ?? 0) + 1;
+      }),
       deliver: deliveries(w).map(({ n, by, target, receiver }) =>
         by !== BRAIN || held === undefined || held.process !== target || n > held.round
           ? "mail"
