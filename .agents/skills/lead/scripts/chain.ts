@@ -116,7 +116,8 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Config, ConfigProvider, Context, Duration, Effect, Layer, Option, Result, Schedule, Schema } from "effect";
+import type { Config } from "effect";
+import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -136,6 +137,9 @@ import {
   prepare,
   runNames,
   sh,
+  StepMinutes,
+  variable,
+  withDriveMinutes,
 } from "./drive.ts";
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
@@ -1267,6 +1271,7 @@ const handlers = (s: Setup) => {
             ticket: s.ticket,
             branch: s.branch,
             plan: s.plan,
+            minutes: yield* StepMinutes,
           });
 
           if (prepared._tag === "refused") {
@@ -1825,15 +1830,6 @@ const backstopFor = (plan: string, brief: string) =>
     return backstop;
   });
 
-/**
- * One variable of this process's environment, read through Config when it runs; unset is
- * `undefined`, and an empty one stays empty, as a read of process.env gave it.
- */
-const variable = (name: string) =>
-  Config.String(name)
-    .pipe(Config.option, Config.map(Option.getOrUndefined))
-    .parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true }));
-
 /** A limit's override from the environment, when set and a number. */
 const overridden =
   (ref: Context.Reference<number>, name: string) =>
@@ -1875,40 +1871,42 @@ const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
 const main = () => {
   const env = loadEnv();
   const args = process.argv.slice(2);
-  const state = Pin.pinState(process.env[Pin.PIN_ENV]);
   const [quest = ""] = args;
 
-  if (state._tag === "malformed") {
-    unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`);
-    return;
-  }
-
-  // A usage error needs no pin: it is printed here, from the checkout.
-  if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
-    launch(env, quest, args);
-    return;
-  }
-
-  const pin = state._tag === "pinned" ? state.pin : null;
   Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const end = yield* chainMain(args, env, pin);
-        process.exitCode = exitOf(end);
-      }),
-    ).pipe(
-      overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
-      overridden(MaxWaits, "CHAIN_WAITS"),
-      overridden(MaxStucks, "CHAIN_STUCKS"),
-      overridden(MaxSteps, "CHAIN_STEPS"),
-      overridden(IntensityCount, "CHAIN_INTENSITY"),
-      overridden(IntensityWithin, "CHAIN_WITHIN"),
-      overridden(BackstopTimes, "CHAIN_BACKSTOP"),
-      overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
-      overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
-      overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
-      overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
-    ),
+    Effect.gen(function* () {
+      const state = Pin.pinState(yield* variable(Pin.PIN_ENV));
+
+      if (state._tag === "malformed") {
+        return yield* Effect.sync(() => unpinned(`${Pin.PIN_ENV} does not parse: ${state.value}`));
+      }
+
+      // A usage error needs no pin: it is printed here, from the checkout.
+      if (state._tag === "unpinned" && QUEST_NAME.test(quest)) {
+        return yield* Effect.sync(() => launch(env, quest, args));
+      }
+
+      const pin = state._tag === "pinned" ? state.pin : null;
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const end = yield* chainMain(args, env, pin);
+          process.exitCode = exitOf(end);
+        }),
+      ).pipe(
+        overridden(WaitMinutes, "CHAIN_WAIT_MINUTES"),
+        overridden(MaxWaits, "CHAIN_WAITS"),
+        overridden(MaxStucks, "CHAIN_STUCKS"),
+        overridden(MaxSteps, "CHAIN_STEPS"),
+        overridden(IntensityCount, "CHAIN_INTENSITY"),
+        overridden(IntensityWithin, "CHAIN_WITHIN"),
+        overridden(BackstopTimes, "CHAIN_BACKSTOP"),
+        overridden(HostMinutes, "CHAIN_HOST_MINUTES"),
+        overridden(TypecheckMinutes, "CHAIN_TYPECHECK_MINUTES"),
+        overridden(TypecheckEvery, "CHAIN_TYPECHECK_EVERY"),
+        overridden(QueueMinutes, "CHAIN_QUEUE_MINUTES"),
+        withDriveMinutes,
+      );
+    }),
   ).catch((e: unknown) => {
     console.log(JSON.stringify({ outcome: "stuck", reason: String(e), exit: 30 }));
     process.exitCode = 30;
