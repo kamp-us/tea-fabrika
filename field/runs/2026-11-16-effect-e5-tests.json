@@ -15,6 +15,7 @@
   "tokens": null,
   "tools": null,
   "minutes": 25,
+  "report": "preferTypedSchemaDecoder: 336 hits met (200 in the E5 folders, 136 in E63 folders that wait on 1366). Fixed by the quick-fix client: 0. Hand edits with the Edit tool: 164 hits in 80 exam-path files, none in 1366's files. Left: 36 hits in 26 product files (.agents 18, libfabrika node 9, transport 4, top 1, tuval 2, app 2), none in 1366's files. A bulk script for these was refused by the auto-mode classifier, so they stay for the build. Waiting on 1366: none in the locked folders; its files with hits (cloudflare/runtime.ts, gateway/Gateway.ts, processes/ProcessManager.ts, processes/internal/programMail.test.ts, runtime/Runner.ts, runtime/Runner.integration.test.ts, settings/Start.test.ts) are all in E63 folders. The draft pull request 1457 was opened before the coordinator's change of shape and is left as it is.",
   "note": "Errors after the tests step: 36, all in product files (.agents 18, libfabrika 14, tuval 2, app 2). Messages (not locked) 136 in lib:cloudflare, gateway, processes, runtime, settings. lint:dead needs NODE_OPTIONS=--max-old-space-size=8000 in this box; pnpm lint passes with it. Narrow tests: namespace-imports, Id, Passkey, Link.laws, Change, counter and checklist program laws pass.",
   "plants": [
     {
