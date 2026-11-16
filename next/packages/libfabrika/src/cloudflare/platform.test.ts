@@ -46,6 +46,15 @@ const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, se
   Object.keys(service).map((method) => `${client}.${method}`),
 );
 
+/** Runs one client member: a call is given `request`, and a member that is an Effect, where the
+ *  call takes nothing (the checker's lazyEffect, T1075), runs as it is. */
+const run = (member: unknown, request: Request): Effect.Effect<unknown, unknown> =>
+  Effect.isEffect(member)
+    ? member
+    : typeof member === "function"
+      ? Reflect.apply(member, undefined, [request])
+      : Effect.die(`no client member: ${String(member)}`);
+
 it.effect.prop(
   "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
   {
@@ -57,13 +66,12 @@ it.effect.prop(
     Effect.gen(function* () {
       const [client = "", method = ""] = call.split(".");
       const kind = faults.find((fault) => fault.name === name)!;
-      const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
-        clients(kind.make(text)),
-        client,
-      );
+      const service: unknown = Reflect.get(clients(kind.make(text)), client);
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
-      const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
+      const error = yield* Effect.flip(
+        run(Reflect.get(Object(service), method), new Request("http://127.0.0.1:8787/client/a/b")),
+      );
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
