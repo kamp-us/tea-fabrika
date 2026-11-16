@@ -42,7 +42,7 @@ expectTypeOf<typeof Chaos.ExperimentId.Type>().toEqualTypeOf<Id.IdValue<"chaos">
 expectTypeOf<typeof Chaos.Target.Type.process>().toEqualTypeOf<typeof ProcessId.Type>();
 expectTypeOf<typeof Chaos.Start.Type.id>().toEqualTypeOf<typeof Chaos.ExperimentId.Type>();
 expectTypeOf<typeof Chaos.Fire.Type.id>().toEqualTypeOf<typeof Chaos.ExperimentId.Type>();
-expectTypeOf<typeof Chaos.Fire.Type.fault>().toEqualTypeOf<typeof Chaos.Fault.Type>();
+expectTypeOf<typeof Chaos.Fire.Type.fault>().toEqualTypeOf<Chaos.Fault>();
 
 expectTypeOf<typeof Chaos.Fault.Type._tag>().toEqualTypeOf<
   "drop_socket" | "drop_answer" | "delay" | "abort" | "abort_all" | "fail_step" | "revoke_key"

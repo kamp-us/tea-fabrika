@@ -8,9 +8,8 @@
       {
         "name": "@effect/language-service",
         // A `typeof X.Type` query is the schema's own type name (E7, `unnecessaryTypeofType`). On for
-        // the folders at zero, their tests too. The globs read from this folder. `src/runtime`,
-        // `src/gateway` and `src/cloudflare` are other slices' folders, or hold files of pull
-        // request 1366, so they wait.
+        // the folders at zero, their tests too. The globs read from this folder. Two `src/runtime` files,
+        // `src/gateway` and `src/cloudflare` hold files of pull request 1366, so they wait.
         "overrides": [
           {
             "include": [
@@ -21,9 +20,11 @@
               "src/packs/**/*.ts",
               "src/permissions/**/*.ts",
               "src/processes/**/*.ts",
+              "src/runtime/**/*.ts",
               "src/tasks/**/*.ts",
               "src/telemetry/**/*.ts"
             ],
+            "exclude": ["src/runtime/ProcessStore.integration.test.ts", "src/runtime/RuntimeCauseTest.ts"],
             "options": { "diagnosticSeverity": { "unnecessaryTypeofType": "error" } }
           }
         ]

@@ -73,7 +73,7 @@ export class JournalError extends Schema.TaggedError<JournalError>()("JournalErr
 export class Journal extends Context.Service<
   Journal,
   {
-    readonly read: (task: string) => Effect.Effect<typeof Entry.Type | null, JournalError>;
-    readonly write: (task: string, entry: typeof Entry.Type) => Effect.Effect<void, JournalError>;
+    readonly read: (task: string) => Effect.Effect<Entry | null, JournalError>;
+    readonly write: (task: string, entry: Entry) => Effect.Effect<void, JournalError>;
   }
 >()("@kampus/libfabrika/client/Journal") {}
