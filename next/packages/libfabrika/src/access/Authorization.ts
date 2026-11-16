@@ -3,7 +3,8 @@
  *
  * @stability unstable
  */
-import { Effect, Result, Schema, Record as Rec } from "effect";
+import { Effect, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Line, valueFor } from "../ledger/Log.ts";

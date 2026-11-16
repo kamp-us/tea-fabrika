@@ -3,7 +3,8 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Result, Schema, Record as Rec } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor, valueFor } from "../ledger/Log.ts";
 import { fold } from "./internal/relationsTable.ts";

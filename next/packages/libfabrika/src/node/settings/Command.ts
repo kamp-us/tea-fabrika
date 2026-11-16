@@ -6,8 +6,9 @@
  *
  * @stability unstable
  */
-import { Config, Console, Effect, Path, Record as Rec } from "effect";
+import { Config, Console, Effect, Path } from "effect";
 import { Command, Flag } from "effect/cli";
+import * as Rec from "effect/Record";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
 import * as Reference from "../../settings/Reference.ts";

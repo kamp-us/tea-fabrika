@@ -1,8 +1,9 @@
-import { Effect, FileSystem, Path, Predicate, Sink, Stream, Record as Rec } from "effect";
+import { Effect, FileSystem, Path, Predicate, Sink, Stream } from "effect";
 import type { PlatformError } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
 import type { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 
 type Format = "sha1" | "sha256";
 type Mode = "100644" | "100755" | "120000" | "040000" | "160000";

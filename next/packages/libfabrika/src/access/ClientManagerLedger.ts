@@ -9,7 +9,8 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Result, Schema, Stream, Record as Rec } from "effect";
+import { Effect, Layer, Result, Schema, Stream } from "effect";
+import * as Rec from "effect/Record";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, fromHere, lineFor, valueFor } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";

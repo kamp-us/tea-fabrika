@@ -20,12 +20,12 @@ import {
   Scope,
   Stream,
   SubscriptionRef,
-  Record as Rec,
 } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { Installed, type Install } from "../../runtime/Code.ts";

@@ -3,8 +3,9 @@
  *
  * @stability unstable
  */
-import { Cause, Effect, Exit, Path, Record as Rec } from "effect";
+import { Cause, Effect, Exit, Path } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
+import * as Rec from "effect/Record";
 import {
   rolldown,
   VERSION,

@@ -16,7 +16,8 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Option, Result, Schema, Record as Rec } from "effect";
+import { Context, Effect, Option, Result, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
