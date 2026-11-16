@@ -10,8 +10,8 @@ import { WebCryptoError } from "./internal/binary.ts";
 /** A WebCryptoError made without a cause, and one made with it. Never called. */
 const uncaused = (cause: unknown) => {
   // @ts-expect-error every caller of WebCryptoError has a cause, so the field is required (0568).
-  const bare = new WebCryptoError({});
-  const kept = new WebCryptoError({ cause });
+  const bare = WebCryptoError.make({});
+  const kept = WebCryptoError.make({ cause });
   return { bare, kept };
 };
 

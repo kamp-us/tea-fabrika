@@ -7,8 +7,11 @@
 // from a plugin, so it writes no disk and starts nothing, and it runs on every pull request (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Path, Schema } from "effect";
-import { TestConsole } from "effect/testing";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as TestConsole from "effect/testing/TestConsole";
 import type { LogLevel, Plugin, RolldownLog } from "rolldown";
 import { bundle } from "./bundle.ts";
 

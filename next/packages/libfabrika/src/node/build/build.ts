@@ -5,11 +5,15 @@
  * last good file.
  *
  * Disk and paths go through Effect's `FileSystem` and `Path`, which the caller provides.
- *
- * @stability unstable
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
-import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -21,7 +25,6 @@ export {
   /**
    * Error for a build that stopped, re-exported from the runtime's build tables.
    *
-   * @stability unstable
    * @category errors
    */
   BuildError,
@@ -31,7 +34,6 @@ export {
  * One program an app selects for its build: its `pack/program` name, its package, and the export
  * that holds its declaration.
  *
- * @stability unstable
  * @category models
  */
 export type Selection = { readonly name: string; readonly package: string; readonly export: string };
@@ -40,7 +42,6 @@ export type Selection = { readonly name: string; readonly package: string; reado
  * What a finished build answers: the published brain file and its hash, and the tables that file
  * carries, each program's compiled source by name and each window file by route.
  *
- * @stability unstable
  * @category models
  */
 export type Built = {
@@ -56,7 +57,6 @@ export type Built = {
  * What a build is given: where to publish, the repo root, the brain's entry module, the selected
  * programs and, when there is one, the tab's window.
  *
- * @stability unstable
  * @category models
  */
 export type Options = {
@@ -89,7 +89,7 @@ const Manifest = Schema.Struct({
   exports: Schema.optionalKey(Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Unknown)])),
 });
 
-const fail = (reason: string) => (cause: unknown) => new BuildError({ reason, cause });
+const fail = (reason: string) => (cause: unknown) => BuildError.make({ reason, cause });
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 // The window a selected package exports, if any. A path, not a package name, has no manifest.
@@ -139,7 +139,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
       type = contentType(item.fileName);
 
     if (type === undefined || Object.hasOwn(assets, route)) {
-      return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+      return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
     }
 
     const body =
@@ -322,7 +322,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
   const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
   if (html === undefined || typeof html.source !== "string") {
-    return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
+    return yield* BuildError.make({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 
   return {
@@ -410,7 +410,6 @@ const publish = Effect.fn("build.emit")(function* (
  * `inputs` receives every module's text by its id, and `reached`, once the check passes, each
  * checked `.tsx` file's text by its path from the root.
  *
- * @stability unstable
  * @category constructors
  */
 export const buildPrograms = Effect.fn("build.programs")(function* (
@@ -463,7 +462,7 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
   );
 
   if (findings.length > 0) {
-    return yield* new BuildError({
+    return yield* BuildError.make({
       reason: "compiler",
       cause: findings.map(({ file, line }) => ({ path: file, line })),
     });
@@ -495,7 +494,6 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
  * One finding fails the whole build as `compiler`, and the error does not list the findings: run
  * the check alone to read them.
  *
- * @stability unstable
  * @category constructors
  */
 export const build = Effect.fn("build.build")(function* (options: Options) {
@@ -509,7 +507,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     new Set(names).size !== names.length ||
     !options.programs.every((p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
   ) {
-    return yield* new BuildError({ reason: "table" });
+    return yield* BuildError.make({ reason: "table" });
   }
 
   // Rolldown names modules by their real paths, so the ledger's relative paths start from the real
@@ -594,7 +592,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   if (options.tab !== undefined) {
     for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
       if (Object.hasOwn(assets, route)) {
-        return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+        return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
       }
 
       assets[route] = file;
@@ -614,7 +612,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
   if (check(files, ledger).length) {
-    return yield* new BuildError({ reason: "compiler" });
+    return yield* BuildError.make({ reason: "compiler" });
   }
 
   const size = (bodies: ReadonlyArray<string>) => bodies.reduce((total, body) => total + bytes(body), 0);

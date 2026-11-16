@@ -48,7 +48,7 @@ declare global {
 class BrowserFailure extends Schema.TaggedError<BrowserFailure>()("BrowserFailure", { cause: Schema.Defect() }) {}
 
 const browserCall = <A>(work: () => Promise<A>) =>
-  Effect.tryPromise({ try: work, catch: (cause) => new BrowserFailure({ cause }) });
+  Effect.tryPromise({ try: work, catch: (cause) => BrowserFailure.make({ cause }) });
 
 /** A browser with one page on the instance's own origin, given back with the scope. */
 const page = (url: string) =>
