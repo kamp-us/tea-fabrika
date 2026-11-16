@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-l11-storage-walk-near-its-timeout",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/start-child.laws.integration.test.ts",
+    "line": 747
+  },
+  "says": "In next/, law L11's storage walk (every storage read and write in the child and lifecycle flows) runs close to vitest's 60 s limit in CI's full run, and timed out on the watch branch. Its exit path calls Project.processExit, which since 8a1d28feb runs one more ledger turn after each exit (the watch wake), so how many cuts it walks there may have grown; that was not measured.",
+  "proof": "Full run 43772292846 at 4889d9da2, job 132995647282: L11 passed in 32857 ms. Full run 43775124405 at 8a1d28feb, job 132999601962: 'L11: every storage read and write ... × 60020ms', 'Error: Test timed out in 60000ms.', and the run was stopped.",
+  "cost": "A red full run on whatever branch it lands on, and a stopped run that cancels the other jobs, with no product fault behind it.",
+  "head": "8a1d28feb0d48fbe2ce669e015cc9b11da22c235",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1341"
+}
