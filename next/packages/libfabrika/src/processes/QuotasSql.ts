@@ -71,9 +71,10 @@ const fromWriter = (writer: Writer | undefined): Authority =>
         own: ({ process }) => Authority.cases.program.make({ process }),
       });
 
-// The brain's own streams: lifecycle, the door, the hands tasks, the instance's starts and access.
-// No program owns them, so a write there with no trusted writer, such as the hands client's own
-// task updates through the door, is infrastructure, never a program's charge.
+// The brain's own streams: lifecycle, the door, the hands tasks, the instance's starts and access,
+// and a person's trust in a repository. No program owns them, so a write there with no trusted
+// writer, such as the hands client's own task updates through the door, is infrastructure, never a
+// program's charge.
 const infrastructure = (stream: string) =>
   stream === ProcessTable.stream ||
   stream.startsWith("processes/") ||
@@ -82,7 +83,8 @@ const infrastructure = (stream: string) =>
   stream.startsWith("job:") ||
   stream.startsWith("target:") ||
   stream.startsWith("settings/") ||
-  stream.startsWith("permissions/");
+  stream.startsWith("permissions/") ||
+  stream.startsWith("repository/");
 
 const programAccount = (program: string) => Quota.Account.cases.program.make({ program });
 const recoveryAccount = (name: string) => Quota.Account.cases.recovery.make({ name, location: "project" });
