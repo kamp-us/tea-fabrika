@@ -152,7 +152,7 @@ const dated = (
   const at = c.pending.findIndex((p) => p.n === n);
   const slot = c.pending[at];
 
-  if (slot === undefined || slot._tag !== "dating") {
+  if (slot === undefined || !Pending.isAnyOf(["dating"])(slot)) {
     return c;
   }
 
@@ -170,12 +170,12 @@ const dated = (
 };
 
 /** Settles `letter` only on its own terminal answer. Every other answer keeps it for a resend. */
-const reply = (c: Client, letter: string, answer: Pick<typeof Reply.Type, "_tag">): Client => {
-  if (answer._tag !== "accepted" && answer._tag !== "refused") {
+const reply = (c: Client, letter: string, answer: typeof Reply.Type): Client => {
+  if (!Reply.isAnyOf(["accepted", "refused"])(answer)) {
     return c;
   }
 
-  const kept = c.pending.filter((p) => p._tag !== "ready" || p.letter !== letter);
+  const kept = c.pending.filter((p) => !Pending.isAnyOf(["ready"])(p) || p.letter !== letter);
   return kept.length === c.pending.length ? c : { ...c, pending: kept };
 };
 
@@ -275,7 +275,7 @@ export const clientMachineFor = (checks: ClientChecks) =>
 // --- Reads of the Model -------------------------------------------------------------------------
 
 type Ready = typeof Pending.cases.ready.Type;
-const isReady = (p: Pending): p is Ready => p._tag === "ready";
+const isReady = Pending.isAnyOf(["ready"]);
 
 /**
  * Returns the letters that may go now: ready ones ahead of the first slot still waiting for its
@@ -304,7 +304,9 @@ export const sendable = (c: Client): ReadonlyArray<Ready> => {
  *  an entry of any other case is not one of these, and is skipped. */
 const Life = { by: Schema.String, body: Schema.Unknown };
 
-const decodeEntry = Schema.decodeUnknownOption(Schema.TaggedUnion({ started: Life, restarted: Life, exited: Life }));
+const LifeEntry = Schema.TaggedUnion({ started: Life, restarted: Life, exited: Life });
+
+const decodeEntry = Schema.decodeUnknownOption(LifeEntry);
 
 const decodeLife = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -347,7 +349,7 @@ const foldEntry = (fold: NameFold, raw: unknown, name: string, by: (writer: stri
     return { ...fold, after };
   }
 
-  if (entry._tag !== "exited") {
+  if (!LifeEntry.isAnyOf(["exited"])(entry)) {
     const named = life.name === undefined || life.name === name;
     return { ...fold, after, live: named ? life.process : fold.live };
   }

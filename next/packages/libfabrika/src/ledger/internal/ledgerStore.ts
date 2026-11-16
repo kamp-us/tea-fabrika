@@ -446,14 +446,14 @@ export const ledgerStore = (
 
         const placing = place(stream, id, checked.success, now);
 
-        if (placing._tag === "refused") {
+        if (Placing.isAnyOf(["refused"])(placing)) {
           throw new LedgerError({
             reason: "refused",
             ...(placing.reason === "quota" ? { cause: new QuotaRefused({}) } : {}),
           });
         }
 
-        if (placing._tag === "placed") {
+        if (Placing.isAnyOf(["placed"])(placing)) {
           for (const waiter of placing.rings) {
             rings.push({ stream, rev: placing.rev, waiter });
           }

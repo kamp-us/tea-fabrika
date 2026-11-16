@@ -3,18 +3,18 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import { ProcessHistory, type ProcessHistoryError } from "../processes/ProcessHistory.ts";
 import * as Chaos from "./Chaos.ts";
 import { BadRow, Nemesis, NemesisError, Storage, Unreachable } from "./Nemesis.ts";
 
 const translate = (cause: ProcessHistoryError): NemesisError =>
   new NemesisError({
-    reason:
-      cause.reason._tag === "Unreachable"
-        ? new Unreachable({ cause })
-        : cause.reason._tag === "BadRow"
-          ? new BadRow({ cause })
-          : new Storage({ cause }),
+    reason: Match.valueTags(cause.reason, {
+      Unreachable: () => new Unreachable({ cause }),
+      BadRow: () => new BadRow({ cause }),
+      Storage: () => new Storage({ cause }),
+    }),
   });
 
 const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"]) {

@@ -34,6 +34,6 @@ export const reply = Machine.make({
   cmds: [],
   init: (saved) => [saved ?? Model.cases.empty.make({}), []],
   update: {
-    remember: (s, m) => [s._tag === "empty" ? Model.cases.remembered.make({ reply: m.reply }) : s, []],
+    remember: (s, m) => [Model.isAnyOf(["empty"])(s) ? Model.cases.remembered.make({ reply: m.reply }) : s, []],
   },
 });

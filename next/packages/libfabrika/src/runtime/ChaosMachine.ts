@@ -126,8 +126,7 @@ export const Msg = Schema.Union([
 ]);
 type Msg = typeof Msg.Type;
 
-const unfinished = (phase: typeof Phase.Type) =>
-  phase._tag === "starting" || phase._tag === "active" || phase._tag === "checking";
+const unfinished = Phase.isAnyOf(["starting", "active", "checking"]);
 
 const initialExperiment = (m: Model, start: typeof Chaos.Start.Type, deadline: number): Experiment => ({
   number: m.number,
@@ -147,11 +146,11 @@ const incomplete = (m: Model, experiment: Experiment, reason: typeof Phase.cases
 const receive = (m: Model, msg: Extract<Msg, { type: "fire_ok" | "fire_err" }>): Model => {
   const p = m.phase;
 
-  if (p._tag === "idle" || p._tag === "starting") {
+  if (Phase.isAnyOf(["idle", "starting"])(p)) {
     return m;
   }
 
-  const history = p._tag === "stopped" ? p : p.experiment;
+  const history = Phase.isAnyOf(["stopped"])(p) ? p : p.experiment;
 
   if (
     history.start.id !== msg.cmd.id ||
@@ -167,7 +166,7 @@ const receive = (m: Model, msg: Extract<Msg, { type: "fire_ok" | "fire_err" }>):
       : Did.fields.result.cases.failed.make({ reason: msg.error._tag });
   const answers = [...history.answers, Did.make({ ordinal: msg.cmd.ordinal, at: msg.at, result })];
 
-  if (p._tag === "stopped") {
+  if (Phase.isAnyOf(["stopped"])(p)) {
     return { ...m, phase: Phase.cases.stopped.make({ ...p, answers }) };
   }
 
@@ -194,7 +193,7 @@ export const chaosMachine = Machine.make({
       return [{ number: m.number + 1, phase: Phase.cases.starting.make({ start }) }, [now({ id: start.id })]];
     },
     now_ok: (m, msg) => {
-      if (m.phase._tag !== "starting" || m.phase.start.id !== msg.cmd.id) {
+      if (!Phase.isAnyOf(["starting"])(m.phase) || m.phase.start.id !== msg.cmd.id) {
         return [m, []];
       }
 
@@ -208,11 +207,11 @@ export const chaosMachine = Machine.make({
       ];
     },
     now_err: (m, msg) =>
-      m.phase._tag === "starting" && m.phase.start.id === msg.cmd.id
+      Phase.isAnyOf(["starting"])(m.phase) && m.phase.start.id === msg.cmd.id
         ? [incomplete(m, initialExperiment(m, m.phase.start, 0), "clock"), []]
         : [m, []],
     timer: (m, msg) => {
-      if (m.phase._tag !== "active" || msg.at < m.phase.experiment.deadline) {
+      if (!Phase.isAnyOf(["active"])(m.phase) || msg.at < m.phase.experiment.deadline) {
         return [m, []];
       }
 
@@ -241,7 +240,7 @@ export const chaosMachine = Machine.make({
     fire_ok: (m, msg) => [receive(m, msg), []],
     fire_err: (m, msg) => [receive(m, msg), []],
     inspect_ok: (m, msg) => {
-      if (m.phase._tag !== "checking" || m.phase.experiment.start.id !== msg.cmd.id) {
+      if (!Phase.isAnyOf(["checking"])(m.phase) || m.phase.experiment.start.id !== msg.cmd.id) {
         return [m, []];
       }
 
@@ -249,34 +248,33 @@ export const chaosMachine = Machine.make({
       return [
         e.answers.length !== e.asked.length
           ? incomplete(m, e, "unanswered")
-          : e.answers.some((a) => a.result._tag === "failed")
+          : e.answers.some((a) => Did.fields.result.isAnyOf(["failed"])(a.result))
             ? incomplete(m, e, "fire")
             : { ...m, phase: Phase.cases.done.make({ experiment: e, report: msg.value }) },
         [],
       ];
     },
     inspect_err: (m, msg) =>
-      m.phase._tag === "checking" && m.phase.experiment.start.id === msg.cmd.id
+      Phase.isAnyOf(["checking"])(m.phase) && m.phase.experiment.start.id === msg.cmd.id
         ? [incomplete(m, m.phase.experiment, "check"), []]
         : [m, []],
     stop: (m) => {
       const p = m.phase;
 
-      if (p._tag === "idle" || p._tag === "stopped") {
+      if (Phase.isAnyOf(["idle", "stopped"])(p)) {
         return [m, []];
       }
 
       return [
         {
           ...m,
-          phase:
-            p._tag === "starting"
-              ? Phase.cases.stopped.make({ start: p.start, asked: [], answers: [] })
-              : Phase.cases.stopped.make({
-                  start: p.experiment.start,
-                  asked: p.experiment.asked,
-                  answers: p.experiment.answers,
-                }),
+          phase: Phase.isAnyOf(["starting"])(p)
+            ? Phase.cases.stopped.make({ start: p.start, asked: [], answers: [] })
+            : Phase.cases.stopped.make({
+                start: p.experiment.start,
+                asked: p.experiment.asked,
+                answers: p.experiment.answers,
+              }),
         },
         [],
       ];
@@ -291,7 +289,7 @@ export const chaosMachine = Machine.make({
  * @category scheduling
  */
 export const wake = (model: Model): number | null =>
-  model.phase._tag === "active" ? model.phase.experiment.deadline : null;
+  Phase.isAnyOf(["active"])(model.phase) ? model.phase.experiment.deadline : null;
 
 /**
  * Refuses a `start` with reason `active` while an experiment is starting, active or checking, or

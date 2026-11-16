@@ -21,7 +21,7 @@ import {
 } from "../coordination/index.ts";
 import { nodeExecution, type Execution, type Declaration } from "./Execution.ts";
 import { type Patch } from "./Patch.ts";
-import { ProgramDown, stepper, type Stepper } from "./Program.ts";
+import { Input, ProgramDown, stepper, type Stepper } from "./Program.ts";
 
 /** A function type whose parameters are checked both ways, as a method's are. */
 type Code<A extends ReadonlyArray<unknown>, R> = { call(...args: A): R }["call"];
@@ -151,7 +151,7 @@ export class ProgramLoader extends Context.Service<
                 inputs: Object.fromEntries(
                   Object.entries(loaded.program.inputs).map(([name, p]) => [
                     name,
-                    { write: p._tag === "write", personOnly: p._tag === "write" && p.personOnly },
+                    { write: Input.isAnyOf(["write"])(p), personOnly: Input.isAnyOf(["write"])(p) && p.personOnly },
                   ]),
                 ),
                 cmds: (loaded.program.machine.cmds ?? []).map((d) => d.cmdType),

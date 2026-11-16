@@ -3,7 +3,7 @@
  */
 import { Effect, Layer } from "effect";
 import type { From } from "../processes/Mailbox.ts";
-import { needs } from "../tasks/Task.ts";
+import { needs, State } from "../tasks/Task.ts";
 import { Tasks, type TasksError } from "../tasks/Tasks.ts";
 import { type Ask, HandsTasks, HandsTasksError, Reply } from "./HandsTasks.ts";
 
@@ -57,11 +57,11 @@ export const layer = (options: { readonly target: string | null; readonly settin
 
           // The task machine refuses another process only once a task is finished, so this check is
           // what keeps a requested, assigned or started task's receipt from another process.
-          if (s._tag === "absent" || s.request.process !== ask.process) {
+          if (State.isAnyOf(["absent"])(s) || s.request.process !== ask.process) {
             return Reply.cases.refused.make({ reason: "id_reused" });
           }
 
-          if (s._tag !== "finished" && s._tag !== "collected") {
+          if (!State.isAnyOf(["finished", "collected"])(s)) {
             const requested = saved.events.find((event) => event.event === "requested");
 
             if (requested === undefined) {

@@ -3,8 +3,9 @@
  * restarts it.
  */
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
-import { NotGranted, type Writer } from "../access/SessionManager.ts";
+import { NotGranted, Writer } from "../access/SessionManager.ts";
 import { QuotasError, type Accounting, type RecoveryReserveExhausted } from "../processes/Quotas.ts";
 import type { ProgramRunner } from "./Runner.ts";
 
@@ -27,7 +28,10 @@ export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiti
  */
 export const reserveFault = (error: unknown): RecoveryReserveExhausted | undefined => {
   if (error instanceof QuotasError) {
-    return error.reason._tag === "RecoveryReserveExhausted" ? error.reason : undefined;
+    return Match.value(error.reason).pipe(
+      Match.tag("RecoveryReserveExhausted", (reason) => reason),
+      Match.orElse(() => undefined),
+    );
   }
 
   if (typeof error !== "object" || error === null) {
@@ -104,6 +108,6 @@ export const restart = (
   accounting: Accounting,
   request: { readonly id: string; readonly build: string; readonly by: Writer },
 ) =>
-  request.by._tag === "person"
+  Writer.isAnyOf(["person"])(request.by)
     ? personRestart(runner, accounting, { id: request.id, build: request.build })
     : Effect.fail(new NotGranted({}));

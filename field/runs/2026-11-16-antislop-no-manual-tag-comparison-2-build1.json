@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tag-comparison-2-build1",
+  "ticket": "kamp-us/tea-fabrika#1057",
+  "pr": null,
+  "started": "2026-11-16T00:42:57-08:00",
+  "ended": "2026-11-16T01:38:21-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "pipeline, tracker ticket 1057, build: slice AS-no-manual-tag-comparison-2, anti-slop-effect/no-manual-tag-comparison over next/packages/libfabrika/src/runtime, ledger and ci, product files only, no lock line and no .oxlintrc.json change, no pull request (owner ruling). The branch took origin/main once at 5c94f12f4 (a clean merge). With the rule forced to error in a scratch config outside the repo, the base counted 225 hits: the tests step's 56 stopped exam hits and 169 product hits (runtime 167, ledger 2, ci 0). All 169 product hits are fixed, leaving 56 in all: the same stopped exam hits, untouched, and none in product code. How: a scratch codemod (X._tag === \"a\" to Union.isAnyOf([\"a\"])(X), from a map of each expression to its union) made 110 one-case rewrites in supervisor.ts, ChaosMachine.ts, BrainLife.ts, Runner.ts and nine smaller files; a second scratch codemod turned the rest of Runner.ts's switch (j._tag) in resume into an if chain on Journal.isAnyOf, with continue where it had break, since its cases yield* and leave the loop; the other hits by hand. The forms, in 0567's order: the union's own isAnyOf, match or matchOrElse wherever the union is reachable (the supervisor's Journal, Origin and StartTiming, which Runner reads off the exported Supervision schema as the tests step did; Phase, BrainState, Pending, Client's Reply, Failure, the hands State and HandsTasks Reply, task State, Admission, Step, Input, Write, Writer, Recipient, the process table State, ExitReason, Appended, Placing, MailFailure, the watchers and reply Models, Execution's Outcome and Reply, Audit.Answer); two inline unions got a name so their own guard reads them (Client's LifeEntry, Runner's HandsSaved, the same schema as before); Exit.isSuccess, Exit.isFailure and Option.isNone for Effect's own; Match.valueTags where no matcher is reachable (the handsDelivery Settled answer, tea's Outcome, the mail error union, ProcessHistory's reason copied word for word from slice AS-prefer-effect-match-1, and ProcessStore's ledger answer, whose union sits two layers down: its ../ledger/Log.ts import line is held by next-ledger.json and stays byte for byte); Match.value with Match.tag and Match.orElse for QuotaRunner's reserveFault, whose reason is a union of error classes. crashReason in supervisor.ts is copied word for word from AS-prefer-effect-match-1. Client's reply now takes a whole Reply in place of Pick<Reply, \"_tag\">; its one caller passes a decoded Reply, so nothing it answers changes. Ten more hand comparisons in Runner.ts that the rule does not see, because they read _tag through ?., were rewritten the same way (lines near 266, 645, 1059, 1104, 1204, 1241 and 1269 on the base). No disable line, no assertion removed or narrowed, no law added or changed.",
+  "laws": [],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 55,
+  "note": "Ran at the working tree that is this commit, over merge 5c94f12f4 plus the build's edits. One at a time, all green: BrainLife.laws (3), Chaos.laws (5), Client.laws (10), Entry (1), Execution (5), Program (44), exitReason (1), handsDelivery (1), reply (2), supervisor.laws (9), watchers (2), RunnerRecovery.laws (4). Then vitest --changed origin/main once: 197 files, 1816 passed, 1 expected fail, 9 skipped, 1 failed. The one failure is a .visual. test the changed set pulled in, next/apps/fabrika/e2e/tezgah-focus.visual.test.ts at line 195 (R4: typing after C-b % lands in the new tile, expected 'q', got ''). That step is DOM focus in the window: it types before it waits for the new tile's field, and no file this build touched is on that path. It was not run again, since the step rules allow no .visual. test in a box. The 0178 guard refused none of the reached integration laws. libfabrika's own tsc --noEmit and one pnpm typecheck are green. The list ratchet exits 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) fails only on the zero lock: next/packages/libfabrika/src/ci/** and now src/ledger/** have no hit left and should join the rule's block in .oxlintrc.json, which this slice may not do. The codemods lived in the scratchpad and were never committed.",
+  "step": "build"
+}

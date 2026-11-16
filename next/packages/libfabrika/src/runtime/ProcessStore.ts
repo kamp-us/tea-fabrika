@@ -5,7 +5,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Match, Option, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { lineFor } from "../ledger/Log.ts";
 import { INPUT_BYTES } from "../processes/Children.ts";
@@ -421,11 +421,11 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
             const append = ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
             const answer = yield* quotas === undefined ? append : quotas.runtime(options.process, append);
 
-            if (answer._tag === "refused") {
-              return yield* new LedgerError({ reason: "refused", message: answer.reason });
-            }
-
-            return answer;
+            // The ledger's own union is two layers down (0043), so its answer is matched by tag.
+            return yield* Match.valueTags(answer, {
+              placed: (placed) => Effect.succeed(placed),
+              refused: ({ reason }) => Effect.fail(new LedgerError({ reason: "refused", message: reason })),
+            });
           }),
         };
       }),

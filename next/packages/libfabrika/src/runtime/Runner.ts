@@ -17,6 +17,7 @@ import {
   Effect,
   Exit,
   Layer,
+  Match,
   Option,
   Result,
   Schema,
@@ -30,7 +31,7 @@ import {
   Checkpoint,
   DeadInput,
   Down,
-  type Appended,
+  Appended,
   brainOnly,
   type From,
   type History,
@@ -57,7 +58,8 @@ import {
   SignRequest,
   type SinkError,
   type Sql,
-  type Writer,
+  State as ProcessState,
+  Writer,
 } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
 import { Children, INPUT_BYTES, Started } from "../processes/Children.ts";
@@ -83,7 +85,7 @@ import {
 import { HandsInput } from "./Hands.ts";
 import { HandsTasks } from "./HandsTasks.ts";
 import { fromFailure } from "./internal/exitReason.ts";
-import { handsDelivery } from "./internal/handsDelivery.ts";
+import { handsDelivery, State as HandsState } from "./internal/handsDelivery.ts";
 import { Failure, Policy, type Receipt, Work } from "./internal/recovery.ts";
 import { defaultPolicy, supervisor, Supervision, type SupervisorMsg } from "./internal/supervisor.ts";
 import { MailDelivery } from "./MailDelivery.ts";
@@ -187,6 +189,9 @@ export type Descriptor = {
   readonly owner: Writer;
 };
 
+/** A hands Cmd's delivery as a dispatched entry saves it: `pending` or `waiting`, never `result`. */
+const HandsSaved = Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev, arrivedAt: Schema.Int } });
+
 /** A Cmd the runner has saved as dispatched and not yet seen answered. Its id is stable: the
  *  process, the inbox position of the letter whose step made it, and its index there. */
 const CommandFields = {
@@ -204,7 +209,7 @@ const CommandFields = {
   /** A send_chunks's chunk size when it was dispatched, so every try cuts the same letters. */
   chunk: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
   /** A hands Cmd's saved delivery, which only its machine changes. Absent reads as `pending`. */
-  hands: Schema.optionalKey(Schema.TaggedUnion({ pending: {}, waiting: { rev: Rev, arrivedAt: Schema.Int } })),
+  hands: Schema.optionalKey(HandsSaved),
 };
 
 /** A Cmd is dispatched, or its answer is saved and waits for room to be mailed (0147). */
@@ -243,6 +248,11 @@ const isRefusal = Schema.is(MailRefusal);
 /** Whether a journal state is program work; the stores charge recovery by the same schema. */
 const isWork = Schema.is(Work);
 
+/** The supervision journal's union, and the two unions its cases carry, each matched by its own. */
+const Journal = Supervision.fields.journal;
+const Origin = Journal.cases.writing_exit.fields.origin;
+const StartTiming = Journal.cases.waiting_start.fields.timing;
+
 /** The Cmds a program asks its supervisor for: a child by name, a child's end, and its own. */
 const START_CHILD = "start_child";
 const STOP_CHILD = "stop_child";
@@ -263,7 +273,11 @@ const HOST = new Set([SEND, SEND_CHUNKS, START_CHILD, STOP_CHILD, EXIT, HANDS, M
  *  again. A hands task that only waits on the hands is owed nothing: a wake or a due asks it again
  *  (0105). */
 const owesHostCmd = (cmds: ReadonlyArray<Dispatched>): boolean =>
-  cmds.some((cmd) => (cmd.mail === true && cmd.hands?._tag !== "waiting") || cmd.state === "waiting_answer");
+  cmds.some(
+    (cmd) =>
+      (cmd.mail === true && (cmd.hands === undefined || !HandsSaved.isAnyOf(["waiting"])(cmd.hands))) ||
+      cmd.state === "waiting_answer",
+  );
 
 /** The name a send or a send_chunks mails, or none for any other Cmd. */
 const mailTarget = (job: Dispatched): Option.Option<string> =>
@@ -552,7 +566,10 @@ export class ProgramRunner extends Context.Service<
         // Read the lifecycle from its machine; the runner keeps no second copy.
         const ended = Effect.map(
           Effect.suspend(() => manager.status(process.name)),
-          ({ state }) => state._tag === "ended" && state.process === process.id && state.reason._tag === "normal",
+          ({ state }) =>
+            ProcessState.isAnyOf(["ended"])(state) &&
+            state.process === process.id &&
+            ExitReason.isAnyOf(["normal"])(state.reason),
         );
         const stepFault = yield* Effect.serviceOption(StepFault);
         /** Sends running now, sends a drain of ordinary mail made, and when a failed send is retried. */
@@ -641,12 +658,19 @@ export class ProgramRunner extends Context.Service<
         const recovering = (s: Supervision | null): boolean => s !== null && !isWork(s.journal);
         /** When recovery waits: down's own wait, or a successor's start that is not due yet. */
         const waitUntil = (s: Supervision | null): number | null => {
-          const j = s?.journal;
-          return j?._tag === "writing_down" || j?._tag === "waiting_recovery"
-            ? j.recovery.until
-            : j?._tag === "waiting_start" && j.timing._tag === "scheduled"
-              ? j.timing.until
-              : null;
+          if (s === null) {
+            return null;
+          }
+
+          return Journal.matchOrElse(
+            s.journal,
+            {
+              writing_down: (j) => j.recovery.until,
+              waiting_recovery: (j) => j.recovery.until,
+              waiting_start: (j) => (StartTiming.isAnyOf(["scheduled"])(j.timing) ? j.timing.until : null),
+            },
+            () => null,
+          );
         };
         /** One object alarm: program work is eligible only while live. */
         const setAlarm = Effect.fnUntraced(function* (retryAt?: number) {
@@ -704,7 +728,7 @@ export class ProgramRunner extends Context.Service<
         const finishSwap = Effect.fnUntraced(function* (prepared?: Live) {
           const s = yield* currentRecovery;
 
-          if (s.journal._tag !== "swapping") {
+          if (!Journal.isAnyOf(["swapping"])(s.journal)) {
             return;
           }
 
@@ -780,156 +804,165 @@ export class ProgramRunner extends Context.Service<
             const j = s.journal;
             const p = yield* coordinator;
 
-            switch (j._tag) {
-              case "swapping": {
-                yield* finishSwap();
-                break;
-              }
-              case "writing_reply": {
-                yield* replies.rememberReply(j.reply);
-                yield* store.activity(Activity.cases.idle.make({ process: j.attempt.process }));
-                yield* complete({ type: "reply_written", seq: j.attempt.seq });
-                break;
-              }
-              case "clearing_attempt": {
-                yield* store.activity(Activity.cases.idle.make({ process: j.attempt.process }));
-                yield* complete({ type: "attempt_cleared", seq: j.attempt.seq });
-                break;
-              }
-              case "writing_dead": {
-                const { failure } = j;
-                const receipt = s.receipts.find(
-                  (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
-                );
+            // Each job's write, then its completion; the loop reads the journal again after each.
+            if (Journal.isAnyOf(["swapping"])(j)) {
+              yield* finishSwap();
+              continue;
+            }
 
-                if (receipt === undefined) {
-                  return yield* new LedgerError({ reason: "bad_row" });
-                }
+            if (Journal.isAnyOf(["writing_reply"])(j)) {
+              yield* replies.rememberReply(j.reply);
+              yield* store.activity(Activity.cases.idle.make({ process: j.attempt.process }));
+              yield* complete({ type: "reply_written", seq: j.attempt.seq });
+              continue;
+            }
 
-                yield* p
-                  .dead(
-                    failure.process,
-                    DeadInput.make({
-                      tries: receipt.tries,
-                      limit: deliveries(s),
-                      m: receipt.letter,
-                      build: s.build,
-                      errors: receipt.errors,
-                    }),
-                    j.from,
-                  )
-                  .pipe(
-                    Effect.withSpan("runner.dead", {
-                      attributes: {
-                        [PROCESS]: failure.process,
-                        [tag("letter")]: receipt.letter,
-                        [tag("attempt")]: receipt.tries,
-                        [tag("build")]: s.build,
-                      },
-                    }),
-                  );
-                yield* fault("after_dead");
-                yield* complete({ type: "dead_written", seq: failure.seq });
-                break;
-              }
-              case "writing_exit": {
-                // A person's restart ends the live process with shutdown; a captured failure is a crash.
-                const reason = j.origin._tag === "manual" ? ExitReason.cases.shutdown.make({}) : j.origin.reason;
-                yield* p.exit(j.process, reason, j.from);
-                yield* fault("after_exit");
-                const status = yield* p.status(process.name);
-                yield* complete({
-                  type: "exit_written",
-                  process: j.process,
-                  restarts: status.restarts,
-                  at: status.at,
-                  program: process.program,
-                });
-                live = null;
-                retry = [];
-                break;
-              }
-              case "writing_down": {
-                yield* p.down(j.recovery.process, j.recovery, j.from);
-                yield* fault("after_down");
-                yield* complete({ type: "down_written", process: j.recovery.process });
-                break;
-              }
-              case "waiting_start": {
-                const status = yield* p.status(s.name);
-                const until = j.timing._tag === "scheduled" ? j.timing.until : undefined;
+            if (Journal.isAnyOf(["clearing_attempt"])(j)) {
+              yield* store.activity(Activity.cases.idle.make({ process: j.attempt.process }));
+              yield* complete({ type: "attempt_cleared", seq: j.attempt.seq });
+              continue;
+            }
 
-                // The successor waits its backoff: the alarm resumes it when due.
-                if (until !== undefined && status.at < until) {
-                  return;
-                }
+            if (Journal.isAnyOf(["writing_dead"])(j)) {
+              const { failure } = j;
+              const receipt = s.receipts.find(
+                (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
+              );
 
-                const timing = {
-                  [PROCESS]: j.request.after,
-                  [tag("until")]: until ?? status.at,
-                  [tag("lag")]: Math.max(0, status.at - (until ?? status.at)),
-                };
-                const restart = p.start(j.request, j.from).pipe(
-                  Effect.withSpan("runner.restart", {
+              if (receipt === undefined) {
+                return yield* new LedgerError({ reason: "bad_row" });
+              }
+
+              yield* p
+                .dead(
+                  failure.process,
+                  DeadInput.make({
+                    tries: receipt.tries,
+                    limit: deliveries(s),
+                    m: receipt.letter,
+                    build: s.build,
+                    errors: receipt.errors,
+                  }),
+                  j.from,
+                )
+                .pipe(
+                  Effect.withSpan("runner.dead", {
                     attributes: {
-                      ...timing,
-                      // The build being started, which a manual restart may change from the current one.
-                      [tag("build")]: j.request.code.hash,
-                      [tag("crashes")]: s.crashes,
+                      [PROCESS]: failure.process,
+                      [tag("letter")]: receipt.letter,
+                      [tag("attempt")]: receipt.tries,
+                      [tag("build")]: s.build,
                     },
                   }),
                 );
-                // A supervised start has a wait; an explicit Restart has none.
-                const started = yield* until === undefined
-                  ? restart
-                  : restart.pipe(Effect.withSpan("runner.recover", { attributes: timing }));
-                yield* fault("after_start");
-                yield* complete({ type: "started", id: j.request.id, process: started.process, at: status.at });
-                break;
+              yield* fault("after_dead");
+              yield* complete({ type: "dead_written", seq: failure.seq });
+              continue;
+            }
+
+            if (Journal.isAnyOf(["writing_exit"])(j)) {
+              // A person's restart ends the live process with shutdown; a captured failure is a crash.
+              const reason = Origin.isAnyOf(["manual"])(j.origin)
+                ? ExitReason.cases.shutdown.make({})
+                : j.origin.reason;
+              yield* p.exit(j.process, reason, j.from);
+              yield* fault("after_exit");
+              const status = yield* p.status(process.name);
+              yield* complete({
+                type: "exit_written",
+                process: j.process,
+                restarts: status.restarts,
+                at: status.at,
+                program: process.program,
+              });
+              live = null;
+              retry = [];
+              continue;
+            }
+
+            if (Journal.isAnyOf(["writing_down"])(j)) {
+              yield* p.down(j.recovery.process, j.recovery, j.from);
+              yield* fault("after_down");
+              yield* complete({ type: "down_written", process: j.recovery.process });
+              continue;
+            }
+
+            if (Journal.isAnyOf(["waiting_start"])(j)) {
+              const status = yield* p.status(s.name);
+              const until = StartTiming.isAnyOf(["scheduled"])(j.timing) ? j.timing.until : undefined;
+
+              // The successor waits its backoff: the alarm resumes it when due.
+              if (until !== undefined && status.at < until) {
+                return;
               }
-              case "checkpointing": {
-                const previous = yield* rootStore.select(j.after);
-                const next = yield* rootStore.select(j.process);
-                const checkpoint = yield* previous.load;
 
-                if (j.origin._tag === "manual" && checkpoint !== null) {
-                  // Keep the accepted turn in the index without carrying its rejected model.
-                  const prepared = Schema.decodeUnknownOption(Turn)(checkpoint.turn);
+              const timing = {
+                [PROCESS]: j.request.after,
+                [tag("until")]: until ?? status.at,
+                [tag("lag")]: Math.max(0, status.at - (until ?? status.at)),
+              };
+              const restart = p.start(j.request, j.from).pipe(
+                Effect.withSpan("runner.restart", {
+                  attributes: {
+                    ...timing,
+                    // The build being started, which a manual restart may change from the current one.
+                    [tag("build")]: j.request.code.hash,
+                    [tag("crashes")]: s.crashes,
+                  },
+                }),
+              );
+              // A supervised start has a wait; an explicit Restart has none.
+              const started = yield* until === undefined
+                ? restart
+                : restart.pipe(Effect.withSpan("runner.recover", { attributes: timing }));
+              yield* fault("after_start");
+              yield* complete({ type: "started", id: j.request.id, process: started.process, at: status.at });
+              continue;
+            }
 
-                  if (Option.isSome(prepared) && (yield* previous.placedByAny(prepared.value.id)) === null) {
-                    const accepted = yield* Stream.runHead(
-                      mailbox
-                        .read(s.name, checkpoint.saved.after)
-                        .pipe(Stream.filter((letter) => letter.id === prepared.value.id)),
-                    );
+            if (Journal.isAnyOf(["checkpointing"])(j)) {
+              const previous = yield* rootStore.select(j.after);
+              const next = yield* rootStore.select(j.process);
+              const checkpoint = yield* previous.load;
 
-                    if (Option.isSome(accepted)) {
-                      const { id, rev, pos } = accepted.value;
-                      yield* previous.save(checkpoint, [{ id, rev, pos }]);
-                    }
-                  }
-                } else if (j.origin._tag === "crash" && (yield* next.load) === null) {
-                  // The turn is the acceptance marker until its letter is indexed.
-                  if (checkpoint !== null) {
-                    yield* next.save({ ...checkpoint, cmds: [] });
+              if (Origin.isAnyOf(["manual"])(j.origin) && checkpoint !== null) {
+                // Keep the accepted turn in the index without carrying its rejected model.
+                const prepared = Schema.decodeUnknownOption(Turn)(checkpoint.turn);
+
+                if (Option.isSome(prepared) && (yield* previous.placedByAny(prepared.value.id)) === null) {
+                  const accepted = yield* Stream.runHead(
+                    mailbox
+                      .read(s.name, checkpoint.saved.after)
+                      .pipe(Stream.filter((letter) => letter.id === prepared.value.id)),
+                  );
+
+                  if (Option.isSome(accepted)) {
+                    const { id, rev, pos } = accepted.value;
+                    yield* previous.save(checkpoint, [{ id, rev, pos }]);
                   }
                 }
-
-                yield* fault("after_checkpoint");
-                const status = yield* p.status(s.name);
-                const done = yield* send({
-                  type: "checkpointed",
-                  after: j.after,
-                  process: j.process,
-                  restarts: status.restarts,
-                  at: status.at,
-                });
-                yield* adopt(j.process, done.build);
-                break;
+              } else if (Origin.isAnyOf(["crash"])(j.origin) && (yield* next.load) === null) {
+                // The turn is the acceptance marker until its letter is indexed.
+                if (checkpoint !== null) {
+                  yield* next.save({ ...checkpoint, cmds: [] });
+                }
               }
-              default:
-                return;
+
+              yield* fault("after_checkpoint");
+              const status = yield* p.status(s.name);
+              const done = yield* send({
+                type: "checkpointed",
+                after: j.after,
+                process: j.process,
+                restarts: status.restarts,
+                at: status.at,
+              });
+              yield* adopt(j.process, done.build);
+              continue;
             }
+
+            // Idle, program work, or a recovery that waits: nothing more to perform now.
+            return;
           }
         });
         const continueRecovery = Effect.fnUntraced(function* () {
@@ -939,7 +972,7 @@ export class ProgramRunner extends Context.Service<
           yield* resume().pipe(
             Effect.onExit((exit) =>
               Effect.gen(function* () {
-                if (exit._tag === "Success" || supervision === null || !recovering(supervision)) {
+                if (Exit.isSuccess(exit) || supervision === null || !recovering(supervision)) {
                   return;
                 }
 
@@ -961,7 +994,7 @@ export class ProgramRunner extends Context.Service<
         ) {
           yield* complete(msg);
 
-          if (thrown !== undefined && thrown.failure._tag !== "interrupted") {
+          if (thrown !== undefined && !Failure.isAnyOf(["interrupted"])(thrown.failure)) {
             const { failure } = thrown;
             yield* Effect.exit(
               // The original failure text belongs only in the span's deletable content.
@@ -1020,14 +1053,17 @@ export class ProgramRunner extends Context.Service<
 
           // Another starter placed a successor while this one waited: adopt it.
           const j = supervision.journal;
-          const waited =
-            j._tag === "writing_down" || j._tag === "waiting_recovery"
-              ? j.recovery.process
-              : j._tag === "waiting_start" && j.timing._tag === "scheduled"
-                ? j.request.after
-                : null;
+          const waited = Journal.matchOrElse(
+            j,
+            {
+              writing_down: (j) => j.recovery.process,
+              waiting_recovery: (j) => j.recovery.process,
+              waiting_start: (j) => (StartTiming.isAnyOf(["scheduled"])(j.timing) ? j.request.after : null),
+            },
+            () => null,
+          );
 
-          if (status.state._tag === "live" && waited !== null && status.state.process !== waited) {
+          if (ProcessState.isAnyOf(["live"])(status.state) && waited !== null && status.state.process !== waited) {
             yield* send({
               type: "adopted",
               process: status.state.process,
@@ -1039,12 +1075,15 @@ export class ProgramRunner extends Context.Service<
           yield* continueRecovery();
           const resumed = yield* currentRecovery;
           const now = resumed.journal;
-          const current =
-            now._tag === "idle"
-              ? now.process
-              : now._tag === "stepping" || now._tag === "checking"
-                ? now.attempt.process
-                : null;
+          const current = Journal.matchOrElse(
+            now,
+            {
+              idle: (now) => now.process,
+              stepping: (now) => now.attempt.process,
+              checking: (now) => now.attempt.process,
+            },
+            () => null,
+          );
 
           if (current !== null) {
             yield* adopt(current, resumed.build);
@@ -1054,9 +1093,12 @@ export class ProgramRunner extends Context.Service<
             // One captured identity, one interruption: the saved attempt wins over the marker.
             const marker = yield* store.readActivity;
             const letter =
-              (now._tag === "stepping" || now._tag === "checking") && now.attempt.process === process.id
+              Journal.isAnyOf(["stepping", "checking"])(now) && now.attempt.process === process.id
                 ? now.attempt.letter
-                : now._tag === "idle" && marker?._tag === "stepping" && marker.process === process.id
+                : Journal.isAnyOf(["idle"])(now) &&
+                    marker !== undefined &&
+                    Activity.isAnyOf(["stepping"])(marker) &&
+                    marker.process === process.id
                   ? marker.letter
                   : null;
 
@@ -1081,7 +1123,11 @@ export class ProgramRunner extends Context.Service<
 
           const waiting = (yield* currentRecovery).journal;
 
-          if (time !== undefined && waiting._tag === "waiting_recovery" && status.at >= waiting.recovery.until) {
+          if (
+            time !== undefined &&
+            Journal.isAnyOf(["waiting_recovery"])(waiting) &&
+            status.at >= waiting.recovery.until
+          ) {
             const meta = yield* from(null, yield* traceId);
             yield* send({ type: "due", at: status.at, program: process.program, from: meta });
             yield* continueRecovery();
@@ -1089,7 +1135,7 @@ export class ProgramRunner extends Context.Service<
 
           const latest = yield* currentRecovery;
 
-          if (latest.journal._tag === "idle") {
+          if (Journal.isAnyOf(["idle"])(latest.journal)) {
             yield* send({ type: "healthy", at: status.at });
           }
 
@@ -1101,7 +1147,7 @@ export class ProgramRunner extends Context.Service<
         /** Abandons the attempt the journal has open, as the next step would. */
         const abandon = Effect.suspend(() => {
           const j = supervision?.journal;
-          return j?._tag === "stepping" || j?._tag === "checking"
+          return j !== undefined && Journal.isAnyOf(["stepping", "checking"])(j)
             ? complete({ type: "abandoned", seq: j.attempt.seq }).pipe(Effect.andThen(continueRecovery()))
             : Effect.void;
         });
@@ -1117,7 +1163,7 @@ export class ProgramRunner extends Context.Service<
             // a reopened runner has already captured its interruption in ensure.
             const pending = supervision.journal;
 
-            if (pending._tag === "checking" || pending._tag === "stepping") {
+            if (Journal.isAnyOf(["checking", "stepping"])(pending)) {
               yield* complete({ type: "abandoned", seq: pending.attempt.seq });
               yield* continueRecovery();
             }
@@ -1148,10 +1194,10 @@ export class ProgramRunner extends Context.Service<
           }).pipe(Effect.exit);
           const j = supervision?.journal;
 
-          if (j !== undefined && result._tag === "Failure") {
+          if (j !== undefined && Exit.isFailure(result)) {
             const failed = Cause.findError(result.cause);
 
-            if (j._tag !== "stepping" && j._tag !== "checking") {
+            if (!Journal.isAnyOf(["stepping", "checking"])(j)) {
               return yield* Effect.failCause(result.cause);
             }
 
@@ -1185,7 +1231,7 @@ export class ProgramRunner extends Context.Service<
             const error = wrapped.errorClass;
             const failure = (reason === "step" ? Failure.cases.fresh : Failure.cases.saved).make({ ...attempt, error });
             const msg: SupervisorMsg =
-              j._tag === "checking" && receipt !== undefined
+              Journal.isAnyOf(["checking"])(j) && receipt !== undefined
                 ? { type: "check_threw", seq: attempt.seq, receipt, error, reason: fromFailure(failure), from: meta }
                 : { type: "threw", seq: attempt.seq, error, reason: fromFailure(failure), from: meta };
             // The original program failure wins even when its observation cannot be saved, except a
@@ -1201,7 +1247,7 @@ export class ProgramRunner extends Context.Service<
             return yield* wrapped;
           }
 
-          if (j?._tag === "stepping") {
+          if (j !== undefined && Journal.isAnyOf(["stepping"])(j)) {
             yield* send({ type: "finished", seq: j.attempt.seq });
           }
 
@@ -1209,13 +1255,15 @@ export class ProgramRunner extends Context.Service<
             Effect.onExit((exit) =>
               store
                 .activity(Activity.cases.idle.make({ process: process.id }))
-                .pipe(Effect.catch((error) => (exit._tag === "Failure" ? Effect.void : Effect.fail(error)))),
+                .pipe(Effect.catch((error) => (Exit.isFailure(exit) ? Effect.void : Effect.fail(error)))),
             ),
           );
         });
 
         const stepped = Effect.fnUntraced(function* (step: Step, reason: ProgramDown["reason"]) {
-          return yield* step._tag === "stepped" ? Effect.succeed(step) : Effect.fail(new ProgramDown({ reason }));
+          return yield* Step.isAnyOf(["stepped"])(step)
+            ? Effect.succeed(step)
+            : Effect.fail(new ProgramDown({ reason }));
         });
 
         /** A throw in the program's init is supervision's, as a step's is: observed, then the wait.
@@ -1238,7 +1286,7 @@ export class ProgramRunner extends Context.Service<
                 });
                 const j = supervision?.journal;
 
-                if (j?._tag !== "stepping" || j.attempt.letter !== letter) {
+                if (j === undefined || !Journal.isAnyOf(["stepping"])(j) || j.attempt.letter !== letter) {
                   return yield* new LedgerError({ reason: "bad_row", cause: down });
                 }
 
@@ -1266,7 +1314,7 @@ export class ProgramRunner extends Context.Service<
           const build = "hash" in loaded && typeof loaded.hash === "string" ? loaded.hash : recorded;
           process = { ...process, build };
 
-          if (supervision?.journal._tag === "idle" && supervision.build !== build) {
+          if (supervision !== null && Journal.isAnyOf(["idle"])(supervision.journal) && supervision.build !== build) {
             yield* send({ type: "swapped", process: process.id, build });
           }
 
@@ -1421,7 +1469,10 @@ export class ProgramRunner extends Context.Service<
 
             const down = signal ? decodeDown(letter.m) : Option.none();
 
-            if (signal && !Option.exists(down, (m) => m.to._tag === "process" && m.to.process === process.id)) {
+            if (
+              signal &&
+              !Option.exists(down, (m) => Recipient.isAnyOf(["process"])(m.to) && m.to.process === process.id)
+            ) {
               continue;
             }
 
@@ -1462,7 +1513,7 @@ export class ProgramRunner extends Context.Service<
                 )
               : yield* receive(state, model, letter.id, letter.m);
 
-            if (folded._tag === "refused") {
+            if (Step.isAnyOf(["refused"])(folded)) {
               if (inNoticeSpace(letter.id)) {
                 skippedNotices++;
               }
@@ -1701,7 +1752,7 @@ export class ProgramRunner extends Context.Service<
               return yield* appended;
             });
           const attempt: Effect.Effect<Appended, WriteFailure> = Effect.gen(function* () {
-            if (asked._tag === "own") {
+            if (Write.isAnyOf(["own"])(asked)) {
               if (policy.personOnly) {
                 return yield* new SigningRefused({ reason: "person_only" });
               }
@@ -1738,7 +1789,7 @@ export class ProgramRunner extends Context.Service<
             return yield* err(job, answer.failure);
           }
 
-          if (answer.success._tag === "refused") {
+          if (Appended.isAnyOf(["refused"])(answer.success)) {
             return yield* err(job, answer.success.reason);
           }
 
@@ -1903,14 +1954,16 @@ export class ProgramRunner extends Context.Service<
           const [before] = handsDelivery.init(job.hands ?? null, undefined);
           const [next] = applyCell(handsDelivery, before, { type: "replied", reply: replied.success });
 
-          if (next._tag === "result") {
-            const { answer } = next;
+          if (HandsState.isAnyOf(["result"])(next)) {
             return Option.some(
-              answer._tag === "ok" ? yield* ok(job, encodeResult(answer.result)) : yield* err(job, answer.reason),
+              yield* Match.valueTags(next.answer, {
+                ok: (answer) => ok(job, encodeResult(answer.result)),
+                err: (answer) => err(job, answer.reason),
+              }),
             );
           }
 
-          if (next._tag === "waiting") {
+          if (HandsState.isAnyOf(["waiting"])(next)) {
             yield* permit.withPermit(wait(job, next));
           }
 
@@ -2096,7 +2149,7 @@ export class ProgramRunner extends Context.Service<
           // The handler's own failure ends its span failed, with the message as deletable content.
           const exit = yield* cmdSpan(job, run.value(job.cmd)).pipe(Effect.exit);
 
-          if (exit._tag === "Failure") {
+          if (Exit.isFailure(exit)) {
             // An interrupted handler stays dispatched: nobody knows whether it acted.
             if (Cause.hasInterrupts(exit.cause)) {
               return yield* Effect.interrupt;
@@ -2110,7 +2163,7 @@ export class ProgramRunner extends Context.Service<
           // also carries its tag as `reason`, as the runner's own errors do.
           return yield* state.loaded.execution.reply(job.cmd, { ...outcome, at: yield* at }).pipe(
             Effect.map((m) => {
-              const tag = outcome._tag === "Err" ? errTag(outcome.error) : undefined;
+              const tag = Match.valueTags(outcome, { Ok: () => undefined, Err: ({ error }) => errTag(error) });
               return tag !== undefined && typeof m === "object" && m !== null && !Array.isArray(m)
                 ? { ...m, reason: tag }
                 : m;
@@ -2240,7 +2293,7 @@ export class ProgramRunner extends Context.Service<
                   .send(process.name, answer, m, yield* from(job.parent, job.traceId))
                   .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
-                if (sent._tag === "refused") {
+                if (Appended.isAnyOf(["refused"])(sent)) {
                   if (sent.reason === "quota") {
                     return yield* new QuotaWaiting();
                   }
@@ -2361,7 +2414,7 @@ export class ProgramRunner extends Context.Service<
             const exit = yield* Effect.exit(operation(turn, time));
             return yield* recording.flush.pipe(
               Effect.flatMap(() => exit),
-              Effect.catch((error) => (exit._tag === "Failure" ? exit : Effect.fail(error))),
+              Effect.catch((error) => (Exit.isFailure(exit) ? exit : Effect.fail(error))),
             );
           });
         };
@@ -2387,7 +2440,7 @@ export class ProgramRunner extends Context.Service<
 
                 const journal = supervision?.journal;
 
-                if (journal !== undefined && journal._tag !== "idle") {
+                if (journal !== undefined && !Journal.isAnyOf(["idle"])(journal)) {
                   yield* Effect.annotateCurrentSpan("outcome", "not_now");
                   return { answer: Swapped.cases.not_now.make({ state: journal._tag }), jobs: [] };
                 }
@@ -2611,7 +2664,7 @@ export class ProgramRunner extends Context.Service<
                   )
                   .pipe(Effect.provideService(RunnerMail, { process: process.id, name: process.name }));
 
-                if (sent._tag === "refused") {
+                if (Appended.isAnyOf(["refused"])(sent)) {
                   if (sent.reason === "quota") {
                     return yield* new QuotaWaiting();
                   }
@@ -2625,7 +2678,7 @@ export class ProgramRunner extends Context.Service<
                 Effect.catchTag("QuotaWaiting", () => Effect.as(waitForRoom, { answer: undefined, jobs: [] })),
                 // A storage failure while draining leaves the alarm that tries it again.
                 Effect.onExit((exit) =>
-                  exit._tag === "Failure" &&
+                  Exit.isFailure(exit) &&
                   Option.exists(
                     Cause.findErrorOption(exit.cause),
                     (error) => Schema.is(LedgerError)(error) || Schema.is(RecoveryStoreError)(error),
@@ -2659,8 +2712,8 @@ export class ProgramRunner extends Context.Service<
                 const s = yield* currentRecovery;
                 const j = s.journal;
                 const flying =
-                  (j._tag === "writing_exit" || j._tag === "waiting_start" || j._tag === "checkpointing") &&
-                  j.origin._tag === "manual"
+                  Journal.isAnyOf(["writing_exit", "waiting_start", "checkpointing"])(j) &&
+                  Origin.isAnyOf(["manual"])(j.origin)
                     ? j.origin.request
                     : undefined;
                 const prior =
@@ -2682,7 +2735,7 @@ export class ProgramRunner extends Context.Service<
                 yield* send({
                   type: "restart_requested",
                   ...request,
-                  live: status.state._tag === "live",
+                  live: ProcessState.isAnyOf(["live"])(status.state),
                   process: status.state.process,
                   program: process.program,
                   from: yield* from(null, yield* traceId),
@@ -2730,7 +2783,11 @@ export class ProgramRunner extends Context.Service<
 
             const port = inputPort(state, input.envelope.input);
 
-            if (port === undefined || !port.write || (port.personOnly && input.envelope.by._tag !== "person")) {
+            if (
+              port === undefined ||
+              !port.write ||
+              (port.personOnly && !Writer.isAnyOf(["person"])(input.envelope.by))
+            ) {
               return { answer: Sent.cases.refused.make({ reason: "bad_msg" }), jobs: [] };
             }
 
@@ -2755,7 +2812,7 @@ export class ProgramRunner extends Context.Service<
                   Effect.gen(function* () {
                     const j = (yield* currentRecovery).journal;
 
-                    if (j._tag !== "checking") {
+                    if (!Journal.isAnyOf(["checking"])(j)) {
                       return yield* new LedgerError({ reason: "bad_row" });
                     }
 
@@ -2783,17 +2840,19 @@ export class ProgramRunner extends Context.Service<
                       ? yield* state.loaded.execution.fresh(state.model, m)
                       : Admission.cases.invalid.make({});
 
-                    if (admission._tag === "admitted") {
+                    if (Admission.isAnyOf(["admitted"])(admission)) {
                       yield* complete({ type: "admitted", seq, receipt });
                       return yield* state.loaded.execution.update(state.model, m);
                     }
 
                     const parent = Schema.decodeUnknownOption(InputId)(input.envelope.id);
 
-                    if (admission._tag === "invalid" || Option.isNone(parent)) {
+                    if (Admission.isAnyOf(["invalid"])(admission) || Option.isNone(parent)) {
                       yield* complete({ type: "abandoned", seq });
                       yield* continueRecovery();
-                      return Step.cases.refused.make(admission._tag === "invalid" ? { reason: "bad_msg" } : admission);
+                      return Step.cases.refused.make(
+                        Admission.isAnyOf(["invalid"])(admission) ? { reason: "bad_msg" } : admission,
+                      );
                     }
 
                     yield* complete({
@@ -2831,8 +2890,7 @@ export class ProgramRunner extends Context.Service<
                 terminal !== null &&
                 terminal !== undefined &&
                 supervision !== null &&
-                supervision.journal._tag !== "writing_dead" &&
-                supervision.journal._tag !== "writing_exit"
+                !Journal.isAnyOf(["writing_dead", "writing_exit"])(supervision.journal)
               ) {
                 return { answer: Sent.cases.refused.make({ reason: "dead" }), jobs: [] };
               }
@@ -2842,7 +2900,7 @@ export class ProgramRunner extends Context.Service<
 
             const prepared = preparation.success;
 
-            if (prepared._tag === "refused") {
+            if (Step.isAnyOf(["refused"])(prepared)) {
               const { _tag: _case, ...reason } = prepared;
               return { answer: Sent.cases.refused.make(reason), jobs: [] };
             }
@@ -2854,7 +2912,7 @@ export class ProgramRunner extends Context.Service<
             yield* store.save(checkpoint(state, Turn.cases.prepared.make({ id: input.id })));
             const appended = yield* checked.append(incoming);
 
-            if (appended._tag === "refused") {
+            if (Appended.isAnyOf(["refused"])(appended)) {
               yield* store.save(checkpoint(state, null));
               return { answer: Sent.cases.refused.make({ reason: appended.reason }), jobs: [] };
             }

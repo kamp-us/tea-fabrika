@@ -810,11 +810,11 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
         throw admission.failure;
       }
 
-      if (admission.success._tag === "invalid") {
+      if (Admission.isAnyOf(["invalid"])(admission.success)) {
         return Step.cases.refused.make({ reason: "bad_msg" });
       }
 
-      if (admission.success._tag === "refused") {
+      if (Admission.isAnyOf(["refused"])(admission.success)) {
         return Step.cases.refused.make(admission.success);
       }
 

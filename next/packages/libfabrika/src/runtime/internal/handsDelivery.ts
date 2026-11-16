@@ -40,25 +40,23 @@ export const handsDelivery = Machine.make({
   init: (loaded) => [loaded ?? State.cases.pending.make({}), []],
   update: {
     replied: (s, { reply }) => {
-      if (s._tag === "result") {
+      if (State.isAnyOf(["result"])(s)) {
         return same(s);
       }
 
-      if (reply._tag === "finished") {
-        return settled(Settled.cases.ok.make({ result: reply.result }));
-      }
-
-      if (reply._tag === "refused") {
+      return Reply.match(reply, {
+        finished: (reply) => settled(Settled.cases.ok.make({ result: reply.result })),
         // No hands key is only ever the first answer: a saved task is never undone by one. A task
         // that is not this process's is refused whenever it is found.
-        return s._tag === "pending" || reply.reason === "id_reused"
-          ? settled(Settled.cases.err.make({ reason: reply.reason }))
-          : same(s);
-      }
-
-      return s._tag === "pending"
-        ? [State.cases.waiting.make({ rev: reply.rev, arrivedAt: reply.arrivedAt }), []]
-        : same(s);
+        refused: (reply) =>
+          State.isAnyOf(["pending"])(s) || reply.reason === "id_reused"
+            ? settled(Settled.cases.err.make({ reason: reply.reason }))
+            : same(s),
+        waiting: (reply): [State, []] =>
+          State.isAnyOf(["pending"])(s)
+            ? [State.cases.waiting.make({ rev: reply.rev, arrivedAt: reply.arrivedAt }), []]
+            : same(s),
+      });
     },
   },
 });

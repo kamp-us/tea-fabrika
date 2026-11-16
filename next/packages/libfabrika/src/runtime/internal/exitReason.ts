@@ -1,5 +1,5 @@
 import { ExitReason } from "../../processes/ExitReason.ts";
-import type { Failure } from "./recovery.ts";
+import { Failure } from "./recovery.ts";
 
 /**
  * The exit reason for one captured failure: its phase, and the class the runner already captured.
@@ -7,9 +7,8 @@ import type { Failure } from "./recovery.ts";
  * @internal
  */
 export const fromFailure = (failure: Failure): ExitReason =>
-  failure._tag === "interrupted"
-    ? ExitReason.cases.crashed.make({ phase: "interrupted" })
-    : ExitReason.cases.crashed.make(
-        { phase: failure._tag === "fresh" ? "step" : "saved_letter", error: failure.error },
-        { disableChecks: true },
-      );
+  Failure.match(failure, {
+    interrupted: () => ExitReason.cases.crashed.make({ phase: "interrupted" }),
+    fresh: ({ error }) => ExitReason.cases.crashed.make({ phase: "step", error }, { disableChecks: true }),
+    saved: ({ error }) => ExitReason.cases.crashed.make({ phase: "saved_letter", error }, { disableChecks: true }),
+  });

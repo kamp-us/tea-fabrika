@@ -96,11 +96,11 @@ export const Supervision = Schema.Struct({
   Schema.makeFilter((s) => {
     const j = s.journal;
 
-    if (j._tag === "swapping") {
+    if (Journal.isAnyOf(["swapping"])(j)) {
       return s.build === j.change.was || "an unfinished swap keeps the previous build";
     }
 
-    if (j._tag === "stepping" && j.attempt.phase === "fresh") {
+    if (Journal.isAnyOf(["stepping"])(j) && j.attempt.phase === "fresh") {
       return (
         s.receipts.some((r) => r.letter === j.attempt.letter && r.input !== null) ||
         "fresh stepping keeps its admitted input"
@@ -108,40 +108,41 @@ export const Supervision = Schema.Struct({
     }
 
     // Dead work names its exact fresh failure, so its terminal receipt must be that letter's own.
-    if (j._tag === "writing_dead") {
+    if (Journal.isAnyOf(["writing_dead"])(j)) {
       return (
         s.receipts.some((r) => r.letter === j.failure.letter && r.process === j.failure.process && r.result !== null) ||
         "dead work keeps its terminal receipt"
       );
     }
 
-    if (j._tag === "checkpointing" && j.after === j.process) {
+    if (Journal.isAnyOf(["checkpointing"])(j) && j.after === j.process) {
       return "a checkpoint's successor is not its predecessor";
     }
 
     // The process this journal replaces, which a crash origin's failure must name.
-    const replaced =
-      j._tag === "writing_exit"
-        ? j.process
-        : j._tag === "writing_down" || j._tag === "waiting_recovery"
-          ? j.recovery.process
-          : j._tag === "waiting_start"
-            ? j.request.after
-            : j._tag === "checkpointing"
-              ? j.after
-              : null;
+    const replaced = Journal.matchOrElse(
+      j,
+      {
+        writing_exit: (j) => j.process,
+        writing_down: (j) => j.recovery.process,
+        waiting_recovery: (j) => j.recovery.process,
+        waiting_start: (j) => j.request.after,
+        checkpointing: (j) => j.after,
+      },
+      () => null,
+    );
 
     if (replaced === null || !("origin" in j)) {
       return true;
     }
 
-    if (j.origin._tag === "crash") {
+    if (Origin.isAnyOf(["crash"])(j.origin)) {
       return j.origin.failure.process === replaced || "a crash origin names the process it replaces";
     }
 
     // A person's restart starts with its own saved request ID and build.
     return (
-      j._tag !== "waiting_start" ||
+      !Journal.isAnyOf(["waiting_start"])(j) ||
       (j.request.id === j.origin.request.id && j.request.code.hash === j.origin.request.build) ||
       "a person's restart starts with its saved request"
     );
@@ -204,7 +205,7 @@ const DEAD = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).
 const unchanged = (s: Supervision) => [s, []] as const;
 
 const crashReason = (failure: Failure) =>
-  failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+  Failure.match(failure, { saved: () => "saved_letter", fresh: () => "step", interrupted: () => "interrupted" });
 
 /** The successor's start request, after the process that ended. */
 const again = (s: Supervision, id: string, after: string, reason: string, code: { program: string; hash: string }) =>
@@ -234,9 +235,9 @@ const observe = (
 
 /** The process a waiting recovery replaces, which a live successor may be adopted for. */
 const waitingFor = (j: Supervision["journal"]): { after: string; origin: Origin } | null =>
-  j._tag === "waiting_recovery" || j._tag === "writing_down"
+  Journal.isAnyOf(["waiting_recovery", "writing_down"])(j)
     ? { after: j.recovery.process, origin: j.origin }
-    : j._tag === "waiting_start" && j.timing._tag === "scheduled"
+    : Journal.isAnyOf(["waiting_start"])(j) && StartTiming.isAnyOf(["scheduled"])(j.timing)
       ? { after: j.request.after, origin: j.origin }
       : null;
 
@@ -255,7 +256,7 @@ const failed = (
   });
   const seen = { seq: attempt.seq, process: fields.process, letter: fields.letter, phase, error, at };
 
-  if (failure._tag !== "fresh") {
+  if (!Failure.isAnyOf(["fresh"])(failure)) {
     return [observe(s, failure, seen, exiting(failure, reason, from)), []];
   }
 
@@ -313,11 +314,11 @@ export const supervisor = Machine.make({
   ],
   update: {
     swap_prepared: (s, m) =>
-      s.journal._tag === "idle" && s.journal.process === m.change.process && s.build === m.change.was
+      Journal.isAnyOf(["idle"])(s.journal) && s.journal.process === m.change.process && s.build === m.change.was
         ? [{ ...s, journal: Journal.cases.swapping.make({ change: m.change }) }, []]
         : unchanged(s),
     swap_completed: (s, m) => {
-      if (s.journal._tag !== "swapping" || s.journal.change.load !== m.load) {
+      if (!Journal.isAnyOf(["swapping"])(s.journal) || s.journal.change.load !== m.load) {
         return unchanged(s);
       }
 
@@ -334,7 +335,9 @@ export const supervisor = Machine.make({
       ];
     },
     swapped: (s, m) =>
-      s.journal._tag === "idle" && s.journal.process === m.process ? [{ ...s, build: m.build }, []] : unchanged(s),
+      Journal.isAnyOf(["idle"])(s.journal) && s.journal.process === m.process
+        ? [{ ...s, build: m.build }, []]
+        : unchanged(s),
     received: (s, m) =>
       s.receipts.some((r) => r.letter === m.receipt.letter)
         ? unchanged(s)
@@ -360,7 +363,7 @@ export const supervisor = Machine.make({
       return [m.maxDeliveries === null ? rest : { ...rest, maxDeliveries: m.maxDeliveries }, []];
     },
     begin: (s, m) => {
-      if (s.journal._tag !== "idle" || s.journal.process !== m.process) {
+      if (!Journal.isAnyOf(["idle"])(s.journal) || s.journal.process !== m.process) {
         return unchanged(s);
       }
 
@@ -376,7 +379,7 @@ export const supervisor = Machine.make({
       const j = s.journal;
 
       if (
-        j._tag !== "checking" ||
+        !Journal.isAnyOf(["checking"])(j) ||
         j.attempt.seq !== m.seq ||
         j.attempt.letter !== m.receipt.letter ||
         m.receipt.input === null
@@ -389,7 +392,7 @@ export const supervisor = Machine.make({
     },
     refused: (s, m) => {
       const j = s.journal;
-      return j._tag === "checking" &&
+      return Journal.isAnyOf(["checking"])(j) &&
         j.attempt.seq === m.seq &&
         m.reply.id === j.attempt.letter &&
         m.reply.name === s.name
@@ -397,24 +400,24 @@ export const supervisor = Machine.make({
         : unchanged(s);
     },
     reply_written: (s, m) =>
-      s.journal._tag === "writing_reply" && s.journal.attempt.seq === m.seq
+      Journal.isAnyOf(["writing_reply"])(s.journal) && s.journal.attempt.seq === m.seq
         ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
         : unchanged(s),
     abandoned: (s, m) => {
       const j = s.journal;
-      return (j._tag === "checking" || j._tag === "stepping") && j.attempt.seq === m.seq
+      return Journal.isAnyOf(["checking", "stepping"])(j) && j.attempt.seq === m.seq
         ? [{ ...s, journal: Journal.cases.clearing_attempt.make({ attempt: j.attempt }) }, []]
         : unchanged(s);
     },
     attempt_cleared: (s, m) =>
-      s.journal._tag === "clearing_attempt" && s.journal.attempt.seq === m.seq
+      Journal.isAnyOf(["clearing_attempt"])(s.journal) && s.journal.attempt.seq === m.seq
         ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
         : unchanged(s),
     check_threw: (s, m) => {
       const j = s.journal;
 
       if (
-        j._tag !== "checking" ||
+        !Journal.isAnyOf(["checking"])(j) ||
         j.attempt.seq !== m.seq ||
         m.receipt.letter !== j.attempt.letter ||
         m.receipt.input === null
@@ -426,11 +429,11 @@ export const supervisor = Machine.make({
       return failed({ ...s, receipts }, j.attempt, m.error, m.reason, m.from);
     },
     finished: (s, m) =>
-      s.journal._tag === "stepping" && s.journal.attempt.seq === m.seq
+      Journal.isAnyOf(["stepping"])(s.journal) && s.journal.attempt.seq === m.seq
         ? [{ ...s, journal: Journal.cases.idle.make({ process: s.journal.attempt.process }) }, []]
         : unchanged(s),
     threw: (s, m) => {
-      if (s.journal._tag !== "stepping" || s.journal.attempt.seq !== m.seq) {
+      if (!Journal.isAnyOf(["stepping"])(s.journal) || s.journal.attempt.seq !== m.seq) {
         return unchanged(s);
       }
 
@@ -440,9 +443,9 @@ export const supervisor = Machine.make({
       const j = s.journal;
       // The saved attempt's identity wins; an activity marker alone gets the next sequence.
       const attempt =
-        (j._tag === "stepping" || j._tag === "checking") && j.attempt.process === m.process
+        Journal.isAnyOf(["stepping", "checking"])(j) && j.attempt.process === m.process
           ? j.attempt
-          : j._tag === "idle" && j.process === m.process
+          : Journal.isAnyOf(["idle"])(j) && j.process === m.process
             ? { process: m.process, letter: m.letter, build: m.build, seq: s.seq + 1, at: m.at }
             : null;
 
@@ -456,20 +459,20 @@ export const supervisor = Machine.make({
       return [observe(s, failure, seen, exiting(failure, m.reason, m.from)), []];
     },
     dead_written: (s, m) =>
-      s.journal._tag === "writing_dead" && s.journal.failure.seq === m.seq
+      Journal.isAnyOf(["writing_dead"])(s.journal) && s.journal.failure.seq === m.seq
         ? [{ ...s, journal: exiting(s.journal.failure, s.journal.reason, s.journal.from) }, []]
         : unchanged(s),
     exit_written: (s, m) => {
       const j = s.journal;
 
-      if (j._tag !== "writing_exit" || j.process !== m.process) {
+      if (!Journal.isAnyOf(["writing_exit"])(j) || j.process !== m.process) {
         return unchanged(s);
       }
 
       const { origin, from } = j;
 
       // A person's restart starts its successor at once, on the build it asked for.
-      if (origin._tag === "manual") {
+      if (Origin.isAnyOf(["manual"])(origin)) {
         const { id, build } = origin.request;
         const request = again(s, id, m.process, "restart", { program: m.program, hash: build });
         const timing = StartTiming.cases.immediate.make({});
@@ -505,7 +508,7 @@ export const supervisor = Machine.make({
       return [{ ...s, restarts: m.restarts, journal: Journal.cases.writing_down.make({ recovery, origin, from }) }, []];
     },
     down_written: (s, m) =>
-      s.journal._tag === "writing_down" && s.journal.recovery.process === m.process
+      Journal.isAnyOf(["writing_down"])(s.journal) && s.journal.recovery.process === m.process
         ? [
             {
               ...s,
@@ -517,7 +520,7 @@ export const supervisor = Machine.make({
     due: (s, m) => {
       const j = s.journal;
 
-      if (j._tag !== "waiting_recovery" || m.at < j.recovery.until) {
+      if (!Journal.isAnyOf(["waiting_recovery"])(j) || m.at < j.recovery.until) {
         return unchanged(s);
       }
 
@@ -533,9 +536,9 @@ export const supervisor = Machine.make({
       const j = s.journal;
 
       if (
-        j._tag !== "waiting_start" ||
+        !Journal.isAnyOf(["waiting_start"])(j) ||
         j.request.id !== m.id ||
-        (j.timing._tag === "scheduled" && m.at < j.timing.until)
+        (StartTiming.isAnyOf(["scheduled"])(j.timing) && m.at < j.timing.until)
       ) {
         return unchanged(s);
       }
@@ -551,12 +554,12 @@ export const supervisor = Machine.make({
     checkpointed: (s, m) => {
       const j = s.journal;
 
-      if (j._tag !== "checkpointing" || j.after !== m.after || j.process !== m.process) {
+      if (!Journal.isAnyOf(["checkpointing"])(j) || j.after !== m.after || j.process !== m.process) {
         return unchanged(s);
       }
 
       // A person's request is completed with the restart history that records its successor.
-      const manual = j.origin._tag === "manual" ? j.origin.request : null;
+      const manual = Origin.isAnyOf(["manual"])(j.origin) ? j.origin.request : null;
       return [
         {
           ...s,
@@ -581,7 +584,7 @@ export const supervisor = Machine.make({
     },
     restart_requested: (s, m) => {
       const j = s.journal;
-      const settled = j._tag === "idle" || (waitingFor(j) !== null && j._tag !== "writing_down");
+      const settled = Journal.isAnyOf(["idle"])(j) || (waitingFor(j) !== null && !Journal.isAnyOf(["writing_down"])(j));
 
       if (!settled || s.requests.some((r) => r.id === m.id)) {
         return unchanged(s);
@@ -599,7 +602,7 @@ export const supervisor = Machine.make({
       return [{ ...s, journal }, []];
     },
     healthy: (s, m) =>
-      s.journal._tag === "idle" && m.at - s.healthyAt >= s.policy.backoff.resetAfterMs
+      Journal.isAnyOf(["idle"])(s.journal) && m.at - s.healthyAt >= s.policy.backoff.resetAfterMs
         ? [{ ...s, crashes: 0, healthyAt: m.at }, []]
         : unchanged(s),
   },

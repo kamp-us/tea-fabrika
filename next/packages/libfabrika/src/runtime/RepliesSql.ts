@@ -62,11 +62,11 @@ const remember = (
   const [next] = applyCell(machine, model, { type: "remember", reply });
 
   // The machine never forgets: a remember always leaves a remembered Model.
-  if (next._tag !== "remembered") {
+  if (!Model.isAnyOf(["remembered"])(next)) {
     throw new RepliesError({ reason: "storage" });
   }
 
-  if (model._tag === "empty") {
+  if (Model.isAnyOf(["empty"])(model)) {
     const value = encode(next.reply);
 
     if (sql.size() + bytes(reply.name) + bytes(reply.id) + bytes(value) > capacity) {
@@ -106,7 +106,7 @@ export const layer = (
   Layer.succeed(Replies, {
     reply: Effect.fn("replies.reply")(function* (name: string, id: string) {
       const model = yield* stored(() => load(sql, name, id));
-      return model._tag === "remembered" ? model.reply : null;
+      return Model.isAnyOf(["remembered"])(model) ? model.reply : null;
     }),
     rememberReply: Effect.fn("replies.remember")(function* (reply: typeof Reply.Type) {
       return yield* Effect.clockWith((clock) =>

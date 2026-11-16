@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
 import { type Sql } from "../Sql.ts";
 import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
@@ -369,7 +369,7 @@ export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()
 export const recoveryState = (value: unknown): boolean => {
   const decoded = Schema.decodeUnknownOption(JournalState)(value);
 
-  if (decoded._tag === "None") {
+  if (Option.isNone(decoded)) {
     return false;
   }
 

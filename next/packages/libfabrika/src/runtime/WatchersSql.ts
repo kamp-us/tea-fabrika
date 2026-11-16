@@ -77,8 +77,10 @@ export const layer = (
           descriptor.name,
           encode({ v: 1, build: descriptor.build, name: descriptor.name, state: next }),
         );
-        const held = new Set(next._tag === "empty" ? [] : next.clients.map((c) => c.client));
-        return before._tag === "watching" ? before.clients.filter((c) => !held.has(c.client)).map((c) => c.client) : [];
+        const held = new Set(Model.isAnyOf(["empty"])(next) ? [] : next.clients.map((c) => c.client));
+        return Model.isAnyOf(["watching"])(before)
+          ? before.clients.filter((c) => !held.has(c.client)).map((c) => c.client)
+          : [];
       };
       // Read at each call: `build` is the code the process runs now, which a swap or an open moves.
       const attributes = () => ({
@@ -124,7 +126,7 @@ export const layer = (
         }),
         publish: Effect.fn("watchers.publish")(function* (patch: Update) {
           const state = yield* stored(() => sql.transaction(() => load(sql, descriptor.name)));
-          const clients = state._tag === "empty" ? [] : state.clients;
+          const clients = Model.isAnyOf(["empty"])(state) ? [] : state.clients;
           let failures = 0;
           let sent = 0;
           let gone = 0;

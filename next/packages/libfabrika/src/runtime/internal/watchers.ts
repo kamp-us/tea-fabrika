@@ -32,11 +32,11 @@ export const watchers = Machine.make({
   init: (saved) => [saved ?? Model.cases.empty.make({}), []],
   update: {
     open: (model, msg) => {
-      const held = model._tag === "empty" ? [] : model.clients.filter((c) => c.client !== msg.watch.client);
+      const held = Model.isAnyOf(["empty"])(model) ? [] : model.clients.filter((c) => c.client !== msg.watch.client);
       return [Model.cases.watching.make({ clients: Array.append(held.slice(-1023), msg.watch) }), []];
     },
     end: (model, msg) => {
-      if (model._tag === "empty") {
+      if (Model.isAnyOf(["empty"])(model)) {
         return [model, []];
       }
 

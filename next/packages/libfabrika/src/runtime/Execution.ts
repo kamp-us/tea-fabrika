@@ -8,7 +8,7 @@ import { Cause, Effect, Option, Result, Schema } from "effect";
 import * as Redacted from "effect/Redacted";
 import * as Audit from "./Audit.ts";
 import { Deliveries, Policy } from "./internal/recovery.ts";
-import { Admission, type Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
+import { Admission, Input, ProgramDown, stepper, Step, type Prepared, type Stepper } from "./Program.ts";
 import { Saved } from "./State.ts";
 
 const Upgraded = Schema.Struct({ saved: Saved, ran: Schema.Array(Schema.String) });
@@ -190,7 +190,9 @@ const admits = (inputs: Readonly<Record<string, Input>>, m: unknown): boolean =>
   }
 
   const port = inputs[typed.value.type];
-  return port !== undefined && port._tag === "write" && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m));
+  return (
+    port !== undefined && Input.isAnyOf(["write"])(port) && Result.isSuccess(Schema.decodeUnknownResult(port.schema)(m))
+  );
 };
 
 const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Schema.Json => {
@@ -203,7 +205,7 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
 
   const outcome = Schema.decodeUnknownSync(Outcome)(raw);
 
-  if (outcome._tag === "Ok") {
+  if (Outcome.isAnyOf(["Ok"])(outcome)) {
     return Schema.decodeUnknownSync(Schema.Json)({
       type: def.okType,
       cmd,
@@ -348,7 +350,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
           ),
         ),
         Effect.flatMap((answer) =>
-          answer._tag === "ok" ? Effect.succeed(answer.value) : Effect.fail(Audit.restore(answer)),
+          Audit.Answer.isAnyOf(["ok"])(answer) ? Effect.succeed(answer.value) : Effect.fail(Audit.restore(answer)),
         ),
       ),
     ),
@@ -363,7 +365,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
     reply: Effect.fn("execution.reply")((cmd, outcome) =>
       ask(Reply, call("reply", [cmd, outcome], "step"), "step").pipe(
         Effect.flatMap((answer) =>
-          answer._tag === "ok" ? Effect.succeed(answer.value) : Effect.fail(programFailure(answer)),
+          Reply.isAnyOf(["ok"])(answer) ? Effect.succeed(answer.value) : Effect.fail(programFailure(answer)),
         ),
       ),
     ),

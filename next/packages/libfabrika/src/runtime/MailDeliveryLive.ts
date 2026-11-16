@@ -1,8 +1,8 @@
 /**
  * The `MailDelivery` layer over program mail and wakeups.
  */
-import { Effect, Layer } from "effect";
-import { ProgramMail } from "../processes/ProgramMail.ts";
+import { Effect, Layer, Match } from "effect";
+import { MailFailure, ProgramMail } from "../processes/ProgramMail.ts";
 import { MailDelivery, MailDeliveryError, type Mail } from "./MailDelivery.ts";
 import { MailWakeups } from "./MailWakeups.ts";
 import { Queued } from "./Send.ts";
@@ -31,7 +31,11 @@ export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> 
         function* (sent: Mail) {
           const receipt = yield* mail
             .deliver(sent)
-            .pipe(Effect.tapError((error) => (error.reason._tag === "full" ? wakeups.wake(sent.to) : Effect.void)));
+            .pipe(
+              Effect.tapError((error) =>
+                MailFailure.isAnyOf(["full"])(error.reason) ? wakeups.wake(sent.to) : Effect.void,
+              ),
+            );
           yield* Effect.annotateCurrentSpan({ "fab.mail.receipt": receipt.id, "fab.mail.to": receipt.to.name });
           yield* wakeups.wake(receipt.to.name);
           return Queued.make({ id: receipt.id });
@@ -40,7 +44,10 @@ export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> 
           (error) =>
             new MailDeliveryError({
               // A mail failure's reason is its case; a wake's is already a word.
-              reason: error._tag === "ProgramMailError" ? error.reason._tag : error.reason,
+              reason: Match.valueTags(error, {
+                ProgramMailError: (error) => error.reason._tag,
+                MailWakeupsError: (error) => error.reason,
+              }),
               cause: error,
             }),
         ),
