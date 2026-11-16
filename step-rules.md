@@ -131,9 +131,11 @@ reads that as: only when this step is the proof run or the fold. Otherwise it wo
 as it is.
 
 **The sev0 comes first (owner, 2026-11-16).** The sev0 ends when every fix on its list merges.
-Nothing off that list starts. @kalfa/cli, records, ci, vitest and oxlint move to right after the
-sev0; @kalfa/config slice 1 stays and finishes. A session already on one of the five parks at a
-clean point: its branch pushed, a field row saying where it stands. A free seat goes, in this
+Nothing off that list starts. Building @kalfa/cli, records, ci, vitest and oxlint as new published
+packages (the list's item 15) moves to right after the sev0; @kalfa/config slice 1 stays and
+finishes. A sev0 fix that only lives in one of those packages stays on the list: 0580's law options
+on @kalfa/vitest (item 8) keeps going. A session already building one of the five new packages
+parks at a clean point: its branch pushed, a field row saying where it stands. A free seat goes, in this
 order, to: (1) a fold, or a fix round of a finished slice; (2) the slice that unblocks a fold, the
 last one missing from a sweep; (3) a new slice.
 
