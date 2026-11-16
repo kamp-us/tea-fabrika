@@ -814,6 +814,10 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
       inConfigCopy(({ printed, lint }) => {
         const globs = viGlobs(printed);
         // Coverage: libfabrika's top files, both extensions, and the ban blocks in every folder it names.
+        expect(globs.map(({ glob }) => glob)).toEqual(
+          expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
+        );
+        // Coverage: the gateway and telemetry slice's two folders.
         expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(VI_FOLDERS));
         expect(globs.every(({ level }) => level === "deny")).toBe(true);
 
@@ -841,7 +845,11 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
   it("scenario: VI_PROPERTIES' lines are refused exactly, and block, in every folder of every vi ban block", () => {
     inConfigCopy(({ printed, lint }) => {
       const globs = viGlobs(printed);
-      // Coverage: libfabrika's top files, both extensions, and the gateway and telemetry folders.
+      // Coverage: libfabrika's top files, both extensions.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
+      );
+      // Coverage: the gateway and telemetry slice's two folders.
       expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(VI_FOLDERS));
 
       const { text, want } = textOf(VI_PROPERTIES);
