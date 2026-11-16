@@ -5,7 +5,7 @@
 // typecheck.integration.test.ts and caps.test.ts.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ConfigProvider, Effect, Fiber, Layer, PlatformError, Sink, Stream } from "effect";
+import { ConfigProvider, Effect, Fiber, Layer, PlatformError, Schema, Sink, Stream } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { TestClock, TestConsole } from "effect/testing";
 import fc from "fast-check";
@@ -218,6 +218,9 @@ const actual = (r: Run) => {
   }).pipe(Effect.provide(layer));
 };
 
+/** fast-check's report, with its counterexample, as the law's typed failure. */
+class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Defect() }) {}
+
 describe("T766 the typecheck's program on its test layers, today's tooling", () => {
   // N1. Plants (each run once, recorded in the tests run row): release the lock before the last
   // command; print the wait for an `--lsp` process; read `refused` as none in silence; patch
@@ -245,7 +248,7 @@ describe("T766 the typecheck's program on its test layers, today's tooling", () 
                 fc.asyncProperty(run, (r) => Effect.runPromise(law(r))),
                 { seed: 119120, numRuns: runsFor({ fast: 100, full: 300 }), endOnFailure: true },
               ),
-            catch: (cause) => cause,
+            catch: (cause) => new PropertyFailed({ cause }),
           }),
         );
         // Coverage: every shape, each way a run ends, and runs with and without a line.

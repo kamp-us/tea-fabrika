@@ -5,7 +5,20 @@
 // is the table saying a pid is gone while that holder's scope is never closed, as SIGKILL runs no
 // finalizer (0061).
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Path, PlatformError, Scope } from "effect";
+import {
+  ByteSize,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  PlatformError,
+  Schema,
+  Scope,
+} from "effect";
 import { TestClock, TestConsole } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -516,6 +529,9 @@ const walk = (cmds: Iterable<Move>) => {
   }).pipe(Effect.provide(Layer.mergeAll(TestClock.layer(), TestConsole.layer)));
 };
 
+/** fast-check's report, with its counterexample, as the law's typed failure. */
+class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Defect() }) {}
+
 describe("T766 LocksFile keeps one holder through takes, releases, kills and reused pids, today's tooling", () => {
   // N3. Plants (each run once, recorded in the tests run row): release a label that names another
   // pid; break a stale lock without looking again under `.break`; wait inside an uninterruptible
@@ -543,7 +559,7 @@ describe("T766 LocksFile keeps one holder through takes, releases, kills and reu
                 fc.asyncProperty(moves, (cmds) => Effect.runPromise(law(cmds))),
                 { seed: 119120, numRuns: runsFor({ fast: 100, full: 300 }), endOnFailure: true },
               ),
-            catch: (cause) => cause,
+            catch: (cause) => new PropertyFailed({ cause }),
           }),
         );
         // Coverage: every kind of move ran in some walk.
