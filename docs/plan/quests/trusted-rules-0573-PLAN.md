@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0573, 0575, 0524, 0168; body 7a6d649b42b4
+Approved by the lead agent, builds 0573, 0575, 0524, 0168; body b8d3c1248c16
 Plancheck-Version: 3
 
 # Plan: our lint rules give way to trusted ones (0573), in next/ and our tooling
