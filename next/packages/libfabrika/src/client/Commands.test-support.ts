@@ -10,6 +10,7 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import { Command, Result } from "../tasks/Task.ts";
 import { Commands } from "./Commands.ts";
 import { fakeResult } from "./HandsDoor.test-support.ts";
@@ -109,7 +110,7 @@ export const fakeCommands = (s: Seen) =>
           yield* hold(s, "execute", before === "fail" ? "stop" : before);
         }
 
-        const result = fakeResult(s.events.filter((e) => e._tag === "ran").length + 1);
+        const result = fakeResult(Arr.filter(s.events, (e) => e._tag === "ran").length + 1);
         s.events.push(Event.cases.ran.make({ command, result }));
         const after = take(s, "execute", "after");
 

@@ -37,7 +37,9 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { FileSystem, Path } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { Array as Arr } from "effect";
 import type { Redacted } from "effect";
 import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
@@ -259,7 +261,7 @@ const start = Effect.fnUntraced(function* (store: Store, token?: Redacted.Redact
   });
 
   const fire = Effect.gen(function* () {
-    const alarm = (yield* store.alarms.saved).find((a) => a.name === NAME);
+    const alarm = Option.getOrUndefined(Arr.findFirst(yield* store.alarms.saved, (a) => a.name === NAME));
     expect(alarm, "a working merger has a saved alarm").toBeDefined();
 
     if (alarm !== undefined) {
@@ -382,9 +384,10 @@ const open = Effect.gen(function* () {
           }
         }),
       saved: Effect.sync(() =>
-        table()
-          .exec("SELECT name, at FROM alarms ORDER BY at, name")
-          .map((row) => ({ name: String(row.name), at: Number(row.at) })),
+        Arr.map(table().exec("SELECT name, at FROM alarms ORDER BY at, name"), (row) => ({
+          name: String(row.name),
+          at: Number(row.at),
+        })),
       ),
       take: (alarm) =>
         Effect.sync(() => {

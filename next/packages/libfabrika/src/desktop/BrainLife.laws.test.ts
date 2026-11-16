@@ -4,6 +4,8 @@ import { arbGuidedSequence, propertyInvariant, propertyTrace, stubCtxThrowingPro
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { syncTest } from "../Testing.ts";
@@ -71,7 +73,8 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
 
     for (const msg of msgs) {
       const id = "pending" in state ? state.pending?.id : undefined;
-      const stale = id === undefined ? undefined : history.findLast((old) => old.cmd.id !== id);
+      const stale =
+        id === undefined ? undefined : Option.getOrUndefined(Arr.findLast(history, (old) => old.cmd.id !== id));
 
       if (stale !== undefined) {
         walk.push(stale);
@@ -105,7 +108,7 @@ describe("P19 lifecycle", () => {
           }
 
           syncTest(machine, ctx, {
-            msgs: steps.map((step) => step.msg),
+            msgs: Arr.map(steps, (step) => step.msg),
             encode: Schema.encodeSync(BrainLife.Model),
             decode: Schema.decodeUnknownSync(BrainLife.Model),
             equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
@@ -147,7 +150,7 @@ describe("P19 lifecycle", () => {
 
           for (const { prev, msg } of steps) {
             const id = "pending" in prev ? prev.pending?.id : undefined;
-            const stale = id === undefined ? [] : earlier.filter((old) => old.cmd.id !== id);
+            const stale = id === undefined ? [] : Arr.filter(earlier, (old) => old.cmd.id !== id);
 
             if (id !== undefined && "cmd" in msg) {
               stale.push({ ...msg, cmd: { ...msg.cmd, id: oldId } } as (typeof stale)[number]);
@@ -262,8 +265,8 @@ describe("P19 lifecycle", () => {
         ctx,
         walks(machine),
         ({ prev, next, msg, cmds }) => {
-          const removes = cmds.some((cmd) => cmd.type === "remove");
-          const checksChildren = cmds.some((cmd) => cmd.type === "cleanup");
+          const removes = Arr.some(cmds, (cmd) => cmd.type === "remove");
+          const checksChildren = Arr.some(cmds, (cmd) => cmd.type === "cleanup");
           removals += Number(removes);
           expect(
             !removes || (prev._tag === "checking_children" && msg.type === "cleanup_ok" && msg.value._tag === "gone"),
@@ -307,9 +310,8 @@ it.effect.prop(
           const poisoned = { ...msg, cause: secret, stderr: secret, url: `${Outside.spec.url}?secret=${encoded}` };
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
-
-          return outputs.every((output) =>
-            [secret, encoded, JSON.stringify(secret).slice(1, -1)].every((form) => !output.includes(form)),
+          return Arr.every(outputs, (output) =>
+            Arr.every([secret, encoded, JSON.stringify(secret).slice(1, -1)], (form) => !output.includes(form)),
           );
         },
         { seed, numRuns: 1 },

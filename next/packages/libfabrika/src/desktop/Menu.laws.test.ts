@@ -5,6 +5,8 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Test from "./Menu.test-support.ts";
@@ -15,13 +17,14 @@ import * as PersonCheckTest from "./PersonCheckTest.ts";
 const options = (numRuns: number) => ({ seed: Test.seed, numRuns });
 
 const signed = (cmds: ReadonlyArray<Test.Command>) =>
-  cmds.filter(
+  Arr.filter(
+    cmds,
     (c): c is Extract<Test.Command, { type: "sign_grant" | "sign_revoke" }> =>
       c.type === "sign_grant" || c.type === "sign_revoke",
   );
 
 const waiting = (s: Test.Model) =>
-  Menu.view(s).filter((i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
+  Arr.filter(Menu.view(s), (i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
 
 const safe = (s: string) => s.replace(/[\p{Cc}\p{Cf}]/gu, "");
 
@@ -59,7 +62,7 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         return "init signed without a checked person";
       }
 
-      const pending = new Set(initCmds.flatMap((c) => (c.type === "check" ? [c.cmd] : [])));
+      const pending = new Set(Arr.flatMap(initCmds, (c) => (c.type === "check" ? [c.cmd] : [])));
 
       for (const { prev, msg, next, cmds } of steps) {
         if (msg.type === "enter" && (!Test.same(prev, next) || cmds.length > 0)) {
@@ -83,7 +86,7 @@ it("L1: signatures follow the matching check; no check failure or Enter writes",
         }
 
         // Live-pass grants are checked separately by L6. A rows message can never revoke.
-        const writes = signed(cmds).filter((c) => msg.type !== "rows" || c.type === "sign_revoke");
+        const writes = Arr.filter(signed(cmds), (c) => msg.type !== "rows" || c.type === "sign_revoke");
 
         if (
           writes.length > 0 &&
@@ -126,9 +129,8 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
       if (prev._tag === "idle" && (msg.type === "approve" || msg.type === "remove")) {
         const shown =
           msg.type === "approve"
-            ? prev.rows.find((r) => r.key === msg.key)
-            : prev.clients.find((c) => c.key === msg.key && !c.own);
-
+            ? Option.getOrUndefined(Arr.findFirst(prev.rows, (r) => r.key === msg.key))
+            : Option.getOrUndefined(Arr.findFirst(prev.clients, (c) => c.key === msg.key && !c.own));
         return (
           shown === undefined ||
           (next._tag === "checking" &&
@@ -203,8 +205,8 @@ it("L3: Deny writes once without a finger in both states, and tabs share one wai
       const items = waiting(next);
 
       if (
-        new Set(items.map((i) => i.key)).size !== items.length ||
-        next.rows.some((r) => items.filter((i) => i.key === r.key).length !== 1)
+        new Set(Arr.map(items, (i) => i.key)).size !== items.length ||
+        Arr.some(next.rows, (r) => Arr.filter(items, (i) => i.key === r.key).length !== 1)
       ) {
         return "tabs split a waiting key into multiple items";
       }
@@ -213,7 +215,7 @@ it("L3: Deny writes once without a finger in both states, and tabs share one wai
         return true;
       }
 
-      const row = prev.rows.find((r) => r.key === msg.key);
+      const row = Option.getOrUndefined(Arr.findFirst(prev.rows, (r) => r.key === msg.key));
 
       if (row === undefined) {
         return cmds.length === 0 || "an unknown row was denied";
@@ -248,8 +250,10 @@ it("L4: the app's own client stays visible and cannot be removed", () => {
     Test.ctx,
     Test.walks,
     ({ prev, msg, next, cmds }) => {
-      for (const own of next.clients.filter((c) => c.own)) {
-        const item = Menu.view(next).find((i) => i._tag === "client" && i.key === own.key);
+      for (const own of Arr.filter(next.clients, (c) => c.own)) {
+        const item = Option.getOrUndefined(
+          Arr.findFirst(Menu.view(next), (i) => i._tag === "client" && i.key === own.key),
+        );
 
         if (item?._tag !== "client" || item.removable) {
           return "the own client is missing or removable";
@@ -258,7 +262,7 @@ it("L4: the app's own client stays visible and cannot be removed", () => {
 
       return (
         msg.type !== "remove" ||
-        !prev.clients.some((c) => c.own && c.key === msg.key) ||
+        !Arr.some(prev.clients, (c) => c.own && c.key === msg.key) ||
         (cmds.length === 0 && Test.same(prev, next)) ||
         "Remove acted on the own client"
       );
@@ -280,7 +284,8 @@ it("L5: one pending check blocks a second click and marks other rows busy in wor
 
       if (next._tag === "checking") {
         return (
-          Menu.view(next).every(
+          Arr.every(
+            Menu.view(next),
             (i) =>
               (i._tag !== "waiting" && i._tag !== "client") ||
               i.key === next.act.key ||
@@ -337,14 +342,16 @@ it("L6: only a matching opened reply creates a pass, live passes sign once, expi
             }
           }
 
-          const actual = cmds.flatMap((c) => (c.type === "sign_grant" ? [{ key: c.key, as: c.as, saw: c.saw }] : []));
+          const actual = Arr.flatMap(cmds, (c) =>
+            c.type === "sign_grant" ? [{ key: c.key, as: c.as, saw: c.saw }] : [],
+          );
 
-          if (!Test.same(actual, expected) || cmds.some((c) => c.type === "check")) {
+          if (!Test.same(actual, expected) || Arr.some(cmds, (c) => c.type === "check")) {
             return "a missing, spent or expired pass signed, or a live pass asked for a finger";
           }
 
-          for (const row of msg.rows.filter((r) => !expected.some((e) => e.key === r.key))) {
-            if (!waiting(next).some((i) => i.key === row.key)) {
+          for (const row of Arr.filter(msg.rows, (r) => !Arr.some(expected, (e) => e.key === r.key))) {
+            if (!Arr.some(waiting(next), (i) => i.key === row.key)) {
               return "a normal row disappeared after a spent, expired or unknown digest";
             }
           }
@@ -356,7 +363,7 @@ it("L6: only a matching opened reply creates a pass, live passes sign once, expi
           }
         }
 
-        if (!Test.same([...next.passes].map((p) => [p.digest, p.until]).sort(), [...passes].sort())) {
+        if (!Test.same(Arr.map([...next.passes], (p) => [p.digest, p.until]).sort(), [...passes].sort())) {
           return "the model holds a pass without a matching pending open";
         }
       }
@@ -380,17 +387,20 @@ it.effect.prop(
   },
   ({ text, bytes, draw }) =>
     Effect.gen(function* () {
-      const secret = `made-up-link-secret:${text}:${bytes.map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+      const secret = `made-up-link-secret:${text}:${Arr.join(
+        Arr.map(bytes, (b) => b.toString(16).padStart(2, "0")),
+        "",
+      )}`;
       const raw = new TextEncoder().encode(secret);
       const digest = yield* Digest.Digest;
       const hash = yield* digest.digestHex(Digest.sha256, raw);
 
       const flows = Test.walks.map((messages) =>
-        messages.map((msg) =>
+        Arr.map(messages, (msg) =>
           msg.type === "opened"
             ? { ...msg, digest: hash, secret, bytes: Array.from(raw) }
             : msg.type === "rows"
-              ? { ...msg, rows: msg.rows.map((r) => ({ ...r, pass: r.pass === null ? null : hash })) }
+              ? { ...msg, rows: Arr.map(msg.rows, (r) => ({ ...r, pass: r.pass === null ? null : hash })) }
               : msg,
         ),
       );
@@ -403,7 +413,7 @@ it.effect.prop(
           const outputs = [
             Test.encoded(final),
             JSON.stringify(initCmds),
-            ...steps.flatMap(({ next, cmds }) => [
+            ...Arr.flatMap(steps, ({ next, cmds }) => [
               Test.encoded(next),
               JSON.stringify(Menu.view(next)),
               JSON.stringify(cmds),
@@ -418,7 +428,7 @@ it.effect.prop(
           ];
 
           return (
-            outputs.every((output) => forms.every((form) => !output.includes(form))) ||
+            Arr.every(outputs, (output) => Arr.every(forms, (form) => !output.includes(form))) ||
             "a link secret escaped its driver"
           );
         },
@@ -435,7 +445,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
     Test.ctx,
     Test.walks,
     (steps, final) => {
-      for (const state of [Test.machine.init(null, Test.ctx)[0], ...steps.map((s) => s.next), final]) {
+      for (const state of [Test.machine.init(null, Test.ctx)[0], ...Arr.map(steps, (s) => s.next), final]) {
         const items = Menu.view(state);
         const clone = Schema.decodeSync(Test.modelJson)(Test.encoded(state));
 
@@ -444,31 +454,29 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         }
 
         const rank = { status: 0, empty: 1, waiting: 1, client: 2, action: 3 };
-
-        const keys = items.map((i) =>
+        const keys = Arr.map(items, (i) =>
           i._tag === "action" ? `action:${i.id}` : i._tag === "waiting" || i._tag === "client" ? i.key : i._tag,
         );
 
         if (
           new Set(keys).size !== keys.length ||
-          items.some((i, n) => n > 0 && rank[i._tag] < rank[items[n - 1]!._tag])
+          Arr.some(items, (i, n) => n > 0 && rank[i._tag] < rank[items[n - 1]!._tag])
         ) {
           return "items are duplicated or out of their fixed category order";
         }
 
         if (
-          items.filter((i) => i._tag === "empty").length !==
+          Arr.filter(items, (i) => i._tag === "empty").length !==
           (state.rows.length === 0 && state.clients.length === 0 ? 1 : 0)
         ) {
           return "empty was not explicit";
         }
 
-        if (items.some((i) => i.words.trim().length === 0)) {
+        if (Arr.some(items, (i) => i.words.trim().length === 0)) {
           return "an item has no words";
         }
 
-        const status = items.find((i) => i._tag === "status");
-
+        const status = Option.getOrUndefined(Arr.findFirst(items, (i) => i._tag === "status"));
         const statusWords = {
           connecting: /connect|starting/i,
           online: /running|online|connected/i,
@@ -488,7 +496,10 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
             return "admission is color only";
           }
 
-          const client = item._tag === "client" ? state.clients.find((c) => c.key === item.key) : undefined;
+          const client =
+            item._tag === "client"
+              ? Option.getOrUndefined(Arr.findFirst(state.clients, (c) => c.key === item.key))
+              : undefined;
 
           if (client?.tabs._tag === "unknown" && !/unknown/i.test(item.words)) {
             return "unknown tabs were shown as a count";
@@ -519,11 +530,11 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
 
   const flows = hostile.chain(({ label }) =>
     Test.walks.map((messages) =>
-      messages.map((msg) =>
+      Arr.map(messages, (msg) =>
         msg.type === "rows"
-          ? { ...msg, rows: msg.rows.map((r) => ({ ...r, label })) }
+          ? { ...msg, rows: Arr.map(msg.rows, (r) => ({ ...r, label })) }
           : msg.type === "clients"
-            ? { ...msg, clients: msg.clients.map((c) => ({ ...c, label })) }
+            ? { ...msg, clients: Arr.map(msg.clients, (c) => ({ ...c, label })) }
             : msg,
       ),
     ),
@@ -541,9 +552,9 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
 
         const shown =
           item._tag === "waiting"
-            ? next.rows.find((r) => r.key === item.key)
+            ? Option.getOrUndefined(Arr.findFirst(next.rows, (r) => r.key === item.key))
             : item._tag === "client"
-              ? next.clients.find((c) => c.key === item.key)
+              ? Option.getOrUndefined(Arr.findFirst(next.clients, (c) => c.key === item.key))
               : undefined;
 
         if (shown !== undefined && !hasLabel(item.words, shown.label)) {
@@ -551,7 +562,7 @@ it("L9: prompts and items keep the code and the safe label within the pinned 256
         }
 
         if (item._tag === "waiting") {
-          const row = next.rows.find((r) => r.key === item.key);
+          const row = Option.getOrUndefined(Arr.findFirst(next.rows, (r) => r.key === item.key));
 
           if (row === undefined || item.code !== row.code || !hasCode(item.words, row.code)) {
             return "a waiting code was lost or replaced";
@@ -620,10 +631,15 @@ describe("browser link start switch", () => {
     ({ enabled }) => {
       const machine = Menu.machine({ linkTtl: Test.ttl, browserLink: enabled });
       const initial = machine.init(null, Test.ctx)[0];
-      expect(Menu.view(initial).some((i) => i._tag === "action" && i.id === "open_browser")).toBe(enabled);
+      expect(Arr.some(Menu.view(initial), (i) => i._tag === "action" && i.id === "open_browser")).toBe(enabled);
       const msgs: ReadonlyArray<Test.Msg> = [{ type: "open_browser", cmd: Test.cmdId(3) }];
       const trace = foldEvents(machine, Test.ctx, null, msgs);
-      expect(trace.steps.flatMap((s) => s.cmds).filter((c) => c.type === "open")).toHaveLength(enabled ? 1 : 0);
+      expect(
+        Arr.filter(
+          Arr.flatMap(trace.steps, (s) => s.cmds),
+          (c) => c.type === "open",
+        ),
+      ).toHaveLength(enabled ? 1 : 0);
     },
     { arbitrary: { seed: Test.seed, runs: 200 } },
   );
@@ -676,7 +692,7 @@ it.effect.prop(
             if (msg.type === "opened") {
               live = true;
 
-              if (!next.passes.some((p) => p.digest === "loaded-digest" && p.until === lifetime)) {
+              if (!Arr.some(next.passes, (p) => p.digest === "loaded-digest" && p.until === lifetime)) {
                 return "the machine replaced the loaded lifetime";
               }
             }
@@ -684,7 +700,7 @@ it.effect.prop(
             if (msg.type === "rows") {
               const count: number = live && msg.at < lifetime && msg.rows.length > 0 ? 1 : 0;
 
-              if (cmds.filter((c) => c.type === "sign_grant").length !== count) {
+              if (Arr.filter(cmds, (c) => c.type === "sign_grant").length !== count) {
                 return "the loaded lifetime did not decide whether a pass signs";
               }
 

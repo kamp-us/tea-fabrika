@@ -50,6 +50,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -69,8 +70,7 @@ const SEED = 119120;
 const opts = { seed: SEED, numRuns: 300 };
 
 const NAMES = ["checklist:1", "tally:1", "plain:1"] as const;
-
-const TILES = NAMES.map((name, i) => ({ id: `tile_${i + 1}`, name }));
+const TILES = Arr.map(NAMES, (name, i) => ({ id: `tile_${i + 1}`, name }));
 
 /** A list view, the checklist's own shape cut to what a parent law reads. */
 const ListView = Schema.Struct({
@@ -172,10 +172,9 @@ const listEdit = (v: ListView, aux: number, word: string): ListView => {
     v.items.length === 0 || aux % 3 === 0
       ? [...v.items, { name: word, state: "open" as const }]
       : aux % 3 === 1
-        ? v.items.filter((_, j) => j !== i)
-        : v.items.map((it, j) => (j === i ? { ...it, state: "checked" as const } : it));
-
-  return { items, left: items.filter((it) => it.state === "open").length };
+        ? Arr.filter(v.items, (_, j) => j !== i)
+        : Arr.map(v.items, (it, j) => (j === i ? { ...it, state: "checked" as const } : it));
+  return { items, left: Arr.filter(items, (it) => it.state === "open").length };
 };
 
 const choice = fc.record({
@@ -285,14 +284,14 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     tile: tile.id,
     m: { type: ["check", "uncheck", "remove"][c.aux % 3]!, name: POOL[c.ms % POOL.length]! },
   }));
-  const openedTiles = s.tiles.filter((t) => t.reach._tag === "open");
+  const openedTiles = Arr.filter(s.tiles, (t) => t.reach._tag === "open");
 
   if (openedTiles.length > 0) {
     const opened = openedTiles[c.pick % openedTiles.length]!;
     out.push(() => ({ type: "press", tile: opened.id, m: { type: "add", name: c.word } }));
   }
 
-  const refusedTiles = openedTiles.filter((t) => t.refusal !== null);
+  const refusedTiles = Arr.filter(openedTiles, (t) => t.refusal !== null);
 
   if (refusedTiles.length > 0) {
     const refused = refusedTiles[c.pick % refusedTiles.length]!;
@@ -300,7 +299,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
   }
 
   // A tile's own Msg, legal for its machine's Model now.
-  const own = s.tiles.filter((t) => tileFor(t.name) !== undefined);
+  const own = Arr.filter(s.tiles, (t) => tileFor(t.name) !== undefined);
 
   if (own.length > 0) {
     const t = own[c.aux % own.length]!;
@@ -330,7 +329,9 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
   }
 
   // A view notice for an open tile's pid: its program steps (a patch) or is shown whole; or an old one.
-  const open = s.tiles.flatMap((t) => (t.reach._tag === "open" || t.reach._tag === "opening" ? [t.reach.pid] : []));
+  const open = Arr.flatMap(s.tiles, (t) =>
+    t.reach._tag === "open" || t.reach._tag === "opening" ? [t.reach.pid] : [],
+  );
 
   if (open.length > 0) {
     const pid = open[c.pick % open.length]!;
@@ -353,8 +354,10 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
 
   // Answers to the writes the brain has, on their own id and dial.
   if (w.flights.length > 0) {
-    const unsettled = w.flights.filter((f) => s.flight.some((live) => live.id === f.id && live.dial === f.dial));
-    const letters = unsettled.filter((f) => f.call._tag === "send");
+    const unsettled = Arr.filter(w.flights, (f) =>
+      Arr.some(s.flight, (live) => live.id === f.id && live.dial === f.dial),
+    );
+    const letters = Arr.filter(unsettled, (f) => f.call._tag === "send");
     const available = c.aux % 4 !== 0 && letters.length > 0 ? letters : w.flights;
     const f = available[c.pick % available.length]!;
     const on = { id: f.id, dial: f.dial };
@@ -427,7 +430,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
               : { type: "read_ok", ...on, value: [], ms: c.ms },
     );
     const current = w.flights[c.aux % Math.max(1, w.flights.length)];
-    const oldDial = w.old.find((old) => old.dial !== current?.dial)?.dial;
+    const oldDial = Option.getOrUndefined(Arr.findFirst(w.old, (old) => old.dial !== current?.dial))?.dial;
 
     if (current !== undefined && oldDial !== undefined) {
       // A current id on an ended dial must not match. Ids alone are insufficient.
@@ -443,7 +446,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
 
   // tea's answers to the Cmds handed out and not answered yet.
   if (w.waiting.length > 0) {
-    const due = w.waiting.filter((cmd) => ["key", "now", "persist"].includes(cmd.type));
+    const due = Arr.filter(w.waiting, (cmd) => ["key", "now", "persist"].includes(cmd.type));
     const available = c.aux % 4 !== 0 && due.length > 0 ? due : w.waiting;
     const cmd = available[c.pick % available.length]!;
     const ok = c.aux % 5 !== 0;
@@ -553,34 +556,36 @@ const walk = <W extends World, C extends Choice>(
     const [stepped, cmds] = step(prev, m);
     const next = walker.after?.({ prev, next: stepped, c }) ?? stepped;
     // The world after the step: an answered Cmd waits no more; a socket answer ends its flight.
-    w.waiting = w.waiting.filter((cmd) => !("cmd" in m) || m.cmd !== cmd);
+    w.waiting = Arr.filter(w.waiting, (cmd) => !("cmd" in m) || m.cmd !== cmd);
 
     if (m.type === "write_err") {
       // A frame that could not be handed over never reached the brain.
-      const lost = w.flights.find((f) => f.id === m.cmd.id && f.dial === m.cmd.dial);
-      w.flights = w.flights.filter((f) => f !== lost);
+      const lost = Option.getOrUndefined(Arr.findFirst(w.flights, (f) => f.id === m.cmd.id && f.dial === m.cmd.dial));
+      w.flights = Arr.filter(w.flights, (f) => f !== lost);
       w.old.push(...(lost === undefined ? [] : [lost]));
     }
 
     if ("id" in m && typeof m.id === "number" && "dial" in m) {
       const answer = m;
-      const answered = w.flights.find((f) => f.id === answer.id && f.dial === answer.dial);
+      const answered = Option.getOrUndefined(
+        Arr.findFirst(w.flights, (f) => f.id === answer.id && f.dial === answer.dial),
+      );
 
       if (answered !== undefined) {
-        w.flights = w.flights.filter((f) => f !== answered);
+        w.flights = Arr.filter(w.flights, (f) => f !== answered);
         w.old.push(answered);
       }
     }
 
     // A dial whose socket ended takes its flights with it: their answers can only be stale now.
     const open = socketDial(next);
-    w.old.push(...w.flights.filter((f) => f.dial !== open));
-    w.flights = w.flights.filter((f) => f.dial === open);
+    w.old.push(...Arr.filter(w.flights, (f) => f.dial !== open));
+    w.flights = Arr.filter(w.flights, (f) => f.dial === open);
     handOut(cmds);
     w.dials = Math.max(w.dials, linkDial(next) ?? 0, next.dials);
 
     // A new letter is from the tile that pressed it, by a button or through its own machine's press.
-    for (const p of next.client.pending.filter((p) => p.n >= prev.client.written)) {
+    for (const p of Arr.filter(next.client.pending, (p) => p.n >= prev.client.written)) {
       w.from.set(p.n, m.type === "press" ? m.tile : m.type === "tile" ? m.id : "?");
 
       if (m.type === "tile") {
@@ -596,7 +601,8 @@ const walk = <W extends World, C extends Choice>(
   return w;
 };
 
-const writes = (cmds: ReadonlyArray<Cmd>, tag: string) => cmds.filter(isWrite).filter((c) => c.call._tag === tag);
+const writes = (cmds: ReadonlyArray<Cmd>, tag: string) =>
+  Arr.filter(Arr.filter(cmds, isWrite), (c) => c.call._tag === tag);
 
 describe("L8: the window parent's connection", () => {
   // P18 slice 2 amended this law's one clause (the plan's mapping row): after a DOWN a tile must read
@@ -618,12 +624,10 @@ describe("L8: the window parent's connection", () => {
         if (prev.link._tag !== "online" && next.link._tag === "online") {
           seen.online++;
           const d = next.link.dial;
-          expect(
-            writes(cmds, "read")
-              .map((c) => [c.dial, c.call["stream"]])
-              .sort(),
-          ).toEqual(NAMES.map((n) => [d, `processes/${n}`]).sort());
-          expect(next.tiles.every((t) => t.reach._tag === "resolving")).toBe(true);
+          expect(Arr.map(writes(cmds, "read"), (c) => [c.dial, c.call["stream"]]).sort()).toEqual(
+            Arr.map(NAMES, (n) => [d, `processes/${n}`]).sort(),
+          );
+          expect(Arr.every(next.tiles, (t) => t.reach._tag === "resolving")).toBe(true);
         }
 
         const answer = msgKey(m);
@@ -632,7 +636,7 @@ describe("L8: the window parent's connection", () => {
 
         for (const t of next.tiles) {
           const stream = `processes/${t.name}`;
-          const mine = writes(cmds, "read").filter((c) => c.call["stream"] === stream);
+          const mine = Arr.filter(writes(cmds, "read"), (c) => c.call["stream"] === stream);
           expect(mine.length, `${stream} read twice in one step`).toBeLessThanOrEqual(1);
 
           for (const c of mine) {
@@ -660,7 +664,7 @@ describe("L8: the window parent's connection", () => {
           }
         }
 
-        for (const r of cmds.map(recordIn)) {
+        for (const r of Arr.map(cmds, recordIn)) {
           if (r?._tag === "view" && r["result"] === "asked") {
             const key = `${linkDial(next)} ${String(r["pid"])}`;
             asks.set(key, (asks.get(key) ?? 0) + 1);
@@ -675,12 +679,17 @@ describe("L8: the window parent's connection", () => {
           expect(c.dial).toBe(socketDial(next));
         }
 
-        if (m.type === "read_ok" && Array.isArray(m.value) && m.value.length === 0) {
-          const tile = prev.tiles.find((t) => t.reach._tag === "resolving" && t.reach.id === m.id);
+        if (m.type === "read_ok" && Arr.isArray(m.value) && m.value.length === 0) {
+          const tile = Option.getOrUndefined(
+            Arr.findFirst(prev.tiles, (t) => t.reach._tag === "resolving" && t.reach.id === m.id),
+          );
 
           if (tile !== undefined && prev.link._tag === "online" && prev.link.dial === m.dial) {
             seen.missing++;
-            expect(next.tiles.find((t) => t.id === tile.id)?.reach._tag, "no live pid is missing").toBe("missing");
+            expect(
+              Option.getOrUndefined(Arr.findFirst(next.tiles, (t) => t.id === tile.id))?.reach._tag,
+              "no live pid is missing",
+            ).toBe("missing");
           }
         }
       };
@@ -702,7 +711,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.opened).toBeGreaterThan(0);
     expect(seen.missing).toBeGreaterThan(0);
     expect(
-      Object.values(again).every((n) => n > 0),
+      Arr.every(Object.values(again), (n) => n > 0),
       `tiles read their name again for each of its three reasons: ${JSON.stringify(again)}`,
     ).toBe(true);
   });
@@ -714,7 +723,7 @@ describe("L8: the window parent's connection", () => {
         fold(list, ({ prev, next }) => {
           const open = socketDial(next);
           expect(
-            next.flight.every((f) => f.dial === open),
+            Arr.every(next.flight, (f) => f.dial === open),
             "a flight outlived its dial",
           ).toBe(true);
 
@@ -722,7 +731,7 @@ describe("L8: the window parent's connection", () => {
             left++;
             expect(next.flight).toEqual([]);
             expect(next.sent).toEqual([]);
-            expect(next.tiles.every((t) => t.reach._tag === "unresolved")).toBe(true);
+            expect(Arr.every(next.tiles, (t) => t.reach._tag === "unresolved")).toBe(true);
             expect(next.client.pending, "a dial's end dropped a letter").toEqual(prev.client.pending);
           }
         });
@@ -743,7 +752,7 @@ describe("L8: the window parent's connection", () => {
           expect(
             asking === null
               ? null
-              : [next.link._tag, (linkDial(next) ?? 0) > highest, cmds.filter((c) => c.type === "key")],
+              : [next.link._tag, (linkDial(next) ?? 0) > highest, Arr.filter(cmds, (c) => c.type === "key")],
           ).toEqual(asking === null ? null : ["dialing", true, [{ type: "key", rejected: asking.fingerprint }]]);
 
           highest = Math.max(highest, linkDial(next) ?? 0);
@@ -760,7 +769,7 @@ describe("L8: the window parent's connection", () => {
       fc.property(walks, (list) => {
         let due = false;
         fold(list, ({ prev, m, next, cmds }) => {
-          const persists = cmds.filter((c) => c.type === "persist").length;
+          const persists = Arr.filter(cmds, (c) => c.type === "persist").length;
 
           const granted = m.type === "granted" && prev.link._tag === "waiting_grant" && prev.link.dial === m.dial;
           grants += granted ? 1 : 0;
@@ -787,7 +796,7 @@ describe("L8: the window parent's connection", () => {
             m.type === "write_ok" ? prev : null,
           );
           const lost = m.type === "write_err" ? m.cmd : null;
-          expect(lost !== null && next.flight.some((f) => f.id === lost.id && f.dial === lost.dial)).toBe(false);
+          expect(lost !== null && Arr.some(next.flight, (f) => f.id === lost.id && f.dial === lost.dial)).toBe(false);
         });
       }),
       opts,
@@ -807,7 +816,7 @@ describe("L8: the window parent's connection", () => {
 
           const on = m as { readonly id: number; readonly dial: number };
 
-          if (prev.flight.some((f) => f.id === on.id && f.dial === on.dial)) {
+          if (Arr.some(prev.flight, (f) => f.id === on.id && f.dial === on.dial)) {
             return;
           }
 
@@ -827,7 +836,7 @@ describe("L8: the window parent's connection", () => {
       fc.property(walks, fc.array(choice, { minLength: 2, maxLength: 8 }), (list, failures) => {
         let checked = false;
         fold(list, ({ next }) => {
-          const tile = next.tiles.find((t) => t.reach._tag === "open");
+          const tile = Option.getOrUndefined(Arr.findFirst(next.tiles, (t) => t.reach._tag === "open"));
 
           if (checked || next.link._tag !== "online" || tile?.reach._tag !== "open") {
             return;
@@ -845,7 +854,9 @@ describe("L8: the window parent's connection", () => {
             let opens = 0;
 
             for (const c of failures) {
-              const flight = state.flight.find((f) => f.call._tag === "open" && f.call.pid === pid);
+              const flight = Option.getOrUndefined(
+                Arr.findFirst(state.flight, (f) => f.call._tag === "open" && f.call.pid === pid),
+              );
               const index = c.aux % 3;
 
               const view = (
@@ -864,7 +875,7 @@ describe("L8: the window parent's connection", () => {
                   : { type: "open_ok", id: flight.id, dial: flight.dial, value, ms: c.ms };
 
               const [after, cmds] = step(state, m);
-              opens += writes(cmds, "open").filter((c) => c.call["pid"] === pid).length;
+              opens += Arr.filter(writes(cmds, "open"), (c) => c.call["pid"] === pid).length;
               expect(after.client.views[pid], "an invalid recovery changed the checked view").toEqual(shown);
               expect(opens, "bad recovery answers must not start replacement opens").toBe(1);
               state = after;
@@ -874,9 +885,9 @@ describe("L8: the window parent's connection", () => {
             const [after] = step(state, { type: "view", pid, note: { type: "whole", ...value } });
             expect(after.client.views[pid]).toEqual(value);
             expect(after.link).toEqual(next.link);
-            expect(after.flight.filter((f) => f.dial === dial && f.call._tag === "open" && f.call.pid === pid)).toEqual(
-              [],
-            );
+            expect(
+              Arr.filter(after.flight, (f) => f.dial === dial && f.call._tag === "open" && f.call.pid === pid),
+            ).toEqual([]);
             state = after;
             shown = state.client.views[pid]!;
           }
@@ -896,9 +907,9 @@ describe("L8: the window parent's connection", () => {
             return;
           }
 
-          const opening = prev.flight.filter((f) => f.call._tag === "open" && f.call.pid === m.pid);
+          const opening = Arr.filter(prev.flight, (f) => f.call._tag === "open" && f.call.pid === m.pid);
           raced += opening.length;
-          expect(next.flight.filter((f) => f.call._tag === "open" && f.call.pid === m.pid)).toEqual([]);
+          expect(Arr.filter(next.flight, (f) => f.call._tag === "open" && f.call.pid === m.pid)).toEqual([]);
 
           for (const f of opening) {
             const late = step(next, {
@@ -927,14 +938,14 @@ describe("L8: the window parent's connection", () => {
             return;
           }
 
-          const reach = prev.tiles.find((t) => t.id === m.tile)?.reach;
+          const reach = Option.getOrUndefined(Arr.findFirst(prev.tiles, (t) => t.id === m.tile))?.reach;
 
           const open = reach?._tag === "open" ? reach : null;
           seen[open === null ? "closed" : "open"]++;
           expect(open === null ? {} : next.client.pending.at(-1)).toMatchObject(
             open === null ? {} : { _tag: "dating", pid: open.pid, n: prev.client.written },
           );
-          expect(cmds.filter((c) => c.type === "now")).toEqual(
+          expect(Arr.filter(cmds, (c) => c.type === "now")).toEqual(
             open === null ? [] : [{ type: "now", n: prev.client.written }],
           );
           expect(open === null ? next.client : null, "a closed tile's press made a letter").toEqual(
@@ -957,7 +968,7 @@ describe("L8: the window parent's connection", () => {
             return;
           }
 
-          const before = prev.tiles.find((t) => t.id === m.id)!;
+          const before = Option.getOrThrow(Arr.findFirst(prev.tiles, (t) => t.id === m.id));
           const tileMachine = tileFor(before.name)!;
 
           const [own, out] = applyCell(tileMachine, before.own as never, m.msg as never) as readonly [
@@ -966,23 +977,31 @@ describe("L8: the window parent's connection", () => {
           ];
 
           seen.stepped++;
-          const blockedPress = before.reach._tag !== "open" && out.some((c) => c.type === "press");
+          const blockedPress = before.reach._tag !== "open" && Arr.some(out, (c) => c.type === "press");
           expect(
-            next.tiles.find((t) => t.id === m.id)!.own,
+            Option.getOrThrow(Arr.findFirst(next.tiles, (t) => t.id === m.id)).own,
             "a blocked submit keeps the draft until it can send",
           ).toEqual(blockedPress ? before.own : own);
           expect(
-            next.tiles.filter((t) => t.id !== m.id).map((t) => t.own),
+            Arr.map(
+              Arr.filter(next.tiles, (t) => t.id !== m.id),
+              (t) => t.own,
+            ),
             "another tile's Model moved",
-          ).toEqual(prev.tiles.filter((t) => t.id !== m.id).map((t) => t.own));
+          ).toEqual(
+            Arr.map(
+              Arr.filter(prev.tiles, (t) => t.id !== m.id),
+              (t) => t.own,
+            ),
+          );
           expect(
-            cmds.filter((c) => c.type === "press"),
+            Arr.filter(cmds, (c) => c.type === "press"),
             "a tile machine's press left the parent as a Cmd",
           ).toEqual([]);
 
-          const pressed = out.filter((c) => c.type === "press");
+          const pressed = Arr.filter(out, (c) => c.type === "press");
           const open = before.reach._tag === "open" ? before.reach : null;
-          const letters = next.client.pending.filter((p) => p.n >= prev.client.written);
+          const letters = Arr.filter(next.client.pending, (p) => p.n >= prev.client.written);
 
           if (pressed.length === 0 || open === null) {
             seen.closed += pressed.length > 0 ? 1 : 0;
@@ -1002,7 +1021,7 @@ describe("L8: the window parent's connection", () => {
               viewRev: prev.client.views[open.pid]?.rev ?? 0,
             },
           ]);
-          expect(cmds.filter((c) => c.type === "now")).toEqual([{ type: "now", n: prev.client.written }]);
+          expect(Arr.filter(cmds, (c) => c.type === "now")).toEqual([{ type: "now", n: prev.client.written }]);
         });
       }),
       opts,
@@ -1021,23 +1040,25 @@ describe("L8: the window parent's connection", () => {
 
           const flight =
             "id" in answer && typeof answer.id === "number" && "dial" in answer
-              ? prev.flight.find((f) => f.id === answer.id && f.dial === answer.dial)
+              ? Option.getOrUndefined(Arr.findFirst(prev.flight, (f) => f.id === answer.id && f.dial === answer.dial))
               : undefined;
 
           const call = flight?.call;
 
           const refusedLetter =
             m.type === "send_ok" && call?._tag === "send" && m.value._tag === "refused"
-              ? prev.client.pending.find((p) => p._tag === "ready" && p.letter === call["letter"])
+              ? Option.getOrUndefined(
+                  Arr.findFirst(prev.client.pending, (p) => p._tag === "ready" && p.letter === call["letter"]),
+                )
               : undefined;
 
           const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
-          const made = next.client.pending.filter((p) => p.n >= prev.client.written);
+          const made = Arr.filter(next.client.pending, (p) => p.n >= prev.client.written);
           const aimed = m.type === "press" ? m.tile : m.type === "tile" ? m.id : null;
 
           for (const t of next.tiles) {
-            const was = prev.tiles.find((x) => x.id === t.id)!.refusal;
-            const pressedHere = made.some((p) => world.from.get(p.n) === t.id);
+            const was = Option.getOrThrow(Arr.findFirst(prev.tiles, (x) => x.id === t.id)).refusal;
+            const pressedHere = Arr.some(made, (p) => world.from.get(p.n) === t.id);
 
             const own = refusedLetter !== undefined && owner === t.id;
             seen.set += own ? 1 : 0;
@@ -1081,10 +1102,10 @@ describe("L8: the window parent's connection", () => {
 
           for (const c of cmds) {
             const text = JSON.stringify(c);
-            const drafts = [...world.typed].filter((d) => d !== "" && text.includes(d));
+            const drafts = Arr.filter([...world.typed], (d) => d !== "" && text.includes(d));
 
             const recorded = c.type === "record" ? drafts : [];
-            const unsent = isWrite(c) ? drafts.filter((d) => !world.submitted.has(d)) : [];
+            const unsent = isWrite(c) ? Arr.filter(drafts, (d) => !world.submitted.has(d)) : [];
             expect(recorded, "a record copied typed text").toEqual([]);
             expect(unsent, "a write carried a draft nobody submitted").toEqual([]);
           }
@@ -1124,7 +1145,7 @@ describe("L9: the records the window emits", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, ({ cmds }) => {
-          for (const c of cmds.filter((c) => c.type === "record")) {
+          for (const c of Arr.filter(cmds, (c) => c.type === "record")) {
             expect(Object.keys(c).sort()).toEqual(["record", "type"]);
             expect(Schema.is(ClientRecord)(c["record"]), JSON.stringify(c)).toBe(true);
           }
@@ -1139,10 +1160,13 @@ describe("L9: the records the window emits", () => {
     fc.assert(
       fc.property(walks, (list) => {
         fold(list, ({ prev, m, next, cmds }) => {
-          const rows = cmds.map(recordIn).filter((r): r is Row => r !== null);
-          const keys = rows.filter((r) => r._tag === "key");
-          const connects = rows.filter((r) => r._tag === "connect");
-          const persists = rows.filter((r) => r._tag === "persist" || (r._tag === "failure" && r["op"] === "persist"));
+          const rows = Arr.filter(Arr.map(cmds, recordIn), (r): r is Row => r !== null);
+          const keys = Arr.filter(rows, (r) => r._tag === "key");
+          const connects = Arr.filter(rows, (r) => r._tag === "connect");
+          const persists = Arr.filter(
+            rows,
+            (r) => r._tag === "persist" || (r._tag === "failure" && r["op"] === "persist"),
+          );
 
           seen.key += m.type === "key_ok" ? 1 : 0;
           expect(keys).toEqual(m.type === "key_ok" ? [{ _tag: "key", result: m.value.found }] : []);
@@ -1196,7 +1220,7 @@ describe("L9: the records the window emits", () => {
         const sends = new Map<string, number>();
         fold(list, ({ prev, m, cmds }) => {
           // A press row comes before any send of its letter, in this step's Cmds or an earlier step's.
-          const pressRows = cmds.flatMap((c) => {
+          const pressRows = Arr.flatMap(cmds, (c) => {
             const r = recordIn(c);
 
             return r?._tag === "press" ? [String(r["letter"])] : [];
@@ -1204,17 +1228,18 @@ describe("L9: the records the window emits", () => {
 
           seen.press += pressRows.length;
           expect(
-            pressRows.filter((l) => sends.has(l)),
+            Arr.filter(pressRows, (l) => sends.has(l)),
             "a press row came after its letter's send",
           ).toEqual([]);
-
-          const sent = cmds.flatMap((c, i) =>
+          const sent = Arr.flatMap(cmds, (c, i) =>
             isWrite(c) && c.call._tag === "send" ? [{ letter: String(c.call["letter"]), at: i }] : [],
           );
 
           expect(
-            sent.filter(
-              (s) => !pressed.has(s.letter) && !cmds.slice(0, s.at).some((p) => recordIn(p)?.["letter"] === s.letter),
+            Arr.filter(
+              sent,
+              (s) =>
+                !pressed.has(s.letter) && !Arr.some(cmds.slice(0, s.at), (p) => recordIn(p)?.["letter"] === s.letter),
             ),
             "a letter went before its press row",
           ).toEqual([]);
@@ -1227,10 +1252,10 @@ describe("L9: the records the window emits", () => {
             sends.set(s.letter, (sends.get(s.letter) ?? 0) + 1);
           }
 
-          const replies = cmds.map(recordIn).filter((r) => r?._tag === "reply");
+          const replies = Arr.filter(Arr.map(cmds, recordIn), (r) => r?._tag === "reply");
 
           if (m.type === "send_ok") {
-            const f = prev.flight.find((x) => x.id === m.id && x.dial === m.dial);
+            const f = Option.getOrUndefined(Arr.findFirst(prev.flight, (x) => x.id === m.id && x.dial === m.dial));
 
             if (f !== undefined && f.call._tag === "send") {
               seen.reply++;
@@ -1273,10 +1298,12 @@ describe("L9: the records the window emits", () => {
       fc.property(walks, (list) => {
         const run = new Map<string, number>(); // installed patches per pid since the last view row
         fold(list, ({ prev, m, next, cmds }) => {
-          const rows = cmds.map(recordIn).filter((r): r is Row => r?._tag === "view");
-
+          const rows = Arr.filter(Arr.map(cmds, recordIn), (r): r is Row => r?._tag === "view");
           const ended = new Map(
-            rows.filter((r) => r["result"] === "patch").map((r) => [String(r["pid"]), r["patches"]]),
+            Arr.map(
+              Arr.filter(rows, (r) => r["result"] === "patch"),
+              (r) => [String(r["pid"]), r["patches"]],
+            ),
           );
 
           for (const [pid, count] of ended) {
@@ -1285,20 +1312,20 @@ describe("L9: the records the window emits", () => {
             run.delete(pid);
           }
 
-          for (const r of rows.filter((r) => r["result"] !== "patch")) {
+          for (const r of Arr.filter(rows, (r) => r["result"] !== "patch")) {
             seen[r["result"] === "whole" ? "whole" : "asked"]++;
             expect(run.get(String(r["pid"])) ?? 0, "a run did not end before its pid's next view row").toBe(0);
           }
 
-          const changed = Object.keys(next.client.views).filter(
+          const changed = Arr.filter(
+            Object.keys(next.client.views),
             (pid) => next.client.views[pid] !== prev.client.views[pid],
           );
 
           for (const pid of changed) {
             const whole =
               m.type === "open_ok" || (m.type === "view" && (m.note as { type?: unknown }).type === "whole");
-
-            expect(rows.filter((r) => r["pid"] === pid && r["result"] === "whole")).toHaveLength(whole ? 1 : 0);
+            expect(Arr.filter(rows, (r) => r["pid"] === pid && r["result"] === "whole")).toHaveLength(whole ? 1 : 0);
 
             if (!whole) {
               run.set(pid, (run.get(pid) ?? 0) + 1);
@@ -1307,7 +1334,7 @@ describe("L9: the records the window emits", () => {
 
           if (prev.link._tag === "online" && next.link._tag !== "online") {
             expect(
-              [...run.entries()].filter(([, n]) => n > 0),
+              Arr.filter([...run.entries()], ([, n]) => n > 0),
               "leaving online ends every run",
             ).toEqual([]);
           }
@@ -1467,13 +1494,13 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
   const none: Expect = { _tag: "none" };
   const nothing: Expect = { _tag: "nothing" };
   const dial = socketDial(s);
-  const past = [...w.dials].filter((d) => d !== dial);
+  const past = Arr.filter([...w.dials], (d) => d !== dial);
   const timer = linkTimer(s.link);
   const hs = handshakeIn(s);
 
   // tea's answers to the Cmds handed out and not answered yet.
   if (w.waiting.length > 0) {
-    const due = w.waiting.filter((cmd) => ["key", "now"].includes(cmd.type));
+    const due = Arr.filter(w.waiting, (cmd) => ["key", "now"].includes(cmd.type));
     const from = c.aux % 3 !== 0 && due.length > 0 ? due : w.waiting;
     const cmd = from[c.pick % from.length]!;
 
@@ -1499,7 +1526,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
   if (timer !== null && s.link._tag === "retrying") {
     const retry = (): readonly [WindowMsg, Expect] => [timer.msg, none];
     out.push(retry, retry, retry);
-  } else if (timer !== null && s.link._tag === "waiting_grant" && !s.flight.some((f) => f.call._tag === "knock")) {
+  } else if (timer !== null && s.link._tag === "waiting_grant" && !Arr.some(s.flight, (f) => f.call._tag === "knock")) {
     // A grant wait renews before its grant now and then, so a renewed knock is out when the grant
     // comes and its answer can land after it.
     const renew = (): readonly [WindowMsg, Expect] => [timer.msg, none];
@@ -1512,7 +1539,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     out.push(() => [{ type: "ask_again", dial: Math.max(...w.dials, 0) + 1 }, none]);
   }
 
-  const open = s.tiles.filter((t) => t.reach._tag === "open");
+  const open = Arr.filter(s.tiles, (t) => t.reach._tag === "open");
 
   if (open.length > 0) {
     const t = open[c.pick % open.length]!;
@@ -1575,7 +1602,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       }
     }
 
-    const stale = [...w.ids].filter((id) => id !== hs.id);
+    const stale = Arr.filter([...w.ids], (id) => id !== hs.id);
 
     if (stale.length > 0) {
       const id = stale[c.pick % stale.length]!;
@@ -1616,7 +1643,9 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
 
     // A renewed knock still out once the handshake has moved past waiting, as after a grant: its
     // late answer is favored, so walks reach it.
-    const late = s.flight.find((f) => f.call._tag === "knock" && !(hs._tag === "waiting" && hs.dial === f.dial));
+    const late = Option.getOrUndefined(
+      Arr.findFirst(s.flight, (f) => f.call._tag === "knock" && !(hs._tag === "waiting" && hs.dial === f.dial)),
+    );
 
     if (late !== undefined) {
       const good = goodAnswer(late, c, hs);
@@ -1630,11 +1659,11 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     }
 
     out.push(() => [
-      frame(w, d, rpc({ id: Math.max(0, ...s.flight.map((f) => f.id), s.serial) + 1 + c.aux, result: {} }), c.ms),
+      frame(w, d, rpc({ id: Math.max(0, ...Arr.map(s.flight, (f) => f.id), s.serial) + 1 + c.aux, result: {} }), c.ms),
       nothing,
     ]);
 
-    const pids = s.tiles.flatMap((t) => ("pid" in t.reach ? [t.reach.pid] : []));
+    const pids = Arr.flatMap(s.tiles, (t) => ("pid" in t.reach ? [t.reach.pid] : []));
 
     if (pids.length > 0) {
       const pid = pids[c.pick % pids.length]!;
@@ -1652,7 +1681,7 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
   // A frame, a close or a late answer of a dial that is not the socket's any more.
   if (past.length > 0) {
     const d = past[c.pick % past.length]!;
-    const late = w.old.filter((f) => f.dial === d);
+    const late = Arr.filter(w.old, (f) => f.dial === d);
     out.push(
       () => [frame(w, d, "pong"), nothing],
       () => [frame(w, d, rpc({ method: "challenge", params: { nonce: `old_${c.word}` } })), nothing],
@@ -1686,10 +1715,10 @@ const foldFrames = (list: ReadonlyArray<Pick>, each: (e: FrameEvent) => void = (
     const prev = w.s;
     const [next, cmds] = step(prev, m);
     w.waiting = [
-      ...w.waiting.filter((cmd) => !("cmd" in m) || m.cmd !== cmd),
-      ...cmds.filter((c) => c.type !== "record"),
+      ...Arr.filter(w.waiting, (cmd) => !("cmd" in m) || m.cmd !== cmd),
+      ...Arr.filter(cmds, (c) => c.type !== "record"),
     ];
-    w.old.push(...prev.flight.filter((f) => !next.flight.some((n) => n.id === f.id && n.dial === f.dial)));
+    w.old.push(...Arr.filter(prev.flight, (f) => !Arr.some(next.flight, (n) => n.id === f.id && n.dial === f.dial)));
     const id = handshakeIn(next).id;
 
     if (id !== undefined) {
@@ -1740,7 +1769,7 @@ const verdict = (
     return [
       "an answer settled another flight",
       after[0].flight,
-      prev.flight.filter((x) => x.id !== e.id || x.dial !== e.dial),
+      Arr.filter(prev.flight, (x) => x.id !== e.id || x.dial !== e.dial),
     ];
   }
 
@@ -1749,7 +1778,7 @@ const verdict = (
   if (e._tag === "handshake" && !(typeof named === "string" && named !== handshakeIn(prev).id)) {
     return [
       `${m.text}: a handshake frame settled a flight`,
-      after[0].flight.filter((x) => prev.flight.includes(x)),
+      Arr.filter(after[0].flight, (x) => prev.flight.includes(x)),
       prev.flight,
     ];
   }
@@ -1807,12 +1836,12 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
             const route = dial === socketDial(prev) ? e._tag : "old";
             seen[route] += 1;
             const named = Option.getOrUndefined(answerId(m.text))?.id;
-            seen.stolen += route === "old" && prev.flight.some((f) => f.id === named) ? 1 : 0;
+            seen.stolen += route === "old" && Arr.some(prev.flight, (f) => f.id === named) ? 1 : 0;
             const hs = handshakeIn(prev);
             seen.late +=
               route !== "old" &&
               hs._tag !== "waiting" &&
-              prev.flight.some((f) => f.id === named && f.dial === dial && f.call._tag === "knock")
+              Arr.some(prev.flight, (f) => f.id === named && f.dial === dial && f.call._tag === "knock")
                 ? 1
                 : 0;
           }
@@ -1822,7 +1851,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
       }
 
       expect(
-        (["owner", "nothing", "handshake", "online", "old", "stolen", "late"] as const).every((k) => seen[k] > 0),
+        Arr.every(["owner", "nothing", "handshake", "online", "old", "stolen", "late"] as const, (k) => seen[k] > 0),
         JSON.stringify(seen),
       ).toBe(true);
 
@@ -1840,7 +1869,9 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
       for (const walk of list) {
         foldFrames(walk, ({ prev, m, next, cmds, expect: e }) => {
           const named = m.type === "frame" ? Option.getOrUndefined(answerId(m.text))?.id : undefined;
-          const call = prev.flight.find((f) => m.type === "frame" && f.id === named && f.dial === m.dial)?.call._tag;
+          const call = Option.getOrUndefined(
+            Arr.findFirst(prev.flight, (f) => m.type === "frame" && f.id === named && f.dial === m.dial),
+          )?.call._tag;
 
           const owned =
             m.type === "frame" && e._tag === "owner" && (call === "wait" || call === "monitor")
@@ -1870,8 +1901,8 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
     { list: Arbitrary.schema(Picks), cut: Arbitrary.schema(Pick.fields.pick) },
     ({ list, cut }) => {
       const events = foldFrames(list);
-      const live = events.flatMap((e, i) => (handshakeIn(e.next).id === undefined ? [] : [i]));
-      const pool = live.length > 0 && cut % 2 === 0 ? live : events.map((_, i) => i);
+      const live = Arr.flatMap(events, (e, i) => (handshakeIn(e.next).id === undefined ? [] : [i]));
+      const pool = live.length > 0 && cut % 2 === 0 ? live : Arr.map(events, (_, i) => i);
       const k = pool[cut % pool.length]!;
       const saved = Schema.encodeSync(Schema.fromJsonString(machine.model))(events[k]!.next);
       const loaded = Schema.decodeSync(Schema.fromJsonString(machine.model))(saved);
@@ -1897,8 +1928,9 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
     "some walks reach a state whose handshake has a live id, so a cut can fall there",
     { list: Arbitrary.array(Arbitrary.schema(Picks), { minLength: 20, maxLength: 20 }) },
     ({ list }) => {
-      expect(list.some((walk) => foldFrames(walk).some((e) => handshakeIn(e.next).id !== undefined))).toBe(true);
-
+      expect(Arr.some(list, (walk) => Arr.some(foldFrames(walk), (e) => handshakeIn(e.next).id !== undefined))).toBe(
+        true,
+      );
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 200 } },
@@ -1911,18 +1943,18 @@ describe("P18 L11: the connect row of a closed dial keeps its close code", () =>
     { list: Arbitrary.schema(Picks) },
     ({ list }) => {
       foldFrames(list, ({ prev, m, next, cmds }) => {
-        const rows = cmds.map(recordIn).filter((r): r is Row => r?._tag === "connect");
+        const rows = Arr.filter(Arr.map(cmds, recordIn), (r): r is Row => r?._tag === "connect");
         const closed = m.type === "socket_closed" && m.dial === socketDial(prev) ? m : null;
 
         const label =
           closed === null ? `connect rows after ${m.type}` : `a close ${closed.code} on dial ${closed.dial}`;
 
         expect(
-          rows.map((r) => [r["result"], r["code"]]),
+          Arr.map(rows, (r) => [r["result"], r["code"]]),
           label,
         ).toEqual(
           closed === null
-            ? rows.map((r) => [r["result"], undefined])
+            ? Arr.map(rows, (r) => [r["result"], undefined])
             : [[closed.code === 4003 ? "removed" : "closed", closed.code]],
         );
         expect(closed === null || (next.link._tag === "removed") === (closed.code === 4003), "only 4003 removes").toBe(
@@ -1977,8 +2009,7 @@ const door = {
   /** Booted, with its key: the link is dialing on dial 1. */
   boot: (): WindowModel => {
     const [s, cmds] = machine.init(null, ctx);
-    const key = cmds.find((c) => c.type === "key");
-
+    const key = Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "key"));
     return step(s, { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:fp" } } as WindowMsg)[0];
   },
   frame: (s: WindowModel, text: string, ms?: number) =>
@@ -2005,7 +2036,7 @@ const door = {
   /** Online with its tile's view open in flight. */
   opening: (): WindowModel => {
     const s = door.online();
-    const read = s.flight.find((f) => f.call._tag === "read")!;
+    const read = Option.getOrThrow(Arr.findFirst(s.flight, (f) => f.call._tag === "read"));
     const entries = [{ _tag: "started", by: "brain", body: { process: PID_A, name: "checklist:1" }, rev: 1 }];
 
     return door.frame(s, rpc({ id: read.id, result: { entries } }), 1)[0];
@@ -2013,11 +2044,10 @@ const door = {
   /** Online with one letter in flight. */
   sending: (): WindowModel => {
     const s = door.opening();
-    const open = s.flight.find((f) => f.call._tag === "open")!;
+    const open = Option.getOrThrow(Arr.findFirst(s.flight, (f) => f.call._tag === "open"));
     const [shown] = door.frame(s, rpc({ id: open.id, result: { rev: 1, view: EMPTY } }), 1);
     const [pressed, cmds] = step(shown, { type: "press", tile: "tile_1", m: { type: "add", name: "milk" } });
-    const now = cmds.find((c) => c.type === "now");
-
+    const now = Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "now"));
     return step(pressed, {
       type: "now_ok",
       cmd: now,
@@ -2041,7 +2071,7 @@ type Family = {
 };
 
 const flightFor = (s: WindowModel, tag: string) => {
-  const found = s.flight.find((f) => f.call._tag === tag);
+  const found = Option.getOrUndefined(Arr.findFirst(s.flight, (f) => f.call._tag === tag));
   expect(found, `the window has no ${tag} call in flight`).toBeDefined();
 
   return found!;
@@ -2052,7 +2082,10 @@ const sameAs = (prev: WindowModel, after: readonly [WindowModel, ReadonlyArray<C
 
 const helloWith = (after: readonly [WindowModel, ReadonlyArray<Cmd>], nonce: string) =>
   expect(
-    after[1].filter((c) => c.type === "hello").map((c) => c["nonce"]),
+    Arr.map(
+      Arr.filter(after[1], (c) => c.type === "hello"),
+      (c) => c["nonce"],
+    ),
     "the hello carries its nonce",
   ).toEqual([nonce]);
 
@@ -2103,7 +2136,7 @@ const FAMILIES: Readonly<Record<string, Family>> = {
         knocks ? { _tag: "knocking", dial: 1 } : { _tag: "refused", dial: 1, reason: word },
       );
       expect(
-        cmds.map(recordIn).filter((r) => r?._tag === "connect"),
+        Arr.filter(Arr.map(cmds, recordIn), (r) => r?._tag === "connect"),
         `the connect rows for ${v.reason}`,
       ).toEqual(knocks ? [] : [{ _tag: "connect", dial: 1, result: "refused", reason: word, ms: 0 }]);
       expect(next.link, "the link keeps its own path").toEqual(p.link);
@@ -2187,8 +2220,8 @@ const FAMILIES: Readonly<Record<string, Family>> = {
 
 /** The params of a notice, or the result of an answer, with one field dropped or of the wrong type. */
 const mutations = (family: Family, sent: Record<string, unknown>) => [
-  ...family.drop.map((k) => Object.fromEntries(Object.entries(sent).filter(([key]) => key !== k))),
-  ...Object.entries(family.wrong).map(([k, v]) => ({ ...sent, [k]: v })),
+  ...Arr.map(family.drop, (k) => Object.fromEntries(Arr.filter(Object.entries(sent), ([key]) => key !== k))),
+  ...Arr.map(Object.entries(family.wrong), ([k, v]) => ({ ...sent, [k]: v })),
 ];
 
 /** JSON text, the only form a frame's value takes on the wire. */
@@ -2318,7 +2351,8 @@ type ReachView = {
 
 type InboxView = { readonly _tag: string; readonly after: number; readonly id?: number };
 
-const reachIn = (s: WindowModel, tile: string): ReachView => s.tiles.find((t) => t.id === tile)!.reach;
+const reachIn = (s: WindowModel, tile: string): ReachView =>
+  Option.getOrThrow(Arr.findFirst(s.tiles, (t) => t.id === tile)).reach;
 
 const inboxIn = (s: WindowModel): InboxView => Reflect.get(s, "inbox") ?? { _tag: "none", after: -1 };
 
@@ -2333,8 +2367,7 @@ const msgKey = (m: WindowMsg) => ({
 
 const answeredFlight = (s: WindowModel, m: WindowMsg) => {
   const on = msgKey(m);
-
-  return s.flight.find((f) => f.id === on.id && f.dial === on.dial);
+  return Option.getOrUndefined(Arr.findFirst(s.flight, (f) => f.id === on.id && f.dial === on.dial));
 };
 
 const streamIn = (call: { readonly [key: string]: unknown }) => call["stream"];
@@ -2363,7 +2396,10 @@ const signal = (w: Follow, ref: string, pid: string, reason: typeof Down.Type.re
   });
 
 const lastLife = (w: Follow, name: string): string | null => {
-  const lives = lifeFacts(w, name).filter((f) => trusted(f.by) && (f._tag === "started" || f._tag === "restarted"));
+  const lives = Arr.filter(
+    lifeFacts(w, name),
+    (f) => trusted(f.by) && (f._tag === "started" || f._tag === "restarted"),
+  );
   const body = lives.at(-1)?.body;
 
   return body === undefined ? null : String(Reflect.get(body, "process"));
@@ -2384,7 +2420,7 @@ const crash = (w: Follow, name: string, reason: ExitReason) => {
   });
   w.live.set(name, null);
 
-  for (const watch of w.watches.filter((x) => x.live && x.pid === pid)) {
+  for (const watch of Arr.filter(w.watches, (x) => x.live && x.pid === pid)) {
     signal(w, watch.ref, pid, reason, watch.session);
     watch.live = false;
   }
@@ -2463,7 +2499,7 @@ const brainStep = (w: Follow, c: FollowChoice) => {
 
 /** A letter in the window's inbox that is no DOWN for the watch a tile holds. */
 const forge = (w: Follow, c: FollowChoice) => {
-  const held = w.s.tiles.flatMap((t) => {
+  const held = Arr.flatMap(w.s.tiles, (t) => {
     const r: ReachView = t.reach;
 
     return holds(r) && typeof r.ref === "string" && r.pid !== undefined ? [{ ref: r.ref, pid: r.pid }] : [];
@@ -2493,7 +2529,7 @@ const forge = (w: Follow, c: FollowChoice) => {
     });
   } else if (kind === 3) {
     // An earlier dial's watch of this same pid, which an evicted session may still hold.
-    const old = w.monitors.filter((x) => x.ref !== ref);
+    const old = Arr.filter(w.monitors, (x) => x.ref !== ref);
     const was = old[c.ms % Math.max(1, old.length)] ?? { ref: "w0", session: processAt(1) };
     const to = clientTo(was.session);
     append(w, w.inbox, {
@@ -2522,14 +2558,14 @@ const followAnswer =
     const all = stream === INBOX ? w.inbox : stream.startsWith("processes/") ? lifeFacts(w, stream.slice(10)) : [];
 
     if (call._tag === "read") {
-      const page = all.filter((e) => e.rev > after).slice(0, PAGE);
+      const page = Arr.filter(all, (e) => e.rev > after).slice(0, PAGE);
       const ok = (): WindowMsg => ({ type: "read_ok", ...on, value: page, ms: c.ms });
 
       return [ok, ok, ok, (): WindowMsg => ({ type: "read_err", ...on, error: { _tag: "unreachable" } })];
     }
 
     if (call._tag === "wait") {
-      const top = Math.max(0, ...all.map((e) => e.rev));
+      const top = Math.max(0, ...Arr.map(all, (e) => e.rev));
       const ok = () => answerMsg({ type: "wait_ok", ...on, value: { rev: top }, ms: c.ms });
 
       return [
@@ -2563,7 +2599,7 @@ const followAnswer =
 /** Slice 1's moves with the brain's answers, plus a nudge for a wait that can wake and a monitor out. */
 const followMoves = (w: Follow, c: FollowChoice): ReadonlyArray<() => WindowMsg> => {
   const reply = followAnswer(w);
-  const due = w.flights.filter((f) => f.call._tag === "monitor" || f.call._tag === "wait");
+  const due = Arr.filter(w.flights, (f) => f.call._tag === "monitor" || f.call._tag === "wait");
   const f = due[c.aux % Math.max(1, due.length)];
   const nudge = f === undefined ? [] : (reply(f, { id: f.id, dial: f.dial }, c) ?? []);
 
@@ -2608,7 +2644,8 @@ const follow = (list: ReadonlyArray<FollowChoice>, each: (e: FollowEvent) => voi
         if (was !== null && was !== socketDial(next)) {
           const session = w.sessions.get(was);
 
-          for (const watch of w.watches.filter(
+          for (const watch of Arr.filter(
+            w.watches,
             (x) => session !== undefined && !session.evicted && x.session === session.id,
           )) {
             watch.live = false;
@@ -2673,12 +2710,12 @@ const takenOn = (s: WindowModel, letter: unknown) => {
     return null;
   }
 
-  const tile = s.tiles.find((t) => {
-    const r: ReachView = t.reach;
-
-    return holds(r) && m.to._tag === "client" && m.to.client === TAB && r.ref === m.ref && r.pid === m.process;
-  });
-
+  const tile = Option.getOrUndefined(
+    Arr.findFirst(s.tiles, (t) => {
+      const r: ReachView = t.reach;
+      return holds(r) && m.to._tag === "client" && m.to.client === TAB && r.ref === m.ref && r.pid === m.process;
+    }),
+  );
   return tile === undefined ? null : { tile, down: m, rev: Number(Reflect.get(entry, "rev")) };
 };
 
@@ -2696,7 +2733,7 @@ const ignoredAs = (s: WindowModel, letter: unknown): string => {
         ? "shape"
         : m.to._tag !== "client" || m.to.client !== TAB
           ? "tab"
-          : s.tiles.some((t) => {
+          : Arr.some(s.tiles, (t) => {
                 const r: ReachView = t.reach;
 
                 return holds(r) && r.pid === m.process;
@@ -2723,7 +2760,7 @@ const tilePage = (e: Event) => {
 
   const tile =
     m.type === "read_ok" && answeredFlight(e.prev, m)?.call._tag === "read"
-      ? e.prev.tiles.find((t) => t.reach._tag === "resolving" && t.reach.id === m.id)
+      ? Option.getOrUndefined(Arr.findFirst(e.prev.tiles, (t) => t.reach._tag === "resolving" && t.reach.id === m.id))
       : undefined;
 
   return tile === undefined || m.type !== "read_ok" ? null : { tile, page: m.value };
@@ -2743,7 +2780,9 @@ const pageBook = () => {
       }
 
       for (const c of writes(e.cmds, "read")) {
-        const tile = e.next.tiles.find((t) => `processes/${t.name}` === streamIn(c.call));
+        const tile = Option.getOrUndefined(
+          Arr.findFirst(e.next.tiles, (t) => `processes/${t.name}` === streamIn(c.call)),
+        );
 
         if (tile !== undefined && c.call["after"] === 0) {
           book.set(tile.id, []);
@@ -2758,13 +2797,12 @@ const pageBook = () => {
 const readsOn = (e: Event, tile: WindowModel["tiles"][number], page: ReadonlyArray<unknown>) => {
   const last = Reflect.get(Object(page.at(-1)), "rev");
   const stream = `processes/${tile.name}`;
-
-  const mine = e.cmds
-    .filter(isWrite)
-    .filter((c) => streamIn(c.call) === stream || c.call._tag === "monitor" || c.call._tag === "open");
-
+  const mine = Arr.filter(
+    Arr.filter(e.cmds, isWrite),
+    (c) => streamIn(c.call) === stream || c.call._tag === "monitor" || c.call._tag === "open",
+  );
   expect(
-    mine.map((c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
+    Arr.map(mine, (c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
     `${tile.name}'s full page`,
   ).toEqual([["read", stream, last]]);
   expect(reachIn(e.next, tile.id)).toMatchObject({ _tag: "resolving", id: mine[0]!.id });
@@ -2778,14 +2816,14 @@ const decides = (e: Event, tile: WindowModel["tiles"][number], pages: ReadonlyAr
   const want = readName(pages, tile.name);
   const now = reachIn(e.next, tile.id);
   const stream = `processes/${tile.name}`;
-
-  const mine = e.cmds
-    .filter(isWrite)
-    .filter((c) => streamIn(c.call) === stream || (want.live !== null && c.call["pid"] === want.live));
+  const mine = Arr.filter(
+    Arr.filter(e.cmds, isWrite),
+    (c) => streamIn(c.call) === stream || (want.live !== null && c.call["pid"] === want.live),
+  );
 
   if (want.live !== null) {
     expect(
-      mine.map((c) => [c.call._tag, c.call["pid"], c.dial]),
+      Arr.map(mine, (c) => [c.call._tag, c.call["pid"], c.dial]),
       `${tile.name} resolved ${want.live}: monitor, then open, on this dial`,
     ).toEqual([
       ["monitor", want.live, socketDial(e.next)],
@@ -2803,7 +2841,7 @@ const decides = (e: Event, tile: WindowModel["tiles"][number], pages: ReadonlyAr
 
   if (want.ended !== null) {
     expect(
-      mine.map((c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
+      Arr.map(mine, (c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
       `${tile.name} ended: one wait on its name after the last rev read`,
     ).toEqual([["wait", stream, want.after]]);
     expect(now, `${tile.name}'s reach when it ended`).toMatchObject({
@@ -2856,13 +2894,12 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               if (was._tag === "resolving" && now._tag === "opening") {
                 seen.resolved++;
                 seen.redial += onlines > 1 ? 1 : 0;
-
-                const order = cmds
-                  .filter(isWrite)
-                  .filter((c) => (c.call._tag === "monitor" || c.call._tag === "open") && c.call["pid"] === now.pid);
-
+                const order = Arr.filter(
+                  Arr.filter(cmds, isWrite),
+                  (c) => (c.call._tag === "monitor" || c.call._tag === "open") && c.call["pid"] === now.pid,
+                );
                 expect(
-                  order.map((c) => [c.call._tag, c.dial]),
+                  Arr.map(order, (c) => [c.call._tag, c.dial]),
                   `${t.id} resolved ${now.pid}`,
                 ).toEqual([
                   ["monitor", socketDial(next)],
@@ -2896,7 +2933,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             return;
           }
 
-          const takes = page.flatMap((letter) => {
+          const takes = Arr.flatMap(page, (letter) => {
             const taken = takenOn(e.prev, letter);
             const as = taken === null ? ignoredAs(e.prev, letter) : "taken";
             seen[as] = (seen[as] ?? 0) + 1;
@@ -2904,16 +2941,15 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
 
             return taken === null ? [] : [taken];
           });
-
-          const moved = new Set(takes.map((t) => t.tile.id));
+          const moved = new Set(Arr.map(takes, (t) => t.tile.id));
 
           for (const t of e.next.tiles) {
-            const reads = writes(e.cmds, "read").filter((c) => streamIn(c.call) === `processes/${t.name}`);
+            const reads = Arr.filter(writes(e.cmds, "read"), (c) => streamIn(c.call) === `processes/${t.name}`);
             expect(moved.has(t.id) ? null : t.reach, `a letter that is no DOWN for ${t.id} moved it`).toEqual(
               moved.has(t.id) ? null : reachIn(e.prev, t.id),
             );
             expect(
-              reads.map((c) => c.call["after"]),
+              Arr.map(reads, (c) => c.call["after"]),
               `${t.id}'s reads of its name on its inbox page`,
             ).toEqual(moved.has(t.id) ? [0] : []);
             const now = reachIn(e.next, t.id);
@@ -2939,7 +2975,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const downed = new Map<string, string>(); // tile id → the reason tag of the DOWN it took
         const book = pageBook();
         follow(list, (e) => {
-          for (const taken of (inboxPage(e) ?? []).flatMap((l) => takenOn(e.prev, l) ?? [])) {
+          for (const taken of Arr.flatMap(inboxPage(e) ?? [], (l) => Arr.fromNullishOr(takenOn(e.prev, l)))) {
             dead.add(taken.down.process);
             downed.set(taken.tile.id, taken.down.reason._tag);
           }
@@ -2965,12 +3001,12 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           }
 
           const answer = msgKey(e.m);
-
-          const waiting = e.prev.tiles.find((t) => {
-            const r = reachIn(e.prev, t.id);
-
-            return r._tag === "ended" && r.id === answer.id;
-          });
+          const waiting = Option.getOrUndefined(
+            Arr.findFirst(e.prev.tiles, (t) => {
+              const r = reachIn(e.prev, t.id);
+              return r._tag === "ended" && r.id === answer.id;
+            }),
+          );
 
           if (
             (answer.type === "wait_ok" || answer.type === "wait_err") &&
@@ -2978,9 +3014,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             answeredFlight(e.prev, e.m) !== undefined
           ) {
             seen.woke++;
-            const reads = writes(e.cmds, "read").filter((c) => streamIn(c.call) === `processes/${waiting.name}`);
+            const reads = Arr.filter(writes(e.cmds, "read"), (c) => streamIn(c.call) === `processes/${waiting.name}`);
             expect(
-              reads.map((c) => c.call["after"]),
+              Arr.map(reads, (c) => c.call["after"]),
               `${waiting.name}'s wait answer reads it again`,
             ).toEqual([0]);
             expect(reachIn(e.next, waiting.id)).toMatchObject({ _tag: "resolving", id: reads[0]!.id });
@@ -3002,7 +3038,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
     const seen = { online: 0, woke: 0, pages: 0, moved: 0, errors: 0, offline: 0, armed: 0 };
 
     const armed = (s: WindowModel): boolean =>
-      (machine.subs ?? []).some((sub) => {
+      Arr.some(machine.subs ?? [], (sub) => {
         const deps: unknown = sub.deps(s as never);
         const msg = Object(Reflect.get(Object(deps), "msg"));
 
@@ -3019,15 +3055,13 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           const now = inboxIn(next);
           const answer = msgKey(m);
           const current = answeredFlight(prev, m) !== undefined;
-
-          const calls = cmds
-            .filter(isWrite)
-            .filter((c) => streamIn(c.call) === INBOX)
-            .map((c) => [c.call._tag, c.call["after"], c.id]);
-
+          const calls = Arr.map(
+            Arr.filter(Arr.filter(cmds, isWrite), (c) => streamIn(c.call) === INBOX),
+            (c) => [c.call._tag, c.call["after"], c.id],
+          );
           expect(now.after, `${m.type} moved the inbox cursor back`).toBeGreaterThanOrEqual(was.after);
           expect(
-            next.flight.filter((f) => streamIn(f.call) === INBOX).length,
+            Arr.filter(next.flight, (f) => streamIn(f.call) === INBOX).length,
             "two inbox calls in flight",
           ).toBeLessThanOrEqual(1);
           const page = inboxPage(e);
@@ -3037,10 +3071,8 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             (current && (answer.type === "wait_err" || answer.type === "read_err") && answer.id === was.id) ||
             (m.type === "write_err" &&
               m.cmd.id === was.id &&
-              prev.flight.some((f) => f.id === m.cmd.id && f.dial === m.cmd.dial && streamIn(f.call) === INBOX));
-
-          const top = Math.max(was.after, ...(page ?? []).map((l) => Number(Reflect.get(Object(l), "rev"))));
-
+              Arr.some(prev.flight, (f) => f.id === m.cmd.id && f.dial === m.cmd.dial && streamIn(f.call) === INBOX));
+          const top = Math.max(was.after, ...Arr.map(page ?? [], (l) => Number(Reflect.get(Object(l), "rev"))));
           const [want, label]: readonly [unknown, string] =
             prev.link._tag !== "online" && next.link._tag === "online"
               ? [
@@ -3142,16 +3174,16 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       fc.property(follows, (list) => {
         const named = new Map<string, string>(); // monitor ref → the tile name it was written for
         follow(list, (e) => {
-          const rows = e.cmds.map(recordIn).filter((r): r is Row => r !== null);
+          const rows = Arr.filter(Arr.map(e.cmds, recordIn), (r): r is Row => r !== null);
           const page = inboxPage(e) ?? [];
-          const takes = page.flatMap((l) => takenOn(e.prev, l) ?? []);
+          const takes = Arr.flatMap(page, (l) => Arr.fromNullishOr(takenOn(e.prev, l)));
           seen.down += takes.length;
           seen.ignored += page.length - takes.length;
           expect(
-            rows.filter((r) => r._tag === "down"),
+            Arr.filter(rows, (r) => r._tag === "down"),
             `${e.m.type}'s down rows`,
           ).toEqual(
-            takes.map((t) => ({
+            Arr.map(takes, (t) => ({
               _tag: "down",
               name: t.tile.name,
               pid: t.down.process,
@@ -3171,7 +3203,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           seen.watching += monitored !== null && result === "watching" ? 1 : 0;
           seen.refused += monitored !== null && result === "refused" ? 1 : 0;
           expect(
-            rows.filter((r) => r._tag === "monitor"),
+            Arr.filter(rows, (r) => r._tag === "monitor"),
             `${e.m.type}'s monitor rows`,
           ).toEqual(
             monitored === null
@@ -3189,7 +3221,8 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           for (const c of writes(e.cmds, "monitor")) {
             named.set(
               String(c.call["ref"]),
-              e.next.tiles.find((t) => reachIn(e.next, t.id).ref === c.call["ref"])?.name ?? "?",
+              Option.getOrUndefined(Arr.findFirst(e.next.tiles, (t) => reachIn(e.next, t.id).ref === c.call["ref"]))
+                ?.name ?? "?",
             );
           }
         });
@@ -3211,7 +3244,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const reached: Array<WindowModel> = [];
         follow(list, (e) => reached.push(e.next));
         // Online cuts first, so the inbox's next wait comes from the resend timer on the cut's dial.
-        const online = reached.filter((s) => s.link._tag === "online");
+        const online = Arr.filter(reached, (s) => s.link._tag === "online");
         const pool = online.length > 0 && cut % 4 !== 0 ? online : reached;
         const saved = pool[cut % pool.length]!;
         const load = () => Schema.decodeSync(save)(Schema.encodeSync(save)(saved));
@@ -3237,14 +3270,14 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         }
 
         const [waiting, armed] = step(away, { type: "resend", dial });
-        const waits = writes(armed, "wait").filter((c) => streamIn(c.call) === there);
+        const waits = Arr.filter(writes(armed, "wait"), (c) => streamIn(c.call) === there);
         expect(
-          writes(armed, "wait").map((c) => [streamIn(c.call), c.call["after"]]),
+          Arr.map(writes(armed, "wait"), (c) => [streamIn(c.call), c.call["after"]]),
           "the moved Model's next inbox wait",
         ).toEqual([[there, 0]]);
         seen.waited++;
 
-        const watch = waiting.tiles.find((t) => holds(t.reach));
+        const watch = Option.getOrUndefined(Arr.findFirst(waiting.tiles, (t) => holds(t.reach)));
         const r: ReachView | undefined = watch?.reach;
 
         if (watch === undefined || r === undefined || r.ref === undefined || r.pid === undefined) {
@@ -3254,9 +3287,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
         const rev = 1 + (cut % 50);
         const wait = waits[0]!;
         const [reading, read] = step(waiting, answerMsg({ type: "wait_ok", id: wait.id, dial, value: { rev }, ms: 0 }));
-        const inboxRead = writes(read, "read").filter((c) => streamIn(c.call) === there);
+        const inboxRead = Arr.filter(writes(read, "read"), (c) => streamIn(c.call) === there);
         expect(
-          inboxRead.map((c) => c.call["after"]),
+          Arr.map(inboxRead, (c) => c.call["after"]),
           "the woken wait reads the moved Model's inbox",
         ).toEqual([0]);
         const to = clientTo(processAt(9_999), OTHER_TAB);
@@ -3274,10 +3307,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           reading,
           answerMsg({ type: "read_ok", id: inboxRead[0]!.id, dial, value: [letter], ms: 0 }),
         );
-
-        const again = writes(cmds, "read").filter((c) => streamIn(c.call) === `processes/${watch.name}`);
+        const again = Arr.filter(writes(cmds, "read"), (c) => streamIn(c.call) === `processes/${watch.name}`);
         expect(
-          again.map((c) => c.call["after"]),
+          Arr.map(again, (c) => c.call["after"]),
           `${watch.name}'s DOWN in the moved Model's inbox reads its name again`,
         ).toEqual([0]);
         expect(reachIn(after, watch.id), `${watch.name} after its DOWN`).toMatchObject({
@@ -3306,8 +3338,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           list,
           ({ prev, m, next, world }) => {
             const was = prev.said;
-
-            const ended = next.tiles.flatMap((t) => {
+            const ended = Arr.flatMap(next.tiles, (t) => {
               const r = t.reach;
               const before = reachIn(prev, t.id);
               const turned = r._tag === "ended" && !(before._tag === "ended" && before.pid === r.pid);
@@ -3319,18 +3350,19 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             // A refused answer to a letter in flight, whose press a tile of this window made.
             const flight = answeredFlight(prev, m)?.call;
             const letter = flight?._tag === "send" ? flight.letter : null;
-            const slot = prev.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
+            const slot = Option.getOrUndefined(
+              Arr.findFirst(prev.client.pending, (p) => p._tag === "ready" && p.letter === letter),
+            );
             const owner = slot === undefined ? undefined : prev.from[slot.n]?.tile;
 
             const refused =
               m.type === "send_ok" &&
               m.value._tag === "refused" &&
               slot !== undefined &&
-              prev.tiles.some((t) => t.id === owner)
+              Arr.some(prev.tiles, (t) => t.id === owner)
                 ? [{ _tag: "refused", tile: owner, m: slot.m, reason: m.value.reason }]
                 : [];
-
-            const messages = [...ended.map(({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
+            const messages = [...Arr.map(ended, ({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
             const tick = m.type === "resend";
             seen.cleared += tick && was.messages.length > 0 ? 1 : 0;
             seen.idle += tick && was.messages.length === 0 ? 1 : 0;
@@ -3356,7 +3388,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             );
             seen.burst += messages.length > 0 && start.messages.length > 0 ? 1 : 0;
             seen.refused += refused.length;
-            seen.resaid += messages.filter((x) => hushed.has(JSON.stringify(x))).length;
+            seen.resaid += Arr.filter(messages, (x) => hushed.has(JSON.stringify(x))).length;
 
             for (const e of ended) {
               seen.ended++;
@@ -3409,8 +3441,7 @@ const typeId = (prefix: string, n: number): string => {
 
 /** The tiles a start is given, named by processes tezgah never shows, so a read of one of their
  *  streams can only come from the given list, never from tezgah's view. */
-const GIVEN = ["given:1", "given:2", "given:3"].map((name, i) => ({ id: `given_${i + 1}`, name }));
-
+const GIVEN = Arr.map(["given:1", "given:2", "given:3"], (name, i) => ({ id: `given_${i + 1}`, name }));
 const DESK_PERSON = typeId("person", 41);
 
 const TEZGAH_PID = "process_of_tezgah";
@@ -3424,7 +3455,7 @@ type Desk = { rev: number; spaces: Map<number, Array<string>>; shows: Map<string
 
 /** The brain's view as the wire carries it: each workspace one row, its percents summing to 100. */
 const deskView = (d: Desk) => ({
-  workspaces: [...d.spaces].map(([n, tiles]) => {
+  workspaces: Arr.map([...d.spaces], ([n, tiles]) => {
     const base = Math.floor(100 / tiles.length);
 
     return {
@@ -3435,13 +3466,16 @@ const deskView = (d: Desk) => ({
           ? tiles[0]
           : {
               dir: "row",
-              parts: tiles.map((inner, i) => ({ percent: i === 0 ? 100 - base * (tiles.length - 1) : base, inner })),
+              parts: Arr.map(tiles, (inner, i) => ({
+                percent: i === 0 ? 100 - base * (tiles.length - 1) : base,
+                inner,
+              })),
             },
       focus: tiles[0],
       recent: [tiles[0]],
     };
   }),
-  tiles: [...d.spaces.values()].flat().map((id, i) => ({
+  tiles: Arr.map([...d.spaces.values()].flat(), (id, i) => ({
     id,
     n: i + 1,
     shows: d.shows.get(id),
@@ -3482,20 +3516,20 @@ type DeskEvent = {
   readonly w: DeskWorld;
 };
 
-const deskTiles = (d: Desk) => (d.spaces.get(1) ?? []).map((id) => ({ id, name: d.shows.get(id) ?? "" }));
+const deskTiles = (d: Desk) => Arr.map(d.spaces.get(1) ?? [], (id) => ({ id, name: d.shows.get(id) ?? "" }));
 
 /** Steps the desk window and keeps every Cmd it hands out until it is answered. */
 const deskStep = (w: DeskWorld, m: WindowMsg, machine: typeof deskWindow, each: (e: DeskEvent) => void) => {
   const prev = w.s;
   const [next, cmds] = applyCell(machine, prev, m) as readonly [WindowModel, ReadonlyArray<Cmd>];
-  w.waiting = [...w.waiting.filter((cmd) => !("cmd" in m) || m.cmd !== cmd), ...cmds];
+  w.waiting = [...Arr.filter(w.waiting, (cmd) => !("cmd" in m) || m.cmd !== cmd), ...cmds];
   w.s = next;
   each({ prev, m, next, cmds, w });
 };
 
 /** The hello exchange on dial 1, as the door runs it: a challenge, a hello, the admission. */
 const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent) => void, dial = 1) => {
-  const key = w.waiting.find((c) => c.type === "key");
+  const key = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "key"));
 
   if (key !== undefined) {
     deskStep(
@@ -3513,7 +3547,7 @@ const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent)
     machine,
     each,
   );
-  const hello = w.waiting.find((c) => c.type === "hello" && c["dial"] === dial);
+  const hello = Option.getOrUndefined(Arr.findFirst(w.waiting, (c) => c.type === "hello" && c["dial"] === dial));
 
   if (hello !== undefined) {
     deskStep(w, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, machine, each);
@@ -3584,7 +3618,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
     });
   }
 
-  for (const cmd of w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
+  for (const cmd of Arr.filter(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
     out.push(
       () =>
         ({
@@ -3652,7 +3686,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
 
       d.spaces.set(
         n,
-        tiles.filter((_, i) => i !== c.pick % tiles.length),
+        Arr.filter(tiles, (_, i) => i !== c.pick % tiles.length),
       );
 
       return notice();
@@ -3702,7 +3736,7 @@ const deskFold = (
 };
 
 const reads = (cmds: ReadonlyArray<Cmd>) =>
-  cmds.filter(isWrite).flatMap((c) => (c.call._tag === "read" ? [String(c.call["stream"])] : []));
+  Arr.flatMap(Arr.filter(cmds, isWrite), (c: Write) => (c.call._tag === "read" ? [String(c.call["stream"])] : []));
 
 describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () => {
   it("L10: a window started with the tezgah option takes its tiles only from tezgah's view: a view change adds and removes tiles and opens each new one's process view, after a redial too", () => {
@@ -3717,13 +3751,13 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
               ? 1
               : 0;
           const want = w.shown ?? [];
-          const got = next.tiles.map((t) => ({ id: t.id, name: t.name }));
+          const got = Arr.map(next.tiles, (t) => ({ id: t.id, name: t.name }));
           expect(
             [...got].sort((a, b) => (a.id < b.id ? -1 : 1)),
             `L10: after ${m.type} the window's tiles are workspace 1's in tezgah's latest view`,
           ).toEqual([...want].sort((a, b) => (a.id < b.id ? -1 : 1)));
 
-          for (const name of GIVEN.map((t) => t.name)) {
+          for (const name of Arr.map(GIVEN, (t) => t.name)) {
             expect(reads(cmds), `L10: a desk window never reads the given tile ${name}`).not.toContain(
               `processes/${name}`,
             );
@@ -3731,13 +3765,13 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
 
           if (next.link._tag === "online" && prev.link._tag !== "online") {
             expect(
-              reads(cmds).filter((r) => r.startsWith("processes/tezgah:")),
+              Arr.filter(reads(cmds), (r) => r.startsWith("processes/tezgah:")),
               "L10: going online, the first time or after a redial, reads the admitted person's tezgah once",
             ).toHaveLength(1);
           }
 
           if (next.link._tag === "online") {
-            for (const t of next.tiles.filter((t) => !prev.tiles.some((p) => p.id === t.id))) {
+            for (const t of Arr.filter(next.tiles, (t) => !Arr.some(prev.tiles, (p) => p.id === t.id))) {
               expect(reads(cmds), `L10: a new tile ${t.id} reads processes/${t.name} in the same step`).toContain(
                 `processes/${t.name}`,
               );
@@ -3747,9 +3781,9 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
           if (m.type === "read_ok" && m.value.length > 0) {
             const name = String(Reflect.get(Object(Reflect.get(Object(m.value[0]), "body")), "name"));
 
-            if (next.tiles.some((t) => t.name === name)) {
+            if (Arr.some(next.tiles, (t) => t.name === name)) {
               expect(
-                writes(cmds, "open").map((c) => c.call["pid"]),
+                Arr.map(writes(cmds, "open"), (c) => c.call["pid"]),
                 `L10: ${name}'s read opens its process view`,
               ).toContain(`process_of_${name}`);
             }
@@ -3767,13 +3801,16 @@ describe("Desk S2a L10: a window with a desk takes its tiles from tezgah", () =>
     fc.assert(
       fc.property(arbMsgSequence(DeskPick, { minLength: 10, maxLength: 120, size: "max" }), (picks) => {
         deskFold(picks, deskWindow, false, ({ prev, next, cmds }) => {
-          opened += next.tiles.filter((t, i) => t.reach._tag === "open" && prev.tiles[i]?.reach._tag !== "open").length;
+          opened += Arr.filter(
+            next.tiles,
+            (t, i) => t.reach._tag === "open" && prev.tiles[i]?.reach._tag !== "open",
+          ).length;
           expect(
-            next.tiles.map((t) => [t.id, t.name]),
+            Arr.map(next.tiles, (t) => [t.id, t.name]),
             "L10: the given tiles stay",
-          ).toEqual(GIVEN.map((t) => [t.id, t.name]));
+          ).toEqual(Arr.map(GIVEN, (t) => [t.id, t.name]));
           expect(
-            reads(cmds).filter((r) => r.startsWith("processes/tezgah:")),
+            Arr.filter(reads(cmds), (r) => r.startsWith("processes/tezgah:")),
             "L10: no desk, no tezgah read",
           ).toEqual([]);
         });
@@ -3803,10 +3840,10 @@ describe("Desk R: a window whose person has no tezgah says so, and follows tezga
             const reach = next.tezgah?.reach._tag;
 
             const tezgahRead = (x: WindowModel) =>
-              x.flight.some((f) => f.call._tag === "read" && f.call.stream === stream);
+              Arr.some(x.flight, (f) => f.call._tag === "read" && f.call.stream === stream);
 
             const emptied = m.type === "read_ok" && m.value.length === 0 && tezgahRead(prev) && !tezgahRead(next);
-            const opened = writes(cmds, "open").map((c) => c.call["pid"]);
+            const opened = Arr.map(writes(cmds, "open"), (c) => c.call["pid"]);
             seen.missing += emptied ? 1 : 0;
             wasMissing ||= emptied;
             expect(emptied ? reach : "missing", "R2: a read that finds no tezgah takes the link to missing").toBe(
@@ -3821,20 +3858,16 @@ describe("Desk R: a window whose person has no tezgah says so, and follows tezga
             const online = next.link._tag === "online" && prev.link._tag !== "online";
             seen.redialed += online && wasMissing ? 1 : 0;
             expect(
-              online ? reads(cmds).filter((r) => r.startsWith("processes/tezgah:")) : [stream],
+              online ? Arr.filter(reads(cmds), (r) => r.startsWith("processes/tezgah:")) : [stream],
               "R2: each time the window goes online it reads its own person's tezgah once",
             ).toEqual([stream]);
 
             const follows = wasMissing && w.up && reach === "open" && !counted;
             counted ||= follows;
             seen.followed += follows ? 1 : 0;
-
-            const want = deskTiles(w.desk)
-              .map((t) => t.name)
-              .sort();
-
+            const want = Arr.map(deskTiles(w.desk), (t) => t.name).sort();
             expect(
-              follows ? [...next.tiles].map((t) => t.name).sort() : want,
+              follows ? Arr.map([...next.tiles], (t) => t.name).sort() : want,
               "R2: once tezgah exists, the window takes workspace 1's tiles from its view",
             ).toEqual(want);
           },
@@ -3901,8 +3934,9 @@ const FOCUS_PRESSES: ReadonlyArray<{ readonly keys: ReadonlyArray<string>; reado
 const drawnHere = (s: WindowModel) => {
   const client = s.tezgah?.client;
   const view = client === undefined ? null : optimisticState(client);
-
-  return view?.workspaces.find((w) => w.n === client?.workspace) ?? null;
+  return Option.getOrNull(
+    Option.flatMap(Option.fromNullishOr(view), (v) => Arr.findFirst(v.workspaces, (w) => w.n === client?.workspace)),
+  );
 };
 
 /** Where a focus key goes on the drawn workspace, by the lean's words; null when nowhere new. */
@@ -3973,8 +4007,7 @@ const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boo
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
-
-  return { workspaces: [{ ...w, focus: on, recent: [on, ...w.recent.filter((t) => t !== on)] }], tiles };
+  return { workspaces: [{ ...w, focus: on, recent: [on, ...Arr.filter(w.recent, (t) => t !== on)] }], tiles };
 };
 
 /** Whether flight `f` is the window's own inbox wait, the one call the door parks in the focus world
@@ -3996,7 +4029,7 @@ const focusMoves = (
 
   // A `ledger.wait` stays parked at the door: nothing in this world writes past its cursor, the
   // window's inbox or a tile's name, so the door never answers it (P18 slice 2's inbox wait).
-  for (const f of s.flight.filter((x) => x.call._tag !== "wait")) {
+  for (const f of Arr.filter(s.flight, (x) => x.call._tag !== "wait")) {
     const on = { id: f.id, dial: f.dial };
     out.push(() => {
       if (f.call._tag === "read") {
@@ -4033,7 +4066,7 @@ const focusMoves = (
     });
   }
 
-  for (const cmd of w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
+  for (const cmd of Arr.filter(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type))) {
     out.push(() =>
       send({
         type: `${cmd.type}_ok`,
@@ -4161,7 +4194,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
             const to = did.to as TileId;
             w.view = {
               ...w.view,
-              workspaces: [{ ...space, focus: to, recent: [to, ...space.recent.filter((t) => t !== to)] }],
+              workspaces: [{ ...space, focus: to, recent: [to, ...Arr.filter(space.recent, (t) => t !== to)] }],
             };
 
             if (w.subscribed) {
@@ -4173,14 +4206,14 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
           const named = new Map<string, unknown>();
 
           const each = ({ m, next, cmds }: DeskEvent) => {
-            for (const c of cmds.filter(isWrite)) {
+            for (const c of Arr.filter(cmds, isWrite)) {
               if (c.call._tag === "send" && c.call["pid"] === TEZGAH_PID) {
                 const letter = String(c.call["letter"]);
                 take(letter, c.call["m"]);
                 named.set(letter, Reflect.get(Object(c.call["m"]), "to"));
-                const move = w.moves.find((x) => x.letter === null);
+                const move = Option.getOrUndefined(Arr.findFirst(w.moves, (x) => x.letter === null));
 
-                if (move !== undefined && !w.moves.some((x) => x.letter === letter)) {
+                if (move !== undefined && !Arr.some(w.moves, (x) => x.letter === letter)) {
                   move.letter = letter;
                 }
               }
@@ -4221,8 +4254,8 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
           // leaves the world unsettled.
           for (let guard = 0; guard < 3_000; guard++) {
             const s = w.s;
-            const unanswered = s.flight.filter((f) => !inboxParked(s, f));
-            const answerable = unanswered.filter((f) => f.call._tag !== "wait");
+            const unanswered = Arr.filter(s.flight, (f) => !inboxParked(s, f));
+            const answerable = Arr.filter(unanswered, (f) => f.call._tag !== "wait");
 
             if (s.link._tag === "dialing" && !dialed.has(s.link.dial)) {
               dialed.add(s.link.dial);
@@ -4236,14 +4269,13 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
               s.link._tag === "online" &&
               unanswered.length === 0 &&
               w.notices.length === 0 &&
-              !w.waiting.some((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)) &&
-              w.moves.every((x) => x.letter !== null && w.took.includes(x.letter));
+              !Arr.some(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type)) &&
+              Arr.every(w.moves, (x) => x.letter !== null && w.took.includes(x.letter));
 
             // The first options are the answers; a timer when retrying; never a socket drop or a key.
             const answers =
               answerable.length +
-              w.waiting.filter((x) => ["now", "record", "persist", "write", "ping"].includes(x.type)).length;
-
+              Arr.filter(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type)).length;
             // Online with nothing left to answer or deliver, and only a call the door holds: no move
             // of this world will ever settle it.
             const stuck = s.link._tag === "online" && answers === 0 && w.notices.length === 0 && unanswered.length > 0;
@@ -4277,19 +4309,25 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
 
           seen.moves += w.moves.length;
           expect(
-            w.s.flight.filter((f) => !inboxParked(w.s, f)).map((f) => f.call),
+            Arr.map(
+              Arr.filter(w.s.flight, (f) => !inboxParked(w.s, f)),
+              (f) => f.call,
+            ),
             "L26: the world settles: every call but the inbox's own parked wait is answered",
           ).toEqual([]);
           expect(
-            w.moves.filter((x) => x.letter === null || !w.took.includes(x.letter)).map((x) => x.to),
+            Arr.map(
+              Arr.filter(w.moves, (x) => x.letter === null || !w.took.includes(x.letter)),
+              (x) => x.to,
+            ),
             "L26: every move the window drew reached tezgah as one letter, after any drop of the link",
           ).toEqual([]);
           expect(
-            w.moves.map((x) => named.get(x.letter ?? "")),
+            Arr.map(w.moves, (x) => named.get(x.letter ?? "")),
             "L26: each move's letter names the tile the window drew",
-          ).toEqual(w.moves.map((x) => x.to));
+          ).toEqual(Arr.map(w.moves, (x) => x.to));
           expect(w.took, "L26: tezgah took each move once, in the order they were made").toEqual(
-            w.moves.map((x) => x.letter),
+            Arr.map(w.moves, (x) => x.letter),
           );
           expect(drawnHere(w.s)?.focus, "L26: once all is answered the window draws tezgah's focus").toBe(
             w.view.workspaces[0]!.focus,
@@ -4344,12 +4382,12 @@ describe("S9: an ended tile's end is said only when the tile has no focus", () =
             const here = drawnHere(next)?.focus ?? null;
             const appended = next.said.messages.slice(next.said.messages.length - (next.said.id - prev.said.id));
 
-            for (const x of appended.filter((x) => x._tag === "ended")) {
+            for (const x of Arr.filter(appended, (x) => x._tag === "ended")) {
               expect(x.tile, `S9: after ${m.type}, an end was said for the drawn focus`).not.toBe(here);
             }
 
             for (const t of next.tiles) {
-              const before = prev.tiles.find((p) => p.id === t.id)?.reach;
+              const before = Option.getOrUndefined(Arr.findFirst(prev.tiles, (p) => p.id === t.id))?.reach;
               const r = t.reach;
 
               if (r._tag !== "ended" || (before?._tag === "ended" && before.pid === r.pid)) {
@@ -4357,7 +4395,7 @@ describe("S9: an ended tile's end is said only when the tile has no focus", () =
               }
 
               const key = `${t.id} ${r.pid}`;
-              const said = appended.filter((x) => x._tag === "ended" && x.tile === t.id).length;
+              const said = Arr.filter(appended, (x) => x._tag === "ended" && x.tile === t.id).length;
               seen.again += told.has(key) ? 1 : 0;
               const want = told.has(key) || t.id === here ? 0 : 1;
               seen.focused += !told.has(key) && t.id === here ? 1 : 0;
@@ -4417,7 +4455,7 @@ const FOLD_SMALLEST = { width: 220, height: 120 } as const;
 const FOLD_ACROSS = { row: 22, column: 20 } as const;
 
 const foldTiles = (node: Workspace["layout"]): ReadonlyArray<string> =>
-  typeof node === "string" ? [node] : node.parts.flatMap((p) => foldTiles(p.inner));
+  typeof node === "string" ? [node] : Arr.flatMap(node.parts, (p) => foldTiles(p.inner));
 
 type Extent = { readonly width: number; readonly height: number };
 
@@ -4437,17 +4475,18 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
 
     const row = node.dir === "row";
     const left = (row ? box.width : box.height) - (node.parts.length - 1) * Layout.GAP;
-    const fixed = node.parts.map((p) => foldTiles(p.inner).every((t) => strips.has(t)));
-    const has = left - fixed.filter((f) => f).length * FOLD_ACROSS[node.dir];
-    const total = node.parts.reduce((sum, p, i) => (fixed[i] ? sum : sum + p.percent), 0);
-    const lead = node.parts.findIndex((p) => foldTiles(p.inner).includes(w.focus));
-    let shares = node.parts.map((p, i) => (fixed[i] ? FOLD_ACROSS[node.dir] : (has * p.percent) / total));
+    const fixed = Arr.map(node.parts, (p) => Arr.every(foldTiles(p.inner), (t) => strips.has(t)));
+    const has = left - Arr.filter(fixed, (f) => f).length * FOLD_ACROSS[node.dir];
+    const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] ? sum : sum + p.percent));
+    const lead = Arr.findFirstIndex(node.parts, (p) => foldTiles(p.inner).includes(w.focus));
+    let shares = Arr.map(node.parts, (p, i) => (fixed[i] ? FOLD_ACROSS[node.dir] : (has * p.percent) / total));
     const least = Math.min(row ? FOLD_SMALLEST.width : FOLD_SMALLEST.height, has);
 
-    if (lead >= 0 && shares[lead]! < least) {
-      const rest = total - node.parts[lead]!.percent;
-      shares = node.parts.map((p, i) =>
-        i === lead ? least : fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+    if (Option.isSome(lead) && shares[lead.value]! < least) {
+      const at = lead.value;
+      const rest = total - node.parts[at]!.percent;
+      shares = Arr.map(node.parts, (p, i) =>
+        i === at ? least : fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
       );
     }
 
@@ -4475,47 +4514,51 @@ const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
   let strips = new Set<string>();
 
   for (;;) {
-    const open = [...foldDrawn(space, s.size, strips)].filter(([t]) => !strips.has(t) && t !== space.focus);
+    const open = Arr.filter([...foldDrawn(space, s.size, strips)], ([t]) => !strips.has(t) && t !== space.focus);
 
     if (
-      open.some(
+      Arr.some(
+        open,
         ([, r]) => Math.abs(r.width - FOLD_SMALLEST.width) <= 0.5 || Math.abs(r.height - FOLD_SMALLEST.height) <= 0.5,
       )
     ) {
       return null;
     }
 
-    const due = open.filter(([, r]) => r.width < FOLD_SMALLEST.width || r.height < FOLD_SMALLEST.height);
+    const due = Arr.filter(open, ([, r]) => r.width < FOLD_SMALLEST.width || r.height < FOLD_SMALLEST.height);
 
     if (due.length === 0) {
-      return Layout.order(space.layout).filter((t) => strips.has(t));
+      return Arr.filter(Layout.order(space.layout), (t) => strips.has(t));
     }
 
-    strips = new Set([...strips, ...due.map(([t]) => t)]);
+    strips = new Set([...strips, ...Arr.map(due, ([t]) => t)]);
   }
 };
 
 /** The record and Msg fields a law reads by their schema: every object case of a union. */
 const objectsIn = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> =>
-  ast._tag === "Union" ? ast.types.flatMap(objectsIn) : ast._tag === "Objects" ? [ast] : [];
+  ast._tag === "Union" ? Arr.flatMap(ast.types, objectsIn) : ast._tag === "Objects" ? [ast] : [];
 
 const fieldIn = (o: SchemaAST.Objects | undefined, name: string) =>
-  o?.propertySignatures.find((p) => p.name === name)?.type;
+  Option.getOrUndefined(
+    Option.flatMap(Option.fromNullishOr(o), (on) => Arr.findFirst(on.propertySignatures, (p) => p.name === name)),
+  )?.type;
 
 /** The window Msg whose `type` is `t`, as the machine's own Msg schema says it. */
 const msgCase = (t: string) =>
-  objectsIn(focusWindow.msg.ast).find((o) => {
-    const ty = fieldIn(o, "type");
-
-    return ty?._tag === "Literal" && ty.literal === t;
-  });
+  Option.getOrUndefined(
+    Arr.findFirst(objectsIn(focusWindow.msg.ast), (o) => {
+      const ty = fieldIn(o, "type");
+      return ty?._tag === "Literal" && ty.literal === t;
+    }),
+  );
 
 /** Every key in a value, at any depth. */
 const keysIn = (v: unknown): ReadonlyArray<string> =>
-  Array.isArray(v)
-    ? v.flatMap(keysIn)
+  Arr.isArray(v)
+    ? Arr.flatMap(v, keysIn)
     : v !== null && typeof v === "object"
-      ? Object.entries(v).flatMap(([k, x]) => [k, ...keysIn(x)])
+      ? Arr.flatMap(Object.entries(v), ([k, x]) => [k, ...keysIn(x)])
       : [];
 
 /** A key that would hold a fold: the one thing L32 forbids the model and the wire. */
@@ -4553,7 +4596,7 @@ const foldWalk = (
 
   /** tezgah takes a move as the socket hands it over and sends its view while the window listens. */
   const each = (e: DeskEvent) => {
-    for (const c of e.cmds.filter(isWrite)) {
+    for (const c of Arr.filter(e.cmds, isWrite)) {
       const to = Reflect.get(Object(c.call["m"]), "to");
       const space = w.view.workspaces[0]!;
       const letter = String(c.call["letter"]);
@@ -4640,8 +4683,7 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
           foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
             const before = stripsNow(prev);
             const after = stripsNow(next);
-
-            const rows = cmds.flatMap((c) => {
+            const rows = Arr.flatMap(cmds, (c) => {
               const r = recordIn(c);
 
               return r?._tag === "fold" ? [r] : [];
@@ -4695,7 +4737,7 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
         (cuts, focus, picks) => {
           foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
             expect(
-              keysIn(next).filter((k) => FOLDED.test(k)),
+              Arr.filter(keysIn(next), (k) => FOLDED.test(k)),
               `L32: after ${m.type} the window's model holds no fold`,
             ).toEqual([]);
 
@@ -4707,21 +4749,22 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
                 size: null,
               });
               expect(
-                cmds.filter(isWrite).map((c) => c.call._tag),
+                Arr.map(Arr.filter(cmds, isWrite), (c) => c.call._tag),
                 "L32: a size Msg writes nothing to the brain",
               ).toEqual([]);
             }
 
-            for (const c of cmds
-              .filter(isWrite)
-              .filter((c) => c.call._tag === "send" && c.call["pid"] === TEZGAH_PID)) {
+            for (const c of Arr.filter(
+              Arr.filter(cmds, isWrite),
+              (c) => c.call._tag === "send" && c.call["pid"] === TEZGAH_PID,
+            )) {
               seen.letters++;
               expect(
-                Object.keys(Object(c.call["m"])).filter((k) => !DID_KEYS.has(k)),
+                Arr.filter(Object.keys(Object(c.call["m"])), (k) => !DID_KEYS.has(k)),
                 "L32: a letter to tezgah carries only did's keys",
               ).toEqual([]);
               expect(
-                keysIn(c.call["m"]).filter((k) => FOLDED.test(k)),
+                Arr.filter(keysIn(c.call["m"]), (k) => FOLDED.test(k)),
                 "L32: a letter to tezgah names no fold",
               ).toEqual([]);
             }

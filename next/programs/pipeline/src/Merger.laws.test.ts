@@ -6,7 +6,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema } from "effect";
+import { Arbitrary, ConfigProvider, Effect, Schema, Array as Arr, Option } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -65,7 +65,10 @@ const settingsFor = (w: World) =>
           queue: {
             kinds: { rows: ["rows/**"], docs: ["docs/**"] },
             checks: Object.fromEntries(
-              ["rows", "docs", "code"].map((kind, i) => [kind, w.empty[i] ? [] : [{ name: w.name, source: w.source }]]),
+              Arr.map(["rows", "docs", "code"], (kind, i) => [
+                kind,
+                w.empty[i] ? [] : [{ name: w.name, source: w.source }],
+              ]),
             ),
           },
           merger: { wait: w.wait, poll: w.poll, backoff: w.backoff, rounds: w.rounds },
@@ -233,7 +236,9 @@ const guided = (p: Program, w: World) => {
           msg = Schema.decodeSync(p.msg)({ type: "timer", at });
           clock = at;
         } else if ("cmd" in event && event.cmd.type !== "send") {
-          const command = out.find((c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt);
+          const command = Option.getOrUndefined(
+            Arr.findFirst(out, (c) => c.type === event.cmd.type && "attempt" in c && c.attempt === model.attempt),
+          );
 
           if (command === undefined || model._tag === "idle" || model.step._tag !== "asking") {
             continue;
@@ -285,7 +290,9 @@ const guided = (p: Program, w: World) => {
           clock = Math.max(clock, model.step.at!);
           msg = Schema.decodeSync(p.msg)({ type: "timer", at: clock });
         } else {
-          const cmd = out.findLast((c) => service(c) && "attempt" in c && c.attempt === model.attempt);
+          const cmd = Option.getOrUndefined(
+            Arr.findLast(out, (c) => service(c) && "attempt" in c && c.attempt === model.attempt),
+          );
 
           if (cmd === undefined) {
             break;
@@ -335,8 +342,8 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
   let asks = 0;
 
   for (const { prev, msg, next, cmds } of folded.steps) {
-    const sent = cmds.filter((c) => c.type === "send");
-    const asked = cmds.filter(service);
+    const sent = Arr.filter(cmds, (c) => c.type === "send");
+    const asked = Arr.filter(cmds, service);
 
     if (law === "L9") {
       const own = Mail.Abandon.make({ type: "abandon", ref: prev._tag === "idle" ? w.ref : prev.job.ref });
@@ -394,7 +401,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
       reached ||= sent.length > 0;
 
       if (sent.length > 0) {
-        expect(cmds.map((c) => c.type)).toEqual(["send", "exit"]);
+        expect(Arr.map(cmds, (c) => c.type)).toEqual(["send", "exit"]);
 
         for (const cmd of sent) {
           if (cmd.type === "send") {
@@ -403,7 +410,7 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
           }
         }
       } else {
-        expect(cmds.filter((c) => c.type === "exit")).toEqual([]);
+        expect(Arr.filter(cmds, (c) => c.type === "exit")).toEqual([]);
       }
     }
 
@@ -673,9 +680,11 @@ describe("the merger, next/", () => {
                 check: () => true,
                 run: (m, { p, w }) => {
                   const prev = m.model;
-                  const active = m.current.find((c) => service(c) && "attempt" in c && c.attempt === prev.attempt);
-
-                  const late = m.history.filter(
+                  const active = Option.getOrUndefined(
+                    Arr.findFirst(m.current, (c) => service(c) && "attempt" in c && c.attempt === prev.attempt),
+                  );
+                  const late = Arr.filter(
+                    m.history,
                     (c) =>
                       service(c) &&
                       (prev._tag === "idle" ||
@@ -706,7 +715,7 @@ describe("the merger, next/", () => {
                     moves.push(() => answer(p, w, late[cell.pick % late.length]!, cell.pick, m.clock));
                   }
 
-                  const send = m.history.find((c) => c.type === "send");
+                  const send = Option.getOrUndefined(Arr.findFirst(m.history, (c) => c.type === "send"));
 
                   if (send !== undefined) {
                     moves.push(() => answer(p, w, send, cell.pick, m.clock));
@@ -745,7 +754,7 @@ describe("the merger, next/", () => {
                     m.replies = 0;
                   }
 
-                  m.replies += cmds.filter((c) => c.type === "send").length;
+                  m.replies += Arr.filter(cmds, (c) => c.type === "send").length;
                   expect(m.replies).toBeLessThanOrEqual(1);
 
                   if (prev._tag !== "idle" && next._tag === "idle") {
@@ -768,7 +777,7 @@ describe("the merger, next/", () => {
                     expect(p.wake(next)).toBe(p.wake(prev));
                   }
 
-                  for (const cmd of cmds.filter(service)) {
+                  for (const cmd of Arr.filter(cmds, service)) {
                     expect("attempt" in cmd && cmd.attempt).toBe(++m.asks);
                   }
 
@@ -888,8 +897,8 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
             if (rounds === w.rounds) {
               bounded++;
               expect(next._tag).toBe("idle");
-              expect(cmds.filter(service)).toEqual([]);
-              expect(cmds.find((c) => c.type === "send")).toMatchObject({
+              expect(Arr.filter(cmds, service)).toEqual([]);
+              expect(Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "send"))).toMatchObject({
                 m: {
                   type: "reply",
                   _tag: "behind",

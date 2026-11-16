@@ -14,6 +14,7 @@
  */
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -109,7 +110,7 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
   const cannot =
     platform === "browser"
       ? [
-          ...mods.flatMap((m) => BROWSER.map((k) => `${m}+${k}`)),
+          ...Arr.flatMap(mods, (m) => Arr.map(BROWSER, (k) => `${m}+${k}`)),
           ...(os === "windows" || os === "linux" || os === "unknown" ? ["f6"] : []),
         ]
       : platform === "electron" && os === "macos"
@@ -126,7 +127,7 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
  * @category constructors
  */
 export const ship = <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend): ReadonlyArray<B> =>
-  defaults.map((row) => ({ ...row, keys: row.keys.filter((k) => !on.cannot.includes(resolved(k, on.mod))) }));
+  Arr.map(defaults, (row) => ({ ...row, keys: Arr.filter(row.keys, (k) => !on.cannot.includes(resolved(k, on.mod))) }));
 
 /**
  * Loads rows into a window's table, or fails on the first row bound to a key its backend can never
@@ -219,11 +220,10 @@ export const spell = (e: {
   }
 
   const named = NAMED[e.key] ?? (e.key.length === 1 ? null : e.key.toLowerCase());
-  const mods = [e.ctrlKey ? "ctrl" : "", e.altKey ? "alt" : "", e.metaKey ? "meta" : ""].filter((m) => m !== "");
+  const mods = Arr.filter([e.ctrlKey ? "ctrl" : "", e.altKey ? "alt" : "", e.metaKey ? "meta" : ""], (m) => m !== "");
   // A printable key carries Shift in its own character; with Ctrl, Alt or Meta it is the letter
   // itself, lower case, and Shift is said.
   const shift = e.shiftKey && (named !== null || mods.length > 0) ? ["shift"] : [];
   const base = named ?? (mods.length > 0 ? e.key.toLowerCase() : e.key);
-
-  return [...mods, ...shift, base].join("+");
+  return Arr.join([...mods, ...shift, base], "+");
 };

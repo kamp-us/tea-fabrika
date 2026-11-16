@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Logger,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+  Array as Arr,
+} from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
@@ -51,7 +63,7 @@ export type Driver = {
 const NAME = "merger:1";
 
 const replies = Effect.fnUntraced(function* (h: World) {
-  return (yield* h.current().letters("queue")).map((letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
+  return Arr.map(yield* h.current().letters("queue"), (letter) => Schema.decodeUnknownSync(Mail.Reply)(letter.m));
 });
 
 const finish = Effect.fnUntraced(function* (h: World) {
@@ -132,7 +144,7 @@ export const suite = (driver: Driver) =>
         expect(yield* h.alarms.saved).toEqual(before);
         yield* h.green;
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(1);
         expect(yield* replies(h)).toHaveLength(1);
       }),
     );
@@ -150,9 +162,9 @@ export const suite = (driver: Driver) =>
         expect((yield* h.host.read(1))?.state).toBe("merged");
         expect(yield* replies(h)).toEqual([]);
         yield* h.reopen;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(1);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(1);
         yield* h.fire;
-        expect(h.host.calls().filter((c) => c.method === "merge")).toHaveLength(2);
+        expect(Arr.filter(h.host.calls(), (c) => c.method === "merge")).toHaveLength(2);
         expect((yield* replies(h))[0]?._tag).toBe("merged");
         expect((yield* replies(h))[0]?.ref).toBe("r3");
         expect(yield* replies(h)).toHaveLength(1);
@@ -283,7 +295,7 @@ export const suite = (driver: Driver) =>
         yield* inspect;
         yield* finish(h);
         yield* inspect;
-        const failures = (yield* h.current().letters(NAME)).map((letter) => letter.m);
+        const failures = Arr.map(yield* h.current().letters(NAME), (letter) => letter.m);
 
         for (const reason of ["unavailable", "handler_failed"]) {
           expect(failures).toContainEqual(
@@ -347,11 +359,11 @@ export const suite = (driver: Driver) =>
         }
 
         yield* inspect;
-        const spans = captured.text().join("\n");
+        const spans = Arr.join(captured.text(), "\n");
         expect(spans).toContain("fab.change");
         expect(spans).toContain("fab.head");
         expect((yield* h.current().letters(NAME)).length).toBeGreaterThan(0);
-        expect((yield* h.savedReplies).some((reply) => reply !== null)).toBe(true);
+        expect(Arr.some(yield* h.savedReplies, (reply) => reply !== null)).toBe(true);
       }).pipe(Effect.withTracer(captured.tracer), Effect.provide(Logger.layer([logger])));
     });
 

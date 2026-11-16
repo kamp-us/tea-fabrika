@@ -5,6 +5,7 @@
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Arr from "effect/Array";
 
 /**
  * Schema for a branch name under git's ref name rules (`git check-ref-format`): components
@@ -18,8 +19,8 @@ export const Branch = Schema.String.check(
   Schema.makeFilter(
     (s) =>
       s !== "@" &&
-      [...s].every((c) => c.charCodeAt(0) > 32 && c.charCodeAt(0) !== 127) &&
-      s.split("/").every((p) => !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock")),
+      Arr.every([...s], (c) => c.charCodeAt(0) > 32 && c.charCodeAt(0) !== 127) &&
+      Arr.every(s.split("/"), (p) => !p.startsWith(".") && !p.endsWith(".") && !p.endsWith(".lock")),
   ),
 );
 

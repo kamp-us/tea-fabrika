@@ -11,6 +11,7 @@ import * as Logger from "effect/Logger";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+import * as Arr from "effect/Array";
 import * as Outside from "./BrainControl.test-support.ts";
 import { BrainService } from "./BrainService.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
@@ -94,7 +95,7 @@ it.effect.prop(
           : v.initial === "foreign"
             ? {
                 ...Outside.foreign,
-                args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
+                args: v.sameArity ? Arr.map(Outside.spec.args, (arg) => `${arg}.foreign`) : Outside.foreign.args,
               }
             : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
 
@@ -120,8 +121,8 @@ it.effect.prop(
       }
 
       const wanted = v.initial === "absent" ? 1 : 0;
-      expect(outside.calls.filter((a) => a === "install")).toHaveLength(wanted);
-      expect(outside.calls.filter((a) => a === "start")).toHaveLength(wanted);
+      expect(Arr.filter(outside.calls, (a) => a === "install")).toHaveLength(wanted);
+      expect(Arr.filter(outside.calls, (a) => a === "start")).toHaveLength(wanted);
       expect(outside.calls).not.toContain("stop");
     }),
   checks(200),
@@ -231,7 +232,7 @@ it.effect.prop(
       const brain = Context.get(context, BrainService);
       const up = yield* Effect.forkScoped(brain.up);
 
-      for (let n = 0; n < 10 && !outside.pending.some((call) => call.action === "start"); n++) {
+      for (let n = 0; n < 10 && !Arr.some(outside.pending, (call) => call.action === "start"); n++) {
         yield* progress(outside, n, "up");
       }
 
@@ -269,7 +270,7 @@ it.effect.prop(
         expect(Exit.isSuccess(yield* finish(outside, repeat, "up", v.steps))).toBe(true);
       }
 
-      expect(outside.calls.filter((action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
+      expect(Arr.filter(outside.calls, (action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
       expect(outside.calls.indexOf("stop")).toBeGreaterThan(outside.calls.indexOf("start"));
     }),
   checks(150),
@@ -434,7 +435,7 @@ it.effect.prop(
           Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
           ...logs,
           Formatter.formatJson(
-            spans.map((s) => ({ attributes: [...s.attributes], events: s.events, status: s.status })),
+            Arr.map(spans, (s) => ({ attributes: [...s.attributes], events: s.events, status: s.status })),
           ),
           Outside.spec.url,
         ];
@@ -466,7 +467,7 @@ it.effect.prop(
       const brain = Context.get(context, BrainService);
       const up = yield* Effect.forkScoped(brain.up);
 
-      for (let n = 0; n < 10 && !outside.pending.some((call) => call.action === "start"); n++) {
+      for (let n = 0; n < 10 && !Arr.some(outside.pending, (call) => call.action === "start"); n++) {
         yield* progress(outside, n, "up");
       }
 
@@ -476,8 +477,8 @@ it.effect.prop(
       yield* held?.fail("lost-bootstrap-race") ?? Effect.die("no start command to race");
       const result = yield* finish(outside, up, "up", v.steps);
       expect(Exit.isSuccess(result)).toBe(matching);
-      expect(outside.calls.filter((action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
-      expect(outside.calls.filter((action) => action === "start")).toHaveLength(1);
+      expect(Arr.filter(outside.calls, (action) => action === "inspect").length).toBeGreaterThanOrEqual(2);
+      expect(Arr.filter(outside.calls, (action) => action === "start")).toHaveLength(1);
       expect(outside.calls).not.toContain("stop");
     }),
   checks(200),

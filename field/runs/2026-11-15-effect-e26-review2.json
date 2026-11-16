@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e26-review2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T21:47:45-08:00",
+  "ended": "2026-11-15T21:51:05-08:00",
+  "parent": "2026-11-15-effect-e26-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of e4db8f1, judgment slice E26 of the Effect-check sweep (preferEffectArray), in next/: merge-ready. The one fault sent back is fixed. The five library files under next/packages/libfabrika/src (client/HandsMachine.ts, client/Keys.ts, client/Tezgah.ts, client/WindowMachine.ts, repositories/Repositories.ts) now import * as Arr from effect/Array, and Tezgah.ts also import * as Option from effect/Option. Only the names the build had added left the barrel lines. The checker with namespaceImportPackages and preferNamespaceImport at error flags no Array in any of them, and no Option in Tezgah.ts. The names it still flags (Option, Schema, Result, Predicate, Context, Effect) were already on those barrel lines on main and are E2's to fix. preferEffectArray stays at 0 in all five files. The fix changes only import lines, so no law reads it beyond the typecheck.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row. Ran on Node 26.13.0 at e4db8f1: WindowMachine, Tezgah, HandsMachine and Keys laws and Repositories.types, one at a time (71 tests), all green; loosening.sh 678a27c HEAD (0 hits); pnpm lint and one pnpm typecheck passed. No plant: an import-only change; a wrong module path or a missing name fails the typecheck.",
+  "step": "review"
+}

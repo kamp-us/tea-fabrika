@@ -1,6 +1,7 @@
 /**
  * Checked inputs and ownership rules for one local brain.
  */
+import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
 
 const Text = Schema.NonEmptyString.check(Schema.isPattern(/^[^\p{Cc}]+$/u));
@@ -11,11 +12,7 @@ const Home = Absolute.check(
   Schema.makeFilter(
     (value) =>
       value === "/" ||
-      (!value.endsWith("/") &&
-        !value
-          .split("/")
-          .slice(1)
-          .some((s) => s === "" || s === "." || s === "..")),
+      (!value.endsWith("/") && !Arr.some(value.split("/").slice(1), (s) => s === "" || s === "." || s === "..")),
     { expected: "a canonical absolute home" },
   ),
 );
@@ -54,7 +51,7 @@ export class BrainSpec extends Schema.Opaque<BrainSpec, { readonly brand: unique
       spec.executable === job.executable &&
       spec.build === job.configuration &&
       spec.args.length === job.args.length &&
-      spec.args.every((arg, i) => arg === job.args[i])
+      Arr.every(spec.args, (arg, i) => arg === job.args[i])
     );
   }
 }

@@ -7,6 +7,8 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Arr from "effect/Array";
+import * as Equivalence from "effect/Equivalence";
 import type { BrainControl, BrainControlError } from "./BrainControl.ts";
 import type { BrainSpec } from "./BrainSpec.ts";
 
@@ -120,7 +122,7 @@ export const suite = (open: Open) =>
           const disk = yield* open(fault);
           expect(Exit.isFailure(yield* disk.control.install.pipe(Effect.exit))).toBe(true);
           expect(yield* disk.read).toBeNull();
-          expect((yield* disk.entries).filter((name) => name !== "records")).toEqual([]);
+          expect(Arr.filter(yield* disk.entries, (name) => name !== "records")).toEqual([]);
         }),
       { arbitrary: { seed: 119120, runs: 100 } },
     );
@@ -143,10 +145,10 @@ export const suite = (open: Open) =>
             expect(ours).not.toBeNull();
 
             const exit = yield* Effect.scoped(disk.control.remove).pipe(Effect.exit);
-            expect(disk.events.filter((event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+            expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
             const swapped = yield* disk.swapped;
             const typed = { defect: false, error: "BrainControlError" };
-            const held = Effect.map(disk.entries, (names) => names.filter((name) => name.startsWith(".brain-")));
+            const held = Effect.map(disk.entries, (names) => Arr.filter(names, (name) => name.startsWith(".brain-")));
 
             if (competing._tag === "copy") {
               // A 0600 file with our exact bytes is our plist: an existing matching file is reusable.
@@ -165,8 +167,7 @@ export const suite = (open: Open) =>
                 dirent: yield* disk.dirent,
               }).toEqual({ refusal: null, dirent: null });
               expect(yield* held).toEqual([]);
-              expect(disk.events.filter((event) => event === `replace:${checkpoint}`)).toHaveLength(1);
-
+              expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
               return;
             }
 
@@ -222,20 +223,21 @@ export const suite = (open: Open) =>
           // Where the competing link is now. Text cannot carry its target, so a restore that reads
           // the target as text can only put a different link back: the link then stays where the
           // capture put it. `changed` is another entry at the path, `lost` is the link nowhere.
+          const sameBytes = Arr.makeEquivalence(Equivalence.Number);
           const place = Effect.gen(function* () {
             const links = yield* disk.links;
 
             if ((yield* disk.dirent) === null) {
-              return links.held.some((bytes) => bytes.join() === target.join()) ? "held" : "lost";
+              return Arr.some(links.held, (bytes) => sameBytes(bytes, target)) ? "held" : "lost";
             }
 
-            return links.path?.join() === target.join() ? "path" : "changed";
+            return links.path !== null && sameBytes(links.path, target) ? "path" : "changed";
           });
 
           const typed = { defect: false, error: "BrainControlError" };
 
           const first = refusal(yield* Effect.scoped(disk.control.remove).pipe(Effect.exit));
-          expect(disk.events.filter((event) => event === "replace:before-capture")).toHaveLength(1);
+          expect(Arr.filter(disk.events, (event) => event === "replace:before-capture")).toHaveLength(1);
           const kept = yield* place;
           expect(first).toEqual(typed);
           expect(["path", "held"]).toContain(kept);
@@ -301,8 +303,7 @@ export const suite = (open: Open) =>
             () => disk.control.install.pipe(Effect.exit),
             { concurrency: "unbounded" },
           );
-
-          expect(exits.every(Exit.isSuccess)).toBe(true);
+          expect(Arr.every(exits, Exit.isSuccess)).toBe(true);
           const original = yield* disk.read;
           expect(original).not.toBeNull();
           yield* disk.control.install;
