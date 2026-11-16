@@ -54,6 +54,43 @@ export const REFLECT: Plant = {
   ],
 };
 
+/**
+ * M1 of the mock sweep (decisions 0555, 0557, 0579): `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and
+ * `vi.stubEnv` are refused, and the rest of `vi` passes. It is the sweep's one lock law: plants.test.ts
+ * runs these lines in every folder a `vitest/no-restricted-vi-methods` block of the config lists, so a
+ * later slice adds its folder to a block and its lines here, never a second set.
+ * Plant: delete one method from one block of `.oxlintrc.json`, and that folder's line is not refused.
+ */
+export const VI_METHODS: Plant = {
+  code: "vitest(no-restricted-vi-methods)",
+  prelude: [
+    'import { vi } from "vitest";',
+    'import { vi as v } from "vitest";',
+    "declare const other: { fn: () => 1 };",
+  ],
+  lines: [
+    ["export const a = vi.fn();", true],
+    ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./b.ts");', true],
+    ['export const b = vi.spyOn(Math, "max");', true],
+    ['vi.stubEnv("A", "1");', true],
+    ['export const c = vi["fn"]();', true],
+    // An alias of vi is followed, since the rule resolves the import.
+    ["export const d = v.fn();", true],
+    // The bans do not reach the rest of vi.
+    ["export const e = vi.waitFor(() => 1);", false],
+    ["export const f = vi.mocked(Math.max);", false],
+    // Not a call of vi: a comment, a string, another object's member.
+    ["// vi.fn() in a comment", false],
+    ['export const g = "vi.fn()";', false],
+    ["export const h = other.fn();", false],
+    // Documented misses, measured on oxlint 1.90.0: a chained call on vi.fn's result and a bare
+    // reference are not refused. The review reads for them.
+    ["export const i = vi.fn().mockReturnValue(1);", false],
+    ["export const j = vi.fn;", false],
+  ],
+};
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {

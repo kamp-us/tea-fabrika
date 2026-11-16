@@ -2811,6 +2811,25 @@
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
+    },
+    {
+      // Decisions 0555, 0557 and 0579: no vi.fn, vi.mock, vi.doMock, vi.spyOn or vi.stubEnv. A folder
+      // is listed the day its own slice of the mock sweep brings it to zero, and none is taken off
+      // (0168, 0524). oxlint takes the last matching block's options for a rule, so a later block for
+      // a subfolder lists all five again; plants.test.ts runs VI_METHODS in every folder listed here.
+      "files": ["next/packages/libfabrika/src/node/*.ts"],
+      "rules": {
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+            "mock": "Give the code a service and provide a test layer (0555).",
+            "doMock": "Give the code a service and provide a test layer (0555).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
     }
   ]
 }

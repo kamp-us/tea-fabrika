@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-mock-node-tests1",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-15T23:12:08-08:00",
+  "ended": "2026-11-15T23:40:18-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Sent back to plan (send). Tests step for slice mock-node-s1 of the mock sweep, ticket 1067, in next/ and our lint tooling, plan docs/plan/quests/mock-node-PLAN.md at 14e9b3134 on fabrikalfa/mock-plans. Branch fabrikalfa/mock-node-s1 from origin/main b510ed2. Written: the vitest/no-restricted-vi-methods block for next/packages/libfabrika/src/node/*.ts in .oxlintrc.json (error, five methods), VI_METHODS in oxlint-plugins/builtin-plants.ts, M1's scenario in oxlint-plugins/plants.test.ts (the REFLECT scenario's temp-repo setup moved into one helper both laws share, its assertions unchanged), and RunnerAdmission.integration.test.ts on Stub.make over Env's bindings with no vi. M1 and M2 hold and M3 is green at runtime. Sent back to plan because M4 cannot be written as planned: Stub.make on main (PR 1481) types rest as (method: string) => A[keyof A], not the loose function type the plan assumed, so the process stub's msg and the record stub's write, whose Cloudflare RPC types (Rpc.Provider) a plain async function cannot fill, type in neither own nor rest. libfabrika's own tsc reports two errors, RunnerAdmission.integration.test.ts lines 134 and 142 (TS2322). No cast was written. With rest typed (method: string) => unknown in Stub.ts, tried and undone, the package type-checks with exit 0. That change is outside this plan's files and loosens the shared helper's type, so it is a plan call. Two plants the plan names came back green: oxlint 1.90.0 does not refuse vi.fn().mockReturnValue(box) (a chained call on vi.fn's result), and the project audit walk never sends the process stub a message box.admit refuses, since the gateway refuses the unknown move before msg. M4 also holds only on plain-interface bindings: a renamed member in a Durable Object stub's own compiles.",
+  "laws": [
+    {
+      "law": "M1: scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block (oxlint-plugins/plants.test.ts)",
+      "red": "before the block: the coverage check, no glob next/packages/libfabrika/src/node/*.ts sets the rule; now green"
+    },
+    {
+      "law": "M2: vitest/no-restricted-vi-methods on next/packages/libfabrika/src/node/*.ts (.oxlintrc.json)",
+      "red": "on main's RunnerAdmission.integration.test.ts: line 90 vi.fn refused; now green on the rewrite"
+    },
+    {
+      "law": "M3: the runner admission suite and the project audit suite in RunnerAdmission.integration.test.ts, unchanged seeds, runs and coverage",
+      "red": "none needed, an existing law kept green: 11 of 11 pass on the Stub.make environment"
+    },
+    {
+      "law": "M4: each stub is typed by its Env binding",
+      "red": "not met: tsc on next/packages/libfabrika/tsconfig.json reports TS2322 at lines 134 (msg) and 142 (write), the RPC-typed members Stub.make cannot take without a cast"
+    }
+  ],
+  "plants": [
+    {
+      "law": "M1",
+      "plant": "deleted fn from the node/*.ts vitest/no-restricted-vi-methods block of .oxlintrc.json: planted.ts refused lines [5,6,7,8], not [4..10]",
+      "result": "red"
+    },
+    {
+      "law": "M2",
+      "plant": "the plan's plant: getEntrypoint answered by vi.fn().mockReturnValue(box), with vi imported again: oxlint refuses nothing (a chained call on vi.fn's result is not matched, listed in VI_METHODS)",
+      "result": "green"
+    },
+    {
+      "law": "M2",
+      "plant": "getEntrypoint answered by vi.fn(() => box), with vi imported again: refused at line 129",
+      "result": "red"
+    },
+    {
+      "law": "M3",
+      "plant": "the plan's plant: the process stub's msg accepts without asking box.admit: all 11 laws pass, as the walk's refused move never reaches msg",
+      "result": "green"
+    },
+    {
+      "law": "M3",
+      "plant": "the process stub's msg refuses every object message: 4 audit laws fail, expected result._tag accepted",
+      "result": "red"
+    },
+    {
+      "law": "M4",
+      "plant": "the process stub's own configure renamed configur: no new type error, as a Durable Object stub's RPC type takes the key",
+      "result": "green"
+    },
+    {
+      "law": "M4",
+      "plant": "the loader stub's own get renamed gett: TS2561, gett does not exist in type Partial<WorkerLoader>",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 28,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "Plan and code differ, code wins: Stub.make's rest is typed A[keyof A]; WorkerLoader.get's name is string | null, so the loader stub throws on a null name before calling loaded. M4's planned plant (write renamed writ) does not apply, since write had to go by name in rest. One effect-tsgo diagnostics run on libfabrika's tsconfig: 816 messages, 0 errors or warnings, none in RunnerAdmission.integration.test.ts; it reports Effect checks only, so M4 was read from libfabrika's own tsc --noEmit -p ., run four times, one at a time and only when no other compiler ran. Each plant was run once on a saved copy and restored by copy. A .integration. law ran in this box (CLAUDE_CODE_REMOTE=true, PR 1508's guard), and the 0178 guard refused nothing. pnpm format, the list ratchet and plants.test.ts (237 of 237) pass. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144): 16 of 18 parts passed in one run; lint:dead and lint:promise-types crashed with EPIPE from the TypeScript API while another agent's compiler ran, and both passed when rerun alone (0 findings; unreachable ledger PASS, none new).",
+  "step": "tests"
+}
