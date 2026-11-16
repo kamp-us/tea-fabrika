@@ -1,6 +1,8 @@
-// `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass.
+// `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass. Its plants
+// were the exam's (next/apps/fabrika/src/exam/no-hand-tag.integration.test.ts) until 0591 moved them here.
+// Plant: skip a class field named `_tag` (the rule's `PropertyDefinition` visitor), and line 6 stops firing.
 import { describe, expect, it } from "vitest";
-import { plant } from "../../../../../oxlint-plugins/plant.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-hand-tag)";
 const FIRES = "next/packages/libfabrika/src/coordination/fires.ts";
@@ -36,15 +38,15 @@ describe("no-hand-tag", async () => {
     "next/packages/libfabrika/src/coordination/fires.test.ts": fires,
   });
 
-  it("fires on a key, a type member and a class field named _tag", () => {
+  it("scenario: fires on a key, a type member and a class field named _tag", () => {
     expect(all(CODE, FIRES)).toEqual([2, 3, 4, 5, 6, 7]);
   });
 
-  it("passes a read, the schema tools, a maker and tea's `type`", () => {
+  it("scenario: passes a read, the schema tools, a maker and tea's `type`", () => {
     expect(all(CODE, PASSES)).toEqual([]);
   });
 
-  it("leaves the log, its one edge, and tests alone", () => {
+  it("scenario: leaves the log, its one edge, and tests alone", () => {
     expect(all(CODE, LOG)).toEqual([]);
     expect(all(CODE, "next/packages/libfabrika/src/coordination/fires.test.ts")).toEqual([]);
   });
