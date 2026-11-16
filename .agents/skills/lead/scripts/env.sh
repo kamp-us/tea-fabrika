@@ -14,7 +14,7 @@ FABRIKA_COAUTHOR=${FABRIKA_COAUTHOR:-"$(git config --global user.name) <$(git co
 # local.env beside the lead skill in the main checkout, which git ignores, with no pull request.
 #   CODEX_MODEL=gpt-6.1-sol
 #   CODEX_EFFORT=high
-# The next step that starts reads it. fieldrow.py prices the model.
+# The next step that starts reads it. fieldrow.ts prices the model.
 # shellcheck disable=SC1091
 [ -f "$MAIN/.agents/skills/lead/local.env" ] && . "$MAIN/.agents/skills/lead/local.env"
 CODEX_MODEL=${CODEX_MODEL:-gpt-6.1-sol}

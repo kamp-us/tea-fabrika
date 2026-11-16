@@ -38,7 +38,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Result, Schema } from "effect";
+import { NodeRuntime } from "@effect/platform-node";
+import { Effect, Result, Schema } from "effect";
+import { read as readEnv, type Values } from "./Env.ts";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
@@ -239,22 +241,7 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
 
 const SAFE = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false"];
 
-type Env = { readonly MAIN: string; readonly BOXES: string; readonly GH_REPO: string };
-
-const loadEnv = (): Env => {
-  const r = sh("sh", [
-    "-c",
-    '. "$0" && printf "%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO"',
-    join(import.meta.dirname, "env.sh"),
-  ]);
-  const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
-
-  if (r.code !== 0 || !MAIN || !BOXES) {
-    throw new Error(`env.sh failed: ${r.err}`);
-  }
-
-  return { MAIN, BOXES, GH_REPO };
-};
+type Env = Pick<Values, "MAIN" | "BOXES" | "GH_REPO">;
 
 /** How many uncommitted and untracked files a box holds, read from its git data with hooks and
  * fsmonitor off; `null` when git cannot say. */
@@ -415,15 +402,17 @@ const keepRuns = (dir: string): boolean => {
 
 const main = () => {
   const args = process.argv.slice(2);
-  const dry = args.includes("--dry-run");
 
   if (args.some((a) => a !== "--dry-run")) {
     console.error("usage: box.sh gc [--dry-run]");
     process.exit(2);
   }
 
-  const env = loadEnv();
+  NodeRuntime.runMain(Effect.flatMap(readEnv, (env) => Effect.sync(() => sweep(env, args.includes("--dry-run")))));
+};
 
+/** One sweep of the boxes folder, or the plan of one with `dry`. */
+const sweep = (env: Env, dry: boolean) => {
   if (!existsSync(env.BOXES)) {
     console.log("gc: no boxes folder");
     return;

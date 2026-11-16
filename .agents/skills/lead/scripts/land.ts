@@ -76,12 +76,13 @@
 // calls them in order.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
+import { Config, Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as Level from "../../sev/scripts/Level.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as RunsGh from "./ci/RunsGh.ts";
+import { read as readEnv } from "./Env.ts";
 import * as Arm from "./pr/Arm.ts";
 import * as Merge from "./pr/Merge.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -179,17 +180,23 @@ const must = Effect.fnUntraced(function* (
 
 const HERE = import.meta.dirname;
 
-/** The paths env.sh gives every lead script. */
+/**
+ * The paths the Env service gives every lead script, and two that are not its own: the person's
+ * HOME, and the tracker's home, FABRIKA_HOME when set and not empty, else the app's default folder.
+ */
 const loadEnv = Effect.gen(function* () {
-  const out = yield* must("env", "env.sh failed", HERE, "sh", [
-    "-c",
-    // oxlint-disable-next-line no-template-curly-in-string -- sh text: `${VAR:-default}` is the shell's own default
-    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$FABRIKA_COAUTHOR" "$HOME" "${FABRIKA_HOME:-$HOME/Library/Application Support/@kampus/fabrika-app}"',
-    `${HERE}/env.sh`,
-  ]);
-  const [MAIN = "", BOXES = "", GH_REPO = "", COAUTHOR = "", HOME = "", TRACKER_HOME = ""] = out.split("\n");
-  return { MAIN, BOXES, GH_REPO, COAUTHOR, HOME, TRACKER_HOME };
-});
+  const env = yield* readEnv;
+  const HOME = yield* Config.String("HOME").pipe(Config.withDefault(""));
+  const home = Option.filter(yield* Config.option(Config.String("FABRIKA_HOME")), (value) => value !== "");
+  return {
+    MAIN: env.MAIN,
+    BOXES: env.BOXES,
+    GH_REPO: env.GH_REPO,
+    COAUTHOR: env.FABRIKA_COAUTHOR,
+    HOME,
+    TRACKER_HOME: Option.getOrElse(home, () => `${HOME}/Library/Application Support/@kampus/fabrika-app`),
+  };
+}).pipe(Effect.mapError((e) => new Refused({ check: "env", reason: "the env could not be read", output: String(e) })));
 
 const lastLines = (output: string) => output.trimEnd().split("\n").slice(-30).join("\n");
 

@@ -27,6 +27,8 @@
     "skills/lead/scripts/clauderow.test.ts",
     "skills/lead/scripts/drive.ts",
     "skills/lead/scripts/drive.test.ts",
+    "skills/lead/scripts/Env.ts",
+    "skills/lead/scripts/Env.test.ts",
     "skills/lead/scripts/gc.ts",
     "skills/lead/scripts/gc.test.ts",
     "skills/lead/scripts/git/*.ts",

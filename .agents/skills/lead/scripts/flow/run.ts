@@ -14,9 +14,9 @@
 // Exit codes, as the quest chain's: 0 done, 20 parked on an ask, 30 stuck, 2 usage.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Layer, Option, Path, Runtime, Schema, Stream } from "effect";
+import { Console, Effect, Layer, Option, Path, Runtime, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { ChildProcess } from "effect/process";
+import { read as readEnv } from "../Env.ts";
 import * as Flow from "./Flow.ts";
 import { runners as hosting } from "./host.ts";
 import { runners as landing } from "./landing.ts";
@@ -33,19 +33,10 @@ export class Stuck extends Schema.TaggedError<Stuck>()("Stuck", { reason: Schema
   readonly [Runtime.errorExitCode] = 30;
 }
 
-/** BOXES from env.sh, as every lead script finds it. */
-const boxes = Effect.fn("flow.boxes")(
-  function* () {
-    const path = yield* Path.Path;
-    const env = path.join(import.meta.dirname, "..", "env.sh");
-    const handle = yield* ChildProcess.make("sh", ["-c", '. "$0" && printf "%s" "$BOXES"', env]);
-    const [out, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.stdout)), handle.exitCode], {
-      concurrency: 2,
-    });
-    return Number(code) === 0 && out !== "" ? out : yield* Usage.make({ reason: "env.sh gave no BOXES" });
-  },
-  Effect.scoped,
-  Effect.catchTag("PlatformError", () => Effect.fail(Usage.make({ reason: "env.sh could not run" }))),
+/** BOXES from the Env service, as every lead script finds it. */
+const boxes = readEnv.pipe(
+  Effect.map((env) => env.BOXES),
+  Effect.mapError((e) => Usage.make({ reason: `the env could not be read: ${String(e)}` })),
 );
 
 /** The flow file's default export, read as a Flow. */
@@ -74,7 +65,7 @@ const flowCommand = Command.make(
     Effect.gen(function* () {
       const flow = yield* load(file);
       const path = yield* Path.Path;
-      const saved = Option.isSome(state) ? state.value : path.join(yield* boxes(), "state", `flow-${flow.name}.json`);
+      const saved = Option.isSome(state) ? state.value : path.join(yield* boxes, "state", `flow-${flow.name}.json`);
       const model = yield* runFlow(flow, { state: saved, resume, lead }).pipe(
         Effect.catchTag(["StoreFailed", "SubFailed"], (e) =>
           Effect.fail(Stuck.make({ reason: `${e._tag}: ${String(e.cause)}` })),

@@ -3,9 +3,10 @@
 //
 //   box.ts rm <name>   remove a clean pair whose commits MAIN retains (box/Remove.ts says how)
 //
-// `new`, `run` and `fetch` still run in box.sh, and `gc` in gc.ts. Paths come from env.sh, which
-// box.sh sources first: MAIN, BOXES. One result line on stdout; exit 0, 1 (kept) or 2 (bad name or
-// usage), as box.sh's Python gave.
+// `new`, `run` and `fetch` still run in box.sh, and `gc` in gc.ts. Paths come from the environment
+// box.sh hands it: MAIN and BOXES, which box.sh sources from env.sh until S14 ports it (the values
+// Env.ts gives the other TypeScript scripts). One result line on stdout; exit 0, 1 (kept) or 2 (bad
+// name or usage), as box.sh's Python gave.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Layer } from "effect";
 import * as BoxGitProcess from "./box/BoxGitProcess.ts";

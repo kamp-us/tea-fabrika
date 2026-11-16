@@ -131,12 +131,12 @@ import {
   freeQuest,
   holdQuest,
   questRunning,
-  loadEnv,
   MUTATION_AGENT,
   prepare,
   runNames,
   sh,
 } from "./drive.ts";
+import { read as readEnv } from "./Env.ts";
 import * as Beat from "./flow/Beat.ts";
 import * as Host from "./flow/host.ts";
 import * as Outcome from "./flow/Outcome.ts";
@@ -1862,8 +1862,7 @@ const launch = (env: Env, quest: string, args: ReadonlyArray<string>) =>
     { disableErrorReporting: true },
   );
 
-const main = () => {
-  const env = loadEnv();
+const main = (env: Env) => {
   const args = process.argv.slice(2);
   const state = Pin.pinState(process.env[Pin.PIN_ENV]);
   const [quest = ""] = args;
@@ -1906,5 +1905,6 @@ const main = () => {
 };
 
 if (import.meta.main) {
-  main();
+  // The env is read first; a run that cannot read it fails here, as env.sh's failure did.
+  NodeRuntime.runMain(Effect.flatMap(readEnv, (env) => Effect.sync(() => main(env))));
 }

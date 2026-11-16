@@ -66,6 +66,7 @@ import {
 } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import { read as readEnv } from "./Env.ts";
 import { spoken } from "./flow/Beat.ts";
 
 // ---------------------------------------------------------------- the setting
@@ -261,18 +262,14 @@ const exec = Effect.fn("gcloop.exec")(function* (command: string, args: Readonly
   return { code: Number(code), out, err };
 }, Effect.scoped);
 
-/** MAIN and BOXES from env.sh, as every lead script finds them. */
+/** MAIN and BOXES from the Env service, as every lead script finds them. */
 export const paths = Effect.fn("gcloop.paths")(
   function* () {
     const path = yield* Path.Path;
-    const env = path.join(import.meta.dirname, "env.sh");
-    const r = yield* exec("sh", ["-c", '. "$0" && printf "%s\\n%s" "$MAIN" "$BOXES"', env]);
-    const [main = "", boxes = ""] = r.out.split("\n");
-    return r.code === 0 && main !== "" && boxes !== ""
-      ? { main, boxes, state: path.join(boxes, "state") }
-      : yield* Broken.make({ reason: `env.sh gave no MAIN or BOXES: ${r.err.trim()}` });
+    const env = yield* readEnv;
+    return { main: env.MAIN, boxes: env.BOXES, state: path.join(env.BOXES, "state") };
   },
-  Effect.catchTag("PlatformError", () => Effect.fail(Broken.make({ reason: "env.sh could not run" }))),
+  Effect.mapError((e) => Broken.make({ reason: `the env could not be read: ${String(e)}` })),
 );
 
 /** KB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */

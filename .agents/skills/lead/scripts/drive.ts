@@ -123,6 +123,7 @@ import {
   stepRow,
   type Turned,
 } from "./agents.ts";
+import { read as readEnv, type Values } from "./Env.ts";
 import { pgrepAnswer, skipLine } from "./pgrep.ts";
 import * as Publish from "./pr/Publish.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
@@ -843,14 +844,8 @@ export const machine = defineMachine({
 
 // ---------------------------------------------------------------- the world
 
-export type Env = {
-  readonly MAIN: string;
-  readonly BOXES: string;
-  readonly GH_REPO: string;
-  /** The model a Codex box runs and its effort (env.sh, decision 0022). */
-  readonly CODEX_MODEL: string;
-  readonly CODEX_EFFORT: string;
-};
+/** The paths a drive reads, and the model a Codex box runs and its effort (decision 0022). */
+export type Env = Pick<Values, "MAIN" | "BOXES" | "GH_REPO" | "CODEX_MODEL" | "CODEX_EFFORT">;
 
 export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
@@ -863,22 +858,6 @@ const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" |
 const writtenReport = (ask: Ask) => {
   const mtime = existsSync(ask.report) ? statSync(ask.report).mtimeMs : null;
   return reportOf(ask.report, ask.started, mtime);
-};
-
-/** The paths env.sh gives every lead script. */
-export const loadEnv = (): Env => {
-  const r = sh("sh", [
-    "-c",
-    '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
-    join(HERE, "env.sh"),
-  ]);
-  const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
-
-  if (r.code !== 0 || !MAIN) {
-    throw new Error(`env.sh failed: ${r.err}`);
-  }
-
-  return { MAIN, BOXES, GH_REPO, CODEX_MODEL, CODEX_EFFORT };
 };
 
 // Shapes that leak on any machine: home and temp folders, key prefixes, private keys, em dashes.
@@ -1980,7 +1959,7 @@ export interface StepArgs {
   readonly step: StepName;
   readonly brief: string;
   readonly agent: AgentName;
-  /** Claude's model; a Codex box runs env.sh's CODEX_MODEL. */
+  /** Claude's model; a Codex box runs Env's CODEX_MODEL. */
   readonly model?: string | undefined;
   readonly electron: boolean;
   readonly ticket?: string | undefined;
@@ -2341,7 +2320,7 @@ export const driveStep = (
 
 const main = () => {
   const args = process.argv.slice(2);
-  const [quest = "", step = "", brief = ""] = args;
+  const [, step = "", brief = ""] = args;
   const agent = flag(args, "--agent") ?? "codex";
 
   if (
@@ -2352,7 +2331,13 @@ const main = () => {
     usage();
   }
 
-  const env = loadEnv();
+  NodeRuntime.runMain(Effect.flatMap(readEnv, (env) => Effect.suspend(() => start(env, args))));
+};
+
+/** One drive, once the command line is known good: refused, planned only, or the step run. */
+const start = (env: Env, args: string[]): Effect.Effect<void> => {
+  const [quest = "", step = "", brief = ""] = args;
+  const agent = flag(args, "--agent") ?? "codex";
   // prepare takes the quest for this process; it is given back however the process ends.
   process.on("exit", () => freeQuest(env.BOXES, quest));
   const prepared = prepare(env, {
@@ -2392,10 +2377,10 @@ const main = () => {
         electron: holdsElectron(prepared.ask.step, prepared.electron),
       }),
     );
-    return;
+    return Effect.void;
   }
 
-  const program = Effect.gen(function* () {
+  return Effect.gen(function* () {
     const agents = yield* makeStepAgents(join(env.BOXES, "state", "sessions"), env.MAIN);
     const line = yield* driveStep(env, agents, prepared);
     console.log(JSON.stringify(line));
@@ -2420,7 +2405,6 @@ const main = () => {
       }),
     ),
   );
-  NodeRuntime.runMain(program);
 };
 
 if (import.meta.main) {
