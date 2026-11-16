@@ -136,6 +136,15 @@
                 "flatMapConditionalToFilterOrFail": "error"
               }
             }
+          },
+          // These folders: catchConditionalRefailToCatchIf (E22).
+          {
+            "include": ["src/processes/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "catchConditionalRefailToCatchIf": "error"
+              }
+            }
           }
         ]
       }
