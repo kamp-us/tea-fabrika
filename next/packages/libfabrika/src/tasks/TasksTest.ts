@@ -16,7 +16,13 @@
 // the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as R from "effect/Result";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";

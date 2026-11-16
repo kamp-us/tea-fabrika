@@ -16,7 +16,7 @@
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect } from "effect";
+import * as Effect from "effect/Effect";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";

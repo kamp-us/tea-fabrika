@@ -6,7 +6,8 @@
 // `make`, `Permission`, `provide`, `recheck` and `Denied`, and never `mint`, which stays in
 // `internal/proof.ts`. A right's class is the context tag of its proof (phoenix's capability, 0107).
 import { expectTypeOf, it } from "@effect/vitest";
-import { Effect, type Result } from "effect";
+import * as Effect from "effect/Effect";
+import type * as Result from "effect/Result";
 import { Model, StartProgram } from "./Model.ts";
 import * as Rebac from "./Rebac.ts";
 import type { Tuples } from "./Relation.ts";

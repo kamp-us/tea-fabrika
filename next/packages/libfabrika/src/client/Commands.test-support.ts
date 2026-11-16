@@ -6,7 +6,10 @@
 // call until the law resumes it, so a law can drop the socket while local work is in flight. The
 // fakes keep their own timeline of what really ran and what was really saved, the oracle the laws
 // read; they never read the client's state.
-import { Deferred, Effect, Layer, Schema } from "effect";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { Command, Result } from "../tasks/Task.ts";
 import { Commands } from "./Commands.ts";
 import { fakeResult } from "./HandsDoor.test-support.ts";

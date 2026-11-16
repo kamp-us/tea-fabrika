@@ -2445,6 +2445,29 @@
       "rules": { "fabrika/prefer-schema-arbitrary": "warn" }
     },
     {
+      // E2 of the Effect-check sweep (0577): a library imports each Effect module by its path, and
+      // `pnpm format` writes the form (`oxlint-plugins/prefer-namespace-import.ts`). On for the
+      // folders libfabrika's and tuval's tsconfig hold at error for the same check; each later
+      // import slice adds its folders to both.
+      "files": [
+        "next/packages/libfabrika/src/*.ts",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/libfabrika/src/transport/**",
+        "next/packages/tuval/**"
+      ],
+      "rules": { "fabrika/prefer-namespace-import": "error" }
+    },
+    {
       // E6 (0023, 0120): every public export of a next/ library has an Effect-shaped doc block, and
       // its file a module block (`oxlint-plugins/jsdocs.ts`). It blocks in every folder at zero, so a
       // new folder blocks from its first file (0523, ticket 948). `since` stays `absent` until

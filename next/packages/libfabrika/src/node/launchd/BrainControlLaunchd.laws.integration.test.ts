@@ -2,8 +2,16 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schema } from "effect";
-import { TestClock } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as Deferred from "effect/Deferred";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as TestClock from "effect/testing/TestClock";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";

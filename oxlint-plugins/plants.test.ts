@@ -417,6 +417,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "no-wall-clock",
       "one-machine-per-file", // scoped plant and blocking check below
       "isolate-boundary", // scoped platform-name plant below
+      // E2 (0577): prefer-namespace-import.test.ts plants imports at in-scope and later folders with the real lint config.
+      "prefer-namespace-import",
       // Generated no-stage-word.test.ts plants run at next/ paths with the real lint config.
       "no-stage-word",
       // package-imports.test.ts plants one file per part at its next/ path with the real lint config.

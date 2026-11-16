@@ -16,23 +16,21 @@
 // The home is `/t730`, a made-up folder that exists only in the counted FileSystem below.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import {
-  Cause,
-  ConfigProvider,
-  Effect,
-  Exit,
-  FileSystem,
-  Layer,
-  Logger,
-  PlatformError,
-  References,
-  Sink,
-  Stream,
-  Tracer,
-} from "effect";
-import { Command as Cli } from "effect/cli";
-import { Digest } from "effect/crypto";
-import { TestConsole } from "effect/testing";
+import * as Cause from "effect/Cause";
+import * as Cli from "effect/cli/Command";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Digest from "effect/crypto/Digest";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
+import * as PlatformError from "effect/PlatformError";
+import * as References from "effect/References";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
+import * as TestConsole from "effect/testing/TestConsole";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
