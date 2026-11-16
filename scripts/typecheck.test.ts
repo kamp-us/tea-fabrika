@@ -1,10 +1,10 @@
 // Ticket 1074, today's tooling: on the laptop, `pnpm typecheck` waits for the one typecheck lock and
 // for any compiler already running, and says once what it waits on. Every law runs stand-ins: a node
 // script for the compiler and pnpm, and a copy of `sleep` under a name of the law's own for a
-// compiler the lock does not cover. Each law names a lock file and a compiler name of its own, so a
+// compiler the lock does not cover (node, for a language server). Each law names a lock file and a compiler name of its own, so a
 // real typecheck on the same machine never holds up a law, and a law never holds up a real one.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -168,6 +168,30 @@ describe("T1074 a local typecheck waits for the lock and any running compiler, t
     const a = typecheck(r, "a");
     await until(() => events(r) === "start a\n", "a stale lock held the typecheck up");
     expect(readFileSync(r.lock, "utf8")).toBe(`${a.child.pid}\n`);
+    release(r, "a");
+    await until(() => ended(a.child), "the typecheck never ended");
+    expect([a.child.exitCode, a.stderr()]).toEqual([0, ""]);
+  });
+
+  // An editor's language server runs as `tsgo --lsp --stdio` for as long as the editor is open.
+  // The stand-in is node, linked under the rig's compiler name, so its args hold `--lsp`.
+  // Plant: wait on every compiler pgrep finds, the language server included.
+  it("does not wait on a language server, a compiler started with --lsp", async () => {
+    const r = rig();
+    const path = join(r.bin, r.compiler);
+    symlinkSync(process.execPath, path);
+    children.push(
+      spawn(path, ["-e", "setTimeout(() => {}, 60_000)", "--", "--lsp", "--stdio"], {
+        detached: true,
+        stdio: "ignore",
+      }),
+    );
+    await until(
+      () => spawnSync("pgrep", ["-x", r.compiler]).status === 0,
+      "the stand-in language server never started",
+    );
+    const a = typecheck(r, "a");
+    await until(() => events(r) === "start a\n", "a language server held the typecheck up");
     release(r, "a");
     await until(() => ended(a.child), "the typecheck never ended");
     expect([a.child.exitCode, a.stderr()]).toEqual([0, ""]);

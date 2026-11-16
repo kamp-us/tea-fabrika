@@ -23,12 +23,24 @@ LOCK = os.environ["FABRIKA_TYPECHECK_LOCK"]
 COMPILER = os.environ["FABRIKA_TYPECHECK_COMPILER"]
 
 
+def args(pid):
+    # The process's command line, or "" where ps cannot read it.
+    ps = subprocess.run(["ps", "-o", "args=", "-p", pid], capture_output=True, text=True)
+    return ps.stdout.strip() if ps.returncode == 0 else ""
+
+
 def named(pid):
-    # The process's command line, so a person can tell what holds things up; just the pid where ps
-    # cannot read it.
-    ps = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True)
-    command = ps.stdout.strip() if ps.returncode == 0 else ""
+    # The pid and its command line, so a person can tell what holds things up.
+    command = args(pid)
     return f"pid {pid} ({command})" if command else f"pid {pid}"
+
+
+def checking(pid):
+    # An editor's language server is `tsgo --lsp --stdio`: `--lsp` is the mode tsgo starts it in
+    # (`tsgo --lsp --help` prints its -stdio, -pipe and -socket flags), and a type check refuses it
+    # as an unknown option. It runs as long as the editor is open, so waiting on it would hold up
+    # every local typecheck all day. It is left out; every other compiler is waited on.
+    return "--lsp" not in args(pid).split()
 
 
 def take(lock):
@@ -75,8 +87,11 @@ def wait_for_compiler():
         if found.returncode != 0:
             sys.stderr.write(f"typecheck: pgrep cannot list processes here, so the wait for a running {COMPILER} is skipped\n")
             return
+        running = [pid for pid in found.stdout.split() if checking(pid)]
+        if not running:
+            return
         if not said:
-            first = found.stdout.split()[0]
+            first = running[0]
             sys.stderr.write(f"typecheck: waiting for {named(first)}, a {COMPILER} already running\n")
             sys.stderr.flush()
             said = True
