@@ -46,7 +46,7 @@ import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import type { SchemaAST } from "effect";
-import { Arbitrary, Option, Result, Schema } from "effect";
+import { Arbitrary, Match, Option, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -386,17 +386,21 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
   if (w.old.length > 0) {
     const f = w.old[c.pick % w.old.length]!;
     const on = { id: f.id, dial: f.dial };
-    out.push(() =>
-      f.call._tag === "open"
-        ? { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }
-        : f.call._tag === "send"
-          ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-          : f.call._tag === "wait"
-            ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
-            : f.call._tag === "monitor"
-              ? answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })
-              : { type: "read_ok", ...on, value: [], ms: c.ms },
-    );
+    out.push(() => {
+      if (f.call._tag === "open") {
+        return { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms };
+      }
+
+      if (f.call._tag === "send") {
+        return { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms };
+      }
+
+      return f.call._tag === "wait"
+        ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
+        : f.call._tag === "monitor"
+          ? answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })
+          : { type: "read_ok", ...on, value: [], ms: c.ms };
+    });
     const current = w.flights[c.aux % Math.max(1, w.flights.length)];
     const oldDial = w.old.find((old) => old.dial !== current?.dial)?.dial;
 
@@ -604,6 +608,7 @@ describe("L8: the window parent's connection", () => {
             reads.set(key, (reads.get(key) ?? 0) + 1);
             const was = reachIn(prev, t.id);
             // The three reasons a tile's stream is read again on the dial it was already read on.
+            const paged = page?.tile.id === t.id && page.page.length === PAGE ? "page" : null;
             const reread =
               downed && holds(was)
                 ? "DOWN"
@@ -611,9 +616,7 @@ describe("L8: the window parent's connection", () => {
                     was._tag === "ended" &&
                     was.id === answer.id
                   ? "wait"
-                  : page?.tile.id === t.id && page.page.length === PAGE
-                    ? "page"
-                    : null;
+                  : paged;
             again[reread ?? "DOWN"] += reads.get(key)! > 1 && reread !== null ? 1 : 0;
             expect(
               reads.get(key) === 1 || reread !== null,
@@ -993,6 +996,12 @@ describe("L8: the window parent's connection", () => {
             seen.others += !own && refusedLetter !== undefined ? 1 : 0;
             seen.cleared += !own && pressedHere && was !== null ? 1 : 0;
 
+            const others: readonly [ReadonlyArray<unknown>, string] = pressedHere
+              ? [[null], `${t.id}'s next press clears its refusal`]
+              : aimed === t.id && made.length === 0
+                ? // A press that made no letter (the tile is not open) may clear the words or keep them.
+                  [[was, null], `${t.id} after a press that sent nothing`]
+                : [[was], `${t.id} after ${m.type}`];
             const [allowed, label]: readonly [ReadonlyArray<unknown>, string] = own
               ? [
                   [
@@ -1003,12 +1012,7 @@ describe("L8: the window parent's connection", () => {
                   ],
                   `${t.id}'s own refused letter`,
                 ]
-              : pressedHere
-                ? [[null], `${t.id}'s next press clears its refusal`]
-                : aimed === t.id && made.length === 0
-                  ? // A press that made no letter (the tile is not open) may clear the words or keep them.
-                    [[was, null], `${t.id} after a press that sent nothing`]
-                  : [[was], `${t.id} after ${m.type}`];
+              : others;
             expect(allowed, label).toContainEqual(t.refusal);
           }
         });
@@ -1095,18 +1099,15 @@ describe("L9: the records the window emits", () => {
           seen.key += m.type === "key_ok" ? 1 : 0;
           expect(keys).toEqual(m.type === "key_ok" ? [{ _tag: "key", result: m.value.found }] : []);
 
-          const outcome =
-            prev.link._tag !== "online" && next.link._tag === "online"
-              ? "online"
-              : prev.link._tag !== "waiting_grant" && next.link._tag === "waiting_grant"
-                ? "waiting"
-                : prev.link._tag !== "removed" && next.link._tag === "removed"
-                  ? "removed"
-                  : prev.link._tag !== "retrying" && next.link._tag === "retrying"
-                    ? m.type === "closed"
-                      ? "closed"
-                      : "stalled"
-                    : null;
+          // The link state this step entered, if it moved.
+          const entered = prev.link._tag === next.link._tag ? null : next.link._tag;
+          const outcome = Match.value(entered).pipe(
+            Match.when("online", () => "online"),
+            Match.when("waiting_grant", () => "waiting"),
+            Match.when("removed", () => "removed"),
+            Match.when("retrying", () => (m.type === "closed" ? "closed" : "stalled")),
+            Match.orElse(() => null),
+          );
 
           const connected = outcome !== null && "ms" in m && "dial" in m ? { dial: m.dial, ms: m.ms } : null;
           seen.connect += connected === null ? 0 : 1;
@@ -1407,14 +1408,16 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
       { type: `${cmd.type}_ok`, cmd, value } as WindowMsg,
       none,
     ];
+    const answered =
+      cmd.type === "now"
+        ? ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })
+        : cmd.type === "persist"
+          ? ok(c.aux % 2 === 0)
+          : ok(null);
     out.push(
       cmd.type === "key"
         ? ok({ found: cmd["rejected"] === null ? "created" : "replaced", fingerprint: `SHA256:${c.word}` })
-        : cmd.type === "now"
-          ? ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })
-          : cmd.type === "persist"
-            ? ok(c.aux % 2 === 0)
-            : ok(null),
+        : answered,
     );
   }
 
@@ -1467,16 +1470,15 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     // a dial not challenged yet, an admission of the live hello (or now and then `not_granted`, so
     // walks also wait for a grant), a code for the live knock, and a grant to a waiting dial.
     if (hs.dial === d) {
-      const next =
-        hs._tag === "opened"
-          ? rpc({ method: "challenge", params: { nonce } })
-          : hs._tag === "initializing"
-            ? rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED })
-            : hs._tag === "knocking"
-              ? rpc({ id: hs.id, result: { code: c.word, until: c.ms } })
-              : hs._tag === "waiting"
-                ? rpc({ method: "client.granted", params: { nonce } })
-                : null;
+      const next = Match.value(hs._tag).pipe(
+        Match.when("opened", () => rpc({ method: "challenge", params: { nonce } })),
+        Match.when("initializing", () =>
+          rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED }),
+        ),
+        Match.when("knocking", () => rpc({ id: hs.id, result: { code: c.word, until: c.ms } })),
+        Match.when("waiting", () => rpc({ method: "client.granted", params: { nonce } })),
+        Match.orElse(() => null),
+      );
 
       if (next !== null) {
         const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), { _tag: "handshake" }];
@@ -2571,20 +2573,26 @@ const ignoredAs = (s: WindowModel, letter: unknown): string => {
   const entry = Object(letter);
   const id: unknown = Reflect.get(entry, "id");
   const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
-  return !trusted(Reflect.get(entry, "by"))
-    ? "writer"
-    : typeof id !== "string" || !inSignalSpace(id)
-      ? "plain"
-      : !Schema.is(Down)(m)
-        ? "shape"
-        : m.to._tag !== "client" || m.to.client !== TAB
-          ? "tab"
-          : s.tiles.some((t) => {
-                const r: ReachView = t.reach;
-                return holds(r) && r.pid === m.process;
-              })
-            ? "stale"
-            : "gone";
+  if (!trusted(Reflect.get(entry, "by"))) {
+    return "writer";
+  }
+
+  if (typeof id !== "string" || !inSignalSpace(id)) {
+    return "plain";
+  }
+
+  if (!Schema.is(Down)(m)) {
+    return "shape";
+  }
+
+  return m.to._tag !== "client" || m.to.client !== TAB
+    ? "tab"
+    : s.tiles.some((t) => {
+          const r: ReachView = t.reach;
+          return holds(r) && r.pid === m.process;
+        })
+      ? "stale"
+      : "gone";
 };
 
 /** The step reads the window's inbox page: its read was the inbox's own call in flight. */
@@ -2897,47 +2905,60 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               m.cmd.id === was.id &&
               prev.flight.some((f) => f.id === m.cmd.id && f.dial === m.cmd.dial && streamIn(f.call) === INBOX));
           const top = Math.max(was.after, ...(page ?? []).map((l) => Number(Reflect.get(Object(l), "rev"))));
-          const [want, label]: readonly [unknown, string] =
-            prev.link._tag !== "online" && next.link._tag === "online"
+          // The inbox this step must leave, and the name of the case that says so, first case first.
+          const expected = (): readonly [unknown, string] => {
+            if (prev.link._tag !== "online" && next.link._tag === "online") {
+              return [
+                {
+                  calls: [["wait", was.after, calls[0]?.[2]]],
+                  now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
+                },
+                "online",
+              ];
+            }
+
+            if (answer.type === "wait_ok" && current && was._tag === "waiting" && was.id === answer.id) {
+              return [
+                {
+                  calls: [["read", was.after, calls[0]?.[2]]],
+                  now: { _tag: "reading", after: was.after, id: calls[0]?.[2] },
+                },
+                "woke",
+              ];
+            }
+
+            if (page !== null) {
+              return [
+                {
+                  calls: [["wait", top, calls[0]?.[2]]],
+                  now: { _tag: "waiting", after: top, id: calls[0]?.[2] },
+                },
+                "pages",
+              ];
+            }
+
+            if (lost) {
+              return [{ calls: [], now: { _tag: "idle", after: was.after } }, "errors"];
+            }
+
+            if (prev.link._tag === "online" && next.link._tag !== "online") {
+              return [{ calls: [], now: { _tag: "idle", after: was.after } }, "offline"];
+            }
+
+            return m.type === "resend" &&
+              m.dial === socketDial(prev) &&
+              prev.link._tag === "online" &&
+              was._tag === "idle"
               ? [
                   {
                     calls: [["wait", was.after, calls[0]?.[2]]],
                     now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
                   },
-                  "online",
+                  "armed",
                 ]
-              : answer.type === "wait_ok" && current && was._tag === "waiting" && was.id === answer.id
-                ? [
-                    {
-                      calls: [["read", was.after, calls[0]?.[2]]],
-                      now: { _tag: "reading", after: was.after, id: calls[0]?.[2] },
-                    },
-                    "woke",
-                  ]
-                : page !== null
-                  ? [
-                      {
-                        calls: [["wait", top, calls[0]?.[2]]],
-                        now: { _tag: "waiting", after: top, id: calls[0]?.[2] },
-                      },
-                      "pages",
-                    ]
-                  : lost
-                    ? [{ calls: [], now: { _tag: "idle", after: was.after } }, "errors"]
-                    : prev.link._tag === "online" && next.link._tag !== "online"
-                      ? [{ calls: [], now: { _tag: "idle", after: was.after } }, "offline"]
-                      : m.type === "resend" &&
-                          m.dial === socketDial(prev) &&
-                          prev.link._tag === "online" &&
-                          was._tag === "idle"
-                        ? [
-                            {
-                              calls: [["wait", was.after, calls[0]?.[2]]],
-                              now: { _tag: "waiting", after: was.after, id: calls[0]?.[2] },
-                            },
-                            "armed",
-                          ]
-                        : [{ calls: [], now: was }, "other"];
+              : [{ calls: [], now: was }, "other"];
+          };
+          const [want, label] = expected();
 
           if (label !== "other") {
             seen[label as keyof typeof seen]++;
@@ -3738,14 +3759,12 @@ const resolved = (s: WindowModel, to: FocusTo): string | null => {
 
   const tiles = Layout.order(space.layout);
   const i = tiles.indexOf(space.focus);
-  const found =
-    to === "next"
-      ? tiles[(i + 1) % tiles.length]
-      : to === "previous"
-        ? tiles[(i - 1 + tiles.length) % tiles.length]
-        : to === "last"
-          ? space.recent[1]
-          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  const found = Match.value(to).pipe(
+    Match.when("next", () => tiles[(i + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(i - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((direction) => Layout.neighbor(space.layout, space.focus, direction) ?? undefined),
+  );
   return found === undefined || found === space.focus ? null : found;
 };
 
@@ -4247,9 +4266,13 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
 
     if (lead >= 0 && shares[lead]! < least) {
       const rest = total - node.parts[lead]!.percent;
-      shares = node.parts.map((p, i) =>
-        i === lead ? least : fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
-      );
+      shares = node.parts.map((p, i) => {
+        if (i === lead) {
+          return least;
+        }
+
+        return fixed[i] ? FOLD_ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
+      });
     }
 
     for (const [i, p] of node.parts.entries()) {

@@ -33,7 +33,7 @@
 // commands land. Each step answers only what really waits: the calls in flight and the Cmds handed out.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Match, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -223,14 +223,12 @@ const drain = (world: World, i: number) => {
     const cmd = w.waiting.find((c) => ["now", "record", "write", "persist", "ping", "mint"].includes(c.type));
 
     if (cmd !== undefined) {
-      const value =
-        cmd.type === "now"
-          ? { letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
-          : cmd.type === "mint"
-            ? { tile: typeId("tile", 5_000 + ++world.minted) }
-            : cmd.type === "persist"
-              ? true
-              : null;
+      const value = Match.value(cmd.type).pipe(
+        Match.when("now", () => ({ letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+        Match.when("mint", () => ({ tile: typeId("tile", 5_000 + ++world.minted) })),
+        Match.when("persist", () => true),
+        Match.orElse(() => null),
+      );
       step(world, i, { type: `${cmd.type}_ok`, cmd, value } as WindowMsg);
       continue;
     }
@@ -386,9 +384,13 @@ const drawnWith = (w: Workspace, size: Size, strips: ReadonlySet<string>): Reado
 
     if (lead >= 0 && shares[lead]! < least) {
       const rest = total - node.parts[lead]!.percent;
-      shares = node.parts.map((p, i) =>
-        i === lead ? least : fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
-      );
+      shares = node.parts.map((p, i) => {
+        if (i === lead) {
+          return least;
+        }
+
+        return fixed[i] ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0;
+      });
     }
 
     for (const [i, p] of node.parts.entries()) {

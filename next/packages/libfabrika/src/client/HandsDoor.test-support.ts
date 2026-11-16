@@ -80,14 +80,16 @@ const task = (s: Saved): Task => {
           execution: s.execution,
           executor: { key: s.executor, connection: "connection_hands", has: ["git"], build: "hands-build" },
         };
+  if (s.phase === "requested" || assignment === undefined) {
+    return { state: State.cases.requested.make({ request: s.request }), events: [] };
+  }
+
   const state =
-    s.phase === "requested" || assignment === undefined
-      ? State.cases.requested.make({ request: s.request })
-      : s.phase === "finished" && s.result !== undefined
-        ? State.cases.finished.make({ request: s.request, assignment, result: s.result })
-        : s.phase === "started"
-          ? State.cases.started.make({ request: s.request, assignment })
-          : State.cases.assigned.make({ request: s.request, assignment });
+    s.phase === "finished" && s.result !== undefined
+      ? State.cases.finished.make({ request: s.request, assignment, result: s.result })
+      : s.phase === "started"
+        ? State.cases.started.make({ request: s.request, assignment })
+        : State.cases.assigned.make({ request: s.request, assignment });
   return { state, events: [] };
 };
 

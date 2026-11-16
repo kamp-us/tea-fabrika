@@ -34,7 +34,7 @@
 // answer, whoever it names.
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Option, Schema } from "effect";
+import { Match, Option, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
 import {
@@ -403,11 +403,13 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
       const forged =
         forge === "other" && theirs !== undefined
           ? rpc({ id: call.id, result: w.door.assignedTo(theirs.request.id, OTHER) })
-          : forge === "idle"
-            ? rpc({ id: call.id, result: TakeReply.cases.idle.make({}) })
-            : forge === "refused"
-              ? rpc({ id: call.id, result: TakeReply.cases.refused.make({ reason: "ambiguous" }) })
-              : rpc({ id: call.id, error: { code: -32000, message: "no", data: { reason: forge } } });
+          : Match.value(forge).pipe(
+              Match.when("idle", () => rpc({ id: call.id, result: TakeReply.cases.idle.make({}) })),
+              Match.when("refused", () =>
+                rpc({ id: call.id, result: TakeReply.cases.refused.make({ reason: "ambiguous" }) }),
+              ),
+              Match.orElse(() => rpc({ id: call.id, error: { code: -32000, message: "no", data: { reason: forge } } })),
+            );
       return frame(call.dial, forged);
     }
 
