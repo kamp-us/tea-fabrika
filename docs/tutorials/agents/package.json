@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "catalog:",
-    "@demlik/tea": "catalog:",
+    "@demlik/tea": "catalog:old",
     "@effect/platform-node": "catalog:",
     "@kampus/fabrika-old": "workspace:*",
     "effect": "catalog:"
