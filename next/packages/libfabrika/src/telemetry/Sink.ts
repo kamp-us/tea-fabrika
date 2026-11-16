@@ -6,8 +6,6 @@
  * is what "a wait is data" forbids. Nothing is dropped. A write that cannot land (`SQLITE_FULL`) is
  * held in memory and tried again at each later `end`, and the next `flush` fails the step with
  * `storage`: let it crash. The sink's own calls end no span.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import {
@@ -60,7 +58,6 @@ export {
    * Error for a sink, record or archive call that failed: the call never answered, a row or an
    * answer did not decode, or storage threw.
    *
-   * @stability unstable
    * @category errors
    */
   SinkError,
@@ -343,7 +340,6 @@ class SinkSpan extends Tracer.NativeSpan {
  * A write that meets a full disk holds its spans in memory and tries again at each later `end`.
  * The next `flush` then fails with `storage` before it sends anything, so the failure is seen.
  *
- * @stability unstable
  * @category services
  */
 export class SpanSink extends Context.Service<

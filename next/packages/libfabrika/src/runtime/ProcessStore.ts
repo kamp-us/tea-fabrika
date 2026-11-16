@@ -2,8 +2,6 @@
  * A process's own storage: its saved model, its unfinished turn and its Cmds' dispatch state, kept
  * in the process object's SQLite. It also appends the runtime's own records to the process's
  * stream, and nothing else. Tables come with the first call.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Option, Result, Schema } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -20,7 +18,6 @@ import { recovering } from "./RecoveryStore.ts";
  * Schema for what a process saves: its model as the runner keeps it, the turn it was in, and its
  * Cmds. The runner gives `turn` and `cmds` their shapes; the store keeps them as JSON.
  *
- * @stability unstable
  * @category schemas
  */
 export const Checkpoint = Schema.Struct({
@@ -36,7 +33,6 @@ export const Checkpoint = Schema.Struct({
 /**
  * What a process saves between turns, as `Checkpoint` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Checkpoint = typeof Checkpoint.Type;
@@ -44,14 +40,12 @@ export type Checkpoint = typeof Checkpoint.Type;
 /**
  * Schema for where an accepted letter sits in its inbox, kept so a resend finds its first placing.
  *
- * @stability unstable
  * @category schemas
  */
 export const Placed = Schema.Struct({ id: Schema.String, rev: Rev, pos: Rev });
 /**
  * Where an accepted letter sits in its inbox, as `Placed` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type Placed = typeof Placed.Type;
@@ -61,7 +55,6 @@ export type Placed = typeof Placed.Type;
  * Cmd's answer it saved there, an upgrade it ran on saved state, and a code change it made or
  * refused. A program never writes any of them.
  *
- * @stability unstable
  * @category schemas
  */
 export const RuntimeRecord = Schema.TaggedUnion({
@@ -85,7 +78,6 @@ export const RuntimeRecord = Schema.TaggedUnion({
 /**
  * One event the runtime wrote to a process's stream, as `RuntimeRecord` decodes it.
  *
- * @stability unstable
  * @category models
  */
 export type RuntimeRecord = typeof RuntimeRecord.Type;
@@ -146,7 +138,6 @@ type ProcessStorage = {
  * else. Every failure is a `LedgerError`: `bad_row` for a row that does not decode, `refused` for
  * a record the ledger or the schema turns down, `storage` for the rest.
  *
- * @stability unstable
  * @category services
  */
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(

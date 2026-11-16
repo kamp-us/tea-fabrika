@@ -1,8 +1,6 @@
 /**
  * Where one registered name's recovery journal is kept: the journal row, and its receipts in rows
  * of their own, in the object's SQLite.
- *
- * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
 import { QuotasError, type Accounting } from "../processes/Quotas.ts";
@@ -13,7 +11,6 @@ import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
  * Reason for a journal that could not be read or written: the `Sql` threw, or a save would grow
  * the database past its capacity. A throw is kept as `cause`; a full database has none.
  *
- * @stability unstable
  * @category errors
  */
 export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
@@ -22,7 +19,6 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * Reason for a saved journal or receipt that does not decode, or that is stored under another
  * name or letter. The decoder's failure is kept as `cause`; a misplaced row has none.
  *
- * @stability unstable
  * @category errors
  */
 export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
@@ -32,7 +28,6 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  * reserved room for its recovery writes being used up (0147). The account's error is kept as
  * `cause`, so a reader finds the fault by name there.
  *
- * @stability unstable
  * @category errors
  */
 export class Quota extends Schema.TaggedError<Quota>()("Quota", { cause: QuotasError }) {}
@@ -40,7 +35,6 @@ export class Quota extends Schema.TaggedError<Quota>()("Quota", { cause: QuotasE
 /**
  * Error for a recovery journal that could not be loaded or saved.
  *
- * @stability unstable
  * @category errors
  */
 export class RecoveryStoreError extends Schema.TaggedError<RecoveryStoreError>()("RecoveryStoreError", {
@@ -114,7 +108,6 @@ const generationIn = (value: unknown): number | null => (typeof value === "numbe
  * past `capacity` fails with `storage` and keeps the old rows. A row that does not decode, or is
  * stored under another name, fails with `bad_row`.
  *
- * @stability unstable
  * @category constructors
  */
 export const recoveryStore = <S extends Kept>(
@@ -341,7 +334,6 @@ export const recoveryStore = <S extends Kept>(
  * fit fails with reason `Quota`, the account's `QuotasError` as its cause, and keeps the old rows;
  * a read is never charged.
  *
- * @stability unstable
  * @category services
  */
 export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()(
@@ -363,7 +355,6 @@ export class RecoveryStore extends Context.Service<RecoveryStore, Store<Kept>>()
  * program's own work (`idle`, `checking` or `stepping`). A value that is not a journal is not in
  * recovery.
  *
- * @stability unstable
  * @category predicates
  */
 export const recoveryState = (value: unknown): boolean => {
@@ -379,7 +370,6 @@ export const recoveryState = (value: unknown): boolean => {
 /**
  * Checks whether the journal saved in `sql` is in recovery. A store with no journal is not.
  *
- * @stability unstable
  * @category predicates
  */
 export const recovering = (sql: Sql): boolean => {

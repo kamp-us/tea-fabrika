@@ -1,8 +1,6 @@
 /**
  * The `Replies` layer over the runtime's own recovery SQL. One SQL transaction reads the row, sends
  * the reply machine its Msg and inserts what it remembers, within the runtime's storage capacity.
- *
- * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
 import { Effect, Layer, Result, Schema, SchemaIssue } from "effect";
@@ -96,7 +94,6 @@ const stored = <A>(f: () => A) =>
  * stored row does not decode or disagrees with its key. With `accounting`, each saved reply is
  * charged to the process's recovery room. A quota refusal is never saved as a reply.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (
