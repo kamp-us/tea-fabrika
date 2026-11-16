@@ -2,7 +2,7 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
-import { Order, Schema } from "effect";
+import type { Json } from "./json.ts";
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
@@ -203,29 +203,28 @@ const LOCKED = [
 ] as const;
 
 /** Keys sorted all the way down, so a reorder is not a change. */
-const canon = (v: Schema.Json): string =>
+const canon = (v: Json): string =>
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
     : v !== null && typeof v === "object"
       ? `{${Object.entries(v)
-          .toSorted(([a], [b]) => Order.String(a, b))
+          // An object's keys are distinct, so no two compare equal.
+          .toSorted(([a], [b]) => (a < b ? -1 : 1))
           .map(([k, x]) => `${JSON.stringify(k)}:${canon(x)}`)
           .join(",")}}`
       : JSON.stringify(v);
 
-const isJsonObject = Schema.is(Schema.JsonObject);
-
 const lockedPart = (text: string): string | null => {
   try {
-    const json: unknown = JSON.parse(text);
+    const json: Json = JSON.parse(text);
 
     if (json === null || typeof json !== "object") {
       return null;
     }
 
     // An array holds none of the locked fields, so each reads as absent.
-    const fields: Schema.JsonObject = isJsonObject(json) ? json : {};
-    return canon(LOCKED.map((k) => fields[k] ?? null));
+    const fields = new Map<string, Json>(Array.isArray(json) ? [] : Object.entries(json));
+    return canon(LOCKED.map((k) => fields.get(k) ?? null));
   } catch {
     return null;
   }
