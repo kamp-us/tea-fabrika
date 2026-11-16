@@ -75,6 +75,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Exit, FileSystem, Predicate, Schema, Stream } from "effect";
 import { Argument, Command } from "effect/cli";
+import * as Function from "effect/Function";
 import { ChildProcess } from "effect/process";
 
 /**
@@ -98,7 +99,10 @@ export const isSharedSuite = (path: string): boolean =>
   path.startsWith("next/") && SUITE.test(path.split("/").at(-1) ?? "");
 
 /** The kind of one changed file, from its path and whether the head marks it generated. */
-export const classify = (path: string, generated: boolean): Kind => {
+export const classify: {
+  (generated: boolean): (path: string) => Kind;
+  (path: string, generated: boolean): Kind;
+} = Function.dual(2, (path: string, generated: boolean): Kind => {
   const parts = path.split("/");
   const name = parts.at(-1) ?? path;
 
@@ -125,7 +129,7 @@ export const classify = (path: string, generated: boolean): Kind => {
   }
 
   return PRODUCT.some((root) => path.startsWith(root)) ? "product" : "other";
-};
+});
 
 /** One file of `git diff --numstat -z`: its changed lines, or none when git sees it as binary. */
 export const Row = Schema.TaggedUnion({
@@ -157,7 +161,10 @@ export const parseNumstat = (out: string): ReadonlyArray<Row> => {
 /** Changed lines by kind, and how many binary files changed. */
 export type Tally = Readonly<Record<Kind, number>> & { readonly binary: number };
 
-export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<string>): Tally => {
+export const countLines: {
+  (generated: ReadonlySet<string>): (rows: ReadonlyArray<Row>) => Tally;
+  (rows: ReadonlyArray<Row>, generated: ReadonlySet<string>): Tally;
+} = Function.dual(2, (rows: ReadonlyArray<Row>, generated: ReadonlySet<string>): Tally => {
   const tally = { product: 0, test: 0, docs: 0, lock: 0, generated: 0, other: 0, binary: 0 };
 
   for (const row of rows) {
@@ -169,16 +176,19 @@ export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<stri
   }
 
   return tally;
-};
+});
 
 /** The one line `diff` prints; past `advice` product lines it asks about slicing, and nothing more. */
-export const diffLine = (tally: Tally, advice: number): string => {
+export const diffLine: {
+  (advice: number): (tally: Tally) => string;
+  (tally: Tally, advice: number): string;
+} = Function.dual(2, (tally: Tally, advice: number): string => {
   const warning =
     tally.product > advice ? `, more than ${advice}: should it have been sliced? (advice only, 0099)` : "";
   const apart = `${tally.test} test, ${tally.docs} docs, ${tally.lock} lock, ${tally.generated} generated, ${tally.other} other lines, ${tally.binary} binary files`;
 
   return `size: ${tally.product} product lines${warning}; not counted: ${apart}`;
-};
+});
 
 // The plan side.
 

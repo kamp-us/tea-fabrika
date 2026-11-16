@@ -23,6 +23,7 @@ import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
 import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
+import * as Function from "effect/Function";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
@@ -182,35 +183,38 @@ const pnpmInstall: Install = (folder) =>
  * and t411-mutation3, 2026-11-10; ticket 565). Installed once, then checked again: still missing is
  * `AdaptersMissing` with the install's own words, before any box exists.
  */
-export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnpmInstall) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = modules.replace(/\/$/, "");
-    const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
-      fs.exists(`${root}/${s}`).pipe(
-        Effect.map((here) => !here),
-        Effect.orElseSucceed(() => true),
-      ),
-    );
+export const adaptersReady: {
+  // The direct form comes first, so a call with no argument is the direct one, as the predicate says.
+  (modules?: string, install?: Install): Effect.Effect<void, AdaptersMissing>;
+  (install?: Install): (modules?: string) => Effect.Effect<void, AdaptersMissing>;
+} = Function.dual(
+  // A direct call starts with the folder, or with nothing; a piped one with the install.
+  (args) => typeof args[0] !== "function",
+  (modules: string = ADAPTERS, install: Install = pnpmInstall): Effect.Effect<void, AdaptersMissing> =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = modules.replace(/\/$/, "");
+      const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
+        fs.exists(`${root}/${s}`).pipe(
+          Effect.map((here) => !here),
+          Effect.orElseSucceed(() => true),
+        ),
+      );
 
-    if ((yield* missing).length === 0) {
-      return;
-    }
+      if ((yield* missing).length === 0) {
+        return;
+      }
 
-    const ran = yield* install(root.replace(/\/node_modules$/, ""));
-    const still = yield* missing;
+      const ran = yield* install(root.replace(/\/node_modules$/, ""));
+      const still = yield* missing;
 
-    if (still.length > 0) {
-      return yield* new AdaptersMissing({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
-    }
-  }).pipe(Effect.provide(nodeServices));
+      if (still.length > 0) {
+        return yield* new AdaptersMissing({ missing: still, said: `install exit ${ran.code}: ${ran.said}` });
+      }
+    }).pipe(Effect.provide(nodeServices)),
+);
 
-/**
- * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
- * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first,
- * and a `codex-exec` turn starts only once the box's shell finds that pin (codexexec.ts).
- */
-export const makeStepAgents = (sessionsDir: string, main: string) =>
+const makeStepAgentsBody = (sessionsDir: string, main: string) =>
   Effect.gen(function* () {
     yield* adaptersReady();
     const sessions = yield* Agent.fileSessions(sessionsDir);
@@ -225,6 +229,16 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
     };
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
   }).pipe(Effect.provide(nodeServices));
+
+/**
+ * The provider table on the ACP rows, the session map and the reaper. One per process. Every row
+ * starts from the env `boxEnv` gives, so a box finds the Node the checkout at `main` pins first,
+ * and a `codex-exec` turn starts only once the box's shell finds that pin (codexexec.ts).
+ */
+export const makeStepAgents: {
+  (main: string): (sessionsDir: string) => ReturnType<typeof makeStepAgentsBody>;
+  (sessionsDir: string, main: string): ReturnType<typeof makeStepAgentsBody>;
+} = Function.dual(2, makeStepAgentsBody);
 
 /** Tokens into a `Spent`, adding this update's tool call when it is one. */
 const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
@@ -264,7 +278,10 @@ const appendTo = (events: string, line: object) =>
  * so running out ends the turn `over_time` and the agent's commands are reaped with it. A
  * `codex-exec` row adds its retries and its one ask for a missing answer (`execTurn`).
  */
-export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>): Effect.Effect<Turned<A>> =>
+export const runTurn: {
+  <A>(ask: TurnAsk<A>): (agents: typeof Agent.Agents.Service) => Effect.Effect<Turned<A>>;
+  <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>): Effect.Effect<Turned<A>>;
+} = Function.dual(2, <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>): Effect.Effect<Turned<A>> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 
@@ -275,7 +292,8 @@ export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>)
     const { turned, said } = yield* turnOnce(agents, ask, ask.prompt, ask.minutes * 60);
     yield* fs.writeFileString(ask.report, said).pipe(Effect.ignore);
     return turned;
-  }).pipe(Effect.provide(nodeServices));
+  }).pipe(Effect.provide(nodeServices)),
+);
 
 /** A message that is one JSON object and nothing else: the typed answer, sent alone. */
 const ALONE = /^\{[\s\S]*\}$/;
@@ -499,7 +517,10 @@ export interface RowAsk {
 }
 
 /** The turn's list-price dollars: Claude's SDK says its own; a Codex row is priced by the table. */
-export const listUsd = (provider: Provider, model: string, spent: Spent): number | null => {
+export const listUsd: {
+  (model: string, spent: Spent): (provider: Provider) => number | null;
+  (provider: Provider, model: string, spent: Spent): number | null;
+} = Function.dual(3, (provider: Provider, model: string, spent: Spent): number | null => {
   if (provider === "claude") {
     return spent.usd;
   }
@@ -515,7 +536,7 @@ export const listUsd = (provider: Provider, model: string, spent: Spent): number
     Math.round((((spent.input - spent.cached) * input + spent.cached * cached + spent.output * output) / 1e6) * 1e4) /
     1e4
   );
-};
+});
 
 /**
  * A step's row as `field/runs.jsonl` saves it (field/README.md). The saved key for the reason is

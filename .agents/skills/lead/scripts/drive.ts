@@ -106,6 +106,7 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
 import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import * as Function from "effect/Function";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -153,7 +154,10 @@ export type AgentName = (typeof AGENTS)[number];
  * The provider row a step's agent runs on: Codex only reads for a plan or a review. `codex` is
  * Codex through ACP; `codex-exec` is the installed `codex exec`, plain (./codexexec.ts).
  */
-export const stepProvider = (agent: AgentName, step: StepName): Provider => {
+export const stepProvider: {
+  (step: StepName): (agent: AgentName) => Provider;
+  (agent: AgentName, step: StepName): Provider;
+} = Function.dual(2, (agent: AgentName, step: StepName): Provider => {
   const reads = step === "plan" || step === "review";
 
   switch (agent) {
@@ -164,7 +168,7 @@ export const stepProvider = (agent: AgentName, step: StepName): Provider => {
     case "codex-exec":
       return reads ? "codex-exec-read" : "codex-exec";
   }
-};
+});
 
 // ---------------------------------------------------------------- the outcome
 
@@ -251,7 +255,10 @@ const TOOL_SIGNS =
  * is the tooling when its reason shows `TOOL_SIGNS`. A stuck name nobody sorted is the work, so a
  * person sees it.
  */
-export const faultFrom = (outcome: string, reason: string): Fault | null => {
+export const faultFrom: {
+  (reason: string): (outcome: string) => Fault | null;
+  (outcome: string, reason: string): Fault | null;
+} = Function.dual(2, (outcome: string, reason: string): Fault | null => {
   const [verb = "", name = ""] = outcome.split(":");
 
   if (verb !== "stuck") {
@@ -276,7 +283,7 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
   }
 
   return TOOL_ONLY.includes(name) ? "tool" : "work";
-};
+});
 
 /**
  * The start checks, before any agent runs: box.sh new's, then drive's own (the agent cap, free disk,
@@ -548,122 +555,129 @@ export const answerWords = (answer: Answer | null) =>
  * answer (./agents.ts), or, for a report with none, its one `answer:` line. A review's `done`,
  * typed or not, also needs a merge-ready verdict line.
  */
-export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judged => {
-  if (read.head === null) {
-    return stuck("fetch_failed", read.problem ?? "fetch failed");
-  }
-
-  if (read.problem !== null) {
-    return stuck("read_failed", read.problem);
-  }
-
-  if (ask.step === "review" && read.changed > 0) {
-    return stuck("review_committed", `the review left ${read.changed} files changed in its box`);
-  }
-
-  if (ask.step === "review" && read.head !== ask.base) {
-    return stuck("review_committed", `the review moved the head to ${read.head.slice(0, 8)}`);
-  }
-
-  if (read.unsigned.length > 0) {
-    return stuck("unsigned", read.unsigned.slice(0, 5).join("; "));
-  }
-
-  if (read.leaks.length > 0) {
-    return stuck("leak", `added lines leak, nothing pushed: ${read.leaks.slice(0, 10).join(" ")}`);
-  }
-
-  if (ask.step === "build" && read.exam.length > 0) {
-    return {
-      outcome: { kind: "send", to: "tests", why: "exam_paths" },
-      reason: `the build touched exam paths: ${read.exam.join(" ")}`,
-    };
-  }
-
-  // A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
-  if (read.manifests.length > 0) {
-    return {
-      // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
-      outcome: { kind: "ask", who: "lead", for: "lockfile" },
-      reason:
-        `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
-        `Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
-        "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
-        "commit pnpm-lock.yaml unsigned as a lead commit (stepcommit.sh --commit-only lead), and the lead " +
-        "session signs it and pushes it to -wip (the lead skill's ready handover, ticket 652), " +
-        `then run ${ask.step} again`,
-    };
-  }
-
-  if (ask.step === "plan" && read.plancheck !== null) {
-    return {
-      outcome: { kind: "send", to: "plan", why: "plancheck" },
-      reason: `plancheck --draft: ${read.plancheck}`,
-    };
-  }
-
-  const said = answerWords(answer) ?? readAnswer(read.report);
-
-  if (said._tag === "none") {
-    return stuck("no_answer", "no answer line in the report");
-  }
-
-  if (said._tag === "many") {
-    return stuck("no_answer", `${said.count} answer lines in the report, and drive takes exactly one`);
-  }
-
-  if (said._tag === "unread") {
-    return stuck("no_answer", "the answer line names no verb drive knows");
-  }
-
-  switch (said.verb) {
-    case "done":
-      if (ask.step === "build" && read.commits === 0) {
-        const green = answer?.laws ?? greenOf(read.report);
-
-        if (green === null) {
-          return stuck("no_commit", "answered done with no commit");
-        }
-
-        return {
-          outcome: { kind: "done", part: false, head: read.head },
-          reason: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
-        };
-      }
-
-      if (ask.step === "tests" && read.commits === 0) {
-        // A review may ask only for plant records that already ran (ticket 850): the answer's
-        // plants are the work, and the chain hands them to the next review's brief.
-        const plants = answer?.plants ?? [];
-
-        if (plants.length === 0 || read.changed > 0) {
-          return stuck("no_commit", "answered done with no commit");
-        }
-
-        return {
-          outcome: { kind: "done", part: false, head: read.head },
-          reason: `no commit: ${plants.length} plant records at ${read.head.slice(0, 8)}. ${said.reason}`,
-        };
-      }
-
-      if (ask.step === "review" && !mergeReady(read.report)) {
-        return stuck("no_answer", "answered done under a verdict that is not merge-ready");
-      }
-
-      return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
-    case "send": {
-      const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
-      return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
+export const decide: {
+  (read: Read, answer?: Answer | null): (ask: Ask) => Judged;
+  (ask: Ask, read: Read, answer?: Answer | null): Judged;
+} = Function.dual(
+  // A direct call starts with the ask, which names its ticket; a piped one with the read.
+  (args) => typeof args[0] === "object" && args[0] !== null && "ticket" in args[0],
+  (ask: Ask, read: Read, answer: Answer | null = null): Judged => {
+    if (read.head === null) {
+      return stuck("fetch_failed", read.problem ?? "fetch failed");
     }
-    case "ask":
-      // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
-      return { outcome: { kind: "ask", who: "lead", for: "question" }, reason: said.reason };
-    case "skip":
-      return { outcome: { kind: "skip", why: "step_said" }, reason: said.reason };
-    default:
-      return stuck("step_said", said.reason);
-  }
-};
+
+    if (read.problem !== null) {
+      return stuck("read_failed", read.problem);
+    }
+
+    if (ask.step === "review" && read.changed > 0) {
+      return stuck("review_committed", `the review left ${read.changed} files changed in its box`);
+    }
+
+    if (ask.step === "review" && read.head !== ask.base) {
+      return stuck("review_committed", `the review moved the head to ${read.head.slice(0, 8)}`);
+    }
+
+    if (read.unsigned.length > 0) {
+      return stuck("unsigned", read.unsigned.slice(0, 5).join("; "));
+    }
+
+    if (read.leaks.length > 0) {
+      return stuck("leak", `added lines leak, nothing pushed: ${read.leaks.slice(0, 10).join(" ")}`);
+    }
+
+    if (ask.step === "build" && read.exam.length > 0) {
+      return {
+        outcome: { kind: "send", to: "tests", why: "exam_paths" },
+        reason: `the build touched exam paths: ${read.exam.join(" ")}`,
+      };
+    }
+
+    // A box has no network, so it cannot refresh the lockfile; the lead does, outside it (ticket 385).
+    if (read.manifests.length > 0) {
+      return {
+        // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
+        outcome: { kind: "ask", who: "lead", for: "lockfile" },
+        reason:
+          `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
+          `Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
+          "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
+          "commit pnpm-lock.yaml unsigned as a lead commit (stepcommit.sh --commit-only lead), and the lead " +
+          "session signs it and pushes it to -wip (the lead skill's ready handover, ticket 652), " +
+          `then run ${ask.step} again`,
+      };
+    }
+
+    if (ask.step === "plan" && read.plancheck !== null) {
+      return {
+        outcome: { kind: "send", to: "plan", why: "plancheck" },
+        reason: `plancheck --draft: ${read.plancheck}`,
+      };
+    }
+
+    const said = answerWords(answer) ?? readAnswer(read.report);
+
+    if (said._tag === "none") {
+      return stuck("no_answer", "no answer line in the report");
+    }
+
+    if (said._tag === "many") {
+      return stuck("no_answer", `${said.count} answer lines in the report, and drive takes exactly one`);
+    }
+
+    if (said._tag === "unread") {
+      return stuck("no_answer", "the answer line names no verb drive knows");
+    }
+
+    switch (said.verb) {
+      case "done":
+        if (ask.step === "build" && read.commits === 0) {
+          const green = answer?.laws ?? greenOf(read.report);
+
+          if (green === null) {
+            return stuck("no_commit", "answered done with no commit");
+          }
+
+          return {
+            outcome: { kind: "done", part: false, head: read.head },
+            reason: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
+          };
+        }
+
+        if (ask.step === "tests" && read.commits === 0) {
+          // A review may ask only for plant records that already ran (ticket 850): the answer's
+          // plants are the work, and the chain hands them to the next review's brief.
+          const plants = answer?.plants ?? [];
+
+          if (plants.length === 0 || read.changed > 0) {
+            return stuck("no_commit", "answered done with no commit");
+          }
+
+          return {
+            outcome: { kind: "done", part: false, head: read.head },
+            reason: `no commit: ${plants.length} plant records at ${read.head.slice(0, 8)}. ${said.reason}`,
+          };
+        }
+
+        if (ask.step === "review" && !mergeReady(read.report)) {
+          return stuck("no_answer", "answered done under a verdict that is not merge-ready");
+        }
+
+        return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
+      case "send": {
+        const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
+        return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
+      }
+      case "ask":
+        // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
+        return { outcome: { kind: "ask", who: "lead", for: "question" }, reason: said.reason };
+      case "skip":
+        return { outcome: { kind: "skip", why: "step_said" }, reason: said.reason };
+      default:
+        return stuck("step_said", said.reason);
+    }
+  },
+);
 
 /**
  * The report's path when this run wrote it: the file exists (`mtime` is its mtime in ms) and is no
@@ -852,10 +866,17 @@ export type Env = {
   readonly CODEX_EFFORT: string;
 };
 
-export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
-  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-  return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
-};
+export const sh: {
+  (args: readonly string[], cwd?: string): (cmd: string) => { code: number; out: string; err: string };
+  (cmd: string, args: readonly string[], cwd?: string): { code: number; out: string; err: string };
+} = Function.dual(
+  // A direct call starts with the command, a string; a piped one with its arguments, a list.
+  (args) => typeof args[0] === "string",
+  (cmd: string, args: readonly string[], cwd?: string) => {
+    const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+    return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
+  },
+);
 
 const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
 
@@ -1022,7 +1043,10 @@ export const changedFiles = (porcelain: string): Change[] =>
  * tracked name and the name on disk. A deleted file, a folder whose case changed and a disk that
  * keeps case all give none: git already sees those, or (a folder) this does not handle them.
  */
-export const caseRenames = (box: string, tracked: readonly string[]): { from: string; path: string }[] => {
+export const caseRenames: {
+  (tracked: readonly string[]): (box: string) => { from: string; path: string }[];
+  (box: string, tracked: readonly string[]): { from: string; path: string }[];
+} = Function.dual(2, (box: string, tracked: readonly string[]): { from: string; path: string }[] => {
   const top = realpathSync.native(box);
   const out: { from: string; path: string }[] = [];
 
@@ -1045,14 +1069,9 @@ export const caseRenames = (box: string, tracked: readonly string[]): { from: st
   }
 
   return out;
-};
+});
 
-/**
- * What the agent left in the box's tree, read from outside the box: every edited, deleted and new
- * file by its own name, a new folder file by file. The agent cannot commit, so this is all the
- * work a box holds. A box whose data cannot be read answers a non-zero `code`, never "no changes".
- */
-export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
+const boxChangesBody = (env: Pick<Env, "BOXES">, box: string) => {
   const status = boxGit(env, box, "status", "--porcelain=v1", "-z", "--untracked-files=all");
 
   if (status.code !== 0) {
@@ -1075,10 +1094,23 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
 };
 
 /**
+ * What the agent left in the box's tree, read from outside the box: every edited, deleted and new
+ * file by its own name, a new folder file by file. The agent cannot commit, so this is all the
+ * work a box holds. A box whose data cannot be read answers a non-zero `code`, never "no changes".
+ */
+export const boxChanges: {
+  (box: string): (env: Pick<Env, "BOXES">) => ReturnType<typeof boxChangesBody>;
+  (env: Pick<Env, "BOXES">, box: string): ReturnType<typeof boxChangesBody>;
+} = Function.dual(2, boxChangesBody);
+
+/**
  * The step commit's subject: the report's first line of prose, else the `reason` of its JSON answer
  * (a report can be the answer alone), else a plain stand-in. One line, cut to fit.
  */
-export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
+export const commitSubject: {
+  (report: string): (ask: Pick<Ask, "ticket" | "step">) => string;
+  (ask: Pick<Ask, "ticket" | "step">, report: string): string;
+} = Function.dual(2, (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
   const lines = report.split("\n").map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
   const prose = lines.find((l) => l.length > 0 && !l.startsWith("{"));
   const reason = lines
@@ -1086,7 +1118,7 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
     .map((l) => /"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim())
     .find((w) => w !== undefined && w.length > 0);
   return `T${ask.ticket} ${ask.step}: ${(prose ?? reason ?? "the step's work").slice(0, 72)}`;
-};
+});
 
 /**
  * The agent holds no key and cannot reach the box's git data, so it commits nothing. Its changes
@@ -1177,20 +1209,24 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
 };
 
 /** Why the commits check held the step: each rule and commit, else its exit and last lines. */
-export const commitsSaid = (
-  check: { code: number; out: string; err: string },
-  questSteps: ReadonlySet<string>,
-): string => {
+export const commitsSaid: {
+  (questSteps: ReadonlySet<string>): (check: { code: number; out: string; err: string }) => string;
+  (check: { code: number; out: string; err: string }, questSteps: ReadonlySet<string>): string;
+} = Function.dual(2, (check: { code: number; out: string; err: string }, questSteps: ReadonlySet<string>): string => {
   const rules = heldRules(check.out, questSteps);
   return rules.length > 0
     ? `commits check: ${rules.slice(0, 5).join("; ")}${rules.length > 5 ? `; and ${rules.length - 5} more` : ""}`
     : `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
-};
+});
 
 /** What the commits check holds the step on: nothing, or one line that names each rule it held.
  * Exit 1 holds unless every stuck answer it gave was waived. */
-export const heldBy = (check: { code: number; out: string; err: string }, questSteps: ReadonlySet<string>): string[] =>
-  checkHolds(check.code, check.out, questSteps) ? [commitsSaid(check, questSteps)] : [];
+export const heldBy: {
+  (questSteps: ReadonlySet<string>): (check: { code: number; out: string; err: string }) => string[];
+  (check: { code: number; out: string; err: string }, questSteps: ReadonlySet<string>): string[];
+} = Function.dual(2, (check: { code: number; out: string; err: string }, questSteps: ReadonlySet<string>): string[] =>
+  checkHolds(check.code, check.out, questSteps) ? [commitsSaid(check, questSteps)] : [],
+);
 
 /**
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
@@ -1504,7 +1540,10 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 };
 
 /** What a step is told on top of the brief: its skill, and that drive commits its work. */
-export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
+export const agentTail: {
+  (electron: boolean): (ask: Pick<Ask, "step" | "ticket">) => string;
+  (ask: Pick<Ask, "step" | "ticket">, electron: boolean): string;
+} = Function.dual(2, (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
   const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts in a box. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
   const commit =
     ask.step === "plan"
@@ -1516,7 +1555,7 @@ export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) 
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
   return `\n\n---\n${skill}${commit}${lock}${NO_ESCALATION}${ask.step === "plan" ? "" : FINISH}`;
-};
+});
 
 /** The rule that keeps a refused command from ending a turn (2026-11-11: in the boxes folder,
  * every Codex ask, 15 of 15, ended its turn `cancelled` within 15 ms. A command the box refused
@@ -1536,10 +1575,14 @@ export const FINISH =
  * sandbox, Codex's fence), so a step cannot read a plan kept beside the boxes: it rides in the
  * prompt. A plan step writes the plan, and a missing file is box.sh new's refusal to make.
  */
-export const planTail = (step: StepName, path: string, text: string | null) =>
+export const planTail: {
+  (path: string, text: string | null): (step: StepName) => string;
+  (step: StepName, path: string, text: string | null): string;
+} = Function.dual(3, (step: StepName, path: string, text: string | null) =>
   step === "plan" || text === null
     ? ""
-    : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+    : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`,
+);
 
 /** A plan's files table as `plancheck.sh --owners-json` prints it: each path, and the step that owns it. */
 const Owners = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
@@ -1561,7 +1604,10 @@ const planOwners = (env: Env, plan: string) => {
  * mutation step may change what tests owns too, as stepcommit allows. Nothing for a plan, a review
  * (it changes no file) or a quest with no plan drive can read.
  */
-export const ownedHead = (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
+export const ownedHead: {
+  (owners: Readonly<Record<string, string>> | null): (step: StepName) => string;
+  (step: StepName, owners: Readonly<Record<string, string>> | null): string;
+} = Function.dual(2, (step: StepName, owners: Readonly<Record<string, string>> | null): string => {
   if (step === "plan" || step === "review" || owners === null) {
     return "";
   }
@@ -1577,7 +1623,7 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
     ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
     : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
         `every file under it):\n${mine.map((p) => `- ${p}\n`).join("")}${other}\n---\n\n`;
-};
+});
 
 /**
  * The quest's newest mutation report, whole, for a review: the review reads it (the review skill,
@@ -1585,7 +1631,10 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
  * `../<quest>-mutationN.md`, so two Codex reviews ended stuck after half a minute and a Claude
  * review said done without it (p34w-review1 and 2, layout-review2, 2026-11-10; ticket 569).
  */
-export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path: string) => string | null): string => {
+export const mutationTail: {
+  (steps: Quest["steps"], read: (path: string) => string | null): (step: StepName) => string;
+  (step: StepName, steps: Quest["steps"], read: (path: string) => string | null): string;
+} = Function.dual(3, (step: StepName, steps: Quest["steps"], read: (path: string) => string | null): string => {
   if (step !== "review") {
     return "";
   }
@@ -1595,7 +1644,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
   return text === null || !last?.report
     ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
-};
+});
 
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
 type DraftRun = (env: Env, agents: Agents, ask: Ask) => Effect.Effect<Turned<Answer>>;
@@ -1659,11 +1708,20 @@ export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuc
 };
 
 /** What a mutation agent is told about the run that already happened in the container. */
-export const mutboxTail = (report: string, skip: boolean) =>
-  `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report, the JSON file the lead keeps at ${report}, follows this note, whole, since your box reads nothing outside itself: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`;
+export const mutboxTail: {
+  (skip: boolean): (report: string) => string;
+  (report: string, skip: boolean): string;
+} = Function.dual(
+  2,
+  (report: string, skip: boolean) =>
+    `\n\n---\nThe Stryker run for this step already happened, in a container with its own network (decision 0045). Its report, the JSON file the lead keeps at ${report}, follows this note, whole, since your box reads nothing outside itself: the sample, the counts, each survivor with its file and line, the tests left out or skipped with the reason, and \`narrowing\`, the mutants arm a (the base's tests) kills and arm b (this branch's) lets live. Do not run Stryker, the mutation command or the sampler yourself, and start nothing that listens on a port. Read the report and do the skill's steps 3 to 6 from it.\n${skip ? "The sampler selected no mutation range, so commit nothing and end with `answer: skip <why>`.\n" : ""}`,
+);
 
 /** mutbox.ts's command line for one step: the build is the step's start head, arm a the quest's root. */
-export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: string): Array<string> => [
+export const mutboxArgs: {
+  (ask: Ask, related: string): (env: Pick<Env, "MAIN" | "BOXES">) => Array<string>;
+  (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: string): Array<string>;
+} = Function.dual(3, (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: string): Array<string> => [
   "run",
   "--checkout",
   env.MAIN,
@@ -1681,7 +1739,7 @@ export const mutboxArgs = (env: Pick<Env, "MAIN" | "BOXES">, ask: Ask, related: 
   dockerLock(env),
   "--plan",
   ask.plan,
-];
+]);
 
 /** The one Docker box's lock, as mutbox.ts takes it and drive's start check reads it. */
 export const dockerLock = (env: Pick<Env, "BOXES">) => join(env.BOXES, "state", "docker.lock");
@@ -1756,14 +1814,20 @@ export const mutationDraft =
  * The Draft, as a Sub that answers once. The prompt file is the brief with drive's tail; the
  * system prompt names the step.
  */
-export const agentsDraft =
+export const agentsDraft: {
+  (agents: Agents, mutbox?: MutboxRun): (env: Env) => (sub: DraftSub) => Stream.Stream<Drafted>;
+  (env: Env, agents: Agents, mutbox?: MutboxRun): (sub: DraftSub) => Stream.Stream<Drafted>;
+} = Function.dual(
+  // A direct call starts with the env, which names the boxes folder; a piped one with the agents.
+  (args) => typeof args[0] === "object" && args[0] !== null && "BOXES" in args[0],
   (env: Env, agents: Agents, mutbox: MutboxRun = runMutbox) =>
-  (sub: DraftSub) =>
-    Stream.fromEffect(
-      (sub.deps.step === "mutation" ? mutationDraft(mutbox) : turnDraft)(env, agents, sub.deps).pipe(
-        Effect.map((turned) => ({ type: "drafted", turned }) satisfies Drafted),
+    (sub: DraftSub): Stream.Stream<Drafted> =>
+      Stream.fromEffect(
+        (sub.deps.step === "mutation" ? mutationDraft(mutbox) : turnDraft)(env, agents, sub.deps).pipe(
+          Effect.map((turned) => ({ type: "drafted", turned }) satisfies Drafted),
+        ),
       ),
-    );
+);
 
 type Quest = {
   readonly quest: string;
@@ -1854,10 +1918,13 @@ const holderOf = (porcelain: string, branch: string): string | null => {
  * mutation step started while another box ran got mutbox's docker_busy only after its box was made,
  * as a stuck step (layout-mutation3, 2026-11-10; ticket 566).
  */
-export const dockerHolder = (lock: string | null, alive: (pid: number) => boolean): number | null => {
+export const dockerHolder: {
+  (alive: (pid: number) => boolean): (lock: string | null) => number | null;
+  (lock: string | null, alive: (pid: number) => boolean): number | null;
+} = Function.dual(2, (lock: string | null, alive: (pid: number) => boolean): number | null => {
   const pid = Number(lock?.trim());
   return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
-};
+});
 
 const isAlive = (pid: number) =>
   Result.match(
@@ -1874,7 +1941,10 @@ const isAlive = (pid: number) =>
  * lock (its sandbox writes only the box and caches), so drive takes it outside, before the agent
  * starts: always for mutation, and for any Claude step started with `--electron`.
  */
-export const holdsElectron = (step: StepName, flagged: boolean) => step === "mutation" || flagged;
+export const holdsElectron: {
+  (flagged: boolean): (step: StepName) => boolean;
+  (step: StepName, flagged: boolean): boolean;
+} = Function.dual(2, (step: StepName, flagged: boolean) => step === "mutation" || flagged);
 
 const usage = () => {
   console.error(
@@ -1938,19 +2008,25 @@ const questLock = (boxes: string, quest: string) => join(boxes, "state", `${ques
  * Take the quest for this process: `null` once it holds it, else the pid of the live process that
  * drives the quest now. Two launches of one quest once both took `p39s1-tests2` (2026-11-11).
  */
-export const holdQuest = (boxes: string, quest: string): number | null => {
+export const holdQuest: {
+  (quest: string): (boxes: string) => number | null;
+  (boxes: string, quest: string): number | null;
+} = Function.dual(2, (boxes: string, quest: string): number | null => {
   mkdirSync(join(boxes, "state"), { recursive: true });
   return holdLock(questLock(boxes, quest));
-};
+});
 
 /** Give the quest back, only when this process holds it. */
-export const freeQuest = (boxes: string, quest: string): void => {
+export const freeQuest: {
+  (quest: string): (boxes: string) => void;
+  (boxes: string, quest: string): void;
+} = Function.dual(2, (boxes: string, quest: string): void => {
   const lock = questLock(boxes, quest);
 
   if (existsSync(lock) && Number(readFileSync(lock, "utf8").trim()) === process.pid) {
     rmSync(lock, { force: true });
   }
-};
+});
 
 /**
  * The names a quest's next run id must pass, for `RunId.next`: every file in the boxes folder and
@@ -1959,7 +2035,10 @@ export const freeQuest = (boxes: string, quest: string): void => {
  * `<box>.md` as its report (p12 review5, 2026-11-09, ticket 383). A box's tree and its view sit
  * in `boxTrees`, every other file of the run beside the boxes, so both folders are read.
  */
-export const runNames = (boxes: string, quest: string): string[] => {
+export const runNames: {
+  (quest: string): (boxes: string) => string[];
+  (boxes: string, quest: string): string[];
+} = Function.dual(2, (boxes: string, quest: string): string[] => {
   const state = join(boxes, "state", `${quest}.json`);
   const saved = savedQuest(state);
   const trees = boxTrees(boxes);
@@ -1968,11 +2047,17 @@ export const runNames = (boxes: string, quest: string): string[] => {
     ...(existsSync(trees) ? readdirSync(trees) : []),
     ...(saved?.steps ?? []).flatMap((e) => (e.box === undefined ? [] : [e.box])),
   ];
-};
+});
 
 /** What a second launch of a quest is told. */
-export const questRunning = (quest: string, pid: number): string =>
-  `quest ${quest} is already running in process ${pid}; wait for it to end, or stop it, before starting it again`;
+export const questRunning: {
+  (pid: number): (quest: string) => string;
+  (quest: string, pid: number): string;
+} = Function.dual(
+  2,
+  (quest: string, pid: number): string =>
+    `quest ${quest} is already running in process ${pid}; wait for it to end, or stop it, before starting it again`,
+);
 
 /** What one step is asked for, as the command line or the chain gives it. */
 export interface StepArgs {
@@ -2010,7 +2095,10 @@ const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reas
  * and the prompt file. Reads of the main checkout and the laptop, beside the quest's lock, which
  * the process that took it gives back (`freeQuest`).
  */
-export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
+export const prepare: {
+  (p: StepArgs): (env: Env) => Prepared | Refusal;
+  (env: Env, p: StepArgs): Prepared | Refusal;
+} = Function.dual(2, (env: Env, p: StepArgs): Prepared | Refusal => {
   const { quest, step, agent, electron } = p;
 
   if (!/^[a-z0-9][a-z0-9-]*$/.test(quest) || !existsSync(p.brief)) {
@@ -2210,7 +2298,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       verdict,
   );
   return Start.cases.prepared.make({ ask, electron, phases });
-};
+});
 
 /** drive's one line: how the step ended, as the chain and a reader of the log take it. */
 export interface DriveLine {
@@ -2238,106 +2326,113 @@ export interface DriveLine {
  * crash is a `stuck:crash` line, with the box kept. `onPhase` hears each phase the machine enters,
  * before that phase's work starts.
  */
-export const driveStep = (
-  env: Env,
-  agents: Agents,
-  p: Prepared,
-  onPhase: (phase: DrivePhase) => void = () => {},
-): Effect.Effect<DriveLine> => {
-  const { ask } = p;
-  const lock = join(env.BOXES, "state", "electron.lock");
-  const program = Effect.gen(function* () {
-    const waitStart = Date.now();
+export const driveStep: {
+  (agents: Agents, p: Prepared, onPhase?: (phase: DrivePhase) => void): (env: Env) => Effect.Effect<DriveLine>;
+  (env: Env, agents: Agents, p: Prepared, onPhase?: (phase: DrivePhase) => void): Effect.Effect<DriveLine>;
+} = Function.dual(
+  // A direct call starts with the env, which names the boxes folder; a piped one with the agents.
+  (args) => typeof args[0] === "object" && args[0] !== null && "BOXES" in args[0],
+  (
+    env: Env,
+    agents: Agents,
+    p: Prepared,
+    onPhase: (phase: DrivePhase) => void = () => {},
+  ): Effect.Effect<DriveLine> => {
+    const { ask } = p;
+    const lock = join(env.BOXES, "state", "electron.lock");
+    const program = Effect.gen(function* () {
+      const waitStart = Date.now();
 
-    if (holdsElectron(ask.step, p.electron)) {
-      yield* takeElectron(env);
-    }
-
-    // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
-    // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
-    // typecheck` still takes its own lock (scripts/typecheck.sh).
-    if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
-      for (;;) {
-        const r = sh("pgrep", ["-x", "tsgo"]);
-        const tsgo = pgrepAnswer(r.code, r.out);
-
-        if (tsgo._tag === "refused") {
-          yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
-          break;
-        }
-
-        if (tsgo.count === 0) {
-          break;
-        }
-
-        yield* Effect.sleep("20 seconds");
+      if (holdsElectron(ask.step, p.electron)) {
+        yield* takeElectron(env);
       }
-    }
 
-    const handle = yield* run(machine, {
-      ctx: undefined,
-      interpret: handlers(env, [...p.phases, { name: "wait", ms: Date.now() - waitStart }]),
-      subscribe: { draft: agentsDraft(env, agents) },
-      terminal: (m) => m.phase === "over",
-    });
-    const runtime = yield* handle.ready;
-    // tea's change notifier fires after each transition and before its first Cmd starts.
-    runtime.subscribe(() => onPhase(runtime.getState().phase));
-    yield* runtime.dispatch({ type: "start", ask });
-    const end = yield* runtime.done();
+      // One typecheck at a time across all agents: a step that typechecks waits for a free tsgo.
+      // Where pgrep cannot list processes, the wait is skipped with one line (pgrep.ts); `pnpm
+      // typecheck` still takes its own lock (scripts/typecheck.sh).
+      if (ask.step === "tests" || ask.step === "build" || ask.step === "mutation") {
+        for (;;) {
+          const r = sh("pgrep", ["-x", "tsgo"]);
+          const tsgo = pgrepAnswer(r.code, r.out);
 
-    if (end.phase !== "over") {
-      return yield* Effect.die(`drive stopped in ${end.phase}`);
-    }
+          if (tsgo._tag === "refused") {
+            yield* Effect.sync(() => console.error(skipLine("one-typecheck wait")));
+            break;
+          }
 
-    const outcome = endName(end.outcome);
-    return {
-      outcome,
-      quest: ask.quest,
-      step: ask.step,
-      agent: ask.agent,
-      box: ask.box,
-      from: ask.base,
-      head: end.head,
-      reason: end.reason,
-      fault: faultFrom(outcome, end.reason),
-      report: writtenReport(ask),
-      kept: end.kept,
-      exit: exitOf(end.outcome),
-      model: ask.model,
-      listUsd: listUsd(stepProvider(ask.agent, ask.step), ask.model, end.spent),
-    } satisfies DriveLine;
-  }).pipe(
-    Effect.scoped,
-    Effect.ensuring(
-      Effect.sync(() => {
-        if (holdsElectron(ask.step, p.electron)) {
-          rmSync(lock, { force: true });
+          if (tsgo.count === 0) {
+            break;
+          }
+
+          yield* Effect.sleep("20 seconds");
         }
-      }),
-    ),
-  );
-  return program.pipe(
-    Effect.catchCause((cause) =>
-      Effect.succeed({
-        outcome: "stuck:crash",
+      }
+
+      const handle = yield* run(machine, {
+        ctx: undefined,
+        interpret: handlers(env, [...p.phases, { name: "wait", ms: Date.now() - waitStart }]),
+        subscribe: { draft: agentsDraft(env, agents) },
+        terminal: (m) => m.phase === "over",
+      });
+      const runtime = yield* handle.ready;
+      // tea's change notifier fires after each transition and before its first Cmd starts.
+      runtime.subscribe(() => onPhase(runtime.getState().phase));
+      yield* runtime.dispatch({ type: "start", ask });
+      const end = yield* runtime.done();
+
+      if (end.phase !== "over") {
+        return yield* Effect.die(`drive stopped in ${end.phase}`);
+      }
+
+      const outcome = endName(end.outcome);
+      return {
+        outcome,
         quest: ask.quest,
         step: ask.step,
         agent: ask.agent,
         box: ask.box,
         from: ask.base,
-        head: ask.base,
-        reason: Cause.pretty(cause),
-        fault: "tool",
+        head: end.head,
+        reason: end.reason,
+        fault: faultFrom(outcome, end.reason),
         report: writtenReport(ask),
-        kept: true,
-        exit: 30,
+        kept: end.kept,
+        exit: exitOf(end.outcome),
         model: ask.model,
-        listUsd: null,
-      } satisfies DriveLine),
-    ),
-  );
-};
+        listUsd: listUsd(stepProvider(ask.agent, ask.step), ask.model, end.spent),
+      } satisfies DriveLine;
+    }).pipe(
+      Effect.scoped,
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (holdsElectron(ask.step, p.electron)) {
+            rmSync(lock, { force: true });
+          }
+        }),
+      ),
+    );
+    return program.pipe(
+      Effect.catchCause((cause) =>
+        Effect.succeed({
+          outcome: "stuck:crash",
+          quest: ask.quest,
+          step: ask.step,
+          agent: ask.agent,
+          box: ask.box,
+          from: ask.base,
+          head: ask.base,
+          reason: Cause.pretty(cause),
+          fault: "tool",
+          report: writtenReport(ask),
+          kept: true,
+          exit: 30,
+          model: ask.model,
+          listUsd: null,
+        } satisfies DriveLine),
+      ),
+    );
+  },
+);
 
 const main = () => {
   const args = process.argv.slice(2);

@@ -63,7 +63,8 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
-import { ChildProcess } from "effect/process";
+import * as Function from "effect/Function";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
@@ -159,10 +160,14 @@ const loads = (file: string, source: string): ReadonlySet<string> => {
  * Why a test cannot run in this container, read from the modules it loads, or `null`. Electron
  * and a browser need a display, and the container has none.
  */
-export const needsHost = (file: string, source: string): string | null =>
+export const needsHost: {
+  (source: string): (file: string) => string | null;
+  (file: string, source: string): string | null;
+} = Function.dual(2, (file: string, source: string): string | null =>
   [...loads(file, source)].some((name) => WINDOWS.has(name))
     ? "it starts an Electron or browser window, and this Linux container has no display"
-    : null;
+    : null,
+);
 
 /** The base image's Node version, or `null` when the FROM line is not pinned by digest. */
 export const baseNode = (dockerfile: string): string | null =>
@@ -274,11 +279,14 @@ export const reachLine = (files: ReadonlyArray<FileReach>): string => {
  * Whether the plan gives a file to the build step: its own row, else the longest folder row
  * (`dir/`) above it, as the box's own owner check reads the same table. Pure.
  */
-export const buildOwns = (owners: Readonly<Record<string, string>>, file: string): boolean => {
+export const buildOwns: {
+  (file: string): (owners: Readonly<Record<string, string>>) => boolean;
+  (owners: Readonly<Record<string, string>>, file: string): boolean;
+} = Function.dual(2, (owners: Readonly<Record<string, string>>, file: string): boolean => {
   const folders = Object.keys(owners).filter((key) => key.endsWith("/") && file.startsWith(key));
   const key = file in owners ? file : folders.sort((a, b) => b.length - a.length)[0];
   return key !== undefined && owners[key] === "build";
-};
+});
 
 const Owners = Schema.Record(Schema.String, Schema.String);
 
@@ -384,7 +392,10 @@ const toRow = (
 });
 
 /** One arm's answer from its mutants. Pure. */
-export const tally = (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>, selected: number): Arm => {
+export const tally: {
+  (from: Arm["from"], rows: ReadonlyArray<Row>, selected: number): (exit: number) => Arm;
+  (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>, selected: number): Arm;
+} = Function.dual(4, (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>, selected: number): Arm => {
   const counts: Record<string, number> = {};
 
   for (const r of rows) {
@@ -399,13 +410,16 @@ export const tally = (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>,
     unreached: Math.max(0, selected - rows.length),
     survivors: rows.filter((r) => r.status === "Survived"),
   };
-};
+});
 
 /** The mutants arm a kills that arm b lets live. Pure. */
-export const narrowed = (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Row> => {
+export const narrowed: {
+  (b: ReadonlyArray<Row>): (a: ReadonlyArray<Row>) => Array<Row>;
+  (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Row>;
+} = Function.dual(2, (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Row> => {
   const killed = new Set(a.filter((r) => r.status === "Killed" || r.status === "Timeout").map(mutantKey));
   return b.filter((r) => (r.status === "Survived" || r.status === "NoCoverage") && killed.has(mutantKey(r)));
-};
+});
 
 /** What the run comes to, from what the container left. Pure. */
 export const judge = (seen: {
@@ -564,27 +578,42 @@ export const judge = (seen: {
  * Each related test left out of arm a, and why: the base has no such file, or its tests fail on
  * the build (named from arm a's own vitest run), which would stop Stryker's dry run. Pure.
  */
-export const droppedFromArmA = (
-  related: ReadonlyArray<string>,
-  onBase: ReadonlyArray<string>,
-  kept: ReadonlyArray<string>,
-  baseline: typeof Baseline.Type | null,
-): Array<typeof Named.Type> =>
-  related
-    .filter((p) => !kept.includes(p))
-    .map((p) => {
-      const failed = (baseline?.testResults ?? [])
-        .filter((file) => file.name.replace(/^\/repo\//, "") === p)
-        .flatMap((file) => file.assertionResults.filter((t) => t.status === "failed").map((t) => t.fullName));
-      return {
-        path: p,
-        reason: !onBase.includes(p)
-          ? "the base has no such file"
-          : failed.length > 0
-            ? `its base version fails on the build: ${failed.slice(0, 5).join("; ")}`
-            : "its base version does not pass on the build; see box/a-baseline.txt",
-      };
-    });
+export const droppedFromArmA: {
+  (
+    onBase: ReadonlyArray<string>,
+    kept: ReadonlyArray<string>,
+    baseline: typeof Baseline.Type | null,
+  ): (related: ReadonlyArray<string>) => Array<typeof Named.Type>;
+  (
+    related: ReadonlyArray<string>,
+    onBase: ReadonlyArray<string>,
+    kept: ReadonlyArray<string>,
+    baseline: typeof Baseline.Type | null,
+  ): Array<typeof Named.Type>;
+} = Function.dual(
+  4,
+  (
+    related: ReadonlyArray<string>,
+    onBase: ReadonlyArray<string>,
+    kept: ReadonlyArray<string>,
+    baseline: typeof Baseline.Type | null,
+  ): Array<typeof Named.Type> =>
+    related
+      .filter((p) => !kept.includes(p))
+      .map((p) => {
+        const failed = (baseline?.testResults ?? [])
+          .filter((file) => file.name.replace(/^\/repo\//, "") === p)
+          .flatMap((file) => file.assertionResults.filter((t) => t.status === "failed").map((t) => t.fullName));
+        return {
+          path: p,
+          reason: !onBase.includes(p)
+            ? "the base has no such file"
+            : failed.length > 0
+              ? `its base version fails on the build: ${failed.slice(0, 5).join("; ")}`
+              : "its base version does not pass on the build; see box/a-baseline.txt",
+        };
+      }),
+);
 
 /** Whether a done's reason names a gap that leaves narrowing unknown. Pure. */
 export const narrowingUnknown = (reason: string) =>
@@ -623,18 +652,26 @@ const sh = Effect.fnUntraced(
  * Run one command, stopped past `seconds`: its child is killed as `sh` says, and the call fails
  * with CallTimeout. A Docker call never waits without a bound.
  */
-export const bounded = (
-  cmd: string,
-  args: ReadonlyArray<string>,
-  seconds: number,
-  stdin?: string | Stream.Stream<Uint8Array>,
-) =>
-  sh(cmd, args, stdin).pipe(
-    Effect.timeoutOrElse({
-      duration: `${seconds} seconds`,
-      orElse: () => Effect.fail(new CallTimeout({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
-    }),
-  );
+type Bounded = Effect.Effect<
+  { out: string; err: string; code: number },
+  CallTimeout,
+  ChildProcessSpawner.ChildProcessSpawner
+>;
+
+export const bounded: {
+  (args: ReadonlyArray<string>, seconds: number, stdin?: string | Stream.Stream<Uint8Array>): (cmd: string) => Bounded;
+  (cmd: string, args: ReadonlyArray<string>, seconds: number, stdin?: string | Stream.Stream<Uint8Array>): Bounded;
+} = Function.dual(
+  // A direct call starts with the command, a string; a piped one with its arguments, a list.
+  (args) => typeof args[0] === "string",
+  (cmd: string, args: ReadonlyArray<string>, seconds: number, stdin?: string | Stream.Stream<Uint8Array>): Bounded =>
+    sh(cmd, args, stdin).pipe(
+      Effect.timeoutOrElse({
+        duration: `${seconds} seconds`,
+        orElse: () => Effect.fail(new CallTimeout({ command: [cmd, ...args.slice(0, 2)].join(" "), seconds })),
+      }),
+    ),
+);
 
 /** One Docker call under its bound (DOCKER_SECONDS). */
 const docker = (args: ReadonlyArray<string>, seconds: number = DOCKER_SECONDS.call) => bounded("docker", args, seconds);

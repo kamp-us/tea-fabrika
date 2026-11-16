@@ -30,6 +30,7 @@
 
 import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
+import * as Function from "effect/Function";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
 import { questKeyed, wipOf } from "../quest.ts";
@@ -190,8 +191,12 @@ export const exec = Effect.fn("host.exec")(
  * none, so a command there ran the laptop's default Node (22 on askdesk7's hand run, where the repo
  * pins 26.13.0). Under `volta run`, every `node` and `pnpm` the line starts is the repo's.
  */
-export const commandArgv = (line: string, node: string | null): readonly [string, ...string[]] =>
-  node === null ? ["sh", "-c", line] : ["volta", "run", "--node", node, "sh", "-c", line];
+export const commandArgv: {
+  (node: string | null): (line: string) => readonly [string, ...string[]];
+  (line: string, node: string | null): readonly [string, ...string[]];
+} = Function.dual(2, (line: string, node: string | null): readonly [string, ...string[]] =>
+  node === null ? ["sh", "-c", line] : ["volta", "run", "--node", node, "sh", "-c", line],
+);
 
 /** One host command in `dir` (`commandArgv` says how), its output appended to `log`; its exit code. */
 const runLine = Effect.fn("host.runLine")(

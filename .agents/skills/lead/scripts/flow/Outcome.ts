@@ -8,6 +8,7 @@
 //   stuck  stop; something broke, with the reason
 
 import { Schema } from "effect";
+import * as Function from "effect/Function";
 
 export const Outcome = Schema.TaggedUnion({
   done: { reason: Schema.String },
@@ -20,7 +21,12 @@ export type Outcome = typeof Outcome.Type;
 
 export const done = (reason: string): Outcome => Outcome.cases.done.make({ reason });
 export const skip = (reason: string): Outcome => Outcome.cases.skip.make({ reason });
-export const send = (to: string, reason: string): Outcome => Outcome.cases.send.make({ to, reason });
+
+export const send: {
+  (reason: string): (to: string) => Outcome;
+  (to: string, reason: string): Outcome;
+} = Function.dual(2, (to: string, reason: string): Outcome => Outcome.cases.send.make({ to, reason }));
+
 export const ask = (reason: string): Outcome => Outcome.cases.ask.make({ reason });
 export const stuck = (reason: string): Outcome => Outcome.cases.stuck.make({ reason });
 

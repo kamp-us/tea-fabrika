@@ -1,6 +1,7 @@
 // AlertsGh.layer: the Alerts service on `gh issue list`, read only. Every call names the repo, so
 // the checkout it runs in does not pick it.
 import { Effect, Layer, Schema } from "effect";
+import * as Function from "effect/Function";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "../../lead/scripts/pr/command.ts";
 import { Alerts, AlertsError } from "./Alerts.ts";
@@ -29,7 +30,10 @@ export const alertsIn = (out: string): Effect.Effect<ReadonlyArray<Alert>, Schem
   );
 
 /** `repo` is `owner/name`; `cwd` is any folder gh may start in. */
-export const layer = (repo: string, cwd: string): Layer.Layer<Alerts, never, ChildProcessSpawner.ChildProcessSpawner> =>
+export const layer: {
+  (cwd: string): (repo: string) => Layer.Layer<Alerts, never, ChildProcessSpawner.ChildProcessSpawner>;
+  (repo: string, cwd: string): Layer.Layer<Alerts, never, ChildProcessSpawner.ChildProcessSpawner>;
+} = Function.dual(2, (repo: string, cwd: string): Layer.Layer<Alerts, never, ChildProcessSpawner.ChildProcessSpawner> =>
   Layer.effect(
     Alerts,
     Effect.gen(function* () {
@@ -55,4 +59,5 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Alerts, never, Chi
 
       return Alerts.of({ open });
     }),
-  );
+  ),
+);

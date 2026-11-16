@@ -9,6 +9,7 @@
 // The loop reads the log again before each cancel, so a close, a `next` or an `allow` counts at
 // once, never a beat late. It never asks for a rerun: the service has none.
 import { Console, Duration, Effect, Schema } from "effect";
+import * as Function from "effect/Function";
 import * as Level from "./Level.ts";
 import type { Run } from "./WorkflowRuns.ts";
 import { WorkflowRuns } from "./WorkflowRuns.ts";
@@ -27,12 +28,16 @@ export type Verdict = typeof Verdict.Type;
  * emptied the queue first, so there is none, and canceling one would take its pull request out of
  * the queue behind the owner's back. A push run on main is canceled too.
  */
-export const verdict = (run: Run, allow: ReadonlyArray<string>): Verdict =>
+export const verdict: {
+  (allow: ReadonlyArray<string>): (run: Run) => Verdict;
+  (run: Run, allow: ReadonlyArray<string>): Verdict;
+} = Function.dual(2, (run: Run, allow: ReadonlyArray<string>): Verdict =>
   run.event === "merge_group"
     ? Verdict.cases.keep.make({ reason: "queue" })
     : allow.includes(run.branch)
       ? Verdict.cases.keep.make({ reason: "allowed" })
-      : Verdict.cases.cancel.make({});
+      : Verdict.cases.cancel.make({}),
+);
 
 /**
  * How many cancel loops of the latest sev0 have not said they ended. A close that no loop answered

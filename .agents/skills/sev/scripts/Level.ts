@@ -10,6 +10,7 @@
 // rewritten. The sev0 is folded from it, so two sev0s open at once cannot be written: `open` is
 // refused while one is open, and a log that holds two fails to fold.
 import { DateTime, Effect, FileSystem, Path, Result, Schema } from "effect";
+import * as Function from "effect/Function";
 import { Run } from "./WorkflowRuns.ts";
 
 /** A command was refused: the level does not stand the way it needs. The reason says how it does. */
@@ -75,12 +76,16 @@ export const Level = Schema.TaggedUnion({
 export type Level = typeof Level.Type;
 
 /** The level from the sev0 and the open issues: an open sev0 wins, then any open issue. */
-export const level = (sev0: Sev0, issues: ReadonlyArray<Alert>): Level =>
+export const level: {
+  (issues: ReadonlyArray<Alert>): (sev0: Sev0) => Level;
+  (sev0: Sev0, issues: ReadonlyArray<Alert>): Level;
+} = Function.dual(2, (sev0: Sev0, issues: ReadonlyArray<Alert>): Level =>
   sev0._tag === "open"
     ? Level.cases.sev0.make({ since: sev0.since, reason: sev0.reason, allow: sev0.allow })
     : issues.length > 0
       ? Level.cases.sev1.make({ issues })
-      : Level.cases.none.make({});
+      : Level.cases.none.make({}),
+);
 
 /** The sev0 after one more line at `index`; a line that does not follow is refused with why. */
 export const step = (sev0: Sev0, entry: Entry, index: number): Result.Result<Sev0, string> => {

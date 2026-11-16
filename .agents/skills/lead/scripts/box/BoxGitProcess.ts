@@ -2,6 +2,7 @@
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
 import { Effect, Layer, Stream } from "effect";
+import * as Function from "effect/Function";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
@@ -47,73 +48,84 @@ const text = new TextDecoder();
 
 const lines = (out: string) => out.split("\n").filter((line) => line !== "");
 
-export const layer = (
-  main: string,
-  inherited: Readonly<Record<string, string | undefined>>,
-): Layer.Layer<BoxGit, never, ChildProcessSpawner.ChildProcessSpawner> =>
-  Layer.effect(
-    BoxGit,
-    Effect.gen(function* () {
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const env = gitEnv(inherited);
+export const layer: {
+  (
+    inherited: Readonly<Record<string, string | undefined>>,
+  ): (main: string) => Layer.Layer<BoxGit, never, ChildProcessSpawner.ChildProcessSpawner>;
+  (
+    main: string,
+    inherited: Readonly<Record<string, string | undefined>>,
+  ): Layer.Layer<BoxGit, never, ChildProcessSpawner.ChildProcessSpawner>;
+} = Function.dual(
+  2,
+  (
+    main: string,
+    inherited: Readonly<Record<string, string | undefined>>,
+  ): Layer.Layer<BoxGit, never, ChildProcessSpawner.ChildProcessSpawner> =>
+    Layer.effect(
+      BoxGit,
+      Effect.gen(function* () {
+        const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const env = gitEnv(inherited);
 
-      /** One git call from MAIN, at `at` when given; any exit but 0, or any stderr, fails it. */
-      const git = Effect.fn("BoxGitProcess.git")(
-        function* (at: Inspection | null, args: ReadonlyArray<string>) {
-          const into = at === null ? [] : [`--git-dir=${at.gitDir}`, `--work-tree=${at.work}`];
-          const handle = yield* ChildProcess.make("git", ["-C", main, ...into, ...OFF, ...args], {
-            env,
-            extendEnv: false,
-            stdin: "ignore",
-          });
-          const [out, err, code] = yield* Effect.all(
-            [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
-            { concurrency: 3 },
-          );
+        /** One git call from MAIN, at `at` when given; any exit but 0, or any stderr, fails it. */
+        const git = Effect.fn("BoxGitProcess.git")(
+          function* (at: Inspection | null, args: ReadonlyArray<string>) {
+            const into = at === null ? [] : [`--git-dir=${at.gitDir}`, `--work-tree=${at.work}`];
+            const handle = yield* ChildProcess.make("git", ["-C", main, ...into, ...OFF, ...args], {
+              env,
+              extendEnv: false,
+              stdin: "ignore",
+            });
+            const [out, err, code] = yield* Effect.all(
+              [Stream.mkUint8Array(handle.stdout), Stream.mkUint8Array(handle.stderr), handle.exitCode],
+              { concurrency: 3 },
+            );
 
-          if (Number(code) !== 0 || err.length > 0) {
-            return yield* new BoxGitError({ command: args[0] ?? "" });
-          }
+            if (Number(code) !== 0 || err.length > 0) {
+              return yield* new BoxGitError({ command: args[0] ?? "" });
+            }
 
-          return text.decode(out);
-        },
-        Effect.scoped,
-        Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        (effect, _at, args) =>
-          Effect.catchTag(effect, "PlatformError", (cause) => new BoxGitError({ command: args[0] ?? "", cause })),
-      );
+            return text.decode(out);
+          },
+          Effect.scoped,
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          (effect, _at, args) =>
+            Effect.catchTag(effect, "PlatformError", (cause) => new BoxGitError({ command: args[0] ?? "", cause })),
+        );
 
-      return BoxGit.of({
-        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => out.split("\0")),
-        trackedChanges: (at) =>
-          Effect.map(git(at, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]), (out) => out !== ""),
-        refs: (at) =>
-          Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
-            lines(out).map((line) => {
-              const space = line.indexOf(" ");
-              return { ref: line.slice(0, space), oid: line.slice(space + 1) };
-            }),
+        return BoxGit.of({
+          indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => out.split("\0")),
+          trackedChanges: (at) =>
+            Effect.map(git(at, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]), (out) => out !== ""),
+          refs: (at) =>
+            Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
+              lines(out).map((line) => {
+                const space = line.indexOf(" ");
+                return { ref: line.slice(0, space), oid: line.slice(space + 1) };
+              }),
+            ),
+          objectsAt: (at, ref) => Effect.map(git(at, ["rev-parse", "--verify", `${ref}^{object}`]), lines),
+          retained: Effect.map(
+            git(null, [
+              "for-each-ref",
+              "--format=%(objectname)",
+              "refs/heads/",
+              "refs/tags/",
+              "refs/keep/",
+              "refs/stash",
+              "refs/notes/",
+            ]),
+            lines,
           ),
-        objectsAt: (at, ref) => Effect.map(git(at, ["rev-parse", "--verify", `${ref}^{object}`]), lines),
-        retained: Effect.map(
-          git(null, [
-            "for-each-ref",
-            "--format=%(objectname)",
-            "refs/heads/",
-            "refs/tags/",
-            "refs/keep/",
-            "refs/stash",
-            "refs/notes/",
-          ]),
-          lines,
-        ),
-        reachable: (tips) =>
-          tips.length === 0
-            ? Effect.succeed(new Set<string>())
-            : Effect.map(
-                git(null, ["rev-list", "--objects", "--no-object-names", ...tips]),
-                (out) => new Set(lines(out)),
-              ),
-      });
-    }),
-  );
+          reachable: (tips) =>
+            tips.length === 0
+              ? Effect.succeed(new Set<string>())
+              : Effect.map(
+                  git(null, ["rev-list", "--objects", "--no-object-names", ...tips]),
+                  (out) => new Set(lines(out)),
+                ),
+        });
+      }),
+    ),
+);

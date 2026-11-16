@@ -47,6 +47,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, DateTime, Effect, FileSystem, Layer, Option, Result, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import * as Function from "effect/Function";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 
@@ -283,12 +284,15 @@ export const read = (text: string): Result.Result<Transcript, Refused> => {
  * does. `toFixed` is exact too but rounds a tie away from zero, and a tie is exactly an odd number
  * of halves of the last place, so only that case is mended.
  */
-export const rounded = (x: number, places: number): number => {
+export const rounded: {
+  (places: number): (x: number) => number;
+  (x: number, places: number): number;
+} = Function.dual(2, (x: number, places: number): number => {
   const digits = Number(Math.abs(x).toFixed(places).replace(".", ""));
   const halves = Math.abs(x) * 2 ** (places + 1);
   const tie = Number.isInteger(halves) && halves % 2 === 1;
   return Math.sign(x) * Number(`${tie && digits % 2 === 1 ? digits - 1 : digits}e-${places}`);
-};
+});
 
 /** A count with a comma between each three digits: 1,234,567. */
 const grouped = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");

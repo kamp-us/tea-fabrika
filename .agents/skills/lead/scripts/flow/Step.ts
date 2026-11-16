@@ -11,6 +11,7 @@
 // lead sign, the merge queue); started without `--lead`, the flow parks there with `ask`.
 
 import { Schema } from "effect";
+import * as Function from "effect/Function";
 
 const Name = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]*$/));
 
@@ -36,20 +37,47 @@ const stepFields = (name: string, args: Schema.JsonObject, options: Options) => 
   lead: options.lead ?? false,
 });
 
-export const gather = (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
-  Step.cases.gather.make(stepFields(name, args, options));
+/** A step maker: `Step.act(name, args, options)`, or piped from its name. */
+type Make = {
+  (args?: Schema.JsonObject, options?: Options): (name: string) => Step;
+  (name: string, args?: Schema.JsonObject, options?: Options): Step;
+};
 
-export const act = (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
-  Step.cases.act.make(stepFields(name, args, options));
+// A direct call starts with the step's name, a string; a piped one with its args.
+const named = (args: IArguments) => typeof args[0] === "string";
 
-export const listen = (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
-  Step.cases.listen.make(stepFields(name, args, options));
+export const gather: Make = Function.dual(
+  named,
+  (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
+    Step.cases.gather.make(stepFields(name, args, options)),
+);
 
-export const draft = (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
-  Step.cases.draft.make(stepFields(name, args, options));
+export const act: Make = Function.dual(
+  named,
+  (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
+    Step.cases.act.make(stepFields(name, args, options)),
+);
 
-export const check = (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
-  Step.cases.check.make(stepFields(name, args, options));
+export const listen: Make = Function.dual(
+  named,
+  (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
+    Step.cases.listen.make(stepFields(name, args, options)),
+);
 
-export const judge = (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
-  Step.cases.judge.make(stepFields(name, args, options));
+export const draft: Make = Function.dual(
+  named,
+  (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
+    Step.cases.draft.make(stepFields(name, args, options)),
+);
+
+export const check: Make = Function.dual(
+  named,
+  (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
+    Step.cases.check.make(stepFields(name, args, options)),
+);
+
+export const judge: Make = Function.dual(
+  named,
+  (name: string, args: Schema.JsonObject = {}, options: Options = {}): Step =>
+    Step.cases.judge.make(stepFields(name, args, options)),
+);

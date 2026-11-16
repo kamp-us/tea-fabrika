@@ -28,6 +28,7 @@
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Clock, Console, Effect, Schema, Stream } from "effect";
+import * as Function from "effect/Function";
 import { ChildProcess } from "effect/process";
 
 /** How long a merge may wait for a passing run, in ms. */
@@ -40,21 +41,28 @@ export const Beat = Schema.TaggedUnion({
 export type Beat = typeof Beat.Type;
 
 /** The heartbeat at `now`, from the last passing run's start and the merges on main since. Pure. */
-export const beat = (now: number, lastPass: number | null, merges: ReadonlyArray<number>): Beat => {
+export const beat: {
+  (lastPass: number | null, merges: ReadonlyArray<number>): (now: number) => Beat;
+  (now: number, lastPass: number | null, merges: ReadonlyArray<number>): Beat;
+} = Function.dual(3, (now: number, lastPass: number | null, merges: ReadonlyArray<number>): Beat => {
   const oldest = Math.min(...merges);
   return merges.length > 0 && now - oldest > LATE
     ? Beat.cases.late.make({ lastPass, merges: merges.length, oldest })
     : Beat.cases.ok.make({ lastPass, merges: merges.length });
-};
+});
 
 const iso = (ms: number | null) => (ms === null ? "none" : new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"));
 const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)} h`;
 
 /** The one line it prints. Pure. */
-export const line = (now: number, b: Beat): string =>
+export const line: {
+  (b: Beat): (now: number) => string;
+  (now: number, b: Beat): string;
+} = Function.dual(2, (now: number, b: Beat): string =>
   b._tag === "late"
     ? `mutation heartbeat: late: ${b.merges} merges since the last passing run (${iso(b.lastPass)}), the oldest ${hours(now - b.oldest)} ago`
-    : `mutation heartbeat: ok: ${b.merges} merges since the last passing run (${iso(b.lastPass)})`;
+    : `mutation heartbeat: ok: ${b.merges} merges since the last passing run (${iso(b.lastPass)})`,
+);
 
 const Runs = Schema.fromJsonString(
   Schema.Struct({ workflow_runs: Schema.Array(Schema.Struct({ created_at: Schema.String })) }),

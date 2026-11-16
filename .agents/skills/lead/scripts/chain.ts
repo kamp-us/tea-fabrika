@@ -117,6 +117,7 @@ import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import * as Function from "effect/Function";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -422,8 +423,12 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
  * The sections a quest brief lacks for a quest started at `start`: every quest step's and `pr`. A
  * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
  */
-export const lacks = (quest: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
-  [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"].filter((k) => !quest.sections[k]);
+export const lacks: {
+  (start: StepName): (quest: ReturnType<typeof sectionsOf>) => string[];
+  (quest: ReturnType<typeof sectionsOf>, start: StepName): string[];
+} = Function.dual(2, (quest: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
+  [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"].filter((k) => !quest.sections[k]),
+);
 
 /** What one step is told about the quest: the brief's shared head, its section and the facts. */
 export type Facts = {
@@ -556,10 +561,13 @@ export const estimateIn = (text: string): Budget | null => {
 };
 
 /** The backstop: `times` the estimate, steps rounded up. */
-export const backstopFrom = (estimate: Budget, times: number): Budget => ({
+export const backstopFrom: {
+  (times: number): (estimate: Budget) => Budget;
+  (estimate: Budget, times: number): Budget;
+} = Function.dual(2, (estimate: Budget, times: number): Budget => ({
   steps: Math.ceil(estimate.steps * times),
   dollars: estimate.dollars * times,
-});
+}));
 
 /** Why the chain stopped to ask a person to redo, cut scope or drop (0076), kept in its record. */
 export const Stop = Schema.TaggedUnion({
@@ -728,7 +736,10 @@ export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "a
  * and `null` says so. Exit 1 is the hit list, parked for the lead's hand check. Anything else is an
  * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
  */
-export const looseningEnd = (pr: number, ran: { readonly code: number; readonly text: string }): End | null => {
+export const looseningEnd: {
+  (ran: { readonly code: number; readonly text: string }): (pr: number) => End | null;
+  (pr: number, ran: { readonly code: number; readonly text: string }): End | null;
+} = Function.dual(2, (pr: number, ran: { readonly code: number; readonly text: string }): End | null => {
   const text = ran.text.trim();
 
   if (ran.code === 0) {
@@ -738,7 +749,7 @@ export const looseningEnd = (pr: number, ran: { readonly code: number; readonly 
   return ran.code === 1
     ? { kind: "ask", reason: `PR ${pr}: loosening.sh hits for the lead's hand check: ${text}` }
     : { kind: "stuck", reason: `PR ${pr}: loosening.sh did not run clean (exit ${ran.code}): ${text}` };
-};
+});
 
 type Quest = {
   readonly round: number;
@@ -1596,58 +1607,68 @@ const handlers = (s: Setup) => {
  * Which agent ran the quest's steps, for the PR body. It names only steps the quest ran, so a quest
  * with no mutation step (0066) claims none; a mutation step runs on drive's `MUTATION_AGENT`.
  */
-export const providers = (
-  ran: readonly string[],
-  claude: ReadonlySet<StepName>,
-  exec: ReadonlySet<StepName> = new Set(),
-): string => {
-  const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
-  const onExec = on("codex-exec");
-  const onClaude = on("claude");
-  return [
-    "Codex in a box",
-    ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
-    ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
-  ].join(", ");
-};
+export const providers: {
+  (claude: ReadonlySet<StepName>, exec?: ReadonlySet<StepName>): (ran: readonly string[]) => string;
+  (ran: readonly string[], claude: ReadonlySet<StepName>, exec?: ReadonlySet<StepName>): string;
+} = Function.dual(
+  // A direct call starts with the steps that ran, a list; a piped one with the `--claude` set.
+  (args) => Array.isArray(args[0]),
+  (ran: readonly string[], claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName> = new Set()): string => {
+    const on = (agent: AgentName) => STEPS.filter((s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
+    const onExec = on("codex-exec");
+    const onClaude = on("claude");
+    return [
+      "Codex in a box",
+      ...(onExec.length === 0 ? [] : [`plain codex exec for ${onExec.join(", ")}`]),
+      ...(onClaude.length === 0 ? [] : [`or Claude for ${onClaude.join(", ")}`]),
+    ].join(", ");
+  },
+);
 
 /**
  * Which agent a step runs on: mutation on drive's `MUTATION_AGENT`; else Claude for a step
  * `--claude` names, plain `codex exec` for one `--codex-exec` names, and Codex through ACP for the
  * rest. `--claude` wins a step both name.
  */
-export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName =>
-  step === "mutation" ? MUTATION_AGENT : claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
+export const stepAgent: {
+  (claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): (step: StepName) => AgentName;
+  (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName;
+} = Function.dual(3, (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName =>
+  step === "mutation" ? MUTATION_AGENT : claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex",
+);
 
 /** One table row per step the quest ran, with its list-price dollars from the rows file. */
-export const stepsTable = (
-  rowsFile: string,
-  steps: readonly { step: string; outcome: string; box?: string; run?: string }[],
-): string[] => {
-  const dollars = new Map<string, number>();
+export const stepsTable: {
+  (steps: readonly { step: string; outcome: string; box?: string; run?: string }[]): (rowsFile: string) => string[];
+  (rowsFile: string, steps: readonly { step: string; outcome: string; box?: string; run?: string }[]): string[];
+} = Function.dual(
+  2,
+  (rowsFile: string, steps: readonly { step: string; outcome: string; box?: string; run?: string }[]): string[] => {
+    const dollars = new Map<string, number>();
 
-  if (existsSync(rowsFile)) {
-    for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
-      // A line that is not JSON, or is JSON null, holds no row.
-      const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
+    if (existsSync(rowsFile)) {
+      for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
+        // A line that is not JSON, or is JSON null, holds no row.
+        const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
-      if (r?.run && typeof r.listUsd === "number") {
-        dollars.set(r.run, r.listUsd);
+        if (r?.run && typeof r.listUsd === "number") {
+          dollars.set(r.run, r.listUsd);
+        }
       }
     }
-  }
 
-  const total = steps.reduce((sum, e) => sum + (dollars.get(e.run ?? "") ?? 0), 0);
-  return [
-    "| Step | Box | Outcome | List $ |",
-    "|---|---|---|---|",
-    ...steps.map(
-      (e) =>
-        `| ${e.step} | ${e.box ?? ""} | ${e.outcome} | ${dollars.has(e.run ?? "") ? (dollars.get(e.run ?? "") ?? 0).toFixed(2) : ""} |`,
-    ),
-    `| total | | | ${total.toFixed(2)} |`,
-  ];
-};
+    const total = steps.reduce((sum, e) => sum + (dollars.get(e.run ?? "") ?? 0), 0);
+    return [
+      "| Step | Box | Outcome | List $ |",
+      "|---|---|---|---|",
+      ...steps.map(
+        (e) =>
+          `| ${e.step} | ${e.box ?? ""} | ${e.outcome} | ${dollars.has(e.run ?? "") ? (dollars.get(e.run ?? "") ?? 0).toFixed(2) : ""} |`,
+      ),
+      `| total | | | ${total.toFixed(2)} |`,
+    ];
+  },
+);
 
 // ---------------------------------------------------------------- the command
 
@@ -1664,7 +1685,7 @@ const stepSet = (text: string | undefined): Set<StepName> =>
       .filter(isStep),
   );
 
-export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
+const chainMainBody = (args: string[], env: Env, pin: Pin.Pinned | null) =>
   Effect.gen(function* () {
     const [quest = "", briefPath = ""] = args;
 
@@ -1796,6 +1817,11 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     );
     return end.end;
   });
+
+export const chainMain: {
+  (env: Env, pin: Pin.Pinned | null): (args: string[]) => ReturnType<typeof chainMainBody>;
+  (args: string[], env: Env, pin: Pin.Pinned | null): ReturnType<typeof chainMainBody>;
+} = Function.dual(3, chainMainBody);
 
 /**
  * The quest's backstop: `BackstopTimes` the estimate in the approved plan, else in the quest brief.

@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e43-build2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:57:46-08:00",
+  "ended": "2026-11-15T23:17:58-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Second build round for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), lead tooling only: the product hits of the .agents tsconfig project, under the owner ruling that every remaining hit gets Function.dual with data-first callers unchanged. Recounted at 87ac39a with only this check at error through --lspconfig on .agents/tsconfig.json (nothing written to a tsconfig): 92 hits, all product, none in PR 1366's files (70 files, none under .agents): lead 83, sev 7, mutation 2. Fixed 85: 65 by a scratch codemod (not committed) that wraps a fixed-arity export in Function.dual with written overload types, 4 of them keeping their body under a private <name>Body const typed by ReturnType, and 20 by hand. A function with an optional argument decides by a predicate on its first argument, never by count: a string (sh, bounded, tail, Flow.make, the six Step makers), an array (providers), a Date (Beat.says, Quests.verdict), a property (ticket for drive's decide, BOXES for agentsDraft and driveStep, runs for WorkflowRunsTest.layer), or not a function (adaptersReady, whose arguments are both optional, so its direct overload comes first). Flow.equals wraps Schema.toEquivalence in Function.dual(2). Imports are the subpath effect/Function, as E47 rules for tooling. Left 7, each needing an exam-path change: chain.ts:242 lineOf, chain.ts:305 moveOf, chain.ts:481 briefOf, drive.ts:687 reportOf, drive.ts:1235 startedOf and gc.ts:84 backupsOf are held word for word by agents-ledger.json for fabrika(no-of); any dual changes the held line, so lint blocks the old name, and the fix (a plain name) needs agents-ledger.json and the importing tests chain.test.ts, drive.test.ts and gc.test.ts changed. Level.ts:91 step: its overloads make TypeScript fail with TS7022 at Level.test.ts:47, where a loop's let narrows from step's own result; that test needs a type on next.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 20,
+  "note": "Files: .agents/skills/lead/scripts agents.ts, chain.ts, clauderow.ts, drive.ts, gc.ts, mutbox.ts, quests.ts, records.ts, sizecap.ts, box/BoxGitProcess.ts, box/RunsProcess.ts, flow/Beat.ts, flow/Flow.ts, flow/Outcome.ts, flow/Step.ts, flow/host.ts, flow/landing.ts; .agents/skills/mutation/scripts/heartbeat.ts; .agents/skills/sev/scripts AlertsGh.ts, Freeze.ts, Incident.ts, Level.ts, WorkflowRunsGh.ts, WorkflowRunsTest.ts. Tools: effect-tsgo diagnostics with --lspconfig for the count, a scratch TypeScript codemod, the Edit tool, pnpm format. Tests at 87ac39a plus this change, one file at a time on Node 26.13.0: 26 test files that import a changed file directly or through others, all green; mutbox.test.ts ran without its describe block 'a call past its bound is stopped' (3 tests), which kills its own child processes with SIGTERM and SIGKILL; its Docker fence test skips by default. No .integration. law reaches these files. vitest --changed origin/main is refused here by the test config as a broad run. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and one pnpm typecheck pass; a first typecheck with NODE_OPTIONS set ran out of memory in three packages and found the Level.step error, and the second, without it, passed whole. Recount for .agents after: 7, the left hits. No lock line, no tsconfig change, no disable or @effect-diagnostics comment, no ledger entry added.",
+  "step": "build"
+}

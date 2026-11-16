@@ -46,6 +46,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, Exit, Option, Predicate, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import * as Function from "effect/Function";
 import { ChildProcess } from "effect/process";
 
 /** The ref every answer is read from. */
@@ -129,7 +130,10 @@ const recordNumber = (name: string): number | undefined => {
  * Whether a path from the top of the repo is one of the folder's records: a Markdown file in it
  * that is not its README, or, in a nested folder, a subfolder's README.
  */
-export const isRecord = (folder: Folder, path: string): boolean => {
+export const isRecord: {
+  (path: string): (folder: Folder) => boolean;
+  (folder: Folder, path: string): boolean;
+} = Function.dual(2, (folder: Folder, path: string): boolean => {
   if (!path.startsWith(`${folder}/`) || !path.endsWith(".md")) {
     return false;
   }
@@ -141,7 +145,7 @@ export const isRecord = (folder: Folder, path: string): boolean => {
   }
 
   return specs[folder].nested && parts.length === 2 && parts[1] === "README.md";
-};
+});
 
 /** What a record's top says: its frontmatter keys, and its first `# ` heading. */
 type Top = { readonly fields: ReadonlyMap<string, string>; readonly heading: string | undefined };
@@ -194,7 +198,10 @@ const recordTitle = (folder: Folder, top: Top): string | undefined =>
       : withoutNumber(top.heading);
 
 /** The line a record prints: its id, the bare keys, its title, then the `key: value` keys. */
-export const recordLine = (folder: Folder, path: string, text: string): string => {
+export const recordLine: {
+  (path: string, text: string): (folder: Folder) => string;
+  (folder: Folder, path: string, text: string): string;
+} = Function.dual(3, (folder: Folder, path: string, text: string): string => {
   const spec = specs[folder];
   const top = readTop(text);
   const name = path.slice(folder.length + 1).replace(/\.md$/, "");
@@ -212,13 +219,16 @@ export const recordLine = (folder: Folder, path: string, text: string): string =
       .filter((key) => top.fields.has(key) || !spec.optional.includes(key))
       .map((key) => `${key}: ${field(key)}`),
   ].join("  ");
-};
+});
 
 /**
  * The next free number in a numbered folder, padded: the highest number among these paths plus one.
  * `undefined` for a folder with no numbers. The paths are a read that succeeded, so none means 1.
  */
-export const nextNumber = (folder: Folder, paths: ReadonlyArray<string>): string | undefined => {
+export const nextNumber: {
+  (paths: ReadonlyArray<string>): (folder: Folder) => string | undefined;
+  (folder: Folder, paths: ReadonlyArray<string>): string | undefined;
+} = Function.dual(2, (folder: Folder, paths: ReadonlyArray<string>): string | undefined => {
   const width = specs[folder].width;
 
   if (width === undefined) {
@@ -230,18 +240,22 @@ export const nextNumber = (folder: Folder, paths: ReadonlyArray<string>): string
     .map((path) => recordNumber(path.slice(folder.length + 1)))
     .filter((n) => n !== undefined);
   return String(Math.max(0, ...numbers) + 1).padStart(width, "0");
-};
+});
 
 /**
  * The folder's records among these paths, in the order a reader expects: by number in a numbered
  * folder, so 65 comes before 203 and a record with no number after them, then by name.
  */
-export const inOrder = (folder: Folder, paths: ReadonlyArray<string>): ReadonlyArray<string> =>
+export const inOrder: {
+  (paths: ReadonlyArray<string>): (folder: Folder) => ReadonlyArray<string>;
+  (folder: Folder, paths: ReadonlyArray<string>): ReadonlyArray<string>;
+} = Function.dual(2, (folder: Folder, paths: ReadonlyArray<string>): ReadonlyArray<string> =>
   paths
     .filter((path) => isRecord(folder, path))
     .map((path) => ({ path, number: recordNumber(path.slice(folder.length + 1)) ?? Infinity }))
     .sort((a, b) => a.number - b.number || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-    .map((r) => r.path);
+    .map((r) => r.path),
+);
 
 // ---------------------------------------------------------------- find and resolve
 
@@ -331,7 +345,10 @@ const glossaryEntries = (path: string, text: string): ReadonlyArray<Entry> => {
 };
 
 /** What `find` ranks in one file from main: one entry for a record, one per row for the glossary. */
-export const readEntries = (path: string, text: string): ReadonlyArray<Entry> => {
+export const readEntries: {
+  (text: string): (path: string) => ReadonlyArray<Entry>;
+  (path: string, text: string): ReadonlyArray<Entry>;
+} = Function.dual(2, (path: string, text: string): ReadonlyArray<Entry> => {
   if (path === GLOSSARY) {
     return glossaryEntries(path, text);
   }
@@ -352,7 +369,7 @@ export const readEntries = (path: string, text: string): ReadonlyArray<Entry> =>
       : undefined;
   const body = decision === undefined ? "" : decidingText(text);
   return [{ path, title, words: wordsIn([title, ...keys, body].join("\n")), decision }];
-};
+});
 
 /** Where a cited decision lands: itself when it is in force, or the live decisions that superseded it. */
 export const Resolution = Schema.TaggedUnion({
@@ -369,7 +386,10 @@ export type Resolution = typeof Resolution.Type;
  * a decision that is not there, to one that is neither accepted nor superseded, or in a loop, is
  * broken: the answer says so and never guesses.
  */
-export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Resolution => {
+export const resolve: {
+  (statuses: ReadonlyMap<string, Status>): (id: string) => Resolution;
+  (id: string, statuses: ReadonlyMap<string, Status>): Resolution;
+} = Function.dual(2, (id: string, statuses: ReadonlyMap<string, Status>): Resolution => {
   const start = statuses.get(id);
 
   if (start === undefined) {
@@ -419,7 +439,7 @@ export const resolve = (id: string, statuses: ReadonlyMap<string, Status>): Reso
         : Resolution.cases.broken.make({ id, reason });
     },
   });
-};
+});
 
 /** One line of a shortlist: where, its title, its score, the shared words, and what to read with it. */
 export const Hit = Schema.Struct({
@@ -449,116 +469,118 @@ const byScore = (a: Hit, b: Hit) => b.score - a.score || (a.path < b.path ? -1 :
  * entries, and a word every live entry holds is worth nothing. A superseded decision's score goes
  * to the live decisions it lands on, unless `all` asks for each record as itself.
  */
-export const find = (
-  query: string,
-  entries: ReadonlyArray<Entry>,
-  options: { readonly limit: number; readonly all: boolean },
-): Found => {
-  const live = entries.filter((e) => e.decision === undefined || Status.isAnyOf(["accepted"])(e.decision.status));
+export const find: {
+  (entries: ReadonlyArray<Entry>, options: { readonly limit: number; readonly all: boolean }): (query: string) => Found;
+  (query: string, entries: ReadonlyArray<Entry>, options: { readonly limit: number; readonly all: boolean }): Found;
+} = Function.dual(
+  3,
+  (query: string, entries: ReadonlyArray<Entry>, options: { readonly limit: number; readonly all: boolean }): Found => {
+    const live = entries.filter((e) => e.decision === undefined || Status.isAnyOf(["accepted"])(e.decision.status));
 
-  if (live.length < FLOOR) {
-    return Found.cases.indeterminate.make({
-      reason: `only ${live.length} live records, below ${FLOOR}: every word looks common`,
-    });
-  }
-
-  const df = new Map<string, number>();
-
-  for (const entry of live) {
-    for (const word of entry.words) {
-      df.set(word, (df.get(word) ?? 0) + 1);
-    }
-  }
-
-  const weights = new Map(
-    [...wordsIn(query)]
-      .filter((word) => (df.get(word) ?? 0) < live.length)
-      .map((word) => [word, Math.log(live.length / Math.max(df.get(word) ?? 0, 1))] as const),
-  );
-
-  if (weights.size === 0) {
-    return Found.cases.indeterminate.make({ reason: "the words hold nothing rarer than a stopword" });
-  }
-
-  const statuses = new Map(
-    entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
-  );
-  const decisions = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e] as const])));
-  const byPath = new Map([...decisions.values()].map((e) => [e.path, e.decision] as const));
-  // A proposed or unknown decision is in force nowhere, so only `all` ranks it.
-  const ranked = options.all
-    ? entries
-    : entries.filter((e) => e.decision === undefined || !Status.isAnyOf(["other"])(e.decision.status));
-  const hits = new Map<string, Hit>();
-  const add = (entry: Entry, score: number, words: ReadonlyArray<string>, note?: string) => {
-    const key = `${entry.path}\0${entry.title}`;
-    const was = hits.get(key);
-    const notes = [...(was?.notes ?? []), ...(note === undefined ? [] : [note])];
-    hits.set(key, {
-      path: entry.path,
-      title: entry.title,
-      score: Math.max(score, was?.score ?? 0),
-      // In the query's order, whichever record brought each word.
-      words: [...weights.keys()].filter((word) => words.includes(word) || was?.words.includes(word) === true),
-      notes,
-    });
-  };
-
-  for (const entry of ranked) {
-    const words = [...weights.keys()].filter((word) => entry.words.has(word));
-    const score = Math.round(words.reduce((sum, word) => sum + (weights.get(word) ?? 0), 0) * 100) / 100;
-
-    if (score === 0) {
-      continue;
+    if (live.length < FLOOR) {
+      return Found.cases.indeterminate.make({
+        reason: `only ${live.length} live records, below ${FLOOR}: every word looks common`,
+      });
     }
 
-    const decision = entry.decision;
+    const df = new Map<string, number>();
 
-    if (decision === undefined || options.all) {
-      add(entry, score, words);
-      continue;
+    for (const entry of live) {
+      for (const word of entry.words) {
+        df.set(word, (df.get(word) ?? 0) + 1);
+      }
     }
 
-    Resolution.matchOrElse(
-      resolve(decision.id, statuses),
-      {
-        broken: (r) => add(entry, score, words, `broken: ${r.reason}`),
-        superseded: (r) => {
-          for (const id of r.by) {
-            const live = decisions.get(id);
-
-            if (live !== undefined) {
-              add(live, score, words, `supersedes: ${decision.id}`);
-            }
-          }
-        },
-      },
-      () => add(entry, score, words),
+    const weights = new Map(
+      [...wordsIn(query)]
+        .filter((word) => (df.get(word) ?? 0) < live.length)
+        .map((word) => [word, Math.log(live.length / Math.max(df.get(word) ?? 0, 1))] as const),
     );
-  }
 
-  const shown = [...hits.values()].map((hit) => {
-    const decision = byPath.get(hit.path);
-    const status =
-      decision === undefined
-        ? []
-        : Status.match(decision.status, {
-            accepted: (s) => (s.amendedBy.length === 0 ? [] : [`amended by: ${s.amendedBy.join(", ")}`]),
-            superseded: (s) => [`superseded by: ${s.by.join(", ")}`],
-            other: (s) => [`status: ${s.status}`],
-          });
-    return { ...hit, notes: [...status, ...hit.notes] };
-  });
+    if (weights.size === 0) {
+      return Found.cases.indeterminate.make({ reason: "the words hold nothing rarer than a stopword" });
+    }
 
-  if (shown.length === 0) {
-    return Found.cases.noOverlap.make({ ranked: ranked.length });
-  }
+    const statuses = new Map(
+      entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e.decision.status] as const])),
+    );
+    const decisions = new Map(entries.flatMap((e) => (e.decision === undefined ? [] : [[e.decision.id, e] as const])));
+    const byPath = new Map([...decisions.values()].map((e) => [e.path, e.decision] as const));
+    // A proposed or unknown decision is in force nowhere, so only `all` ranks it.
+    const ranked = options.all
+      ? entries
+      : entries.filter((e) => e.decision === undefined || !Status.isAnyOf(["other"])(e.decision.status));
+    const hits = new Map<string, Hit>();
+    const add = (entry: Entry, score: number, words: ReadonlyArray<string>, note?: string) => {
+      const key = `${entry.path}\0${entry.title}`;
+      const was = hits.get(key);
+      const notes = [...(was?.notes ?? []), ...(note === undefined ? [] : [note])];
+      hits.set(key, {
+        path: entry.path,
+        title: entry.title,
+        score: Math.max(score, was?.score ?? 0),
+        // In the query's order, whichever record brought each word.
+        words: [...weights.keys()].filter((word) => words.includes(word) || was?.words.includes(word) === true),
+        notes,
+      });
+    };
 
-  return Found.cases.shortlist.make({
-    hits: shown.sort(byScore).slice(0, Math.max(options.limit, 0)),
-    ranked: ranked.length,
-  });
-};
+    for (const entry of ranked) {
+      const words = [...weights.keys()].filter((word) => entry.words.has(word));
+      const score = Math.round(words.reduce((sum, word) => sum + (weights.get(word) ?? 0), 0) * 100) / 100;
+
+      if (score === 0) {
+        continue;
+      }
+
+      const decision = entry.decision;
+
+      if (decision === undefined || options.all) {
+        add(entry, score, words);
+        continue;
+      }
+
+      Resolution.matchOrElse(
+        resolve(decision.id, statuses),
+        {
+          broken: (r) => add(entry, score, words, `broken: ${r.reason}`),
+          superseded: (r) => {
+            for (const id of r.by) {
+              const live = decisions.get(id);
+
+              if (live !== undefined) {
+                add(live, score, words, `supersedes: ${decision.id}`);
+              }
+            }
+          },
+        },
+        () => add(entry, score, words),
+      );
+    }
+
+    const shown = [...hits.values()].map((hit) => {
+      const decision = byPath.get(hit.path);
+      const status =
+        decision === undefined
+          ? []
+          : Status.match(decision.status, {
+              accepted: (s) => (s.amendedBy.length === 0 ? [] : [`amended by: ${s.amendedBy.join(", ")}`]),
+              superseded: (s) => [`superseded by: ${s.by.join(", ")}`],
+              other: (s) => [`status: ${s.status}`],
+            });
+      return { ...hit, notes: [...status, ...hit.notes] };
+    });
+
+    if (shown.length === 0) {
+      return Found.cases.noOverlap.make({ ranked: ranked.length });
+    }
+
+    return Found.cases.shortlist.make({
+      hits: shown.sort(byScore).slice(0, Math.max(options.limit, 0)),
+      ranked: ranked.length,
+    });
+  },
+);
 
 /** The lines `find` prints for its answer. */
 export const foundLines = (found: Found): ReadonlyArray<string> =>
@@ -576,7 +598,10 @@ export const foundLines = (found: Found): ReadonlyArray<string> =>
   });
 
 /** The line `resolve` prints for one decision. */
-export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string, string>): string =>
+export const resolutionLine: {
+  (paths: ReadonlyMap<string, string>): (resolution: Resolution) => string;
+  (resolution: Resolution, paths: ReadonlyMap<string, string>): string;
+} = Function.dual(2, (resolution: Resolution, paths: ReadonlyMap<string, string>): string =>
   Resolution.match(resolution, {
     accepted: (r) =>
       [
@@ -589,7 +614,8 @@ export const resolutionLine = (resolution: Resolution, paths: ReadonlyMap<string
     other: (r) => [r.id, `status: ${r.status}`, paths.get(r.id) ?? ""].join("  "),
     absent: (r) => `${r.id}  absent from main`,
     broken: (r) => `${r.id}  broken: ${r.reason}`,
-  });
+  }),
+);
 
 // ---------------------------------------------------------------- the world
 

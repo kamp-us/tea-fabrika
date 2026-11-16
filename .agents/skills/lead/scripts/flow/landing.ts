@@ -16,6 +16,7 @@
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
 import { Effect, Layer, Path, Schema, Stream } from "effect";
+import * as Function from "effect/Function";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as ChecksGh from "../ci/ChecksGh.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
@@ -30,7 +31,14 @@ import type { Step } from "./Step.ts";
 export type Ran = { readonly code: number; readonly output: string };
 
 /** The last lines of a command's output, for a reason. */
-export const tail = (output: string, n = 5): string => output.trimEnd().split("\n").slice(-n).join(" | ");
+export const tail: {
+  (n?: number): (output: string) => string;
+  (output: string, n?: number): string;
+} = Function.dual(
+  // A direct call starts with the output, a string; a piped one with the line count.
+  (args) => typeof args[0] === "string",
+  (output: string, n: number = 5): string => output.trimEnd().split("\n").slice(-n).join(" | "),
+);
 
 const run = Effect.fn("landing.run")(
   function* (dir: string, command: string, args: ReadonlyArray<string>) {
@@ -71,10 +79,14 @@ const Pr = Schema.Struct({
 // ---------------------------------------------------------------- what each exit code means
 
 /** A command that passes on 0 and is stuck otherwise. */
-export const passOrStuck = (command: string, ran: Ran): Outcome.Outcome =>
+export const passOrStuck: {
+  (ran: Ran): (command: string) => Outcome.Outcome;
+  (command: string, ran: Ran): Outcome.Outcome;
+} = Function.dual(2, (command: string, ran: Ran): Outcome.Outcome =>
   ran.code === 0
     ? Outcome.done(`${command} passed`)
-    : Outcome.stuck(`${command} exited ${ran.code}: ${tail(ran.output)}`);
+    : Outcome.stuck(`${command} exited ${ran.code}: ${tail(ran.output)}`),
+);
 
 /** governance.sh only advises and always exits 0: its list is the reason. */
 export const governanceOutcome = (ran: Ran): Outcome.Outcome =>

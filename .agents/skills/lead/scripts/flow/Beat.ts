@@ -14,6 +14,7 @@
 //   // { stuck: true, text: "cleanup for 1h50m, no beat for 1h50m: stuck" }
 
 import { Schema } from "effect";
+import * as Function from "effect/Function";
 
 /**
  * What the chain is doing now. A step's own parts come from its drive machine: `cleanup` (the
@@ -62,19 +63,25 @@ export const EVERY = 30_000;
 export const QUIET = 10 * 60_000;
 
 /** The beat after entering `phase` at `now`: a new phase starts its own `since`. */
-export const enter = (beat: Beat | null, phase: Phase, now: Date): Beat => ({
+export const enter: {
+  (phase: Phase, now: Date): (beat: Beat | null) => Beat;
+  (beat: Beat | null, phase: Phase, now: Date): Beat;
+} = Function.dual(3, (beat: Beat | null, phase: Phase, now: Date): Beat => ({
   at: now.toISOString(),
   phase,
   since: beat !== null && beat.phase === phase ? beat.since : now.toISOString(),
   agentAt: beat?.agentAt ?? null,
-});
+}));
 
 /** The beat written again at `now`, with when the agent last wrote, if it ever did. */
-export const tick = (beat: Beat, now: Date, agentAt: Date | null): Beat => ({
+export const tick: {
+  (now: Date, agentAt: Date | null): (beat: Beat) => Beat;
+  (beat: Beat, now: Date, agentAt: Date | null): Beat;
+} = Function.dual(3, (beat: Beat, now: Date, agentAt: Date | null): Beat => ({
   ...beat,
   at: now.toISOString(),
   agentAt: agentAt === null ? beat.agentAt : agentAt.toISOString(),
-});
+}));
 
 /** A span in the largest two units a person reads at a glance: `1h50m`, `12m`, `30s`. */
 export const spoken = (ms: number): string => {
@@ -93,22 +100,29 @@ export const spoken = (ms: number): string => {
  * The line a status page shows for a running quest, and whether it counts as stuck: the beat went
  * quiet (the chain is blocked or gone), or the agent wrote nothing for `quiet` in its turn.
  */
-export const says = (beat: Beat, now: Date, quiet = QUIET): { stuck: boolean; text: string } => {
-  const ago = (iso: string) => now.getTime() - Date.parse(iso);
-  const head = `${beat.phase} for ${spoken(ago(beat.since))}`;
+export const says: {
+  (now: Date, quiet?: number): (beat: Beat) => { stuck: boolean; text: string };
+  (beat: Beat, now: Date, quiet?: number): { stuck: boolean; text: string };
+} = Function.dual(
+  // A direct call starts with the beat; a piped one with the time, a Date.
+  (args) => !(args[0] instanceof Date),
+  (beat: Beat, now: Date, quiet: number = QUIET): { stuck: boolean; text: string } => {
+    const ago = (iso: string) => now.getTime() - Date.parse(iso);
+    const head = `${beat.phase} for ${spoken(ago(beat.since))}`;
 
-  if (ago(beat.at) > quiet) {
-    return { stuck: true, text: `${head}, no beat for ${spoken(ago(beat.at))}: stuck` };
-  }
+    if (ago(beat.at) > quiet) {
+      return { stuck: true, text: `${head}, no beat for ${spoken(ago(beat.at))}: stuck` };
+    }
 
-  // In the agent's turn, its silence counts from its last output, or from the turn's start.
-  const silent = Math.min(ago(beat.since), beat.agentAt === null ? Infinity : ago(beat.agentAt));
+    // In the agent's turn, its silence counts from its last output, or from the turn's start.
+    const silent = Math.min(ago(beat.since), beat.agentAt === null ? Infinity : ago(beat.agentAt));
 
-  if (beat.phase === "agent" && silent > quiet) {
-    return { stuck: true, text: `${head}, no agent output for ${spoken(silent)}: stuck` };
-  }
+    if (beat.phase === "agent" && silent > quiet) {
+      return { stuck: true, text: `${head}, no agent output for ${spoken(silent)}: stuck` };
+    }
 
-  const last = beat.agentAt === null ? null : spoken(ago(beat.agentAt));
-  const agent = last === null ? "no agent output yet" : `last agent output ${last} ago`;
-  return { stuck: false, text: `${head}, ${agent}` };
-};
+    const last = beat.agentAt === null ? null : spoken(ago(beat.agentAt));
+    const agent = last === null ? "no agent output yet" : `last agent output ${last} ago`;
+    return { stuck: false, text: `${head}, ${agent}` };
+  },
+);

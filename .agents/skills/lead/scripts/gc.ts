@@ -39,6 +39,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { Result, Schema } from "effect";
+import * as Function from "effect/Function";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
@@ -88,21 +89,29 @@ export const backupsOf = (name: string, branch: string | null): string[] => {
 
 /** The `state/*.box` files whose box folder is gone: facts of a dead box, which stepcommit would
  * otherwise still read. A box saves its facts only after its folder exists, so none is half made. */
-export const deadFacts = (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
-  files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length)));
+export const deadFacts: {
+  (boxes: ReadonlySet<string>): (files: readonly string[]) => string[];
+  (files: readonly string[], boxes: ReadonlySet<string>): string[];
+} = Function.dual(2, (files: readonly string[], boxes: ReadonlySet<string>): string[] =>
+  files.filter((f) => f.endsWith(".box") && !boxes.has(f.slice(0, -".box".length))),
+);
 
 /**
  * The Check for one quest's pinned scripts, pure. A pin goes only when no process names it and it is
  * IDLE old; a process list pgrep cannot read keeps it, never reads as none running.
  */
-export const decidePin = (holders: PgrepAnswer, idle: number): PinVerdict =>
+export const decidePin: {
+  (idle: number): (holders: PgrepAnswer) => PinVerdict;
+  (holders: PgrepAnswer, idle: number): PinVerdict;
+} = Function.dual(2, (holders: PgrepAnswer, idle: number): PinVerdict =>
   holders._tag === "refused"
     ? PinVerdict.cases.keep.make({ reason: "pgrep cannot list processes, so a quest may still run from it" })
     : holders.count > 0
       ? PinVerdict.cases.keep.make({ reason: `${holders.count} running processes name it` })
       : idle < IDLE
         ? PinVerdict.cases.keep.make({ reason: "made less than 2 h ago" })
-        : PinVerdict.cases.remove.make({ reason: "no running process names it" });
+        : PinVerdict.cases.remove.make({ reason: "no running process names it" }),
+);
 
 /** The Check, pure. */
 export const decide = (s: Seen): Verdict => {
@@ -167,19 +176,40 @@ export type PrState = "OPEN" | "MERGED" | "CLOSED";
  * remote branch whose tip is its HEAD, and every one whose head commit is its HEAD. A lead's
  * worktree is often pushed under another name (botpush to fabrikalfa/<quest>), so its own branch
  * name alone missed a merged quest and gc kept it for good (2026-11-09: PR 623's worktree). */
-export const worktreePrs = (
-  w: {
+export const worktreePrs: {
+  (
+    byRef: ReadonlyMap<string, readonly PrState[]>,
+    byHead: ReadonlyMap<string, readonly PrState[]>,
+  ): (w: {
     readonly branch: string | null;
     readonly head: string | null;
     readonly tips: readonly string[];
-  },
-  byRef: ReadonlyMap<string, readonly PrState[]>,
-  byHead: ReadonlyMap<string, readonly PrState[]>,
-): PrState[] => [
-  ...(w.branch === null ? [] : (byRef.get(w.branch.replace(/(-wip)+$/, "")) ?? [])),
-  ...w.tips.flatMap((t) => byRef.get(t.replace(/(-wip)+$/, "")) ?? []),
-  ...(w.head === null ? [] : (byHead.get(w.head) ?? [])),
-];
+  }) => PrState[];
+  (
+    w: {
+      readonly branch: string | null;
+      readonly head: string | null;
+      readonly tips: readonly string[];
+    },
+    byRef: ReadonlyMap<string, readonly PrState[]>,
+    byHead: ReadonlyMap<string, readonly PrState[]>,
+  ): PrState[];
+} = Function.dual(
+  3,
+  (
+    w: {
+      readonly branch: string | null;
+      readonly head: string | null;
+      readonly tips: readonly string[];
+    },
+    byRef: ReadonlyMap<string, readonly PrState[]>,
+    byHead: ReadonlyMap<string, readonly PrState[]>,
+  ): PrState[] => [
+    ...(w.branch === null ? [] : (byRef.get(w.branch.replace(/(-wip)+$/, "")) ?? [])),
+    ...w.tips.flatMap((t) => byRef.get(t.replace(/(-wip)+$/, "")) ?? []),
+    ...(w.head === null ? [] : (byHead.get(w.head) ?? [])),
+  ],
+);
 
 /** A worktree goes once its quest landed, clean and idle. Its branch stays in the main checkout, so
  * only the folder goes; a worktree with no quest branch is someone's own and stays. */
@@ -258,7 +288,10 @@ const loadEnv = (): Env => {
 
 /** How many uncommitted and untracked files a box holds, read from its git data with hooks and
  * fsmonitor off; `null` when git cannot say. */
-export const dirtyIn = (gitDir: string, box: string): number | null => {
+export const dirtyIn: {
+  (box: string): (gitDir: string) => number | null;
+  (gitDir: string, box: string): number | null;
+} = Function.dual(2, (gitDir: string, box: string): number | null => {
   const r = sh("git", [
     ...SAFE,
     "-c",
@@ -272,28 +305,34 @@ export const dirtyIn = (gitDir: string, box: string): number | null => {
   ]);
   // No rename pairs, so each NUL-ended entry is one file.
   return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
-};
+});
 
 /** Keep a box's uncommitted and untracked files in `main` at `ref`, as one stash commit (`git stash
  * push -u`, ignored files left out), read and fetched with hooks and fsmonitor off; false: not kept. */
-export const keepFiles = (gitDir: string, box: string, main: string, ref: string): boolean =>
-  sh(
-    "git",
-    [
-      ...SAFE,
-      `--git-dir=${gitDir}`,
-      `--work-tree=${box}`,
-      "-c",
-      "user.name=gc",
-      "-c",
-      "user.email=gc@localhost",
-      "stash",
-      "push",
-      "-q",
-      "-u",
-    ],
-    box,
-  ).code === 0 && sh("git", ["-C", main, ...SAFE, "fetch", "-q", "-f", gitDir, `refs/stash:${ref}`]).code === 0;
+export const keepFiles: {
+  (box: string, main: string, ref: string): (gitDir: string) => boolean;
+  (gitDir: string, box: string, main: string, ref: string): boolean;
+} = Function.dual(
+  4,
+  (gitDir: string, box: string, main: string, ref: string): boolean =>
+    sh(
+      "git",
+      [
+        ...SAFE,
+        `--git-dir=${gitDir}`,
+        `--work-tree=${box}`,
+        "-c",
+        "user.name=gc",
+        "-c",
+        "user.email=gc@localhost",
+        "stash",
+        "push",
+        "-q",
+        "-u",
+      ],
+      box,
+    ).code === 0 && sh("git", ["-C", main, ...SAFE, "fetch", "-q", "-f", gitDir, `refs/stash:${ref}`]).code === 0,
+);
 
 /** The folder a box's `.git` file points at, or the `.git` folder itself. */
 const gitDirOf = (box: string): string | null => {
@@ -333,11 +372,15 @@ export const lastLogged = (log: string): number => {
 /** When work last happened in a box: the newest of its folder (a box being made), its index (an
  * add, a checkout) and its HEAD log's newest entry (a commit, a reset). Never the git data folder
  * itself: any git command's lock files change that. */
-export const lastTouched = (box: string, gitDir: string | null): number =>
+export const lastTouched: {
+  (gitDir: string | null): (box: string) => number;
+  (box: string, gitDir: string | null): number;
+} = Function.dual(2, (box: string, gitDir: string | null): number =>
   Math.max(
     mtime(box),
     gitDir === null ? 0 : Math.max(mtime(join(gitDir, "index")), lastLogged(join(gitDir, "logs", "HEAD"))),
-  );
+  ),
+);
 
 /** Every working folder some process sits in, with its pid, from one lsof call. */
 const cwds = (): { readonly pid: number; readonly path: string }[] => {

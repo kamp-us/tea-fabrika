@@ -8,6 +8,7 @@
 // flow may make, so a `send` loop ends `stuck`.
 
 import { Schema } from "effect";
+import * as Function from "effect/Function";
 import { Step } from "./Step.ts";
 
 const uniqueNames = Schema.makeFilter<ReadonlyArray<Step>>(
@@ -26,11 +27,18 @@ export type Flow = typeof Flow.Type;
 export const ATTEMPTS = 32;
 
 /** A flow; it throws on a bad name or two steps of one name, when the flow file loads. */
-export const make = (
-  name: string,
-  steps: readonly [Step, ...ReadonlyArray<Step>],
-  options: { readonly attempts?: number } = {},
-): Flow => Flow.make({ name, steps, attempts: options.attempts ?? ATTEMPTS });
+export const make: {
+  (steps: readonly [Step, ...ReadonlyArray<Step>], options?: { readonly attempts?: number }): (name: string) => Flow;
+  (name: string, steps: readonly [Step, ...ReadonlyArray<Step>], options?: { readonly attempts?: number }): Flow;
+} = Function.dual(
+  // A direct call starts with the name, a string; a piped one with the steps.
+  (args) => typeof args[0] === "string",
+  (name: string, steps: readonly [Step, ...ReadonlyArray<Step>], options: { readonly attempts?: number } = {}): Flow =>
+    Flow.make({ name, steps, attempts: options.attempts ?? ATTEMPTS }),
+);
 
 /** Whether two flows are the same data: a resume refuses a flow file that changed. */
-export const equals = Schema.toEquivalence(Flow);
+export const equals: {
+  (that: Flow): (self: Flow) => boolean;
+  (self: Flow, that: Flow): boolean;
+} = Function.dual(2, Schema.toEquivalence(Flow));

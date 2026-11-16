@@ -13,6 +13,7 @@
 // into each and pushes, which starts a fresh run on today's main.
 import type { Duration } from "effect";
 import { Console, Effect, Schema } from "effect";
+import * as Function from "effect/Function";
 import { Branches } from "../../lead/scripts/pr/Branches.ts";
 import { type PullRequest, PullRequests } from "../../lead/scripts/pr/PullRequests.ts";
 import { Alerts } from "./Alerts.ts";
@@ -33,11 +34,16 @@ export const latest = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<Level
     ),
   );
 
-/** The open pull requests the latest sev0 canceled a run of, each once, by number. */
-export const owed = (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<PullRequest>) => {
+const owedBody = (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<PullRequest>) => {
   const hit = new Set(latest(entries).flatMap((e) => (e._tag === "canceled" ? [e.run.branch] : [])));
   return prs.filter((pr) => pr.state === "OPEN" && hit.has(pr.head)).toSorted((a, b) => a.number - b.number);
 };
+
+/** The open pull requests the latest sev0 canceled a run of, each once, by number. */
+export const owed: {
+  (prs: ReadonlyArray<PullRequest>): (entries: ReadonlyArray<Level.Entry>) => ReturnType<typeof owedBody>;
+  (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<PullRequest>): ReturnType<typeof owedBody>;
+} = Function.dual(2, owedBody);
 
 /** One pull request the lead walks after a sev0, and how its branch stands to main. */
 export const Walk = Schema.TaggedUnion({

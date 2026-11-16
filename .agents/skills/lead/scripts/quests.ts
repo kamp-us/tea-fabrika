@@ -54,6 +54,7 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, DateTime, Effect, FileSystem, Option, Path, Predicate, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
+import * as Function from "effect/Function";
 import * as Beat from "./flow/Beat.ts";
 import { paths } from "./gcloop.ts";
 
@@ -153,70 +154,77 @@ const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): st
 };
 
 /** What a quest is doing at `now`, from what was read. Pure: the rules are in the header. */
-export const verdict = (seen: Seen, now: Date, quiet = Beat.QUIET): Line => {
-  const nothing = { quest: seen.quest, step: null, box: null, phase: null, quietSeconds: null, since: null };
+export const verdict: {
+  (now: Date, quiet?: number): (seen: Seen) => Line;
+  (seen: Seen, now: Date, quiet?: number): Line;
+} = Function.dual(
+  // A direct call starts with what was seen; a piped one with the time, a Date.
+  (args) => !(args[0] instanceof Date),
+  (seen: Seen, now: Date, quiet: number = Beat.QUIET): Line => {
+    const nothing = { quest: seen.quest, step: null, box: null, phase: null, quietSeconds: null, since: null };
 
-  if (seen.found._tag === "missing") {
-    return { ...nothing, state: "unknown", text: "no chain record" };
-  }
+    if (seen.found._tag === "missing") {
+      return { ...nothing, state: "unknown", text: "no chain record" };
+    }
 
-  if (seen.found._tag === "unreadable") {
-    return { ...nothing, state: "unknown", text: "the chain record does not read" };
-  }
+    if (seen.found._tag === "unreadable") {
+      return { ...nothing, state: "unknown", text: "the chain record does not read" };
+    }
 
-  const { record } = seen.found;
-  const last = record.steps.at(-1) ?? null;
-  const open = last !== null && last.endedAt === null ? last : null;
-  const box = open === null ? last?.line?.box || null : standing(seen.quest, open.step, seen.boxes);
-  const quest = { ...nothing, step: last?.step ?? null, box };
+    const { record } = seen.found;
+    const last = record.steps.at(-1) ?? null;
+    const open = last !== null && last.endedAt === null ? last : null;
+    const box = open === null ? last?.line?.box || null : standing(seen.quest, open.step, seen.boxes);
+    const quest = { ...nothing, step: last?.step ?? null, box };
 
-  if (record.landed !== null) {
-    return { ...quest, state: "landed", since: record.landed, text: "landed" };
-  }
+    if (record.landed !== null) {
+      return { ...quest, state: "landed", since: record.landed, text: "landed" };
+    }
 
-  // A quest started again holds its lock, so its fresh beat decides, as after an `ask`.
-  if (record.queued !== undefined && !seen.held) {
-    return { ...quest, state: "queued", since: record.queued, text: "in GitHub's merge queue" };
-  }
+    // A quest started again holds its lock, so its fresh beat decides, as after an `ask`.
+    if (record.queued !== undefined && !seen.held) {
+      return { ...quest, state: "queued", since: record.queued, text: "in GitHub's merge queue" };
+    }
 
-  if (!seen.held && seen.end !== null) {
-    const { outcome, reason, at } = seen.end;
-    return outcome === "done"
-      ? { ...quest, state: "landed", since: at, text: reason }
-      : { ...quest, state: "waits", since: at, text: `${outcome}: ${reason}` };
-  }
+    if (!seen.held && seen.end !== null) {
+      const { outcome, reason, at } = seen.end;
+      return outcome === "done"
+        ? { ...quest, state: "landed", since: at, text: reason }
+        : { ...quest, state: "waits", since: at, text: `${outcome}: ${reason}` };
+    }
 
-  if (record.beat !== undefined) {
-    const said = Beat.says(record.beat, now, quiet);
+    if (record.beat !== undefined) {
+      const said = Beat.says(record.beat, now, quiet);
+      return {
+        ...quest,
+        state: said.stuck ? "stuck" : "running",
+        phase: record.beat.phase,
+        quietSeconds: Math.max(0, Math.floor((now.getTime() - Date.parse(record.beat.at)) / 1000)),
+        since: record.beat.since,
+        text: said.text,
+      };
+    }
+
+    if (open !== null) {
+      const ms = now.getTime() - Date.parse(open.startedAt);
+      const stuck = ms > quiet;
+      return {
+        ...quest,
+        state: stuck ? "stuck" : "running",
+        since: open.startedAt,
+        text: `${open.step} open for ${Beat.spoken(ms)}, no beat in the record${stuck ? ": stuck" : ""}`,
+      };
+    }
+
     return {
       ...quest,
-      state: said.stuck ? "stuck" : "running",
-      phase: record.beat.phase,
-      quietSeconds: Math.max(0, Math.floor((now.getTime() - Date.parse(record.beat.at)) / 1000)),
-      since: record.beat.since,
-      text: said.text,
+      state: "unknown",
+      text: seen.held
+        ? "a process holds the quest, and its record has no beat and no open step"
+        : "no beat, no open step and no outcome line",
     };
-  }
-
-  if (open !== null) {
-    const ms = now.getTime() - Date.parse(open.startedAt);
-    const stuck = ms > quiet;
-    return {
-      ...quest,
-      state: stuck ? "stuck" : "running",
-      since: open.startedAt,
-      text: `${open.step} open for ${Beat.spoken(ms)}, no beat in the record${stuck ? ": stuck" : ""}`,
-    };
-  }
-
-  return {
-    ...quest,
-    state: "unknown",
-    text: seen.held
-      ? "a process holds the quest, and its record has no beat and no open step"
-      : "no beat, no open step and no outcome line",
-  };
-};
+  },
+);
 
 // ---------------------------------------------------------------- the reads
 
