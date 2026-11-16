@@ -13,6 +13,9 @@ packages:
   # .agents: the skills and the lead's own scripts, type-checked here (ticket 486). It names no
   # dependency: its imports resolve from the root's.
   - .agents
+  # scripts: today's tooling scripts, so far the typecheck's port, type-checked in a program of
+  # its own (ticket 766). It names no dependency: its imports resolve from the root's.
+  - scripts
   # next/: the new version (docs/plan/tier-1.md). Real packages, one lockfile, this catalog.
   - next/packages/*
   - next/programs/*

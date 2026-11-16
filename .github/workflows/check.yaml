@@ -375,6 +375,7 @@ jobs:
             oxlint-plugins/node_modules/.cache/tsc
             .github/ci/node_modules/.cache/tsc
             .agents/node_modules/.cache/tsc
+            scripts/node_modules/.cache/tsc
             next/packages/*/node_modules/.cache/tsc
             next/programs/*/node_modules/.cache/tsc
             next/apps/*/node_modules/.cache/tsc
