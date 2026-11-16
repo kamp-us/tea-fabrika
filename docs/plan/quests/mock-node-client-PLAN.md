@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0555, 0579; body 869819016f66
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/node/client`, in next/ (ticket 1067)

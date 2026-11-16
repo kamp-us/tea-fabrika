@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0555, 0579; body 0d6f31cf837b
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/node/dev`, in next/: 15 spies and 2 call matchers go, `process.kill` moves behind a `Signals` service, and lint holds the folder at zero (ticket 1067)

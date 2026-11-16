@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0555, 0579, 0557, 0524; body 8d42eba2dc46
 Plancheck-Version: 3
 
 # The mock sweep in `oxlint-plugins/`: its one `vi.fn` becomes a plain list, and the folder is locked at zero

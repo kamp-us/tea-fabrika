@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0555, 0579; body 5104ad4d0f7e
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/apps/fabrika/src`, in next/: 5 `vi.fn`, 14 `toHaveBeenCalled*` and 23 `vi.spyOn` go, in five slices on the sweep's one pull request
