@@ -61,19 +61,29 @@ const unknown = fc
   .stringMatching(/^[a-z][a-z0-9]{1,6}$/)
   .filter((w) => !["instance", "port", "fabrika", "pack", "ledger", "limits", "review"].includes(w));
 
+/** One thing a generated file holds: a port, a port that is no port, the version, a stray key or a table. */
+const Entry = Schema.TaggedUnion({
+  port: { port: Schema.Number },
+  "bad-port": { raw: Schema.String },
+  version: {},
+  sibling: { key: Schema.String, raw: Schema.String },
+  table: { name: Schema.String, empty: Schema.Boolean },
+});
+
 const entry = fc.oneof(
-  fc.record({ _tag: fc.constant("port" as const), port: fc.integer({ min: 1, max: 65535 }) }),
-  fc.record({
-    _tag: fc.constant("bad-port" as const),
-    raw: fc.oneof(
+  fc.integer({ min: 1, max: 65535 }).map((port) => Entry.cases.port.make({ port })),
+  fc
+    .oneof(
       fc.integer({ min: 65536, max: 2 ** 30 }).map(String),
       fc.integer({ min: -(2 ** 30), max: 0 }).map(String),
       fc.constantFrom('"18800"', '""', "18800.5", "true", "[1]"),
-    ),
-  }),
-  fc.record({ _tag: fc.constant("version" as const) }),
-  fc.record({ _tag: fc.constant("sibling" as const), key: unknown, raw: fc.constantFrom("1", '"x"', "true") }),
-  fc.record({ _tag: fc.constant("table" as const), name: unknown, empty: fc.boolean() }),
+    )
+    .map((raw) => Entry.cases["bad-port"].make({ raw })),
+  fc.constant(Entry.cases.version.make({})),
+  fc
+    .record({ key: unknown, raw: fc.constantFrom("1", '"x"', "true") })
+    .map(({ key, raw }) => Entry.cases.sibling.make({ key, raw })),
+  fc.record({ name: unknown, empty: fc.boolean() }).map(({ name, empty }) => Entry.cases.table.make({ name, empty })),
 );
 
 type Entry = typeof entry extends fc.Arbitrary<infer E> ? E : never;
@@ -203,11 +213,9 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
 
         if (Exit.isSuccess(exit)) {
           expect(exit.value.values.record).toBe(ByteSize.bytes(expected));
-          expect(exit.value.origins[d.path]).toEqual({
-            _tag: "file",
-            file: v.file === "repo" ? REPO : PERSON,
-            line: 2,
-          });
+          expect(exit.value.origins[d.path]).toEqual(
+            Sources.Origin.cases.file.make({ file: v.file === "repo" ? REPO : PERSON, line: 2 }),
+          );
           expect(exit.value.saved.values).toEqual({ [d.path]: String(expected) });
           expect(exit.value.checked.values).toEqual(exit.value.values);
           expect(exit.value.checked.snapshot).toEqual(exit.value.saved);
@@ -392,6 +400,9 @@ const grouped = (ds: Declared) =>
     ),
   );
 
+/** What a file holds for one declaration: nothing, a valid value or an invalid one. */
+const Held = Schema.TaggedUnion({ absent: {}, valid: { value: Schema.Unknown }, invalid: { value: Schema.Unknown } });
+
 /** What one file holds: per declaration nothing, a valid value or an invalid one, and maybe one stray key. */
 const document = (ds: Declared) =>
   fc.record({
@@ -399,9 +410,9 @@ const document = (ds: Declared) =>
     values: fc.tuple(
       ...ds.map((d) =>
         fc.oneof(
-          fc.constant({ _tag: "absent" as const }),
-          KINDS[d.kind].valid.map((value: unknown) => ({ _tag: "valid" as const, value })),
-          KINDS[d.kind].invalid.map((value) => ({ _tag: "invalid" as const, value })),
+          fc.constant(Held.cases.absent.make({})),
+          KINDS[d.kind].valid.map((value: unknown) => Held.cases.valid.make({ value })),
+          KINDS[d.kind].invalid.map((value) => Held.cases.invalid.make({ value })),
         ),
       ),
     ),

@@ -222,7 +222,13 @@ describe("T753 complete checked snapshots", () => {
           // Missing origins cannot be filled from current files or a default either.
           const invalidOrigin = {
             ...made,
-            origins: { ...made.origins, [key]: { _tag: "file", file: REPO, line: "two" } },
+            origins: {
+              ...made.origins,
+              [key]: Schema.TaggedStruct("file", { file: Schema.String, line: Schema.String }).make({
+                file: REPO,
+                line: "two",
+              }),
+            },
           };
           expect(Exit.isFailure(await digest(Snapshot.read(flow.group, invalidOrigin).pipe(Effect.exit)))).toBe(true);
         },
@@ -507,7 +513,7 @@ it("T753 L9 [secrets] malformed snapshots keep rejected values out of public dia
             : field === "extra"
               ? { ...made, values: { ...made.values, unrelated: word } }
               : field === "origin"
-                ? { ...made, origins: { ...made.origins, "limits.record": { _tag: word } } }
+                ? { ...made, origins: { ...made.origins, "limits.record": Schema.TaggedStruct(word, {}).make({}) } }
                 : { ...made, hash: word };
         const traced = spans();
         const entries: Array<string> = [];

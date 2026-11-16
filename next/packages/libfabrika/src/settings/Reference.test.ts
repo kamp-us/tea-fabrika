@@ -192,7 +192,9 @@ describe("L5, rows carry the snapshot's values and origins, and only declared ke
           values: { ...snapshot.values, ...extra },
           origins: {
             ...snapshot.origins,
-            ...Object.fromEntries(Object.keys(extra).map((k) => [k, { _tag: "flag" as const, name: `--${k}` }])),
+            ...Object.fromEntries(
+              Object.keys(extra).map((k) => [k, Sources.Origin.cases.flag.make({ name: `--${k}` })]),
+            ),
           },
         };
         const rows = Reference.rows(group, widened);

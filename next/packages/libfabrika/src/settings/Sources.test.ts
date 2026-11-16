@@ -143,10 +143,15 @@ describe("L5, the highest present source wins per key, and so does its origin", 
             expect(resolved.values[key.name]).toBe(winner === undefined ? DEFAULT : Number(c[winner]));
             const want =
               winner === "repo" || winner === "person"
-                ? { _tag: "file", file: winner === "repo" ? REPO : PERSON, line: lines[winner][dotted] }
+                ? Sources.Origin.cases.file.make({
+                    file: winner === "repo" ? REPO : PERSON,
+                    // A winning file always wrote the key; -1 is no line, so a missing one fails the match.
+                    line: lines[winner][dotted] ?? -1,
+                  })
                 : winner === "env"
-                  ? { _tag: "env", name: key.env }
-                  : { _tag: winner ?? "default" };
+                  ? Sources.Origin.cases.env.make({ name: key.env })
+                  : // For a flag or the default, only the case is checked.
+                    Schema.TaggedStruct(winner ?? "default", {}).make({});
             expect(resolved.origins[dotted]).toMatchObject(want);
           });
         },
@@ -160,7 +165,7 @@ const unreadable: Sources.Source = {
   provider: ConfigProvider.make(() =>
     Effect.fail(new ConfigProvider.SourceError({ message: "the source could not be read" })),
   ),
-  origin: () => ({ _tag: "default" }),
+  origin: () => Sources.Origin.cases.default.make({}),
 };
 
 describe("L6, a failed source or an invalid winner never falls through", () => {

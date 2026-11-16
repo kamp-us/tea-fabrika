@@ -9,6 +9,7 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as TestClock from "effect/testing/TestClock";
@@ -189,7 +190,8 @@ const expectIdFailure = <A, E>(exit: Exit.Exit<A, E>, failureReason: string): vo
     if (Cause.isFailReason(reason)) {
       expect(Public.IdError, "IdError is exported from the public package").toBeTypeOf("function");
       expect(reason.error).toBeInstanceOf(Public.IdError);
-      expect(reason.error).toMatchObject({ _tag: "IdError", reason: failureReason });
+      expect(Predicate.isTagged(reason.error, "IdError")).toBe(true);
+      expect(reason.error).toMatchObject({ reason: failureReason });
     }
   }
 };

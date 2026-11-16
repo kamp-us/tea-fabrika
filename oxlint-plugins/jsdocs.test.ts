@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { Data } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -83,10 +84,12 @@ type State =
   | { readonly _tag: "missing" }
   | { readonly _tag: "wrong"; readonly way: Wrong };
 
+const State = Data.taggedEnum<State>();
+
 const state: fc.Arbitrary<State> = fc.oneof(
-  fc.boolean().map((tagged) => ({ _tag: "right", tagged }) as const),
-  fc.constant({ _tag: "missing" } as const),
-  fc.constantFrom(...(Object.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
+  fc.boolean().map((tagged) => State.right({ tagged })),
+  fc.constant(State.missing()),
+  fc.constantFrom(...(Object.keys(WRONG) as Wrong[])).map((way) => State.wrong({ way })),
 );
 
 const blockFor = (s: State): string | null =>

@@ -121,9 +121,14 @@ describe("S2 syncTest catches its plants", () => {
 });
 
 describe("p69 senderTest catches its plants", () => {
-  const owner = { key: "owner", for: "person", _tag: "agent" } as const;
-  const person = { key: "window", for: "person", _tag: "person" } as const;
-  const agent = { key: "agent", for: "person", _tag: "agent" } as const;
+  // A write's writer as the runtime records it: a person's window, or an agent let in for a person.
+  const Writer = Schema.TaggedUnion({
+    person: { key: Schema.String, for: Schema.String },
+    agent: { key: Schema.String, for: Schema.String },
+  });
+  const owner = Writer.cases.agent.make({ key: "owner", for: "person" });
+  const person = Writer.cases.person.make({ key: "window", for: "person" });
+  const agent = Writer.cases.agent.make({ key: "agent", for: "person" });
   const inputs = [
     { parent: "pa", by: person },
     { parent: "pb", by: agent },

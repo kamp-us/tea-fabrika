@@ -7,7 +7,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyInvariant } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Program, Input, stepper } from "@kampus/libfabrika";
+import { Program, Input, Step, stepper } from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
@@ -24,6 +24,14 @@ type State =
   | { readonly _tag: "open"; readonly since: number }
   | { readonly _tag: "late"; readonly since: number }
   | { readonly _tag: "checked"; readonly note: string | null };
+
+/** An item's state, made by a Schema maker as the program makes its own, so a law compares like with like. */
+const State = Schema.TaggedUnion({
+  new: {},
+  open: { since: Schema.Number },
+  late: { since: Schema.Number },
+  checked: { note: Schema.NullOr(Schema.String) },
+});
 
 type Item = { readonly name: string; readonly state: State };
 type Model = { readonly items: ReadonlyArray<Item> };
@@ -159,7 +167,7 @@ const walked = (machine: ChecklistMachine, minLength = 0) =>
 const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
   switch (msg.type) {
     case "add":
-      return [...prev.items, { name: msg.name, state: { _tag: "new" } }];
+      return [...prev.items, { name: msg.name, state: State.cases.new.make({}) }];
     case "rename":
       return prev.items.map((i) => (i.name === msg.name ? { ...i, name: msg.to } : i));
     case "remove":
@@ -167,19 +175,19 @@ const expected = (prev: Model, msg: Msg): ReadonlyArray<Item> => {
     case "check":
       return prev.items.map((i) =>
         i.name === msg.name && i.state._tag !== "checked"
-          ? { name: i.name, state: { _tag: "checked", note: msg.note ?? null } }
+          ? { name: i.name, state: State.cases.checked.make({ note: msg.note ?? null }) }
           : i,
       );
     case "uncheck":
       return prev.items.map((i) =>
-        i.name === msg.name && i.state._tag === "checked" ? { name: i.name, state: { _tag: "new" } } : i,
+        i.name === msg.name && i.state._tag === "checked" ? { name: i.name, state: State.cases.new.make({}) } : i,
       );
     case "timer":
       return prev.items.map((i) =>
         i.state._tag === "new"
-          ? { name: i.name, state: { _tag: "open", since: msg.arrivedAt } }
+          ? { name: i.name, state: State.cases.open.make({ since: msg.arrivedAt }) }
           : i.state._tag === "open" && msg.arrivedAt >= i.state.since + DAY
-            ? { name: i.name, state: { _tag: "late", since: i.state.since } }
+            ? { name: i.name, state: State.cases.late.make({ since: i.state.since }) }
             : i,
       );
   }
@@ -249,9 +257,9 @@ const folded = (machine: ChecklistMachine, msgs: ReadonlyArray<Msg>) => {
 const Broken = fc.constantFrom(
   (i: Item): unknown => ({ ...i, name: "" }),
   (i: Item): unknown => ({ ...i, name: "x".repeat(81) }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "gone" } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "open", since: 1.5 } }),
-  (i: Item): unknown => ({ ...i, state: { _tag: "checked", note: 7 } }),
+  (i: Item): unknown => ({ ...i, state: Schema.TaggedStruct("gone", {}).make({}) }),
+  (i: Item): unknown => ({ ...i, state: State.cases.open.make({ since: 1.5 }) }),
+  (i: Item): unknown => ({ ...i, state: Schema.TaggedStruct("checked", { note: Schema.Number }).make({ note: 7 }) }),
   (i: Item): unknown => ({ name: i.name }),
 );
 
@@ -329,14 +337,13 @@ describe("ticket 806 the checklist's laws", () => {
         const [next] = applyCell(checklist.machine, model, msg);
         expect(step).toEqual(
           no === null
-            ? {
-                _tag: "stepped",
+            ? Step.cases.stepped.make({
                 model: encode(next),
                 view: checklist.view.select(next),
                 cmds: [],
                 wake: checklist.wake(next),
-              }
-            : { _tag: "refused", reason: no },
+              })
+            : Step.cases.refused.make({ reason: no }),
         );
         expect(JSON.stringify(saved), "a step never edits the model it was given").toBe(before);
       }),
@@ -388,9 +395,9 @@ describe("ticket 806 the checklist's laws", () => {
           const s = item.state;
           expect(now, `item ${n} after a timer at ${time}`).toEqual(
             s._tag === "new"
-              ? { _tag: "open", since: time }
+              ? State.cases.open.make({ since: time })
               : s._tag === "open" && time >= s.since + DAY
-                ? { _tag: "late", since: s.since }
+                ? State.cases.late.make({ since: s.since })
                 : s,
           );
         }
@@ -483,7 +490,7 @@ describe("ticket 806 the checklist's laws", () => {
           expect(roundTrip(record), "a reached model").toEqual(record);
           // The schema is a wall, not a pass-through: the same model with one item made wrong is refused.
           const items: ReadonlyArray<Item> =
-            record.items.length === 0 ? [{ name: "x", state: { _tag: "new" } }] : record.items;
+            record.items.length === 0 ? [{ name: "x", state: State.cases.new.make({}) }] : record.items;
           const wrong = items.map((i, n) => (n === pick % items.length ? broken(i) : i));
           expect(decodes({ items: wrong }), `a model with ${JSON.stringify(wrong)}`).toBe(false);
         }
@@ -498,7 +505,7 @@ describe("ticket 806 the checklist's laws", () => {
     for (const note of ["", "o".repeat(MOST + 44), null]) {
       // pinned: main's saved shape, `note: NullOr(String)` with no length checks (plan, L14): an
       // empty note and one past `MOST` still decode, so the saved state needs no upgrade and stays v 1.
-      const saved = { items: [{ name: "x", state: { _tag: "checked", note } }] };
+      const saved = { items: [{ name: "x", state: State.cases.checked.make({ note }) }] };
       expect(Schema.decodeUnknownSync(model)(saved), `a saved note of ${note?.length ?? "null"}`).toEqual(saved);
     }
   });

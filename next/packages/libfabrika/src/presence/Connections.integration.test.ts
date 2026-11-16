@@ -6,6 +6,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Result from "effect/Result";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
@@ -121,7 +122,8 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
             gateway.online("key-a").pipe(Effect.asVoid),
           ]) {
             const result = yield* Effect.result(action);
-            expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "storage" } });
+            expect(Result.isFailure(result)).toBe(true);
+            expect(result).toMatchObject({ failure: { reason: "storage" } });
 
             if (result._tag === "Failure") {
               expect(result.failure).toBeInstanceOf(LedgerError);
@@ -133,7 +135,8 @@ describe("p79, online is a fresh read of admitted gateway sessions", () => {
           yield* gateway.join(world.connection());
           world.store.sql.exec("UPDATE process_connections SET session = ?", `invalid:${message}`);
           const result = yield* Effect.result(gateway.online("key-a"));
-          expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "bad_row" } });
+          expect(Result.isFailure(result)).toBe(true);
+          expect(result).toMatchObject({ failure: { reason: "bad_row" } });
         }).pipe(Effect.provide(world.layer()));
       });
     }),

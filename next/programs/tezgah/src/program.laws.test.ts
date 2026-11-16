@@ -42,7 +42,7 @@
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { type Stepper, stepper } from "@kampus/libfabrika";
-import { Result, Schema } from "effect";
+import { Data, Result, Schema } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -161,6 +161,23 @@ type Waiting =
       readonly space: string;
     };
 
+const Waiting = Data.taggedEnum<Waiting>();
+
+/** What the walk records of one step's answer: taken, or refused with the program's reason. */
+const Taken = Schema.TaggedUnion({ stepped: {}, refused: { reason: Schema.String } });
+
+/** The keybindings note's Via, as the window sends it. */
+const Via = Schema.TaggedUnion({ key: { keys: Schema.String }, click: {} });
+
+/** A start's answer as the runner hands it to the program, written here as the plan states it. */
+const Answer = Schema.TaggedUnion({
+  started: { process: Schema.String, name: Schema.Unknown, rev: Schema.Number },
+  already_started: { process: Schema.String, name: Schema.Unknown },
+});
+
+/** A Cmd's refusal as the runner hands it to the program: its reason as the tag, and nothing else. */
+const refusal = (reason: string) => Schema.TaggedStruct(reason, {}).make({});
+
 type Dir = "right" | "down";
 const DOES = { right: "tezgah.split_right", down: "tezgah.split_down" } as const;
 
@@ -217,21 +234,26 @@ const take = (p: Stepper, w: World, msg: unknown, saved: boolean) => {
     w.view = Schema.decodeUnknownSync(View)(s.view);
     const cmds = s.cmds as ReadonlyArray<Cmd>;
     w.stops.push(...cmds.filter((c) => c.type === "stop_child"));
-    return { before, after: w.view, result: { _tag: "stepped" }, cmds };
+    return { before, after: w.view, result: Taken.cases.stepped.make({}), cmds };
   }
 
-  return { before, after: w.view, result: { _tag: s._tag, reason: s.reason }, cmds: [] as ReadonlyArray<Cmd> };
+  return {
+    before,
+    after: w.view,
+    result: Taken.cases.refused.make({ reason: s.reason }),
+    cmds: [] as ReadonlyArray<Cmd>,
+  };
 };
 
-const via = { _tag: "key", keys: "ctrl+b %" };
+const via = Via.cases.key.make({ keys: "ctrl+b %" });
 const starts = (cmds: ReadonlyArray<Cmd>) => cmds.filter((c) => c.type === "start_child");
 
 /** The answer a start gets: `started`, or for an attach maybe the boot list's `already_started`. */
 const started = (cmd: Cmd, kind: "started" | "already_started", w: World) => {
   const process = typeId("process", 500 + w.next++);
   return kind === "started"
-    ? { _tag: "started", process, name: cmd["name"], rev: w.at }
-    : { _tag: "already_started", process, name: cmd["name"] };
+    ? Answer.cases.started.make({ process, name: cmd["name"], rev: w.at })
+    : Answer.cases.already_started.make({ process, name: cmd["name"] });
 };
 
 type Kind =
@@ -272,7 +294,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       const cmd = starts(e.cmds)[0];
 
       if (cmd !== undefined) {
-        w.waiting.push({ _tag: "attach", workspace: n, tile, cmd });
+        w.waiting.push(Waiting.attach({ workspace: n, tile, cmd }));
       }
 
       return { move: `attach ${n} ${tile}`, ...e };
@@ -292,7 +314,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       const cmd = starts(e.cmds)[0];
       const space = spaceWith(w.view, from)?.id ?? "";
       const waiting: Waiting | undefined =
-        cmd === undefined ? undefined : { _tag: "split", from, tile, dir, cmd, space };
+        cmd === undefined ? undefined : Waiting.split({ from, tile, dir, cmd, space });
 
       if (waiting !== undefined) {
         w.waiting.push(waiting);
@@ -337,7 +359,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       w.waiting = w.waiting.filter((x) => x !== waiting);
 
       if (kind === "refuse") {
-        const error = { _tag: (["forbidden", "bad_name", "name_taken"] as const)[pick % 3] };
+        const error = refusal((["forbidden", "bad_name", "name_taken"] as const)[pick % 3] ?? "forbidden");
         return {
           move: `refuse ${waiting.tile}`,
           ...take(p, w, { type: "start_child_err", cmd: waiting.cmd, error, at: w.at }, true),
@@ -366,7 +388,7 @@ const move = (p: Stepper, w: World, kind: Kind, pick: number): Event | null => {
       w.stops = w.stops.filter((c) => c !== cmd);
       const msg =
         pick % 3 === 0
-          ? { type: "stop_child_err", cmd, error: { _tag: "noproc" }, at: w.at }
+          ? { type: "stop_child_err", cmd, error: refusal("noproc"), at: w.at }
           : { type: "stop_child_ok", cmd, value: null, at: w.at };
       return { move: `stop answer ${String(cmd["name"])}`, ...take(p, w, msg, true) };
     }
@@ -602,10 +624,9 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
 
             if (was.length === 1) {
               seen.last++;
-              expect(e.result, "L7: the last tile of a workspace never closes").toEqual({
-                _tag: "refused",
-                reason: "last_tile",
-              });
+              expect(e.result, "L7: the last tile of a workspace never closes").toEqual(
+                Taken.cases.refused.make({ reason: "last_tile" }),
+              );
               expect(e.after, "L7: a refused close changes nothing").toEqual(e.before);
               continue;
             }
@@ -723,7 +744,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
             if (e !== null && kind === "reattach") {
               // Plan amendment (b): an attach of a workspace that exists is taken and changes nothing.
               seen["reattach"] = (seen["reattach"] ?? 0) + 1;
-              expect(e.result, `L9: ${e.move} is taken, not refused`).toEqual({ _tag: "stepped" });
+              expect(e.result, `L9: ${e.move} is taken, not refused`).toEqual(Taken.cases.stepped.make({}));
               expect(e.after, `L9: ${e.move} changes no view`).toEqual(e.before);
               expect(JSON.stringify(w.model), `L9: ${e.move} changes no model`).toBe(model);
               expect(e.cmds, `L9: ${e.move} starts nothing`).toEqual([]);
@@ -733,7 +754,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
             if (e !== null && kind === "attach_reused") {
               const which = e.move.includes("reusing live") ? "attach_live" : "attach_waiting";
               seen[which] = (seen[which] ?? 0) + 1;
-              expect(e.result, `L9: ${e.move}`).toEqual({ _tag: "refused", reason: "id_reused" });
+              expect(e.result, `L9: ${e.move}`).toEqual(Taken.cases.refused.make({ reason: "id_reused" }));
               expect(e.after, "L9: a refused attach changes no view").toEqual(e.before);
               expect(JSON.stringify(w.model), "L9: a refused attach writes nothing to the model").toBe(model);
               expect(e.cmds, "L9: a refused attach starts nothing").toEqual([]);
@@ -746,7 +767,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
 
             const want = w.view.workspaces.length === 0 ? "no_workspace" : kind === "reused" ? "id_reused" : "missing";
             seen[want] = (seen[want] ?? 0) + 1;
-            expect(e.result, `L9: ${e.move}`).toEqual({ _tag: "refused", reason: want });
+            expect(e.result, `L9: ${e.move}`).toEqual(Taken.cases.refused.make({ reason: want }));
             expect(e.after, "L9: a refusal changes no view").toEqual(e.before);
             expect(JSON.stringify(w.model), "L9: a refusal writes nothing to the model").toBe(model);
             expect(e.cmds, "L9: a refusal asks for nothing").toEqual([]);
@@ -769,7 +790,9 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
 
         for (const { pick } of picks) {
           const e = move(p, w, "unknown", pick)!;
-          expect(e.result, `L9: ${e.move} before any attach`).toEqual({ _tag: "refused", reason: "no_workspace" });
+          expect(e.result, `L9: ${e.move} before any attach`).toEqual(
+            Taken.cases.refused.make({ reason: "no_workspace" }),
+          );
         }
       }),
       { seed: SEED, numRuns: 50 },
@@ -817,7 +840,11 @@ const Cursor = fc.oneof(
   fc.string({ minLength: 81, maxLength: 256 }),
 );
 
-const VIAS = [{ _tag: "key", keys: "ctrl+b o" }, { _tag: "click" }, { _tag: "key", keys: "f6" }] as const;
+const VIAS = [
+  Via.cases.key.make({ keys: "ctrl+b o" }),
+  Via.cases.click.make({}),
+  Via.cases.key.make({ keys: "f6" }),
+] as const;
 
 const FocusPick = fc.record({
   type: fc.constant("pick" as const),
@@ -876,7 +903,7 @@ const focusMove = (
     does: name,
     from,
     to,
-    via: name === CLICK ? { _tag: "click" } : VIAS[c.pick % VIAS.length],
+    via: name === CLICK ? Via.cases.click.make({}) : VIAS[c.pick % VIAS.length],
     cursor: c.cursor,
     sentAt: iso(c.sentAt),
   };
@@ -901,7 +928,7 @@ const splitMove = (p: Stepper, w: World, c: FocusPick) => {
   const cmd = starts(e.cmds)[0];
 
   if (cmd !== undefined) {
-    w.waiting.push({ _tag: "split", from, tile, dir, cmd, space });
+    w.waiting.push(Waiting.split({ from, tile, dir, cmd, space }));
   }
 
   return { move: `split ${dir} ${from} -> ${tile} leaving ${String(c.cursor)}`, ...e, from, split: c.cursor };
@@ -959,10 +986,10 @@ describe("Desk S3: focus moves at the program", () => {
           const e = take(
             p,
             w,
-            { type: "did", does, from: a, to: b, via: { _tag: "key", keys: "ctrl+b o" }, cursor: null },
+            { type: "did", does, from: a, to: b, via: Via.cases.key.make({ keys: "ctrl+b o" }), cursor: null },
             false,
           );
-          expect(e.result, `S3: tezgah takes ${does} from ${a} to ${b}`).toEqual({ _tag: "stepped" });
+          expect(e.result, `S3: tezgah takes ${does} from ${a} to ${b}`).toEqual(Taken.cases.stepped.make({}));
         },
       ),
       { seed: SEED, numRuns: 100 },
@@ -996,7 +1023,7 @@ describe("Desk S3: focus moves at the program", () => {
                 : move(p, w, c.kind as Kind, c.pick));
 
           if (e !== null && "split" in e) {
-            expect(e.result, `S3: ${e.move} is taken`).toEqual({ _tag: "stepped" });
+            expect(e.result, `S3: ${e.move} is taken`).toEqual(Taken.cases.stepped.make({}));
             expect(starts(e.cmds), `S3: ${e.move} asks for its start as before`).toHaveLength(1);
             cursors.set(e.from, e.split);
             seen.split += e.split === null ? 0 : 1;
@@ -1008,10 +1035,9 @@ describe("Desk S3: focus moves at the program", () => {
 
             if (e.far) {
               seen.far++;
-              expect(e.result, `S3: ${e.move} names a tile not on its workspace`).toEqual({
-                _tag: "refused",
-                reason: "missing",
-              });
+              expect(e.result, `S3: ${e.move} names a tile not on its workspace`).toEqual(
+                Taken.cases.refused.make({ reason: "missing" }),
+              );
               expect(e.after, "S3: a refused move changes no view").toEqual(e.before);
               expect(JSON.stringify(w.model), "S3: a refused move writes nothing").toBe(model);
               continue;
@@ -1019,7 +1045,7 @@ describe("Desk S3: focus moves at the program", () => {
 
             seen.moved++;
             seen.stale += before.focus === e.from ? 0 : 1;
-            expect(e.result, `S3: ${e.move} is taken`).toEqual({ _tag: "stepped" });
+            expect(e.result, `S3: ${e.move} is taken`).toEqual(Taken.cases.stepped.make({}));
             expect(e.cmds, `S3: ${e.move} asks for no Cmd`).toEqual([]);
             const now = e.after.workspaces.find((s) => s.id === before.id)!;
             expect(now.focus, `S3: ${e.move} focuses its to`).toBe(e.to);
@@ -1090,10 +1116,18 @@ describe("Desk S3: focus moves at the program", () => {
               const e = take(
                 p,
                 w,
-                { type: "did", does: name, from, to, via: { _tag: "click" }, cursor: m.cursor, sentAt: iso(clock(i)) },
+                {
+                  type: "did",
+                  does: name,
+                  from,
+                  to,
+                  via: Via.cases.click.make({}),
+                  cursor: m.cursor,
+                  sentAt: iso(clock(i)),
+                },
                 false,
               );
-              expect(e.result, `L27: move ${i} is taken`).toEqual({ _tag: "stepped" });
+              expect(e.result, `L27: move ${i} is taken`).toEqual(Taken.cases.stepped.make({}));
               views.push(w.view);
               tos.push(to);
             }

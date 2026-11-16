@@ -182,6 +182,9 @@ const imported = (document: Json) =>
     { patterns: "apply" },
   ) as Schema.Codec<unknown, unknown>;
 
+/** What a file holds for one declaration: nothing, a valid value or an invalid one. */
+const Held = Schema.TaggedUnion({ absent: {}, valid: { value: Schema.Unknown }, invalid: { value: Schema.Unknown } });
+
 /** One file's document: per declaration nothing, a valid value or an invalid one, and maybe one stray key. */
 const contents = (input: Declared) =>
   fc.record({
@@ -189,11 +192,11 @@ const contents = (input: Declared) =>
     values: fc.tuple(
       ...input[1].map((_, n) =>
         fc.oneof(
-          fc.constant({ _tag: "absent" as const }),
-          (build(input).values(n).valid as fc.Arbitrary<unknown>).map((value) => ({ _tag: "valid" as const, value })),
+          fc.constant(Held.cases.absent.make({})),
+          (build(input).values(n).valid as fc.Arbitrary<unknown>).map((value) => Held.cases.valid.make({ value })),
           build(input)
             .values(n)
-            .invalid.map((value) => ({ _tag: "invalid" as const, value })),
+            .invalid.map((value) => Held.cases.invalid.make({ value })),
         ),
       ),
     ),

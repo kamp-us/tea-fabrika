@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { Data } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import type { Tag } from "./starters.ts";
@@ -21,6 +22,8 @@ type End =
   | { readonly _tag: "needs_layer" }
   | { readonly _tag: "type_only" }
   | { readonly _tag: "nothing" };
+
+const End = Data.taggedEnum<End>();
 
 /** A module's text for each end, in the starters' own spellings. */
 const SOURCE: Readonly<Record<Tag, string>> = {
@@ -51,8 +54,8 @@ const sourceOf = (end: End): string => {
 const end: fc.Arbitrary<End> = fc.oneof(
   fc
     .constantFrom<Tag>("process", "port", "browser", "instance", "signal", "network", "disk")
-    .map((tag): End => ({ _tag: "opens", tag })),
-  fc.constantFrom<End>({ _tag: "needs_layer" }, { _tag: "type_only" }, { _tag: "nothing" }),
+    .map((tag) => End.opens({ tag })),
+  fc.constantFrom(End.needs_layer(), End.type_only(), End.nothing()),
 );
 
 /** Whether a chain's end is a starter: for the integration walk, and alone, for the advice. */

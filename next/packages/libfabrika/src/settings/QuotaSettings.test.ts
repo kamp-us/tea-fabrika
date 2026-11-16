@@ -1,6 +1,6 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Option, Schema } from "effect";
+import { ByteSize, Effect, Option, Result, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -160,10 +160,10 @@ describe("P34c Q11 settings", () => {
             expect(restored.snapshot).toEqual(saved);
             const bad = { ...transport, values: { ...transport.values } };
             delete bad.values["limits.writes"];
-            expect(yield* Effect.result(Snapshot.read(g, bad))).toMatchObject({ _tag: "Failure" });
-            expect(yield* Effect.result(Snapshot.read(g, { ...transport, hash: "changed" }))).toMatchObject({
-              _tag: "Failure",
-            });
+            expect(Result.isFailure(yield* Effect.result(Snapshot.read(g, bad)))).toBe(true);
+            expect(Result.isFailure(yield* Effect.result(Snapshot.read(g, { ...transport, hash: "changed" })))).toBe(
+              true,
+            );
           }
         }),
       ),
@@ -187,7 +187,7 @@ describe("P34c Q11 settings", () => {
             const key = [...valid.keys()][cell.pick % valid.size]!;
             const bad = cell.value % 2 === 0 ? "0" : key === "writes" ? "13761" : '"1000000001 B"';
             const text = `[limits]\n${[...valid].map(([k, v]) => `${k} = ${k === key ? bad : v}`).join("\n")}\n`;
-            expect(yield* Effect.result(resolve(text))).toMatchObject({ _tag: "Failure" });
+            expect(Result.isFailure(yield* Effect.result(resolve(text)))).toBe(true);
           }
 
           const recovery = declaration("limits.recovery");

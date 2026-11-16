@@ -115,7 +115,9 @@ describe("p22 real counter in the runner", () => {
               const loader = yield* ProgramLoader;
               const healthy = yield* loader.load(PROGRAM);
               expect(healthy.stepper.program.machine).toBe(counter.machine);
-              expect(healthy.stepper.init({ count })).toMatchObject({ _tag: "stepped", view: { count } });
+              const boot = healthy.stepper.init({ count });
+              expect(boot._tag).toBe("stepped");
+              expect(boot).toMatchObject({ view: { count } });
               const result = yield* Effect.result(loader.load(name));
               expect(Result.isFailure(result)).toBe(true);
 
@@ -558,10 +560,9 @@ describe("P40 the counter under its qualified identity", () => {
                       brainFrom,
                     ),
                   );
-                  expect(result, `${bent} is refused`).toMatchObject({
-                    _tag: "Failure",
-                    failure: { _tag: "ProcessError", reason: "bad_name" },
-                  });
+                  expect(Result.isFailure(result), `${bent} is refused`).toBe(true);
+                  expect(Result.isFailure(result) && result.failure._tag, `${bent} is refused`).toBe("ProcessError");
+                  expect(result, `${bent} is refused`).toMatchObject({ failure: { reason: "bad_name" } });
                   refused++;
                 }
 

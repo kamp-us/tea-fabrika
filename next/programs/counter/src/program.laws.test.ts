@@ -87,7 +87,7 @@ describe("P11 real counter laws", () => {
         (value) =>
           Effect.promise(async () => {
             const { counter } = await import("./program.ts");
-            const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
+            const { Program, ProgramLoader, Step }: typeof import("@kampus/libfabrika") = await import(LIBRARY);
             // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
             expect(Schema.decodeUnknownSync(Program.schema)(counter)).toMatchObject({
               name: "fabrika/counter",
@@ -100,20 +100,19 @@ describe("P11 real counter laws", () => {
               }).pipe(Effect.provide(ProgramLoader.layer({ "fabrika/counter": counter }, {}))),
             );
             const boot = p.init(null);
-            expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
+            expect(boot._tag).toBe("stepped");
+            expect(boot).toMatchObject({ view: { count: 0 }, cmds: [] });
 
             for (const type of ["inc", "dec", "reset"] as const) {
               expect(counter.refuse({ count: value }, { type })).toBeNull();
             }
 
-            expect(p.step({ count: value }, { type: "inc", value: "wrong" })).toMatchObject({
-              _tag: "stepped",
-              view: { count: value + 1 },
-            });
-            expect(p.step({ count: value }, { type: "unknown" })).toMatchObject({
-              _tag: "refused",
-              reason: "bad_msg",
-            });
+            const inc = p.step({ count: value }, { type: "inc", value: "wrong" });
+            expect(inc._tag).toBe("stepped");
+            expect(inc).toMatchObject({ view: { count: value + 1 } });
+            expect(p.step({ count: value }, { type: "unknown" })).toMatchObject(
+              Step.cases.refused.make({ reason: "bad_msg" }),
+            );
           }),
         { concurrency: 1, discard: true },
       ),
