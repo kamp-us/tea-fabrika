@@ -130,6 +130,17 @@ main and run `git merge-tree` without merging. A step whose brief says "merge or
 reads that as: only when this step is the proof run or the fold. Otherwise it works on the branch
 as it is.
 
+**The sev0 comes first (owner, 2026-11-16).** The sev0 ends when every fix on its list merges.
+Nothing off that list starts. @kalfa/cli, records, ci, vitest and oxlint move to right after the
+sev0; @kalfa/config slice 1 stays and finishes. A session already on one of the five parks at a
+clean point: its branch pushed, a field row saying where it stands. A free seat goes, in this
+order, to: (1) a fold, or a fix round of a finished slice; (2) the slice that unblocks a fold, the
+last one missing from a sweep; (3) a new slice.
+
+**Folds roll in batches.** Each sweep has one integrator branch. When 5 or more reviewed slices of
+a sweep sit unfolded, its integrator folds them (merge, never rebase), and the twin mails the head
+for the merge session to stack.
+
 **No slice opens a pull request (one PR per sweep, 0589).** A slice pushes its branch and ends with
 its RESULT. Its integrator folds it into the sweep's one PR. A slice brief that says to open or
 update a PR is overridden by this line.
