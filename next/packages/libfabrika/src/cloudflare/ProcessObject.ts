@@ -5,7 +5,8 @@
  */
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { Digest } from "effect/crypto";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { ProgramSource } from "./index.ts";
 import { Process, type ProcessShape } from "./objects.ts";
@@ -71,7 +72,9 @@ export const layer = (options: {
       const raw = state.raw as unknown as DurableObjectState;
       const service = ObjectService.make(
         ProcessService,
-        processLayer(raw, bindings, options.programs, options.input(bindings)),
+        processLayer(raw, bindings, options.programs, options.input(bindings)).pipe(
+          Layer.provide(Digest.layerWebCrypto),
+        ),
       );
       // `configure` saves the descriptor first, then runs the service's first turn from a context.
       const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };

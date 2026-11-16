@@ -1,4 +1,5 @@
 import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -345,4 +346,4 @@ export const connectionRuntime = (
   env: Env,
   config?: BrainOptions,
   input?: ProjectOptions["input"],
-) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input));
+) => SettingsRuntime.runtime(connectionLayer(ctx, env, config, input).pipe(Layer.provide(Digest.layerWebCrypto)));

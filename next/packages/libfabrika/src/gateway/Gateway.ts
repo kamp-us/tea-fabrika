@@ -414,28 +414,20 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
     const key = checkedKey ?? (yield* fingerprint(raw, false));
     return Writer.cases[identity.as === "agent" ? "agent" : "person"].make({ key, for: identity.person });
   });
-  const sessions = yield* Effect.service(SessionManager).pipe(
-    Effect.provide(
-      SessionManager.layer(sql, membership, {
-        input: (name) => options.inputs.personOnly.includes(name),
-        event: (kind) => options.events.personOnly.includes(kind),
-      }),
-    ),
-  );
+  const sessions = yield* SessionManager.make(sql, membership, {
+    input: (name) => options.inputs.personOnly.includes(name),
+    event: (kind) => options.events.personOnly.includes(kind),
+  });
   const sessionsFor = Effect.fnUntraced(function* (process: string) {
     if (options.policy === undefined) {
       return sessions;
     }
 
     const policy = yield* options.policy(process);
-    return yield* SessionManager.pipe(
-      Effect.provide(
-        SessionManager.layer(sql, membership, {
-          input: (name) => policy.inputs.includes(name),
-          event: (kind) => policy.events.includes(kind),
-        }),
-      ),
-    );
+    return yield* SessionManager.make(sql, membership, {
+      input: (name) => policy.inputs.includes(name),
+      event: (kind) => policy.events.includes(kind),
+    });
   });
   // A connection's checked state: its attachment, its key and its watches' recipient.
   const forget = (client: string) => {

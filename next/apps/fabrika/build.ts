@@ -1,5 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Path } from "effect";
+import { Digest } from "effect/crypto";
 import { build } from "./src/build.ts";
 
 NodeRuntime.runMain(
@@ -13,6 +14,6 @@ NodeRuntime.runMain(
       }),
     ),
     // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
-    Effect.provide(NodeServices.layer),
+    Effect.provide([NodeServices.layer, Digest.layerWebCrypto]),
   ),
 );

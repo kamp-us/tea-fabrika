@@ -10,6 +10,7 @@
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -284,7 +285,7 @@ const tabScript = (output: ReadonlyArray<OutputChunk | OutputAsset>): string =>
     .join("\n");
 
 // The tab's page is an asset of the tab's own call, so the call that made the script made the page.
-const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
+const tabPage = (styles: ReadonlyArray<string>, digest: Digest.Digest["Service"]): Plugin => ({
   name: "fabrika-tab-page",
   generateBundle(_options, output) {
     const emit = hash(tabScript(Object.values(output))).pipe(
@@ -295,7 +296,7 @@ const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
       ),
     );
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: a Rolldown hook answers with a Promise
-    return Effect.runPromiseWith(Context.empty())(emit);
+    return Effect.runPromiseWith(Context.make(Digest.Digest, digest))(emit);
   },
 });
 
@@ -313,7 +314,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
     (file) => fs.readFileString(file).pipe(Effect.mapError(fail("read")), Effect.andThen(inlineStylesheet(file))),
     { concurrency: 1 },
   );
-  const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
+  const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles, yield* Digest.Digest)], {
     phase: "tab",
     cwd,
     define: { "process.env.NODE_ENV": JSON.stringify("production") },

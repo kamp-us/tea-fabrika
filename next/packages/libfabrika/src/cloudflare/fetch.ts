@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from "effect";
+import { Digest } from "effect/crypto";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { GatewayClient, ProjectClient } from "./platform.ts";
@@ -29,7 +30,7 @@ export const httpContext = (env: Env) =>
     return known !== undefined
       ? Effect.succeed(known)
       : // `RecordedStart` is a plain value with nothing to give back, so it outlives this scope.
-        Layer.build(recordedLayer(env)).pipe(
+        Layer.build(recordedLayer(env).pipe(Layer.provide(Digest.layerWebCrypto))).pipe(
           Effect.scoped,
           Effect.tap((context) => Effect.sync(() => isolates.set(env, context))),
         );

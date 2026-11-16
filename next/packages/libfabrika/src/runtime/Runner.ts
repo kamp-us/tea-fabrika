@@ -528,7 +528,11 @@ export class ProgramRunner extends Context.Service<
         let process = initial;
         const manager = yield* ProcessManager;
         const recovery = recoveryStore(options.recovery.sql, { ...options.recovery, schema: Supervision });
-        const replies = yield* Replies.pipe(Effect.provide(RepliesSql.layer(options.recovery.sql, options.recovery)));
+        // Built in the runner's own scope, so the receipts and watchers live as long as the runner.
+        const replies = Context.get(
+          yield* Layer.build(RepliesSql.layer(options.recovery.sql, options.recovery)),
+          Replies,
+        );
         let supervision: Supervision | null = null;
         let woke = false;
         const mailbox = yield* Mailbox;
@@ -541,7 +545,7 @@ export class ProgramRunner extends Context.Service<
             return process.build;
           },
         };
-        const watches = yield* Watchers.pipe(Effect.provide(WatchersSql.layer(options.recovery.sql, watched)));
+        const watches = Context.get(yield* Layer.build(WatchersSql.layer(options.recovery.sql, watched)), Watchers);
         const alarm = yield* Alarm;
         const recording = yield* Recording;
         const sessions = yield* Effect.serviceOption(SessionManager);

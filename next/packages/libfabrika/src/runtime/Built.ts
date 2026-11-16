@@ -25,15 +25,13 @@ export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
 }) {}
 
 /**
- * Computes the SHA-256 of a text's UTF-8 bytes, as lowercase hex.
+ * Computes the SHA-256 of a text's UTF-8 bytes, as lowercase hex, with the caller's `Digest`.
  *
  * @stability unstable
  * @category combinators
  */
 export const hash = Effect.fn("build.hash")((text: string) =>
-  Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))).pipe(
-    Effect.provide(Digest.layerWebCrypto),
-  ),
+  Digest.Digest.use((digest) => digest.digestHex(Digest.sha256, new TextEncoder().encode(text))),
 );
 
 /**

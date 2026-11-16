@@ -18,6 +18,7 @@ import { control } from "@kampus/libfabrika/workers/control";
 import { ProjectService, signingReply, commitReply, settingsWire } from "@kampus/libfabrika/workers/runtime";
 import { DurableObject, WorkerEntrypoint, env } from "cloudflare:workers";
 import { Effect, Redacted, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { assets, programs } from "virtual:fabrika-built";
 import type { ConnectionId } from "./door.ts";
 import { Objects } from "./objects.ts";
@@ -338,8 +339,12 @@ export class IsolateTail extends makeWorkerBridge(WorkerEntrypoint, meta) {}
  */
 export class Control extends WorkerEntrypoint<Env, { token: string }> {
   fetch(request: Request) {
+    const work = control(request, this.env, Redacted.make(this.ctx.props.token), programs).pipe(
+      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
+      Effect.provide(Digest.layerWebCrypto),
+    );
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the private local control socket enters Effect
-    return Effect.runPromise(control(request, this.env, Redacted.make(this.ctx.props.token), programs));
+    return Effect.runPromise(work);
   }
 }
 

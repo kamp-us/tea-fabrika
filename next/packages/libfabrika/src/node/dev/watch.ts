@@ -7,6 +7,7 @@
 import { run } from "@demlik/tea/effect";
 import type { Scope } from "effect";
 import { Clock, Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import type { Digest } from "effect/crypto";
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -87,7 +88,7 @@ export const watchPrograms = (options: {
   readonly programs: ReadonlyArray<Selection>;
   readonly install: (code: Install) => Effect.Effect<Installed, ControlError>;
   readonly failed: (fact: Failed) => Effect.Effect<void, ControlError>;
-}): Stream.Stream<Reloaded, never, Scope.Scope | FileSystem.FileSystem | Path.Path> => {
+}): Stream.Stream<Reloaded, never, Scope.Scope | FileSystem.FileSystem | Path.Path | Digest.Digest> => {
   const program = (selected: Selection) =>
     Effect.gen(function* () {
       const path = yield* Path.Path;
@@ -187,7 +188,7 @@ export const watchPrograms = (options: {
           Effect.fn("watch.rebuild")(function* (): Effect.fn.Return<
             Option.Option<Reloaded>,
             never,
-            FileSystem.FileSystem | Path.Path
+            FileSystem.FileSystem | Path.Path | Digest.Digest
           > {
             const started = yield* Clock.currentTimeMillis;
             const finish = Effect.fnUntraced(function* (result: Option.Option<Reloaded>, bytes = 0) {

@@ -18,10 +18,12 @@ import {
   Option,
   Result,
   Schema,
+  Scope,
   Semaphore,
   Stream,
   Tracer,
 } from "effect";
+import { Digest } from "effect/crypto";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
@@ -215,14 +217,14 @@ type CheckedSettings = Effect.Success<ReturnType<typeof settings>>;
  * @stability unstable
  * @category layers
  */
-export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError>;
+export function recordedLayer(env: Env): Layer.Layer<RecordedStart, Starts.StartsError, Digest.Digest>;
 export function recordedLayer(
   env: Env,
-  input: Effect.Effect<CheckedSettings, LedgerError>,
-): Layer.Layer<RecordedStart, LedgerError | Starts.StartsError>;
+  input: Effect.Effect<CheckedSettings, LedgerError, Digest.Digest>,
+): Layer.Layer<RecordedStart, LedgerError | Starts.StartsError, Digest.Digest>;
 export function recordedLayer(
   env: Env,
-  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = checkedSettings(env),
+  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError, Digest.Digest> = checkedSettings(env),
 ) {
   return Layer.unwrap(
     input.pipe(
@@ -375,7 +377,7 @@ type Boots = readonly [Boot, ...ReadonlyArray<Boot>];
  * @category models
  */
 export interface ProjectOptions {
-  readonly input?: Effect.Effect<Effect.Success<ReturnType<typeof settings>>, LedgerError>;
+  readonly input?: Effect.Effect<Effect.Success<ReturnType<typeof settings>>, LedgerError, Digest.Digest>;
   readonly mail?: { readonly grants: Grants };
   readonly config?: BrainOptions;
   readonly programs: Readonly<Record<string, ProgramSource>>;
@@ -384,9 +386,7 @@ export interface ProjectOptions {
   readonly bootstrap: Boots | ((person: string) => Boots);
   /** Which program may start which (P42), a host right. None when absent. */
   readonly starts?: ReadonlyArray<typeof StartGrant.Type>;
-  readonly door: (
-    options: ProjectDoorOptions,
-  ) => Effect.Effect<
+  readonly door: (options: ProjectDoorOptions) => Effect.Effect<
     GatewayCalls,
     unknown,
     | Ledger
@@ -399,6 +399,8 @@ export interface ProjectOptions {
     | Tasks
     | MailWakeups
     | RecordedStart
+    // The Project object's own scope: a door built from layers builds them here, once.
+    | Scope.Scope
   >;
 }
 
@@ -484,7 +486,9 @@ export const commitReply = Effect.fn("project.commitReply")(function* (work: Eff
  * @stability unstable
  * @category error handling
  */
-export const processReply = <A, E>(work: Effect.Effect<A, E | ProcessError>): Effect.Effect<ProcessReply<A>, E> =>
+export const processReply = <A, E, R = never>(
+  work: Effect.Effect<A, E | ProcessError, R>,
+): Effect.Effect<ProcessReply<A>, E, R> =>
   work.pipe(
     Effect.map((value): ProcessReply<A> => ({ ...ProcessReplies.cases.ok.make({ value }), value })),
     Effect.catch((error): Effect.Effect<ProcessReply<A>, E> =>
@@ -825,7 +829,7 @@ const projectLedger = (
   ctx: DurableObjectState,
   env: Env,
   name: string,
-  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError>,
+  input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError, Digest.Digest>,
 ) => {
   const sql = cloudflareSql(ctx.storage);
   const turn = Semaphore.makeUnsafe(1);
@@ -912,7 +916,10 @@ const projectLogic = Effect.fn("project.init")(function* (
     RelationsLedger.layer({ by }),
     processManager,
   ).pipe(Layer.provideMerge(base));
-  // The door wakes a task's requester after a finish with the same wake mail uses.
+  // The door wakes a task's requester after a finish with the same wake mail uses. The Digest checks a
+  // built program's hash and a start's settings wherever the Project's calls decode them. Each layer
+  // below is built once, in this object's scope, so its service lives as long as the object.
+  const digest = yield* Digest.Digest;
   const services = Context.add(
     Context.add(
       yield* Layer.build(managers).pipe(Effect.provideService(RecordedStart, checked)),
@@ -920,24 +927,26 @@ const projectLogic = Effect.fn("project.init")(function* (
       checked,
     ),
     MailWakeups,
-    yield* MailWakeups.pipe(Effect.provide(wakeups(env, name))),
-  );
+    Context.get(yield* Layer.build(wakeups(env, name)), MailWakeups),
+  ).pipe(Context.add(Digest.Digest, digest));
   // A program's hands Cmd targets the person's hands key, and its request records this start's settings.
-  const hands = yield* HandsTasks.pipe(
-    Effect.provide(
+  const hands = Context.get(
+    yield* Layer.build(
       HandsTasksLive.layer({ target: checked.values.handsTarget, settings: checked.snapshot.hash }).pipe(
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
+    HandsTasks,
   );
   // `mail.unread`, read at the brain's edge with the start's other settings (0086).
   const cap = checked.values.mailUnread;
-  const mail = yield* ProgramMail.pipe(
-    Effect.provide(
+  const mail = Context.get(
+    yield* Layer.build(
       ProgramMailLedger.layer({ grants: options.mail?.grants ?? checked.input.mail?.grants ?? {}, cap }).pipe(
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
+    ProgramMail,
   );
   const ledger = Context.get(services, Ledger),
     referee = Context.get(services, Referee),
@@ -946,8 +955,13 @@ const projectLogic = Effect.fn("project.init")(function* (
   // Each window session's own ProcessManager, so its watches deliver to that session (P18). Its
   // owner is the session's own pid, which registered no name, so an owner-gated call through it is
   // `not_parent`. Built at the session's first monitor and kept until its leave, so its folded
-  // table lives as long as the session, never folded again from rev 0 for each call.
-  const windows = new Map<string, { readonly session: string; readonly manager: typeof ProcessManager.Service }>();
+  // table lives as long as the session, never folded again from rev 0 for each call. Its layer is
+  // built in a scope of its own under the object's, closed at the session's leave.
+  const scope = yield* Scope.Scope;
+  const windows = new Map<
+    string,
+    { readonly session: string; readonly scope: Scope.Closeable; readonly manager: typeof ProcessManager.Service }
+  >();
   const windowManager = Effect.fnUntraced(function* (to: typeof Recipient.cases.client.Type) {
     const key = JSON.stringify([to.client, to.session]);
     const kept = windows.get(key);
@@ -957,21 +971,23 @@ const projectLogic = Effect.fn("project.init")(function* (
     }
 
     const caller = { by, owner: Owner.cases.process.make({ process: to.session }), recipient: to };
-    const manager = yield* ProcessManager.pipe(
-      Effect.provide(ProcessManager.layer(caller, ids.next)),
-      Effect.provideContext(services),
+    const life = yield* Scope.fork(scope);
+    const manager = Context.get(
+      yield* Layer.buildWithScope(ProcessManager.layer(caller, ids.next), life).pipe(Effect.provideContext(services)),
+      ProcessManager,
     );
-    windows.set(key, { session: to.session, manager });
+    windows.set(key, { session: to.session, scope: life, manager });
     return manager;
   });
-  const windowsLeave = (session: string) => {
+  const windowsLeave = Effect.fnUntraced(function* (session: string) {
     for (const [key, kept] of windows) {
       if (kept.session === session) {
         windows.delete(key);
+        yield* Scope.close(kept.scope, Exit.void);
       }
     }
-  };
-  const codes = yield* CodeStore.pipe(Effect.provide(CodeStoreSql.layer(sql)));
+  });
+  const codes = Context.get(yield* Layer.build(CodeStoreSql.layer(sql)), CodeStore);
 
   for (const source of Object.values(programs)) {
     const built = yield* Schema.decodeUnknownEffect(BuiltProgram)(source);
@@ -1210,27 +1226,30 @@ const projectLogic = Effect.fn("project.init")(function* (
       founder,
       turn,
       write,
-      policy,
+      policy: (pid) => policy(pid).pipe(Effect.provideService(Digest.Digest, digest)),
       isLive: processes.isLive,
-      audit: Effect.fn("project.audit")(function* (pid: string, message: unknown) {
-        // Like processLogic, load the build this target runs; its start record may name an older build.
-        const program = yield* Effect.gen(function* () {
-          const life = yield* resolved(pid);
-          const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process });
-          // A swap moves the saved descriptor's build, so a message is checked by the code that will step it.
-          const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", life.state.process);
-          const running =
-            saved === undefined
-              ? undefined
-              : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value)).build;
-          return yield* loader.load(life.state.code.program, life.state.process, tail, running);
-        }).pipe(
-          Effect.mapError(
-            (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
-          ),
-        );
-        return yield* program.execution.audit(message);
-      }),
+      audit: Effect.fn("project.audit")(
+        function* (pid: string, message: unknown) {
+          // Like processLogic, load the build this target runs; its start record may name an older build.
+          const program = yield* Effect.gen(function* () {
+            const life = yield* resolved(pid);
+            const tail = yield* bindTail(ctx, { project: name, name: life.name, process: life.state.process });
+            // A swap moves the saved descriptor's build, so a message is checked by the code that will step it.
+            const [saved] = sql.exec("SELECT value FROM dev_descriptors WHERE process=?", life.state.process);
+            const running =
+              saved === undefined
+                ? undefined
+                : (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SavedDescriptor))(saved.value)).build;
+            return yield* loader.load(life.state.code.program, life.state.process, tail, running);
+          }).pipe(
+            Effect.mapError(
+              (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
+            ),
+          );
+          return yield* program.execution.audit(message);
+        },
+        Effect.provideService(Digest.Digest, digest),
+      ),
       nextProcess: () => ids.next,
       notify,
       admit: (pid, incoming, before) =>
@@ -1256,8 +1275,8 @@ const projectLogic = Effect.fn("project.init")(function* (
     .pipe(Effect.provideContext(services));
   // P42 and 0170: a child start decides in the turns of the manager that writes it, checked against
   // the member the door says sent its cause. Only `child` below uses it, after the door exists.
-  const children = yield* Children.pipe(
-    Effect.provide(
+  const children = Context.get(
+    yield* Layer.build(
       ChildrenLedger.layer({
         grants: options.starts ?? checked.input.starts ?? [],
         fabrika: Model.ref("fabrika", name),
@@ -1271,11 +1290,12 @@ const projectLogic = Effect.fn("project.init")(function* (
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
+    Children,
   );
   // A program's watch decides in the same manager's turns, checked against the same member (0170,
   // 0531), and writes as the watcher through the trusted argument only this side holds.
-  const monitors = yield* Monitors.pipe(
-    Effect.provide(
+  const monitors = Context.get(
+    yield* Layer.build(
       MonitorsLedger.layer({ fabrika: Model.ref("fabrika", name) }).pipe(
         Layer.provide(
           Layer.succeed(
@@ -1286,9 +1306,10 @@ const projectLogic = Effect.fn("project.init")(function* (
         Layer.provide(Layer.succeedContext(services)),
       ),
     ),
+    Monitors,
   );
-  const gateways = yield* Connections.pipe(
-    Effect.provide(
+  const gateways = Context.get(
+    yield* Layer.build(
       Connections.layer(sql, {
         probe: (gateway, session) => rpc(GatewayClient.make(env.CONNECTION.getByName(gateway)).probe(session)),
         admitted: (key) =>
@@ -1310,8 +1331,8 @@ const projectLogic = Effect.fn("project.init")(function* (
             Effect.map((values) => values.some(Boolean)),
           ),
       }),
-    ),
-    Effect.provideContext(services),
+    ).pipe(Effect.provideContext(services)),
+    Connections,
   );
   sql.exec("CREATE TABLE IF NOT EXISTS dev_starts (id TEXT PRIMARY KEY, request TEXT NOT NULL, hash TEXT NOT NULL)");
   // The founding person owns this fabrika (0290). Every boot writes the same row under one id, so
@@ -1802,7 +1823,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       { concurrency: 1, discard: true },
     ),
   );
-  const wrapped = <A, E>(effect: Effect.Effect<A, E>) =>
+  const wrapped = <A, E>(effect: Effect.Effect<A, E, Digest.Digest>) =>
     complete(effect).pipe(projectStorage, Effect.provideContext(services));
   const own = Effect.fn("project.own")(function* (pid: string, id: string, stream: string, event: unknown) {
     if (!(yield* processes.isLive(pid))) {
@@ -1932,7 +1953,7 @@ const projectLogic = Effect.fn("project.init")(function* (
       yield* wrapped(gateways.leave(client, session));
       // A closed socket's session is a watcher that ended: its watches end with it, as in OTP.
       yield* wrapped(write(processes.leave(session, yield* from())));
-      windowsLeave(session);
+      yield* windowsLeave(session);
     }),
     online: (key: string) => wrapped(gateways.online(key)),
     info: wrapped(processes.info),
@@ -2174,7 +2195,8 @@ export const projectLayer = (
     options.input ?? checkedSettings(env),
   ),
 ) => {
-  const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError> = options.input ?? checkedSettings(env);
+  const input: Effect.Effect<CheckedSettings, LedgerError | Starts.StartsError, Digest.Digest> =
+    options.input ?? checkedSettings(env);
   return Layer.unwrap(
     input.pipe(
       Effect.map(({ input }) => {
@@ -2211,7 +2233,10 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
     ctx.id.name ?? options.config?.name ?? "project",
     options.input ?? checkedSettings(env),
   );
-  const minimal = SettingsRuntime.runtime(local.starts.pipe(Layer.provideMerge(local.ledgerLayer)));
+  // Both runtimes are this object's edge: each takes the WebCrypto Digest that checks settings and builds.
+  const minimal = SettingsRuntime.runtime(
+    local.starts.pipe(Layer.provideMerge(local.ledgerLayer), Layer.provide(Digest.layerWebCrypto)),
+  );
   const ready = Layer.unwrap(
     minimal.contextEffect.pipe(
       Effect.map((services) =>
@@ -2231,7 +2256,7 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env, options: Proje
       ),
     ),
   );
-  const runtime = SettingsRuntime.runtime(ready);
+  const runtime = SettingsRuntime.runtime(ready.pipe(Layer.provide(Digest.layerWebCrypto)));
   const dispose = Effect.all([runtime.disposeEffect, minimal.disposeEffect], { discard: true, concurrency: 1 });
   return {
     ...runtime,
@@ -2414,6 +2439,8 @@ const processLogic = Effect.fnUntraced(function* (
   );
   // P34 on the Worker: receipts and pending recovery live in this object's own SQLite, beside
   // ProcessStore, under the registered name every successor shares.
+  // The Digest checks the hash of each build the loader fetches.
+  const digest = yield* Digest.Digest;
   const runnerLayer = ProgramRunner.withLoader(
     saved,
     {
@@ -2424,7 +2451,7 @@ const processLogic = Effect.fnUntraced(function* (
             Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
           );
           return yield* loader.load(name, process, tail, hash);
-        }),
+        }).pipe(Effect.provideService(Digest.Digest, digest)),
     },
     {
       policy: defaultPolicy,
@@ -2434,7 +2461,8 @@ const processLogic = Effect.fnUntraced(function* (
     },
   ).pipe(Layer.provide(dependencies), Layer.provide(Layer.succeedContext(services)));
   // A name stopped under its reserve does no work until a person restarts it.
-  const runner = QuotaRunner.guard(yield* ProgramRunner.pipe(Effect.provide(runnerLayer)), accounting);
+  // Built once in this object's scope, so the runner lives as long as the object.
+  const runner = QuotaRunner.guard(Context.get(yield* Layer.build(runnerLayer), ProgramRunner), accounting);
   yield* sink.flush.pipe(Effect.provideContext(services));
   const attributed = <A, E, R>(work: Effect.Effect<A, E, R>) =>
     Effect.suspend(() => work.pipe(Effect.annotateSpans({ "fab.process": active }), Effect.provideContext(services)));
@@ -2553,4 +2581,4 @@ export const processLayer = (
  * @category constructors
  */
 export const processRuntime = (ctx: DurableObjectState, env: Env, programs: Readonly<Record<string, ProgramSource>>) =>
-  SettingsRuntime.runtime(processLayer(ctx, env, programs));
+  SettingsRuntime.runtime(processLayer(ctx, env, programs).pipe(Layer.provide(Digest.layerWebCrypto)));

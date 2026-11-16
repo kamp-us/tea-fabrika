@@ -4,7 +4,6 @@
  * @stability unstable
  */
 import { Effect, Layer } from "effect";
-import { Digest } from "effect/crypto";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import type * as Start from "../settings/Start.ts";
 import { Decode, Starts, StartsError } from "../settings/Starts.ts";
@@ -23,6 +22,8 @@ import * as SettingsInput from "./SettingsInput.ts";
  * Recording the same start again answers the first receipt, so every object of one instance can
  * build this layer for the same input.
  *
+ * The layer asks for the `Digest` that checks the settings' hash: the object's edge provides it.
+ *
  * @stability unstable
  * @category layers
  */
@@ -40,5 +41,5 @@ export const layer = (input: Start.Input) =>
       );
 
       return { ...checked, receipt: saved };
-    }).pipe(Effect.provide(Digest.layerWebCrypto)),
+    }),
   );

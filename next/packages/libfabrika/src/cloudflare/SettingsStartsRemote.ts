@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Effect, Layer, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import * as Start from "../settings/Start.ts";
 import {
   Decode,
@@ -37,27 +38,34 @@ const unreachable = (cause: unknown) => new StartsError({ reason: new Unreachabl
  *
  * No reply is trusted as it comes. Each one is decoded. An `ok` receipt is checked again, must be
  * for the asked start, and on `record` must match the input. A call that throws fails with
- * `Unreachable`. A failed reply fails with the same reason here.
+ * `Unreachable`. A failed reply fails with the same reason here. The layer asks for the `Digest` that
+ * checks a receipt's settings hash.
  *
  * @stability unstable
  * @category layers
  */
 export const layer = (calls: Calls) =>
-  Layer.succeed(Starts, {
-    record: (input) =>
-      call(
-        // oxlint-disable-next-line fabrika/no-promises -- edge: trusted Project settings-start RPC enters Effect
-        Effect.tryPromise({ try: () => calls.settingsStart(input), catch: unreachable }),
-        input.start,
-        input,
-      ),
-    read: (start) =>
-      call(
-        // oxlint-disable-next-line fabrika/no-promises -- edge: trusted Project settings-read RPC enters Effect
-        Effect.tryPromise({ try: () => calls.settingsRead(start), catch: unreachable }),
-        start,
-      ),
-  });
+  Layer.effect(
+    Starts,
+    Effect.gen(function* () {
+      const digest = yield* Digest.Digest;
+      return {
+        record: (input: Start.Input) =>
+          call(
+            // oxlint-disable-next-line fabrika/no-promises -- edge: trusted Project settings-start RPC enters Effect
+            Effect.tryPromise({ try: () => calls.settingsStart(input), catch: unreachable }),
+            input.start,
+            input,
+          ).pipe(Effect.provideService(Digest.Digest, digest)),
+        read: (start: string) =>
+          call(
+            // oxlint-disable-next-line fabrika/no-promises -- edge: trusted Project settings-read RPC enters Effect
+            Effect.tryPromise({ try: () => calls.settingsRead(start), catch: unreachable }),
+            start,
+          ).pipe(Effect.provideService(Digest.Digest, digest)),
+      };
+    }),
+  );
 
 const call = Effect.fnUntraced(function* (
   work: Effect.Effect<unknown, StartsError>,

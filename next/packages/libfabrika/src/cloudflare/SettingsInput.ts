@@ -6,7 +6,6 @@
  */
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Effect, Equal, Schema } from "effect";
-import { Digest } from "effect/crypto";
 import * as Codec from "../settings/Codec.ts";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
@@ -40,7 +39,8 @@ export const check = Effect.fnUntraced(function* (raw: unknown) {
 });
 
 /**
- * Decodes a JSON string as a start's input and runs `check` on it.
+ * Decodes a JSON string as a start's input and runs `check` on it. Like `check`, it asks its
+ * caller for the `Digest` that hashes the settings.
  *
  * @stability unstable
  * @category decoding
@@ -50,7 +50,7 @@ export const decode = Effect.fnUntraced(function* (encoded: unknown) {
     onExcessProperty: "error",
   });
   return yield* check(input);
-}, Effect.provide(Digest.layerWebCrypto));
+});
 
 /**
  * Decodes a raw value as a start's receipt and checks that it is the receipt it claims to be.
@@ -88,7 +88,7 @@ export const receipt = Effect.fnUntraced(function* (raw: unknown, expected?: Sta
   }
 
   return saved;
-}, Effect.provide(Digest.layerWebCrypto));
+});
 
 /**
  * Reads the start's input from the Worker's `INSTANCE` binding, with `decode`. Any failure is a

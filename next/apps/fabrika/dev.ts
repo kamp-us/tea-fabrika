@@ -260,6 +260,6 @@ const command = Command.make("dev", flags, (options) => {
 
 NodeRuntime.runMain(
   Command.runWith(command, { version: "0.0.0" })(words).pipe(
-    Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto, Id.Generator.layer]),
+    Effect.provide([NodeServices.layer, SecureRandom.layerWebCrypto, Digest.layerWebCrypto, Id.Generator.layer]),
   ),
 );

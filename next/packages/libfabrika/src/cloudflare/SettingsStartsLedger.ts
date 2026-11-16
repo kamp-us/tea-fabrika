@@ -69,6 +69,7 @@ export const fromLedger = () =>
     Starts,
     Effect.gen(function* () {
       const ledger = yield* Referee;
+      const digest = yield* Digest.Digest;
       const lookup = (start: string) => ledger.read(stream(start), 0, "settings").pipe(Effect.mapError(storage));
       const read = Effect.fnUntraced(function* (start: string) {
         yield* Schema.decodeUnknownEffect(Start.Input.fields.start)(start).pipe(Effect.mapError(decode));
@@ -142,8 +143,8 @@ export const fromLedger = () =>
         return receipt;
       });
       return {
-        record: (input: Start.Input) => record(input).pipe(Effect.provide(Digest.layerWebCrypto)),
-        read: (start: string) => read(start).pipe(Effect.provide(Digest.layerWebCrypto)),
+        record: (input: Start.Input) => record(input).pipe(Effect.provideService(Digest.Digest, digest)),
+        read: (start: string) => read(start).pipe(Effect.provideService(Digest.Digest, digest)),
       };
     }),
   );

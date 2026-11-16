@@ -152,7 +152,8 @@ type ProcessStorage = {
 export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>()(
   "@kampus/libfabrika/runtime/ProcessStore",
 ) {
-  static readonly layer = (
+  /** Builds the service for one process on a `Sql` store and the context's `Ledger`. */
+  static readonly make = (
     sql: Sql,
     options: {
       readonly process: string;
@@ -166,268 +167,268 @@ export class ProcessStore extends Context.Service<ProcessStore, ProcessStorage>(
           }
         | undefined;
     },
-  ): Layer.Layer<ProcessStore, never, Ledger> =>
-    Layer.effect(
-      ProcessStore,
-      Effect.gen(function* () {
-        const ledger = yield* Ledger;
-        const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
-        let ready = false;
-        const tables = () => {
-          if (!ready) {
-            for (const query of TABLES) {
-              sql.exec(query);
+  ): Effect.Effect<ProcessStorage, never, Ledger> =>
+    Effect.gen(function* () {
+      const ledger = yield* Ledger;
+      const quotas = Option.getOrUndefined(yield* Effect.serviceOption(Quotas));
+      let ready = false;
+      const tables = () => {
+        if (!ready) {
+          for (const query of TABLES) {
+            sql.exec(query);
+          }
+        }
+
+        ready = true;
+      };
+      const failed = (error: unknown) =>
+        error instanceof LedgerError
+          ? error
+          : new LedgerError({
+              reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
+              cause: error,
+            });
+      // A read changes no row, so it is charged nothing and fails only as the ledger does.
+      const read = Effect.fnUntraced(function* <A>(step: () => A) {
+        return yield* Effect.try({
+          try: () => {
+            tables();
+            return step();
+          },
+          catch: failed,
+        });
+      });
+      const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
+        return yield* Effect.clockWith((clock) =>
+          Effect.try({
+            try: () => {
+              tables();
+              return options.accounting === undefined
+                ? step(clock.currentTimeMillisUnsafe())
+                : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
+            },
+            catch: (error) => (error instanceof QuotasError ? error : failed(error)),
+          }),
+        );
+      });
+      const bytes = (text: string) => new TextEncoder().encode(text).length;
+      const get = options.storage?.get;
+      const readActivity =
+        get === undefined
+          ? read(() => {
+              const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+              return row === undefined
+                ? undefined
+                : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
+            })
+          : get("activity").pipe(
+              Effect.flatMap((raw) =>
+                raw === undefined
+                  ? Effect.succeed(undefined)
+                  : Effect.try({
+                      try: () => Schema.decodeUnknownSync(Activity)(raw),
+                      catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+                    }),
+              ),
+            );
+      // One marker write: its text against the old one, and the key it is kept under the first time.
+      const chargeActivity = (key: string, text: string, old: string | undefined, at: number) =>
+        options.accounting?.change(
+          "activity",
+          1,
+          bytes(text) - (old === undefined ? 0 : bytes(old)) + (old === undefined ? bytes(key) : 0),
+          at,
+          recovering(sql),
+        );
+      return {
+        select: Effect.fn("process.select")(function* (process: string) {
+          const selected = ProcessStore.make(sql, { ...options, process }).pipe(Effect.provideService(Ledger, ledger));
+          return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
+        }),
+        readActivity,
+        activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
+          const text = encodeActivity(value);
+          const storage = options.storage;
+
+          // Node keeps the marker as a SQL row, charged in the transaction that writes it.
+          if (storage === undefined) {
+            return yield* stored((at) =>
+              sql.transaction(() => {
+                const [old] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
+
+                if (old?.activity === text) {
+                  return;
+                }
+
+                chargeActivity(options.process, text, old === undefined ? undefined : String(old.activity), at);
+                sql.exec(
+                  "INSERT INTO process_activity (process,activity) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET activity=excluded.activity",
+                  options.process,
+                  text,
+                );
+              }),
+            );
+          }
+
+          // The object keeps the marker in its own key-value storage, where the wake rule reads it.
+          // With an account, the put is charged first, so a charge that does not fit writes nothing.
+          if (options.accounting !== undefined) {
+            const old = yield* readActivity;
+            const oldText = old === undefined ? undefined : encodeActivity(old);
+
+            if (oldText !== text) {
+              yield* stored((at) => sql.transaction(() => chargeActivity("activity", text, oldText, at)));
             }
           }
 
-          ready = true;
-        };
-        const failed = (error: unknown) =>
-          error instanceof LedgerError
-            ? error
-            : new LedgerError({
-                reason: Schema.isSchemaError(error) ? "bad_row" : "storage",
-                cause: error,
-              });
-        // A read changes no row, so it is charged nothing and fails only as the ledger does.
-        const read = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({
-            try: () => {
-              tables();
-              return step();
-            },
-            catch: failed,
-          });
-        });
-        const stored = Effect.fnUntraced(function* <A>(step: (at: number) => A) {
-          return yield* Effect.clockWith((clock) =>
-            Effect.try({
-              try: () => {
-                tables();
-                return options.accounting === undefined
-                  ? step(clock.currentTimeMillisUnsafe())
-                  : options.accounting.protect(() => step(clock.currentTimeMillisUnsafe()));
-              },
-              catch: (error) => (error instanceof QuotasError ? error : failed(error)),
-            }),
-          );
-        });
-        const bytes = (text: string) => new TextEncoder().encode(text).length;
-        const get = options.storage?.get;
-        const readActivity =
-          get === undefined
-            ? read(() => {
-                const [row] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
-                return row === undefined
+          yield* storage.put("activity", value);
+          yield* storage.sync();
+        }),
+        load: read(() => {
+          const [row] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
+
+          if (row === undefined) {
+            return null;
+          }
+
+          // An empty head names a checkpoint split across rows in the same transaction.
+          const text =
+            row.checkpoint === ""
+              ? sql
+                  .exec(
+                    "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
+                    options.process,
+                  )
+                  .map((part) => part.checkpoint)
+                  .join("")
+              : row.checkpoint;
+          return decodeCheckpoint(text);
+        }),
+        save: (value, placed = []) =>
+          stored((at) => {
+            const text = encodeCheckpoint(value);
+            // UTF-8 takes at most three bytes per UTF-16 unit. Leave room for the row's keys,
+            // and keep surrogate pairs together when a checkpoint crosses a row boundary.
+            const width = Math.floor((INPUT_BYTES - new TextEncoder().encode(options.process).length - 8) / 3);
+            const parts: Array<string> = [];
+
+            for (let offset = 0; offset < text.length;) {
+              let end = Math.min(offset + width, text.length);
+
+              if (end < text.length && /[\uD800-\uDBFF]/.test(text.slice(end - 1, end))) {
+                end--;
+              }
+
+              parts.push(text.slice(offset, end));
+              offset = end;
+            }
+
+            sql.transaction(() => {
+              const [old] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
+              // A split checkpoint keeps an empty head; charge its whole saved text.
+              const oldText =
+                old === undefined
                   ? undefined
-                  : Schema.decodeUnknownSync(Schema.fromJsonString(Activity))(row.activity);
-              })
-            : get("activity").pipe(
-                Effect.flatMap((raw) =>
-                  raw === undefined
-                    ? Effect.succeed(undefined)
-                    : Effect.try({
-                        try: () => Schema.decodeUnknownSync(Activity)(raw),
-                        catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
-                      }),
-                ),
+                  : old.checkpoint === ""
+                    ? sql
+                        .exec(
+                          "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
+                          options.process,
+                        )
+                        .map((part) => part.checkpoint)
+                        .join("")
+                    : String(old.checkpoint);
+              const isRecovery = recovering(sql);
+              options.accounting?.change(
+                "checkpoint",
+                oldText === text ? 0 : 1,
+                bytes(text) -
+                  (oldText === undefined ? 0 : bytes(oldText)) +
+                  (old === undefined ? bytes(options.process) : 0),
+                at,
+                isRecovery,
               );
-        // One marker write: its text against the old one, and the key it is kept under the first time.
-        const chargeActivity = (key: string, text: string, old: string | undefined, at: number) =>
-          options.accounting?.change(
-            "activity",
-            1,
-            bytes(text) - (old === undefined ? 0 : bytes(old)) + (old === undefined ? bytes(key) : 0),
-            at,
-            recovering(sql),
-          );
-        return {
-          select: Effect.fn("process.select")(function* (process: string) {
-            const selected = ProcessStore.pipe(
-              Effect.provide(ProcessStore.layer(sql, { ...options, process })),
-              Effect.provideService(Ledger, ledger),
-            );
-            return yield* quotas === undefined ? selected : selected.pipe(Effect.provideService(Quotas, quotas));
-          }),
-          readActivity,
-          activity: Effect.fn("process.activity")(function* (value: typeof Activity.Type) {
-            const text = encodeActivity(value);
-            const storage = options.storage;
-
-            // Node keeps the marker as a SQL row, charged in the transaction that writes it.
-            if (storage === undefined) {
-              return yield* stored((at) =>
-                sql.transaction(() => {
-                  const [old] = sql.exec("SELECT activity FROM process_activity WHERE process=?", options.process);
-
-                  if (old?.activity === text) {
-                    return;
-                  }
-
-                  chargeActivity(options.process, text, old === undefined ? undefined : String(old.activity), at);
-                  sql.exec(
-                    "INSERT INTO process_activity (process,activity) VALUES (?,?) ON CONFLICT(process) DO UPDATE SET activity=excluded.activity",
-                    options.process,
-                    text,
-                  );
-                }),
-              );
-            }
-
-            // The object keeps the marker in its own key-value storage, where the wake rule reads it.
-            // With an account, the put is charged first, so a charge that does not fit writes nothing.
-            if (options.accounting !== undefined) {
-              const old = yield* readActivity;
-              const oldText = old === undefined ? undefined : encodeActivity(old);
-
-              if (oldText !== text) {
-                yield* stored((at) => sql.transaction(() => chargeActivity("activity", text, oldText, at)));
-              }
-            }
-
-            yield* storage.put("activity", value);
-            yield* storage.sync();
-          }),
-          load: read(() => {
-            const [row] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
-
-            if (row === undefined) {
-              return null;
-            }
-
-            // An empty head names a checkpoint split across rows in the same transaction.
-            const text =
-              row.checkpoint === ""
-                ? sql
-                    .exec(
-                      "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
-                      options.process,
-                    )
-                    .map((part) => part.checkpoint)
-                    .join("")
-                : row.checkpoint;
-            return decodeCheckpoint(text);
-          }),
-          save: (value, placed = []) =>
-            stored((at) => {
-              const text = encodeCheckpoint(value);
-              // UTF-8 takes at most three bytes per UTF-16 unit. Leave room for the row's keys,
-              // and keep surrogate pairs together when a checkpoint crosses a row boundary.
-              const width = Math.floor((INPUT_BYTES - new TextEncoder().encode(options.process).length - 8) / 3);
-              const parts: Array<string> = [];
-
-              for (let offset = 0; offset < text.length;) {
-                let end = Math.min(offset + width, text.length);
-
-                if (end < text.length && /[\uD800-\uDBFF]/.test(text.slice(end - 1, end))) {
-                  end--;
-                }
-
-                parts.push(text.slice(offset, end));
-                offset = end;
-              }
-
-              sql.transaction(() => {
-                const [old] = sql.exec("SELECT checkpoint FROM process_state WHERE process=?", options.process);
-                // A split checkpoint keeps an empty head; charge its whole saved text.
-                const oldText =
-                  old === undefined
-                    ? undefined
-                    : old.checkpoint === ""
-                      ? sql
-                          .exec(
-                            "SELECT checkpoint FROM process_checkpoint_parts WHERE process=? ORDER BY part",
-                            options.process,
-                          )
-                          .map((part) => part.checkpoint)
-                          .join("")
-                      : String(old.checkpoint);
-                const isRecovery = recovering(sql);
-                options.accounting?.change(
-                  "checkpoint",
-                  oldText === text ? 0 : 1,
-                  bytes(text) -
-                    (oldText === undefined ? 0 : bytes(oldText)) +
-                    (old === undefined ? bytes(options.process) : 0),
-                  at,
-                  isRecovery,
-                );
-                sql.exec("DELETE FROM process_checkpoint_parts WHERE process=?", options.process);
-                sql.exec(
-                  "INSERT INTO process_state (process, checkpoint) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET checkpoint = excluded.checkpoint",
-                  options.process,
-                  parts.length > 1 ? "" : text,
-                );
-
-                if (parts.length > 1) {
-                  for (const [part, checkpoint] of parts.entries()) {
-                    sql.exec(
-                      "INSERT INTO process_checkpoint_parts (process, part, checkpoint) VALUES (?, ?, ?)",
-                      options.process,
-                      part,
-                      checkpoint,
-                    );
-                  }
-                }
-
-                for (const { id, rev, pos } of placed) {
-                  const [known] = sql.exec(
-                    "SELECT id FROM process_letters WHERE process=? AND id=?",
-                    options.process,
-                    id,
-                  );
-
-                  if (known === undefined) {
-                    options.accounting?.change(
-                      "checkpoint",
-                      1,
-                      bytes(JSON.stringify({ process: options.process, id, rev, pos })),
-                      at,
-                      isRecovery,
-                    );
-                  }
-
-                  sql.exec(
-                    "INSERT OR IGNORE INTO process_letters (process, id, rev, pos) VALUES (?, ?, ?, ?)",
-                    options.process,
-                    id,
-                    rev,
-                    pos,
-                  );
-                }
-              });
-            }),
-          placed: (id) =>
-            read(() => {
-              const [row] = sql.exec(
-                "SELECT id, rev, pos FROM process_letters WHERE process=? AND id=?",
+              sql.exec("DELETE FROM process_checkpoint_parts WHERE process=?", options.process);
+              sql.exec(
+                "INSERT INTO process_state (process, checkpoint) VALUES (?, ?) ON CONFLICT (process) DO UPDATE SET checkpoint = excluded.checkpoint",
                 options.process,
-                id,
+                parts.length > 1 ? "" : text,
               );
-              return row === undefined ? null : decodePlaced(row);
-            }),
-          placedByAny: (id) =>
-            read(() => {
-              const [row] = sql.exec("SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1", id);
-              return row === undefined ? null : decodePlaced(row);
-            }),
-          record: Effect.fn("process.record")(function* (id: string, event: unknown, from: From) {
-            const decoded = decodeRecord(event);
 
-            if (Result.isFailure(decoded)) {
-              return yield* new LedgerError({ reason: "refused" });
-            }
+              if (parts.length > 1) {
+                for (const [part, checkpoint] of parts.entries()) {
+                  sql.exec(
+                    "INSERT INTO process_checkpoint_parts (process, part, checkpoint) VALUES (?, ?, ?)",
+                    options.process,
+                    part,
+                    checkpoint,
+                  );
+                }
+              }
 
-            const append = ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
-            const answer = yield* quotas === undefined ? append : quotas.runtime(options.process, append);
+              for (const { id, rev, pos } of placed) {
+                const [known] = sql.exec(
+                  "SELECT id FROM process_letters WHERE process=? AND id=?",
+                  options.process,
+                  id,
+                );
 
-            if (answer._tag === "refused") {
-              return yield* new LedgerError({ reason: "refused", message: answer.reason });
-            }
+                if (known === undefined) {
+                  options.accounting?.change(
+                    "checkpoint",
+                    1,
+                    bytes(JSON.stringify({ process: options.process, id, rev, pos })),
+                    at,
+                    isRecovery,
+                  );
+                }
 
-            return answer;
+                sql.exec(
+                  "INSERT OR IGNORE INTO process_letters (process, id, rev, pos) VALUES (?, ?, ?, ?)",
+                  options.process,
+                  id,
+                  rev,
+                  pos,
+                );
+              }
+            });
           }),
-        };
-      }),
-    );
+        placed: (id) =>
+          read(() => {
+            const [row] = sql.exec(
+              "SELECT id, rev, pos FROM process_letters WHERE process=? AND id=?",
+              options.process,
+              id,
+            );
+            return row === undefined ? null : decodePlaced(row);
+          }),
+        placedByAny: (id) =>
+          read(() => {
+            const [row] = sql.exec("SELECT id, rev, pos FROM process_letters WHERE id=? ORDER BY rev LIMIT 1", id);
+            return row === undefined ? null : decodePlaced(row);
+          }),
+        record: Effect.fn("process.record")(function* (id: string, event: unknown, from: From) {
+          const decoded = decodeRecord(event);
+
+          if (Result.isFailure(decoded)) {
+            return yield* new LedgerError({ reason: "refused" });
+          }
+
+          const append = ledger.append(options.process, id, lineFor(from, encodeRecord(decoded.success)));
+          const answer = yield* quotas === undefined ? append : quotas.runtime(options.process, append);
+
+          if (answer._tag === "refused") {
+            return yield* new LedgerError({ reason: "refused", message: answer.reason });
+          }
+
+          return answer;
+        }),
+      };
+    });
+
+  /** Layer of `make`'s service, with the same arguments. */
+  static readonly layer = (
+    sql: Sql,
+    options: Parameters<typeof ProcessStore.make>[1],
+  ): Layer.Layer<ProcessStore, never, Ledger> => Layer.effect(ProcessStore, ProcessStore.make(sql, options));
 }

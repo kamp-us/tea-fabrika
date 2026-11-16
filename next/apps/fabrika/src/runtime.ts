@@ -53,40 +53,40 @@ export const projectRuntime = (ctx: DurableObjectState, env: Env) =>
           port: checked.values.port,
           rateLimit: { limit: checked.values.gatewayLimit, window: checked.values.gatewayWindow },
         };
-        return yield* Gateway.pipe(
-          Effect.provide(
-            Gateway.layer({
-              ...options,
-              name: ctx.id.name ?? config.name,
-              url: `http://127.0.0.1:${config.port}`,
-              origins: [`http://127.0.0.1:${config.port}`],
-              location: "local",
-              build: config.build,
-              versions: [1],
-              waiting: { most: 64, ttl: 600_000 },
-              ping: { min: 30_000, max: 75_000 },
-              inputCap: 1_000_000,
-              spentCap: 100_000,
-              rateLimit: config.rateLimit,
-              deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
-              inputs: {
-                schema: Schema.Json,
-                raw: [],
-                personOnly: [],
-                name: (m) =>
-                  Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
-                    ? m.type
-                    : undefined,
-              },
-              events: { personOnly: [] },
-            }).pipe(
-              Layer.provide(
-                RateLimiter.layer.pipe(
-                  Layer.provide(RateLimiterSql.layer(options.sql, { build: config.build, policy: config.rateLimit })),
-                ),
+        // Built once in the Project object's scope, so the door and its rate limiter live as long as it.
+        const door = yield* Layer.build(
+          Gateway.layer({
+            ...options,
+            name: ctx.id.name ?? config.name,
+            url: `http://127.0.0.1:${config.port}`,
+            origins: [`http://127.0.0.1:${config.port}`],
+            location: "local",
+            build: config.build,
+            versions: [1],
+            waiting: { most: 64, ttl: 600_000 },
+            ping: { min: 30_000, max: 75_000 },
+            inputCap: 1_000_000,
+            spentCap: 100_000,
+            rateLimit: config.rateLimit,
+            deliver: (pid, _envelope, _span, incoming) => options.deliver(pid, incoming),
+            inputs: {
+              schema: Schema.Json,
+              raw: [],
+              personOnly: [],
+              name: (m) =>
+                Predicate.isObjectOrArray(m) && Predicate.hasProperty(m, "type") && Predicate.isString(m.type)
+                  ? m.type
+                  : undefined,
+            },
+            events: { personOnly: [] },
+          }).pipe(
+            Layer.provide(
+              RateLimiter.layer.pipe(
+                Layer.provide(RateLimiterSql.layer(options.sql, { build: config.build, policy: config.rateLimit })),
               ),
             ),
           ),
         );
+        return yield* Gateway.pipe(Effect.provideContext(door));
       }),
   });

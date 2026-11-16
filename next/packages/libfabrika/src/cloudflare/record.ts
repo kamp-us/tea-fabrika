@@ -1,6 +1,7 @@
 import { DurableObjectState as ObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Layer, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { RecordedStart } from "../settings/RecordedStart.ts";
 import { recordPart } from "../telemetry/RecordPart.ts";
 import { SinkError } from "../telemetry/Sink.ts";
@@ -82,7 +83,7 @@ export const RecordPartLive = RecordPart.make(
     });
     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy supplies the Worker's typed binding handles
     const bindings = env as unknown as Env;
-    const recorded = recordedLayer(bindings);
+    const recorded = recordedLayer(bindings).pipe(Layer.provide(Digest.layerWebCrypto));
     const ready = Layer.effect(
       RecordedStart,
       RecordedStart.pipe(

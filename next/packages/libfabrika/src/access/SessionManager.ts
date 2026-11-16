@@ -270,205 +270,210 @@ export class SessionManager extends Context.Service<
    * with reason `Membership`. `policy.input` says whether an input of that name may be
    * person-only, and `policy.event` says whether an event of that kind needs a person writer.
    */
+  static readonly make = <E, R>(
+    sql: Sql,
+    membership: (key: string) => Effect.Effect<Writer, E, R>,
+    policy: { readonly input: (name: string) => boolean; readonly event: (kind: string) => boolean },
+  ): Effect.Effect<SessionManager["Service"], never, R> =>
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>();
+      const ensure = () => {
+        sql.exec("CREATE TABLE IF NOT EXISTS gateway_sessions (parent TEXT PRIMARY KEY, saved TEXT NOT NULL)");
+        sql.exec("CREATE TABLE IF NOT EXISTS gateway_ended (process TEXT PRIMARY KEY)");
+        sql.exec(
+          "CREATE TABLE IF NOT EXISTS gateway_receipts (id TEXT PRIMARY KEY, parent TEXT NOT NULL, process TEXT NOT NULL, kind TEXT NOT NULL, session TEXT NOT NULL, UNIQUE(parent, process, kind))",
+        );
+      };
+      const stored = Effect.fnUntraced(function* <A>(step: () => A) {
+        return yield* Effect.try({ try: step, catch: storageFault });
+      });
+      const ended = (process: string) =>
+        sql.exec("SELECT process FROM gateway_ended WHERE process=?", process).length > 0;
+      const load = (parent: string) => {
+        const [row] = sql.exec("SELECT saved FROM gateway_sessions WHERE parent=?", parent);
+        return row === undefined ? null : decode(row.saved);
+      };
+      /** A saved input's writer must still belong; with no saved input, the read after answers. */
+      const belongs = Effect.fnUntraced(function* (parent: string) {
+        const saved = yield* stored(() => {
+          ensure();
+          return load(parent);
+        });
+
+        if (saved !== null) {
+          yield* membership(saved.input.client).pipe(
+            Effect.provideContext(context),
+            Effect.mapError((cause) =>
+              Schema.is(NotGranted)(cause) ? cause : new SessionManagerError({ reason: new Membership({ cause }) }),
+            ),
+          );
+        }
+      });
+      /** The session of an input delivered to a live process, read in the caller's transaction. */
+      const deliveredTo = (parent: string, process: string, personOnly: boolean) => {
+        if (ended(process)) {
+          return Result.fail(new SigningRefused({ reason: "ended" }));
+        }
+
+        const current = load(parent);
+        return current === null
+          ? Result.fail(new SigningRefused({ reason: "not_delivered" }))
+          : SavedInput.sign(current, process, personOnly);
+      };
+      const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
+        const request = yield* SignRequest;
+
+        // A signal, runner or notice id is the brain's alone: refuse it before reading or writing,
+        // so no receipt binds one and the delivery's one receipt stays free.
+        if (inSignalSpace(request.id) || inRunnerSpace(request.id) || inNoticeSpace(request.id)) {
+          return yield* new SigningRefused({ reason: "signal" });
+        }
+
+        yield* belongs(parent);
+
+        return yield* stored(() =>
+          sql.transaction(() => {
+            const session = deliveredTo(parent, process, policy.event(kind));
+
+            if (Result.isFailure(session)) {
+              return session;
+            }
+
+            const [receipt] = sql.exec(
+              "SELECT * FROM gateway_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
+              request.id,
+              parent,
+              process,
+              kind,
+            );
+
+            if (receipt !== undefined) {
+              return receipt.id === request.id &&
+                receipt.parent === parent &&
+                receipt.process === process &&
+                receipt.kind === kind
+                ? Result.succeed(decodeSession(receipt.session))
+                : Result.fail(new SigningRefused({ reason: "spent" }));
+            }
+
+            sql.exec(
+              "INSERT INTO gateway_receipts (id,parent,process,kind,session) VALUES (?,?,?,?,?)",
+              request.id,
+              parent,
+              process,
+              kind,
+              encodeSession(session.success),
+            );
+            return session;
+          }),
+        ).pipe(
+          Effect.flatMap((answer) =>
+            Result.isFailure(answer) ? Effect.fail(answer.failure) : Effect.succeed(answer.success),
+          ),
+        );
+      });
+      return {
+        signer,
+        sender: Effect.fn("session.sender")(function* (parent: string, process: string) {
+          yield* belongs(parent);
+          // A read, in one transaction as `signer`'s: no request, and no receipt is written.
+          const session = yield* stored(() => sql.transaction(() => deliveredTo(parent, process, false)));
+          return yield* Effect.fromResult(session).pipe(Effect.map(({ by }) => by));
+        }),
+        receipt: Effect.fn("session.receipt")(function* (id: string, parent: string, process: string, kind: string) {
+          const exists = yield* stored(() => {
+            ensure();
+            return (
+              sql.exec(
+                "SELECT id FROM gateway_receipts WHERE id=? AND parent=? AND process=? AND kind=?",
+                id,
+                parent,
+                process,
+                kind,
+              ).length > 0
+            );
+          });
+
+          if (!exists) {
+            return yield* new SigningRefused({ reason: "not_delivered" });
+          }
+
+          return yield* signer(parent, process, kind).pipe(Effect.provideService(SignRequest, { id }));
+        }),
+        record: Effect.fn("session.record")(function* (input: InputRecord) {
+          const result = yield* stored(() =>
+            sql.transaction(() => {
+              ensure();
+
+              if (ended(input.process)) {
+                return Result.fail(new SigningRefused({ reason: "ended" }));
+              }
+
+              const prior = load(input.id);
+              const saved = SavedInput.make({
+                input: { ...input, personOnly: input.personOnly && policy.input(input.name) },
+                state: State.cases.recorded.make({}),
+              });
+
+              if (prior !== null) {
+                return JSON.stringify(prior.input) === JSON.stringify(saved.input)
+                  ? Result.succeed(undefined)
+                  : Result.fail(new SigningRefused({ reason: "not_delivered" }));
+              }
+
+              sql.exec("INSERT INTO gateway_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
+              return Result.succeed(undefined);
+            }),
+          );
+
+          if (Result.isFailure(result)) {
+            return yield* result.failure;
+          }
+        }),
+        delivered: Effect.fn("session.delivered")(function* (parent: string, process: string) {
+          const result = yield* stored(() =>
+            sql.transaction(() => {
+              ensure();
+
+              if (ended(process)) {
+                return Result.fail(new SigningRefused({ reason: "ended" }));
+              }
+
+              const saved = load(parent);
+
+              if (saved === null || saved.input.process !== process) {
+                return Result.fail(new SigningRefused({ reason: "not_delivered" }));
+              }
+
+              sql.exec(
+                "UPDATE gateway_sessions SET saved=? WHERE parent=?",
+                encode(SavedInput.make({ ...saved, state: State.cases.delivered.make({}) })),
+                parent,
+              );
+              return Result.succeed(undefined);
+            }),
+          );
+
+          if (Result.isFailure(result)) {
+            return yield* result.failure;
+          }
+        }),
+        end: Effect.fn("session.end")(function* (process: string) {
+          yield* stored(() =>
+            sql.transaction(() => {
+              ensure();
+              sql.exec("INSERT OR IGNORE INTO gateway_ended (process) VALUES (?)", process);
+            }),
+          );
+        }),
+      };
+    });
+
+  /** Layer of `make`'s service, with the same arguments. */
   static readonly layer = <E, R>(
     sql: Sql,
     membership: (key: string) => Effect.Effect<Writer, E, R>,
     policy: { readonly input: (name: string) => boolean; readonly event: (kind: string) => boolean },
   ): Layer.Layer<SessionManager, never, R> =>
-    Layer.effect(
-      SessionManager,
-      Effect.gen(function* () {
-        const context = yield* Effect.context<R>();
-        const ensure = () => {
-          sql.exec("CREATE TABLE IF NOT EXISTS gateway_sessions (parent TEXT PRIMARY KEY, saved TEXT NOT NULL)");
-          sql.exec("CREATE TABLE IF NOT EXISTS gateway_ended (process TEXT PRIMARY KEY)");
-          sql.exec(
-            "CREATE TABLE IF NOT EXISTS gateway_receipts (id TEXT PRIMARY KEY, parent TEXT NOT NULL, process TEXT NOT NULL, kind TEXT NOT NULL, session TEXT NOT NULL, UNIQUE(parent, process, kind))",
-          );
-        };
-        const stored = Effect.fnUntraced(function* <A>(step: () => A) {
-          return yield* Effect.try({ try: step, catch: storageFault });
-        });
-        const ended = (process: string) =>
-          sql.exec("SELECT process FROM gateway_ended WHERE process=?", process).length > 0;
-        const load = (parent: string) => {
-          const [row] = sql.exec("SELECT saved FROM gateway_sessions WHERE parent=?", parent);
-          return row === undefined ? null : decode(row.saved);
-        };
-        /** A saved input's writer must still belong; with no saved input, the read after answers. */
-        const belongs = Effect.fnUntraced(function* (parent: string) {
-          const saved = yield* stored(() => {
-            ensure();
-            return load(parent);
-          });
-
-          if (saved !== null) {
-            yield* membership(saved.input.client).pipe(
-              Effect.provideContext(context),
-              Effect.mapError((cause) =>
-                Schema.is(NotGranted)(cause) ? cause : new SessionManagerError({ reason: new Membership({ cause }) }),
-              ),
-            );
-          }
-        });
-        /** The session of an input delivered to a live process, read in the caller's transaction. */
-        const deliveredTo = (parent: string, process: string, personOnly: boolean) => {
-          if (ended(process)) {
-            return Result.fail(new SigningRefused({ reason: "ended" }));
-          }
-
-          const current = load(parent);
-          return current === null
-            ? Result.fail(new SigningRefused({ reason: "not_delivered" }))
-            : SavedInput.sign(current, process, personOnly);
-        };
-        const signer = Effect.fn("session.signer")(function* (parent: string, process: string, kind: string) {
-          const request = yield* SignRequest;
-
-          // A signal, runner or notice id is the brain's alone: refuse it before reading or writing,
-          // so no receipt binds one and the delivery's one receipt stays free.
-          if (inSignalSpace(request.id) || inRunnerSpace(request.id) || inNoticeSpace(request.id)) {
-            return yield* new SigningRefused({ reason: "signal" });
-          }
-
-          yield* belongs(parent);
-
-          return yield* stored(() =>
-            sql.transaction(() => {
-              const session = deliveredTo(parent, process, policy.event(kind));
-
-              if (Result.isFailure(session)) {
-                return session;
-              }
-
-              const [receipt] = sql.exec(
-                "SELECT * FROM gateway_receipts WHERE id=? OR (parent=? AND process=? AND kind=?)",
-                request.id,
-                parent,
-                process,
-                kind,
-              );
-
-              if (receipt !== undefined) {
-                return receipt.id === request.id &&
-                  receipt.parent === parent &&
-                  receipt.process === process &&
-                  receipt.kind === kind
-                  ? Result.succeed(decodeSession(receipt.session))
-                  : Result.fail(new SigningRefused({ reason: "spent" }));
-              }
-
-              sql.exec(
-                "INSERT INTO gateway_receipts (id,parent,process,kind,session) VALUES (?,?,?,?,?)",
-                request.id,
-                parent,
-                process,
-                kind,
-                encodeSession(session.success),
-              );
-              return session;
-            }),
-          ).pipe(
-            Effect.flatMap((answer) =>
-              Result.isFailure(answer) ? Effect.fail(answer.failure) : Effect.succeed(answer.success),
-            ),
-          );
-        });
-        return {
-          signer,
-          sender: Effect.fn("session.sender")(function* (parent: string, process: string) {
-            yield* belongs(parent);
-            // A read, in one transaction as `signer`'s: no request, and no receipt is written.
-            const session = yield* stored(() => sql.transaction(() => deliveredTo(parent, process, false)));
-            return yield* Effect.fromResult(session).pipe(Effect.map(({ by }) => by));
-          }),
-          receipt: Effect.fn("session.receipt")(function* (id: string, parent: string, process: string, kind: string) {
-            const exists = yield* stored(() => {
-              ensure();
-              return (
-                sql.exec(
-                  "SELECT id FROM gateway_receipts WHERE id=? AND parent=? AND process=? AND kind=?",
-                  id,
-                  parent,
-                  process,
-                  kind,
-                ).length > 0
-              );
-            });
-
-            if (!exists) {
-              return yield* new SigningRefused({ reason: "not_delivered" });
-            }
-
-            return yield* signer(parent, process, kind).pipe(Effect.provideService(SignRequest, { id }));
-          }),
-          record: Effect.fn("session.record")(function* (input: InputRecord) {
-            const result = yield* stored(() =>
-              sql.transaction(() => {
-                ensure();
-
-                if (ended(input.process)) {
-                  return Result.fail(new SigningRefused({ reason: "ended" }));
-                }
-
-                const prior = load(input.id);
-                const saved = SavedInput.make({
-                  input: { ...input, personOnly: input.personOnly && policy.input(input.name) },
-                  state: State.cases.recorded.make({}),
-                });
-
-                if (prior !== null) {
-                  return JSON.stringify(prior.input) === JSON.stringify(saved.input)
-                    ? Result.succeed(undefined)
-                    : Result.fail(new SigningRefused({ reason: "not_delivered" }));
-                }
-
-                sql.exec("INSERT INTO gateway_sessions (parent,saved) VALUES (?,?)", input.id, encode(saved));
-                return Result.succeed(undefined);
-              }),
-            );
-
-            if (Result.isFailure(result)) {
-              return yield* result.failure;
-            }
-          }),
-          delivered: Effect.fn("session.delivered")(function* (parent: string, process: string) {
-            const result = yield* stored(() =>
-              sql.transaction(() => {
-                ensure();
-
-                if (ended(process)) {
-                  return Result.fail(new SigningRefused({ reason: "ended" }));
-                }
-
-                const saved = load(parent);
-
-                if (saved === null || saved.input.process !== process) {
-                  return Result.fail(new SigningRefused({ reason: "not_delivered" }));
-                }
-
-                sql.exec(
-                  "UPDATE gateway_sessions SET saved=? WHERE parent=?",
-                  encode(SavedInput.make({ ...saved, state: State.cases.delivered.make({}) })),
-                  parent,
-                );
-                return Result.succeed(undefined);
-              }),
-            );
-
-            if (Result.isFailure(result)) {
-              return yield* result.failure;
-            }
-          }),
-          end: Effect.fn("session.end")(function* (process: string) {
-            yield* stored(() =>
-              sql.transaction(() => {
-                ensure();
-                sql.exec("INSERT OR IGNORE INTO gateway_ended (process) VALUES (?)", process);
-              }),
-            );
-          }),
-        };
-      }),
-    );
+    Layer.effect(SessionManager, SessionManager.make(sql, membership, policy));
 }
