@@ -163,6 +163,12 @@ and stays. In both cases, list the line in the run row: its file:line, and the e
 with its reason. The judgment sweep's final lock PR adds every line that was taken out, together
 with the locks.
 
+**A folder a slice brings to zero (merge session ruling, 2026-11-16).** A judgment slice adds no
+lock line, so when it brings a whole folder to zero, `oxlint-plugins/lint.ts` asks to add that
+folder to the rule's block, and that one lint part stays red on the slice branch. That is
+expected: list the ask in RESULT. The sweep's integrator adds every such entry in one lock commit,
+reviewed alone, before the fold lands.
+
 **Folds roll in batches.** Each sweep has one integrator branch. When 5 or more reviewed slices of
 a sweep sit unfolded, its integrator folds them (merge, never rebase), and the twin mails the head
 for the merge session to stack.
