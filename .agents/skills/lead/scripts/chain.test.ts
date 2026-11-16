@@ -40,6 +40,29 @@ import {
 } from "./chain.ts";
 import { FAULTS, faultFrom, MUTATION_AGENT, stepProvider } from "./drive.ts";
 
+/** The key of each Msg, Cmd and answer these laws write or expect, made by its schema (0569, 0562).
+ *  A law hands a cell or expects of a Cmd only the fields it reads, so a case holds the key alone. */
+const Tag = Schema.TaggedUnion({
+  start: {},
+  step_run: {},
+  step_run_ok: {},
+  step_run_err: {},
+  judge: {},
+  judge_ok: {},
+  host_run: {},
+  host_run_ok: {},
+  pr_open: {},
+  pr_open_ok: {},
+  typecheck_read: {},
+  typecheck_read_ok: {},
+  typecheck_read_err: {},
+  loosen: {},
+  loosen_ok: {},
+  loosen_err: {},
+  land: {},
+  land_ok: {},
+});
+
 // Today's tooling. The quest machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 // Every step the chain can start at, and the quest's own steps (0066: no mutation step).
@@ -84,7 +107,7 @@ type Stepped = ReturnType<ReturnType<typeof makeMachine>["update"]["start"]>;
 const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "hosting"
     ? machine.update.host_run_ok(m, {
-        type: "host_run_ok",
+        ...Tag.cases.host_run_ok.make({}),
         value: { outcome: "skip", head: "", reason: "no host section" },
       } as never)
     : [m, cmds];
@@ -92,7 +115,10 @@ const hostSkipped = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped
 /** CI's typecheck job answered green; any other state stays. */
 const typechecked = (machine: ReturnType<typeof makeMachine>, [m, cmds]: Stepped): Stepped =>
   m.phase === "typechecking"
-    ? machine.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value: { _tag: "green" } } as never)
+    ? machine.update.typecheck_read_ok(m, {
+        ...Tag.cases.typecheck_read_ok.make({}),
+        value: { _tag: "green" },
+      } as never)
     : [m, cmds];
 
 describe("T341 the chain's moves follow the five verbs, today's tooling", () => {
@@ -413,15 +439,15 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
   const machine = makeMachine(limits(16));
   const start = () => {
     const [idle] = machine.init(null, undefined);
-    return machine.update.start(idle, { type: "start", step: "tests" });
+    return machine.update.start(idle, { ...Tag.cases.start.make({}), step: "tests" });
   };
   // Every review hosts first; these laws are about the other steps, so the host step skips.
   const ran = (m: ReturnType<typeof start>[0], l: Line) =>
-    hostSkipped(machine, machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never));
+    hostSkipped(machine, machine.update.step_run_ok(m, { ...Tag.cases.step_run_ok.make({}), value: l } as never));
 
   it("scenario: a clean quest runs tests, build and review, opens the PR, runs loosening.sh and lands it, with exit 0", () => {
     let [m, cmds] = start();
-    expect(cmds[0]).toMatchObject({ type: "step_run", step: "tests", round: 1 });
+    expect(cmds[0]).toMatchObject({ ...Tag.cases.step_run.make({}), step: "tests", round: 1 });
     const heads: string[] = [];
 
     for (const [i, s] of QUEST_STEPS.entries()) {
@@ -432,21 +458,21 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     }
 
     expect(m.phase).toBe("opening");
-    expect(cmds[0]).toMatchObject({ type: "pr_open", head: heads[2] });
+    expect(cmds[0]).toMatchObject({ ...Tag.cases.pr_open.make({}), head: heads[2] });
     [m, cmds] = machine.update.pr_open_ok(m, {
-      type: "pr_open_ok",
+      ...Tag.cases.pr_open_ok.make({}),
       value: { pr: 42, detail: "opened" },
     } as never);
-    expect(cmds[0]).toMatchObject({ type: "typecheck_read", pr: 42, head: heads[2] });
+    expect(cmds[0]).toMatchObject({ ...Tag.cases.typecheck_read.make({}), pr: 42, head: heads[2] });
     [m, cmds] = typechecked(machine, [m, cmds]);
-    expect(cmds[0]).toMatchObject({ type: "loosen", pr: 42, head: heads[2] });
+    expect(cmds[0]).toMatchObject({ ...Tag.cases.loosen.make({}), pr: 42, head: heads[2] });
     [m, cmds] = machine.update.loosen_ok(m, {
-      type: "loosen_ok",
+      ...Tag.cases.loosen_ok.make({}),
       value: { code: 0, text: "loosening: 0 hits in 0 exam files" },
     } as never);
-    expect(cmds[0]).toMatchObject({ type: "land", pr: 42 });
+    expect(cmds[0]).toMatchObject({ ...Tag.cases.land.make({}), pr: 42 });
     [m] = machine.update.land_ok(m, {
-      type: "land_ok",
+      ...Tag.cases.land_ok.make({}),
       value: { ok: true, detail: "pr 42: queued at 0123" },
     } as never);
     expect(m.phase).toBe("over");
@@ -478,19 +504,22 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     fc.assert(
       fc.property(questStep, fc.array(answer, { maxLength: 20 }), (first, answers) => {
         const [idle] = machine.init(null, undefined);
-        let [m, cmds] = machine.update.start(idle, { type: "start", step: first });
-        const started: string[] = cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : []));
+        let [m, cmds] = machine.update.start(idle, { ...Tag.cases.start.make({}), step: first });
+        const started: string[] = cmds.flatMap((c) => (c._tag === "step_run" ? [c.step] : []));
 
         for (const a of answers) {
           if (m.phase === "stepping" && a._tag === "line") {
             [m, cmds] = ran(m, line(a.o, "c".repeat(40)));
           } else if (m.phase === "judging" && a._tag === "judged") {
-            [m, cmds] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: a.text } } as never);
+            [m, cmds] = machine.update.judge_ok(m, {
+              ...Tag.cases.judge_ok.make({}),
+              value: { text: a.text },
+            } as never);
           } else {
             continue;
           }
 
-          started.push(...cmds.flatMap((c) => (c.type === "step_run" ? [c.step] : [])));
+          started.push(...cmds.flatMap((c) => (c._tag === "step_run" ? [c.step] : [])));
           expect(m.phase === "stepping" || m.phase === "judging" ? m.step : "none").not.toBe("mutation");
         }
 
@@ -504,7 +533,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     fc.assert(
       fc.property(fc.constantFrom("tests", "build"), sha, (first, head) => {
         const [idle] = machine.init(null, undefined);
-        let [m, cmds] = machine.update.start(idle, { type: "start", step: first });
+        let [m, cmds] = machine.update.start(idle, { ...Tag.cases.start.make({}), step: first });
 
         if (first === "tests") {
           [m, cmds] = ran(m, line("done", head));
@@ -513,7 +542,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
         expect(m).toMatchObject({ phase: "stepping", step: "build" });
         [m, cmds] = ran(m, line("done", head));
         expect(m).toMatchObject({ phase: "stepping", step: "review" });
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review" })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step: "review" })]);
       }),
       options,
     );
@@ -525,12 +554,12 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     fc.assert(
       fc.property(fc.constantFrom("done", "skip:step_said"), sha, (o, head) => {
         const [idle] = machine.init(null, undefined);
-        let [m, cmds] = machine.update.start(idle, { type: "start", step: "mutation" });
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "mutation", round: 1 })]);
+        let [m, cmds] = machine.update.start(idle, { ...Tag.cases.start.make({}), step: "mutation" });
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step: "mutation", round: 1 })]);
         [m, cmds] = ran(m, line(o, head));
         expect(m).toMatchObject({ phase: "stepping", step: "review" });
         // Round 2 is the host step's.
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step: "review", round: 3 })]);
         [m, cmds] = ran(m, line("done", head));
         expect(m.phase).toBe("opening");
       }),
@@ -548,15 +577,15 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
         // The build is the sender here: a send to itself goes to judgment, never another round.
         if (to === "build") {
           expect(m.phase).toBe("judging");
-          expect(cmds).toEqual([expect.objectContaining({ type: "judge", step: "build" })]);
+          expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.judge.make({}), step: "build" })]);
           return;
         }
 
         expect(m).toMatchObject({ phase: "stepping", step: to });
         // A review hosts first, in round 3.
-        expect(cmds[0]).toMatchObject({ type: "step_run", step: to, round: to === "review" ? 4 : 3 });
+        expect(cmds[0]).toMatchObject({ ...Tag.cases.step_run.make({}), step: to, round: to === "review" ? 4 : 3 });
 
-        if (cmds[0]?.type === "step_run") {
+        if (cmds[0]?._tag === "step_run") {
           expect(cmds[0].note).toContain(reason);
         }
       }),
@@ -570,18 +599,18 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
         let [m, cmds] = start();
         [m, cmds] = ran(m, line("stuck:timeout", "", reason));
         expect(m.phase).toBe("judging");
-        expect(cmds[0]).toMatchObject({ type: "judge", step: "tests" });
+        expect(cmds[0]).toMatchObject({ ...Tag.cases.judge.make({}), step: "tests" });
         const [sent, after] = hostSkipped(
           machine,
           machine.update.judge_ok(m, {
-            type: "judge_ok",
+            ...Tag.cases.judge_ok.make({}),
             value: { text: `answer: send ${to} ${reason}` },
           } as never),
         );
         expect(sent).toMatchObject({ phase: "stepping", step: to });
-        expect(after[0]).toMatchObject({ type: "step_run", step: to });
+        expect(after[0]).toMatchObject({ ...Tag.cases.step_run.make({}), step: to });
         const [parked] = machine.update.judge_ok(m, {
-          type: "judge_ok",
+          ...Tag.cases.judge_ok.make({}),
           value: { text: `answer: park ${reason}` },
         } as never);
         expect(parked).toMatchObject({ phase: "over", end: { kind: "ask", reason } });
@@ -599,7 +628,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
       fc.property(word, fc.integer({ min: 1, max: 9 }), (reason, times) => {
         const [m] = start();
         const [over] = machine.update.step_run_err(m, {
-          type: "step_run_err",
+          ...Tag.cases.step_run_err.make({}),
           error: {
             _tag: "RetriesExhausted",
             schedule: "slotSchedule(5 minutes)",
@@ -624,13 +653,13 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
   it("the step cap parks the quest as ask, never loops forever", () => {
     const small = makeMachine(limits(2));
     const [idle] = small.init(null, undefined);
-    let [m] = small.update.start(idle, { type: "start", step: "tests" });
+    let [m] = small.update.start(idle, { ...Tag.cases.start.make({}), step: "tests" });
     [m] = small.update.step_run_ok(m, {
-      type: "step_run_ok",
+      ...Tag.cases.step_run_ok.make({}),
       value: line("done", "a".repeat(40)),
     } as never);
     [m] = small.update.step_run_ok(m, {
-      type: "step_run_ok",
+      ...Tag.cases.step_run_ok.make({}),
       value: line("send:tests:step_said", "b".repeat(40)),
     } as never);
     expect(m).toMatchObject({ phase: "over", end: { kind: "ask" } });
@@ -639,13 +668,14 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
 describe("the host step runs before every review of a new head, today's tooling", () => {
   const machine = makeMachine(limits(16));
-  const stepped = (m: Stepped[0], l: Line) => machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+  const stepped = (m: Stepped[0], l: Line) =>
+    machine.update.step_run_ok(m, { ...Tag.cases.step_run_ok.make({}), value: l } as never);
   const hosted = (m: Stepped[0], outcome: "done" | "skip" | "send" | "stuck", head: string, reason = "why") =>
-    machine.update.host_run_ok(m, { type: "host_run_ok", value: { outcome, head, reason } } as never);
+    machine.update.host_run_ok(m, { ...Tag.cases.host_run_ok.make({}), value: { outcome, head, reason } } as never);
   /** A quest started at build whose build answered done at `head`. */
   const built = (head: string) => {
     const [idle] = machine.init(null, undefined);
-    const [m] = machine.update.start(idle, { type: "start", step: "build" });
+    const [m] = machine.update.start(idle, { ...Tag.cases.start.make({}), step: "build" });
     return stepped(m, line("done", head));
   };
 
@@ -655,11 +685,11 @@ describe("the host step runs before every review of a new head, today's tooling"
       fc.property(sha, sha, fc.constantFrom("done", "skip"), (head, after, outcome) => {
         const [m, cmds] = built(head);
         expect(m.phase).toBe("hosting");
-        expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head, round: 2 })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.host_run.make({}), head, round: 2 })]);
         const next = outcome === "done" ? after : head;
         const [r, rcmds] = hosted(m, outcome, outcome === "done" ? after : "");
         expect(r).toMatchObject({ phase: "stepping", step: "review", quest: { head: next, hosted: next } });
-        expect(rcmds).toEqual([expect.objectContaining({ type: "step_run", step: "review", round: 3 })]);
+        expect(rcmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step: "review", round: 3 })]);
       }),
       options,
     );
@@ -672,8 +702,8 @@ describe("the host step runs before every review of a new head, today's tooling"
         const [m] = built(head);
         const [b, cmds] = hosted(m, "send", "", `host: \`node e2e.ts\` exited 1:\n${said}`);
         expect(b).toMatchObject({ phase: "stepping", step: "build" });
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "build" })]);
-        expect(cmds.flatMap((c) => (c.type === "step_run" ? [c.note] : []))[0]).toContain(said);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step: "build" })]);
+        expect(cmds.flatMap((c) => (c._tag === "step_run" ? [c.note] : []))[0]).toContain(said);
         expect(b.quest.hosted).toBeNull();
       }),
       options,
@@ -689,15 +719,15 @@ describe("the host step runs before every review of a new head, today's tooling"
         const [judging] = stepped(r, line("send:review:step_said", head));
         expect(judging.phase).toBe("judging");
         const [again, cmds] = machine.update.judge_ok(judging, {
-          type: "judge_ok",
+          ...Tag.cases.judge_ok.make({}),
           value: { text: "answer: send review look again" },
         } as never);
         expect(again).toMatchObject({ phase: "stepping", step: "review" });
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step: "review" })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step: "review" })]);
         const [b] = stepped(r, line("send:build:step_said", head));
         const [moved, mcmds] = stepped(b, line("done", other));
         expect(moved.phase).toBe(other === head ? "stepping" : "hosting");
-        expect(mcmds[0]?.type).toBe(other === head ? "step_run" : "host_run");
+        expect(mcmds[0]?._tag).toBe(other === head ? "step_run" : "host_run");
       }),
       options,
     );
@@ -728,11 +758,11 @@ describe("the host step runs before every review of a new head, today's tooling"
     // Backstop of 2 steps: build is round 1, the host step round 2, so the review never starts.
     const small = makeMachine(limits(16, { steps: 2, dollars: 100 }));
     const [idle] = small.init(null, undefined);
-    let [b, cmds] = small.update.start(idle, { type: "start", step: "build" });
-    [b, cmds] = small.update.step_run_ok(b, { type: "step_run_ok", value: line("done", h) } as never);
-    expect(cmds).toEqual([expect.objectContaining({ type: "host_run", round: 2 })]);
+    let [b, cmds] = small.update.start(idle, { ...Tag.cases.start.make({}), step: "build" });
+    [b, cmds] = small.update.step_run_ok(b, { ...Tag.cases.step_run_ok.make({}), value: line("done", h) } as never);
+    expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.host_run.make({}), round: 2 })]);
     [b, cmds] = small.update.host_run_ok(b, {
-      type: "host_run_ok",
+      ...Tag.cases.host_run_ok.make({}),
       value: { outcome: "skip", head: "", reason: "no section" },
     } as never);
     expect(cmds).toEqual([]);
@@ -749,10 +779,10 @@ describe("the host step runs before every review of a new head, today's tooling"
     }
 
     const [idle] = machine.init(null, undefined);
-    const [started, cmds] = machine.update.start(idle, { type: "start", step: "review" });
+    const [started, cmds] = machine.update.start(idle, { ...Tag.cases.start.make({}), step: "review" });
     expect(started.phase).toBe("hosting");
     // The machine has no head yet: the handler reads the quest's state file for it.
-    expect(cmds).toEqual([expect.objectContaining({ type: "host_run", head: "", round: 1 })]);
+    expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.host_run.make({}), head: "", round: 1 })]);
   });
 });
 
@@ -761,9 +791,10 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
   type Machine = typeof machine;
   // A quest whose review said merge-ready at `head`, after `sends` sends back: the PR opens next.
   const merged = (head: string, sends = 0, on: Machine = machine) => {
-    const ran = (m: Stepped[0], l: Line) => on.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+    const ran = (m: Stepped[0], l: Line) =>
+      on.update.step_run_ok(m, { ...Tag.cases.step_run_ok.make({}), value: l } as never);
     const [idle] = on.init(null, undefined);
-    let [m] = on.update.start(idle, { type: "start", step: sends > 0 ? "tests" : "build" });
+    let [m] = on.update.start(idle, { ...Tag.cases.start.make({}), step: sends > 0 ? "tests" : "build" });
 
     // Tests and build send each other back: a step's send to itself goes to judgment instead.
     for (let i = 0; i < sends; i++) {
@@ -780,10 +811,10 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
   // The same quest with PR `pr` open at `head`: CI's typecheck job is next.
   const reviewed = (head: string, sends = 0, on: Machine = machine, pr = 7) => {
     const [m] = merged(head, sends, on);
-    return on.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never);
+    return on.update.pr_open_ok(m, { ...Tag.cases.pr_open_ok.make({}), value: { pr, detail: "opened" } } as never);
   };
   const answered = (m: Stepped[0], value: unknown, on: Machine = machine) =>
-    on.update.typecheck_read_ok(m, { type: "typecheck_read_ok", value } as never);
+    on.update.typecheck_read_ok(m, { ...Tag.cases.typecheck_read_ok.make({}), value } as never);
   const lines = fc.array(word, { minLength: 1, maxLength: 30 });
   const pr = fc.integer({ min: 1, max: 99_999 });
 
@@ -792,10 +823,10 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
       fc.property(sha, pr, (head, n) => {
         const [opening, opens] = merged(head);
         expect(opening.phase).toBe("opening");
-        expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head })]);
+        expect(opens).toEqual([expect.objectContaining({ ...Tag.cases.pr_open.make({}), head })]);
         const [m, cmds] = reviewed(head, 0, machine, n);
         expect(m).toMatchObject({ phase: "typechecking", pr: n });
-        expect(cmds).toEqual([expect.objectContaining({ type: "typecheck_read", pr: n, head })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.typecheck_read.make({}), pr: n, head })]);
       }),
       options,
     );
@@ -805,7 +836,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     fc.assert(
       fc.property(sha, pr, word, (head, n, reason) => {
         const [m] = reviewed(head, 0, machine, n);
-        const loosens = [expect.objectContaining({ type: "loosen", pr: n, head })];
+        const loosens = [expect.objectContaining({ ...Tag.cases.loosen.make({}), pr: n, head })];
         const [green, next] = answered(m, { _tag: "green" });
         expect(green).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: null } });
         expect(next).toEqual(loosens);
@@ -813,7 +844,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
         expect(skipped).toMatchObject({ phase: "loosening", pr: n, quest: { unchecked: reason } });
         expect(also).toEqual(loosens);
         const [threw, again] = machine.update.typecheck_read_err(m, {
-          type: "typecheck_read_err",
+          ...Tag.cases.typecheck_read_err.make({}),
           error: { _tag: "unknown" },
         } as never);
         expect(threw).toMatchObject({ phase: "loosening", quest: { unchecked: "reading CI's typecheck job threw" } });
@@ -831,9 +862,9 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
         const [sent, cmds] = answered(m, { _tag: "red", to: step, lines: ls });
         expect(sent).toMatchObject({ phase: "stepping", step, quest: { unchecked: null } });
         expect(sent.quest.window.at(-1)).toBe("send");
-        expect(cmds).toEqual([expect.objectContaining({ type: "step_run", step })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.step_run.make({}), step })]);
 
-        if (cmds[0]?.type === "step_run") {
+        if (cmds[0]?._tag === "step_run") {
           for (const l of ls) {
             expect(cmds[0].note).toContain(l);
           }
@@ -860,19 +891,22 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
     const [m] = reviewed(first);
     let [back] = answered(m, { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] });
     expect(back).toMatchObject({ phase: "stepping", step: "build" });
-    [back] = machine.update.step_run_ok(back, { type: "step_run_ok", value: line("done", second) } as never);
+    [back] = machine.update.step_run_ok(back, {
+      ...Tag.cases.step_run_ok.make({}),
+      value: line("done", second),
+    } as never);
     [back] = hostSkipped(machine, [back, []]);
     const [opening, opens] = machine.update.step_run_ok(back, {
-      type: "step_run_ok",
+      ...Tag.cases.step_run_ok.make({}),
       value: line("done", second),
     } as never);
     expect(opening.phase).toBe("opening");
-    expect(opens).toEqual([expect.objectContaining({ type: "pr_open", head: second })]);
+    expect(opens).toEqual([expect.objectContaining({ ...Tag.cases.pr_open.make({}), head: second })]);
     const [, reads] = machine.update.pr_open_ok(opening, {
-      type: "pr_open_ok",
+      ...Tag.cases.pr_open_ok.make({}),
       value: { pr: 7, detail: "existing" },
     } as never);
-    expect(reads).toEqual([expect.objectContaining({ type: "typecheck_read", pr: 7, head: second })]);
+    expect(reads).toEqual([expect.objectContaining({ ...Tag.cases.typecheck_read.make({}), pr: 7, head: second })]);
   });
 
   it("scenario: a typecheck answer outside the typecheck phase changes nothing", () => {
@@ -888,18 +922,18 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
   // A quest whose review said merge-ready and whose PR is open: the loosening Cmd is next.
   const opened = (pr: number, head: string) => {
     const [idle] = machine.init(null, undefined);
-    let [m] = machine.update.start(idle, { type: "start", step: "tests" });
+    let [m] = machine.update.start(idle, { ...Tag.cases.start.make({}), step: "tests" });
 
     for (const _ of QUEST_STEPS) {
       [m] = hostSkipped(
         machine,
-        machine.update.step_run_ok(m, { type: "step_run_ok", value: line("done", head) } as never),
+        machine.update.step_run_ok(m, { ...Tag.cases.step_run_ok.make({}), value: line("done", head) } as never),
       );
     }
 
     return typechecked(
       machine,
-      machine.update.pr_open_ok(m, { type: "pr_open_ok", value: { pr, detail: "opened" } } as never),
+      machine.update.pr_open_ok(m, { ...Tag.cases.pr_open_ok.make({}), value: { pr, detail: "opened" } } as never),
     );
   };
   const pr = fc.integer({ min: 1, max: 99_999 });
@@ -912,7 +946,7 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
       fc.property(pr, sha, (n, head) => {
         const [m, cmds] = opened(n, head);
         expect(m).toMatchObject({ phase: "loosening", pr: n });
-        expect(cmds).toEqual([expect.objectContaining({ type: "loosen", pr: n, head })]);
+        expect(cmds).toEqual([expect.objectContaining({ ...Tag.cases.loosen.make({}), pr: n, head })]);
       }),
       options,
     );
@@ -923,14 +957,14 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
       fc.property(pr, sha, hits, fc.integer({ min: -1, max: 255 }), (n, head, list, code) => {
         const [m] = opened(n, head);
         const [clean, landCmds] = machine.update.loosen_ok(m, {
-          type: "loosen_ok",
+          ...Tag.cases.loosen_ok.make({}),
           value: { code: 0, text: "loosening: 0 hits in 2 exam files" },
         } as never);
         expect(clean).toMatchObject({ phase: "landing", pr: n });
-        expect(landCmds).toEqual([expect.objectContaining({ type: "land", pr: n })]);
+        expect(landCmds).toEqual([expect.objectContaining({ ...Tag.cases.land.make({}), pr: n })]);
 
         const [hit, none] = machine.update.loosen_ok(m, {
-          type: "loosen_ok",
+          ...Tag.cases.loosen_ok.make({}),
           value: { code: 1, text: list.join("\n") },
         } as never);
         expect(none).toEqual([]);
@@ -946,13 +980,16 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
 
         const other = code === 0 || code === 1 ? 2 : code;
         const [broke, nothing] = machine.update.loosen_ok(m, {
-          type: "loosen_ok",
+          ...Tag.cases.loosen_ok.make({}),
           value: { code: other, text: "loosening: bad ref" },
         } as never);
         expect(nothing).toEqual([]);
         expect(broke).toMatchObject({ phase: "over", end: { kind: "stuck" } });
         expect(looseningEnd(n, { code: other, text: "x" })?.kind).toBe("stuck");
-        const [threw] = machine.update.loosen_err(m, { type: "loosen_err", error: { _tag: "unknown" } } as never);
+        const [threw] = machine.update.loosen_err(m, {
+          ...Tag.cases.loosen_err.make({}),
+          error: { _tag: "unknown" },
+        } as never);
         expect(threw).toMatchObject({ phase: "over", end: { kind: "stuck" } });
       }),
       options,
@@ -961,7 +998,10 @@ describe("T590 loosening.sh runs after review and before the merge queue, today'
 
   it("scenario: a loosening answer outside the loosening phase changes nothing", () => {
     const [idle] = machine.init(null, undefined);
-    const [same, cmds] = machine.update.loosen_ok(idle, { type: "loosen_ok", value: { code: 0, text: "" } } as never);
+    const [same, cmds] = machine.update.loosen_ok(idle, {
+      ...Tag.cases.loosen_ok.make({}),
+      value: { code: 0, text: "" },
+    } as never);
     expect(same).toBe(idle);
     expect(cmds).toEqual([]);
   });
@@ -1338,7 +1378,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
   const stepOn = (limit: Limits) => {
     const machine = makeMachine(limit);
     const [idle] = machine.init(null, undefined);
-    return { machine, first: machine.update.start(idle, { type: "start", step: "tests" }) };
+    return { machine, first: machine.update.start(idle, { ...Tag.cases.start.make({}), step: "tests" }) };
   };
   const again = JSON.stringify({ _tag: "step", step: "tests", note: "again" });
 
@@ -1456,7 +1496,10 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
 
         for (const [i, s] of steps.entries()) {
           expect(m.phase).toBe("stepping");
-          [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: line(s.o, "", s.reason) } as never);
+          [m] = machine.update.step_run_ok(m, {
+            ...Tag.cases.step_run_ok.make({}),
+            value: line(s.o, "", s.reason),
+          } as never);
 
           if (i === expected) {
             expect(m).toMatchObject({ phase: "over", end: { kind: "ask", stop: { _tag: "intensity" } } });
@@ -1466,7 +1509,10 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
           expect(m.phase).not.toBe("over");
 
           if (m.phase === "judging") {
-            [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
+            [m] = machine.update.judge_ok(m, {
+              ...Tag.cases.judge_ok.make({}),
+              value: { text: again, listUsd: 0 },
+            } as never);
           }
         }
 
@@ -1488,10 +1534,13 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
     ];
 
     for (const l of run) {
-      [m] = machine.update.step_run_ok(m, { type: "step_run_ok", value: l } as never);
+      [m] = machine.update.step_run_ok(m, { ...Tag.cases.step_run_ok.make({}), value: l } as never);
 
       if (m.phase === "judging") {
-        [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0.25 } } as never);
+        [m] = machine.update.judge_ok(m, {
+          ...Tag.cases.judge_ok.make({}),
+          value: { text: again, listUsd: 0.25 },
+        } as never);
       }
     }
 
@@ -1531,7 +1580,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
           for (const [i, c] of cents.entries()) {
             spent += c / 100;
             [m] = machine.update.step_run_ok(m, {
-              type: "step_run_ok",
+              ...Tag.cases.step_run_ok.make({}),
               value: line("ask:lead:question", "", "which form?", c / 100),
             } as never);
             const round = i + 1;
@@ -1545,7 +1594,10 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
             }
 
             expect(m.phase).toBe("judging");
-            [m] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: again, listUsd: 0 } } as never);
+            [m] = machine.update.judge_ok(m, {
+              ...Tag.cases.judge_ok.make({}),
+              value: { text: again, listUsd: 0 },
+            } as never);
             expect(m.phase).toBe("stepping");
           }
         },

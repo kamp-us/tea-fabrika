@@ -57,6 +57,10 @@ import {
 import { boxTree } from "./quest.ts";
 import * as RunId from "./runid.ts";
 
+/** The answers these laws hand drive's cells, keyed by their schema's maker (0569, 0562). Each law
+ *  sets only the fields the cell reads, so a case holds the key alone. */
+const Reply = Schema.TaggedUnion({ step_read_ok: {}, backup_push_ok: {}, box_new_ok: {} });
+
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
 
@@ -119,7 +123,7 @@ const recorded = (
     problem: null,
   };
   const [read, cmds] = machine.update.step_read_ok({ phase: "reading", ask, answer: typed, spent: NO_SPENT }, {
-    type: "step_read_ok",
+    ...Reply.cases.step_read_ok.make({}),
     value,
   } as never);
 
@@ -128,7 +132,7 @@ const recorded = (
   }
 
   const [state, after] = machine.update.backup_push_ok(read, {
-    type: "backup_push_ok",
+    ...Reply.cases.backup_push_ok.make({}),
     value: { ok: pushed, detail: pushed ? "" : "rejected" },
   } as never);
   return { state, cmd: after[0] as Recorded };
@@ -195,7 +199,7 @@ describe("drive takes a skip answer, today's tooling", () => {
   >;
   const read = (step: "tests" | "build" | "mutation" | "review", report: string) =>
     machine.update.step_read_ok({ phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT }, {
-      type: "step_read_ok",
+      ...Reply.cases.step_read_ok.make({}),
       value: {
         head: ask.base,
         commits: 0,
@@ -328,7 +332,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     const [state, cmds] = machine.update.step_read_ok(
       { phase: "reading", ask: { ...ask, step }, answer: null, spent: NO_SPENT },
       {
-        type: "step_read_ok",
+        ...Reply.cases.step_read_ok.make({}),
         value: {
           head: ask.base,
           commits: 0,
@@ -525,7 +529,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), { maxLength: 3 });
   const boxNewOk = (value: ReturnType<typeof startedOf>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
-      type: "box_new_ok",
+      ...Reply.cases.box_new_ok.make({}),
       value,
     } as never);
 
@@ -825,7 +829,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
 describe("drive asks the lead for the lockfile, today's tooling", () => {
   const read = (report: string, manifests: readonly string[]) =>
     machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
-      type: "step_read_ok",
+      ...Reply.cases.step_read_ok.make({}),
       value: {
         head: "c".repeat(40),
         commits: 1,
@@ -1318,7 +1322,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
           problem: null,
         };
         const [read] = machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
-          type: "step_read_ok",
+          ...Reply.cases.step_read_ok.make({}),
           value,
         } as never);
 
@@ -1329,7 +1333,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
         }
 
         const [state, cmds] = machine.update.backup_push_ok(read, {
-          type: "backup_push_ok",
+          ...Reply.cases.backup_push_ok.make({}),
           value: { ok: landed, detail: landed ? "pushed" : "botpush: push refused" },
         } as never);
         const cmd = cmds[0] as { outcome: string; head: string };
