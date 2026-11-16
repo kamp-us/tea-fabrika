@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t404-door-norow-build1",
+  "ticket": "404",
+  "pr": "kamp-us/tea-fabrika#1366",
+  "started": "2026-11-15T21:49:56-08:00",
+  "ended": "2026-11-15T21:59:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "In next/. The door law 'Q9/Q12 the assembled door refuses before an envelope, binding, reply or local step is saved' (next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts) was red because transport/Connection.ts ordinary() tagged only reserved and rate_limited as refused on the connection.frame span, so a door quota refusal saved that span as an unsent row and one measurements row. The tests step's diagnosis was confirmed by reading Connection.ts and Sink.ts (Sink counts any span that carries the refused tag and saves no row for it). One-line fix: ordinary() also tags quota. No test file changed, no export added. 0143: a refused write is counted, never a row.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "All runs under `nice -n 15 pnpm exec vitest run --maxWorkers=3 <path>` on base 9b2549441678c4a563a2551d99e591111ae2c854 plus the Connection.ts edit (the commit that carries this row). (a) runtime-recovery.laws.integration.test.ts: 13 passed (13). (b) worker-quotas.integration.test.ts: 3 passed (3). (c) door plant, Sink.ts alone from aa0c5f8d97fb8a5d0aed0449f529f83d5f946922: 1 failed | 12 passed (13), Q9/Q12 red with 'AssertionError: refusal 0 saved a span row in the door's store: expected { unsent: 2, measurements: 4 } to deeply equal { unsent: +0, measurements: 2 }'; Sink.ts restored with git checkout, never committed. Narrow tests reaching Connection.ts: transport/Connection.test.ts 6 passed, cloudflare/connection.test.ts 11 passed, runtime/Gateway.laws.test.ts 10 passed. pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passed. No pnpm typecheck here; CI runs it (0133).",
+  "plants": [
+    {
+      "law": "Q9/Q12 the assembled door refuses before an envelope, binding, reply or local step is saved",
+      "plant": "next/packages/libfabrika/src/telemetry/Sink.ts from aa0c5f8d97fb8a5d0aed0449f529f83d5f946922 (countRefusal answers false, so refused spans land as rows)",
+      "result": "red"
+    }
+  ],
+  "step": "build",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}
