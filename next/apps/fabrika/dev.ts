@@ -171,7 +171,7 @@ const command = Command.make("dev", flags, (options) => {
           const selected = yield* OpenRepository.open(prepared, {
             selection: yield* ids.next(Id.InputId),
             request: yield* ids.next(Id.InputId),
-            actor: yield* Schema.decodeUnknownEffect(Id.Person)(state.person),
+            actor: yield* Schema.decodeEffect(Id.Person)(state.person),
             by: "brain",
             build: built.build,
             interactive: process.stdin.isTTY === true,

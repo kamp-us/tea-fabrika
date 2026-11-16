@@ -177,7 +177,7 @@ const lineFor = Effect.fnUntraced(function* (raw: string): Effect.fn.Return<KeyL
 
   const type = new TextEncoder().encode("ssh-ed25519");
   const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
-  return yield* Schema.decodeUnknownEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
+  return yield* Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
     Effect.mapError(() => new StoreError({ op: "read", error: "DataError" })),
   );
 });

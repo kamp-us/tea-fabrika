@@ -35,7 +35,7 @@ const Listed = Schema.fromJsonString(
 
 /** `gh run list --json`'s rows, as `Run`s; gh writes an empty conclusion before a run completes. */
 export const runsIn = (out: string): Effect.Effect<ReadonlyArray<Run>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
+  Effect.map(Schema.decodeEffect(Listed)(out.trim() || "[]"), (rows) =>
     rows.map((r): Run => ({
       id: r.databaseId,
       workflow: r.workflowName,

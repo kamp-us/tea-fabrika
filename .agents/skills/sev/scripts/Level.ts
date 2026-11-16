@@ -151,7 +151,7 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
   return yield* Effect.forEach(
     lines,
     (line, index) =>
-      Schema.decodeUnknownEffect(EntryJson)(line).pipe(
+      Schema.decodeEffect(EntryJson)(line).pipe(
         Effect.mapError(() => new Refused({ reason: `line ${index + 1} of ${at} is not one this script wrote` })),
       ),
     { concurrency: "unbounded" },

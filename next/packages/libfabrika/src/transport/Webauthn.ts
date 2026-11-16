@@ -174,7 +174,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   return yield* Effect.try(() => ({
     rp: text(p.rp),
     origin: text(p.origin),
-    client: Schema.decodeUnknownSync(Client)(text(p.client)),
+    client: Schema.decodeSync(Client)(text(p.client)),
   })).pipe(
     Effect.flatMap(
       Effect.fnUntraced(function* ({ rp, origin, client }) {
@@ -261,7 +261,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 
   const { blob, key, ints } = parsed.value;
   const decoded = yield* Effect.try({
-    try: () => Schema.decodeUnknownSync(Client)(text(client)),
+    try: () => Schema.decodeSync(Client)(text(client)),
     catch: (cause) => new BadAssertion({ cause }),
   });
   const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));

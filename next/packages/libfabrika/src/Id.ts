@@ -181,7 +181,7 @@ export class Generator extends Context.Service<
         at = nextAt;
         random = nextRandom;
         return Result.getOrThrowWith(
-          S.decodeUnknownResult(schema)(`${prefix}_${encode(at, random)}`),
+          S.decodeResult(schema)(`${prefix}_${encode(at, random)}`),
           (cause) => new IdError({ reason: "prefix", cause }),
         );
       };

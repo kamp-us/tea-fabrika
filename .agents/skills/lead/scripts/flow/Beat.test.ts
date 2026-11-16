@@ -40,7 +40,7 @@ describe("Beat.enter and Beat.tick", () => {
       fc.property(phase, ms(3_600_000), fc.boolean(), (p, d, heard) => {
         const beat = Beat.tick(Beat.enter(null, p, at(0)), at(d), heard ? at(d) : null);
         const encoded = Schema.encodeSync(Beat.Beat)(beat);
-        expect(Schema.decodeUnknownSync(Beat.Beat)(encoded)).toEqual(beat);
+        expect(Schema.decodeSync(Beat.Beat)(encoded)).toEqual(beat);
       }),
       options,
     );

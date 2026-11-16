@@ -149,7 +149,7 @@ type Top = { readonly fields: ReadonlyMap<string, string>; readonly heading: str
 const JsonString = Schema.fromJsonString(Schema.String);
 
 const unquoted = (raw: string): string =>
-  raw.startsWith('"') ? Option.getOrElse(Schema.decodeUnknownOption(JsonString)(raw), () => raw) : raw;
+  raw.startsWith('"') ? Option.getOrElse(Schema.decodeOption(JsonString)(raw), () => raw) : raw;
 
 /** Reads a record's top: a frontmatter block when the text opens with one, then the first heading. */
 export const readTop = (text: string): Top => {
