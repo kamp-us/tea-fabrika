@@ -2573,6 +2573,7 @@ const ignoredAs = (s: WindowModel, letter: unknown): string => {
   const entry = Object(letter);
   const id: unknown = Reflect.get(entry, "id");
   const m: unknown = Reflect.get(Object(Reflect.get(entry, "body")), "m");
+
   if (!trusted(Reflect.get(entry, "by"))) {
     return "writer";
   }

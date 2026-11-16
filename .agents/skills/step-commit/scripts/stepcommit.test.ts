@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { Match } from "effect";
+import { Match, Result } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -18,9 +18,10 @@ const each = <A>(values: readonly A[], check: (value: A) => void) => {
   const errors: Error[] = [];
 
   for (const value of values) {
-    try {
-      check(value);
-    } catch (cause) {
+    const checked = Result.try(() => check(value));
+
+    if (Result.isFailure(checked)) {
+      const cause = checked.failure;
       errors.push(
         new Error(`${JSON.stringify(value)}: ${cause instanceof Error ? cause.message : String(cause)}`, { cause }),
       );

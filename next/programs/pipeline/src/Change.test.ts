@@ -51,6 +51,7 @@ const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Ch
     const matching = selected.filter((r) => r.name === c.name && (c.source === undefined || c.source === r.source));
     return matching.length === 0 || matching.some((r) => r.status._tag !== "done");
   });
+
   if (red.length > 0) {
     return { tag: "red", values: red };
   }

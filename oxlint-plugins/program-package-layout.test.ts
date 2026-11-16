@@ -14,7 +14,7 @@ import {
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Match } from "effect";
+import { Match, Result } from "effect";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -120,17 +120,17 @@ const inProcess = (plants: readonly Plant[]): Finding[][] => {
       const found: Finding[] = [];
 
       for (const file of files) {
-        try {
+        const ran = Result.try(() =>
           tester.run(CODE, recording(found, file), {
             valid: [{ code: readFileSync(join(scratch, file), "utf8"), filename: join(scratch, file) }],
             invalid: [],
-          });
-        } catch (error) {
-          // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
-          // parse, so that file has no finding here either; the law's oxlint run checks the same.
-          if (!(error instanceof Error && error.message === "Parsing failed")) {
-            throw error;
-          }
+          }),
+        );
+
+        // Some plants hold a file cut off mid-statement. oxlint runs no rule on a file it cannot
+        // parse, so that file has no finding here either; the law's oxlint run checks the same.
+        if (Result.isFailure(ran) && !(ran.failure instanceof Error && ran.failure.message === "Parsing failed")) {
+          throw ran.failure;
         }
       }
 

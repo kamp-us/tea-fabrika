@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Match } from "effect";
+import { Match, Result } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
@@ -20,11 +20,13 @@ const decode = (text: string) => {
     .replaceAll("\\n", "\n");
 
   for (let i = 0; i < 3; i++) {
-    try {
-      value = decodeURIComponent(value);
-    } catch {
+    const decoded = Result.try(() => decodeURIComponent(value));
+
+    if (Result.isFailure(decoded)) {
       break;
     }
+
+    value = decoded.success;
   }
 
   return value;
