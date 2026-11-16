@@ -5,8 +5,10 @@
 // How code-graph 0.15.0 reads the setting (node_modules/@demlik/code-graph/dist/index.js):
 //   - `testSupportFilePatterns` is a record of named groups, each a list of regular expressions
 //     (not globs), tested against a file's path from the scanned root (`NodeKindRulesSchema`,
-//     `matchingRules`). A file that matches is test support: its exports are withheld with reason
-//     `test-support-surface` and are never `dead` or `only-called-from-tests` (`judge`).
+//     `matchingRules`). A file that matches is test support: as published, its exports are withheld
+//     with reason `test-support-surface` and are never `dead` or `only-called-from-tests` (`judge`),
+//     and are never unused-export candidates (`isCandidate`), used or not. Law 4 holds the repo's
+//     local patch to that: only an export something uses is withheld (0006).
 //   - A key set in `--node-kinds` replaces that key's default whole (`loadOverrides` spreads the
 //     file over the defaults), so the default groups stay only if the file writes them again.
 //
@@ -65,14 +67,19 @@ const Report = Schema.fromJsonString(
   }),
 );
 
-/** Every export the pass reports, by id, as `pnpm lint:dead` would gate it, with the run's status. */
-const flagged = (root: string) => {
+/** The pass's report on a planted tree, as `pnpm lint:dead` reads it, with the run's status checked. */
+const reported = (root: string) => {
   const run = spawnSync(bin, [".", "--unreachable", "--json", "--node-kinds", "node-kinds.json"], {
     cwd: root,
     encoding: "utf8",
   });
   expect(run.status, run.stderr).toBe(0);
-  const report = Schema.decodeUnknownSync(Report)(run.stdout);
+  return Schema.decodeUnknownSync(Report)(run.stdout);
+};
+
+/** Every export the pass reports, by id, as `pnpm lint:dead` would gate it. */
+const flagged = (root: string) => {
+  const report = reported(root);
   return [...report.unreachable.map((u) => u.id), ...report.unusedExports.map((u) => u.id)].sort();
 };
 
@@ -271,6 +278,80 @@ describe("node-kinds.json on the --unreachable pass (lint:dead)", () => {
         }
 
         expect(flagged(plant(files))).toEqual([]);
+      }),
+    runs,
+  );
+
+  // Law 4. The pattern withholds a test-support export only while a test uses it (0006 stays whole):
+  // an export of a `*.test-support.ts` file that nothing uses, no test and no product file, is
+  // reported. A function is `dead` on the unreachable path, and a constant is an unused export on
+  // the unused-export path. A helper its test uses, in the same file, stays unflagged, as law 1 says.
+  // Red on code-graph 0.15.0 as published: `judge` withholds every export of a test-like file as
+  // `test-support-surface`, and `isCandidate` drops every test-like file, both before any use is
+  // counted (dist/index.js, src/query/unreachable.ts and src/query/unused-exports.ts).
+  // Plant: the installed package without the build's local patch. Each unused helper is withheld,
+  // so nothing is reported and the law fails.
+  it.effect.prop(
+    "an export of a .test-support.ts file that nothing uses is flagged",
+    { folder: Folder, unused: Names, base: Segment },
+    ({ folder, unused, base }) =>
+      Effect.gen(function* () {
+        const { plant } = yield* planter;
+        const support = `${base}.test-support.ts`;
+        // A helper file at next/'s top and one in a nested folder, each with a used helper, unused
+        // functions and unused constants, and a test beside it that calls only the used helper.
+        const dirs = ["next", ["next", ...folder].join("/")];
+        const fns = (i: number) => unused.map((u) => `u${i}${u}`);
+        const consts = (i: number) => unused.map((u) => `c${i}${u}`);
+        const files = Object.fromEntries(
+          dirs.flatMap((dir, i) => [
+            [
+              `${dir}/${support}`,
+              source([`s${i}`, ...fns(i)]) +
+                consts(i)
+                  .map((c) => `export const ${c} = ${i};\n`)
+                  .join(""),
+            ],
+            [`${dir}/${base}.test.ts`, user([[support, `s${i}`]])],
+          ]),
+        );
+
+        // Coverage: a helper file at next/'s top and one nested, each holding unused functions and
+        // unused constants beside a used helper.
+        expect(
+          dirs.filter((dir) => dir !== "next"),
+          "no case planted a helper file in a nested folder",
+        ).not.toEqual([]);
+
+        for (const [i, dir] of dirs.entries()) {
+          const body = files[`${dir}/${support}`] ?? "";
+          expect(body, `no used helper in ${dir}`).toContain(`export const s${i} =`);
+          expect(fns(i).length, `no unused function in ${dir}`).toBeGreaterThan(0);
+          expect(consts(i).length, `no unused constant in ${dir}`).toBeGreaterThan(0);
+        }
+
+        const report = reported(plant(files));
+        const dead = report.unreachable.filter((u) => u.category === "dead").map((u) => u.id);
+        expect(dead).toEqual(
+          expect.arrayContaining(dirs.flatMap((dir, i) => fns(i).map((f) => `${dir}/${support}:${f}`))),
+        );
+        const unusedIds = report.unusedExports.map((u) => u.id);
+
+        for (const [i, dir] of dirs.entries()) {
+          for (const c of consts(i)) {
+            expect(
+              unusedIds.some((id) => id.startsWith(`${dir}/${support}:`) && id.endsWith(`:${c}`)),
+              `${dir}/${support}: ${c} is not reported as an unused export`,
+            ).toBe(true);
+          }
+        }
+
+        // The used helpers stay withheld: no report names one.
+        const all = [...report.unreachable.map((u) => u.id), ...unusedIds];
+
+        for (const [i, dir] of dirs.entries()) {
+          expect(all, `the used helper s${i} in ${dir} is flagged`).not.toContain(`${dir}/${support}:s${i}`);
+        }
       }),
     runs,
   );
