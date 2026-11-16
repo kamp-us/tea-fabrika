@@ -5,7 +5,7 @@ import * as Exit from "effect/Exit";
 import * as Predicate from "effect/Predicate";
 import * as SchemaIssue from "effect/SchemaIssue";
 import * as Option from "effect/Option";
-import { Array as Arr } from "effect";
+import { Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -66,8 +66,8 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           },
         };
 
-        const defaults = Object.fromEntries(
-          Arr.map(Object.entries(Settings.all.settings), ([key, setting]) => [key, setting.default]),
+        const defaults = Rec.fromEntries(
+          Arr.map(Rec.toEntries(Settings.all.settings), ([key, setting]) => [key, setting.default]),
         );
 
         const empty = read({});
@@ -89,7 +89,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         if (Exit.isSuccess(decoded)) {
           const actual: Readonly<Record<string, unknown>> = decoded.value;
 
-          for (const [key, setting] of Object.entries(Settings.all.settings)) {
+          for (const [key, setting] of Rec.toEntries(Settings.all.settings)) {
             const from = Arr.reduce(setting.segments, table, (value: unknown, segment) =>
               Predicate.hasProperty(value, segment) ? value[segment] : undefined,
             );

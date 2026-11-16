@@ -16,6 +16,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -454,9 +455,9 @@ describe("P17a, appendAdmitted", () => {
 
                 const operations = rows.filter(
                   (row) =>
-                    Object.values(row.attributes).includes(id) &&
-                    Object.values(row.attributes).includes("notes") &&
-                    Object.values(row.attributes).includes(outcome),
+                    Rec.values(row.attributes).includes(id) &&
+                    Rec.values(row.attributes).includes("notes") &&
+                    Rec.values(row.attributes).includes(outcome),
                 );
 
                 expect(operations, "the operation's own ended span records its id, stream and outcome").toHaveLength(1);

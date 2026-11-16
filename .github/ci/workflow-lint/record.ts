@@ -1,3 +1,4 @@
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
 import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";
@@ -35,7 +36,7 @@ export const record: Rule = ({ jobs }, require) => {
   const recordStep = changeSteps.filter((s) => s["run"] === RECORD);
   const recorder = recordStep[0];
   const recordEnv = map(recorder?.["env"]);
-  const selected = Object.fromEntries([...FLAGS, "next", "filter"].map((name) => [name.toUpperCase(), outputs[name]]));
+  const selected = Rec.fromEntries([...FLAGS, "next", "filter"].map((name) => [name.toUpperCase(), outputs[name]]));
   require(recordStep.length === 1 &&
     recorder?.["id"] === "record" &&
     compact(recorder["if"]) === RECORD_IF &&
@@ -45,11 +46,11 @@ export const record: Rule = ({ jobs }, require) => {
       changeSteps.indexOf(
         recorder,
       ), "Q1: changes records the tested tree once, after the size step, on a ready pull request alone, and its failure fails nothing");
-  require(JSON.stringify(Object.keys(recordEnv).toSorted()) ===
-    JSON.stringify([...Object.keys(classifier), "TESTED", ...Object.keys(selected)].toSorted()) &&
-    Object.entries(classifier).every(([key, expected]) => recordEnv[key] === expected) &&
+  require(JSON.stringify(Rec.keys(recordEnv).toSorted()) ===
+    JSON.stringify([...Rec.keys(classifier), "TESTED", ...Rec.keys(selected)].toSorted()) &&
+    Rec.toEntries(classifier).every(([key, expected]) => recordEnv[key] === expected) &&
     recordEnv["TESTED"] === TESTED &&
-    Object.entries(selected).every(
+    Rec.toEntries(selected).every(
       ([key, expected]) => compact(recordEnv[key]) === compact(expected),
     ), "Q1: the record step reads the run's event, the merge commit it tests, and changes' outputs as changes exposes them");
   const uploads = changeSteps.filter((s) => uses(s, "actions/upload-artifact"));
@@ -62,8 +63,8 @@ export const record: Rule = ({ jobs }, require) => {
     compact(upload["if"]) === "steps.record.outputs.name!=''" &&
     upload["continue-on-error"] === true &&
     sameEntries(
-      Object.entries(map(upload["with"])).filter(([key]) => key !== "retention-days"),
-      Object.entries(RECORD_UPLOAD),
+      Rec.toEntries(map(upload["with"])).filter(([key]) => key !== "retention-days"),
+      Rec.toEntries(RECORD_UPLOAD),
     ) &&
     typeof kept === "number" &&
     kept >=
@@ -76,7 +77,7 @@ export const record: Rule = ({ jobs }, require) => {
   // workflow that uploads one, whatever action does it, beside the test legs' timings uploads: each
   // in a job of TIMED_LEGS (next alone since 0539), with exactly TT2's `with:`, so its name is
   // `timings-...` and never a record's.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     for (const step of allSteps(map(job)).filter((s) => uses(s, "actions/checkout"))) {
       const given = map(step["with"]);
       require(!("ref" in given) &&
@@ -84,7 +85,7 @@ export const record: Rule = ({ jobs }, require) => {
     }
   }
 
-  const uploaders = Object.values(jobs).flatMap((job) =>
+  const uploaders = Rec.values(jobs).flatMap((job) =>
     allSteps(map(job)).filter((s) => typeof s["uses"] === "string" && /(?:^|\/)upload-artifact@/.test(s["uses"])),
   );
 

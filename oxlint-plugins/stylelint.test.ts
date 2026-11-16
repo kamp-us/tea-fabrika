@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+import { it } from "@effect/vitest";
 import stylelint from "stylelint";
 import { afterAll, assert, describe, expect } from "vitest";
 
@@ -267,7 +268,7 @@ const warningPaths = (value: unknown, path = "config"): string[] => {
     return [];
   }
 
-  return Arr.flatMap(Object.entries(value), ([key, item]) => [
+  return Arr.flatMap(Rec.toEntries(value), ([key, item]) => [
     ...((key === "severity" || key === "defaultSeverity") && item === "warning" ? [`${path}.${key}`] : []),
     ...warningPaths(item, `${path}.${key}`),
   ]);
@@ -289,7 +290,7 @@ describe("T245 PR 3, laws 27 and 28: the effective config cannot weaken a rule",
   it.live("law 27 keeps each rule's complete root options in every tracked CSS file", () =>
     Effect.gen(function* () {
       const base = yield* rootConfig();
-      expect(Arr.filter(Object.keys(base.rules ?? {}), (rule) => rule.startsWith("fabrika/")).sort()).toEqual(
+      expect(Arr.filter(Rec.keys(base.rules ?? {}), (rule) => rule.startsWith("fabrika/")).sort()).toEqual(
       Arr.map(RULES, ({ name }) => `fabrika/${name}`).sort(),
     );
     const tracked = spawnSync("git", ["ls-files", "-z", "--", "*.css"], {
@@ -395,11 +396,11 @@ export default {...base, rules: Object.fromEntries(Object.entries(base.rules).ma
 };
 
 const track = (repo: string, files: Record<string, string>) => {
-  for (const [path, contents] of Object.entries(files)) {
+  for (const [path, contents] of Rec.toEntries(files)) {
     write(repo, path, contents);
   }
 
-  const added = spawnSync("git", ["add", "--", ...Object.keys(files)], {
+  const added = spawnSync("git", ["add", "--", ...Rec.keys(files)], {
     cwd: repo,
     encoding: "utf8",
   });
@@ -541,12 +542,12 @@ describe("T245 PR 3, law 30: the runner and disable comments cannot hide CSS", (
   it("law 30 reads every tracked scope despite nested configs and ignore files", () => {
     const repo = runnerRepo();
     const paths = Arr.map(["apps", "packages", "programs", "next"], (scope) => `${scope}/plant/window.css`);
-    track(repo, Object.fromEntries(Arr.map(paths, (path) => [path, ".a { color: #fff; }\n"])));
+    track(repo, Rec.fromEntries(Arr.map(paths, (path) => [path, ".a { color: #fff; }\n"])));
     write(repo, ".stylelintignore", "**/*.css\n");
     write(
       repo,
       "apps/.stylelintrc.json",
-      JSON.stringify({ rules: Object.fromEntries(Arr.map(RULES, ({ name }) => [`fabrika/${name}`, null])) }),
+      JSON.stringify({ rules: Rec.fromEntries(Arr.map(RULES, ({ name }) => [`fabrika/${name}`, null])) }),
     );
     write(repo, "apps/untracked.css", ".broken {\n");
     track(repo, { "experiments/plant/ignored.css": ".broken {\n" });

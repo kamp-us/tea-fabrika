@@ -1,7 +1,8 @@
 import type { Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { CodeHost, Program, Send, StartChild, Started, type Refusal } from "@kampus/libfabrika";
-import { Array as Arr, Schema } from "effect";
+import * as Schema from "effect/Schema";
+import { Array as Arr, Record as Rec } from "effect";
 import { Abandon, Drop, Enqueue, Reply, Resume } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
 
@@ -83,7 +84,7 @@ const forward = (entry: Entry, reply: typeof Reply.Type): ReadonlyArray<Command>
 
 /** One queue, registered under the same name its host supplies here. */
 export const queue = ({ name, settings }: { readonly name: string; readonly settings: Values }) => {
-  const unset = Arr.every(Object.values(settings.checks), (checks) => checks.length === 0);
+  const unset = Arr.every(Rec.values(settings.checks), (checks) => checks.length === 0);
   const next = (s: Pick<Model, "attempt" | "late">, line: ReadonlyArray<Entry>): Cell => {
     const [entry, ...rest] = line;
 

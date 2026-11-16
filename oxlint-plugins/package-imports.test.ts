@@ -8,6 +8,7 @@ import { join } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
@@ -114,7 +115,7 @@ const within =
 
 /** What a file at each place may import by a name under the scope; `null` where nothing is judged. */
 const ALLOWS: Readonly<Record<string, ((name: string) => boolean) | null>> = {
-  ...Object.fromEntries(Arr.map(TABLE.parts, (part) => [part.name, (name: string) => part.may.includes(name)])),
+  ...Rec.fromEntries(Arr.map(TABLE.parts, (part) => [part.name, (name: string) => part.may.includes(name)])),
   // A library test names the library itself and the test primitives, root or subpath, and nothing
   // else of ours. A test of the test primitives names only that package.
   "library test": within(LIBRARY, VITEST),
@@ -366,9 +367,9 @@ it.live("each part fires on exactly the names of ours its table refuses, whereve
   expect(Arr.some([...cases.values()], (one) => one.lines.length > 0)).toBe(true);
   expect(Arr.some([...cases.values()], (one) => one.lines.length === 0)).toBe(true);
 
-    const result = yield* promised(() => plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
-    expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-      Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+  const result = yield* promised(() => plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
+  expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+    Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
   }),
 );
@@ -425,9 +426,9 @@ it.live("the library's and a program's code may not import the test primitives, 
   );
   expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
-    const result = yield* promised(() => plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
-    expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-      Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+  const result = yield* promised(() => plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
+  expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+    Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
   }),
 );

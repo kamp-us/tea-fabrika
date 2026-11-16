@@ -1,7 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it, beforeAll } from "@effect/vitest";
-import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
@@ -233,7 +235,7 @@ describe("next workflow coverage", () => {
           );
 
           for (const spec of unknown) {
-            expect(Object.hasOwn(measured, repoPath(spec))).toBe(false);
+            expect(Rec.has(measured, repoPath(spec))).toBe(false);
           }
 
           const files = [...subset, ...unknown];

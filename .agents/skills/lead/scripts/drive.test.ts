@@ -13,7 +13,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Exit, Schema, Stream, Array as Arr, pipe, Order } from "effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Order from "effect/Order";
+import * as Rec from "effect/Record";
+import { Array as Arr, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -1265,7 +1271,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
         drafted(step, agent, `${name}-${step}${n}`).pipe(
           Effect.tap((rows) =>
             Effect.sync(() => {
-              const started = Arr.flatMap(Object.values(rows), (row) => row.seen.started);
+              const started = Arr.flatMap(Rec.values(rows), (row) => row.seen.started);
               expect(started.length).toBe(1);
               const folder = started[0]?.folder ?? "";
               expect(folder).toBe(step === "plan" ? env.MAIN : boxTree(env.BOXES, `${name}-${step}${n}`));
@@ -1445,7 +1451,7 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
 
         const listed = Arr.map([...head.matchAll(/^- (\S+)$/gm)], (m) => m[1]);
         const allowed = Arr.filter(
-          Object.keys(given),
+          Rec.keys(given),
           (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
         );
         expect(listed).toEqual(Arr.sort(allowed, Order.String));

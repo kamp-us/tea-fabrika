@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import * as Rec from "effect/Record";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintCiSpeed } from "./ci-speed.ts";
@@ -15,8 +16,7 @@ type SpeedFile = {
 const speedFile = (): SpeedFile =>
   parse(readFileSync(new URL("../../workflows/ci-speed.yaml", import.meta.url), "utf8"));
 
-const speedJob = (w: SpeedFile) => Object.values(w.jobs)[0]!;
-
+const speedJob = (w: SpeedFile) => Rec.values(w.jobs)[0]!;
 const speedStep = (w: SpeedFile, name: string) => speedJob(w).steps.find((s) => s["name"] === name)!;
 
 it("ci-speed.yaml as checked in passes", () => {

@@ -3,7 +3,7 @@
 // names only those two rules, and gives a reason. Each wrong comment stands over a line that really
 // fires, so only this rule speaks. `plant` spawns oxlint over the planted files in a temp folder, so
 // this half is `.integration.` (0584); the `.oxlintrc.json` laws are in edge-config.test.ts.
-import { Array as Arr } from "effect";
+import { Array as Arr, Record as Rec } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
@@ -55,8 +55,8 @@ const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
 const UNUSED = at("unused");
 
 const all = await plant({
-    ...Object.fromEntries(
-      Arr.map(Object.entries(CASES), ([name, [comment, line]]) => [
+    ...Rec.fromEntries(
+      Arr.map(Rec.toEntries(CASES), ([name, [comment, line]]) => [
         at(name),
         Arr.join([...PRELUDE, comment, line], "\n"),
       ]),
@@ -73,7 +73,7 @@ const all = await plant({
 
 describe("edge-comment", () => {
   it("refuses each wrong edge comment, at the top of the file", () => {
-    const refused = Arr.filter(Object.entries(CASES), ([, [, , no]]) => no);
+    const refused = Arr.filter(Rec.toEntries(CASES), ([, [, , no]]) => no);
     expect(refused).toHaveLength(8);
 
     for (const [name] of refused) {
@@ -82,7 +82,7 @@ describe("edge-comment", () => {
   });
 
   it("passes a right one for each rule and for both, and leaves other comments alone", () => {
-    const passed = Arr.filter(Object.entries(CASES), ([, [, , no]]) => !no);
+    const passed = Arr.filter(Rec.toEntries(CASES), ([, [, , no]]) => !no);
     expect(passed).toHaveLength(4);
 
     for (const [name] of passed) {
@@ -91,7 +91,7 @@ describe("edge-comment", () => {
   });
 
   it("speaks alone: the line under each comment is silenced and no comment is unused", () => {
-    for (const name of Object.keys(CASES)) {
+    for (const name of Rec.keys(CASES)) {
       for (const code of [
         "fabrika(no-promises)",
         "fabrika(no-effect-run-outside-edge)",

@@ -26,6 +26,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -304,7 +305,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
       }
 
       expect(
-        Object.values(seen).every((n) => n > 0),
+        Rec.values(seen).every((n) => n > 0),
         JSON.stringify(seen),
       ).toBe(true);
 

@@ -2,8 +2,10 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -505,8 +507,8 @@ it("property: unreadable history, no path at all, or an event with no paths of i
       fc.constantFrom("workflow_dispatch", "schedule", ""),
       fc.boolean(),
       (event, none, paths, other, draft) => {
-        expect(Object.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
-        expect(Object.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
+        expect(Rec.values(ci.jobs(none, event, false)).every(Boolean)).toBe(true);
+        expect(Rec.values(ci.jobs(paths, other, draft)).every(Boolean)).toBe(true);
       },
     ),
     options,
@@ -522,7 +524,7 @@ it("scenario: a push with no commit before it reads no paths, so it runs every j
   for (const base of ["0".repeat(40), ""]) {
     const read = ci.readPaths(base, "c".repeat(40), "push", run);
     expect(read).toBeNull();
-    expect(Object.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
+    expect(Rec.values(ci.jobs(read, "push", false)).every(Boolean)).toBe(true);
   }
 });
 
@@ -972,7 +974,7 @@ it("property: probe changes no flag: the first pass prints the same flags for an
         const printed = await ci.outputs({ same: false, env: envOf(event, draft), run: git(paths, diff) });
         const expected = ci.jobs(paths, event, draft);
 
-        for (const [key, on] of Object.entries(expected)) {
+        for (const [key, on] of Rec.toEntries(expected)) {
           expect(printed[key], key).toBe(String(on));
         }
 
@@ -1142,7 +1144,7 @@ const pushed = (paths: readonly string[], fake: Fake, env: Record<string, string
 
 /** Every flag `outputs` printed is the one `expected` holds. */
 const prints = (printed: Record<string, string>, expected: Record<string, boolean>) => {
-  for (const [key, on] of Object.entries(expected)) {
+  for (const [key, on] of Rec.toEntries(expected)) {
     expect(printed[key], key).toBe(String(on));
   }
 };
@@ -1980,8 +1982,7 @@ it.live(
 
   const api = ci.github(runEnv, (url, init) => {
     asked.push({ url, auth: init.headers["authorization"] });
-    const kind = Object.keys(answers).find((key) => url.includes(`/${key}`));
-
+    const kind = Rec.keys(answers).find((key) => url.includes(`/${key}`));
     return Promise.resolve({
       ok: kind !== undefined,
       status: kind === undefined ? 404 : 200,
@@ -2028,12 +2029,12 @@ const anyEvent = fc.constantFrom("pull_request", "merge_group", "push", "workflo
 it("property: on every event, for any paths and either draft flag, no flag and no printed output starts today's tests, e2e or a tooling test", () =>
   fc.assert(
     fc.asyncProperty(paths, anyEvent, fc.boolean(), async (paths, event, draft) => {
-      expect(Object.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
-      expect(Object.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
+      expect(Rec.keys(ci.classify(paths, event)).toSorted()).toEqual(flagNames);
+      expect(Rec.keys(ci.jobs(paths, event, draft)).toSorted()).toEqual(flagNames);
       // Unreadable history is the fallback that runs every job.
       const run: Runner = paths === null ? () => ({ status: 128, stdout: "" }) : git(paths, "");
       const printed = await ci.outputs({ same: false, env: envOf(event, draft), run });
-      expect(Object.keys(printed).toSorted()).toEqual([...flagNames, "filter", "probe", "tested"].toSorted());
+      expect(Rec.keys(printed).toSorted()).toEqual([...flagNames, "filter", "probe", "tested"].toSorted());
     }),
     {
       ...options,

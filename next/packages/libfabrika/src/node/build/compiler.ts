@@ -19,6 +19,7 @@
  */
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
@@ -143,7 +144,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
     if (FUNCTIONS.has(node.type)) {
       const own = { on: false };
 
-      for (const [key, child] of Object.entries(node)) {
+      for (const [key, child] of Rec.toEntries(node)) {
         if (key !== "type") {
           walk(child, null, depth + 1, own);
         }
@@ -163,7 +164,7 @@ const functions = (file: string, text: string): readonly Fn[] => {
       return;
     }
 
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Rec.toEntries(node)) {
       if (key === "type" || key === "start" || key === "end") {
         continue;
       }

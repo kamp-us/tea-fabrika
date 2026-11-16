@@ -21,11 +21,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import { pipe } from "effect/Function";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+import { it } from "@effect/vitest";
+import { pipe } from "effect/Function";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -474,7 +475,7 @@ describe("each rule refuses what it is there to refuse", () => {
       "runs-from-depth",
     ];
     const missing = Arr.filter(
-      Object.keys(plugin.rules),
+      Rec.keys(plugin.rules),
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),
     );
 
@@ -510,8 +511,8 @@ it.live("scenario: T877 L10 only the TOML adapter imports the parser and seriali
   ];
 
   const adapter = "next/packages/libfabrika/src/settings/TomlParser.ts";
-    const result = yield* promised(() =>
-      lintCopies(Object.fromEntries(Arr.map([...banned, adapter], (file) => [file, imports]))),
+  const result = yield* promised(() =>
+      lintCopies(Rec.fromEntries(Arr.map([...banned, adapter], (file) => [file, imports]))),
     );
 
   for (const file of banned) {
@@ -916,7 +917,7 @@ describe("a plain file cannot take a folder out of the checks", () => {
     const folder = mkdtempSync(join(plant, "hide-"));
     mkdirSync(join(folder, "sub"));
 
-    for (const [name, text] of Object.entries(files)) {
+    for (const [name, text] of Rec.toEntries(files)) {
       writeFileSync(join(folder, name), text);
     }
 

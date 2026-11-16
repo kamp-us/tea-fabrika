@@ -9,7 +9,14 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Array as Arr, Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Array as Arr, Record as Rec } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -28,7 +35,7 @@ const declarations = Declarations.all.declarations;
 
 // Each declared setting is a flag at its own path, as --instance.port. --port stays the port's
 // alias, for the commands and instance tests written before the setting.
-const settings = Object.fromEntries(
+const settings = Rec.fromEntries(
   Arr.map(declarations, (d) => {
     const flag = Flag.String(d.path);
 
@@ -42,7 +49,7 @@ const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Decla
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {

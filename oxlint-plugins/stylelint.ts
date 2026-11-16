@@ -7,6 +7,7 @@ import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
+import * as Rec from "effect/Record";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 
@@ -43,7 +44,7 @@ const check = async (): Promise<void> => {
 
   const counts = new Map<string, { fires: number; known: Set<string> }>();
 
-  for (const rule of Object.keys(config.rules ?? {})) {
+  for (const rule of Rec.keys(config.rules ?? {})) {
     if (rule.startsWith("fabrika/")) {
       counts.set(rule, { fires: 0, known: new Set() });
     }

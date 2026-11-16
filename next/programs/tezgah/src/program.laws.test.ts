@@ -46,7 +46,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -626,7 +626,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
     // Every case of the law was walked: a split asked, refused, placed, placed after the focused
     // tile once its own tile closed (plan amendment (a)), and a workspace attached.
     expect(
-      Arr.every(Object.values(seen), (n) => n > 0),
+      Arr.every(Rec.values(seen), (n) => n > 0),
       `L6: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
       }),
@@ -682,7 +682,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Arr.every(Object.values(seen), (n) => n > 0),
+      Arr.every(Rec.values(seen), (n) => n > 0),
       `L7: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
       }),
@@ -720,7 +720,7 @@ describe("Desk S2a: tezgah's layout changes, at the program", () => {
       { seed: SEED, numRuns: 100 },
     );
     expect(
-      Arr.every(Object.values(seen), (n) => n > 0),
+      Arr.every(Rec.values(seen), (n) => n > 0),
       `L8: the walks closed both kinds ${JSON.stringify(seen)}`,
     ).toBe(true);
       }),
@@ -816,7 +816,7 @@ describe("Desk S2a L9: tezgah refuses what names nothing", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Arr.every(Object.values(seen), (n) => n > 0),
+      Arr.every(Rec.values(seen), (n) => n > 0),
       `L9: the walks met every refusal ${JSON.stringify(seen)}`,
     ).toBe(true);
       }),
@@ -1013,7 +1013,7 @@ describe("Desk S3: focus moves at the program", () => {
     const seen = new Set<string>();
     fc.assert(
       fc.property(
-        fc.constantFrom(...Object.keys(want), CLICK),
+        fc.constantFrom(...Rec.keys(want), CLICK),
         fc.array(fc.record({ down: fc.boolean(), at: fc.nat() }), { minLength: 1, maxLength: 4 }),
         fc.nat(),
         fc.nat(),
@@ -1048,8 +1048,8 @@ describe("Desk S3: focus moves at the program", () => {
       ),
       { seed: SEED, numRuns: 100 },
     );
-    expect(seen.size, "S3: the walk tries every focus move and the click").toBe(Object.keys(want).length + 1);
-      }),
+    expect(seen.size, "S3: the walk tries every focus move and the click").toBe(Rec.keys(want).length + 1);
+  }),
   );
 
   it.live(
@@ -1137,7 +1137,7 @@ describe("Desk S3: focus moves at the program", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Arr.every(Object.values(seen), (n) => n > 0),
+      Arr.every(Rec.values(seen), (n) => n > 0),
       `S3: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
       }),

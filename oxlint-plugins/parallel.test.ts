@@ -8,9 +8,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -173,7 +174,7 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
         const command = `echo o-${out}; echo e-${err} >&2; kill -${name} $$`;
         const ran = run([command]);
         const n = pipe(
-          Arr.findFirst(Object.entries(constants.signals), ([signal]) => signal === `SIG${name}`),
+          Arr.findFirst(Rec.toEntries(constants.signals), ([signal]) => signal === `SIG${name}`),
           Option.map(([, number]) => number),
           Option.getOrElse(() => 0),
         );

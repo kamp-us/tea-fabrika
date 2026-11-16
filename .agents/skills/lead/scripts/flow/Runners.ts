@@ -4,6 +4,7 @@
 // `Runners.layer`, so no test needs git, the network or an agent.
 
 import { Context, Effect, Layer, Schema } from "effect";
+import * as Rec from "effect/Record";
 import type { Answer } from "./Outcome.ts";
 import type { Step } from "./Step.ts";
 
@@ -40,7 +41,6 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
 
         return yield* runner(step).pipe(Effect.provideContext(services));
       });
-
-      return Runners.of({ names: new Set(Object.keys(table)), run });
+      return Runners.of({ names: new Set(Rec.keys(table)), run });
     }),
   );

@@ -3,6 +3,8 @@
 
 import { dirname, matchesGlob } from "node:path";
 import { Array as Arr, Option, Order, pipe, Schema } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 
 /** A text read as JSON, or none when it does not read. */
 const parsed = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown));
@@ -220,11 +222,11 @@ const LOCKED = [
 const canon = (v: unknown): string =>
   Arr.isArray(v)
     ? `[${Arr.join(Arr.map(v, canon), ",")}]`
-    : v !== null && typeof v === "object"
+    : Predicate.isObject(v)
       ? `{${pipe(
-          Object.keys(v),
+          Rec.keys(v),
           Arr.sort(Order.String),
-          Arr.map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`),
+          Arr.map((k) => `${JSON.stringify(k)}:${canon(v[k])}`),
           Arr.join(","),
         )}}`
       : JSON.stringify(v);

@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -34,7 +34,7 @@ type Tree = any;
 
 const toValue = (node: Tree): unknown => {
   if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
+    return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
 
   if (node.type === "ArrayExpression") {
@@ -117,7 +117,7 @@ describe(".oxlintrc.json", () => {
       Arr.flatMap((o) => {
         const tests = pipe(o.files, Arr.filter(agents), Arr.every(test));
         return pipe(
-          Object.entries(o.rules),
+          Rec.toEntries(o.rules),
           Arr.filter(
             ([rule, setting]) =>
               !Arr.some(
@@ -144,7 +144,7 @@ describe(".oxlintrc.json", () => {
       Arr.filter((o) => Arr.some(o.files, (f) => agents(f) && !test(f)) && !mirror(o)),
       Arr.flatMap((o) =>
         pipe(
-          Object.entries(o.rules),
+          Rec.toEntries(o.rules),
           Arr.filter(([, setting]) => off(setting)),
           Arr.map(([rule]) => [Arr.join(o.files, ", "), rule]),
         ),

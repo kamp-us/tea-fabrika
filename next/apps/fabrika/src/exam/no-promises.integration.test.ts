@@ -5,7 +5,7 @@ import { NodePath } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { API } from "typescript/unstable/sync";
 // `no-promises` (exam item 1): every Promise shape fires in next/, Effect's own Promise calls with
@@ -29,7 +29,7 @@ const typed = (files: Readonly<Record<string, string>>, workers = false) => {
   const api = new API({ cwd: root });
 
   try {
-    for (const [file, body] of Object.entries(files)) {
+    for (const [file, body] of Rec.toEntries(files)) {
       mkdirSync(dirname(join(root, file)), { recursive: true });
       writeFileSync(join(root, file), body);
     }

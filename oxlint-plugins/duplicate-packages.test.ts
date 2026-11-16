@@ -10,8 +10,9 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -31,7 +32,7 @@ const value = (node: Expression): unknown => {
         element === null || element.type === "SpreadElement" ? null : value(element),
       );
     case "ObjectExpression":
-      return Object.fromEntries(
+      return Rec.fromEntries(
         Arr.flatMap(node.properties, (property) =>
           property.type === "Property" && property.key.type === "Literal"
             ? [[String(property.key.value), value(property.value)]]
@@ -44,7 +45,7 @@ const value = (node: Expression): unknown => {
 };
 
 const record = (x: unknown): Record<string, unknown> =>
-  typeof x === "object" && x !== null && !Arr.isArray(x) ? Object.fromEntries(Object.entries(x)) : {};
+  typeof x === "object" && x !== null && !Arr.isArray(x) ? Rec.fromEntries(Rec.toEntries(x)) : {};
 
 const list = (x: unknown): ReadonlyArray<unknown> => (Arr.isArray(x) ? x : []);
 

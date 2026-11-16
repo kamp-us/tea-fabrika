@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 // In next/, a resource is released by the scope that acquired it, never by an `afterEach` or
 // `afterAll` that a thrown error or a killed test can skip (0061). oxlint's own `vitest/no-hooks`
 // holds it, set in the repo's config to allow the two setup hooks. Each planted file sits at a
@@ -43,7 +44,7 @@ it("refuses an after-hook in any next/ file, test or helper, and keeps the setup
 
         const free = [`packages/fabrika/src/${file}.test.ts`, `.agents/skills/x/scripts/${file}.test.ts`];
         const result = await plant(
-          Object.fromEntries(Arr.map([...held, ...free], (path) => [path, body(after, before)])),
+          Rec.fromEntries(Arr.map([...held, ...free], (path) => [path, body(after, before)])),
         );
 
         for (const path of held) {

@@ -20,7 +20,15 @@ import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { ClientKey } from "@kampus/libfabrika/transport/ClientKey";
 import type { Link } from "@kampus/libfabrika/transport/Link";
-import { Array as Arr, Config, Effect, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import { Array as Arr, Record as Rec } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { Socket } from "effect/socket";
 
@@ -47,7 +55,7 @@ const OS: Partial<Record<NodeJS.Platform, "macos" | "linux" | "windows">> = {
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 /** What a parent needs to know of the link: waiting for a grant, online, or neither. */
 const lineFor = (link: Link, fingerprint: string): Line =>

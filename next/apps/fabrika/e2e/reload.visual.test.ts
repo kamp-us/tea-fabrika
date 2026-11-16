@@ -22,7 +22,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -248,7 +248,7 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
     ? []
     : Arr.isArray(value)
       ? Arr.flatMap(value, objects)
-      : [value as Record<string, unknown>, ...Arr.flatMap(Object.values(value), objects)];
+      : [value as Record<string, unknown>, ...Arr.flatMap(Rec.values(value), objects)];
 
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {

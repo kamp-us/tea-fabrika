@@ -2,7 +2,15 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Schema, type Scope, Array as Arr, Order } from "effect";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Order from "effect/Order";
+import * as Rec from "effect/Record";
+import { Array as Arr } from "effect";
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";
@@ -77,7 +85,7 @@ describe("close", () => {
           const prs = Arr.map(picks, (p, i) =>
             pr(i + 1, runs.length === 0 ? stray : (runs[Math.abs(p.at) % runs.length]?.branch ?? stray), p.state),
           );
-          const behind = Object.fromEntries(Arr.map(prs, (p, i) => [p.oid, picks[i]?.behind ?? 0]));
+          const behind = Rec.fromEntries(Arr.map(prs, (p, i) => [p.oid, picks[i]?.behind ?? 0]));
           const prWorld = PullRequestsTest.world([...prs, pr(9999, stray)]);
 
           yield* Incident.open({ home: dir, reason: "slow", allow: [] }).pipe(Effect.provide(services({})));

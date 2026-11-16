@@ -21,7 +21,7 @@ import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin, type RolldownBuild } from "rolldown";
 
@@ -214,7 +214,7 @@ const plant = (files: Readonly<Record<string, string | object>>) =>
     Effect.sync(() => {
       const root = realpathSync(mkdtempSync(join(tmpdir(), "next-exam-")));
 
-      for (const [path, body] of Object.entries(files)) {
+      for (const [path, body] of Rec.toEntries(files)) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
         writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
       }
@@ -245,7 +245,7 @@ const isPlatform = (spec: string): boolean =>
 const listed = (m: Package["manifest"]): ReadonlyMap<string, string> =>
   new Map(
     Arr.flatMap([m.dependencies, m.devDependencies, m.peerDependencies, m.optionalDependencies], (names) =>
-      Object.entries(names ?? {}),
+      Rec.toEntries(names ?? {}),
     ),
   );
 

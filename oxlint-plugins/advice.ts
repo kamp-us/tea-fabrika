@@ -5,6 +5,7 @@
 // deleted.
 import { matchesGlob } from "node:path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 
 /** One fire as oxlint reports it, its filename from the top of the repo. */
 export interface Fire {
@@ -88,7 +89,7 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
       override.files,
       (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
     );
-    return Arr.flatMap(Object.entries(override.rules), ([key, setting]) => {
+    return Arr.flatMap(Rec.toEntries(override.rules), ([key, setting]) => {
       const rule = CODES.get(key);
       return rule !== undefined && level(setting) === "warn" ? Arr.map(globs, (glob) => ({ rule, glob })) : [];
     });

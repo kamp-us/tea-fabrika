@@ -1,7 +1,12 @@
 // runFlow on the real tea engine and tea's own file store, in a temp folder, with fake runners
 // through `Runners.layer`: no git, network or agent.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Schema, type Scope, Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
+import * as Rec from "effect/Record";
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
 import { landDecision } from "./flows/land-decision.ts";
@@ -19,8 +24,8 @@ const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Sc
 const fakes = (answers: Readonly<Record<string, (n: number) => Outcome.Outcome>>) => {
   const calls: string[] = [];
 
-  const table = Object.fromEntries(
-    Arr.map(Object.entries(answers), ([name, answer]) => [
+  const table = Rec.fromEntries(
+    Arr.map(Rec.toEntries(answers), ([name, answer]) => [
       name,
       (step: Step.Step) =>
         Effect.sync(() => {
@@ -170,7 +175,7 @@ describe("the land-decision flow", () => {
       Effect.gen(function* () {
         const state = yield* tempState;
         const ok = () => Outcome.done("ok");
-        const { calls, layer } = fakes(Object.fromEntries(Arr.map(decision.steps, (s) => [s.name, ok])));
+        const { calls, layer } = fakes(Rec.fromEntries(Arr.map(decision.steps, (s) => [s.name, ok])));
         const model = yield* runFlow(decision, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(calls).toEqual(["format", "lint", "governance"]);
         expect(model._tag === "parked" ? model.position : -1).toBe(3);

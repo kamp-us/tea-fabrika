@@ -3,6 +3,7 @@
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
 import { Effect, Layer, Stream, Array as Arr } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Rec from "effect/Record";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
 /** Settings no box config can turn back on, so inspection never runs a program from the box. */
@@ -34,7 +35,7 @@ const PINNED = {
 const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record<string, string> => {
   const env: Record<string, string> = {};
 
-  for (const [key, value] of Object.entries(inherited)) {
+  for (const [key, value] of Rec.toEntries(inherited)) {
     if (value !== undefined && !key.startsWith("GIT_")) {
       env[key] = value;
     }

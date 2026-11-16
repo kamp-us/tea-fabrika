@@ -24,6 +24,7 @@
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import { dotted } from "./match.ts";
 
@@ -62,7 +63,7 @@ type Role =
   | { readonly _tag: "service"; readonly needs: Layer };
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
-const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(Arr.map(names, (name) => [name, role]));
+const each = (names: ReadonlyArray<string>, role: Role) => Rec.fromEntries(Arr.map(names, (name) => [name, role]));
 
 const launchers = (browser: string) =>
   each(
@@ -186,8 +187,7 @@ export const reader = <N>() => {
       const paths = pipe(
         MODULES,
         Arr.filter((entry) => entry.module.test(source)),
-        Arr.flatMap((entry) => Object.entries(entry.names)),
-      );
+        Arr.flatMap((entry) => Rec.toEntries(entry.names)));
 
       for (const { imported, local } of names) {
         // `localInstance` opens the instance from wherever it is imported, as the rule always read it.

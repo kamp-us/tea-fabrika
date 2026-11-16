@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Rec from "effect/Record";
 import { expect, it, onTestFinished } from "vitest";
 
 // Today's CI. Covers apt.sh, the apt step of next's chromium step. No root
@@ -86,7 +87,7 @@ const box = (files: Files, release = "noble") => {
   mkdirSync(lists);
   writeFileSync(osRelease, `NAME="Ubuntu"\n${release === "" ? "" : `VERSION_CODENAME=${release}\n`}ID=ubuntu\n`);
 
-  for (const [name, text] of Object.entries(files)) {
+  for (const [name, text] of Rec.toEntries<string, string>(files)) {
     writeFileSync(join(etc, name), text);
   }
 

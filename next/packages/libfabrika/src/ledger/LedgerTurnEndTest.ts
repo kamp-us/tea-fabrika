@@ -10,6 +10,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -47,7 +48,7 @@ const counted = (sql: Sql) => {
 
       if (state.on) {
         for (const row of rows) {
-          for (const value of Object.values(row)) {
+          for (const value of Rec.values(row)) {
             state.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
           }
         }

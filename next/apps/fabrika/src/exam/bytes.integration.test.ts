@@ -12,7 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -96,7 +96,7 @@ vi.mock("rolldown", async (original) => {
               code: info.code ?? "",
             };
           });
-          const chunks = Arr.flatMap(Object.values(output), (o) =>
+          const chunks = Arr.flatMap(Rec.values(output), (o) =>
             o.type === "chunk"
               ? [
                   {
@@ -104,7 +104,7 @@ vi.mock("rolldown", async (original) => {
                     code: o.code,
                     imports: [...o.imports],
                     dynamic: [...o.dynamicImports],
-                    modules: Object.keys(o.modules),
+                    modules: Rec.keys(o.modules),
                   },
                 ]
               : [],
@@ -121,7 +121,7 @@ vi.mock("rolldown", async (original) => {
             }
           }
 
-          const assets = Arr.flatMap(Object.values(output), (o) =>
+          const assets = Arr.flatMap(Rec.values(output), (o) =>
             o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
           );
 
@@ -219,18 +219,18 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
 
   const texts = carried(brain),
     others = Arr.filter(all, (g) => g !== brain);
-  expect(texts).toHaveLength(Object.keys(built.programs).length + Object.keys(built.assets).length);
+  expect(texts).toHaveLength(Rec.keys(built.programs).length + Rec.keys(built.assets).length);
 
   for (const text of texts) {
     expect(Arr.some(others, (g) => (isProgram(g) || isWindow(g) || isTab(g)) && emitted(g).includes(text))).toBe(true);
   }
 
-  for (const program of Object.values(built.programs)) {
+  for (const program of Rec.values(built.programs)) {
     expect(texts).toContain(program.source);
     expect(Arr.some(others, (g) => isProgram(g) && joined(g) === program.source)).toBe(true);
   }
 
-  for (const [route, asset] of Object.entries(built.assets)) {
+  for (const [route, asset] of Rec.toEntries(built.assets)) {
     expect(texts).toContain(asset.body);
 
     if (tab !== undefined && TAB_ROUTES.includes(route)) {
@@ -244,7 +244,7 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
 
   if (tab !== undefined) {
     expect(Arr.filter(all, isTab), "one observed call built the tab").toHaveLength(1);
-    expect(Object.keys(built.assets)).toEqual(expect.arrayContaining([...TAB_ROUTES]));
+    expect(Rec.keys(built.assets)).toEqual(expect.arrayContaining([...TAB_ROUTES]));
   }
 
   return brain;
@@ -265,17 +265,16 @@ it.effect(
       // carries the page and the tab's script, each from the tab's own observed call.
       const observed = observations.builds.slice(start),
         brain = checkBuild(observed, built, APP_TAB);
-
-      expect(Object.keys(built.assets)).toContain("/index.html");
-      expect(Object.keys(built.assets)).toContain("/window.js");
+      expect(Rec.keys(built.assets)).toContain("/index.html");
+      expect(Rec.keys(built.assets)).toContain("/window.js");
       process.stdout.write(
         `P14 tab: page ${new TextEncoder().encode(built.assets["/index.html"]?.body ?? "").byteLength} bytes; script ${new TextEncoder().encode(built.assets["/window.js"]?.body ?? "").byteLength} bytes\n`,
       );
-      expect(Arr.filter(observed, isProgram)).toHaveLength(Object.keys(built.programs).length);
+      expect(Arr.filter(observed, isProgram)).toHaveLength(Rec.keys(built.programs).length);
       const bytes = yield* fs.readFileString(built.brain);
       expect(bytes).toBe(joined(brain));
 
-      for (const [name, program] of Object.entries(built.programs)) {
+      for (const [name, program] of Rec.toEntries(built.programs)) {
         process.stdout.write(`P8 program ${name}: ${new TextEncoder().encode(program.source).byteLength} bytes\n`);
       }
 
@@ -388,7 +387,7 @@ it.effect(
       const control = yield* windowBuild(`export const view = () => "p8-clean-window";`);
       const brain = checkBuild(control.observed, control.built);
       expect(Arr.filter(control.observed, isWindow)).toHaveLength(1);
-      expect(Arr.some(Object.values(control.built.assets), (a) => pipe(a.body, Str.includes("p8-clean-window")))).toBe(true);
+      expect(Arr.some(Rec.values(control.built.assets), (a) => pipe(a.body, Str.includes("p8-clean-window")))).toBe(true);
       expect(Arr.some(carried(brain), (t) => pipe(t, Str.includes("p8-clean-window")))).toBe(true);
 
       // Plant: the window imports the MCP SDK. The brain's own graph names only text modules, so

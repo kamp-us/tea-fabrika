@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -202,7 +202,7 @@ describe("decoders", () => {
   it("P06: a link missing any required field is refused", () => {
     fc.assert(
       fc.property(anyLink, (value) => {
-        for (const field of Object.keys(value)) {
+        for (const field of Rec.keys(value)) {
           const missing: Record<string, unknown> = { ...value };
           delete missing[field];
           expect(decodeLink(missing)).toEqual(Option.none());
@@ -383,7 +383,7 @@ describe("exam paths and scope", () => {
     fc.assert(
       fc.property(fc.array(fc.record({ glob: filename, reason: fc.string() })), filename, (rows, name) => {
         const encoded = Arr.map(rows, ({ glob, reason }) =>
-          Object.fromEntries([
+          Rec.fromEntries([
             ["glob", glob],
             ["why", reason],
           ]),

@@ -9,7 +9,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";
@@ -27,7 +27,7 @@ const PRELUDE = 'import {Effect} from "effect";\ndeclare const p: Promise<number
 const file = (...lines: ReadonlyArray<string>) => Arr.join([PRELUDE, ...lines, ""], "\n");
 
 const run = (base: Record<string, string>, head: Record<string, string>) =>
-  Effect.runSync(asks(new Map(Object.entries(base)), new Map(Object.entries(head))));
+  Effect.runSync(asks(new Map(Rec.toEntries(base)), new Map(Rec.toEntries(head))));
 
 describe("asks", () => {
   it.effect.prop(

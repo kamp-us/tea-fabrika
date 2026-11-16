@@ -17,10 +17,11 @@ import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
 import * as Arr from "effect/Array";
 import * as Exit from "effect/Exit";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import { verify } from "./vendored.ts";
 
 /**
@@ -246,7 +247,7 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
     });
 
   // The lock's run uses each rule's options from its own block, so it counts what the config holds.
-  const settings = Object.fromEntries(Arr.map(TAKEN, (rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
+  const settings = Rec.fromEntries(Arr.map(TAKEN, (rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
   const hits = count(root, settings, ignorePatterns);
 
   if (hits === null) {

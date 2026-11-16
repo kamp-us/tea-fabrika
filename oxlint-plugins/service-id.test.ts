@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
@@ -141,9 +142,9 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
               ['export class Old extends Context.Service<Old, {}>()("old/Old") {}', false],
             ]),
           };
-          const linted = await plant(Object.fromEntries(Arr.map(Object.entries(files), ([path, f]) => [path, f.text])));
+          const linted = await plant(Rec.fromEntries(Arr.map(Rec.toEntries(files), ([path, f]) => [path, f.text])));
 
-          for (const [path, f] of Object.entries(files)) {
+          for (const [path, f] of Rec.toEntries(files)) {
             expect(linted(CODE, path), path).toEqual(f.fires);
           }
         },
@@ -222,8 +223,8 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
       files.set(path, lines);
     }
 
-      const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
-      const linted = yield* promised(() => plant(Object.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text]))));
+    const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
+    const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text]))));
 
     for (const [path, f] of planted) {
       expect(linted(CODE, path), path).toEqual(f.fires);

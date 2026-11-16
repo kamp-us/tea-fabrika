@@ -15,7 +15,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -660,8 +660,7 @@ export const statusBar = (on: Page) =>
   promised(() =>
     on.evaluate(() => {
       const bar = document.querySelector(".statusbar");
-
-      const tiles = Object.fromEntries(
+      const tiles = Rec.fromEntries(
         [...document.querySelectorAll("main [data-tile], main [data-strip]")].map((el) => {
           const box = el.getBoundingClientRect();
           const id = el.getAttribute("data-tile") ?? `strip ${el.getAttribute("data-strip")}`;

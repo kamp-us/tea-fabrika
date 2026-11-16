@@ -6,7 +6,12 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
-import { Arbitrary, ConfigProvider, Effect, Schema, Array as Arr, Option } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import { Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -64,10 +69,9 @@ const settingsFor = (w: World) =>
         {
           queue: {
             kinds: { rows: ["rows/**"], docs: ["docs/**"] },
-            checks: Object.fromEntries(
+            checks: Rec.fromEntries(
               Arr.map(["rows", "docs", "code"], (kind, i) => [
-                kind,
-                w.empty[i] ? [] : [{ name: w.name, source: w.source }],
+                kind, w.empty[i] ? [] : [{ name: w.name, source: w.source }],
               ]),
             ),
           },

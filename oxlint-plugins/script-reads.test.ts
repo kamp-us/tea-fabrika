@@ -3,10 +3,11 @@ import { NodeServices } from "@effect/platform-node";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { load, reached, scriptReads } from "./script-reads.mjs";
@@ -242,8 +243,7 @@ describe("reached", () => {
       [".agents/skills/a/scripts/box.ts", ""],
       [".agents/skills/a/scripts/box.test.ts", 'const box = join(import.meta.dirname, "box.sh");'],
     ]);
-
-    expect(Object.fromEntries(reached(tree, none, ".agents/skills/a/scripts/box.test.ts"))).toEqual({
+    expect(Rec.fromEntries(reached(tree, none, ".agents/skills/a/scripts/box.test.ts"))).toEqual({
       ".agents/skills/a/scripts/box.sh": ".agents/skills/a/scripts/box.test.ts",
       ".agents/skills/a/scripts/env.sh": ".agents/skills/a/scripts/box.sh",
       ".agents/skills/a/scripts/box.ts": ".agents/skills/a/scripts/box.sh",
@@ -279,8 +279,7 @@ describe("reached", () => {
       [".agents/skills/a/scripts/b.sh", 'sh "$(dirname "$0")/a.sh"'],
       [".agents/skills/a/scripts/a.test.ts", '"a.sh"'],
     ]);
-
-    expect(Object.fromEntries(reached(tree, none, ".agents/skills/a/scripts/a.test.ts"))).toEqual({
+    expect(Rec.fromEntries(reached(tree, none, ".agents/skills/a/scripts/a.test.ts"))).toEqual({
       ".agents/skills/a/scripts/a.sh": ".agents/skills/a/scripts/a.test.ts",
       ".agents/skills/a/scripts/b.sh": ".agents/skills/a/scripts/a.sh",
     });
@@ -434,15 +433,15 @@ describe("load", () => {
           "data/rows.json": "[]",
         };
 
-        for (const [file, text] of Object.entries(written)) {
+        for (const [file, text] of Rec.toEntries(written)) {
           yield* fs.makeDirectory(path.join(root, path.dirname(file)), { recursive: true });
           yield* fs.writeFileString(path.join(root, file), text);
         }
 
         const { tree, exists, prose } = load(root);
         // Only files under a scripts/ folder, at any depth, each with its text.
-        expect(Object.fromEntries(tree)).toEqual(
-          Object.fromEntries(Arr.filter(Object.entries(written), ([file]) => file.startsWith(`${scripts}/`))),
+        expect(Rec.fromEntries(tree)).toEqual(
+          Rec.fromEntries(Arr.filter(Rec.toEntries(written), ([file]) => file.startsWith(`${scripts}/`))),
         );
         // A file exists; a folder and a missing path do not.
         expect(Arr.map(["data/rows.json", "data", "data/none.json", scripts], exists)).toEqual([
@@ -454,7 +453,7 @@ describe("load", () => {
         expect(prose(".agents/skills/a/SKILL.md")).toBe(written[".agents/skills/a/SKILL.md"]);
         expect(prose(".agents/skills/b/SKILL.md")).toBe("");
         // And the three answers together are what the walk and the lint need.
-        expect(Object.fromEntries(reached(tree, exists, `${scripts}/run.test.ts`))).toEqual({
+        expect(Rec.fromEntries(reached(tree, exists, `${scripts}/run.test.ts`))).toEqual({
           [`${scripts}/run.sh`]: `${scripts}/run.test.ts`,
           [`${scripts}/flow/deep.sh`]: `${scripts}/run.sh`,
           "data/rows.json": `${scripts}/run.sh`,

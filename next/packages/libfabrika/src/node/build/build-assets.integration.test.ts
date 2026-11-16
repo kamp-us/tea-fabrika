@@ -19,6 +19,7 @@ import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -268,11 +269,11 @@ describe("P16 assets and Compiler", () => {
 
           const worker = { serveAsset: await serving() };
           expect(
-            Arr.filter(Object.values(built.assets), (a) => a.type === "text/javascript; charset=utf-8").length,
+            Arr.filter(Rec.values(built.assets), (a) => a.type === "text/javascript; charset=utf-8").length,
           ).toBeGreaterThanOrEqual(2);
-          expect(Arr.some(Object.values(built.assets), (a) => a.type === "text/css; charset=utf-8")).toBe(true);
+          expect(Arr.some(Rec.values(built.assets), (a) => a.type === "text/css; charset=utf-8")).toBe(true);
 
-          for (const [route, asset] of Object.entries(built.assets)) {
+          for (const [route, asset] of Rec.toEntries(built.assets)) {
             expect(pipe(route, Str.startsWith("/"))).toBe(true);
             expect(asset.hash).toBe(createHash("sha256").update(asset.body).digest("hex"));
 
@@ -381,7 +382,7 @@ describe("P16 assets and Compiler", () => {
             const serveAsset = await serving();
 
             const verify = async (assets: Readonly<Record<string, Asset>>) => {
-              for (const [route, asset] of Object.entries(assets)) {
+              for (const [route, asset] of Rec.toEntries(assets)) {
                 if (pipe(asset.type, Str.startsWith("text/css"))) {
                   expect(asset.body, "local CSS import must be included").not.toMatch(/@import\b/);
                   continue;
@@ -406,7 +407,7 @@ describe("P16 assets and Compiler", () => {
 
             // Plant the exact old behavior in real output: retain a CSS import to an absent route.
             const stylesheet = Option.getOrUndefined(
-              Arr.findFirst(Object.entries(built.assets), ([, a]) => pipe(a.type, Str.startsWith("text/css"))),
+              Arr.findFirst(Rec.toEntries(built.assets), ([, a]) => pipe(a.type, Str.startsWith("text/css"))),
             );
             assert(stylesheet, "window stylesheet must be emitted");
             await expect(
@@ -419,7 +420,7 @@ describe("P16 assets and Compiler", () => {
 
             const styles = Arr.join(
               Arr.map(
-                Arr.filter(Object.values(built.assets), (a) => pipe(a.type, Str.startsWith("text/css"))),
+                Arr.filter(Rec.values(built.assets), (a) => pipe(a.type, Str.startsWith("text/css"))),
                 (a) => a.body,
               ),
               "\n",
@@ -475,7 +476,7 @@ describe("P16 assets and Compiler", () => {
             const built = await run(f.options);
             const local = condition === "" ? body : `@media ${condition} {\n${body}\n}`;
             const stylesheets = Arr.filter(
-              Object.values(built.assets),
+              Rec.values(built.assets),
               (asset) => asset.type === "text/css; charset=utf-8",
             );
             expect(stylesheets).toHaveLength(1);
@@ -1049,7 +1050,7 @@ describe("P16 cleanup and recording", () => {
             expect(Arr.some(phases, (s) => s.name === "build.bundle")).toBe(true);
             const data = Arr.map(phases, (s) => ({
               name: s.name,
-              attributes: Object.fromEntries(s.attributes),
+              attributes: Rec.fromEntries(s.attributes),
               status: s.status,
             }));
 
@@ -1095,9 +1096,9 @@ describe("P16 cleanup and recording", () => {
 
               const planted = Arr.map(data, (row) => ({
                 ...row,
-                attributes: Object.fromEntries(
+                attributes: Rec.fromEntries(
                   Arr.filter(
-                    Object.entries(row.attributes),
+                    Rec.toEntries(row.attributes),
                     ([key]) => key !== "phase" || (omit === "failed" && row.attributes.outcome !== "failure"),
                   ),
                 ),
@@ -1119,10 +1120,10 @@ describe("P16 cleanup and recording", () => {
                 expect(row.status.endTime >= row.status.startTime).toBe(true);
               }
 
-              expect(Arr.some(Object.values(row.attributes), (v) => v === "failure" || v === "success")).toBe(true);
+              expect(Arr.some(Rec.values(row.attributes), (v) => v === "failure" || v === "success")).toBe(true);
             }
 
-            expect(Arr.some(data, (row) => Object.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(
+            expect(Arr.some(data, (row) => Rec.values(row.attributes).includes(fail ? "failure" : "success"))).toBe(
               true,
             );
             const recorded = JSON.stringify(Arr.map(data, ({ name, attributes }) => ({ name, attributes })));
@@ -1142,7 +1143,7 @@ describe("P16 cleanup and recording", () => {
               expect(recorded).toMatch(/[a-f0-9]{64}/);
               expect(
                 Arr.some(
-                  Arr.flatMap(data, (row) => Object.entries(row.attributes)),
+                  Arr.flatMap(data, (row) => Rec.toEntries(row.attributes)),
                   ([key, value]) => /bytes|size/.test(key) && typeof value === "number" && value > 0,
                 ),
               ).toBe(true);
@@ -1242,7 +1243,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
     });
 
     builds++;
-    const scripts = Arr.filter(Object.entries(built.assets), ([, a]) => a.type === "text/javascript; charset=utf-8");
+    const scripts = Arr.filter(Rec.toEntries(built.assets), ([, a]) => a.type === "text/javascript; charset=utf-8");
     const entries = new Map<string, string>();
 
     for (const p of selected) {
@@ -1258,7 +1259,7 @@ const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<nu
 
     expect(new Set(entries.values()).size).toBe(selected.length);
 
-    for (const [route, asset] of Object.entries(built.assets)) {
+    for (const [route, asset] of Rec.toEntries(built.assets)) {
       // A valid route: slash-led segments, none empty, `.` or `..`.
       expect(route).toMatch(/^(?:\/(?!\.\.?(?:\/|$))[\w.-]+)+$/);
       const response = yield* serveAsset(built.assets, new Request(`https://test.invalid${route}`));

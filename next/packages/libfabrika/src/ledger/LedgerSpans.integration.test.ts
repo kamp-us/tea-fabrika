@@ -20,6 +20,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Duration, Effect, Exit, Layer, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -96,8 +97,7 @@ const capture = () => {
   const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
 
   const tags = (name: string): ReadonlyArray<Record<string, unknown>> =>
-    ended(name).map((span) => Object.fromEntries(span.attributes));
-
+    ended(name).map((span) => Rec.fromEntries(span.attributes));
   const failed = (name: string): ReadonlyArray<boolean> =>
     ended(name).map((span) => span.status._tag === "Ended" && Exit.isFailure(span.status.exit));
 
@@ -490,7 +490,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             const error = yield* Effect.flip(ledger.append("a", "w-1", line()));
             expect(error.reason).toBe("storage");
             expect(failed("ledger.append")).toEqual([true]);
-            const values = Object.values(tags("ledger.append")[0] ?? {});
+            const values = Rec.values(tags("ledger.append")[0] ?? {});
             expect(values.some((value) => value === full.code || value === full.errcode)).toBe(true);
             expect(all().filter((value) => String(value).includes("message-marker"))).toEqual([]);
           }).pipe(Effect.provide(onSql(Effect.succeed(broken))), Effect.withTracer(tracer));
@@ -566,7 +566,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             expect(error.reason).toBe("storage");
             const [span = {}] = tags("ledger.append");
             expect(span).toEqual(expect.objectContaining({ [tag("reason")]: "storage", [ERROR]: "TypeError" }));
-            expect(Object.keys(span)).not.toContain(tag("code"));
+            expect(Rec.keys(span)).not.toContain(tag("code"));
           }).pipe(Effect.provide(onSql(Effect.succeed(odd))), Effect.withTracer(tracer));
         },
         { concurrency: 1, discard: true },
@@ -662,7 +662,7 @@ describe("p95, every call is one span, names and numbers only", () => {
           const died = rings.find((span) => span.attributes.get(tag("to")) === DIES);
           const rung = rings.find((span) => span.attributes.get(tag("to")) === READER);
           expect(died?.status._tag === "Ended" && Exit.isFailure(died.status.exit)).toBe(true);
-          expect(Object.fromEntries(died?.attributes ?? [])).toEqual(
+          expect(Rec.fromEntries(died?.attributes ?? [])).toEqual(
             expect.objectContaining({ [tag("ok")]: false, [ERROR]: "BellBroke" }),
           );
           expect(rung?.attributes.get(tag("ok"))).toBe(true);
@@ -687,7 +687,7 @@ describe("p95, every call is one span, names and numbers only", () => {
         const rings = tags("ledger.ring");
         expect(rings).toHaveLength(1);
         expect(rings[0]).toEqual(expect.objectContaining({ [tag("to")]: READER, [tag("ok")]: false }));
-        expect(Object.values(rings[0] ?? {})).toContain("LedgerError");
+        expect(Rec.values(rings[0] ?? {})).toContain("LedgerError");
         expect(rings[0]).toEqual(expect.objectContaining({ [ERROR]: "LedgerError" }));
         expect(tags("ledger.append")[0]).toEqual(
           expect.objectContaining({ [tag("answer")]: "placed", [tag("rings")]: 1 }),
@@ -722,7 +722,7 @@ describe("p95, every call is one span, names and numbers only", () => {
             expect(failed("ledger.call")).toEqual([false, true, true]);
             expect(calls.map((t) => t[tag("reader")])).toEqual([READER, READER, READER]);
             expect(calls.map((t) => t[tag("reason")])).toEqual([undefined, "unreachable", "bad_row"]);
-            expect(calls.map((t) => Object.values(t))).toEqual([
+            expect(calls.map((t) => Rec.values(t))).toEqual([
               expect.arrayContaining(["append"]),
               expect.arrayContaining(["read"]),
               expect.arrayContaining(["wait"]),

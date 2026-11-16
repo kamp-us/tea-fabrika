@@ -1,3 +1,4 @@
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's triggers: the events that start a run, the paths
 // a pull request ignores, what cancels a run, and a draft's own check names.
 import { ignored } from "../changes.mjs";
@@ -54,7 +55,7 @@ export const triggers: Rule = ({ workflow, on, jobs }, require) => {
     TYPES.every((type) => types.includes(type)), "pull requests run on open, push, reopen and ready for review");
   require(compact(map(workflow["concurrency"])["cancel-in-progress"]) === CANCEL, "only a new head cancels a run");
 
-  for (const [job, expected] of Object.entries(DRAFT_NAMES)) {
+  for (const [job, expected] of Rec.toEntries(DRAFT_NAMES)) {
     require(compact(map(jobs[job])["name"]) === expected, `${job} has its own name on a draft`);
   }
 };

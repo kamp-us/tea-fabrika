@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
@@ -24,7 +25,7 @@ const run = (files: Readonly<Record<string, string>>, untracked: readonly string
   mkdirSync(tree);
   spawnSync("git", ["init", "-q"], { cwd: tree });
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(tree, path)), { recursive: true });
     writeFileSync(join(tree, path), text);
 
@@ -199,7 +200,7 @@ describe("a named catalog's pointer", () => {
       Arr.join(""),
     )}`,
     "packages/one/package.json": JSON.stringify({
-      dependencies: Object.fromEntries(Arr.map(all, (name, i) => [`thing${i}`, `catalog:${name}`])),
+      dependencies: Rec.fromEntries(Arr.map(all, (name, i) => [`thing${i}`, `catalog:${name}`])),
     }),
   });
 
@@ -253,7 +254,7 @@ describe("a named catalog's pointer", () => {
         const { status, said } = run({
           "pnpm-workspace.yaml": `catalogs:\n  ${name}:\n    thing: 1.2.3\n`,
           "packages/one/package.json": JSON.stringify({
-            dependencies: Object.fromEntries(Arr.map(bad, (version, i) => [`thing${i}`, version])),
+            dependencies: Rec.fromEntries(Arr.map(bad, (version, i) => [`thing${i}`, version])),
           }),
         });
 

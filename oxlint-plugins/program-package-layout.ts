@@ -4,9 +4,10 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "n
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
@@ -70,7 +71,7 @@ const conditionPaths = (x: unknown, path: readonly string[] = []): string[][] =>
     : Arr.isArray(x)
       ? Arr.flatMap(x, (target) => conditionPaths(target, path))
       : map(x)
-        ? Arr.flatMap(Object.entries(x), ([condition, target]) =>
+        ? Arr.flatMap(Rec.toEntries(x), ([condition, target]) =>
             condition === "types" ? [] : conditionPaths(target, [...path, condition]),
           )
         : [];
@@ -82,7 +83,7 @@ const targetStrings = (x: unknown): string[] =>
     : Arr.isArray(x)
       ? Arr.flatMap(x, targetStrings)
       : map(x)
-        ? Arr.flatMap(Object.entries(x), ([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
+        ? Arr.flatMap(Rec.toEntries(x), ([condition, target]) => (condition === "types" ? [] : targetStrings(target)))
         : [];
 
 // The platform's own import names, as decision 0042 lists them
@@ -116,7 +117,7 @@ type Names = {
 const aliasTargets = (names: Names, name: string): string[] =>
   !name.startsWith("#")
     ? []
-    : Arr.flatMap(Object.entries(names.aliases), ([key, target]) => {
+    : Arr.flatMap(Rec.toEntries(names.aliases), ([key, target]) => {
         if (key === name) {
           return targetStrings(target);
         }
@@ -558,16 +559,14 @@ export const programPackageLayout: CreateRule = {
         Arr.flatMap(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"], (field) => {
           const listed = map(manifest) ? manifest[field] : undefined;
 
-          return map(listed) ? Object.keys(listed) : [];
+          return map(listed) ? Rec.keys(listed) : [];
         }),
       ),
     };
-
-    const keys = map(raw) ? Object.keys(raw) : [];
-
+    const keys = map(raw) ? Rec.keys(raw) : [];
     // A string, an array, null, or an object of conditions is the '.' export alone.
     const exports: Record<string, unknown> =
-      map(raw) && Arr.some(Object.keys(raw), (key) => key.startsWith("."))
+      map(raw) && Arr.some(Rec.keys(raw), (key) => key.startsWith("."))
         ? raw
         : raw === undefined
           ? {}
@@ -663,7 +662,7 @@ export const programPackageLayout: CreateRule = {
     }
 
     // './window' is judged for Worker code like every other subpath.
-    const subpaths = Arr.filter(Object.keys(exports), (key) => key.startsWith("./"));
+    const subpaths = Arr.filter(Rec.keys(exports), (key) => key.startsWith("./"));
     const windowTargets = "./window" in exports ? resolveKey("./window") : [];
 
     const real = (paths: readonly (string | undefined)[]) =>

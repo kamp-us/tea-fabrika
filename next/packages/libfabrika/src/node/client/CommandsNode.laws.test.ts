@@ -26,6 +26,7 @@ import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
@@ -299,7 +300,7 @@ describe("P39 slice 4b: the real command layer", () => {
             expect(Arr.map(command.args, String), "C2: the argv is exactly --version").toEqual(["--version"]);
             expect(command.options.extendEnv, "C2: the child is not given the hands' environment").toBe(false);
             const childEnv = command.options.env ?? {};
-            expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
+            expect(Rec.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
             expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
 
             // Every named output of the spawn: the executable, the argv and every option, in each form a

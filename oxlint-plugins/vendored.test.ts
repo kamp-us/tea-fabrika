@@ -18,10 +18,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, describe, expect, it } from "vitest";
@@ -69,7 +70,7 @@ const pinned = (files: Readonly<Record<string, string>>): { readonly root: strin
   const root = join(home, String(trees));
   const src = join(root, "vendor", "anti-slop", "src");
 
-  for (const [path, text] of Object.entries(files)) {
+  for (const [path, text] of Rec.toEntries(files)) {
     mkdirSync(dirname(join(src, path)), { recursive: true });
     writeFileSync(join(src, path), text);
   }
@@ -157,7 +158,7 @@ describe("L1 the vendored folder is the pinned commit's code", () => {
       fc.property(FILES, EDIT, (files, edit) => {
         const { root, tree } = pinned(files);
         fc.pre(edit.kind !== "tree" || edit.tree !== tree);
-        apply(root, Object.keys(files), edit);
+        apply(root, Rec.keys(files), edit);
         seen.add(`${edit.kind} ${edit.committed}`);
         // Refused exactly when the copy was edited: an untouched copy gets no line, every edit one at least.
         expect({ kind: edit.kind, refused: verify(root).length > 0 }).toEqual({

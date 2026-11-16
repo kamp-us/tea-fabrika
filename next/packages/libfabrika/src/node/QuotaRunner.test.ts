@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { Writer } from "../access/SessionManager.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -92,7 +93,7 @@ const program = (name: string) => ({
   msg: Msg,
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
-  inputs: Object.fromEntries(
+  inputs: Rec.fromEntries(
     Arr.map(["inc", "throw", "work", "schedule"], (key) => [
       key,
       {
@@ -111,7 +112,7 @@ const program = (name: string) => ({
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
 const snapshot = (sql: Sql) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     Arr.map(
       sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
       ({ name }) => [String(name), sql.exec(`SELECT * FROM ${quote(String(name))}`)],
@@ -331,7 +332,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
     entries: Effect.sync(() =>
       Arr.map(project.exec("SELECT * FROM entries ORDER BY rev"), (row) => Schema.decodeUnknownSync(Row)(row)),
     ),
-    snapshot: Effect.sync(() => Object.fromEntries(Arr.map([...sqls], ([name, db]) => [name, snapshot(db)]))),
+    snapshot: Effect.sync(() => Rec.fromEntries(Arr.map([...sqls], ([name, db]) => [name, snapshot(db)]))),
     reopen: store.reopen,
     cut: (at) => {
       cut = at;

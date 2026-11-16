@@ -10,7 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
@@ -115,7 +115,7 @@ const backends = {
 } as const;
 
 describe("P18 L9: one client, two backends, one real round trip", () => {
-  for (const [name, make] of Object.entries(backends)) {
+  for (const [name, make] of Rec.toEntries(backends)) {
     it(
       `scenario: the ${name} client dials, waits, is granted, pings in text, opens the checklist, submits one add and reads it back, through the library's one start`,
       { timeout: LIMIT },
@@ -144,7 +144,7 @@ describe("P18 L9: one client, two backends, one real round trip", () => {
 // Plant: drop the window's DOWN handler; the tile stays `Online` on the dead pid and the wait for
 // `Ended (crashed)` runs out.
 describe("P18 E1: a tile monitors its process and follows the restart, on both backends", () => {
-  for (const [name, make] of Object.entries(backends)) {
+  for (const [name, make] of Rec.toEntries(backends)) {
     it(
       `scenario: the ${name} client's tile says Ended (crashed), opens the successor, sends it one add, and its watch ends when the client closes`,
       { timeout: LIMIT },

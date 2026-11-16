@@ -1,6 +1,9 @@
 import { relative, resolve } from "node:path";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it } from "@effect/vitest";
-import { type Duration, Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import {
@@ -308,7 +311,7 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
 
 it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", () => {
   // Plant: let a failed read escape collect as a defect, as a bare JSON.parse of a missing report would.
-  const key = fc.constantFrom(...Object.keys(env));
+  const key = fc.constantFrom(...Rec.keys(env));
   return fc.assert(
     fc.asyncProperty(
       fc.uniqueArray(key),
@@ -317,8 +320,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
       fc.oneof(fc.string(), fc.constant("{}"), fc.constant('{"testResults":[]}')),
       fc.boolean(),
       async (dropped, answer, apiThrows, report, readThrows) => {
-        const partial = Object.fromEntries(Object.entries(env).filter(([name]) => !dropped.includes(name)));
-
+        const partial = Rec.fromEntries(Rec.toEntries(env).filter(([name]) => !dropped.includes(name)));
         const timings = await timingsOf(partial, {
           job: () =>
             apiThrows ? Effect.fail(Unread.make({ cause: new Error("socket hang up") })) : Effect.succeed(answer),

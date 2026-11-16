@@ -12,6 +12,7 @@ import { runsFor } from "@kampus/vitest";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
 
@@ -68,7 +69,7 @@ const encoded = fc
  * field: an Error keeps `message` as an own key that does not enumerate.
  */
 const own = (value: object) =>
-  Object.fromEntries(
+  Rec.fromEntries(
     Object.getOwnPropertyNames(value)
       .filter((key) => key !== "stack")
       .map((key) => [key, Object.getOwnPropertyDescriptor(value, key)?.value]),

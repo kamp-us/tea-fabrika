@@ -8,6 +8,7 @@ import { join } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
@@ -195,7 +196,7 @@ type Tree = any;
 
 const toValue = (node: Tree): unknown => {
   if (node.type === "ObjectExpression") {
-    return Object.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
+    return Rec.fromEntries(node.properties.map((p: Tree) => [p.key.value ?? p.key.name, toValue(p.value)]));
   }
 
   if (node.type === "ArrayExpression") {
@@ -262,7 +263,7 @@ it.live(
     "next/apps/fabrika/src/Planted.test.ts",
     "packages/fabrika/src/Planted.ts",
   ];
-      const linted = yield* promised(() => plant(Object.fromEntries(Arr.map([...on, ...off], (path) => [path, SERVICE]))));
+  const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map([...on, ...off], (path) => [path, SERVICE]))));
 
       expect(Arr.map(on, (path) => [path, linted(CODE, path)])).toEqual(Arr.map(on, (path) => [path, [4]]));
       expect(Arr.map(off, (path) => [path, linted(CODE, path)])).toEqual(Arr.map(off, (path) => [path, []]));

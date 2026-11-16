@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 // Ticket 477, PR 0: the lint laws of libfabrika's modules (decision 0043), each seen to fire on a
 // planted file before a file moves. All of this is `next/`. Three rules carry them:
@@ -57,9 +58,8 @@ const pascal = (name: string): string => `${name.slice(0, 1).toUpperCase()}${nam
 const own = "export const own = 1;";
 
 const pair = (module: string, other: string) => `${SRC}/${module}/From${pascal(other)}.ts`;
-
-const reexportFiles = {
-    ...Object.fromEntries(
+  const reexportFiles = {
+    ...Rec.fromEntries(
       Arr.map(PAIRS, ([module, other]) => [
         pair(module, other),
         file(
@@ -197,9 +197,8 @@ const internalBody = file(
     "// @internal", // 32: a line comment is not the tag a doc tool reads
     "export const k = 3;", // 33
 );
-
-const internalFiles = {
-  ...Object.fromEntries(Arr.map(MODULES, (module) => [`${SRC}/${module}/internal/part.ts`, internalBody])),
+  const internalFiles = {
+    ...Rec.fromEntries(Arr.map(MODULES, (module) => [`${SRC}/${module}/internal/part.ts`, internalBody])),
     // The plan's real name, and a folder below `internal/`.
   [`${SRC}/ledger/internal/ledgerStore.ts`]: internalBody,
   [`${SRC}/runtime/internal/holder/state.ts`]: internalBody,
@@ -292,10 +291,9 @@ describe("fabrika/modules: the shared top files hold values only", () => {
 });
 
 const front = (module: string, other: string) => `${SRC}/${module}/Into${pascal(other)}.ts`;
-const inner = (module: string, other: string) => `${SRC}/${module}/internal/into${pascal(other)}.ts`;
-
-const importFiles = {
-    ...Object.fromEntries(
+  const inner = (module: string, other: string) => `${SRC}/${module}/internal/into${pascal(other)}.ts`;
+  const importFiles = {
+    ...Rec.fromEntries(
       Arr.flatMap(PAIRS, ([module, other]) => [
         [
           front(module, other),

@@ -1,6 +1,7 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -91,8 +92,8 @@ it.live("scenario: U11 is enabled by the real config and leaves only cloudflare/
   const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
   const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
   const old = "packages/fabrika/src/usage.ts";
-    const result = yield* promised(() =>
-      plant(Object.fromEntries(Arr.map([runtime, cloudflare, old], (file) => [file, Arr.join(uses, "\n")]))),
+  const result = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([runtime, cloudflare, old], (file) => [file, Arr.join(uses, "\n")]))),
     );
   expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
   expect(result(CODE, cloudflare)).toEqual([]);

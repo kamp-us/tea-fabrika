@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -70,7 +71,7 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
   })),
   // Each port starter, called with options and no literal URL, so it opens a socket on this machine.
   ...Arr.flatMap(
-    Object.entries({
+    Rec.toEntries({
       "node:net": ["createServer", "createConnection", "connect"],
       "node:http": ["createServer", "request", "get"],
       https: ["createServer", "request", "get"],
@@ -347,7 +348,7 @@ it("scenario: the repo's .oxlintrc.json wires the rule for next/'s test files", 
     }
 
     const found = fires([relative(root, folder)]);
-    expect(Object.fromEntries(found)).toEqual({ [relative(root, plain)]: [2] });
+    expect(Rec.fromEntries(found)).toEqual({ [relative(root, plain)]: [2] });
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }
@@ -357,5 +358,5 @@ it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)"
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.
-  expect(Object.fromEntries(fires(committed()))).toEqual({});
+  expect(Rec.fromEntries(fires(committed()))).toEqual({});
 });

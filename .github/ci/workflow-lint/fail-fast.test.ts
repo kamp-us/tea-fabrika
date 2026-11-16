@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -27,7 +28,7 @@ it("F1 scenario: in the checked-in check.yaml every job but ci-required ends wit
   // The YAML anchor `&stop` in changes and its aliases elsewhere, read as GitHub reads them. Each
   // job's last step taken off gives that job's one error, so each alias lands where the law looks.
   const real = () => parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
-  const jobs = Object.keys(real().jobs).filter((job) => job !== "ci-required");
+  const jobs = Rec.keys(real().jobs).filter((job) => job !== "ci-required");
   expect(jobs.length).toBeGreaterThan(0);
 
   for (const job of jobs) {

@@ -15,6 +15,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
@@ -120,8 +121,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
         );
 
       const exports = manifest.exports;
-
-      return typeof exports === "object" && Object.hasOwn(exports, "./window")
+      return typeof exports === "object" && Rec.has(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
     }
@@ -147,7 +147,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
     const route = `/${item.fileName}`,
       type = contentType(item.fileName);
 
-    if (type === undefined || Object.hasOwn(assets, route)) {
+    if (type === undefined || Rec.has(assets, route)) {
       return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
     }
 
@@ -196,11 +196,11 @@ const embed = (tables: Tables): Plugin => {
   const texts: Array<string> = [];
   const text = (body: string) => `t${texts.push(body) - 1}`;
   const programs = Arr.map(
-    Object.entries(tables.programs),
+    Rec.toEntries(tables.programs),
     ([name, p]) => `${JSON.stringify(name)}: {hash: ${JSON.stringify(p.hash)}, source: ${text(p.source)}}`,
   );
   const assets = Arr.map(
-    Object.entries(tables.assets),
+    Rec.toEntries(tables.assets),
     ([route, a]) =>
       `${JSON.stringify(route)}: {hash: ${JSON.stringify(a.hash)}, type: ${JSON.stringify(a.type)}, body: ${text(a.body)}}`,
   );
@@ -310,7 +310,7 @@ const tabScript = (output: ReadonlyArray<OutputChunk | OutputAsset>): string =>
 const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
   name: "fabrika-tab-page",
   generateBundle(_options, output) {
-    const emit = hash(tabScript(Object.values(output))).pipe(
+    const emit = hash(tabScript(Rec.values(output))).pipe(
       Effect.flatMap((build) =>
         Effect.sync(() => {
           this.emitFile({ type: "asset", fileName: PAGE, source: page(styles, build) });
@@ -492,7 +492,7 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
     root: path.dirname(entry),
     cwd: root,
     plugins: [compiler],
-    programs: Object.fromEntries(Arr.map(options.programs, (p) => [p.name, { module: p.package, name: p.export }])),
+    programs: Rec.fromEntries(Arr.map(options.programs, (p) => [p.name, { module: p.package, name: p.export }])),
   });
 
   const findings = check(
@@ -613,17 +613,16 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
     },
     load(id) {
-      for (const [name, module] of Object.entries(windows)) {
+      for (const [name, module] of Rec.toEntries(windows)) {
         if (id === generated(name)) {
           return `export * from ${JSON.stringify(module)};`;
         }
       }
     },
   };
-
-  const assets: Record<string, Asset> = Object.keys(windows).length
+  const assets: Record<string, Asset> = Rec.keys(windows).length
     ? yield* bundle(
-        Object.fromEntries(Arr.map(Object.keys(windows), (name) => [name, `${WINDOW}${name}`])),
+        Rec.fromEntries(Arr.map(Rec.keys(windows), (name) => [name, `${WINDOW}${name}`])),
         [entries, compiler, stylesheets(context, path)],
         {
           phase: "window",
@@ -635,8 +634,8 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     : {};
 
   if (options.tab !== undefined) {
-    for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
-      if (Object.hasOwn(assets, route)) {
+    for (const [route, file] of Rec.toEntries(yield* tabAssets(options.tab, [compiler], root))) {
+      if (Rec.has(assets, route)) {
         return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
       }
 
@@ -666,8 +665,8 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   const size = (bodies: ReadonlyArray<string>) => Arr.reduce(bodies, 0, (total, body) => total + bytes(body));
   const digest = yield* publish(options.out, brain, {
-    programs: size(Arr.map(Object.values(programs), (p) => p.source)),
-    window: size(Arr.map(Object.values(assets), (a) => a.body)),
+    programs: size(Arr.map(Rec.values(programs), (p) => p.source)),
+    window: size(Arr.map(Rec.values(assets), (a) => a.body)),
   });
 
   return {

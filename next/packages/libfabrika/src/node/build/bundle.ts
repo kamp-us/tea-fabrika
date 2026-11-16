@@ -8,6 +8,7 @@ import * as Arr from "effect/Array";
 import { String as Str, pipe } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
+import * as Rec from "effect/Record";
 import {
   rolldown,
   VERSION,
@@ -193,7 +194,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
   const generated = path.join(options.root, "program.generated.ts");
   const programs: Record<string, ProgramSource> = {};
 
-  for (const [name, entry] of Object.entries(options.programs)) {
+  for (const [name, entry] of Rec.toEntries(options.programs)) {
     const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
 
     const output = yield* bundle(

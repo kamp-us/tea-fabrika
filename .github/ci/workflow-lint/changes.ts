@@ -1,3 +1,4 @@
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's changes job (S1): its flags and outputs, the
 // parser's pass, and the size step that sizes next's legs (legs.ts).
 import { classifier, compact, env, FLAGS, map, ROW_INSTALL, type Rule, steps, VISUAL_LABEL } from "./shared.ts";
@@ -57,7 +58,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   }
 
   const exposed = [...FLAGS, "next", "filter", ...LEGS_OUTPUTS.map(([name]) => name)].toSorted();
-  require(JSON.stringify(Object.keys(outputs).toSorted()) ===
+  require(JSON.stringify(Rec.keys(outputs).toSorted()) ===
     JSON.stringify(exposed), "S1: changes exposes its flags, filter and the size step's outputs, and nothing else");
 
   const changeSteps = steps(changes);
@@ -65,7 +66,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
   require(same?.["run"] === "node .github/ci/changes.mjs --same" &&
     same["continue-on-error"] === true, "changes runs the parser's pass, and its failure fails nothing");
 
-  for (const [key, expected] of Object.entries(classifier)) {
+  for (const [key, expected] of Rec.toEntries(classifier)) {
     require(map(same?.["env"])[key] === expected, `the parser's pass gets event ${key} through env`);
   }
 
@@ -104,7 +105,7 @@ export const changesJob: Rule = ({ jobs }, require) => {
     compact(sizing["if"]) ===
       SIZED, "S1: changes sizes next with legs.ts after the parser's pass, on every run that tests next, and fails open");
 
-  for (const [key, expected] of Object.entries(SIZE_ENV)) {
+  for (const [key, expected] of Rec.toEntries(SIZE_ENV)) {
     require(map(sizing?.["env"])[key] === expected, `S1: the size step gets ${key} through env`);
   }
 

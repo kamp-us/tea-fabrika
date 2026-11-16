@@ -18,6 +18,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { inputParents, processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -127,7 +128,7 @@ const full: Line = {
 const json = (): Record<string, unknown> => JSON.parse(JSON.stringify(full));
 
 const without = (key: string): Record<string, unknown> =>
-  Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
+  Rec.fromEntries(Rec.toEntries(json()).filter(([k]) => k !== key));
 
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
 
@@ -179,9 +180,7 @@ describe("p92, every entry has every field: the type", () => {
     const g: Line = noTag;
     // @ts-expect-error `body` is required
     const h: Line = noBody;
-    expect([a, b, c, d, e, f, g, h, i].map((line) => Object.keys(line).length)).toEqual(
-      KEYS.map(() => KEYS.length - 1),
-    );
+    expect([a, b, c, d, e, f, g, h, i].map((line) => Rec.keys(line).length)).toEqual(KEYS.map(() => KEYS.length - 1));
   });
 
   it("a Line may not name what the referee sets", () => {
@@ -209,7 +208,7 @@ describe("p92, every entry has every field: the type", () => {
     }[keyof typeof data];
 
     expectTypeOf<MakesInputId>().toEqualTypeOf<"InputId" | "ParentText">();
-    expect(Object.keys(data).length).toBeGreaterThan(0);
+    expect(Rec.keys(data).length).toBeGreaterThan(0);
   });
 });
 
@@ -270,7 +269,7 @@ describe("p92, every entry has every field: at the referee", () => {
       yield* ledger.append("notes:2", "w-2", { ...full, parent: goodParent });
       yield* ledger.append("notes:1", "w-3", { ...full, seen: 2 });
       const entries = yield* Stream.runCollect(ledger.read("notes:1", 0));
-      expect(entries.map((entry) => Object.keys(entry).sort())).toEqual([ENTRY_KEYS, ENTRY_KEYS]);
+      expect(entries.map((entry) => Rec.keys(entry).sort())).toEqual([ENTRY_KEYS, ENTRY_KEYS]);
       expect(entries.map((entry) => [entry.id, entry.stream, entry.rev, entry.pos])).toEqual([
         ["w-1", "notes:1", 1, 1],
         ["w-3", "notes:1", 3, 2],

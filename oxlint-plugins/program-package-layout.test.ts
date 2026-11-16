@@ -15,8 +15,9 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Result from "effect/Result";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -78,12 +79,12 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
     const written = manifest({ name: `@p16/${name}`, type: "module", exports });
     writeFileSync(join(scratch, pkg, "package.json"), typeof written === "string" ? written : JSON.stringify(written));
 
-    for (const [path, text] of Object.entries(sources)) {
+    for (const [path, text] of Rec.toEntries(sources)) {
       mkdirSync(dirname(join(scratch, pkg, path)), { recursive: true });
       writeFileSync(join(scratch, pkg, path), text.replaceAll(HOME, home));
     }
 
-    for (const [path, target] of Object.entries(links)) {
+    for (const [path, target] of Rec.toEntries(links)) {
       const at = join(scratch, pkg, path);
       mkdirSync(dirname(at), { recursive: true });
       symlinkSync(relative(dirname(at), join(scratch, pkg, target)), at);
@@ -92,7 +93,7 @@ const write = (scratch: string, plants: readonly Plant[]): readonly (readonly st
     // oxlint lints only JavaScript and TypeScript files, here only the package's own: a file
     // outside it is outside the rule too.
     return pipe(
-      Object.keys(sources),
+      Rec.keys(sources),
       Arr.filter((path) => /\.[cm]?[jt]sx?$/.test(path) && !path.startsWith("../")),
       Arr.map((path) => `${pkg}/${path}`),
     );
@@ -310,7 +311,7 @@ describe("fabrika/program-package-layout", () => {
             exports = {
               ".": {
                 types: { import: "./src/types.ts", default: declaration },
-                ...Object.fromEntries(
+                ...Rec.fromEntries(
                   Arr.map(conditions, (condition) => [
                     condition,
                     {
@@ -754,7 +755,7 @@ describe("fabrika/program-package-layout", () => {
         fc.constantFrom(...links),
         fc.constantFrom(...entries),
         fc.constantFrom("workerd", "worker", "browser", "import", "node", "default"),
-        fc.constantFrom(...(Object.keys(manifests) as (keyof typeof manifests)[])),
+        fc.constantFrom(...(Rec.keys(manifests) as (keyof typeof manifests)[])),
         (
           name,
           [workerKey, windowKey, helperKey],
@@ -839,8 +840,7 @@ describe("fabrika/program-package-layout", () => {
               "array dot": [".", { ".": { [condition]: [worker], [beside]: "./src/program.ts" } }],
               "fixed pattern": [`${workerKey}/*`, { [`${workerKey}/*`]: worker }],
               "null pattern": [
-                "./*",
-                { "./*": "./src/*.ts", ...Object.fromEntries(Arr.map(shut, (key) => [key, null])) },
+                "./*", { "./*": "./src/*.ts", ...Rec.fromEntries(Arr.map(shut, (key) => [key, null])) },
               ],
               window: ["./window", { "./window": worker }],
               "window tsx": ["./window", { "./window": worker }],
@@ -908,7 +908,7 @@ describe("fabrika/program-package-layout", () => {
                       manifest: (fields) => ({
                         ...manifests[manifest](fields),
                         ...declared,
-                        ...(Object.keys(aliases).length === 0 ? {} : { imports: aliases }),
+                    ...(Rec.keys(aliases).length === 0 ? {} : { imports: aliases }),
                       }),
                       links: symlinks,
                     },

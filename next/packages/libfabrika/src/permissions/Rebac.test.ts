@@ -20,6 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
@@ -230,7 +231,7 @@ const holds = (tuples: ReadonlySet<string>, subject: string, permission: string,
   while (changed) {
     changed = false;
 
-    for (const [name, union] of Object.entries(rules)) {
+    for (const [name, union] of Rec.toEntries(rules)) {
       if (!held.has(name) && union.some(has)) {
         held.add(name);
         changed = true;

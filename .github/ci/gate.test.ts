@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import { parse } from "yaml";
@@ -278,7 +280,7 @@ it("G1 property: decide starts every hand start, and on a push or the catch-up s
     { ...options, numRuns: 200 },
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -443,7 +445,7 @@ it.live(
         ),
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
     }),
@@ -631,7 +633,7 @@ it.live(
         ),
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
     }),
@@ -686,7 +688,7 @@ it.live(
           }
         }
 
-        for (const [name, text] of Object.entries(outputs)) {
+        for (const [name, text] of Rec.toEntries(outputs)) {
           for (const form of forms) {
             expect(text.includes(form), name).toBe(false);
           }
@@ -700,7 +702,7 @@ it.live(
         ),
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
     }),
@@ -773,7 +775,7 @@ it.live(
         ),
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
     }),
@@ -915,7 +917,7 @@ it.live(
         ),
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
     }),

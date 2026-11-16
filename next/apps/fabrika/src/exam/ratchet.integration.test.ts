@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -55,7 +55,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
 
       git("init", "-q", "-b", "main");
 
-      for (const [file, rows] of Object.entries(ROWS)) {
+      for (const [file, rows] of Rec.toEntries(ROWS)) {
         put(file, rows);
       }
 

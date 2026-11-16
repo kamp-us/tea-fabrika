@@ -7,6 +7,7 @@ import { join } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -394,8 +395,8 @@ it.live("fires exactly on a read service whose type holds ReturnType, Effect.Suc
   ];
 
   const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
-    const linted = yield* promised(() =>
-      plant(Object.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text]))),
+  const linted = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text]))),
     );
   expect(linted(CODE, product)).toEqual(planted.fires);
   // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.

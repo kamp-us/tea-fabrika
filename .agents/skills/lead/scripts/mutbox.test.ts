@@ -4,7 +4,16 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Clock, Effect, Exit, Fiber, Layer, Schedule, Stream, Array as Arr, Option } from "effect";
+import * as Clock from "effect/Clock";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
@@ -241,7 +250,7 @@ describe("mutbox, the pure parts", () => {
         fc.nat({ max: 40 }),
         (a, b, selected) => {
           const arm = tally(0, "report", b, selected);
-          expect(Arr.reduce(Object.values(arm.counts), 0, (x, y) => x + y)).toBe(b.length);
+          expect(Arr.reduce(Rec.values(arm.counts), 0, (x, y) => x + y)).toBe(b.length);
           expect(arm.tested).toBe(Arr.filter(b, (r) => ["Killed", "Survived", "Timeout"].includes(r.status)).length);
           expect(arm.survivors).toEqual(Arr.filter(b, (r) => r.status === "Survived"));
           expect(arm.unreached).toBe(Math.max(0, selected - b.length));
@@ -347,7 +356,7 @@ describe("mutbox, the pure parts", () => {
           const key =
             file in map
               ? file
-              : Arr.filter(Object.keys(map), (k) => k.endsWith("/") && file.startsWith(k)).sort(
+              : Arr.filter(Rec.keys(map), (k) => k.endsWith("/") && file.startsWith(k)).sort(
                   (x, y) => y.length - x.length,
                 )[0];
           return key !== undefined && map[key] === "build";
@@ -604,7 +613,7 @@ const run = (setup: Setup = {}) => {
     writeFileSync(join(fake, "leftover"), `${setup.leftover}\n`);
   }
 
-  for (const [path, text] of Object.entries(setup.files ?? {})) {
+  for (const [path, text] of Rec.toEntries(setup.files ?? {})) {
     writeFileSync(join(dir, path), text);
   }
 

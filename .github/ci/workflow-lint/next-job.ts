@@ -1,3 +1,4 @@
+import * as Rec from "effect/Record";
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
 import {
@@ -47,7 +48,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   const expectedLegs = [...Array.from({ length: e2eCount }, (_, i) => `${E2E_PREFIX}${i + 1}`), ...VITEST_LEGS];
   require(e2eCount >= 1 &&
     JSON.stringify(allLegs) === JSON.stringify(expectedLegs) &&
-    Object.keys(matrix).length ===
+    Rec.keys(matrix).length ===
       1, "next's legs are e2e-1 to e2e-N in order, then 1 to 5, all strings, with no other matrix entries");
   // E10 (0536). The visual tests never start unasked: the full fallback runs only on a pull request
   // with the `visual` label, and every other unsized run, the merge queue and main among them, gets
@@ -114,7 +115,7 @@ export const nextLaws: Rule = ({ jobs }, require) => {
   // narrow the list again, past the readers.
   require(compact(map(testStep?.["env"])["FILTER"]) ===
     "needs.changes.outputs.files||needs.changes.outputs.filter||'next/'", "next's vitest step takes changes' files, else filter, with the fallback next/");
-  require(JSON.stringify(Object.keys(map(testStep?.["env"])).toSorted()) ===
+  require(JSON.stringify(Rec.keys(map(testStep?.["env"])).toSorted()) ===
     JSON.stringify(["FILTER", "SHARD"]), "next's vitest step's env is SHARD and FILTER alone");
   // E2. The same for the end-to-end step, over the count of e2e legs.
   const e2eStep = nextSteps.find((s) => s["run"] === e2eCommand);

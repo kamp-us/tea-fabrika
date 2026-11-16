@@ -11,6 +11,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Path from "effect/Path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str } from "effect";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
@@ -21,7 +22,7 @@ const declarations = Declarations.all.declarations;
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Rec.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 const optional = (name: string) => Config.String(name).pipe(Config.withDefault(undefined));
 
@@ -42,7 +43,7 @@ export const make = (options: { readonly version: string }) =>
     "settings",
     {
       // Each declared setting is a flag at its own path, as --instance.port.
-      settings: Object.fromEntries(
+      settings: Rec.fromEntries(
         Arr.map(declarations, (d) => [
           d.path,
           Flag.String(d.path).pipe(Flag.withDescription(d.doc), Flag.withDefault(undefined)),

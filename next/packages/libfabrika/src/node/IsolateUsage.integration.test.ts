@@ -17,6 +17,7 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
@@ -283,7 +284,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     yield* service.open("fixture");
 
     const snapshot = Effect.sync(() =>
-      Object.fromEntries(
+      Rec.fromEntries(
         Arr.map(["process_state", "process_letters", "process_recovery", "process_receipts"], (table) => [
           table,
           state.sql.exec(`SELECT * FROM ${table} ORDER BY rowid`),

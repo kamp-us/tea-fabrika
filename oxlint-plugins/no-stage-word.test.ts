@@ -3,6 +3,7 @@ import type { Context } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { expect } from "vitest";
@@ -139,7 +140,7 @@ it("rejects the word in generated names, spellings and placements, and passes th
 
         const result = await plant(files);
 
-        for (const [path, fires] of Object.entries(expected)) {
+        for (const [path, fires] of Rec.toEntries(expected)) {
           expect(result(CODE, path), files[path]).toEqual(fires);
         }
       },
@@ -194,7 +195,7 @@ it("real config holds generated next/ paths and leaves today's version, .agents/
         ];
 
         const source = "const localStage = 1;\n// a stage\n";
-        const result = await plant(Object.fromEntries(Arr.map([...inside, ...outside], (path) => [path, source])));
+        const result = await plant(Rec.fromEntries(Arr.map([...inside, ...outside], (path) => [path, source])));
 
         for (const path of inside) {
           expect(result(CODE, path), path).toEqual([1, 2]);
@@ -227,7 +228,7 @@ it("absolute, relative and Windows spellings of a path get the same next/-only s
         // The scope check reads only the two paths; the rest of the Context is never touched for it.
         const context: Pick<Context, "cwd" | "filename"> = { cwd, filename };
         const visitor = noStageWord.create(context as Context);
-        expect(Object.keys(visitor).length > 0, `${cwd} ${filename}`).toBe(top === "next");
+        expect(Rec.keys(visitor).length > 0, `${cwd} ${filename}`).toBe(top === "next");
       },
     ),
     { ...runs, numRuns: 200 },
@@ -378,6 +379,6 @@ it.live("format: an empty file or folder named for the word is refused by its pa
     "next/apps/fabrika/src/instance.ts": "",
   };
     const result = yield* promised(() => plant(files));
-    expect(Arr.map(Object.keys(files), (path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
+    expect(Arr.map(Rec.keys(files), (path) => result(CODE, path))).toEqual([[1], [1], [1], [1], [], []]);
   }),
 );

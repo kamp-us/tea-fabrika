@@ -19,7 +19,8 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Array as Arr, Schema, pipe } from "effect";
+import * as Schema from "effect/Schema";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -194,7 +195,7 @@ describe("L24: the checklist window's markup", () => {
 
           const read = text(html);
 
-          for (const word of new Set(Object.values(WORDS))) {
+          for (const word of new Set(Rec.values(WORDS))) {
             const count = Arr.filter(view.items, (i) => WORDS[i.state] === word).length;
             expect(read.match(new RegExp(`\\b${word}\\b`, "g"))?.length ?? 0, `${word} words`).toBe(count);
           }

@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import type { Sql, SqlValue } from "../Sql.ts";
 import { property } from "../Testing.test-support.ts";
@@ -204,7 +205,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
             head: yield* sent((turn) => turn.head("b/inbox")),
           };
 
-          for (const [read, sentQueries] of Object.entries(queries)) {
+          for (const [read, sentQueries] of Rec.toEntries(queries)) {
             const entries = sentQueries.filter(({ query }) => /\bentries\b/.test(query));
             expect(entries.length, `${read} asks SQLite for entries`).toBeGreaterThan(0);
 

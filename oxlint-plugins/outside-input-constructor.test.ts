@@ -1,6 +1,7 @@
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -119,8 +120,7 @@ describe("P17a, outside input has typed failures", () => {
       "runtime/Runner",
       "runtime/Entry",
     ];
-
-    const files = Object.fromEntries(
+    const files = Rec.fromEntries(
       Arr.map(paths, (path) => [
         `next/packages/libfabrika/src/${path}.ts`,
         "declare const raw: unknown, Row: any; Row.make(raw);",
@@ -135,7 +135,7 @@ describe("P17a, outside input has typed failures", () => {
         }),
       );
 
-    for (const path of Object.keys(files)) {
+    for (const path of Rec.keys(files)) {
       expect(linted(code, path)).toEqual([1]);
     }
 

@@ -23,6 +23,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -581,8 +582,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }),
     ),
   );
-
-  const proxy = <Members extends object>(
+  const proxy = <Members extends Readonly<Record<string | symbol, unknown>>>(
     invoke: (method: string, args: ReadonlyArray<unknown>) => Effect.Effect<unknown, ControlError>,
     members: Members,
   ) =>
@@ -592,7 +592,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           return undefined;
         }
 
-        if (Object.hasOwn(members, method)) {
+        if (Rec.has<string | symbol, unknown>(members, method)) {
           return members[method as keyof Members];
         }
 

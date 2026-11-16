@@ -13,7 +13,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Effect from "effect/Effect";
-import { Array as Arr, pipe } from "effect";
+import { Array as Arr, pipe, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 
@@ -645,16 +645,8 @@ describe("ticket 806 the checklist's laws", () => {
   // pinned: the checklist's input keys, so a renamed or dropped input is seen.
   it.live("pinned: the checklist's input keys, so a renamed or dropped input is seen", () =>
     Effect.gen(function* () {
-      const { checklist } = yield* promised(() => load());
-    expect(Object.keys(checklist.inputs).sort()).toEqual([
-      "add",
-      "check",
-      "items",
-      "left",
-      "remove",
-      "rename",
-      "uncheck",
-    ]);
-    }),
+    const { checklist } = yield* promised(() => load());
+    expect(Rec.keys(checklist.inputs).sort()).toEqual(["add", "check", "items", "left", "remove", "rename", "uncheck"]);
+  }),
   );
 });

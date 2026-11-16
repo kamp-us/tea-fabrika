@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
@@ -141,8 +142,7 @@ export const brain = () => {
 
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
-    const p = typeof params === "object" && params !== null ? new Map(Object.entries(params)) : new Map();
-
+    const p = typeof params === "object" && params !== null ? new Map(Rec.toEntries(params)) : new Map();
     const text = (name: string) => {
       const value = p.get(name);
 

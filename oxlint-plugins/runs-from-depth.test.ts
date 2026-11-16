@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -79,16 +80,19 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
-  const found = Arr.map([...cases.keys()], (file) => [
+  const found = Arr.map(
+    [...cases.keys()],
+    (file) =>
+      [
     file,
     pipe(
       report.diagnostics,
       Arr.filter((d) => d.code === "fabrika(runs-from-depth)" && join(root, d.filename) === file),
       Arr.map((d) => d.labels[0]!.span.line),
     ).sort((a, b) => a - b),
-  ]);
-
-  expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
+      ] as const,
+  );
+  expect(Rec.fromEntries(found)).toEqual(Rec.fromEntries(cases));
 };
 
 /**

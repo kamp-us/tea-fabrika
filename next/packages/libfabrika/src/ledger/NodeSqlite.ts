@@ -4,6 +4,8 @@
  * lives in the project object.
  */
 import type { DatabaseSync, SQLOutputValue, StatementSync } from "node:sqlite"; // edge: Effect SQL has no synchronous SQLite handle for the referee's transactions
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import type { Sql, SqlValue } from "../Sql.ts";
 
 /** The ledger writes text, integers and nulls only. A blob or a big integer is a row it never wrote. */
@@ -51,24 +53,27 @@ export const nodeSql = (db: DatabaseSync): Sql => {
     exec: (query, ...params) =>
       prepared(query)
         .all(...params)
-        .map((row) => Object.fromEntries(Object.entries(row).map(([k, v]) => [k, value(v)]))),
+        .map((row) => Rec.fromEntries(Rec.toEntries(row).map(([k, v]) => [k, value(v)]))),
     transaction: (step) => {
       db.exec("BEGIN IMMEDIATE");
 
-      try {
-        const done = step();
+      const done = Result.try(() => {
+        const answer = step();
         db.exec("COMMIT");
+        return answer;
+      });
 
-        return done;
-      } catch (error) {
+      if (Result.isSuccess(done)) {
+        return done.success;
+      }
+
         // SQLite rolls some failures back by itself, SQLITE_FULL among them; then there is none to
         // roll back, and a ROLLBACK would throw over the real error.
         if (db.isTransaction) {
           db.exec("ROLLBACK");
         }
 
-        throw error;
-      }
+      throw done.failure;
     },
     size: () => {
       const [count] = prepared("PRAGMA page_count").all();

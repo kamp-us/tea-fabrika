@@ -33,6 +33,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -242,7 +243,7 @@ it(
 
           return { path: `next/packages/libfabrika/src/${label}.test.ts`, text, expected };
         });
-        const result = await linted(Object.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
+        const result = await linted(Rec.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
 
         for (const { path, text, expected } of files) {
           expect(result(path), text).toEqual(expected);
@@ -285,9 +286,9 @@ it(
         );
         return { source, path: `next/packages/libfabrika/src/types/Check${i}.test.ts`, text, fires };
       });
-        const result = await linted(Object.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
-        const fired = Object.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
-        const expected = Object.fromEntries(
+      const result = await linted(Rec.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
+      const fired = Rec.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
+      const expected = Rec.fromEntries(
           Arr.map(files, ({ source, fires }) => [source, fires ? [[3, TYPE_MESSAGE]] : []]),
         );
       expect(fired, files[0]?.text).toEqual(expected);
@@ -335,9 +336,9 @@ it(
         );
         return { source, path: `next/packages/libfabrika/src/processes/Shared${i}Test.ts`, text, fires };
       });
-      const result = await linted(Object.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
-      const fired = Object.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
-      const expected = Object.fromEntries(Arr.map(files, ({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
+      const result = await linted(Rec.fromEntries(Arr.map(files, ({ path, text }) => [path, text])));
+      const fired = Rec.fromEntries(Arr.map(files, ({ source, path }) => [source, result(path)]));
+      const expected = Rec.fromEntries(Arr.map(files, ({ source, fires }) => [source, fires ? [[5, MESSAGE]] : []]));
       expect(fired, files[0]?.text).toEqual(expected);
     }),
     { ...runs, numRuns: 2 },
@@ -363,7 +364,7 @@ it(
       const caller = "next/a/sink.test.ts";
 
       const result = await linted({
-        ...Object.fromEntries(Arr.map([...read, ...left], (path) => [path, text])),
+        ...Rec.fromEntries(Arr.map([...read, ...left], (path) => [path, text])),
         [caller]: 'import * as SinkTest from "./SinkTest.ts";\nSinkTest.suite(nodeSql);\n',
       });
 

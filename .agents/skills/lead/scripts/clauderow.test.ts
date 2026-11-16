@@ -7,7 +7,15 @@
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema, Array as Arr, pipe } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as PlatformError from "effect/PlatformError";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+import { Array as Arr, pipe } from "effect";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };
@@ -127,9 +135,9 @@ const on = (zone: string, files: Readonly<Record<string, string>> = FILES) =>
   Effect.provide(
     Layer.mergeAll(
       FileSystem.layerNoop({
-        exists: (path) => Effect.succeed(Object.hasOwn(files, path)),
+        exists: (path) => Effect.succeed(Rec.has(files, path)),
         readFileString: (path) =>
-          Object.hasOwn(files, path)
+          Rec.has(files, path)
             ? Effect.succeed(files[path] ?? "")
             : Effect.fail(
                 PlatformError.systemError({
@@ -162,7 +170,7 @@ const ask = (over: Partial<Ask> = {}): Ask => ({
 /** A printed line holds the same values under the same keys in the same order as Python's line. */
 const same = (line: string, python: string) => {
   expect(JSON.parse(line)).toEqual(JSON.parse(python));
-  expect(Object.keys(JSON.parse(line))).toEqual(Object.keys(JSON.parse(python)));
+  expect(Rec.keys(JSON.parse(line))).toEqual(Rec.keys(JSON.parse(python)));
 };
 
 /** Each printed line is Python's line of the same place, and there are as many. */

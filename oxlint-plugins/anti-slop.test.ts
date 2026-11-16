@@ -16,11 +16,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -255,7 +256,7 @@ beforeAll(() => {
 
 describe("L2 each taken rule fires through the repository's own config, in a folder on its list", () => {
   it("scenario: every taken rule has its plant, refused and taken", () => {
-    expect(Arr.sort(Object.keys(PLANTS), Order.String)).toEqual(Arr.sort(TAKEN, Order.String));
+    expect(Arr.sort(Rec.keys(PLANTS), Order.String)).toEqual(Arr.sort(TAKEN, Order.String));
     expect(ON.length).toBeGreaterThan(0);
   });
 
@@ -281,7 +282,7 @@ describe("L3 a taken rule holds only where its block lists the folder", () => {
     expect(Arr.filter(root, ofThePlugins)).toEqual([]);
     const named = pipe(
       printed.overrides,
-      Arr.flatMap((block) => Object.keys(block.rules)),
+      Arr.flatMap((block) => Rec.keys(block.rules)),
       Arr.filter(ofThePlugins),
     );
     expect(Arr.filter(named, (rule) => !TAKEN.includes(rule))).toEqual([]);
@@ -341,7 +342,7 @@ describe("L4 the zero lock names exactly the folders with no hit that are not li
 describe("L5 no block for a taken rule says off or warn", () => {
   it("scenario: every setting of a rule of the two plugins, in every block, is error", () => {
     const settings = Arr.flatMap(printed.overrides, (block) =>
-      Arr.filter(Object.entries(block.rules), ([rule]) => ofThePlugins(rule)),
+      Arr.filter(Rec.toEntries(block.rules), ([rule]) => ofThePlugins(rule)),
     );
 
     expect(settings.length).toBeGreaterThan(0);

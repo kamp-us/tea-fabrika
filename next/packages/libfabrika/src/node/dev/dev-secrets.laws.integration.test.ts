@@ -21,6 +21,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
@@ -86,7 +87,7 @@ const strings = (value: unknown): Array<string> => {
   }
 
   return value !== null && typeof value === "object"
-    ? Arr.flatMap(Object.entries(value), ([key, child]) => [key, ...strings(child)])
+    ? Arr.flatMap(Rec.toEntries(value), ([key, child]) => [key, ...strings(child)])
     : [];
 };
 
@@ -200,7 +201,7 @@ const flow = async (sample: Flow) => {
 
     // The platform send is allowed to hold the bearer; persistent outputs are checked below.
     // It holds no other header but the content type: no trace header rides along.
-    expect(Object.fromEntries(new Headers(options?.headers))).toEqual({
+    expect(Rec.fromEntries(new Headers(options?.headers))).toEqual({
       authorization: `Bearer ${bearer}`,
       "content-type": "application/json",
     });

@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 // oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (0058): on for our source,
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.
@@ -55,10 +56,10 @@ const NAMED = "export const a = 1;\nexport type T = number;\n";
 it("every default export form is refused in our source, under every source folder", () =>
   fc.assert(
     fc.asyncProperty(fc.constantFrom(...SOURCE), fc.stringMatching(/^[a-z]{1,8}$/), async (folder, stem) => {
-      const files = Object.fromEntries(Arr.map(FORMS, (form, i) => [`${folder}/${stem}${i}.ts`, `${form}\n`]));
+      const files = Rec.fromEntries(Arr.map(FORMS, (form, i) => [`${folder}/${stem}${i}.ts`, `${form}\n`]));
       const result = await plant({ ...files, [`${folder}/named.ts`]: NAMED });
 
-      for (const file of Object.keys(files)) {
+      for (const file of Rec.keys(files)) {
         expect(result(CODE, file)).toEqual([1]);
       }
 
@@ -88,10 +89,10 @@ it("an inline edge comment lets the default on the next line through, and no lin
 it.live("scenario: tooling and config files, and files outside our source, keep their default export", () =>
   Effect.gen(function* () {
   // A tool loads these by their default, so 0058 leaves them out by glob.
-    const files = Object.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
-    const result = yield* promised(() => plant(files));
+  const files = Rec.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
+  const result = yield* promised(() => plant(files));
 
-  for (const file of Object.keys(files)) {
+  for (const file of Rec.keys(files)) {
     expect(result(CODE, file)).toEqual([]);
   }
   }),

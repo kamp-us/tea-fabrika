@@ -1,4 +1,6 @@
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC18).
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 import {
   allSteps,
@@ -183,15 +185,13 @@ const depth = (jobs: Record<string, unknown>, name: string, seen: readonly strin
  * of legs, so the measured split (vitest.shards.ts) and each leg's `/N` hold for both.
  */
 export const lintScheduled = (text: string, check: string): string[] => {
-  let source: unknown;
+  const source = Result.try((): unknown => parse(text));
 
-  try {
-    source = parse(text);
-  } catch {
+  if (Result.isFailure(source)) {
     return ["scheduled.yaml: invalid YAML"];
   }
 
-  const workflow = map(source),
+  const workflow = map(source.success),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
 
@@ -207,10 +207,10 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // or queue runs the whole suite, and a push to any other branch does not either. The push takes
   // every path, since the gate, not a path filter, decides. The catch-up is hourly at a fixed minute.
   const crons = Array.isArray(on["schedule"]) ? on["schedule"] : [];
-  require(JSON.stringify(Object.keys(on).toSorted()) === JSON.stringify(["push", "schedule", "workflow_dispatch"]) &&
+  require(JSON.stringify(Rec.keys(on).toSorted()) === JSON.stringify(["push", "schedule", "workflow_dispatch"]) &&
     JSON.stringify(on["push"]) === JSON.stringify({ branches: ["main"] }) &&
     crons.length === 1 &&
-    Object.keys(map(crons[0])).length === 1 &&
+    Rec.keys(map(crons[0])).length === 1 &&
     typeof map(crons[0])["cron"] === "string" &&
     HOURLY.test(
       String(map(crons[0])["cron"]),
@@ -218,7 +218,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC16. The gap is the workflow's one env value, a whole number of minutes, an hour at least
   // (0581's binding constraint), so a person changes it in one line beside the cron line.
   const gap = map(workflow["env"])[GAP];
-  require(JSON.stringify(Object.keys(map(workflow["env"]))) === JSON.stringify([GAP]) &&
+  require(JSON.stringify(Rec.keys(map(workflow["env"]))) === JSON.stringify([GAP]) &&
     typeof gap === "number" &&
     Number.isInteger(gap) &&
     gap >= LEAST_GAP, `SC16: the workflow's env is ${GAP} alone, a whole number of minutes, ${LEAST_GAP} or more`);
@@ -240,7 +240,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       issues: "write",
     }), "SC3: the report job's token reads actions and contents and writes issues, nothing more");
 
-  for (const [name, job] of Object.entries(jobs).filter(([name]) => name !== VERDICT)) {
+  for (const [name, job] of Rec.toEntries(jobs).filter(([name]) => name !== VERDICT)) {
     require(!("permissions" in map(job)), `SC3: ${name} keeps the workflow's token, which cannot cancel a run`);
   }
 
@@ -248,7 +248,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // cancels the run (a canceled run ends `cancelled`, never `failure`), no other job runs on
   // `always()`, every job has a time limit, and no checkout keeps the token in .git/config. The test
   // job's limit is an expression by its leg's suite, and SC13 pins it exactly.
-  for (const [name, job] of Object.entries(jobs)) {
+  for (const [name, job] of Rec.toEntries(jobs)) {
     const limit = map(job)["timeout-minutes"];
     require((typeof limit === "number" && limit > 0 && limit < 360) ||
       (name === TESTS_JOB && typeof limit === "string"), `SC4: ${name} sets timeout-minutes`);
@@ -276,8 +276,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // said `false`, so a skipped run neither judges nor closes the issue, and a gate that failed is
   // judged red. It, the gate's step and the time tables are the steps that get the token.
   const report = map(jobs[VERDICT]),
-    others = Object.keys(jobs).filter((name) => name !== VERDICT);
-
+    others = Rec.keys(jobs).filter((name) => name !== VERDICT);
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
@@ -292,15 +291,14 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // from its name's shard, so no job sets a `name` of its own.
   const env = {
     ...REPORT_ENV,
-    ...Object.fromEntries(
-      (Object.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
+    ...Rec.fromEntries(
+      (Rec.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
         `LIMIT_${suite.toUpperCase()}`,
         limitOf(jobs, suite),
       ]),
     ),
   };
-
-  require(Object.values(jobs).every(
+  require(Rec.values(jobs).every(
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");
   require(judged.length === 1 &&
@@ -313,7 +311,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // gate's step reads the run list (SC14 pins its env).
   const gateJob = map(jobs[GATE_JOB]);
   const gateRuns = steps(gateJob).filter((s) => "run" in s);
-  require(Object.values(jobs).every((job) =>
+  require(Rec.values(jobs).every((job) =>
     steps(map(job)).every(
       (s) =>
         s === judged[0] ||
@@ -455,13 +453,13 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // `failure`.
   const MATRICES = [TESTS_JOB, CHANGED_JOB];
   require(JSON.stringify(others.toSorted()) === JSON.stringify([GATE_JOB, SELECT_JOB, ...MATRICES].toSorted()) &&
-    Object.entries(jobs).every(
+    Rec.toEntries(jobs).every(
       ([name, job]) => MATRICES.includes(name) || !("strategy" in map(job)),
     ), `SC6: every test leg a run starts is in one matrix, the ${TESTS_JOB} job or the ${CHANGED_JOB} job, so its first red leg stops all the others`);
   const atOnce = new Map<number, number>();
   const matrixAt = new Map<number, number>();
 
-  for (const [name, job] of Object.entries(jobs).map(([name, job]) => [name, map(job)] as const)) {
+  for (const [name, job] of Rec.toEntries(jobs).map(([name, job]) => [name, map(job)] as const)) {
     const strategy = map(job["strategy"]);
     const most = strategy["max-parallel"];
     const cap = name === CHANGED_JOB ? selectEnv["MOST"] : listed(job).length;
@@ -560,7 +558,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // SC11. Every test leg runs at full depth: a law that reads FABRIKA_TEST_DEPTH runs its full case
   // count here, and unset means `fast`, as on the merge line (pull request 1274).
   for (const command of [WHOLE_NEXT, WHOLE_E2E, WHOLE_TOOLING]) {
-    const found = Object.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
+    const found = Rec.values(jobs).flatMap((job) => steps(map(job)).filter((s) => s["run"] === command));
     require(found.length > 0 &&
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,

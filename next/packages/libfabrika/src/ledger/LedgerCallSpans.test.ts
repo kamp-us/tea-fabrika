@@ -1,6 +1,7 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
 import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -85,7 +86,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               stream,
               active: active.map((s) => ({
                 name: s.name,
-                attributes: Object.fromEntries(s.attributes),
+                attributes: Rec.fromEntries(s.attributes),
               })),
             });
           };
@@ -223,7 +224,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
             expect(span.name).toBe("ledger.call");
             expect(span.traceId).toBe(parent.traceId);
             expect(Option.getOrThrow(span.parent).spanId).toBe(parent.spanId);
-            expect(Object.fromEntries(span.attributes)).toEqual({
+            expect(Rec.fromEntries(span.attributes)).toEqual({
               "rpc.method": c.method,
               ...cut("messaging.destination.name", stream),
               ...cut("fab.ledger.reader", reader),

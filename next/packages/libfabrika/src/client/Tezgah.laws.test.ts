@@ -20,6 +20,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
@@ -67,7 +68,7 @@ describe("Desk S2a L11: tezgah's view in the window", () => {
       expect(tiles, "L11: one wire tile per tile").toHaveLength(view.tiles.length);
 
       for (const [i, tile] of tiles.entries()) {
-        expect(Object.keys(tile).sort(), "L11: the wire tile keeps every field").toEqual(
+        expect(Rec.keys(tile).sort(), "L11: the wire tile keeps every field").toEqual(
           expect.arrayContaining([...FIELDS].sort()),
         );
         expect(tile["child"], "L11: the wire says whether tezgah started the tile").toBe(view.tiles[i]?.child);
@@ -426,7 +427,7 @@ const letterIn = (p: object): string | null => {
     return own;
   }
 
-  for (const v of Object.values(p)) {
+  for (const v of Rec.values(p)) {
     const inner: unknown = typeof v === "object" && v !== null ? Reflect.get(v, "letter") : undefined;
 
     if (typeof inner === "string") {
@@ -950,7 +951,7 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
     expectTypeOf<Extract<keyof NonNullable<WindowModel["tezgah"]>, Stored>>().toEqualTypeOf<never>();
     const fresh = tezgahMachine.init(null, { workspace: 1 })[0];
     expect(
-      Arr.filter(Object.keys(fresh), (k) => STORED.test(k)),
+      Arr.filter(Rec.keys(fresh), (k) => STORED.test(k)),
       "L23: the tezgah child stores no drawn focus",
     ).toEqual([]);
     expect(TABLE, "the laws' key table loads").not.toBeNull();
@@ -964,7 +965,7 @@ describe("Desk S3 L23: the window stores no optimistic focus", () => {
           seen[pending.length > 0 ? "pending" : "none"]++;
           expect(
             Arr.filter(
-              Arr.flatMap([next, next.tezgah ?? {}, next.tezgah?.client ?? {}], (o) => Object.keys(o)),
+              Arr.flatMap([next, next.tezgah ?? {}, next.tezgah?.client ?? {}], (o) => Rec.keys(o)),
               (k) => STORED.test(k),
             ),
             `L23: window ${win} stores no drawn focus`,
@@ -1159,7 +1160,7 @@ describe("Desk S3 L25: a focus key is drawn on the step that reads it", () => {
       { seed: SEED, numRuns: 200 },
     );
     expect(
-      Arr.every(Object.values(seen), (n) => n > 0),
+      Arr.every(Rec.values(seen), (n) => n > 0),
       `L25: the walks reached every case ${JSON.stringify(seen)}`,
     ).toBe(true);
   });

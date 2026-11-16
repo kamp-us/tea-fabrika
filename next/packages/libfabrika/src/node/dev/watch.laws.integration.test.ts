@@ -28,6 +28,7 @@ import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, vi } from "vitest";
@@ -618,7 +619,7 @@ describe("P15 slice 1: the watcher", () => {
 
               for (let n = 0; n < edits; n++) {
                 // A file from the current set, and an edit: a new value, so the bytes change.
-                const files = Object.keys(reaches);
+                const files = Rec.keys(reaches);
                 const file = files[g(fc.nat, { max: files.length - 1 })]!;
                 const value = (values.get(file) ?? 0) + g(fc.integer, { min: 1, max: 99 });
                 values.set(file, value);

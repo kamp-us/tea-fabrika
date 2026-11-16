@@ -10,6 +10,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 
 type Format = "sha1" | "sha256";
@@ -1214,19 +1215,16 @@ export const make = Effect.fnUntraced(function* () {
 
   const run = Effect.fnUntraced(function* (command: ChildProcess.StandardCommand) {
     const words = Arr.filter(command.args, Predicate.isString);
-    const env = Object.fromEntries(
+    const env = Rec.fromEntries(
       Arr.filter(
-        Object.entries(command.options.env ?? {}),
+        Rec.toEntries(command.options.env ?? {}),
         (pair): pair is [string, string | undefined] => Predicate.isString(pair[1]) || pair[1] === undefined,
       ),
     );
 
     // Memory git reads no secret: a redacted word or variable stays unread, and the law that sent
     // one belongs on real git.
-    if (
-      words.length !== command.args.length ||
-      Object.keys(env).length !== Object.keys(command.options.env ?? {}).length
-    ) {
+    if (words.length !== command.args.length || Rec.keys(env).length !== Rec.keys(command.options.env ?? {}).length) {
       return yield* Effect.die(new Error("git memory: unsupported command: a redacted argument or variable"));
     }
 

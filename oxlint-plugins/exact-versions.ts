@@ -11,8 +11,9 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as Arr from "effect/Array";
-import { pipe } from "effect/Function";
 import * as Result from "effect/Result";
+import * as Rec from "effect/Record";
+import { pipe } from "effect/Function";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -39,7 +40,7 @@ const isMap = (value: unknown): value is Record<string, unknown> =>
 const refused = (file: string, field: string, map: unknown): readonly string[] =>
   isMap(map)
     ? pipe(
-        Object.entries(map),
+        Rec.toEntries(map),
         Arr.filter(([, version]) => !passes(version)),
         Arr.map(([name, version]) => `${file}: ${field}: ${name}: ${JSON.stringify(version)}`),
       )
@@ -72,7 +73,7 @@ const inWorkspace = (file: string, text: string): readonly string[] => {
   return [
     ...refused(file, "catalog", catalog),
     ...(isMap(catalogs)
-      ? Arr.flatMap(Object.entries(catalogs), ([name, map]) => refused(file, `catalogs.${name}`, map))
+      ? Arr.flatMap(Rec.toEntries(catalogs), ([name, map]) => refused(file, `catalogs.${name}`, map))
       : []),
     ...refused(file, "overrides", overrides),
   ];
@@ -87,7 +88,7 @@ const root = process.argv[2] ?? join(import.meta.dirname, "..");
 
 const tracked = spawnSync(
   "git",
-  ["ls-files", "-z", "--", ...Arr.flatMap(Object.keys(READERS), (name) => [name, `**/${name}`])],
+  ["ls-files", "-z", "--", ...Arr.flatMap(Rec.keys(READERS), (name) => [name, `**/${name}`])],
   {
     cwd: root,
     encoding: "utf8",

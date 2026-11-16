@@ -31,6 +31,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
+import * as Rec from "effect/Record";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -441,7 +442,7 @@ const Page = (props: PageProps) => {
         <h1>Blocked</h1>
         <p>The browser could not keep or use this window's key. {link.reason}</p>
       </main>
-    ) : link._tag !== "online" && Object.keys(views).length === 0 ? (
+    ) : link._tag !== "online" && Rec.keys(views).length === 0 ? (
       <main className="screen">
         <p>Connecting</p>
       </main>

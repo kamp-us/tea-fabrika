@@ -4,6 +4,7 @@ import { join } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -44,9 +45,9 @@ const check = (filename: string, { text: code, lines }: Case) => {
 
 /** One oxlint run over every case's files, through the repo's own config. */
 const cli = Effect.fnUntraced(function* (cases: ReadonlyMap<string, Case>) {
-  const result = yield* promised(() => plant(Object.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
-  expect(Object.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-    Object.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+  const result = yield* promised(() => plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
+  expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+    Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
   );
 
   return result;

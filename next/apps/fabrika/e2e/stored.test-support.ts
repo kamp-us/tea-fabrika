@@ -6,7 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
 /** An instance's home, and the stop that ends every process that writes in it. */
@@ -114,8 +114,8 @@ const scan = (
 
           for (const [at, read] of select.all().entries()) {
             // An integer a JavaScript number holds exactly is read as one, as before; a larger one stays whole.
-            const row = Object.fromEntries(
-              Arr.map(Object.entries(read), ([column, value]) => [
+            const row = Rec.fromEntries(
+              Arr.map(Rec.toEntries(read), ([column, value]) => [
                 column,
                 typeof value === "bigint" && value >= Number.MIN_SAFE_INTEGER && value <= Number.MAX_SAFE_INTEGER
                   ? Number(value)
@@ -165,7 +165,7 @@ const scan = (
               }
             }
 
-            for (const [column, value] of Object.entries(cells)) {
+            for (const [column, value] of Rec.toEntries(cells)) {
               outputs.push([
                 `${label} table ${name} ${key} column ${column}`,
                 value instanceof Uint8Array ? Buffer.from(value).toString("latin1") : String(value),

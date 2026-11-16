@@ -4,6 +4,7 @@
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
 import { Schema } from "effect";
+import * as Rec from "effect/Record";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 
@@ -168,7 +169,9 @@ export const checkRow = (file: string, line: number, value: unknown): Finding[] 
     return [warning("row", "no detailed schema for this file")];
   }
 
-  const failures = Object.entries(schema.fields).flatMap(([field, rule]) =>
+  // One field map for whichever schema the folder names, so each core field is checked alone.
+  const fields: Schema.Struct.Fields = schema.fields;
+  const failures = Rec.toEntries(fields).flatMap(([field, rule]) =>
     Schema.is(Schema.Struct({ [field]: rule }))(value) ? [] : [error(field, "invalid or missing core field")],
   );
 

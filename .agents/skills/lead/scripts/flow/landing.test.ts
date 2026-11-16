@@ -1,7 +1,11 @@
 // What the landing runners read from each script, and that they refuse args they cannot parse. No
 // script runs here.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, type Scope, Array as Arr, Order } from "effect";
+import * as Effect from "effect/Effect";
+import type * as Scope from "effect/Scope";
+import * as Order from "effect/Order";
+import * as Rec from "effect/Record";
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { PullRequestsError } from "../pr/PullRequests.ts";
 import { LeakGrepRefused } from "../pr/Pushes.ts";
@@ -36,7 +40,7 @@ describe("what the landing scripts' exit codes mean", () => {
   const r = (code: number, output = "line") => ({ code, output });
 
   it("pinned: the landing table has a runner for each step of the land-decision flow, and no other", () => {
-    expect(Arr.sort(Object.keys(landing), Order.String)).toEqual(
+    expect(Arr.sort(Rec.keys(landing), Order.String)).toEqual(
       Arr.sort(
         Arr.map(decision.steps, (s) => s.name),
         Order.String,

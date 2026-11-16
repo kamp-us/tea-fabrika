@@ -6,6 +6,7 @@ import { applyCell } from "@demlik/tea";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { DevState } from "./DevLife.ts";
@@ -399,7 +400,7 @@ const main = (ref: Ref, msg: Msg): readonly [Ref, Settled] => {
 
 // Every number and string a state holds, whatever its field names.
 const leaves = (value: unknown): ReadonlyArray<unknown> =>
-  Predicate.isObject(value) ? Arr.flatMap(Object.values(value), leaves) : [value];
+  Predicate.isObject(value) ? Arr.flatMap(Rec.values(value), leaves) : [value];
 
 const pids = (s: State) => Arr.filter(leaves(s), (v) => Predicate.isNumber(v) && v >= PIDS.min && v <= PIDS.max);
 
@@ -461,7 +462,7 @@ const coverage = () => ({
 });
 
 const covered = (seen: ReturnType<typeof coverage>) => {
-  for (const [name, count] of Object.entries(seen)) {
+  for (const [name, count] of Rec.toEntries(seen)) {
     expect(count, `walks reached ${name}`).toBeGreaterThan(0);
   }
 };

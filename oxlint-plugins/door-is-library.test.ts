@@ -1,4 +1,5 @@
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 
@@ -49,7 +50,7 @@ describe("P17a, the library owns the door", () => {
     expect(linted(code, "next/apps/fabrika/src/door-nonce.ts")).toEqual([2]);
   });
   it("permits library logic, app wiring and tests", () => {
-    for (const path of Object.keys(files).slice(3)) {
+    for (const path of Rec.keys(files).slice(3)) {
       expect(linted(code, path)).toEqual([]);
     }
   });

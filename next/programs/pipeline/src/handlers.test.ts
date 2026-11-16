@@ -4,7 +4,7 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import * as CodeHost from "@kampus/libfabrika/codehost/CodeHost";
 import * as CodeHostTest from "@kampus/libfabrika/codehost/CodeHostTest";
 import * as RepliesTest from "@kampus/libfabrika/runtime/RepliesTest";
-import { Cause, Context, Effect, Exit, Layer, Redacted, Schema } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Redacted, Schema, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import { handlers } from "./handlers.ts";
 
@@ -73,7 +73,7 @@ describe("L12: handlers map faults", () => {
 
             if (Exit.isSuccess(exit)) {
               expect(exit.value).toEqual({ _tag: "Err", error: { _tag: reason } });
-              expect(exit.value._tag === "Err" && Object.keys(exit.value.error as object)).toEqual(["_tag"]);
+              expect(exit.value._tag === "Err" && Rec.keys(exit.value.error as object)).toEqual(["_tag"]);
             }
           } else {
             expect(Exit.isFailure(exit)).toBe(true);
@@ -89,7 +89,7 @@ describe("L12: handlers map faults", () => {
 
                 if (reason._tag === "Fail") {
                   expect(reason.error).toMatchObject({ _tag: "HandlerDefect", cmd: cell.method });
-                  expect(Object.hasOwn(Object(reason.error), "cause")).toBe(false);
+                  expect(Rec.has(Object(reason.error), "cause")).toBe(false);
                 }
               }
             }

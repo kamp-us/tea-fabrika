@@ -8,6 +8,7 @@ import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -94,7 +95,7 @@ type State =
 const state: fc.Arbitrary<State> = fc.oneof(
   fc.boolean().map((tagged) => ({ _tag: "right", tagged }) as const),
   fc.constant({ _tag: "missing" } as const),
-  fc.constantFrom(...(Object.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
+  fc.constantFrom(...(Rec.keys(WRONG) as Wrong[])).map((way) => ({ _tag: "wrong", way }) as const),
 );
 
 const blockFor = (s: State): string | null =>
@@ -161,7 +162,7 @@ const PIECES = {
 
 type Kind = keyof typeof PIECES;
 
-const KINDS = Object.keys(PIECES) as Kind[];
+const KINDS = Rec.keys(PIECES) as Kind[];
 
 /** A `//` line between a block and its export is skipped (case 16). */
 const GAPS = ["", "// @ts-expect-error planted\n", "// a planted note\n"] as const;
@@ -470,7 +471,7 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
     }
 
     expect(report.number_of_files).toBe(439);
-    expect(Object.fromEntries(fired)).toEqual({
+    expect(Rec.fromEntries(fired)).toEqual({
       "StandardSchema.ts": 6,
       "encoding/Ini.ts": 1,
       "encoding/Yaml.ts": 1,

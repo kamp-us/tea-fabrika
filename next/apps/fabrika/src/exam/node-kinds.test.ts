@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 
@@ -78,7 +78,7 @@ const problems = (text: string) => {
   const kinds = Schema.decodeSync(Kinds)(text);
   const found: string[] = [];
 
-  for (const [name, { files, exports }] of Object.entries(kinds.entryExportConventions)) {
+  for (const [name, { files, exports }] of Rec.toEntries(kinds.entryExportConventions)) {
     const homes = Arr.filter(tracked, (p) => CODE.test(p) && !TEST.test(p) && matchesGlob(inPackage(p), files));
 
     if (homes.length === 0) {
@@ -113,7 +113,7 @@ describe("node-kinds.json (L6)", () => {
   it("L6 scenario: every name is exported by a file its glob matches and bound by that string elsewhere in next/", () => {
     // The real file and the tracked tree: on main, RecordPart and IsolateTail, both from src/brain.ts.
     const text = readFileSync(join(ROOT, "node-kinds.json"), "utf8");
-    expect(Object.keys(Schema.decodeSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
+    expect(Rec.keys(Schema.decodeSync(Kinds)(text).entryExportConventions)).not.toEqual([]);
     expect(problems(text)).toEqual([]);
   });
 });

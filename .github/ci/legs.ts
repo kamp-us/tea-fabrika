@@ -28,6 +28,7 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Rec from "effect/Record";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -90,7 +91,7 @@ export const budgetOf = (value: string | undefined): number => {
 
 /** A file's row, or undefined when the table has none, as `Shards` reads it. */
 const rowOf = (table: Readonly<Record<string, number>>, path: string) =>
-  Object.hasOwn(table, path) ? table[path] : undefined;
+  Rec.has(table, path) ? table[path] : undefined;
 
 /** Each leg's files when `assign` splits `files` over `count` legs, as `Shards` keeps them. */
 export const split = (files: readonly string[], count: number, table = measured): string[][] => {
@@ -98,7 +99,7 @@ export const split = (files: readonly string[], count: number, table = measured)
     files.map((path) => ({ path, seconds: rowOf(table, path) })),
     count,
     [],
-    median(Object.values(table)),
+    median(Rec.values(table)),
   );
 
   return Array.from({ length: count }, (_, leg) => files.filter((_, i) => placed[i] === leg));
@@ -106,8 +107,7 @@ export const split = (files: readonly string[], count: number, table = measured)
 
 /** The seconds of a leg's files, a file with no row at the table's median. */
 export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
-  const unmeasured = median(Object.values(table));
-
+  const unmeasured = median(Rec.values(table));
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
 

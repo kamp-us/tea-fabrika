@@ -51,6 +51,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
@@ -720,7 +721,7 @@ describe("L8: the window parent's connection", () => {
     expect(seen.opened).toBeGreaterThan(0);
     expect(seen.missing).toBeGreaterThan(0);
     expect(
-      Arr.every(Object.values(again), (n) => n > 0),
+      Arr.every(Rec.values(again), (n) => n > 0),
       `tiles read their name again for each of its three reasons: ${JSON.stringify(again)}`,
     ).toBe(true);
   });
@@ -1155,7 +1156,7 @@ describe("L9: the records the window emits", () => {
       fc.property(walks, (list) => {
         fold(list, ({ cmds }) => {
           for (const c of Arr.filter(cmds, (c) => c.type === "record")) {
-            expect(Object.keys(c).sort()).toEqual(["record", "type"]);
+            expect(Rec.keys(c).sort()).toEqual(["record", "type"]);
             expect(Schema.is(ClientRecord)(c["record"]), JSON.stringify(c)).toBe(true);
           }
         });
@@ -1327,7 +1328,7 @@ describe("L9: the records the window emits", () => {
           }
 
           const changed = Arr.filter(
-            Object.keys(next.client.views),
+            Rec.keys(next.client.views),
             (pid) => next.client.views[pid] !== prev.client.views[pid],
           );
 
@@ -2229,15 +2230,15 @@ const FAMILIES: Readonly<Record<string, Family>> = {
 
 /** The params of a notice, or the result of an answer, with one field dropped or of the wrong type. */
 const mutations = (family: Family, sent: Record<string, unknown>) => [
-  ...Arr.map(family.drop, (k) => Object.fromEntries(Arr.filter(Object.entries(sent), ([key]) => key !== k))),
-  ...Arr.map(Object.entries(family.wrong), ([k, v]) => ({ ...sent, [k]: v })),
+  ...Arr.map(family.drop, (k) => Rec.fromEntries(Arr.filter(Rec.toEntries(sent), ([key]) => key !== k))),
+  ...Arr.map(Rec.toEntries(family.wrong), ([k, v]) => ({ ...sent, [k]: v })),
 ];
 
 /** JSON text, the only form a frame's value takes on the wire. */
 const Json = Schema.fromJsonString(Schema.Unknown);
 
 describe("P18 L10: every frame family the parent reads decodes or reaches its typed failure", () => {
-  for (const [name, family] of Object.entries(FAMILIES)) {
+  for (const [name, family] of Rec.toEntries(FAMILIES)) {
     it.prop(
       `format: ${name}, from its schema, reaches its handler, and with one field dropped or mistyped changes nothing`,
       { generated: Arbitrary.schema(family.schema) },
@@ -2974,7 +2975,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       opts,
     );
 
-    for (const [as, n] of Object.entries(seen)) {
+    for (const [as, n] of Rec.toEntries(seen)) {
       expect(n, `letters seen as ${as}`).toBeGreaterThan(0);
     }
   });
@@ -3142,7 +3143,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       opts,
     );
 
-    for (const [k, n] of Object.entries(seen)) {
+    for (const [k, n] of Rec.toEntries(seen)) {
       expect(n, `inbox steps seen as ${k}`).toBeGreaterThan(0);
     }
   });
@@ -3415,7 +3416,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
       opts,
     );
 
-    for (const [k, n] of Object.entries(seen)) {
+    for (const [k, n] of Rec.toEntries(seen)) {
       expect(n, `region steps seen as ${k}`).toBeGreaterThan(0);
     }
   });
@@ -4569,7 +4570,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
   Arr.isArray(v)
     ? Arr.flatMap(v, keysIn)
     : v !== null && typeof v === "object"
-      ? Arr.flatMap(Object.entries(v), ([k, x]) => [k, ...keysIn(x)])
+      ? Arr.flatMap(Rec.toEntries(v), ([k, x]) => [k, ...keysIn(x)])
       : [];
 
 /** A key that would hold a fold: the one thing L32 forbids the model and the wire. */
@@ -4771,7 +4772,7 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
             )) {
               seen.letters++;
               expect(
-                Arr.filter(Object.keys(Object(c.call["m"])), (k) => !DID_KEYS.has(k)),
+                Arr.filter(Rec.keys(Object(c.call["m"])), (k) => !DID_KEYS.has(k)),
                 "L32: a letter to tezgah carries only did's keys",
               ).toEqual([]);
               expect(

@@ -24,6 +24,7 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -568,7 +569,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           })),
         );
 
-        for (const [name, values] of Object.entries(outputs)) {
+        for (const [name, values] of Rec.toEntries(outputs)) {
           expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
 
           const output =

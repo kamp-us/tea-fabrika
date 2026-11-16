@@ -40,6 +40,7 @@ import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
@@ -1237,8 +1238,8 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
     (generated) =>
       Effect.gen(function* () {
         // Marked, so a secret is never a word the start writes anyway.
-        const s = Object.fromEntries(
-          Arr.map(Object.entries(generated), ([k, v]) => [k, `Q9X${k}${v}Z`]),
+        const s = Rec.fromEntries(
+          Arr.map(Rec.toEntries(generated), ([k, v]) => [k, `Q9X${k}${v}Z`]),
         ) as typeof generated;
 
         const spans: Array<Tracer.AnySpan> = [];
@@ -1363,9 +1364,9 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
           ),
           urls: JSON.stringify([...urls, ...Arr.map(urls, (u) => decodeURIComponent(u))]),
         };
-        const secrets = [...Arr.flatMap(Object.values(s), forms), ...forms(signed), ...forms(key.raw)];
+        const secrets = [...Arr.flatMap(Rec.values(s), forms), ...forms(signed), ...forms(key.raw)];
 
-        for (const [output, text] of Object.entries(outputs)) {
+        for (const [output, text] of Rec.toEntries(outputs)) {
           expect(
             Arr.filter(secrets, (secret) => pipe(text, Str.includes(secret))),
             `${output} holds a secret`,
@@ -1417,7 +1418,7 @@ const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
 
   return {
     ...window,
-    update: Object.fromEntries(Arr.map(Object.keys(window.update), (type) => [type, step])) as typeof window.update,
+    update: Rec.fromEntries(Arr.map(Rec.keys(window.update), (type) => [type, step])) as typeof window.update,
   };
 };
 

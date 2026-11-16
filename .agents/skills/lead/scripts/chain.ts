@@ -116,7 +116,16 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema, Array as Arr, pipe, Option } from "effect";
+import * as Context from "effect/Context";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
+import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import { Array as Arr, pipe } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -440,7 +449,7 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
     }
   }
 
-  for (const [k, v] of Object.entries(bodies)) {
+  for (const [k, v] of Rec.toEntries(bodies)) {
     sections[k] = Arr.join(v, "\n").trim();
   }
 

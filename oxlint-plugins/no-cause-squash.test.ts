@@ -7,6 +7,7 @@ import { join } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
 import { it } from "@effect/vitest";
 import * as fc from "fast-check";
@@ -189,7 +190,7 @@ const LEFT_OUT = [
 
 it.live("scenario: one real lint run per path kind, since only the real config holds which paths are tests", () =>
   Effect.gen(function* () {
-    const linted = yield* promised(() => plant(Object.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY]))));
+  const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY]))));
 
   // Product code: the bare call fires, and the call under its edge comment passes.
   for (const path of HELD) {

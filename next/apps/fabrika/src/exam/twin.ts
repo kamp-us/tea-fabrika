@@ -5,7 +5,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { String as Str, pipe, Array as Arr } from "effect";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { parseSync, type ModuleExportName } from "oxc-parser";
 
 type Tree = any;
@@ -42,7 +42,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
 
     visit(node);
 
-    for (const [key, child] of Object.entries(node)) {
+    for (const [key, child] of Rec.toEntries(node)) {
       if (!["comments", "tokens"].includes(key)) {
         nodes(child, visit);
       }
@@ -634,7 +634,7 @@ const makeScanner = (path: Path.Path, CF: string, sources: ReadonlyMap<string, s
         report(node, "unsupported-case: optional resource or remote call");
       }
 
-      for (const [key, child] of Object.entries(node)) {
+      for (const [key, child] of Rec.toEntries(node)) {
         // The name after a dot, and a literal object's key, are names rather than references.
         if (node.type === "MemberExpression" && !node.computed && key === "property") {
           continue;

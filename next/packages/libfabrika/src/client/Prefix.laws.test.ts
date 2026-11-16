@@ -37,6 +37,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
@@ -788,7 +789,7 @@ const keysIn = (v: unknown): ReadonlyArray<string> =>
   Arr.isArray(v)
     ? Arr.flatMap(v, keysIn)
     : v !== null && typeof v === "object"
-      ? Arr.flatMap(Object.entries(v), ([k, x]) => [k, ...keysIn(x)])
+      ? Arr.flatMap(Rec.toEntries(v), ([k, x]) => [k, ...keysIn(x)])
       : [];
 
 /** How many tiles a window of `size` draws as strips, by the plan's rule written here: every tile
@@ -820,7 +821,7 @@ describe("Desk S4 L32: a split's letter never carries a fold", () => {
 
             for (const m of Arr.map(sent, (x) => x.m)) {
               expect(
-                Arr.filter(Object.keys(Object(m)), (k) => !DID_KEYS.has(k)),
+                Arr.filter(Rec.keys(Object(m)), (k) => !DID_KEYS.has(k)),
                 "L32: a letter to tezgah carries only did's keys",
               ).toEqual([]);
               expect(
