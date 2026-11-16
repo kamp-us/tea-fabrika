@@ -4,7 +4,7 @@
   "ticket": null,
   "pr": null,
   "started": "2026-11-15T22:10:38-08:00",
-  "ended": "2026-11-15T22:17:30-08:00",
+  "ended": "2026-11-15T22:15:00-08:00",
   "parent": "2026-11-15-t1075-e47-tests3",
   "active": null,
   "role": "step",
@@ -14,7 +14,7 @@
   "why": "Fix round of the build step of slice E47 of the Effect-checker sweep (ticket 1075), in our tooling (.agents): globalConsole and globalConsoleInEffect. It applies the owner ruling made this round, that tooling imports Effect by subpath and not from the effect barrel (about 250 ms per script start), to the four .agents files this slice touched: chain.ts, drive.ts, gc.ts and flow/walk.ts under .agents/skills/lead/scripts. Each one's single effect barrel import line became one import * as X from \"effect/X\" line per name, the same names (chain.ts 9, drive.ts 9, gc.ts 4, walk.ts 7); every name is used as a value, so none is a type import. effect 4.1.3's package.json maps ./* to ./dist/*.js, and each module file was checked to exist. tea and @effect/platform-node imports, drive.ts's effect/process import and every other .agents file were left as they are. No no-raw-try-catch fallout. Hits: 41 met in the first build round, all fixed by hand edits then; this round changed only import lines, so the count is unchanged: 0 left in .agents, 0 by quick fix, 0 waiting on 1366.",
   "tokens": null,
   "tools": null,
-  "minutes": 7,
+  "minutes": 4,
   "note": "Ran at the uncommitted tree on c1cef822, one file at a time under nice -n 15 --maxWorkers=3: chain.test.ts 63, drive.test.ts 65, gc.test.ts 15, gcloop.test.ts 11, flow/walk.test.ts 6, all green. pnpm format exit 0; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 exit 0 (17 parts passed); the ratchet exit 0; one pnpm typecheck exit 0; loosening.sh c1cef822 HEAD 0 hits. Script edges run by hand against c1cef822's copy: drive.ts and chain.ts with no arguments, gc.ts with a bad flag, flow/walk.ts with no arguments; each printed the same bytes on the same stream with the same exit code. No pull request was opened (owner ruling: one per sweep).",
   "step": "build"
 }
