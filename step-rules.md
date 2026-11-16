@@ -11,6 +11,8 @@ cd <repo root> && pnpm install --frozen-lockfile
 ```
 
 Put the PATH line before every command that runs node or pnpm (the shell does not keep it).
+`pnpm lint:dead` aborts with SIGABRT (exit 134) in a cloud box because it runs out of heap. Run
+`pnpm lint` with `NODE_OPTIONS=--max-old-space-size=6144` set, and it passes; that is not a skip.
 
 **Branch.** Work only on the branch named in your brief. If it exists on origin, fetch it and
 continue from its head; if not, create it from `origin/main`. Push only to that branch.
@@ -77,7 +79,8 @@ the package's own `tsconfig.json` under the `@effect/language-service` plugin's 
 way pull request 1430 (E2) did, never in `tsconfig.base.json`. The tooling folders have their own
 tsconfig: `.agents/tsconfig.json`, `.github/ci/tsconfig.json`, `oxlint-plugins/tsconfig.json`.
 
-**Field row.** One `field/runs/<date>-<run>.json` per step, the same day, shaped like the rows in
+**Field row.** One `field/runs/<date>-<run>.json` per step, the same day, with real times (read
+them with `TZ=America/Los_Angeles date -Iseconds` at start and end) or `null`, never made up, shaped like the rows in
 pull request 1425 and 1430 (see `field/README.md`), committed with your step's work.
 
 **RESULT.** Your last message ends with exactly this block, filled in:
