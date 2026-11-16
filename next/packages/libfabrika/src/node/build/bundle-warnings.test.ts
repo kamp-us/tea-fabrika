@@ -39,11 +39,12 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
         const root = path.join(home, folder);
         const entry = path.join(root, "brain.ts");
         const imported = path.join(home, "dependency", "imported.ts");
-        const specifiers = [`l1-missing-${missing}`, `l1-dependency-${missing}`];
+        const entrySpecifier = `l1-missing-${missing}`;
+        const importedSpecifier = `l1-dependency-${missing}`;
         const use = (file: "entry" | "imported") => (directive === file ? '"use client";\n' : "");
         const files: Readonly<Record<string, string>> = {
-          [entry]: `${use("entry")}import ${JSON.stringify(specifiers[0])};\nimport "../dependency/imported.ts";\nexport const a = 1;\n`,
-          [imported]: `${use("imported")}import ${JSON.stringify(specifiers[1])};\nexport const b = 2;\n`,
+          [entry]: `${use("entry")}import ${JSON.stringify(entrySpecifier)};\nimport "../dependency/imported.ts";\nexport const a = 1;\n`,
+          [imported]: `${use("imported")}import ${JSON.stringify(importedSpecifier)};\nexport const b = 2;\n`,
         };
         // What Rolldown logged before bundle's onLog saw it: the law's own count, never the product's.
         const raw: Array<{ readonly level: LogLevel; readonly code: string | undefined }> = [];
@@ -98,8 +99,8 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
 
         // format: Rolldown's printed shape, which a person reads in the terminal and must not change.
         for (const [specifier, importer] of [
-          [specifiers[0], entry],
-          [specifiers[1], imported],
+          [entrySpecifier, entry],
+          [importedSpecifier, imported],
         ] as const) {
           const named = lines.filter((line) => line.includes(specifier));
           expect(named, `one line names ${specifier}`).toHaveLength(1);
