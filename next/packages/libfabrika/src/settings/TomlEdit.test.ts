@@ -236,16 +236,25 @@ const unchanged = (before: ReturnType<typeof members>, after: ReturnType<typeof 
 // lone surrogate in a string or a key.
 const lone = (text: string) => /[\uD800-\uDFFF]/u.test(text);
 
-const writable = (value: unknown): boolean =>
-  value === null
-    ? false
-    : Array.isArray(value)
-      ? value.every(writable)
-      : record(value)
-        ? Object.entries(value).every(([key, child]) => !lone(key) && writable(child))
-        : typeof value === "string"
-          ? !lone(value)
-          : typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
+const writable = (value: unknown): boolean => {
+  if (value === null) {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.every(writable);
+  }
+
+  if (record(value)) {
+    return Object.entries(value).every(([key, child]) => !lone(key) && writable(child));
+  }
+
+  if (typeof value === "string") {
+    return !lone(value);
+  }
+
+  return typeof value !== "number" || !Number.isInteger(value) || Number.isSafeInteger(value);
+};
 
 const dotted = (path: Path): string => path.map((key) => JSON.stringify(key)).join(".");
 

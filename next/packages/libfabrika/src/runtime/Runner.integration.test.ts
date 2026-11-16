@@ -1741,10 +1741,10 @@ describe("p35 Cmd order, replay and recorded failures", () => {
   // on a woken runner before it holds a live state, so the program's own wake cannot hide the
   // retry alarm. The recovery fault needs a journal save in that window: a new delivery limit.
   const drainFaults = {
-    ledger: { failure: "LedgerError", retries: true },
-    recovery: { failure: "RecoveryStoreError", retries: true },
-    down: { failure: "ProgramDown", retries: false },
-    interrupt: { failure: "interrupted", retries: false },
+    ledger: { failure: "LedgerError", retries: true, load: "" },
+    recovery: { failure: "RecoveryStoreError", retries: true, load: "limit" },
+    down: { failure: "ProgramDown", retries: false, load: "down" },
+    interrupt: { failure: "interrupted", retries: false, load: "pause" },
   } as const;
   it.effect.prop(
     "A-Timer: only a storage failure in a drain sets the retry alarm, one backoff after the failure",
@@ -1755,7 +1755,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
     ({ asked, lag }) =>
       Effect.forEach(
         Object.entries(drainFaults),
-        ([fault, { failure, retries }]) =>
+        ([fault, { failure, retries, load }]) =>
           Effect.gen(function* () {
             const w = yield* disks.pipe(
               Effect.flatMap((on) =>
@@ -1776,8 +1776,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               fault === "ledger" ? "SELECT checkpoint FROM process_state" : "INSERT INTO process_recovery";
             w.store.fault.query = (q) => q.startsWith(failing);
             w.store.fault.once = fault === "ledger" || fault === "recovery";
-            w.fault.load =
-              fault === "recovery" ? "limit" : fault === "down" ? "down" : fault === "interrupt" ? "pause" : "";
+            w.fault.load = load;
             yield* Effect.gen(function* () {
               const r: Runner = yield* w.ProgramRunner;
               yield* TestClock.setTime(now);

@@ -6,7 +6,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Match, Option, type Scope } from "effect";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -193,13 +193,12 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
 
           for (let index = 0; index < moves; index++) {
             const possible = goals.filter((move) =>
-              move === "replace" || move === "repeat"
-                ? requested !== null && armed !== null
-                : move === "clear"
-                  ? covered.has("replace") && covered.has("repeat")
-                  : move === "clear-again"
-                    ? requested === null && covered.has("clear")
-                    : true,
+              Match.value(move).pipe(
+                Match.whenOr("replace", "repeat", () => requested !== null && armed !== null),
+                Match.when("clear", () => covered.has("replace") && covered.has("repeat")),
+                Match.when("clear-again", () => requested === null && covered.has("clear")),
+                Match.orElse(() => true),
+              ),
             );
             const missing = possible.filter((move) => !covered.has(move));
             const choices: Move[] =
@@ -219,24 +218,17 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
               }
             } else {
               const gap = draw(fc.integer, { min: 1, max: now - 1 });
-              const at: number | null =
-                move === "clear" || move === "clear-again"
-                  ? null
-                  : move === "repeat"
-                    ? requested
-                    : move === "zero"
-                      ? 0
-                      : move === "negative"
-                        ? -gap
-                        : move === "past"
-                          ? now - gap
-                          : move === "now"
-                            ? now
-                            : move === "far"
-                              ? draw(fc.integer, { min: 4_000_000_000_000_000, max: 8_000_000_000_000_000 })
-                              : move === "replace"
-                                ? requested! + draw(fc.integer, { min: 1, max: 1_000_000 })
-                                : now + gap;
+              const at: number | null = Match.value(move).pipe(
+                Match.whenOr("clear", "clear-again", () => null),
+                Match.when("repeat", () => requested),
+                Match.when("zero", () => 0),
+                Match.when("negative", () => -gap),
+                Match.when("past", () => now - gap),
+                Match.when("now", () => now),
+                Match.when("far", () => draw(fc.integer, { min: 4_000_000_000_000_000, max: 8_000_000_000_000_000 })),
+                Match.when("replace", () => requested! + draw(fc.integer, { min: 1, max: 1_000_000 })),
+                Match.orElse(() => now + gap),
+              );
               const exit = yield* Effect.exit(alarm.set(at));
               expect(Exit.isSuccess(exit), Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "alarm operation").toBe(
                 true,

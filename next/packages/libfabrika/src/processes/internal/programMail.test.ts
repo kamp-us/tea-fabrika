@@ -18,6 +18,19 @@ import { full, granted, mailId, unread } from "./programMail.ts";
 
 const SEED = 119120;
 
+/** Which side of the cap an unread count sits on, for L3's coverage. */
+const side = (count: number, cap: number): string => {
+  if (count < 0) {
+    return "ack_ahead";
+  }
+
+  if (count === cap) {
+    return "at_cap";
+  }
+
+  return count === cap - 1 ? "below_cap" : "other";
+};
+
 /** A dispatched command's ID as the runner mints it: its process, an inbox position and an index. */
 const fcCommand = fc
   .tuple(fc.constantFrom(...PIDS), fc.nat({ max: 1_000_000 }), fc.nat({ max: 64 }))
@@ -143,7 +156,7 @@ describe("P41 slice 1: program mail rules", () => {
           const count = top - acked;
           expect(unread(top, acked), `unread of head ${top} past ack ${acked}`).toBe(Math.max(0, count));
           expect(full(top, acked, cap), `full at ${count} unread, cap ${cap}`).toBe(count >= cap);
-          reached.add(count < 0 ? "ack_ahead" : count === cap ? "at_cap" : count === cap - 1 ? "below_cap" : "other");
+          reached.add(side(count, cap));
         },
       ),
       { seed: SEED, numRuns: 200 },

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-max-ternary-depth-1-tests-2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:24:55-08:00",
+  "ended": "2026-11-15T23:33:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Anti-slop judgment slice AS-max-ternary-depth-1 (decision 0563 and its amendment), second tests round, on branch fabrikalfa/antislop-max-ternary-depth-1 at c8f2c83, which merges origin/main with pull request 1366 in it. The rule anti-slop/max-ternary-depth was forced to error with maxDepth 2 in a scratch config outside the repo and run over next/, .agents, oxlint-plugins and .github/ci. Hits met: 10. Nine are in exam paths (exam-paths.json) and all nine were fixed by hand with the Edit tool and small one-off replace scripts in the scratchpad (never committed); no checker quick fix. Six were the hits once waiting on 1366: next/packages/libfabrika/src/runtime/Runner.integration.test.ts:1780 (the fault-to-load chain became a load field in the test's own drainFaults table), next/packages/libfabrika/src/settings/StartsTest.ts:123 and :405 (Effect Match over the origin and over the changed key, exhaustive for the origin, orElse for by and for), next/packages/libfabrika/src/cloudflare/alarm.laws.test.ts:196 and :223 (Effect Match over the move, the old last branch as orElse, each draw kept lazy) and next/packages/libfabrika/src/processes/internal/programMail.test.ts:146 (a named sub-decision, side). Three came in from the merge with pull request 1366 and main: next/packages/libfabrika/src/settings/TomlEdit.test.ts:240 (writable, mixed conditions, now early returns), next/apps/fabrika/src/runtime-quotas.laws.test.ts:309 (the Proxy get, mixed conditions, now early returns with its comment kept) and next/packages/libfabrika/src/processes/internal/quota.test.ts:44 (Effect Match over the move). One is left in a product file for the build step: next/packages/libfabrika/src/runtime/Runner.ts:2166 (depth 6). The other product hits of the first round are gone: the build step fixed them. No assertion was deleted or narrowed, no law was loosened, no disable line, no lock line and no .oxlintrc.json change.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "No new law was written, so there is no plant: the rule is the check, and its count over the slice (one hit, in Runner.ts) is the proof. Tests run at c8f2c83 plus this diff, one file each, all green: TomlEdit.test.ts (18), programMail.test.ts (6), quota.test.ts (4), alarm.laws.test.ts (2), cloudflare/SettingsStarts.test.ts (12, runs StartsTest's suite), settings/Start.test.ts (5), runtime-quotas.laws.test.ts (2) and runtime/Runner.integration.test.ts (117; the 0178 guard allowed it in this box). pnpm format also added blank lines to three files outside this change (client/HandsDoor.test-support.ts, client/WindowMachine.laws.test.ts, programs/pipeline/src/Change.test.ts); they were put back, and the format check still passes. pnpm lint exits 1 only on the zero lock's own lines (max-ternary-depth has no hit left in 16 folders, and prefer-effect-match in tezgah); the owner's ruling keeps lock lines for one later pull request. The list ratchet exits 0. No pnpm typecheck was run in this step.",
+  "step": "tests"
+}

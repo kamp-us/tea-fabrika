@@ -1,6 +1,6 @@
 // T753, next/. Shared start laws take their storage driver from the calling module (0062).
 import { describe, expect, it } from "@effect/vitest";
-import { type Config, DateTime, Effect, Exit, Option, Schema, type Scope } from "effect";
+import { type Config, DateTime, Effect, Exit, Match, Option, Schema, type Scope } from "effect";
 import { Digest } from "effect/crypto";
 import { Hex } from "effect/encoding";
 import * as fc from "fast-check";
@@ -119,14 +119,13 @@ export const input = Effect.fnUntraced(function* (
   r: Recipe,
   values: Values = {},
 ): Effect.fn.Return<Input, never, Digest.Digest> {
-  const origin =
-    r.origin === "flag"
-      ? Origin.cases.flag.make({ name: "--instance.port" })
-      : r.origin === "env"
-        ? Origin.cases.env.make({ name: "FABRIKA_INSTANCE_PORT" })
-        : r.origin === "file"
-          ? Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })
-          : Origin.cases.default.make({});
+  const origin = Match.value(r.origin).pipe(
+    Match.when("flag", () => Origin.cases.flag.make({ name: "--instance.port" })),
+    Match.when("env", () => Origin.cases.env.make({ name: "FABRIKA_INSTANCE_PORT" })),
+    Match.when("file", () => Origin.cases.file.make({ file: "~/.fabrika/fabrika.toml", line: 2 })),
+    Match.when("default", () => Origin.cases.default.make({})),
+    Match.exhaustive,
+  );
   const settings = yield* Snapshot.make(Declarations.all, {
     // Every declaration starts at its declared default, so a setting added to `all` (T1041's two
     // mail settings) needs no edit here; the fixture then names the values it chooses.
@@ -401,18 +400,18 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
                   ...current,
                   origin: {
                     ...original,
-                    [key]:
-                      key === "seen"
-                        ? original.seen + 1
-                        : key === "parent"
-                          ? original.parent === null
-                            ? `in-process_${"0".repeat(26)}-1`
-                            : null
-                          : key === "traceId"
-                            ? `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`
-                            : key === "sentAt"
-                              ? DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1))
-                              : `${original[key]}-different`,
+                    [key]: Match.value(key).pipe(
+                      Match.when("seen", () => original.seen + 1),
+                      Match.when("parent", () => (original.parent === null ? `in-process_${"0".repeat(26)}-1` : null)),
+                      Match.when(
+                        "traceId",
+                        () => `${original.traceId[0] === "0" ? "1" : "0"}${original.traceId.slice(1)}`,
+                      ),
+                      Match.when("sentAt", () =>
+                        DateTime.formatIso(DateTime.makeUnsafe(Date.parse(original.sentAt) + 1)),
+                      ),
+                      Match.orElse((other) => `${original[other]}-different`),
+                    ),
                   },
                 };
                 expect(Exit.isFailure(yield* Effect.exit(driver.record(changed)))).toBe(true);

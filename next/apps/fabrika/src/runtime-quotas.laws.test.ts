@@ -305,27 +305,30 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
         new Proxy(
           {},
           {
-            get: (_target, method) =>
-              typeof method !== "string" || method === "then"
-                ? undefined
-                : // A Process records its start on the Project's own small runtime, beside its service.
-                  method === "settingsStart"
-                  ? (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
-                      Effect.runPromise(required(projectHeld).settingsStart(input))
-                  : method === "settingsRead"
-                    ? (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start))
-                    : (...args: ReadonlyArray<unknown>) =>
-                        Effect.runPromise(
-                          project((p) => {
-                            const member = Reflect.get(p, method);
-                            const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
-                            return method === "sign"
-                              ? signingReply(work)
-                              : method === "commit"
-                                ? commitReply(work)
-                                : work;
-                          }),
-                        ),
+            get: (_target, method) => {
+              if (typeof method !== "string" || method === "then") {
+                return undefined;
+              }
+
+              // A Process records its start on the Project's own small runtime, beside its service.
+              if (method === "settingsStart") {
+                return (input: Parameters<ReturnType<typeof projectRuntime>["settingsStart"]>[0]) =>
+                  Effect.runPromise(required(projectHeld).settingsStart(input));
+              }
+
+              if (method === "settingsRead") {
+                return (start: string) => Effect.runPromise(required(projectHeld).settingsRead(start));
+              }
+
+              return (...args: ReadonlyArray<unknown>) =>
+                Effect.runPromise(
+                  project((p) => {
+                    const member = Reflect.get(p, method);
+                    const work = typeof member === "function" ? Reflect.apply(member, p, args) : member;
+                    return method === "sign" ? signingReply(work) : method === "commit" ? commitReply(work) : work;
+                  }),
+                );
+            },
           },
         ),
     },
