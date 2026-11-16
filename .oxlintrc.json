@@ -2342,6 +2342,7 @@
         "next/apps/fabrika/src/entry/**",
         "next/packages/libfabrika/src/access/**",
         "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/codehost/**",
         "next/packages/libfabrika/src/coordination/**",
         "next/packages/libfabrika/src/desktop/**",
         "next/packages/libfabrika/src/packs/**",
