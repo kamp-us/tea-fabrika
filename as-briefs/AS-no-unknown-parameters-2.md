@@ -8,7 +8,7 @@ Read `AGENTS.md` and `next/AGENTS.md` first. Then read from the twin's tools bra
 - Rule: `anti-slop/no-unknown-parameters` (forced to `error` in a scratch config outside the repo, as the count did)
 - Folders: `apps/fabrika` (115), `libfabrika/node` (54), `libfabrika/client` (33), `oxlint-plugins` (30), `libfabrika/settings` (26), `.agents` (16), `.github/ci` (16), `libfabrika/src/* (root files)` (10)
 - Folder names are short: `libfabrika/X` is `next/packages/libfabrika/src/X` (`libfabrika/src/*` is the files right in `src/`), `apps/fabrika` is `next/apps/fabrika`, `packages/*` and `programs/*` are under `next/`. `.agents`, `.github/ci` and `oxlint-plugins` are at the repo root.
-- Hits on origin/main at 9186e6c49, net of PR 1366's files: 300. Hits in PR 1366's files are never touched; they are listed as waiting on 1366.
+- Hits on origin/main at 9186e6c49, net of PR 1366's files: 300. PR 1366 has merged (2026-11-16): merge `origin/main` in, and the hits in its files are part of this slice too (recount: the count above leaves them out).
 - Branch: `fabrikalfa/antislop-no-unknown-parameters-2`, created from `origin/main`. Push only there.
 
 The step briefs say "one rule, one package"; this slice is one rule over the folders above, cut so each slice is about 300 hits. Every other line of those briefs holds: fix code only, no lock line and no `.oxlintrc.json` change, never delete or narrow an assertion, never a disable line except where decision 0563 allows it for that very case with its reason, and a hit whose right fix is unclear is stopped and listed with file:line and why.
