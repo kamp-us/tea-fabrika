@@ -22,6 +22,7 @@ import {
   Stream,
   Tracer,
 } from "effect";
+import * as Arr from "effect/Array";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Redacted from "effect/Redacted";
 import { admitted } from "../access/Access.ts";
@@ -671,7 +672,10 @@ export const processDescriptor = Effect.fn("process.descriptor")(function* (ctx:
   return { ...descriptor, id: pid ?? descriptor.id, build: checkpoint.saved.build };
 });
 
-const hex = (bytes: ArrayBuffer) => Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0")).join("");
+const hex = (bytes: ArrayBuffer) => {
+  const pairs = Array.from(new Uint8Array(bytes), (n) => n.toString(16).padStart(2, "0"));
+  return Arr.join(pairs, "");
+};
 
 // R2 refuses a body whose SHA-256 differs from the one sent. The local bucket does not check,
 // so the adapter checks first and both places fail the same way.
@@ -1062,7 +1066,7 @@ const projectLogic = Effect.fn("project.init")(function* (
     "CREATE TABLE IF NOT EXISTS dev_descriptors (process TEXT PRIMARY KEY, value TEXT NOT NULL, pending INTEGER NOT NULL DEFAULT 0)",
   );
 
-  if (!sql.exec("PRAGMA table_info(dev_descriptors)").some((column) => column.name === "pending")) {
+  if (!Arr.some(sql.exec("PRAGMA table_info(dev_descriptors)"), (column) => column.name === "pending")) {
     sql.exec("ALTER TABLE dev_descriptors ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
   }
 
@@ -1106,12 +1110,14 @@ const projectLogic = Effect.fn("project.init")(function* (
   const policies = new Map<string, InputPolicy>();
   const remember = (owner: string, declaration: Declaration): InputPolicy => {
     const policy = {
-      inputs: Object.entries(declaration.inputs)
-        .filter(([, p]) => p.personOnly)
-        .map(([name]) => name),
-      events: Object.entries(declaration.writes)
-        .filter(([, p]) => p.personOnly)
-        .map(([name]) => name),
+      inputs: Arr.map(
+        Arr.filter(Object.entries(declaration.inputs), ([, p]) => p.personOnly),
+        ([name]) => name,
+      ),
+      events: Arr.map(
+        Arr.filter(Object.entries(declaration.writes), ([, p]) => p.personOnly),
+        ([name]) => name,
+      ),
     };
     policies.set(owner, policy);
     return policy;
@@ -1307,7 +1313,7 @@ const projectLogic = Effect.fn("project.init")(function* (
                 { concurrency: 1 },
               ),
             ),
-            Effect.map((values) => values.some(Boolean)),
+            Effect.map((values) => Arr.some(values, Boolean)),
           ),
       }),
     ),
@@ -1517,10 +1523,12 @@ const projectLogic = Effect.fn("project.init")(function* (
   const wakeWatchers = Effect.fnUntraced(function* (pid: string) {
     const names = yield* Context.get(services, LedgerTransaction).transact((turn) => {
       const table = processes.table(turn);
-      return table
-        .inbound(pid)
-        .flatMap(({ to }) => (to._tag === "process" ? Option.toArray(table.life(to.process)) : []))
-        .map((life) => life.name);
+      return Arr.map(
+        Arr.flatMap(table.inbound(pid), ({ to }) =>
+          to._tag === "process" ? Option.toArray(table.life(to.process)) : [],
+        ),
+        (life) => life.name,
+      );
     });
     const wakeups = Context.get(services, MailWakeups);
     yield* Effect.forEach(new Set(names), (name) => wakeups.wake(name), { concurrency: 1, discard: true }).pipe(
@@ -1542,18 +1550,18 @@ const projectLogic = Effect.fn("project.init")(function* (
    *  `shutdown`, and its session can no longer sign, as an exit's cannot. */
   const stopChild = Effect.fnUntraced(function* (input: ChildStop, origin: From) {
     const child = yield* Effect.gen(function* () {
-      const child = (yield* processes.info).find((row) => row.name === input.name);
+      const child = Arr.findFirst(yield* processes.info, (row) => row.name === input.name);
       yield* children.stop(input, origin);
 
-      if (child !== undefined) {
-        yield* door.retire(child.process);
+      if (Option.isSome(child)) {
+        yield* door.retire(child.value.process);
       }
 
       return child;
     }).pipe(write);
 
-    if (child !== undefined) {
-      yield* wakeWatchers(child.process);
+    if (Option.isSome(child)) {
+      yield* wakeWatchers(child.value.process);
     }
   });
   const failed = Effect.fn("code.failed")(function* (raw: unknown, id?: string) {
@@ -1713,7 +1721,7 @@ const projectLogic = Effect.fn("project.init")(function* (
         }),
       );
 
-      if (!Array.isArray(prepared)) {
+      if (!Arr.isArray(prepared)) {
         return prepared;
       }
 
@@ -1953,14 +1961,14 @@ const projectLogic = Effect.fn("project.init")(function* (
           }
 
           yield* door.checkDelivery(pid, input);
-          const row = (yield* processes.info).find((r) => r.process === pid);
+          const row = Arr.findFirst(yield* processes.info, (r) => r.process === pid);
 
-          if (row === undefined) {
+          if (Option.isNone(row)) {
             return yield* new LedgerError({ reason: "refused" });
           }
 
           return yield* ledger.append(
-            `${row.name}/inbox`,
+            `${row.value.name}/inbox`,
             input.id,
             yield* ProjectQuotas.inboxLine(input, config.build),
           );

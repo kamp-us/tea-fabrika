@@ -8,6 +8,7 @@
  * @stability unstable
  */
 import { Predicate, Schema } from "effect";
+import * as Arr from "effect/Array";
 
 const DIALECT = "https://json-schema.org/draft/2020-12/schema";
 
@@ -20,19 +21,19 @@ const loose = (node: unknown, seen: Set<unknown>): boolean => {
   seen.add(node);
 
   // An opaque declaration becomes `{}`; a check with no exact JSON Schema is left out or widened.
-  if (!Array.isArray(node) && node._tag === "Declaration") {
+  if (!Arr.isArray(node) && node._tag === "Declaration") {
     return true;
   }
 
-  if (!Array.isArray(node) && (node._tag === "Filter" || node._tag === "FilterGroup")) {
+  if (!Arr.isArray(node) && (node._tag === "Filter" || node._tag === "FilterGroup")) {
     const write = Predicate.isObject(node.annotations) ? node.annotations.toJsonSchema : undefined;
 
-    if (!Predicate.isFunction(write) || Array.isArray(write({ type: undefined, schemas: [] }))) {
+    if (!Predicate.isFunction(write) || Arr.isArray(write({ type: undefined, schemas: [] }))) {
       return true;
     }
   }
 
-  return Object.values(node).some((value) => loose(value, seen));
+  return Arr.some(Object.values(node), (value) => loose(value, seen));
 };
 
 /**
@@ -72,20 +73,21 @@ const printed = (value: unknown, indent: string, taken: number): string => {
 
   const inner = `${indent}  `;
 
-  if (Array.isArray(value)) {
+  if (Arr.isArray(value)) {
     if (value.length === 0) {
       return "[]";
     }
 
-    const flat = value.every((item) => item === null || typeof item !== "object");
-    const line = `[${value.map((item) => JSON.stringify(item)).join(", ")}]`;
+    const flat = Arr.every(value, (item) => item === null || typeof item !== "object");
+    const plain = Arr.map(value, (item) => JSON.stringify(item));
+    const line = `[${Arr.join(plain, ", ")}]`;
 
     if (flat && indent.length + taken + line.length <= WIDTH) {
       return line;
     }
 
-    const items = value.map((item, n) => `${inner}${printed(item, inner, n < value.length - 1 ? 1 : 0)}`);
-    return `[\n${items.join(",\n")}\n${indent}]`;
+    const items = Arr.map(value, (item, n) => `${inner}${printed(item, inner, n < value.length - 1 ? 1 : 0)}`);
+    return `[\n${Arr.join(items, ",\n")}\n${indent}]`;
   }
 
   const entries = Object.entries(value);
@@ -94,11 +96,11 @@ const printed = (value: unknown, indent: string, taken: number): string => {
     return "{}";
   }
 
-  const fields = entries.map(([key, item], n) => {
+  const fields = Arr.map(entries, ([key, item], n) => {
     const name = `${JSON.stringify(key)}: `;
     return `${inner}${name}${printed(item, inner, name.length + (n < entries.length - 1 ? 1 : 0))}`;
   });
-  return `{\n${fields.join(",\n")}\n${indent}}`;
+  return `{\n${Arr.join(fields, ",\n")}\n${indent}}`;
 };
 
 /**

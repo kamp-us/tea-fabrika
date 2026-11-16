@@ -6,6 +6,7 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -197,10 +198,13 @@ const make = (sql: Sql, options: { readonly brain: string; readonly limits: Limi
       options.brain,
     );
   const owner = (entry: Entry, registry: ProcessTable) => {
-    const live = registry.info.find((p) => entry.stream === `${p.name}/inbox` || entry.stream.startsWith(`${p.name}/`));
+    const live = Arr.findFirst(
+      registry.info,
+      (p) => entry.stream === `${p.name}/inbox` || entry.stream.startsWith(`${p.name}/`),
+    );
 
-    if (live !== undefined) {
-      return live;
+    if (Option.isSome(live)) {
+      return live.value;
     }
 
     const life = registry.life(entry.stream.split("/")[0] ?? "");

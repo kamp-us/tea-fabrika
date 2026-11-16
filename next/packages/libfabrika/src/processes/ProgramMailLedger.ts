@@ -10,6 +10,7 @@
  * @stability unstable
  */
 import { Effect, Equal, Layer, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor, valueFor } from "../ledger/Log.ts";
@@ -113,7 +114,7 @@ const capped = (turn: LedgerTurn, manager: typeof ProcessManager.Service, to: st
 
 /** The newest lifecycle rev of each name the send depends on: a change means look again. */
 const heads = (turn: LedgerTurn, names: ReadonlyArray<string>): string =>
-  JSON.stringify([ProcessTable.stream, ...names.map(ProcessTable.events)].map((stream) => turn.head(stream)));
+  JSON.stringify(Arr.map([ProcessTable.stream, ...Arr.map(names, ProcessTable.events)], (stream) => turn.head(stream)));
 
 /**
  * Layer that provides `ProgramMail` on the ledger, through `LedgerTransaction` and `ProcessManager`.

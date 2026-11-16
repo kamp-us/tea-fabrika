@@ -1,4 +1,5 @@
 import { Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
 import * as Schema from "effect/Schema";
 import { Exceeded, RecoveryReserveExhausted, type Allowance } from "../Quotas.ts";
 
@@ -62,11 +63,11 @@ export type Msg = typeof Msg.Type;
 
 const advance = (s: Model, at: number): Model => {
   const now = Math.max(s.at, at);
-  const groups = s.groups.filter((g) => g.at > now - 60_000);
+  const groups = Arr.filter(s.groups, (g) => g.at > now - 60_000);
   return {
     ...s,
-    writes: groups.reduce((n, g) => n + g.writes, 0),
-    bytes: s.account._tag === "recovery" ? groups.reduce((n, g) => n + g.bytes, 0) : s.bytes,
+    writes: Arr.reduce(groups, 0, (n, g) => n + g.writes),
+    bytes: s.account._tag === "recovery" ? Arr.reduce(groups, 0, (n, g) => n + g.bytes) : s.bytes,
   };
 };
 
@@ -170,7 +171,7 @@ export const make = (options: { readonly account: Account; readonly limits: Allo
         }
 
         const at = Math.max(s.at, m.at);
-        const groups = s.groups.filter((g) => g.at > at - 60_000);
+        const groups = Arr.filter(s.groups, (g) => g.at > at - 60_000);
         const last = groups.at(-1);
 
         if (writes !== 0 || bytes !== 0) {

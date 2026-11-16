@@ -7,6 +7,7 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Option, Result, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { type Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { lineFor } from "../ledger/Log.ts";
@@ -255,7 +256,9 @@ export class ProcessManager extends Context.Service<
 
           // A retried call may find this signal already written. Only the brain's own row counts;
           // another writer's row at this id makes the append refuse, and the whole turn with it.
-          if ([...turn.read(inbox, 0)].some((entry) => entry.id === letter && entry.by === caller.by)) {
+          if (
+            Arr.some(Arr.fromIterable(turn.read(inbox, 0)), (entry) => entry.id === letter && entry.by === caller.by)
+          ) {
             return;
           }
 
@@ -542,9 +545,9 @@ export class ProcessManager extends Context.Service<
                 [tag("letters")]: mail.length,
                 ...(mail.length === 0
                   ? {}
-                  : { [tag("lag")]: Math.max(...mail.map(({ arrivedAt }) => now - arrivedAt)) }),
+                  : { [tag("lag")]: Math.max(...Arr.map(mail, ({ arrivedAt }) => now - arrivedAt)) }),
               });
-              return Stream.fromIterable(mail.map(({ letter }) => letter));
+              return Stream.fromIterable(Arr.map(mail, ({ letter }) => letter));
             }).pipe(Effect.tapError(failed)),
           ).pipe(Stream.withSpan("process.receive"));
         const info = Effect.fn("process.info")(function* () {
@@ -580,9 +583,9 @@ export class ProcessManager extends Context.Service<
               });
               const stream = `${process}/dead`;
               const key = id("dead", process, value.m);
-              const prior = [...turn.read(stream, 0)].find((entry) => entry.id === key && entry.by === caller.by);
+              const prior = Arr.findFirst(turn.read(stream, 0), (entry) => entry.id === key && entry.by === caller.by);
 
-              if (prior === undefined) {
+              if (Option.isNone(prior)) {
                 turn.append(stream, key, line(from, value));
               }
 

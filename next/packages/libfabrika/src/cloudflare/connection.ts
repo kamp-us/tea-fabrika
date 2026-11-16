@@ -1,4 +1,5 @@
 import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -309,7 +310,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
     probe: (session: string) => recorded(probe(session)),
     notify: Effect.fnUntraced(function* (client: string, news: unknown) {
       const states = yield* Effect.forEach(ctx.getWebSockets(), attached, { concurrency: 1 });
-      const online = states.some((state) => state.client === client && state._tag === "online");
+      const online = Arr.some(states, (state) => state.client === client && state._tag === "online");
       return yield* online ? recorded(notify(client, news)) : notify(client, news);
     }),
   };
