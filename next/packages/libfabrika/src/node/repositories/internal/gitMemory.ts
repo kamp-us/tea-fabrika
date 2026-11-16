@@ -1,4 +1,4 @@
-import { Effect, FileSystem, Path, Predicate, Sink, Stream } from "effect";
+import { Effect, FileSystem, Path, Predicate, Sink, Stream, Record as Rec } from "effect";
 import type { PlatformError } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
@@ -1114,18 +1114,15 @@ export const make = Effect.fnUntraced(function* () {
 
   const run = Effect.fnUntraced(function* (command: ChildProcess.StandardCommand) {
     const words = command.args.filter(Predicate.isString);
-    const env = Object.fromEntries(
-      Object.entries(command.options.env ?? {}).filter(
+    const env = Rec.fromEntries(
+      Rec.toEntries(command.options.env ?? {}).filter(
         (pair): pair is [string, string | undefined] => Predicate.isString(pair[1]) || pair[1] === undefined,
       ),
     );
 
     // Memory git reads no secret: a redacted word or variable stays unread, and the law that sent
     // one belongs on real git.
-    if (
-      words.length !== command.args.length ||
-      Object.keys(env).length !== Object.keys(command.options.env ?? {}).length
-    ) {
+    if (words.length !== command.args.length || Rec.keys(env).length !== Rec.keys(command.options.env ?? {}).length) {
       return yield* Effect.die(new Error("git memory: unsupported command: a redacted argument or variable"));
     }
 

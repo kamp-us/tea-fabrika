@@ -26,7 +26,7 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema, Record as Rec } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -410,7 +410,7 @@ const Page = (props: PageProps) => {
         <h1>Blocked</h1>
         <p>The browser could not keep or use this window's key. {link.reason}</p>
       </main>
-    ) : link._tag !== "online" && Object.keys(views).length === 0 ? (
+    ) : link._tag !== "online" && Rec.keys(views).length === 0 ? (
       <main className="screen">
         <p>Connecting</p>
       </main>

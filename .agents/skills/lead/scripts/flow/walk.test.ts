@@ -2,6 +2,7 @@
 // through `Runners.layer`: no git, network or agent.
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Schema, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
 import { landDecision } from "./flows/land-decision.ts";
@@ -18,8 +19,8 @@ const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Sc
 /** Fake runners: each answers from `answers` by step name, and every call is written down. */
 const fakes = (answers: Readonly<Record<string, (n: number) => Outcome.Outcome>>) => {
   const calls: string[] = [];
-  const table = Object.fromEntries(
-    Object.entries(answers).map(([name, answer]) => [
+  const table = Rec.fromEntries(
+    Rec.toEntries(answers).map(([name, answer]) => [
       name,
       (step: Step.Step) =>
         Effect.sync(() => {
@@ -154,7 +155,7 @@ describe("the land-decision flow", () => {
       Effect.gen(function* () {
         const state = yield* tempState;
         const ok = () => Outcome.done("ok");
-        const { calls, layer } = fakes(Object.fromEntries(decision.steps.map((s) => [s.name, ok])));
+        const { calls, layer } = fakes(Rec.fromEntries(decision.steps.map((s) => [s.name, ok])));
         const model = yield* runFlow(decision, { state, resume: false, lead: false }).pipe(Effect.provide(layer));
         expect(calls).toEqual(["format", "lint", "governance"]);
         expect(model._tag === "parked" ? model.position : -1).toBe(3);

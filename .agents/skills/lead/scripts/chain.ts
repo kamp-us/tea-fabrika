@@ -117,6 +117,7 @@ import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -411,7 +412,7 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
     }
   }
 
-  for (const [k, v] of Object.entries(bodies)) {
+  for (const [k, v] of Rec.toEntries(bodies)) {
     sections[k] = v.join("\n").trim();
   }
 

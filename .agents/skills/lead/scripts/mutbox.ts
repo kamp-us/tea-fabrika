@@ -64,6 +64,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 import { parseSync, Visitor } from "oxc-parser";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
@@ -275,7 +276,7 @@ export const reachLine = (files: ReadonlyArray<FileReach>): string => {
  * (`dir/`) above it, as the box's own owner check reads the same table. Pure.
  */
 export const buildOwns = (owners: Readonly<Record<string, string>>, file: string): boolean => {
-  const folders = Object.keys(owners).filter((key) => key.endsWith("/") && file.startsWith(key));
+  const folders = Rec.keys(owners).filter((key) => key.endsWith("/") && file.startsWith(key));
   const key = file in owners ? file : folders.sort((a, b) => b.length - a.length)[0];
   return key !== undefined && owners[key] === "build";
 };
@@ -476,7 +477,7 @@ export const judge = (seen: {
     seen.b.tested === 0 &&
     seen.b.unreached === 0 &&
     ignored > 0 &&
-    Object.keys(seen.b.counts).every((status) => status === "Ignored")
+    Rec.keys(seen.b.counts).every((status) => status === "Ignored")
   ) {
     return {
       outcome: "skip",
@@ -757,7 +758,7 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
   const report = yield* decoded(Report, yield* readOut(box, `${name}/report.json`));
 
   if (report !== null) {
-    const rows = Object.entries(report.files).flatMap(([file, f]) => f.mutants.map((m) => toRow(file, m)));
+    const rows = Rec.toEntries(report.files).flatMap(([file, f]) => f.mutants.map((m) => toRow(file, m)));
     return { arm: tally(exit, "report", rows, selected), rows };
   }
 

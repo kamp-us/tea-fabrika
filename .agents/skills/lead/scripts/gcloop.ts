@@ -66,6 +66,7 @@ import {
 } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 import { spoken } from "./flow/Beat.ts";
 
 // ---------------------------------------------------------------- the setting
@@ -228,7 +229,7 @@ const xml = (text: string) =>
 export const fill = (template: string, values: Readonly<Record<string, string>>): Result.Result<string, string> => {
   const missing = new Set<string>();
   const filled = template.replaceAll(/\{\{([a-z]+)\}\}/g, (mark, name: string) => {
-    const value = Object.hasOwn(values, name) ? values[name] : undefined;
+    const value = Rec.has(values, name) ? values[name] : undefined;
 
     if (value === undefined) {
       missing.add(mark);

@@ -20,6 +20,7 @@ import {
   Scope,
   Stream,
   SubscriptionRef,
+  Record as Rec,
 } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
@@ -544,7 +545,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       }),
     ),
   );
-  const proxy = <Members extends object>(
+  const proxy = <Members extends Readonly<Record<string | symbol, unknown>>>(
     invoke: (method: string, args: ReadonlyArray<unknown>) => Effect.Effect<unknown, ControlError>,
     members: Members,
   ) =>
@@ -554,7 +555,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
           return undefined;
         }
 
-        if (Object.hasOwn(members, method)) {
+        if (Rec.has<string | symbol, unknown>(members, method)) {
           return members[method as keyof Members];
         }
 

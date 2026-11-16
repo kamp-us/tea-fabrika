@@ -2,6 +2,7 @@
 // script runs here.
 import { NodeServices } from "@effect/platform-node";
 import { Effect, type Scope } from "effect";
+import * as Rec from "effect/Record";
 import { describe, expect, it } from "vitest";
 import { PullRequestsError } from "../pr/PullRequests.ts";
 import { LeakGrepRefused } from "../pr/Pushes.ts";
@@ -36,7 +37,7 @@ describe("what the landing scripts' exit codes mean", () => {
   const r = (code: number, output = "line") => ({ code, output });
 
   it("pinned: the landing table has a runner for each step of the land-decision flow, and no other", () => {
-    expect(Object.keys(landing).toSorted()).toEqual(decision.steps.map((s) => s.name).toSorted());
+    expect(Rec.keys(landing).toSorted()).toEqual(decision.steps.map((s) => s.name).toSorted());
   });
 
   it("vector: each script's exit codes, as the scripts document them", () => {

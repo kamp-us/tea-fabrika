@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Result, Schema } from "effect";
+import { Effect, Result, Schema, Record as Rec } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Line, valueFor } from "../ledger/Log.ts";
@@ -12,7 +12,7 @@ import { admitted, MemberEvent } from "./Access.ts";
 import { foldAccess } from "./AccessFold.ts";
 import { NotGranted } from "./SessionManager.ts";
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const known: ReadonlySet<string> = new Set(Rec.keys(MemberEvent.cases));
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
 /**

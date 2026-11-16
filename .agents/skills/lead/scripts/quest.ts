@@ -2,6 +2,9 @@
 // own laptop; it is not product.
 
 import { dirname, matchesGlob } from "node:path";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 
 /**
  * A quest's state file (`state/<quest>.json`, drive.ts's) names its quest under `quest`. One written
@@ -82,27 +85,26 @@ export const questRoot = (
 
 /** The step a git note names, or none when it does not read. */
 export const stepOf = (note: string): string[] => {
-  let n: unknown;
+  const read = Result.try((): unknown => JSON.parse(note));
 
-  try {
-    n = JSON.parse(note);
-  } catch {
+  if (Result.isFailure(read)) {
     return [];
   }
 
+  const n = read.success;
   const step = n !== null && typeof n === "object" ? (n as { step?: unknown }).step : undefined;
   return typeof step === "string" ? [step] : [];
 };
 
 const stuckIn = (out: string) =>
   out.split("\n").flatMap((line) => {
-    let a: unknown;
+    const read = Result.try((): unknown => JSON.parse(line));
 
-    try {
-      a = JSON.parse(line);
-    } catch {
+    if (Result.isFailure(read)) {
       return [];
     }
+
+    const a = read.success;
 
     if (a === null || typeof a !== "object" || !("_tag" in a) || a._tag !== "stuck") {
       return [];
@@ -205,26 +207,25 @@ const LOCKED = [
 const canon = (v: unknown): string =>
   Array.isArray(v)
     ? `[${v.map(canon).join(",")}]`
-    : v !== null && typeof v === "object"
-      ? `{${Object.keys(v)
+    : Predicate.isObject(v)
+      ? `{${Rec.keys(v)
           .toSorted()
-          .map((k) => `${JSON.stringify(k)}:${canon((v as Record<string, unknown>)[k])}`)
+          .map((k) => `${JSON.stringify(k)}:${canon(v[k])}`)
           .join(",")}}`
       : JSON.stringify(v);
 
-const lockedPart = (text: string): string | null => {
-  try {
-    const json: unknown = JSON.parse(text);
+const lockedPart = (text: string): string | null =>
+  Result.getOrNull(
+    Result.try(() => {
+      const json: unknown = JSON.parse(text);
 
-    if (json === null || typeof json !== "object") {
-      return null;
-    }
+      if (json === null || typeof json !== "object") {
+        return null;
+      }
 
-    return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
-  } catch {
-    return null;
-  }
-};
+      return canon(LOCKED.map((k) => (json as Record<string, unknown>)[k] ?? null));
+    }),
+  );
 
 /** One manifest a step's commits touched, as the base and the head hold it (`null`: absent). */
 export type Manifest = {

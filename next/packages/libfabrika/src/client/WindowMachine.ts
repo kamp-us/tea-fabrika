@@ -9,7 +9,7 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Predicate, Result, Schema } from "effect";
+import { Option, Predicate, Result, Schema, Record as Rec } from "effect";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -224,7 +224,7 @@ export const lastCursor = (
   tile: { readonly id: string; readonly cursor: string | null },
 ): string | null => {
   const notes = tezgah?.cursors ?? {};
-  return Object.hasOwn(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
+  return Rec.has(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
 };
 
 const Own = Schema.Union([
@@ -720,7 +720,7 @@ const noticed = (
           ? { ...t, recovery: Recovery.make(changed ? "ready" : asks.includes(pid) ? "asked" : t.recovery) }
           : t,
       ),
-      patches: Object.fromEntries(Object.entries(s.patches).filter(([p]) => p !== pid)),
+      patches: Rec.fromEntries(Rec.toEntries(s.patches).filter(([p]) => p !== pid)),
     },
     rows,
     asks,
@@ -1203,7 +1203,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
 
   if (link._tag !== "online") {
     if (s.link._tag === "online") {
-      out.push(...Object.keys(s.patches).flatMap((pid) => runEnd(s, pid)));
+      out.push(...Rec.keys(s.patches).flatMap((pid) => runEnd(s, pid)));
     }
 
     return [
@@ -1250,7 +1250,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   return [flushed, [...out, ...firsts, ...reads, ...waits, ...sends, ...(askPersist ? [persist({})] : [])]];
 };
 
-const linkUpdate = Object.fromEntries(
+const linkUpdate = Rec.fromEntries(
   [
     "admitted",
     "not_granted",
@@ -1800,8 +1800,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           client,
           flight: found.rest,
           sent: s.sent.filter((l) => l !== letter),
-          attempts: Object.fromEntries(Object.entries(s.attempts).filter(([l]) => l !== letter)),
-          from: Object.fromEntries(Object.entries(s.from).filter(([n]) => Number(n) !== slot?.n)),
+          attempts: Rec.fromEntries(Rec.toEntries(s.attempts).filter(([l]) => l !== letter)),
+          from: Rec.fromEntries(Rec.toEntries(s.from).filter(([n]) => Number(n) !== slot?.n)),
           tiles: refusal === null ? s.tiles : s.tiles.map((t) => (t.id === owner ? { ...t, refusal } : t)),
         };
         return [
@@ -1990,8 +1990,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
     ],
   });
   // Every step, whatever its Msg, records a change of the window's strips (the plan's `fold` row).
-  const update = Object.fromEntries(
-    Object.entries(machine.update).map(([type, cell]: [string, (s: WindowModel, m: never) => Step]) => [
+  const update = Rec.fromEntries(
+    Rec.toEntries(machine.update).map(([type, cell]: [string, (s: WindowModel, m: never) => Step]) => [
       type,
       (s: WindowModel, m: never): Step => folded(s, cell(s, m)),
     ]),

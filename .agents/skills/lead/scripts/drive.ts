@@ -107,6 +107,7 @@ import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
 import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 import {
   type Agents,
   Answer,
@@ -226,7 +227,7 @@ const FAULT: Record<StuckReason, Fault> = {
   step_said: "work",
 };
 
-const isStuckReason = (s: string): s is StuckReason => Object.hasOwn(FAULT, s);
+const isStuckReason = (s: string): s is StuckReason => Rec.has<string, Fault>(FAULT, s);
 
 /** The fault as a log line names it, after the outcome: ` (fault: tool)`, or nothing. */
 const faultNote = (outcome: string, reason: string): string => {
@@ -1566,7 +1567,7 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
     return "";
   }
 
-  const mine = Object.keys(owners)
+  const mine = Rec.keys(owners)
     .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
     .toSorted();
   const other =

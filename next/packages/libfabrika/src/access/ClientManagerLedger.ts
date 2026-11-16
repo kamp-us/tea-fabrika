@@ -9,7 +9,7 @@
  *
  * @stability unstable
  */
-import { Effect, Layer, Result, Schema, Stream } from "effect";
+import { Effect, Layer, Result, Schema, Stream, Record as Rec } from "effect";
 import { Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { type Entry, fromHere, lineFor, valueFor } from "../ledger/Log.ts";
 import type { From } from "../processes/Mailbox.ts";
@@ -25,7 +25,7 @@ const MEMBERS = "gateway/access";
 
 const tag = (word: string): string => `fab.access.${word}`;
 
-const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+const known: ReadonlySet<string> = new Set(Rec.keys(MemberEvent.cases));
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
 /** One entry of `gateway/access` and the event it holds; a case this piece does not know is none. */
