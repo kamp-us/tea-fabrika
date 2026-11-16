@@ -23,6 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import * as Rec from "effect/Record";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -60,7 +61,7 @@ type Role =
   | { readonly _tag: "service"; readonly needs: Layer };
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
-const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
+const each = (names: ReadonlyArray<string>, role: Role) => Rec.fromEntries(names.map((name) => [name, role]));
 
 const launchers = (browser: string) =>
   each(
@@ -171,9 +172,7 @@ export const reader = <N>() => {
 
   return {
     imports: (source: string, names: ReadonlyArray<Bound>) => {
-      const paths = MODULES.filter((entry) => entry.module.test(source)).flatMap((entry) =>
-        Object.entries(entry.names),
-      );
+      const paths = MODULES.filter((entry) => entry.module.test(source)).flatMap((entry) => Rec.toEntries(entry.names));
 
       for (const { imported, local } of names) {
         // `localInstance` opens the instance from wherever it is imported, as the rule always read it.

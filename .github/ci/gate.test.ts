@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -249,7 +250,7 @@ it("G1 property: decide starts every hand start, and on a push or the catch-up s
     { ...options, numRuns: 200 },
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -395,7 +396,7 @@ it("G3 property: the reader asks the two run lists of main and one jobs list per
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -569,7 +570,7 @@ it("G2 property: in the group, no full run on main starts within a gap of the la
     { ...options, numRuns: 200 },
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -617,7 +618,7 @@ it("G4 property: [secrets] the token goes only in the authorization header, and 
           }
         }
 
-        for (const [name, text] of Object.entries(outputs)) {
+        for (const [name, text] of Rec.toEntries(outputs)) {
           for (const form of forms) {
             expect(text.includes(form), name).toBe(false);
           }
@@ -630,7 +631,7 @@ it("G4 property: [secrets] the token goes only in the authorization header, and 
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -694,7 +695,7 @@ it("G5 property: a call that fails is tried 3 times, and after the third failure
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -807,7 +808,7 @@ it("G7 property: a gate whose calls would run past its step's time limit stops b
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });

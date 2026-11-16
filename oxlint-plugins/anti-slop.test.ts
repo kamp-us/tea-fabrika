@@ -16,6 +16,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { Predicate, Schema } from "effect";
+import * as Rec from "effect/Record";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -241,7 +242,7 @@ beforeAll(() => {
 
 describe("L2 each taken rule fires through the repository's own config, in a folder on its list", () => {
   it("scenario: every taken rule has its plant, refused and taken", () => {
-    expect(Object.keys(PLANTS).toSorted()).toEqual([...TAKEN].toSorted());
+    expect(Rec.keys(PLANTS).toSorted()).toEqual([...TAKEN].toSorted());
     expect(ON.length).toBeGreaterThan(0);
   });
 
@@ -265,7 +266,7 @@ describe("L3 a taken rule holds only where its block lists the folder", () => {
     // The root holds many rules: none read means the text was not read, never that it is clean.
     expect(root.length).toBeGreaterThan(0);
     expect(root.filter(ofThePlugins)).toEqual([]);
-    const named = printed.overrides.flatMap((block) => Object.keys(block.rules)).filter(ofThePlugins);
+    const named = printed.overrides.flatMap((block) => Rec.keys(block.rules)).filter(ofThePlugins);
     expect(named.filter((rule) => !TAKEN.includes(rule))).toEqual([]);
   });
 });
@@ -316,7 +317,7 @@ describe("L4 the zero lock names exactly the folders with no hit that are not li
 describe("L5 no block for a taken rule says off or warn", () => {
   it("scenario: every setting of a rule of the two plugins, in every block, is error", () => {
     const settings = printed.overrides.flatMap((block) =>
-      Object.entries(block.rules).filter(([rule]) => ofThePlugins(rule)),
+      Rec.toEntries(block.rules).filter(([rule]) => ofThePlugins(rule)),
     );
     expect(settings.length).toBeGreaterThan(0);
     expect(settings.filter(([, setting]) => levelOf(setting) !== "deny")).toEqual([]);

@@ -16,6 +16,7 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
 import { Exit, Predicate, Schema } from "effect";
+import * as Rec from "effect/Record";
 import { verify } from "./vendored.ts";
 
 /**
@@ -228,7 +229,7 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
       return setting !== undefined && levelOf(setting) === "deny" ? [{ files: block.files, setting }] : [];
     });
   // The lock's run uses each rule's options from its own block, so it counts what the config holds.
-  const settings = Object.fromEntries(TAKEN.map((rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
+  const settings = Rec.fromEntries(TAKEN.map((rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
   const hits = count(root, settings, ignorePatterns);
 
   if (hits === null) {

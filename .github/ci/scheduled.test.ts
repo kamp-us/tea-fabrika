@@ -1068,7 +1068,7 @@ it("L1 property: a run is full exactly when one of its jobs is a test leg, tests
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
@@ -1144,7 +1144,7 @@ it("L1 property: the last green run is main's newest green run whose test legs r
     options,
   );
   expect(
-    Object.values(reached).every((count) => count > 0),
+    Rec.values(reached).every((count) => count > 0),
     JSON.stringify(reached),
   ).toBe(true);
 });
