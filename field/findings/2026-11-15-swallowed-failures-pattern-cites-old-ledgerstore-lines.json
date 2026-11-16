@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-swallowed-failures-pattern-cites-old-ledgerstore-lines",
+  "date": "2026-11-15",
+  "by": "adr",
+  "model": "claude-fable-5-2",
+  "rule": "doc_drift",
+  "location": {
+    "path": ".patterns/effect-swallowed-failures-leave-a-trace.md",
+    "line": 84
+  },
+  "says": "In next/, the pattern doc on swallowed failures names its two examples at ledger/internal/ledgerStore.ts:301 and :414, and neither line holds a catchCause any more.",
+  "proof": "On main at a31798b20, grep -n catchCause next/packages/libfabrika/src/ledger/internal/ledgerStore.ts prints lines 323 and 465 only. Line 84 of the pattern doc says the two catchCause(() => Effect.void) calls are at :301 and :414.",
+  "cost": "A reader who opens the cited lines lands on other code, and the doc is the one that teaches this shape. Decision 0566 changes that shape, so the doc is due a rewrite anyway.",
+  "head": "a31798b20f45f10bfc698beafc5761cd9c8ccacc",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1370"
+}
