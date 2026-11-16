@@ -58,6 +58,11 @@ a sev1, so a check that cries wolf is itself a fix that goes first.
   ([0539](../../../.decisions/0539-the-merge-line-runs-no-tooling-tests.md)). On 2026-11-14 a
   rename broke a visual law, and nothing showed it until a pull request with the `visual` label ran.
   Read one full scheduled run after the fix before you call it fixed.
+- **A full run's word is its verdict.** A red full run ends `failure`, on main and on a branch.
+  `cancelled` means a person or the freeze stopped it, or a leg hung past its job's backstop limit;
+  read its report job's line before you call it harmless. On 2026-11-15 a red full run on a branch
+  still canceled itself, read as cut off, and its pull request merged with two red laws. A
+  merge-line run (`check`) still cancels itself when red; its `ci-required` is the word there.
 - **Moving up:** when nothing can land, or each run makes it worse, tell the owner a sev0 may fit.
 - **Tell the owner:** one line when a sev1 starts (which issue, the cause if known), one when it
   ends (what fixed it).

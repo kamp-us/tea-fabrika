@@ -174,13 +174,42 @@ const plants: [string, (w: Workflow) => void][] = [
   ["SC5: the report is not told the needs", (w) => Reflect.deleteProperty(step(w, "report", "report").env!, "NEEDS")],
   ["SC5: the report takes a secret", (w) => (step(w, "report", "report").env!["GITHUB_TOKEN"] = `\${{ secrets.BOT }}`)],
   ["SC5: a test step gets the token", (w) => (step(w, "next", "vitest").env!["GITHUB_TOKEN"] = `\${{ github.token }}`)],
-  // The report tells a timed-out leg by its job's limit: a missing or stale one reads a time-out as a
-  // leg canceled by hand, and opens no issue (run 43723335863).
+  // The report tells a timed-out leg by its test steps' limit: a missing or stale one reads a
+  // time-out as a red test or a leg canceled by hand (run 43723335863 opened no issue).
   [
     "SC5: the report is not told next's limit",
     (w) => Reflect.deleteProperty(step(w, "report", "report").env!, "LIMIT_NEXT"),
   ],
-  ["SC5: next's limit is raised, and the report's is not", (w) => (w.jobs["next"]!["timeout-minutes"] = 20)],
+  [
+    "SC5: next's test steps' limit is raised, and the report's is not",
+    (w) => {
+      step(w, "next", "vitest")["timeout-minutes"] = 19;
+      step(w, "next", "end to end")["timeout-minutes"] = 19;
+      w.jobs["next"]!["timeout-minutes"] = 22;
+    },
+  ],
+  // SC12: the limit on the test steps, the job's own a backstop past it.
+  [
+    "SC12: next's vitest step has no limit",
+    (w) => Reflect.deleteProperty(step(w, "next", "vitest"), "timeout-minutes"),
+  ],
+  ["SC12: next's two test steps differ", (w) => (step(w, "next", "end to end")["timeout-minutes"] = 16)],
+  [
+    "SC12: tooling's tests step has no limit",
+    (w) => Reflect.deleteProperty(step(w, "tooling", "tooling tests"), "timeout-minutes"),
+  ],
+  [
+    "SC12: next's job limit equals its steps', so a hung test ends the run cancelled",
+    (w) => (w.jobs["next"]!["timeout-minutes"] = 17),
+  ],
+  ["SC12: tooling's backstop is not 3 minutes", (w) => (w.jobs["tooling"]!["timeout-minutes"] = 40)],
+  [
+    "SC12: a test step's limit is not a whole number",
+    (w) => {
+      step(w, "tooling", "tooling tests")["timeout-minutes"] = "30";
+      step(w, "report", "report").env!["LIMIT_TOOLING"] = "30";
+    },
+  ],
   [
     "SC5: the report's tooling limit is its own number",
     (w) => (step(w, "report", "report").env!["LIMIT_TOOLING"] = 25),
@@ -436,6 +465,33 @@ it("SC3, SC5 and SC6 scenario: on the real scheduled.yaml, what ends a red run a
       `scheduled.yaml: SC6: ${job} sets max-parallel to at most its legs, and its first red leg stops the others`,
     ]);
   }
+});
+
+it("SC12 scenario: on the real scheduled.yaml, a test step with no limit of its own, or a job limit that is no backstop, is named by SC12", () => {
+  // A job that runs into its own limit ends `cancelled`, and its run with it, even when the report
+  // fails after it (probe run 43778355238); a test step that runs into its own ends `failure` (probe
+  // run 43778586135). Plant, run once on scheduled.ts and restored: SC12 dropped (red on each case).
+  const SC12 = (job: string) =>
+    `scheduled.yaml: SC12: ${job}'s test steps share one timeout-minutes, and the job's own is 3 minutes more`;
+  const LIMIT_TEXT =
+    "scheduled.yaml: SC5: the report runs node .github/ci/scheduled.mjs once, with the needs, the results, the token and each test job's time limit, and its failure shows";
+
+  // The shape before this change: the limit on the job alone, which a hung leg ran into.
+  const onJob = real();
+  Reflect.deleteProperty(step(onJob, "next", "vitest"), "timeout-minutes");
+  Reflect.deleteProperty(step(onJob, "next", "end to end"), "timeout-minutes");
+  onJob.jobs["next"]!["timeout-minutes"] = 17;
+  expect(lint(onJob)).toEqual([LIMIT_TEXT, SC12("next")]);
+
+  for (const minutes of [30, 32, 34]) {
+    const near = real();
+    near.jobs["tooling"]!["timeout-minutes"] = minutes;
+    expect(lint(near)).toEqual([SC12("tooling")]);
+  }
+
+  const apart = real();
+  step(apart, "next", "end to end")["timeout-minutes"] = 16;
+  expect(lint(apart)).toEqual([LIMIT_TEXT, SC12("next")]);
 });
 
 it.each(plants)("rejects the schedule's plant: %s", (plant, mutate) => {

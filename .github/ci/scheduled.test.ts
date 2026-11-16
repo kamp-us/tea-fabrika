@@ -33,7 +33,12 @@ const at = (ms: number) => new Date(BASE + ms).toISOString();
 const quiet = fc.constantFrom("success", "cancelled", "skipped", null);
 const stepName = fc.constantFrom("vitest", "end to end", "tooling tests", "results", "time table", "stop the run");
 const stepEnd = fc.option(fc.nat({ max: 40 * MINUTE }).map(at), { nil: null });
-const steps = fc.array(fc.record({ name: stepName, conclusion: quiet, end: stepEnd }), { maxLength: 6 });
+
+// A step that did not fail: its times may be anything, even past every limit, since only a failed
+// step's run time can name a time-out.
+const steps = fc.array(fc.record({ name: stepName, conclusion: quiet, start: stepEnd, end: stepEnd }), {
+  maxLength: 6,
+});
 
 const legName = fc.oneof(
   jobName,
@@ -75,7 +80,7 @@ const proof = fc.oneof(
           conclusion,
           start: null,
           end: null,
-          steps: [...before, { name, conclusion: "failure", end }, ...after],
+          steps: [...before, { name, conclusion: "failure", start: null, end }, ...after],
         },
       ],
       failed: [] as string[],
@@ -170,6 +175,45 @@ it("property: any set of legs with one that neither passed, was skipped nor was 
   expect(scheduled.ending(leg(60 * MINUTE), {})).toBe("canceled");
 });
 
+it("property: a leg whose failed step ran for its limit or longer timed out, and one whose failed step ended sooner failed", () => {
+  // The limit sits on the test step (SC12), and GitHub ends a step that runs into it `failure`, the
+  // same word as a red test (probe run 43778586135: the step ran 72 s against 60, then failed).
+  // Plants: a failed step is always `failed`, as before (red: a step time-out named as a red test);
+  // a step time-out needs more than its limit (red: a step failed at exactly 17 minutes read as
+  // failed); the job's run time instead of the step's (red: a red test after a long setup read as a
+  // time-out).
+  fc.assert(
+    fc.property(
+      fc.constantFrom("next (1)", "next (e2e-2)", "tooling (2)"),
+      fc.constantFrom("vitest", "end to end", "tooling tests"),
+      fc.nat({ max: 5 * MINUTE }),
+      fc.integer({ min: 1, max: 10 * MINUTE }),
+      fc.constantFrom("failure", "cancelled"),
+      steps,
+      (name, step, setup, by, conclusion, others) => {
+        const limit = LIMITS[name.startsWith("next") ? "next" : "tooling"] * MINUTE;
+        const leg = (ran: number) => ({
+          name,
+          status: "completed",
+          conclusion,
+          start: at(0),
+          end: at(setup + ran + 5_000),
+          steps: [...others, { name: step, conclusion: "failure", start: at(setup), end: at(setup + ran) }],
+        });
+        expect(scheduled.ending(leg(limit), LIMITS)).toBe("timed out");
+        expect(scheduled.ending(leg(limit + by), LIMITS)).toBe("timed out");
+        expect(scheduled.ending(leg(limit - by), LIMITS)).toBe("failed");
+        expect(scheduled.causes([leg(limit + by)], LIMITS)).toEqual([
+          { _tag: "timed out", leg: name, minutes: limit / MINUTE },
+        ]);
+        // With no known limit, a failed step is only red.
+        expect(scheduled.ending(leg(limit + by), {})).toBe("failed");
+      },
+    ),
+    options,
+  );
+});
+
 // Legs that passed or were skipped, as the jobs API lists them once each has finished.
 const passed = fc.array(
   fc.record({
@@ -178,9 +222,10 @@ const passed = fc.array(
     conclusion: fc.constantFrom("success", "skipped"),
     start: fc.constant(at(0)),
     end: fc.nat({ max: 60 * MINUTE }).map(at),
-    steps: fc.array(fc.record({ name: stepName, conclusion: fc.constantFrom("success", "skipped"), end: stepEnd }), {
-      maxLength: 6,
-    }),
+    steps: fc.array(
+      fc.record({ name: stepName, conclusion: fc.constantFrom("success", "skipped"), start: stepEnd, end: stepEnd }),
+      { maxLength: 6 },
+    ),
   }),
   { maxLength: 9 },
 );
@@ -249,8 +294,13 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
           start: at(0),
           end: at(ms + 20_000),
           steps: [
-            { name: "vitest", conclusion: "failure", end: at(ms) },
-            { name: "stop the run", conclusion: seed % 3 === 0 ? "cancelled" : "success", end: at(ms + 10_000) },
+            { name: "vitest", conclusion: "failure", start: at(0), end: at(ms) },
+            {
+              name: "stop the run",
+              conclusion: seed % 3 === 0 ? "cancelled" : "success",
+              start: at(ms),
+              end: at(ms + 10_000),
+            },
           ],
         }));
         const stopped = cancels.map((ms, i) => ({
@@ -259,7 +309,7 @@ it("property: a run a red leg stopped names the legs that failed, the first firs
           conclusion: "cancelled",
           start: at(0),
           end: at(ms),
-          steps: [{ name: "end to end", conclusion: "cancelled", end: at(ms) }],
+          steps: [{ name: "end to end", conclusion: "cancelled", start: at(0), end: at(ms) }],
         }));
         // Every order the jobs API may list them in.
         const jobs = fc.sample(
@@ -415,7 +465,7 @@ it("pinned: run 43723335863's report opens the issue and names both legs as time
 it("property: the jobs API's answer reads as each job's name, status, conclusion, times and steps, and any other shape as none", () => {
   // Plants: keep only finished jobs (red: the running one dropped); drop a step's null conclusion to
   // "" (red: a running step read as a result); read the job's start from `created_at` (red: every
-  // start null).
+  // start null); read a step's start from its `completed_at` (red: a step's start read as its end).
   fc.assert(
     fc.property(calmJobs, fc.nat(), (jobs, id) => {
       const answer = {
@@ -426,11 +476,11 @@ it("property: the jobs API's answer reads as each job's name, status, conclusion
           created_at: at(-1000),
           started_at: start,
           completed_at: end,
-          steps: list.map(({ end: done, ...step }, n) => ({
+          steps: list.map(({ start: begun, end: done, ...step }, n) => ({
             number: n + 1,
             status: "completed",
             ...step,
-            started_at: at(0),
+            started_at: begun,
             completed_at: done,
           })),
         })),
@@ -449,7 +499,7 @@ it("property: the jobs API's answer reads as each job's name, status, conclusion
       conclusion: null,
       start: null,
       end: null,
-      steps: [{ name: "", conclusion: null, end: null }],
+      steps: [{ name: "", conclusion: null, start: null, end: null }],
     },
   ]);
 });
@@ -633,7 +683,7 @@ const answer = (jobs: Jobs) => ({
     ...job,
     started_at: start,
     completed_at: end,
-    steps: list.map(({ end: done, ...step }) => ({ ...step, completed_at: done })),
+    steps: list.map(({ start: begun, end: done, ...step }) => ({ ...step, started_at: begun, completed_at: done })),
   })),
 });
 
@@ -794,9 +844,10 @@ it("property: on any ref but main the report judges the run the same and writes 
 });
 
 it("property: the report job passes for a green run alone, so a red run ends failure on GitHub, on main and on a branch", async () => {
-  // 2026-11-15: a red run ended `cancelled` and was read as cut off. A failed leg is a failed job
-  // by itself; a leg that only timed out ends `cancelled` on GitHub, and this exit code is what
-  // makes its run a failure. Plants: exit 0 always, as before (red: every run that is not green);
+  // 2026-11-15: a red run ended `cancelled` and was read as cut off. A failed leg or a test step
+  // that ran out of time is a failed job by itself; this exit code covers a red run with neither,
+  // such as a leg that ended odd. It cannot turn a run GitHub ended `cancelled` into a failure
+  // (probe run 43778355238). Plants: exit 0 always, as before (red: every run that is not green);
   // exit 1 on red alone (red: a `stopped` run passed, having proved nothing).
   expect(scheduled.exitCode("green")).toBe(0);
   expect(scheduled.exitCode("red")).toBe(1);
@@ -826,8 +877,9 @@ it("property: the report job passes for a green run alone, so a red run ends fai
 
 it("pinned: run 43723335863, two legs that only timed out, fails the report job on a branch too; a run with needs it cannot read fails it", async () => {
   // pinned: GitHub ended this run `cancelled` with every other job green, the report job among
-  // them. Plant: the exit code follows the action, not the verdict (red: a branch, which writes
-  // nothing, passed).
+  // them. Its legs ran into the job's limit, so the run stays `cancelled` today whatever the report
+  // job does; the test steps' own limit (SC12) is what ends such a run `failure` now. Plant: the
+  // exit code follows the action, not the verdict (red: a branch, which writes nothing, passed).
   const run = fixture("43723335863");
 
   for (const ref of ["refs/heads/main", "refs/heads/fabrikalfa/a-branch"]) {

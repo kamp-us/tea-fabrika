@@ -1,4 +1,4 @@
-// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC11).
+// Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC12).
 import { parse } from "yaml";
 import {
   allSteps,
@@ -32,8 +32,8 @@ const RUNNERS = 10;
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
 const READS = { actions: "read", contents: "read" };
 export const VERDICT = "report";
-// On every branch: the report job fails unless the run is green, which is what ends a run whose
-// red leg only timed out as `failure`. scheduled.mjs writes the issue on main alone.
+// On every branch: the report job fails unless the run is green, so a red run with no failed job
+// still ends `failure`. scheduled.mjs writes the issue on main alone.
 const REPORT_IF = "always()";
 const REPORT = "node .github/ci/scheduled.mjs";
 
@@ -53,6 +53,25 @@ const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#
 const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "$SHARD" --passWithNoTests ${REPORTERS}`;
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
+// Each test job's test commands, which carry its time limit on their own steps (SC12).
+const TESTS: Record<string, readonly string[]> = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] };
+// A test job's own limit is its test steps' limit and this many minutes more. In green runs
+// 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
+// and the three after it at most 7 s, against their 2 minutes of step limits.
+const BACKSTOP = 3;
+
+/**
+ * A test job's time limit: the one `timeout-minutes` its test steps all set, or undefined when one
+ * sets none or they differ. A step that runs into it ends `failure`, and so does the run; a job that
+ * runs into its own limit ends `cancelled`, and so does the run, whatever fails after it.
+ */
+const limitOf = (jobs: Record<string, unknown>, name: string): unknown => {
+  const found = steps(map(jobs[name])).filter(
+    (s) => typeof s["run"] === "string" && (TESTS[name] ?? []).includes(s["run"]),
+  );
+  const limits = new Set(found.map((s) => s["timeout-minutes"]));
+  return found.length > 0 && limits.size === 1 ? [...limits][0] : undefined;
+};
 
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
 const listed = (job: Record<string, unknown>): unknown[] => {
@@ -147,12 +166,12 @@ export const lintScheduled = (text: string, check: string): string[] => {
     compact(report["if"]) ===
       REPORT_IF, "SC5: the report needs every other job, and runs after any result, on every branch");
   const judged = steps(report).filter((s) => "run" in s);
-  // Each test job's limit, as `LIMIT_<ID>`, equal to its own `timeout-minutes`: scheduled.mjs tells
-  // a timed-out leg from a canceled one by it, and reads a leg's job id from its name, so no job
-  // sets a `name` of its own.
+  // Each test job's limit, as `LIMIT_<ID>`, equal to its test steps' `timeout-minutes` (SC12):
+  // scheduled.mjs tells a timed-out leg from a red or a canceled one by it, and reads a leg's job id
+  // from its name, so no job sets a `name` of its own.
   const env = {
     ...REPORT_ENV,
-    ...Object.fromEntries(others.map((name) => [`LIMIT_${name.toUpperCase()}`, map(jobs[name])["timeout-minutes"]])),
+    ...Object.fromEntries(others.map((name) => [`LIMIT_${name.toUpperCase()}`, limitOf(jobs, name)])),
   };
   require(Object.values(jobs).every(
     (job) => !("name" in map(job)),
@@ -260,6 +279,20 @@ export const lintScheduled = (text: string, check: string): string[] => {
       found.every(
         (s) => map(s["env"])["FABRIKA_TEST_DEPTH"] === DEPTH,
       ), `SC11: every step that runs ${command.split(" --shard")[0]} sets FABRIKA_TEST_DEPTH: ${DEPTH}`);
+  }
+
+  // SC12. The time limit sits on each test step, and the job's own is a backstop BACKSTOP minutes
+  // past it. A step that runs into its limit ends `failure`, and so does the run; a job that runs
+  // into its own ends `cancelled`, and so does the run, even when the report fails after it (probe
+  // runs 43778586135 and 43778355238 on a throwaway copy of this workflow).
+  for (const name of Object.keys(TESTS)) {
+    const limit = limitOf(jobs, name);
+    require(typeof limit === "number" &&
+      Number.isInteger(limit) &&
+      limit > 0 &&
+      map(jobs[name])["timeout-minutes"] ===
+        limit +
+          BACKSTOP, `SC12: ${name}'s test steps share one timeout-minutes, and the job's own is ${BACKSTOP} minutes more`);
   }
 
   return errors;

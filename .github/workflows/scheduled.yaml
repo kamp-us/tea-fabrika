@@ -8,20 +8,29 @@ name: scheduled
 # break no diff reached shows within about 3 hours. A red run opens one GitHub issue labeled `ci-scheduled`, or comments on the open one,
 # and a green run closes it (scheduled.mjs). Those are the only issues automation opens here.
 #
-# A red run ends `failure`, on main and on a branch, and only a run a person, a sev0's freeze or
-# this workflow's concurrency group cut off ends `cancelled`. GitHub ends a run `cancelled` once
-# anything canceled the run, whatever failed in it, so no step here cancels it: a failed leg is a
-# failed job, each matrix's `fail-fast` stops that job's other legs, and the report job fails unless
-# the run is green, which also turns a leg that only timed out (GitHub ends it `cancelled`) into a
-# failure. On 2026-11-15 a red run on a branch that had canceled itself was read as cut off, and its
-# pull request merged with two red laws. workflow-lint.ts holds all of it (SC3 to SC6).
+# A red run ends `failure`, on main and on a branch, and only a run a person or a sev0's freeze
+# canceled ends `cancelled`. On 2026-11-15 a red run on a branch that had canceled itself was read
+# as cut off, and its pull request merged with two red laws. What GitHub does, from probe runs of a
+# throwaway copy of this file (43778347612, 43778355238, 43778362939, 43778578495, 43778586135):
+#
+#   what happened in the run                                   the run's conclusion
+#   a leg failed, its matrix's fail-fast canceled the others   failure
+#   a leg failed, another leg of the matrix hit the job limit  failure
+#   a test step hit its own step limit                         failure
+#   a job hit its job limit, a later always() job failed       cancelled
+#   a person canceled the run, a later always() job failed     cancelled
+#
+# So no step here cancels the run, each matrix fails fast, and the time limit sits on each test step
+# (`timeout-minutes`, which ends the step `failure`), with the job's own limit a few minutes past it
+# as a backstop for a hung setup or upload. workflow-lint.ts holds all of it (SC3 to SC6, SC12).
 #
 #   what            legs   how
 #   next/ vitest    5      check.yaml's next legs 1 to 5, the `next` and `next-integration`
 #                          projects, every file, no `--changed`
 #   next/ visual    2      check.yaml's legs e2e-1 and e2e-2, the `next-visual` project, every file
 #   tooling tests   2      the `tooling` project, every file, no `--changed`
-#   report          1      after the others, on any result; it fails unless the run is green
+#   report          1      after the others, on any result; it fails unless the run is green, so
+#                          a run whose red leg left no failed job still ends `failure`
 #
 # Every test leg sets `FABRIKA_TEST_DEPTH: full`, so a law with a depth runs its full case count
 # here; the merge line leaves it unset, which reads as `fast` (pull request 1274).
@@ -61,9 +70,12 @@ jobs:
   # Chromium. Nothing is narrowed: no `--changed`, no list.
   next:
     runs-on: ubuntu-latest
-    # check.yaml's next limit, for the same legs with the same split. The report reads it through
-    # the alias, to tell a leg that ran into it from one stopped after another leg failed.
-    timeout-minutes: &next-limit 17
+    # A backstop: the test steps' own limit, `next-limit` below, and 3 minutes more. In green runs
+    # 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
+    # (chromium's included) and the three after it at most 7 s, against their 2 minutes of step
+    # limits. A job that hits this limit ends `cancelled` and so does its run, so only a hung setup
+    # or upload reaches it; the report still names it as a time-out.
+    timeout-minutes: 20
     # Fail fast, GitHub's own (ticket 990): the first red leg stops this job's other legs, so they
     # free their runners, and the run still ends `failure`. It reaches no other job: tooling's legs
     # run on after a red next leg, and next's after a red tooling leg.
@@ -80,8 +92,12 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
+      # check.yaml's next limit, for the same legs with the same split, on the test step itself: a step
+      # that runs into it ends `failure`, and so does the run. The report reads it through the alias,
+      # to name a leg that ran into it as a time-out.
       - name: vitest
         if: ${{ !startsWith(matrix.shard, 'e2e-') }}
+        timeout-minutes: &next-limit 17
         env:
           SHARD: ${{ matrix.shard }}/5
           FABRIKA_TEST_DEPTH: full
@@ -96,6 +112,7 @@ jobs:
       # Leg `e2e-k` runs shard `k/2` of the visual files: `${SHARD#e2e-}` drops the leg's prefix.
       - name: end to end
         if: startsWith(matrix.shard, 'e2e-')
+        timeout-minutes: *next-limit
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
@@ -147,8 +164,8 @@ jobs:
   # in no CI job (0533).
   tooling:
     runs-on: ubuntu-latest
-    # The limit check.yaml's tooling legs had, before 0539 took them off the merge line.
-    timeout-minutes: &tooling-limit 30
+    # A backstop, as next's: the tests step's own limit and 3 minutes more.
+    timeout-minutes: 33
     strategy:
       fail-fast: true
       max-parallel: 2
@@ -162,7 +179,10 @@ jobs:
       - uses: ./.github/actions/pnpm
 
       - run: pnpm install --frozen-lockfile
+      # The limit check.yaml's tooling legs had, before 0539 took them off the merge line, on the
+      # step itself, as next's.
       - name: tooling tests
+        timeout-minutes: &tooling-limit 30
         env:
           SHARD: ${{ matrix.shard }}/2
           FABRIKA_TEST_DEPTH: full
@@ -182,11 +202,12 @@ jobs:
   # green scheduled run, the legs that made it red and the failing tests, or comments on the open
   # one; a leg that ran into its time limit is red, named as a time-out; green closes it; a run
   # stopped by hand does nothing. On a branch it writes nothing. On both it fails unless the run is
-  # green, so a red run ends `failure` (scheduled.mjs). `always()`, so it runs after a red leg, as
-  # ci-required does in check.yaml. The one job with `issues: write`, and `actions: read` to read
-  # the run's jobs and steps and find the last green run: `needs` folds a matrix's legs into one
-  # result, and says `cancelled` for a leg that timed out. No install: the runner's own Node runs
-  # scheduled.mjs.
+  # green (scheduled.mjs), so a red run with no failed job, such as a leg that ended odd, still ends
+  # `failure`; its failure cannot turn a run GitHub ends `cancelled` into one (probe run
+  # 43778355238). `always()`, so it runs after a red leg, as ci-required does in check.yaml. The
+  # one job with `issues: write`, and `actions: read` to read the run's jobs and steps and find
+  # the last green run: `needs` folds a matrix's legs into one result. No install: the runner's own
+  # Node runs scheduled.mjs.
   report:
     needs: [next, tooling]
     if: always()
@@ -208,9 +229,10 @@ jobs:
         with:
           pattern: results-*
           path: ${{ runner.temp }}/results
-      # Each test job's time limit, an alias of its own line, so the limit stays one setting: GitHub
-      # ends a leg that ran into it `cancelled`, as it ends one stopped after another leg failed, and
-      # only the leg's run time against its limit tells a time-out apart (scheduled.mjs's `ending`).
+      # Each test job's test step limit, an alias of its own line, so the limit stays one setting. A
+      # step that ran into it ends `failure` like a red test, and a job that ran into its backstop
+      # ends `cancelled` like a leg stopped after another leg failed, so only the run time against
+      # this limit tells a time-out apart (scheduled.mjs's `ending`).
       - name: report
         env:
           NEEDS: ${{ toJSON(needs) }}
