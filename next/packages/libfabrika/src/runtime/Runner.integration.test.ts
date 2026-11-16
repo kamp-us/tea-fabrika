@@ -137,6 +137,9 @@ const work = Cmd.make("work", {
 
 class DiskError extends Schema.TaggedError<DiskError>()("disk", {}) {}
 
+// A world that could not be built: the fixture failed, not the runner under test.
+class FixtureError extends Schema.TaggedError<FixtureError>()("FixtureError", { cause: Schema.Defect() }) {}
+
 class WorkValue extends Schema.Class<WorkValue>("WorkValue")({
   n: Schema.Int,
   extra: Schema.optionalKey(Schema.String),
@@ -1664,7 +1667,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           Effect.flatMap((on) =>
             Effect.tryPromise({
               try: () => worldOn(on),
-              catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+              catch: (cause) => new FixtureError({ cause }),
             }),
           ),
         );
@@ -1710,7 +1713,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           Effect.flatMap((on) =>
             Effect.tryPromise({
               try: () => worldOn(on),
-              catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+              catch: (cause) => new FixtureError({ cause }),
             }),
           ),
         );
@@ -1761,7 +1764,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               Effect.flatMap((on) =>
                 Effect.tryPromise({
                   try: () => worldOn(on),
-                  catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+                  catch: (cause) => new FixtureError({ cause }),
                 }),
               ),
             );
@@ -1810,7 +1813,7 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           Effect.flatMap((on) =>
             Effect.tryPromise({
               try: () => worldOn(on),
-              catch: (cause: unknown): Error => new Error("Runner fixture failed", { cause }),
+              catch: (cause) => new FixtureError({ cause }),
             }),
           ),
         );
