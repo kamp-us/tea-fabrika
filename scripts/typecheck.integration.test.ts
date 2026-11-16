@@ -4,14 +4,15 @@
 // lock does not cover or a language server. Each law names a lock file and a compiler name of its
 // own, so a real typecheck on the same machine never holds up a law, and a law never holds up a real
 // one. These laws start processes, so under 0584 they are `.integration.` and run in the full run.
+// Ticket 766 ported the script to `scripts/typecheck.ts` (0113); these laws start it with node.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
-const script = join(root, "scripts/typecheck.sh");
+const script = join(root, "scripts/typecheck.ts");
 
 /** One law's folder: stand-in commands on PATH, an events file the stand-in compiler writes, a lock. */
 type Rig = {
@@ -72,8 +73,9 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
   writeFileSync(
     join(dir, "named.mjs"),
     `import {existsSync, writeFileSync} from 'node:fs';
-import {basename} from 'node:path';
+import {basename, join} from 'node:path';
 if (existsSync('/proc/self/comm')) writeFileSync('/proc/self/comm', basename(process.argv0));
+writeFileSync(join(${JSON.stringify(dir)}, 'named-ready'), '');
 setTimeout(() => {}, 60_000);
 `,
   );
@@ -84,7 +86,7 @@ setTimeout(() => {}, 60_000);
 
 /** One `pnpm typecheck`, with its stderr kept. */
 const typecheck = (r: Rig, id: string, env: Record<string, string | undefined> = {}) => {
-  const child = spawn("sh", [script], {
+  const child = spawn(process.execPath, [script], {
     cwd: root,
     detached: true,
     stdio: ["ignore", "ignore", "pipe"],
@@ -129,6 +131,11 @@ const named = async (r: Rig, args: readonly string[] = []) => {
   symlinkSync(process.execPath, path);
   const child = spawn(path, [standIn, ...args], { detached: true, stdio: "ignore" });
   children.push(child);
+  // Linux names a new process after the file it runs, here the rig's compiler name, and Node then
+  // renames its main thread, which is the process's name, until named.mjs writes it back. So a
+  // pgrep before named.mjs is ready can see the name and the next one miss it (ticket 766 saw this
+  // flake). The law waits for the stand-in to say it is ready first.
+  await until(() => existsSync(join(r.dir, "named-ready")), "the stand-in compiler never got ready");
   await until(() => spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started");
   return { child, command: [path, standIn, ...args].join(" ") };
 };
@@ -230,5 +237,38 @@ describe("T1074 a local typecheck waits for the lock and any running compiler, t
       0,
       `typecheck: pgrep cannot list processes here, so the wait for a running ${r.compiler} is skipped\n`,
     ]);
+  });
+});
+
+describe("T766 CommandsProcess runs a command in our process group and reads how it ended, today's tooling", () => {
+  // N5. Two real `node -e` children, so this law is `.integration.` (0584): one writes its process
+  // group as ps reads it and exits 3, one stops itself with SIGTERM. A caps law (R4 "recovers a
+  // killed typecheck holder") kills the holder's group and expects its compiler gone with it, which
+  // holds only when the command shares our group. Plant: leave Effect's default `detached` (true on
+  // Linux and macOS), so the child's group differs from ours.
+  it("scenario: a command is heard by its pid first, runs in our process group, and comes back as an exit code or a signal", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "tc-766-"));
+    dirs.push(dir);
+    const group = join(dir, "group");
+    const exits = {
+      cmd: process.execPath,
+      args: [
+        "-e",
+        `require("node:fs").writeFileSync(${JSON.stringify(group)}, require("node:child_process").execFileSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" }).trim()); process.exit(3);`,
+      ],
+    };
+    const stops = {
+      cmd: process.execPath,
+      args: ["-e", `process.kill(process.pid, "SIGTERM"); setTimeout(() => {}, 5000);`],
+    };
+    const { commandsOnNode } = await import("./typecheck/test-helper.ts");
+    const { ended, heard } = await commandsOnNode([exits, stops]);
+    const ours = spawnSync("ps", ["-o", "pgid=", "-p", String(process.pid)], { encoding: "utf8" }).stdout.trim();
+    expect(ended).toEqual([
+      { _tag: "exited", code: 3 },
+      { _tag: "signaled", signal: "SIGTERM" },
+    ]);
+    expect(readFileSync(group, "utf8"), "the command ran in a process group of its own").toBe(ours);
+    expect(heard, "each command's pid is heard first, and none once it has ended").toEqual([true, false, true, false]);
   });
 });

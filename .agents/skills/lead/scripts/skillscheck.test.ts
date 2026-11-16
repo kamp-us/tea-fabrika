@@ -412,7 +412,7 @@ const slice1bClauses = [
         skill,
         "Go easy on the machine",
         "K9",
-        "The test config and typecheck.sh hold worker, home and typecheck limits.",
+        "The test config and typecheck.ts hold worker, home and typecheck limits.",
       ] as const,
   ),
   [

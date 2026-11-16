@@ -961,7 +961,15 @@
       // shrinks. This rule block is the `next/**` block above, repeated: change both together.
       // `fabrika/no-stage-word` reads only `next/` paths (0080), so lead tooling keeps the word
       // for today's pipeline steps.
-      "files": [".agents/**/*.ts", ".agents/**/*.mjs"],
+      // The typecheck's port (0113, ticket 766) is lead tooling in scripts/ and joins it here.
+      "files": [
+        ".agents/**/*.ts",
+        ".agents/**/*.mjs",
+        "scripts/typecheck.ts",
+        "scripts/typecheck/**/*.ts",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
+      ],
       "rules": {
         "fabrika/no-promises": "error",
         "fabrika/no-ledger-sql": "error",
@@ -1126,7 +1134,9 @@
         "next/**/*.test.tsx",
         "next/**/*Test.ts",
         "next/**/*.test-support.ts",
-        ".agents/**/*.test.ts"
+        ".agents/**/*.test.ts",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
       ],
       "rules": { "fabrika/no-cause-squash": "off" }
     },
@@ -1180,7 +1190,7 @@
     {
       // `.agents/` tests keep the edge rules on: only `next/`'s tests may turn one off
       // (`edge-comment.test.ts`). The rest is left out as for `next/`'s tests above.
-      "files": [".agents/**/*.test.ts"],
+      "files": [".agents/**/*.test.ts", "scripts/typecheck.test.ts", "scripts/typecheck-lock.test.ts"],
       "rules": {
         "fabrika/effect-functions": "off",
         "fabrika/no-hand-tag": "off",
@@ -1282,7 +1292,14 @@
       // advises where the warn override at the end still names the folder (0523). A shared suite
       // (`SinkTest.ts`, 0062) holds laws too. Today's version's tests are left out: 0093 covers
       // next/, and .agents/ follows next/'s rules (0033).
-      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", ".agents/**/*.test.ts"],
+      "files": [
+        "next/**/*.test.ts",
+        "next/**/*.test.tsx",
+        "next/**/*Test.ts",
+        ".agents/**/*.test.ts",
+        "scripts/typecheck.test.ts",
+        "scripts/typecheck-lock.test.ts"
+      ],
       "rules": {
         "fabrika/law-shape": "error"
       }
