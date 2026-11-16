@@ -19,6 +19,12 @@ import { programBox } from "./box.ts";
 
 // Only Cloudflare's base class is supplied. No execution or supervision method is replaced.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
+
+/** The rejection a stand-in RPC answers with, as a lost call to another object rejects. */
+class RpcFault extends Schema.TaggedError<RpcFault, { readonly brand: unique symbol }>()("RpcFault", {
+  message: Schema.String,
+}) {}
+
 const NAME = "counter:1";
 const BUILD = "build-a";
 const owner = Writer.cases.person.make({ key: "SHA256:fixture", for: from().for });
@@ -123,7 +129,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 init: (s) => box.init(s),
                 fresh: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before checking")));
+                    return Effect.runPromise(
+                      Effect.fail(new RpcFault({ message: "transport failed before checking" })),
+                    );
                   }
 
                   if (move === "decode") {
@@ -136,7 +144,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 audit: (m) => box.audit(m),
                 step: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before the program")));
+                    return Effect.runPromise(
+                      Effect.fail(new RpcFault({ message: "transport failed before the program" })),
+                    );
                   }
 
                   if (move === "decode") {

@@ -35,6 +35,11 @@ import { Archive, type BucketCalls } from "../Archive.ts";
 import { RecordManager } from "../Records.ts";
 import { SinkError, SpanSink } from "../Sink.ts";
 
+/** The failure a span made by `span` below ends with, when it is not `ok`. */
+class SpanFault extends Schema.TaggedError<SpanFault, { readonly brand: unique symbol }>()("SpanFault", {
+  message: Schema.String,
+}) {}
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
 // Every object is a fresh node:sqlite file in its own temp folder. The scope that asked for it
@@ -114,7 +119,7 @@ const span = (piece: string, at: number, ms = 1, ok = true, attributes: Record<s
     yield* TestClock.setTime(at);
     yield* Effect.exit(
       TestClock.adjust(ms).pipe(
-        Effect.andThen(ok ? Effect.void : Effect.fail(new Error("p101"))),
+        Effect.andThen(ok ? Effect.void : Effect.fail(new SpanFault({ message: "p101" }))),
         Effect.withSpan(piece, { attributes }),
       ),
     );

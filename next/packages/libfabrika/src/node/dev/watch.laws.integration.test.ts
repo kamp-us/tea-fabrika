@@ -15,12 +15,20 @@
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Schema, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
 import type * as Dev from "./dev.ts";
 import { watchPrograms } from "./watch.ts";
+
+class NotificationError extends Schema.TaggedError<NotificationError, { readonly brand: unique symbol }>()(
+  "NotificationError",
+  {
+    message: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
 const SEED = 119120;
 const ROOT = new URL("../../../../../../", import.meta.url).pathname;
@@ -83,7 +91,8 @@ vi.mock("rolldown", async (original) => {
                   try: async () => {
                     await listener(notification);
                   },
-                  catch: (cause: unknown): Error => new Error("the repeated Rolldown notification failed", { cause }),
+                  catch: (cause: unknown) =>
+                    new NotificationError({ message: "the repeated Rolldown notification failed", cause }),
                 }).pipe(Effect.orDie),
               { discard: true, concurrency: 1 },
             );

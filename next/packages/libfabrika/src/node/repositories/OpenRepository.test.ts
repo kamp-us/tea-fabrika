@@ -43,6 +43,11 @@ import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as OpenRepository from "./OpenRepository.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
+/** A failed confirm whose message carries the secret, so a leak of it shows in every output. */
+class ConfirmFault extends Schema.TaggedError<ConfirmFault, { readonly brand: unique symbol }>()("ConfirmFault", {
+  message: Schema.String,
+}) {}
+
 const services = Layer.mergeAll(NodeServices.layer, RepositoryOpenTest.toml, Digest.layerWebCrypto);
 
 const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
@@ -474,7 +479,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                     confirm: (snapshot) => {
                       outputs.pending.push(snapshot);
                       return source === 8
-                        ? Effect.fail(new Error(`${url} ${folder} ${secret}`))
+                        ? Effect.fail(new ConfirmFault({ message: `${url} ${folder} ${secret}` }))
                         : Effect.succeed(c.move % 2 === 0);
                     },
                   }).pipe(

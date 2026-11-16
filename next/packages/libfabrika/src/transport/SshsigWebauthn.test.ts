@@ -55,8 +55,12 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
     ]),
   );
 
-const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: () => new Error("test WebCrypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: call, catch: () => new WebCryptoError({ message: "test WebCrypto failed" }) });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));

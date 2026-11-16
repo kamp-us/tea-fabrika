@@ -136,8 +136,17 @@ const pack = (blob: Uint8Array, signature: Uint8Array, space: string = SPACE) =>
     ]),
   );
 
-const web = <A>(call: () => Promise<A>): Effect.Effect<A, Error> =>
-  Effect.tryPromise({ try: call, catch: (): Error => new Error("test WebCrypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+/** The fault a stand-in store throws, as SQLite throws an `Error` with its code in the message. */
+class StoreFault extends Schema.TaggedError<StoreFault, { readonly brand: unique symbol }>()("StoreFault", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(call: () => Promise<A>): Effect.Effect<A, WebCryptoError> =>
+  Effect.tryPromise({ try: call, catch: () => new WebCryptoError({ message: "test WebCrypto failed" }) });
 
 const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
@@ -1065,7 +1074,7 @@ describe("T843 sender budget, next/", () => {
           w.sql.exec("UPDATE gateway_limits SET value=?", "{");
         }
 
-        const cause = new Error("t843 write failed");
+        const cause = new StoreFault({ message: "t843 write failed" });
         const sql = failingTableWrites(w.sql, "gateway_limits", () => !corrupt, cause);
         yield* Effect.gen(function* () {
           const d = yield* Gateway;
@@ -1084,7 +1093,7 @@ describe("T843 sender budget, next/", () => {
       Effect.gen(function* () {
         const w = yield* world({ rateLimit: { limit: 1, window: 60_000 } });
         let broken = false;
-        const sql = failingTableWrites(w.sql, "sums", () => broken, new Error("SQLITE_FULL"));
+        const sql = failingTableWrites(w.sql, "sums", () => broken, new StoreFault({ message: "SQLITE_FULL" }));
         const sink = SpanSink.layer(sql, { object: START });
         yield* Effect.gen(function* () {
           const d = yield* Gateway;

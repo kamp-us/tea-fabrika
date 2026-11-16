@@ -28,6 +28,11 @@ import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import { killWorkerd } from "./workerd.test-support.ts";
 
+/** The proxy answered, but not yet with the reopened Worker: a reply that is retried. */
+class NotReopened extends Schema.TaggedError<NotReopened, { readonly brand: unique symbol }>()("NotReopened", {
+  status: Schema.Int,
+}) {}
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) };
 const DEFAULT = 18787;
@@ -429,7 +434,7 @@ it.live("scenario: T753 L13 real Worker retries the same HTTP owner, shares warm
     // The proxy can reply 502 while workerd reopens, so retry non-200 replies too.
     yield* request.pipe(
       Effect.flatMap((response) =>
-        response.status === 200 ? Effect.succeed(response) : Effect.fail(new Error("Worker has not reopened")),
+        response.status === 200 ? Effect.succeed(response) : Effect.fail(new NotReopened({ status: response.status })),
       ),
       Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
     );

@@ -39,7 +39,12 @@ const GatewayCalls = Arbitrary.schema(
 type DoorCall = typeof GatewayCalls extends Arbitrary.Arbitrary<infer C> ? C : never;
 
 // WebCrypto owns ephemeral test key generation and signing. No machine key is read or printed.
-const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
+const web = <A>(f: () => Promise<A>) =>
+  Effect.tryPromise({ try: f, catch: () => new WebCryptoError({ message: "test crypto failed" }) });
 
 const key = Effect.fnUntraced(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));

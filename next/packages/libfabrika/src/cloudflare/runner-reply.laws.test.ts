@@ -18,6 +18,11 @@ import { ProgramRunner } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
 
+/** The rejection a stand-in RPC answers with, as a lost call to another object rejects. */
+class RpcFault extends Schema.TaggedError<RpcFault, { readonly brand: unique symbol }>()("RpcFault", {
+  message: Schema.String,
+}) {}
+
 const SEED = 119120;
 // Only the platform base class is fake. Every RPC method runs the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -204,7 +209,7 @@ const replyCase = (
           replyCalls++;
 
           if (mode === "rpc" && replyCalls === 1) {
-            return Effect.runPromise(Effect.fail(new Error("reply RPC lost")));
+            return Effect.runPromise(Effect.fail(new RpcFault({ message: "reply RPC lost" })));
           }
 
           if (mode === "decode" && replyCalls === 1) {

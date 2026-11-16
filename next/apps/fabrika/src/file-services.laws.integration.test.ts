@@ -27,6 +27,11 @@ import { expect, vi } from "vitest";
 import { build } from "./build.ts";
 import { Row } from "./exam/compiler.ts";
 
+class ImportError extends Schema.TaggedError<ImportError, { readonly brand: unique symbol }>()("ImportError", {
+  message: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
 const cli = vi.hoisted(() => ({
   work: undefined as Effect.Effect<unknown, unknown> | undefined,
   layer: undefined as
@@ -853,7 +858,7 @@ it.effect.prop(
           vi.resetModules();
           yield* Effect.tryPromise({
             try: () => import("../dev.ts"),
-            catch: (cause: unknown) => new Error("dev import failed", { cause }),
+            catch: (cause: unknown) => new ImportError({ message: "dev import failed", cause }),
           });
           expect(cli.work).toBeDefined();
           const exit = yield* Effect.exit(

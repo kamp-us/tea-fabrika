@@ -7,6 +7,11 @@ import type { Sql } from "../Sql.ts";
 import * as Publish from "./Publish.ts";
 import * as WatcherManagerRemote from "./WatcherManagerRemote.ts";
 
+/** A failure the stand-in send or RPC answers with, which the remote reads as unreachable. */
+class Fault extends Schema.TaggedError<Fault, { readonly brand: unique symbol }>()("Fault", {
+  message: Schema.String,
+}) {}
+
 const Step = Arbitrary.all({
   pick: Arbitrary.schema(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   client: Arbitrary.schema(Schema.NonEmptyString.check(Schema.isMaxLength(240))),
@@ -37,7 +42,7 @@ describe("watcher delivery evidence, next/", () => {
           const publish = Publish.make(sql, (connection: string, client: string, news: unknown) =>
             Effect.suspend(() => {
               if (failSend) {
-                return Effect.fail(new Error("unknown send failure"));
+                return Effect.fail(new Fault({ message: "unknown send failure" }));
               }
 
               delivered.push({ connection, client, news });
@@ -48,9 +53,9 @@ describe("watcher delivery evidence, next/", () => {
           let rpc: "ok" | "throw" | "malformed" = "ok";
           const context = yield* Layer.build(
             WatcherManagerRemote.layer((client, update) =>
-              Effect.suspend((): Effect.Effect<unknown, Error> => {
+              Effect.suspend((): Effect.Effect<unknown, Fault> => {
                 if (rpc === "throw") {
-                  return Effect.fail(new Error("RPC unreachable"));
+                  return Effect.fail(new Fault({ message: "RPC unreachable" }));
                 }
 
                 if (rpc === "malformed") {

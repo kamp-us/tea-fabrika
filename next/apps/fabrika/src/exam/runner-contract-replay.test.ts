@@ -47,12 +47,17 @@ const failedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
 
 type World = Effect.Success<ReturnType<typeof world>>;
 
+class WebCryptoError extends Schema.TaggedError<WebCryptoError, { readonly brand: unique symbol }>()("WebCryptoError", {
+  message: Schema.String,
+}) {}
+
 // The real Gateway in front of a world's runner, for the delivery law below. Moved out of the
 // world unchanged; it reads the world's SQL and ledger.
 const openDoor = Effect.fnUntraced(function* (w: World, runner: typeof ProgramRunner.Service) {
   const { sql, ledger } = w;
   // Ephemeral signing material only. This helper reads no key file.
-  const web = <A>(f: () => Promise<A>) => Effect.tryPromise({ try: f, catch: () => new Error("test crypto failed") });
+  const web = <A>(f: () => Promise<A>) =>
+    Effect.tryPromise({ try: f, catch: () => new WebCryptoError({ message: "test crypto failed" }) });
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const raw = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const fingerprint = `SHA256:${Base64.encode(new Uint8Array(yield* web(() => crypto.subtle.digest("SHA-256", raw)))).replace(/=+$/, "")}`;
