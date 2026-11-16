@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-exam-to-lint-c-tests",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T00:47:33-08:00",
+  "ended": "2026-11-16T01:24:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice C of docs/plan/quests/exam-to-lint-PLAN.md (branch fabrikalfa/exam-to-lint, approved), next/ and the repo's tooling. Written: vitest.reads.ts (readsOf, and lawReads, the Vite plugin, as a factory so R2 runs the real one), wired into vitest.config.ts with vitest.reads.test.ts in the tooling project; R1 and R2 in vitest.reads.test.ts (seed 119120, 100 and 50 runs), both green on the real code; R3 in next/packages/vitest/src/Law.types.test.ts, red in the package typecheck because LawOptions and TaskMeta have no reads (TS2339 at lines 42 and 48); and the runtime half of 'lands in meta' as an extension of the toTestOptions property in next/packages/vitest/src/Law.test.ts, red now: 'expected { reads: [] } to deeply equal {}', since toTestOptions passes reads through as a vitest option. Declarations, each file moved onto @kampus/vitest's it with its title labels moved to options: exam/client-manager-contract.test.ts, exam/alchemy-lifecycle.test.ts, exam/commits.test.ts, exam/twin.integration.test.ts, exam/agents.test.ts, exam/agent-may.test.ts, settings-generated.integration.test.ts, build-command.integration.test.ts and instance-one-file.integration.test.ts. Not declared: commits-git-chain (a permission check refused the edit, a stop), commits-git-person, -signatures and -steps (they use it.each, which the package's it lacks), and bytes, build.integration and the three libfabrika node/build integration files (moving them changes laws as .github/ci/plant-check.ts reads them, so each law would need its own plant run; see the finding in the step's report).",
+  "plants": [
+    { "law": "R1 readsOf answers exactly the literal globs of every reads key in a law's options, in any spelling of the declaration, and throws on any other value", "plant": "read only the first reads in a file (vitest.reads.ts visitor skips once a glob is found)", "result": "red" },
+    { "law": "R2 a test whose law declares a glob is in vitest's --changed when a tracked file it matches changes, and not when none does", "plant": "drop the addWatchFile call from lawReads", "result": "red" },
+    { "file": "next/packages/vitest/src/Law.types.test.ts", "law": "type: R3 reads is a key of LawOptions, typed as a list of strings, and lands in meta", "plant": "type reads as unknown in LawOptions and TaskMeta, after the build's two lines were added to a scratch copy of Law.ts", "result": "red" },
+    { "file": "next/apps/fabrika/src/exam/agents.test.ts", "law": "not built: P25 / schema-made tools, read-only ps first, no person-only input", "plant": "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound", "result": "red" },
+    { "file": "next/apps/fabrika/src/exam/agents.test.ts", "law": "not built: P25 / before approval tools list; each call answers with the code and no letters", "plant": "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound", "result": "red" },
+    { "file": "next/apps/fabrika/src/exam/agents.test.ts", "law": "not built: P25 / approval persists per name across restart, second name needs own grant, ps drives nothing", "plant": "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound", "result": "red" },
+    { "file": "next/apps/fabrika/src/exam/agents.test.ts", "law": "not built: P25 / SDK check with a note is visible with the real checked writer; repeated checks reuse one TypeID", "plant": "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound", "result": "red" },
+    { "file": "next/apps/fabrika/src/exam/agents.test.ts", "law": "not built: P25 / malformed calls and checks of missing items write no letters and preserve refusal fields", "plant": "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound", "result": "red" },
+    { "file": "next/apps/fabrika/src/exam/agent-may.test.ts", "law": "not built: P25 agent policy / every current method, unknown method and process target follows the closed table", "plant": "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no policy bound", "result": "red" },
+    { "law": "oxlint refuses each import a caller may not make, in every spelling, and passes the rest", "plant": "drop src/settings-start.integration.test.ts from the TOML adapter's allowed files in .oxlintrc.json (slice F's M8 plant), seed 119120, 10 runs", "result": "green" },
+    { "file": "next/apps/fabrika/src/settings-generated.integration.test.ts", "law": "oxlint refuses each import a caller may not make, in every spelling, and passes the rest", "plant": "drop the bare **/settings/TomlParser spelling from every TOML adapter ban in .oxlintrc.json", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 37,
+  "note": "Every plant was a scratch copy restored by copy, and the mcp.ts plant file was removed; no product file is in the commit. The green L9 record names no file on purpose: it is slice F's planned break, which this law did not catch at seed 119120 and 10 runs, and is reported as a plan gap. Ran in this box, at the branch's working tree on 7615df4: vitest.reads.test.ts (2 passed), vitest.changed.test.ts (passed), next/packages/vitest/src/Law.test.ts (1 red as planned, 40 passed), Law.types.test.ts (vitest, passed; red only in the package typecheck, run once with tsc -p next/packages/vitest), every moved file above (all green: agents 6 passed 5 pending, agent-may 10 passed 1 pending, alchemy-lifecycle 2, client-manager-contract 1, commits 39, twin.integration 84, settings-generated.integration 5, build-command.integration 2, instance-one-file.integration 7), the 0178 guard allowing each .integration. file as a cloud box. vitest.shards.test.ts F2 and L18 fail locally because Vitest's results cache starts the red Law.test.ts first, the cache lesson slice A fixes with cache: false; not touched. pnpm format, pnpm lint (exit 0) and the list ratchet (exit 0) passed. Not run: pnpm typecheck (the build's), vitest list --changed timing (the local guard refuses it while vitest.config.ts, a rerun trigger, is changed).",
+  "step": "tests"
+}

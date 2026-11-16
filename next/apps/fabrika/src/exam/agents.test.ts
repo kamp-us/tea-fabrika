@@ -2,9 +2,10 @@
 // Mapping: toolsOf/callOf -> schema tools and malformed calls; SDK client -> approval/retry/writer.
 // Tracker, quit, desk control, top-bar counts and the old host/stdio handshake are not ported.
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { expect, it } from "@effect/vitest";
+import { expect } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import { senderTest } from "@kampus/libfabrika/testing";
+import { it } from "@kampus/vitest";
 import { Arbitrary, Effect, FileSystem, Schema } from "effect";
 
 const SEED = 119120;
@@ -281,7 +282,17 @@ it.effect.prop(
         }
       }
     }).pipe(Effect.provide(platform)),
-  options,
+  {
+    ...options,
+    plant: "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound",
+    reads: [
+      "next/packages/libfabrika/src/mcp/**",
+      "next/packages/libfabrika/src/mcp.ts",
+      "next/apps/fabrika/mcp.ts",
+      "next/apps/fabrika/src/mcp.ts",
+      "next/apps/fabrika/src/mcp/**",
+    ],
+  },
 );
 
 it.effect.prop(
@@ -294,7 +305,17 @@ it.effect.prop(
       waiting(a);
       yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
-  options,
+  {
+    ...options,
+    plant: "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound",
+    reads: [
+      "next/packages/libfabrika/src/mcp/**",
+      "next/packages/libfabrika/src/mcp.ts",
+      "next/apps/fabrika/mcp.ts",
+      "next/apps/fabrika/src/mcp.ts",
+      "next/apps/fabrika/src/mcp/**",
+    ],
+  },
 );
 
 it.effect.prop(
@@ -307,7 +328,17 @@ it.effect.prop(
       expect(a).toEqual({ afterRestart: true, otherName: false, drives: 0 });
       yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
-  options,
+  {
+    ...options,
+    plant: "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound",
+    reads: [
+      "next/packages/libfabrika/src/mcp/**",
+      "next/packages/libfabrika/src/mcp.ts",
+      "next/apps/fabrika/mcp.ts",
+      "next/apps/fabrika/src/mcp.ts",
+      "next/apps/fabrika/src/mcp/**",
+    ],
+  },
 );
 
 it.effect.prop(
@@ -322,7 +353,17 @@ it.effect.prop(
       visible(a.result, c.note, a.agent);
       yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
-  options,
+  {
+    ...options,
+    plant: "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound",
+    reads: [
+      "next/packages/libfabrika/src/mcp/**",
+      "next/packages/libfabrika/src/mcp.ts",
+      "next/apps/fabrika/mcp.ts",
+      "next/apps/fabrika/src/mcp.ts",
+      "next/apps/fabrika/src/mcp/**",
+    ],
+  },
 );
 
 it.effect.prop(
@@ -337,7 +378,17 @@ it.effect.prop(
       expect(missing).toEqual({ reason: "missing", letters: [] });
       yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
-  options,
+  {
+    ...options,
+    plant: "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no bridge bound",
+    reads: [
+      "next/packages/libfabrika/src/mcp/**",
+      "next/packages/libfabrika/src/mcp.ts",
+      "next/apps/fabrika/mcp.ts",
+      "next/apps/fabrika/src/mcp.ts",
+      "next/apps/fabrika/src/mcp/**",
+    ],
+  },
 );
 
 const cleanTools = (declarations: ReadonlyArray<InputDeclaration> = standard): ReadonlyArray<Tool> => [

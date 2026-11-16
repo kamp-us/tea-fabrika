@@ -1,5 +1,5 @@
-import { it, expect } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
+import { expect } from "@effect/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Effect, Schema } from "effect";
 import { rolldown } from "rolldown";
 
@@ -52,5 +52,10 @@ it.effect.prop(
 
       yield* inspect(["ClientManager", ...new Set(names)]);
     }).pipe(Effect.scoped),
-  { timeout: 60_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) } },
+  {
+    timeout: 60_000,
+    arbitrary: { seed: 119120, runs: runsFor({ fast: 10, full: 100 }) },
+    // Rolldown reads the contract and everything it reaches as files, which no import of this test sees.
+    reads: ["next/packages/libfabrika/src/**"],
+  },
 );

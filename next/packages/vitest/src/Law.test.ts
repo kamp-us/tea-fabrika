@@ -46,35 +46,52 @@ const passed = fc.record(
   { requiredKeys: [] },
 );
 
-// Plant: drop `retry` from what passes through.
-it("toTestOptions puts the plant and the label in meta, with its tag and reason, and passes every other vitest option through unchanged", () => {
+/** A law's declared text reads (0591), or none: globs from the top of the repo. */
+const declared = fc.option(fc.array(fc.stringMatching(/^[a-z*/.]{1,20}$/), { maxLength: 3 }), { nil: null });
+
+// Plants: drop `retry` from what passes through; leave `reads` out of meta, passed through as a
+// vitest option (0591, slice C: red).
+it("toTestOptions puts the plant, the label and the reads in meta, with the label's tag and reason, and passes every other vitest option through unchanged", () => {
   fc.assert(
-    fc.property(fc.option(fc.string({ maxLength: 20 }), { nil: null }), label, passed, (plant, named, rest) => {
-      const options: LawOptions = {
-        ...rest,
-        ...(plant === null ? {} : { plant }),
-        ...(named === null ? {} : named.name === "pinned" ? { pinned: named.reason } : { [named.name]: named.reason }),
-      };
-      const { meta, ...vitest } = toTestOptions(options);
-      expect(vitest).toEqual(rest);
-      expect(meta ?? {}).toEqual({
-        ...(plant === null ? {} : { plant }),
-        ...(named === null
-          ? {}
-          : {
-              label:
-                named.name === "pinned"
-                  ? Label.cases.pinned.make({ reason: named.reason })
-                  : TEXT[named.name](named.reason),
-            }),
-      });
-    }),
+    fc.property(
+      fc.option(fc.string({ maxLength: 20 }), { nil: null }),
+      label,
+      declared,
+      passed,
+      (plant, named, globs, rest) => {
+        const options: LawOptions = {
+          ...rest,
+          ...(plant === null ? {} : { plant }),
+          ...(globs === null ? {} : { reads: globs }),
+          ...(named === null
+            ? {}
+            : named.name === "pinned"
+              ? { pinned: named.reason }
+              : { [named.name]: named.reason }),
+        };
+        const { meta, ...vitest } = toTestOptions(options);
+        expect(vitest).toEqual(rest);
+        expect(meta ?? {}).toEqual({
+          ...(plant === null ? {} : { plant }),
+          ...(globs === null ? {} : { reads: globs }),
+          ...(named === null
+            ? {}
+            : {
+                label:
+                  named.name === "pinned"
+                    ? Label.cases.pinned.make({ reason: named.reason })
+                    : TEXT[named.name](named.reason),
+              }),
+        });
+      },
+    ),
     {
       seed: SEED,
       numRuns: 100,
       examples: [
-        ["", null, {}],
-        [null, { name: "pinned", reason: 1497 }, { retry: 0 }],
+        ["", null, null, {}],
+        [null, { name: "pinned", reason: 1497 }, null, { retry: 0 }],
+        [null, null, [], {}],
       ],
     },
   );

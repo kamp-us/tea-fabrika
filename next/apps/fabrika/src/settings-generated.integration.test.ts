@@ -13,12 +13,13 @@
 //   adapter; in libfabrika only the settings module and `node/settings/`; and only
 //   `settings/TomlParser.ts` imports the parser. oxlint's own `no-restricted-imports` says so.
 import { NodeServices } from "@effect/platform-node";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
+import { it } from "@kampus/vitest";
 import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
@@ -110,17 +111,23 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     },
     { arbitrary: { seed: SEED, runs: 50 } },
   );
-  it("format: the committed person.json, repo.json and reference are what generation writes", async () => {
-    // format: editors read the two schemas and people read the reference exactly as committed, so
-    // the committed bytes must be the generator's output for the shipped declarations.
-    const files = await committed;
-    const fresh = outputs(Declarations.all);
-    expect(files.person).toBe(fresh.person);
-    expect(files.repo).toBe(fresh.repo);
-    expect(files.reference).toContain(fresh.reference);
-    expect(fresh.person.endsWith("}\n") && !fresh.person.endsWith("\n\n")).toBe(true);
-    expect(fresh.repo.endsWith("}\n") && !fresh.repo.endsWith("\n\n")).toBe(true);
-  });
+  it(
+    "the committed person.json, repo.json and reference are what generation writes",
+    async () => {
+      // The committed bytes must be the generator's output for the shipped declarations.
+      const files = await committed;
+      const fresh = outputs(Declarations.all);
+      expect(files.person).toBe(fresh.person);
+      expect(files.repo).toBe(fresh.repo);
+      expect(files.reference).toContain(fresh.reference);
+      expect(fresh.person.endsWith("}\n") && !fresh.person.endsWith("\n\n")).toBe(true);
+      expect(fresh.repo.endsWith("}\n") && !fresh.repo.endsWith("\n\n")).toBe(true);
+    },
+    {
+      format: "editors read the two schemas and people read the reference exactly as committed",
+      reads: ["next/apps/fabrika/person.json", "next/apps/fabrika/repo.json", "docs/settings-reference.md"],
+    },
+  );
 
   it("outputs ignore declaration order, and a changed doc or default reaches each output that shows it", () => {
     fc.assert(
@@ -227,45 +234,52 @@ const relative = (from: string, to: string) => {
 };
 
 describe("L9, only the start files take the TOML adapter in next/apps, and only the adapter takes the parser", () => {
-  it("oxlint refuses each import a caller may not make, in every spelling, and passes the rest", async () => {
-    // Each run plants a batch of generated imports and lints them in one oxlint process.
-    await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
-        async (cases) => {
-          const planted = cases
-            .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
-            .map(([c, t]) => {
-              const spec =
-                t === "package"
-                  ? "@kampus/libfabrika/settings/TomlParser"
-                  : t === "relative"
-                    ? relative(c.file, ADAPTER)
-                    : t === "relative-bare"
-                      ? relative(c.file, ADAPTER).replace(/\.ts$/, "")
-                      : t === "parser"
-                        ? "toml-eslint-parser"
-                        : "toml-eslint-parser/lib/ast";
-              const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
-              return { file: c.file, spec, allowed };
-            });
-          fc.pre(planted.length > 0);
-          const result = await plant(
-            Object.fromEntries(
-              planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
-            ),
-          );
+  it(
+    "oxlint refuses each import a caller may not make, in every spelling, and passes the rest",
+    async () => {
+      // Each run plants a batch of generated imports and lints them in one oxlint process.
+      await fc.assert(
+        fc.asyncProperty(
+          fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
+          async (cases) => {
+            const planted = cases
+              .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
+              .map(([c, t]) => {
+                const spec =
+                  t === "package"
+                    ? "@kampus/libfabrika/settings/TomlParser"
+                    : t === "relative"
+                      ? relative(c.file, ADAPTER)
+                      : t === "relative-bare"
+                        ? relative(c.file, ADAPTER).replace(/\.ts$/, "")
+                        : t === "parser"
+                          ? "toml-eslint-parser"
+                          : "toml-eslint-parser/lib/ast";
+                const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
+                return { file: c.file, spec, allowed };
+              });
+            fc.pre(planted.length > 0);
+            const result = await plant(
+              Object.fromEntries(
+                planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
+              ),
+            );
 
-          for (const p of planted) {
-            expect(result(RULE, p.file), `${p.file} imports ${p.spec}`).toEqual(p.allowed ? [] : [1]);
-          }
-        },
-      ),
-      // A lint property: each run starts one oxlint process over up to 12 planted files, so a red
-      // ends at its first counterexample rather than shrinking through more processes.
-      { seed: SEED, numRuns: 10, endOnFailure: true },
-    );
-  }, 120_000);
+            for (const p of planted) {
+              expect(result(RULE, p.file), `${p.file} imports ${p.spec}`).toEqual(p.allowed ? [] : [1]);
+            }
+          },
+        ),
+        // A lint property: each run starts one oxlint process over up to 12 planted files, so a red
+        // ends at its first counterexample rather than shrinking through more processes.
+        { seed: SEED, numRuns: 10, endOnFailure: true },
+      );
+    },
+    {
+      timeout: 120_000,
+      plant: "drop the bare **/settings/TomlParser spelling from every TOML adapter ban in .oxlintrc.json",
+    },
+  );
 });
 
 it.prop(

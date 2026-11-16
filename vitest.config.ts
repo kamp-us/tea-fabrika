@@ -8,6 +8,7 @@ import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.m
 import packageJson from "./package.json" with { type: "json" };
 import { changedFiles } from "./vitest.changed.ts";
 import { HOST_RUN, hostRun } from "./vitest.hostrun.ts";
+import { lawReads } from "./vitest.reads.ts";
 import { Shards } from "./vitest.shards.ts";
 
 // Today's version's tests. It is frozen, and no CI job runs them (0525, 0533); they run on the laptop.
@@ -19,6 +20,7 @@ const TOOLING = [
   "vitest.shards.test.ts",
   "vitest.changed.test.ts",
   "vitest.hostrun.test.ts",
+  "vitest.reads.test.ts",
   ".github/ci/*.test.ts",
   // workflow-lint's families of laws, each test file beside its module.
   ".github/ci/workflow-lint/*.test.ts",
@@ -323,5 +325,8 @@ export default defineConfig({
     scriptReads,
     githubReads,
     shardTable,
+    // A law's declared text reads, `{ reads: [<glob>] }` on its options, as watched files of its test
+    // file, so `--changed` follows them as it follows an import (0591, vitest.reads.ts).
+    lawReads(root),
   ],
 });

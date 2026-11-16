@@ -3,7 +3,7 @@
 // The complete closed method list belongs to P25 and remains a separately named pending law.
 import { DatabaseSync } from "node:sqlite";
 import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem";
-import { expect, it } from "@effect/vitest";
+import { expect } from "@effect/vitest";
 import { Gateway, Id, type Incoming } from "@kampus/libfabrika";
 import { Adds } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
@@ -21,7 +21,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { runsFor } from "@kampus/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
@@ -595,7 +595,17 @@ it.effect.prop(
 
       methodAnswer("ledger.wait:parked", yield* policy.parkedWait);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
-  options,
+  {
+    ...options,
+    plant: "create next/apps/fabrika/src/mcp.ts, so P25 reads as started with no policy bound",
+    reads: [
+      "next/packages/libfabrika/src/mcp/**",
+      "next/packages/libfabrika/src/mcp.ts",
+      "next/apps/fabrika/mcp.ts",
+      "next/apps/fabrika/src/mcp.ts",
+      "next/apps/fabrika/src/mcp/**",
+    ],
+  },
 );
 
 it.prop(

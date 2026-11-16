@@ -4,7 +4,7 @@
 // holds type checks only (0527). A plant that lets a refused shape compile fails its `not` check.
 //
 // Plant: make `Labeled` one plain record of the five optional keys, so two labels compile.
-import { describe, expectTypeOf, it } from "@effect/vitest";
+import { assertType, describe, expectTypeOf, it } from "@effect/vitest";
 import type { TaskMeta } from "vitest";
 import type { Label, LawOptions } from "./Law.ts";
 
@@ -27,5 +27,24 @@ describe("a law's options (0580)", () => {
     expectTypeOf<TaskMeta["plant"]>().toEqualTypeOf<string | undefined>();
     expectTypeOf<NonNullable<TaskMeta["label"]>>().toEqualTypeOf<Label>();
     expectTypeOf<Label["_tag"]>().toEqualTypeOf<"vector" | "format" | "scenario" | "type" | "pinned">();
+  });
+
+  // R3 (0591): `reads` names the files a law reads as text, globs from the top of the repo, and rides
+  // in meta beside the plant and the label. Plant: type `reads` as `unknown` in `LawOptions` and
+  // `TaskMeta`; the `@ts-expect-error` goes unused and the refused shapes compile.
+  it("type: R3 reads is a key of LawOptions, typed as a list of strings, and lands in meta", () => {
+    expectTypeOf<{ readonly reads: readonly ["next/packages/libfabrika/src/**"] }>().toExtend<LawOptions>();
+    expectTypeOf<{
+      readonly reads: ReadonlyArray<string>;
+      readonly plant: "a break";
+      readonly scenario: "one tree";
+    }>().toExtend<LawOptions>();
+    expectTypeOf<NonNullable<LawOptions["reads"]>>().toEqualTypeOf<ReadonlyArray<string>>();
+    // A glob that is not a string, or one glob not in a list.
+    expectTypeOf<{ readonly reads: readonly [3] }>().not.toExtend<LawOptions>();
+    expectTypeOf<{ readonly reads: "next/**" }>().not.toExtend<LawOptions>();
+    // @ts-expect-error one glob is written as a list of one
+    assertType<LawOptions>({ reads: "next/**" });
+    expectTypeOf<TaskMeta["reads"]>().toEqualTypeOf<ReadonlyArray<string> | undefined>();
   });
 });

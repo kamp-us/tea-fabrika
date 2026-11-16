@@ -6,10 +6,10 @@ import { createRequire, syncBuiltinESMExports } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { pathToFileURL } from "node:url";
-import { runsFor } from "@kampus/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Effect, Layer } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, vi } from "vitest";
 
 const ROOT = resolve(import.meta.dirname, "../../../../..");
 const require = createRequire(import.meta.resolve("@alchemy.run/cloudflare"));
@@ -81,18 +81,26 @@ const spawned = () => {
 };
 
 describe("P12 Alchemy lifecycle patch", () => {
-  it("format: the installed lifecycle patch registration matches its locked hash", () => {
-    const workspace = readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
-    const registration = /^ {2}['"]?@alchemy\.run\/cloudflare-runtime@2\.0\.0-beta\.85['"]?: (.+)$/m.exec(workspace);
-    expect(registration, "the lifecycle patch must survive a clean pnpm install").not.toBeNull();
-    expect(existsSync(join(ROOT, registration![1]!))).toBe(true);
-    const hash = createHash("sha256")
-      .update(readFileSync(join(ROOT, registration![1]!)))
-      .digest("hex");
-    expect(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8")).toContain(
-      `'@alchemy.run/cloudflare-runtime@2.0.0-beta.85': ${hash}`,
-    );
-  });
+  it(
+    "the installed lifecycle patch registration matches its locked hash",
+    () => {
+      const workspace = readFileSync(join(ROOT, "pnpm-workspace.yaml"), "utf8");
+      const registration = /^ {2}['"]?@alchemy\.run\/cloudflare-runtime@2\.0\.0-beta\.85['"]?: (.+)$/m.exec(workspace);
+      expect(registration, "the lifecycle patch must survive a clean pnpm install").not.toBeNull();
+      expect(existsSync(join(ROOT, registration![1]!))).toBe(true);
+      const hash = createHash("sha256")
+        .update(readFileSync(join(ROOT, registration![1]!)))
+        .digest("hex");
+      expect(readFileSync(join(ROOT, "pnpm-lock.yaml"), "utf8")).toContain(
+        `'@alchemy.run/cloudflare-runtime@2.0.0-beta.85': ${hash}`,
+      );
+    },
+    {
+      format: "pnpm-workspace.yaml's patch registration and the lockfile's hash line, as pnpm writes them",
+      // The workspace file and the lockfile are rerun triggers, so only the patch is declared (0591).
+      reads: ["patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch"],
+    },
+  );
 
   it("reports spawn PIDs, replacement delays and the brake; scope closure cancels recovery", async () => {
     await fc.assert(

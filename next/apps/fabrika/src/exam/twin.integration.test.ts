@@ -4,10 +4,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { runsFor } from "@kampus/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Effect } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import { scanner } from "./twin.ts";
 
 const check = await Effect.runPromise(scanner.pipe(Effect.provide(NodeServices.layer)));
@@ -25,16 +25,20 @@ const generated = fc.record({
 });
 
 const law = (name: string, check: (input: ReturnType<typeof generated.generate>["value"]) => void) =>
-  it(name, () =>
-    fc.assert(fc.property(generated, check), {
-      seed: 119120,
-      numRuns: runsFor({ fast: 5, full: 20 }),
-      examples: [
-        [{ alias: "Zone", name: "test.invalid" }],
-        [{ alias: "CF", name: "x" }],
-        [{ alias: "C", name: "Brain" }],
-      ],
-    }),
+  it(
+    name,
+    () =>
+      fc.assert(fc.property(generated, check), {
+        seed: 119120,
+        numRuns: runsFor({ fast: 5, full: 20 }),
+        examples: [
+          [{ alias: "Zone", name: "test.invalid" }],
+          [{ alias: "CF", name: "x" }],
+          [{ alias: "C", name: "Brain" }],
+        ],
+      }),
+    // The planted forms sit beside the real stack's text, read from disk (`text()`).
+    { reads: ["next/apps/fabrika/alchemy.run.ts"] },
   );
 
 describe("P12 local twin lint", () => {
@@ -323,12 +327,16 @@ describe("P12 local twin lint", () => {
       rmSync(home, { recursive: true, force: true });
     }
   });
-  it("scenario: pnpm lint:twin checks the real stack and prints its count", () => {
-    const ran = spawnSync("pnpm", ["-s", "lint:twin"], {
-      cwd: resolve(import.meta.dirname, "../../../../.."),
-      encoding: "utf8",
-    });
-    expect(ran.status).toBe(0);
-    expect(ran.stdout).toContain("lint:twin: 0 findings");
-  });
+  it(
+    "pnpm lint:twin checks the real stack and prints its count",
+    () => {
+      const ran = spawnSync("pnpm", ["-s", "lint:twin"], {
+        cwd: resolve(import.meta.dirname, "../../../../.."),
+        encoding: "utf8",
+      });
+      expect(ran.status).toBe(0);
+      expect(ran.stdout).toContain("lint:twin: 0 findings");
+    },
+    { scenario: "the one real stack", reads: ["next/apps/fabrika/alchemy.run.ts"] },
+  );
 });

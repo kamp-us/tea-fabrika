@@ -1,9 +1,10 @@
 // next/, P32 and ticket 251: pure laws p83 to p87 and p89.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { it } from "@kampus/vitest";
 import { Option } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect } from "vitest";
 import {
   type Answer,
   annotate,
@@ -112,20 +113,23 @@ const examPaths = fc
   .map((names) => names.map((name) => `next/${name}.test.ts`));
 
 describe("signedText", () => {
-  // format: v2 is the byte-exact text existing step signatures verify against.
-  it("format: v2 signed link bytes", () => {
-    expect(
-      signedText({
-        step: "build",
-        ticket: "229",
-        version: 3,
-        from: "a".repeat(40),
-        to: "b".repeat(40),
-      }),
-    ).toBe(
-      `fabrika-step attested v2\nstep build\nticket 229\nversion 3\nfrom ${"a".repeat(40)}\nto ${"b".repeat(40)}\n`,
-    );
-  });
+  it(
+    "v2 signed link bytes",
+    () => {
+      expect(
+        signedText({
+          step: "build",
+          ticket: "229",
+          version: 3,
+          from: "a".repeat(40),
+          to: "b".repeat(40),
+        }),
+      ).toBe(
+        `fabrika-step attested v2\nstep build\nticket 229\nversion 3\nfrom ${"a".repeat(40)}\nto ${"b".repeat(40)}\n`,
+      );
+    },
+    { format: "v2 is the byte-exact text existing step signatures verify against" },
+  );
   // Plant: include key in the signed text.
   it("P01: signs exactly the generated link fields, independent of note metadata", () => {
     fc.assert(
@@ -364,40 +368,44 @@ describe("exam paths and scope", () => {
     );
   });
   // Plant: reject every exam list.
-  it("P12: generated exam lists decode, and the real list protects every listed check", () => {
-    fc.assert(
-      fc.property(fc.array(fc.record({ glob: filename, reason: fc.string() })), filename, (rows, name) => {
-        const encoded = rows.map(({ glob, reason }) =>
-          Object.fromEntries([
-            ["glob", glob],
-            ["why", reason],
-          ]),
-        );
-        expect(decodeExam(JSON.stringify(encoded))).toEqual(Option.some(rows));
-        const list = Option.getOrThrow(decodeExam(readFileSync(join(ROOT, "exam-paths.json"), "utf8")));
-        expect(list.every((row) => row.reason.length > 0)).toBe(true);
-        const isExam = examMatcher(list);
+  it(
+    "P12: generated exam lists decode, and the real list protects every listed check",
+    () => {
+      fc.assert(
+        fc.property(fc.array(fc.record({ glob: filename, reason: fc.string() })), filename, (rows, name) => {
+          const encoded = rows.map(({ glob, reason }) =>
+            Object.fromEntries([
+              ["glob", glob],
+              ["why", reason],
+            ]),
+          );
+          expect(decodeExam(JSON.stringify(encoded))).toEqual(Option.some(rows));
+          const list = Option.getOrThrow(decodeExam(readFileSync(join(ROOT, "exam-paths.json"), "utf8")));
+          expect(list.every((row) => row.reason.length > 0)).toBe(true);
+          const isExam = examMatcher(list);
 
-        for (const path of [
-          `next/apps/fabrika/src/exam/${name}.ts`,
-          `next/${name}.test.ts`,
-          `next/${name}.test.tsx`,
-          `.github/workflows/${name}.yaml`,
-          `fixtures/next/${name}`,
-          "allowed_signers",
-          "exam-paths.json",
-          // 0524: a list file is an exam path until it is deleted, and so are code-graph's names.
-          "next-ledger.json",
-          "agents-ledger.json",
-          "unreachable-ledger.json",
-          "node-kinds.json",
-        ]) {
-          expect(isExam(path)).toBe(true);
-        }
-      }),
-      runs,
-    );
-  });
+          for (const path of [
+            `next/apps/fabrika/src/exam/${name}.ts`,
+            `next/${name}.test.ts`,
+            `next/${name}.test.tsx`,
+            `.github/workflows/${name}.yaml`,
+            `fixtures/next/${name}`,
+            "allowed_signers",
+            "exam-paths.json",
+            // 0524: a list file is an exam path until it is deleted, and so are code-graph's names.
+            "next-ledger.json",
+            "agents-ledger.json",
+            "unreachable-ledger.json",
+            "node-kinds.json",
+          ]) {
+            expect(isExam(path)).toBe(true);
+          }
+        }),
+        runs,
+      );
+    },
+    { reads: ["exam-paths.json"] },
+  );
 });
 
 const route = fc
@@ -807,11 +815,12 @@ describe("printed lines", () => {
 });
 
 describe("trusted config files", () => {
-  // format: pin every byte of the trusted list, including all previously protected rows and reasons.
-  it("format: exam-paths.json bytes", () => {
-    // A snapshot is one template, so no comment fits beside the one line that quotes today's app.
-    // oxlint-disable fabrika/no-stage-word -- the pinned bytes quote today's app, which keeps its pipeline words
-    expect(readFileSync(join(ROOT, "exam-paths.json"), "utf8")).toMatchInlineSnapshot(`
+  it(
+    "exam-paths.json bytes",
+    () => {
+      // A snapshot is one template, so no comment fits beside the one line that quotes today's app.
+      // oxlint-disable fabrika/no-stage-word -- the pinned bytes quote today's app, which keeps its pipeline words
+      expect(readFileSync(join(ROOT, "exam-paths.json"), "utf8")).toMatchInlineSnapshot(`
       "[
         { "glob": "exam-paths.json", "why": "this list: dropping a row is changing the exam" },
         { "glob": "allowed_signers", "why": "the step keys: who may sign as which step (p87)" },
@@ -913,8 +922,13 @@ describe("trusted config files", () => {
       ]
       "
     `);
-    // oxlint-enable fabrika/no-stage-word
-  });
+      // oxlint-enable fabrika/no-stage-word
+    },
+    {
+      format: "every byte of the trusted list, including all previously protected rows and reasons",
+      reads: ["exam-paths.json"],
+    },
+  );
 });
 
 const parentLists = fc.uniqueArray(filename, { minLength: 3, maxLength: 9 }).chain((folders) =>

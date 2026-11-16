@@ -2,7 +2,8 @@
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect } from "@effect/vitest";
+import { it } from "@kampus/vitest";
 import { Effect } from "effect";
 
 const APP = resolve(import.meta.dirname, "..");
@@ -44,23 +45,43 @@ const verify = (home: string, result: ReturnType<typeof command>) => {
   expect(readFileSync(join(home, "dist/brain.mjs"), "utf8").length).toBeGreaterThan(0);
 };
 
+// What `node build.ts` reads as files, which no import of this test reaches: the command itself and
+// the sources its bundle takes. The app's package.json is a rerun trigger, so it is not declared.
 describe("P16 app build command", () => {
-  it.live("scenario: node build.ts exits zero and writes brain.mjs in a fresh folder", () =>
-    Effect.gen(function* () {
-      const home = yield* fixture;
-      verify(home, command(home));
-    }),
+  it.live(
+    "node build.ts exits zero and writes brain.mjs in a fresh folder",
+    () =>
+      Effect.gen(function* () {
+        const home = yield* fixture;
+        verify(home, command(home));
+      }),
+    {
+      scenario: "one fresh folder holding the real command",
+      reads: [
+        "next/apps/fabrika/build.ts",
+        "next/apps/fabrika/src/**",
+        "next/programs/*/src/**",
+        "next/packages/libfabrika/src/**",
+        "next/packages/tuval/src/**",
+      ],
+    },
   );
-  it.live("scenario: plant a parameter property in the real command and reject Node's import failure", () =>
-    Effect.gen(function* () {
-      const home = yield* fixture,
-        file = join(home, "build.ts");
-      writeFileSync(file, `class Options { constructor(readonly out: string) {} }\n${readFileSync(file, "utf8")}`);
-      const result = command(home);
-      expect(result.stderr).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
-      expect(result.stderr).toContain("TypeScript parameter property");
-      expect(result.stderr).toContain("class Options { constructor(readonly out: string) {} }");
-      expect(() => verify(home, result)).toThrow();
-    }),
+  it.live(
+    "plant a parameter property in the real command and reject Node's import failure",
+    () =>
+      Effect.gen(function* () {
+        const home = yield* fixture,
+          file = join(home, "build.ts");
+        writeFileSync(file, `class Options { constructor(readonly out: string) {} }\n${readFileSync(file, "utf8")}`);
+        const result = command(home);
+        expect(result.stderr).toContain("ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX");
+        expect(result.stderr).toContain("TypeScript parameter property");
+        expect(result.stderr).toContain("class Options { constructor(readonly out: string) {} }");
+        expect(() => verify(home, result)).toThrow();
+      }),
+    {
+      scenario: "one syntax Node refuses, planted in a copy of the real command",
+      reads: ["next/apps/fabrika/build.ts"],
+    },
   );
 });
