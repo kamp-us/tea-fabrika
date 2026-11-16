@@ -355,6 +355,15 @@ top. Before 2026-11-10 the layout law ran its 7 examples and 1 generated input.
 T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.
 Its property test generates file contents and checks nearby paths stay allowed.
 
+`one-page-runtime` holds the page entry, `next/apps/fabrika/src/entry/browser.tsx`, the one file
+`.oxlintrc.json` turns it on for, to one Effect runtime (P12, L11): it imports `runMain` from
+`@kampus/tuval/browser` once, starts it once as a statement of the module, reads it nowhere else,
+and calls no other `run*`. It took over `next/apps/fabrika/src/build.test.ts`'s format law (0591).
+`one-page-runtime.test.ts` generates the entry in each start spelling and the four planted breaks,
+and plants them at the entry's path with the real config. Count on 2026-11-16, on the real entry:
+0 fires. The `no-restricted-imports` lines that keep the TOML adapter and its parser to their
+callers (T730's L9) are planted, generated, in `settings-imports.test.ts`.
+
 ### libfabrika's modules
 
 Ticket 477, decision [0043](../.decisions/0043-rooms-on-floors.md), with the words of [0091](../.decisions/0091-modules-and-layers.md) (ticket 688): a folder of libfabrika is a module and its rank is a layer. One rule of ours and two of oxlint's own hold a module's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `modules.test.ts` plants each law at its real path with that config.

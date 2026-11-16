@@ -38,6 +38,7 @@ import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
 import { oneIdModule } from "./one-id-module.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
+import { onePageRuntime } from "./one-page-runtime.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
 import { packageImports } from "./package-imports.ts";
@@ -90,6 +91,7 @@ const plugin: Plugin = {
     "no-wall-clock": noWallClock,
     "one-store-hook": oneStoreHook,
     "one-machine-per-file": oneMachinePerFile,
+    "one-page-runtime": onePageRuntime,
     "program-package-layout": programPackageLayout,
     "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,

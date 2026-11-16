@@ -426,6 +426,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "integration-test-name",
       // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
       "runs-from-depth",
+      // P12's rule is on for the page entry alone: one-page-runtime.test.ts plants each break there.
+      "one-page-runtime",
     ];
     const missing = Object.keys(plugin.rules).filter(
       (rule) => !planted.has(`fabrika(${rule})`) && !elsewhere.includes(rule),

@@ -1,0 +1,155 @@
+// `fabrika/one-page-runtime`, the lint rule that took over `next/apps/fabrika/src/build.test.ts`'s
+// format law (0591). Generated entries run in process through oxlint's RuleTester at the entry's path;
+// one oxlint run per kind then proves the repo's own .oxlintrc.json turns the rule on for the page
+// entry and nowhere else. The real entry itself is held by `pnpm lint`, which lints it.
+//
+// Plant, run once when the rule was written: count a `runMain` inside a function as the module's
+// start (read every statement, not only the module's own), and the component case below passes: red.
+import { join } from "node:path";
+import * as fc from "fast-check";
+import { RuleTester } from "oxlint/plugins-dev";
+import { expect, it } from "vitest";
+import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { onePageRuntime } from "./one-page-runtime.ts";
+
+// RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
+RuleTester.describe = (_name, fn) => fn();
+RuleTester.it = (_name, fn) => fn();
+// From the top of the repo, so the rule reads each path as oxlint gives it there.
+const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
+
+const ENTRY = "next/apps/fabrika/src/entry/browser.tsx";
+const CODE = "fabrika(one-page-runtime)";
+
+const IMPORT = /Import `runMain` from `@kampus\/tuval\/browser` once/;
+const START = /Start the page's one Effect program at module scope/;
+const SECOND = /A second page runtime/;
+const OTHER = /runs an Effect the page does not own/;
+
+/** The real entry as it stood when the rule took over, with its program named `name` and started by `start`. */
+const entry = (name: string, start: string, extra = "") =>
+  [
+    'import { Id } from "@kampus/libfabrika";',
+    'import { start } from "@kampus/libfabrika/client/WindowStart";',
+    'import { mount } from "@kampus/tuval";',
+    'import { browserKey, browserRows, runMain } from "@kampus/tuval/browser";',
+    'import { Effect, Layer } from "effect";',
+    'import { Socket } from "effect/socket";',
+    'import { keys, tezgah, window, windowFor } from "./views.ts";',
+    "",
+    `const ${name} = Effect.scoped(`,
+    "  Effect.gen(function* () {",
+    "    const origin = globalThis.location.origin;",
+    '    const element = document.getElementById("root");',
+    "    if (element === null) {",
+    "      return;",
+    "    }",
+    '    const client = { platform: "browser", os: "unknown", has: [], label: "Browser" } as const;',
+    '    const booting = yield* start({ tiles: [], tezgah, window, origin, build: "unknown", client });',
+    "    const run = yield* booting.ready;",
+    "    yield* mount(element, { run, machine: window, origin, windowFor, keys });",
+    "    return yield* Effect.never;",
+    "  }),",
+    ").pipe(",
+    "  Effect.provide(Layer.mergeAll(browserKey, browserRows, Socket.layerWebSocketConstructorGlobal, Id.Generator.layer)),",
+    ");",
+    "",
+    extra,
+    start,
+    "",
+  ].join("\n");
+
+/** The three ways the entry may start its program. */
+const starts = {
+  piped: (name: string) => `${name}.pipe(runMain);`,
+  direct: (name: string) => `runMain(${name});`,
+  curried: (name: string) => `runMain({ disableErrorReporting: true })(${name});`,
+} as const;
+
+type Spelling = keyof typeof starts;
+
+const spelling = fc.constantFrom<Spelling>("piped", "direct", "curried");
+// A program name that is no keyword and no run function: lower-case letters, then `Page`.
+const name = fc.stringMatching(/^[a-z]{1,8}$/).map((letters) => `${letters}Page`);
+
+/** The four planted entries of the plan's plants table, each with the reports it must get, in order. */
+const breaks = (program: string, start: string, from: string, run: string, inside: string) => ({
+  // No `runMain` from `@kampus/tuval/browser`: the import names another module.
+  "no import": {
+    code: entry(program, start).replace('from "@kampus/tuval/browser"', `from "${from}"`),
+    errors: [IMPORT],
+  },
+  // `runMain` only inside a component: no start at module scope, and a read that is a second runtime.
+  "inside a component": {
+    code: entry(program, "", inside.replace("START", start)),
+    errors: [START, SECOND],
+  },
+  // A second start at module scope.
+  "a second start": {
+    code: entry(program, `${start}\n${start}`),
+    errors: [SECOND],
+  },
+  // A run function beside the start.
+  "another run": {
+    code: entry(program, start, `${run}(${program});`),
+    errors: [OTHER],
+  },
+});
+
+const from = fc.constantFrom("@kampus/tuval", "effect", "@effect/platform-browser", "@kampus/tuval/electron");
+const run = fc.constantFrom("Effect.runPromise", "Effect.runFork", "Effect.runSync", "runtime.runPromise");
+
+const inside = fc.constantFrom(
+  "export const App = () => {\n  START\n  return null;\n};",
+  "export function App() {\n  START\n  return null;\n}",
+  "useEffect(() => {\n  START\n}, []);",
+);
+
+it("refuses each planted entry with its own reports and passes the entry in every start spelling", () => {
+  const reached = new Set<string>();
+  fc.assert(
+    fc.property(name, spelling, from, run, inside, (program, how, other, runner, place) => {
+      const start = starts[how](program);
+      reached.add(how);
+      const planted = breaks(program, start, other, runner, place);
+      tester.run("one-page-runtime", onePageRuntime, {
+        valid: [{ code: entry(program, start), filename: ENTRY }],
+        invalid: Object.values(planted).map(({ code, errors }) => ({
+          code,
+          filename: ENTRY,
+          errors: errors.map((message) => ({ message })),
+        })),
+      });
+    }),
+    { seed: 119120, numRuns: 30 },
+  );
+  // Coverage: each start spelling was drawn, so each was both passed and planted against.
+  expect([...reached].sort()).toEqual(["curried", "direct", "piped"]);
+});
+
+it("scenario: the repo's config turns the rule on for the page entry and for no other file", async () => {
+  // scenario: oxlint's own path matching is the subject, so each kind is one oxlint run on the
+  // config as it is; the generated law above holds the rule's reach.
+  const start = starts.piped("page");
+  const planted = breaks(
+    "page",
+    start,
+    "@kampus/tuval",
+    "Effect.runPromise",
+    "export const App = () => {\n  START\n  return null;\n};",
+  );
+  const elsewhere = "next/apps/fabrika/src/entry/other.tsx";
+  const clean = await plant({ [ENTRY]: entry("page", start), [elsewhere]: planted["a second start"].code });
+  expect(clean(CODE, ENTRY)).toEqual([]);
+  expect(clean(CODE, elsewhere)).toEqual([]);
+
+  for (const [kind, { code, errors }] of Object.entries(planted)) {
+    const linted = await plant({ [ENTRY]: code }, (fire) => fire.message);
+    const fires = linted(CODE, ENTRY);
+    expect(fires, kind).toHaveLength(errors.length);
+    expect(
+      fires.every((message, n) => errors[n]?.test(message) === true),
+      `${kind}: ${fires.join(" | ")}`,
+    ).toBe(true);
+  }
+}, 120_000);
