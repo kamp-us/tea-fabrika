@@ -2,12 +2,13 @@
 import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Stub } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Path, Predicate, type Scope } from "effect";
+import { Recorder, Stub } from "@kampus/vitest";
+import { Effect, FileSystem, Layer, Path, Predicate, Schema, type Scope } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Envelope } from "../access/SessionManager.ts";
+import { ProcessObjects, RecordObjects } from "../cloudflare/Objects.ts";
 import * as ProjectAuditTest from "../cloudflare/ProjectAuditTest.ts";
 import type { Env, ProjectDoorOptions } from "../cloudflare/runtime.ts";
 import { Gateway } from "../gateway/Gateway.ts";
@@ -20,7 +21,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
 import { Owner, Recipient } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
-import type { Incoming } from "../runtime/Entry.ts";
+import { Incoming } from "../runtime/Entry.ts";
 import { Sent } from "../runtime/Runner.ts";
 import * as RunnerAdmissionTest from "../runtime/RunnerAdmissionTest.ts";
 import { BRAIN, type Harness } from "../runtime/RunnerRepliesTest.ts";
@@ -89,61 +90,79 @@ const unexpected = (member: string) => (): never => {
   throw new Error(`unused platform call: ${member}`);
 };
 
-// M3 of the mock sweep (ticket 1067): the stubs are typed by Env's bindings (M4), and both suites
-// keep their seeds, run counts and coverage.
-// Plant: make the process stub's `msg` refuse every object message, and four project audit laws are
-// red (expected `result._tag` accepted).
-// Cloudflare's RPC types wrap a Durable Object's methods (`Rpc.Provider`): the process's `msg` must
-// answer a disposable promise and the record's `write` types as answering never, so neither plain
-// async function goes in `own`. Each is answered by name in `rest`, which `Stub.make` types as one of
-// the stub's own members, so these two do not type-check yet: ticket 1067 sent this back to plan.
-const environment: ProjectAuditTest.Harness["environment"] = (box, accept, usage, loaded) => {
-  const msg = async (input: Incoming) => {
-    const message = input.envelope.input;
-    const stamped = Predicate.isObject(message) ? { ...message, parent: input.envelope.id } : message;
+// M4 of the mock sweep (ticket 1067): every member this law gives is typed by a type that names it.
+// The plain bindings are Stub.make over Env's interfaces, so a misspelled member of the loader stub's
+// `own` does not compile. A Durable Object stub's Cloudflare type takes any key, so the process
+// stub's `usage` is held by M3 at run time instead: the walk's usage rows never arrive.
+// Plant: rename the loader stub's `get` to `gett`: TS2561 in libfabrika's `tsc --noEmit -p .`.
+// RECORD gives nothing and PROCESS only the tail's `usage`: the Project's own calls on its objects go
+// through `objects` below.
+const environment: ProjectAuditTest.Harness["environment"] = (box, usage, loaded) => ({
+  PROJECT: Stub.make<Env["PROJECT"]>(unexpected),
+  CONNECTION: Stub.make<Env["CONNECTION"]>(unexpected),
+  LOADER: Stub.make<Env["LOADER"]>(unexpected, {
+    get: (key, code) => {
+      // The Project always names the code it loads; a load with no name is no call this law gave.
+      if (key === null) {
+        return unexpected("get with no name")();
+      }
 
-    if (!(await box.admit(stamped))) {
-      return Sent.cases.refused.make({ reason: "bad_msg" });
-    }
+      loaded(key, code());
+      // getEntrypoint is generic in its binding, so a plain `() => box` is not every Fetcher<T> it
+      // may answer: it is answered by name.
+      return Stub.make<ReturnType<Env["LOADER"]["get"]>>((member) =>
+        member === "getEntrypoint" ? () => box : unexpected(member),
+      );
+    },
+  }),
+  PROCESS: Stub.make<Env["PROCESS"]>(unexpected, {
+    getByName: (object) =>
+      Stub.make<ReturnType<Env["PROCESS"]["getByName"]>>(unexpected, {
+        usage: async (rows) => usage(object, rows),
+      }),
+  }),
+  RECORD: Stub.make<Env["RECORD"]>(unexpected),
+  MEASUREMENTS: Stub.make<Env["MEASUREMENTS"]>(unexpected),
+});
 
-    const rev = accept();
-    return Sent.cases.accepted.make({ rev, pos: rev });
-  };
-  const write = async () => Written.cases.written.make({});
-  return {
-    PROJECT: Stub.make<Env["PROJECT"]>(unexpected),
-    CONNECTION: Stub.make<Env["CONNECTION"]>(unexpected),
-    LOADER: Stub.make<Env["LOADER"]>(unexpected, {
-      get: (key, code) => {
-        // The Project always names the code it loads; a load with no name is no call this law gave.
-        if (key === null) {
-          return unexpected("get with no name")();
-        }
+/** The program box's admission rejected, which no walk of this law expects: the stand-in dies with it. */
+class AdmitFailed extends Schema.TaggedError<AdmitFailed>()("AdmitFailed", { cause: Schema.Defect() }) {}
 
-        loaded(key, code());
-        // getEntrypoint is generic in its binding, so a plain `() => box` is not every Fetcher<T> it
-        // may answer: it is answered by name.
-        return Stub.make<ReturnType<Env["LOADER"]["get"]>>((member) =>
-          member === "getEntrypoint" ? () => box : unexpected(member),
-        );
-      },
+// M3 of the mock sweep (ticket 1067): the Project's calls on its Process and Record objects go
+// through ProcessObjects and RecordObjects, provided with Recorder.layer, and both suites keep their
+// seeds, run counts and coverage. A member this law leaves out dies with UnimplementedError, as one
+// left out of Layer.mock does.
+// Plant: make `msg` answer refused for every object message, and four project audit laws are red
+// (expected `result._tag` accepted).
+// M4: each impl is typed by its service, so a misspelled member does not compile (the Recorder's laws
+// R17 and R18). Plant: rename `write` to `writ` in the RecordObjects impl: red in libfabrika's
+// `tsc --noEmit -p .`.
+const objects: ProjectAuditTest.Harness["objects"] = (box, accept) =>
+  Layer.merge(
+    Recorder.layer(ProcessObjects, {
+      configure: () => Effect.void,
+      msg: (_object, input) =>
+        Effect.gen(function* () {
+          // The Process object types msg's input as unknown; the stand-in reads it through Entry's schema.
+          const incoming = yield* Schema.decodeUnknownEffect(Incoming)(input);
+          const message = incoming.envelope.input;
+          const stamped = Predicate.isObject(message) ? { ...message, parent: incoming.envelope.id } : message;
+          // The program box admits through a Promise, as the platform's stub did.
+          const admitted = yield* Effect.tryPromise({
+            try: () => box.admit(stamped),
+            catch: (cause) => new AdmitFailed({ cause }),
+          });
+
+          if (!admitted) {
+            return Sent.cases.refused.make({ reason: "bad_msg" });
+          }
+
+          const rev = accept();
+          return Sent.cases.accepted.make({ rev, pos: rev });
+        }).pipe(Effect.orDie),
     }),
-    PROCESS: Stub.make<Env["PROCESS"]>(unexpected, {
-      getByName: (object) =>
-        Stub.make<ReturnType<Env["PROCESS"]["getByName"]>>((member) => (member === "msg" ? msg : unexpected(member)), {
-          configure: async () => undefined,
-          usage: async (rows) => usage(object, rows),
-        }),
-    }),
-    RECORD: Stub.make<Env["RECORD"]>(unexpected, {
-      getByName: () =>
-        Stub.make<ReturnType<Env["RECORD"]["getByName"]>>((member) =>
-          member === "write" ? write : unexpected(member),
-        ),
-    }),
-    MEASUREMENTS: Stub.make<Env["MEASUREMENTS"]>(unexpected),
-  };
-};
+    Recorder.layer(RecordObjects, { write: () => Effect.succeed(Written.cases.written.make({})) }),
+  );
 
 const door: ProjectAuditTest.Harness["door"] =
   (url: string, input: Parameters<ProjectAuditTest.Harness["door"]>[1]) => (options: ProjectDoorOptions) =>
@@ -190,6 +209,7 @@ ProjectAuditTest.suite(
     open: files.pipe(Effect.flatMap((open: Effect.Success<typeof files>) => open("project-audit"))),
     tail: () => ({ fetch: () => Promise.resolve(new Response()) }),
     environment,
+    objects,
     door,
   },
   register,

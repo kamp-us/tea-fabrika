@@ -24,7 +24,7 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT, VI_METHODS } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, VI_METHODS, VI_PROPERTIES } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -644,23 +644,42 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
 
 describe("M1 of the mock sweep: every folder a vi-methods block lists refuses the five vi methods", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a
-  // `vitest/no-restricted-vi-methods` block lists gets VI_METHODS' lines, a later slice's folder
-  // included. A block that drops a method, or sets the rule below error, is red here.
-  // Plant: delete `fn` from the node/*.ts block of `.oxlintrc.json`, and that folder's `vi.fn()` line
-  // is not refused.
-  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi-methods block", () => {
+  // `vitest/no-restricted-vi-methods` block lists gets the lock's lines, a later slice's folder
+  // included. The lock is a pair (amendment 2026-11-16, lead ruling): VI_METHODS records what the
+  // vitest rule refuses alone and VI_PROPERTIES what no-restricted-properties refuses, on the same
+  // file, and a line is held when either refuses it. A block that drops a method from either rule,
+  // sets the vitest rule below error, or loses an entry it writes out again, is red here.
+  // Plant: delete `fn` from the node/*.ts block's vitest rule, and that folder's `vi.fn()` line is not
+  // refused under its code. Plant: drop the block's `vi` entries from no-restricted-properties, and
+  // the chained lines are refused by neither half.
+  it("scenario: VI_METHODS' and VI_PROPERTIES' lines are refused exactly, in every folder of every vi-methods block", () => {
     inTempRepo("vi-methods-", ({ print, refused }) => {
       const globs = viGlobs(print());
       // Coverage: the first folder the sweep locks, and every block at error, as it blocks at zero (0523).
       expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(["next/packages/libfabrika/src/node/*.ts"]));
       expect(globs.map(({ level }) => level)).toEqual(globs.map(() => "deny"));
 
-      const want = wanted(VI_METHODS);
       const files = globs.map(({ glob }) => plantPath(glob));
       expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const methods = refused(VI_METHODS, files);
+      const properties = refused(VI_PROPERTIES, files);
+      const first = VI_METHODS.prelude.length + 1;
+      // The lines the vitest rule takes alone, which the pair must still refuse: a call chained onto a
+      // banned vi call (oxc#29656) and a bare reference.
+      const chained = VI_METHODS.lines.flatMap(([line, refusedAlone], i) =>
+        !refusedAlone && /^export const \w+ = vi\.(fn|spyOn)\b/.test(line) ? [first + i] : [],
+      );
+      // Coverage: both chained forms the ruling names, and the bare reference.
+      expect(chained).toHaveLength(3);
 
-      for (const [file, lines] of refused(VI_METHODS, files)) {
-        expect(lines, file).toEqual(want);
+      for (const file of files) {
+        expect(methods.get(file), `${file}: ${VI_METHODS.code}`).toEqual(wanted(VI_METHODS));
+        expect(properties.get(file), `${file}: ${VI_PROPERTIES.code}`).toEqual(wanted(VI_PROPERTIES));
+        const held = new Set([...(methods.get(file) ?? []), ...(properties.get(file) ?? [])]);
+
+        for (const line of chained) {
+          expect(held.has(line), `${file}:${line} is held by the pair`).toBe(true);
+        }
       }
     });
   }, 120_000);

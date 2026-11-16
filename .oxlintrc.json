@@ -2816,7 +2816,13 @@
       // Decisions 0555, 0557 and 0579: no vi.fn, vi.mock, vi.doMock, vi.spyOn or vi.stubEnv. A folder
       // is listed the day its own slice of the mock sweep brings it to zero, and none is taken off
       // (0168, 0524). oxlint takes the last matching block's options for a rule, so a later block for
-      // a subfolder lists all five again; plants.test.ts runs VI_METHODS in every folder listed here.
+      // a subfolder lists all five again; plants.test.ts runs VI_METHODS and VI_PROPERTIES in every
+      // folder listed here. The lock is a pair: vitest/no-restricted-vi-methods misses a call chained
+      // onto a vi call (oxc#29656), which no-restricted-properties refuses by its member access, with
+      // the same five messages. An override replaces a rule's options, so the entries these files
+      // take from the blocks above are written out again: Data.TaggedError and JSON.parse. These
+      // files have no JSON.parse fire, so the rule is at error here, as 0523 asks of a folder at zero:
+      // a warn line with no fire left fails lint.ts.
       "files": ["next/packages/libfabrika/src/node/*.ts"],
       "rules": {
         "vitest/no-restricted-vi-methods": [
@@ -2827,6 +2833,40 @@
             "doMock": "Give the code a service and provide a test layer (0555).",
             "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
             "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ],
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
           }
         ]
       }

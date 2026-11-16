@@ -1,0 +1,78 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-node-tests2",
+  "ticket": "kamp-us/tea-fabrika#1067",
+  "pr": null,
+  "started": "2026-11-16T00:29:39-08:00",
+  "ended": "2026-11-16T00:53:44-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Sent back to plan (send) on one name, with every planned law written. Tests step round 2 for slice mock-node-s1 of the mock sweep, ticket 1067, in next/ and our lint tooling, plan docs/plan/quests/mock-node-PLAN.md at c28109626 on fabrikalfa/mock-plans, on fabrikalfa/mock-node-s1 from 2d2f8bfb9, main not merged. Written: the lock as the pair (vitest/no-restricted-vi-methods plus eslint/no-restricted-properties with one object vi entry per banned member) for next/packages/libfabrika/src/node/*.ts in .oxlintrc.json; VI_METHODS and VI_PROPERTIES on one shared planted file in oxlint-plugins/builtin-plants.ts; M1 in oxlint-plugins/plants.test.ts running both halves and checking the chained lines are held by the pair; ProjectAuditTest.ts's Harness with objects(box, accept), environment without accept, and projectWalk on projectLayerWithoutObjects; RunnerAdmission.integration.test.ts with Recorder.layer over ProcessObjects and RecordObjects and Stub.make for the plain bindings. The gap: the plan names the build's new contract file next/packages/libfabrika/src/cloudflare/Objects.ts, beside the existing objects.ts. tsc refuses it (TS1261, the file names differ only in casing, with a probe file of the plan's sketch at that path, removed after), and on a case-insensitive disk, as on a Mac, the two are one file. The laws import ../cloudflare/Objects.ts as the plan says, and the builder may not change a law, so the plan must name the file before the build. With the probe under another name, ObjectCalls.ts, the two law files type-check against the plan's contract, and only projectLayerWithoutObjects is missing.",
+  "laws": [
+    {
+      "law": "M1: scenario: VI_METHODS' and VI_PROPERTIES' lines are refused exactly, in every folder of every vi-methods block (oxlint-plugins/plants.test.ts)",
+      "red": "before the pair: the node/*.ts block set no eslint/no-restricted-properties vi entry, so the chained lines vi.fn().mockReturnValue(1) and vi.spyOn(console, \"warn\").mockImplementation(...) were refused by neither half; now green, 237 of 237 in the file"
+    },
+    {
+      "law": "M2: no vi call and no vi import in RunnerAdmission.integration.test.ts, held by the pair on next/packages/libfabrika/src/node/*.ts (.oxlintrc.json)",
+      "red": "green on the rewrite; red under both plants below"
+    },
+    {
+      "law": "M3: the runner admission suite and the project audit suite in RunnerAdmission.integration.test.ts, unchanged seeds, runs and coverage, on Recorder.layer over ProcessObjects and RecordObjects",
+      "red": "red until the build: Error: Cannot find module '../cloudflare/Objects.ts' imported from RunnerAdmission.integration.test.ts (0 tests run); goes green at the build's head"
+    },
+    {
+      "law": "M4: every member the law gives is typed by a type that names it (Recorder.layer impls of ProcessObjects and RecordObjects, and the own of the plain stubs)",
+      "red": "red until the build, in libfabrika's tsc --noEmit -p .: TS2307 Cannot find module '../cloudflare/Objects.ts' and './Objects.ts', and TS2305 no exported member 'projectLayerWithoutObjects' in ProjectAuditTest.ts"
+    }
+  ],
+  "plants": [
+    {
+      "law": "M1",
+      "plant": "deleted fn from the node/*.ts block's vitest/no-restricted-vi-methods: vitest(no-restricted-vi-methods) refused lines [6,7,8,9], not [5..11]",
+      "result": "red"
+    },
+    {
+      "law": "M1",
+      "plant": "dropped the node/*.ts block's five vi entries from eslint/no-restricted-properties: eslint(no-restricted-properties) refused only lines [21,22] (JSON.parse, Data.TaggedError)",
+      "result": "red"
+    },
+    {
+      "law": "M1",
+      "plant": "dropped the JSON.parse entry the node/*.ts block writes out again: its planted line 21 was not refused",
+      "result": "red"
+    },
+    {
+      "law": "M2",
+      "plant": "getEntrypoint: vi.fn().mockReturnValue(box) with import { vi } from \"vitest\" put back: lint.ts blocks at line 114, eslint(no-restricted-properties) 'vi.fn' is restricted, and vitest(no-restricted-vi-methods) is silent",
+      "result": "red"
+    },
+    {
+      "law": "M2",
+      "plant": "getEntrypoint: vi.fn(() => box) with vi imported: lint.ts blocks at line 114 through both vitest(no-restricted-vi-methods) and eslint(no-restricted-properties)",
+      "result": "red"
+    },
+    {
+      "law": "M4",
+      "plant": "with a probe of the plan's Objects.ts contract at cloudflare/ObjectCalls.ts and both imports pointed there, removed after: write renamed writ in the RecordObjects impl gives TS2561 at line 164",
+      "result": "red"
+    },
+    {
+      "law": "M4",
+      "plant": "with the same probe: the loader stub's own get renamed gett gives TS2561, 'gett' does not exist in type 'Partial<WorkerLoader>'",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 24,
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "note": "For the build to run: M3's plant, msg answering Sent.cases.refused for every object message in the ProcessObjects impl, which should turn 4 audit laws red (expected result._tag accepted); it needs projectLayerWithoutObjects. The build must export ProcessObjects and RecordObjects from the contract file and projectLayerWithoutObjects from runtime.ts, at the name the plan settles. Plan and code differ, code wins, twice. First, the lock's eslint/no-restricted-properties is at error, not the plan's warn: node/*.ts has no JSON.parse fire, and lint.ts fails a warn line with no fire left (eslint(no-restricted-properties) has no fire left in next/packages/libfabrika/src/node/*.ts, seen on a whole oxlint run), so JSON.parse and Data.TaggedError block in these files, as 0523 asks of a folder at zero. Second, the Data.TaggedError entry is written out though this branch's base b510ed2 has no such entry, as the signing note asks, so the fold with main keeps it. The chained vitest misses are tracked upstream as oxc#29656. Each plant ran once on a saved copy and was restored by copy; git status showed no product file before the commit. tsc --noEmit -p . on libfabrika ran four times, one at a time, with no other compiler running. The .integration. law ran in this box (CLAUDE_CODE_REMOTE=true) and the 0178 guard refused nothing. pnpm format, plants.test.ts (237 of 237), advice.test.ts (16 of 16) and the list ratchet pass. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144): run twice. The first run, before this row: 17 of 18 parts passed, and lint:promise-types died with EPIPE and passed rerun alone (0 findings). The second, with this row (field: 2 added rows checked, passed): 15 of 18 passed, and lint:kind, lint:dead and lint:promise-types died with EPIPE; each passed rerun alone (lint:kind clean, unreachable ledger PASS with none new, 0 findings).",
+  "step": "tests"
+}

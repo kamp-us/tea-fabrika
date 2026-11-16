@@ -54,43 +54,68 @@ export const REFLECT: Plant = {
   ],
 };
 
+/** The lock's planted file: each line with whether `vitest/no-restricted-vi-methods` and then `no-restricted-properties` refuse it. */
+const VI_LINES: readonly (readonly [string, boolean, boolean])[] = [
+  ["export const a = vi.fn();", true, true],
+  ['vi.mock("./a.ts");', true, true],
+  ['vi.doMock("./b.ts");', true, true],
+  ['export const b = vi.spyOn(Math, "max");', true, true],
+  ['vi.stubEnv("A", "1");', true, true],
+  ['export const c = vi["fn"]();', true, true],
+  // An alias of vi is followed by the vitest rule, which resolves the import, and not by
+  // no-restricted-properties, which reads the object's name.
+  ["export const d = v.fn();", true, false],
+  // The vitest rule misses a call chained onto a banned vi call, measured on oxlint 1.90.0 and 1.93.0
+  // (oxc#29656), and a bare reference. no-restricted-properties matches the member access itself.
+  ["export const i = vi.fn().mockReturnValue(1);", false, true],
+  ['export const k = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false, true],
+  ["export const j = vi.fn;", false, true],
+  // The bans do not reach the rest of vi.
+  ["export const e = vi.waitFor(() => 1);", false, false],
+  ["export const f = vi.mocked(Math.max);", false, false],
+  ["export const l = vi.hoisted(() => 1);", false, false],
+  // Not a call of vi: a comment, a string, another object's member.
+  ["// vi.fn() in a comment", false, false],
+  ['export const g = "vi.fn()";', false, false],
+  ["export const h = other.fn();", false, false],
+  // The entries the lock's block writes out again, so a locked path loses none.
+  ['export const m: unknown = JSON.parse("1");', false, true],
+  ['export const n = Data.TaggedError("N");', false, true],
+];
+
+const VI_PRELUDE = [
+  'import { vi } from "vitest";',
+  'import { vi as v } from "vitest";',
+  "declare const other: { fn: () => 1 };",
+  "declare const Data: { TaggedError: (tag: string) => unknown };",
+];
+
 /**
- * M1 of the mock sweep (decisions 0555, 0557, 0579): `vi.fn`, `vi.mock`, `vi.doMock`, `vi.spyOn` and
- * `vi.stubEnv` are refused, and the rest of `vi` passes. It is the sweep's one lock law: plants.test.ts
- * runs these lines in every folder a `vitest/no-restricted-vi-methods` block of the config lists, so a
- * later slice adds its folder to a block and its lines here, never a second set.
+ * M1 of the mock sweep (decisions 0555, 0557, 0579), the vitest half of the lock: `vi.fn`, `vi.mock`,
+ * `vi.doMock`, `vi.spyOn` and `vi.stubEnv` are refused by `vitest/no-restricted-vi-methods`, and the
+ * rest of `vi` passes. It is the sweep's one lock law: plants.test.ts runs these lines, with
+ * `VI_PROPERTIES` on the same file, in every folder a `vitest/no-restricted-vi-methods` block of the
+ * config lists, so a later slice adds its folder to a block and its lines here, never a second set.
+ * Its chained lines stay not refused under its own code: the pair refuses them, through `VI_PROPERTIES`.
  * Plant: delete one method from one block of `.oxlintrc.json`, and that folder's line is not refused.
  */
 export const VI_METHODS: Plant = {
   code: "vitest(no-restricted-vi-methods)",
-  prelude: [
-    'import { vi } from "vitest";',
-    'import { vi as v } from "vitest";',
-    "declare const other: { fn: () => 1 };",
-  ],
-  lines: [
-    ["export const a = vi.fn();", true],
-    ['vi.mock("./a.ts");', true],
-    ['vi.doMock("./b.ts");', true],
-    ['export const b = vi.spyOn(Math, "max");', true],
-    ['vi.stubEnv("A", "1");', true],
-    ['export const c = vi["fn"]();', true],
-    // An alias of vi is followed, since the rule resolves the import.
-    ["export const d = v.fn();", true],
-    // The bans do not reach the rest of vi.
-    ["export const e = vi.waitFor(() => 1);", false],
-    ["export const f = vi.mocked(Math.max);", false],
-    // Not a call of vi: a comment, a string, another object's member.
-    ["// vi.fn() in a comment", false],
-    ['export const g = "vi.fn()";', false],
-    ["export const h = other.fn();", false],
-    // Known gap, measured on oxlint 1.90.0: a call chained onto a banned vi call and a bare reference
-    // are not refused. The lock is not final until the plan's amendment pairs this rule with
-    // eslint/no-restricted-properties on `vi`; until then the review reads for these.
-    ["export const i = vi.fn().mockReturnValue(1);", false],
-    ['export const k = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
-    ["export const j = vi.fn;", false],
-  ],
+  prelude: VI_PRELUDE,
+  lines: VI_LINES.map(([line, methods]) => [line, methods]),
+};
+
+/**
+ * M1's other half (amendment 2026-11-16, lead ruling): the same lines under
+ * `eslint/no-restricted-properties` with one `object: "vi"` entry per banned member, which refuses a
+ * call chained onto a banned vi call. A line is held by the lock when either half refuses it.
+ * Plant: drop the block's `vi` entries from `no-restricted-properties`, and the chained lines are not
+ * refused.
+ */
+export const VI_PROPERTIES: Plant = {
+  code: "eslint(no-restricted-properties)",
+  prelude: VI_PRELUDE,
+  lines: VI_LINES.map(([line, , properties]) => [line, properties]),
 };
 
 const eslint: readonly Plant[] = [
