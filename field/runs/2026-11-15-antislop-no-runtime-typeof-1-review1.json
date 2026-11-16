@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-runtime-typeof-1-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:18:00-08:00",
+  "ended": "2026-11-15T22:29:45-08:00",
+  "parent": "2026-11-15-antislop-no-runtime-typeof-1-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Review of slice AS-no-runtime-typeof-1 at f977ab2bf (tests commit on bcad0080d), next/ and our tooling: changes 1, findings 1. Six of the 302 swaps put Effect's Predicate inside code that runs in Chromium, where no module import exists, so those three visual tests now throw ReferenceError: Predicate is not defined. The lines are next/apps/fabrika/e2e/first-window.visual.test.ts 135 and 167 (loseFirstAnswers, passed to addInitScript at line 417), instance.visual.test.ts 137 and 246 and reload.visual.test.ts 85 and 158 (both inside the driver's page.evaluate body). Proof: a scratch probe that runs a function's toString in a fresh vm context, as Playwright does, printed 'in the page: ReferenceError Predicate is not defined'; typecheck passes, so no check here sees it. The fix puts back code that runs in the page: the old typeof line with a reasoned 0563 C ignore line, or browser code with no typeof that keeps the same answer. Every other swap keeps behavior: isObjectOrArray is exactly typeof object and not null, isObject adds not an array, isObjectKeyword (door-spans.test.ts 66, runtime.decode.test.ts 151) also takes functions, which gives the same answer at both lines, and the two walkers in oxlint-plugins/match.ts and written-service-type.ts give the same nodes. The 13 Result.try conversions keep the same answers and error lines. Counts checked: 320 hits at base, 18 at head (11 in the four .mjs scripts, 7 in PR 1366's two files), no file of PR 1366's 67 in the diff, no disable line, no .oxlintrc.json change.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 12,
+  "note": "Read-only apart from this row. Ran: the rule forced on in a scratch config at base and head; loosening.sh on bcad0080d..f977ab2 (6 removed-expect hits, each one expect rewritten one for one with the same pass and fail, the rest import lines; no law loosened); governance.sh (no decision walked back); pnpm lint (fails only on the zero lock's three asks for oxlint-plugins, libfabrika client and tezgah, which the later lock pull request owes); 60 plain test files that the change touches or reaches, 1410 passed and 6 skipped, at f977ab2bf; one pnpm typecheck, passed. Not run: any .integration. or .visual. file. A merge of origin/main 623e161 conflicts in oxlint-plugins/integration-test-name.ts, where main rewrote the function this slice touched; main's side has no runtime typeof.",
+  "step": "review"
+}
