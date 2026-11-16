@@ -11,7 +11,9 @@ import { lintScheduled } from "./scheduled.ts";
 // unrelated error cannot mask it. Each plant was also run once on workflow-lint.ts with its rule
 // dropped, and that turned this law red.
 const options = { seed: 119120, numRuns: 100 };
+
 const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
+
 const check = read("check.yaml");
 
 type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
@@ -613,8 +615,10 @@ const plants: [string, (w: Workflow) => void][] = [
       const list = w.jobs[job]!.steps;
       const at = list.indexOf(step(w, job, name));
       list[at] = structuredClone(list[at]!);
+
       return list[at]!;
     };
+
     return [
       [
         `TT1: ${job} drops its time table`,
@@ -827,10 +831,13 @@ it("SC13 scenario: on the real scheduled.yaml, a test step with no limit of its 
   // run 43778586135). Plant, run once on scheduled.ts and restored: SC13 dropped (red on each case).
   const STEPS = (suite: string) => `scheduled.yaml: SC13: ${suite}'s test steps share one whole timeout-minutes`;
   const JOB = "scheduled.yaml: SC13: tests's own timeout-minutes is each leg's suite limit and 3 minutes more";
+
   const LIMIT_TEXT =
     "scheduled.yaml: SC5: the report runs node .github/ci/scheduled.mjs once, with the needs, the results, the token and each suite's time limit, and its failure shows";
+
   // The changed legs run at next's limit (SC18), so a next limit that is no longer one names them too.
   const CHANGED = `scheduled.yaml: ${CHANGED_RULE}`;
+
   const backstop = (tooling: number, next: number) =>
     `\${{ startsWith(matrix.shard, 'tooling-') && ${tooling} || ${next} }}`;
 

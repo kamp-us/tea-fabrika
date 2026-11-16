@@ -15,25 +15,31 @@ const open = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync(join(tmpdir(), "p10-session-"))),
     (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
   );
+
   const path = join(folder, "session.db");
+
   const handle = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const db = new DatabaseSync(path);
+
       return { db, sql: nodeSql(db) };
     }),
     (held) => Effect.sync(() => held.db.isOpen && held.db.close()),
   );
+
   // One Sql across reopens: each call goes to the database open now.
   const sql: Sql = {
     exec: (query, ...params) => handle.sql.exec(query, ...params),
     transaction: (step) => handle.sql.transaction(step),
     size: () => handle.sql.size(),
   };
+
   const reopen = Effect.sync(() => {
     handle.db.close();
     handle.db = new DatabaseSync(path);
     handle.sql = nodeSql(handle.db);
   });
+
   return { sql, reopen } satisfies SessionManagerTest.Store;
 });
 

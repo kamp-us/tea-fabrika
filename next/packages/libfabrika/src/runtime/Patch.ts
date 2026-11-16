@@ -29,6 +29,7 @@ const same = (a: unknown, b: unknown): boolean => {
 
   if (isPlain(a) && isPlain(b)) {
     const keys = Object.keys(a);
+
     return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && same(a[key], b[key]));
   }
 
@@ -89,6 +90,7 @@ const walk = (path: string, before: unknown, after: unknown, out: Array<Patch>):
 export const diff = (before: unknown, after: unknown): ReadonlyArray<Patch> => {
   const out: Array<Patch> = [];
   walk("", before, after, out);
+
   return out;
 };
 
@@ -99,8 +101,11 @@ const Operation = Schema.Union([
 ]);
 
 const decodeOps = Schema.decodeUnknownResult(Schema.Array(Operation));
+
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
+
 const unsafe = new Set(["__proto__", "constructor", "prototype"]);
+
 const invalid = () => Result.fail("bad_patch" as const);
 
 /**

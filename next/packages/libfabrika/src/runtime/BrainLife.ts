@@ -18,6 +18,7 @@ export const BrainState = Schema.TaggedUnion({
   stopping: {},
   stopped: {},
 });
+
 type BrainState = typeof BrainState.Type;
 
 const Msg = Schema.Union([

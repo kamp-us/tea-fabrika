@@ -19,15 +19,20 @@ import type { checklistMachine } from "./program.ts";
 import { tile } from "./tile.ts";
 
 const SEED = 119120;
+
 const CAP = 80;
 
 // The exam's own statement of the tile's Model, pinned to the schema's type (0135).
 type Tile = { readonly draft: string };
+
 expectTypeOf<Tile>().toEqualTypeOf<typeof tile.model.Type>();
 
 type Msg = { readonly type: "typed"; readonly text: string } | { readonly type: "submit" };
+
 expectTypeOf<Msg>().toEqualTypeOf<typeof tile.msg.Type>();
+
 type Cmd = { readonly type: string; readonly m?: unknown };
+
 /** The program's own add, so a press the tile hands up is a Msg the checklist takes. */
 type Add = Extract<typeof checklistMachine.msg.Type, { readonly type: "add" }>;
 
@@ -72,6 +77,7 @@ const walk = (
 };
 
 const walks = fc.array(choice, { minLength: 1, maxLength: 40 });
+
 const opts = { seed: SEED, numRuns: 200 };
 
 describe("L22: the checklist tile", () => {
@@ -109,6 +115,7 @@ describe("L22: the checklist tile", () => {
           if (prev.draft === "") {
             seen.empty++;
             expect([next, cmds], "an empty submit sent something").toEqual([prev, []]);
+
             return;
           }
 

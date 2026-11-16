@@ -25,6 +25,7 @@ export const Competing = Schema.TaggedUnion({
   // A directory with one file inside.
   directory: { bytes: Schema.String },
 });
+
 export type Competing = typeof Competing.Type;
 
 /** A directory entry as it is on disk. A symlink is its own target text, never what it points at. */
@@ -33,12 +34,14 @@ export const Dirent = Schema.TaggedUnion({
   symlink: { target: Schema.String },
   directory: { files: Schema.Record(Schema.String, Schema.String) },
 });
+
 export type Dirent = typeof Dirent.Type;
 
 const Byte = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 255 }));
 
 /** A symlink whose target is not valid UTF-8. Text cannot carry it, so it is held as bytes. */
 export const Opaque = Schema.TaggedStruct("opaque", { target: Schema.Array(Byte) });
+
 export type Opaque = typeof Opaque.Type;
 
 // A target of any bytes but NUL around one byte that no valid UTF-8 text holds, wherever it sits.
@@ -53,6 +56,7 @@ export const Replacement = Schema.Struct({
   checkpoint: Schema.Literals(["before-capture", "after-capture"]),
   competing: Schema.Union([Competing, Opaque]),
 });
+
 export type Replacement = typeof Replacement.Type;
 
 // A file holds UTF-8, so a lone surrogate is compared as the text the disk gives back.
@@ -162,6 +166,7 @@ export const suite = (open: Open) =>
               }).toEqual({ refusal: null, dirent: null });
               expect(yield* held).toEqual([]);
               expect(disk.events.filter((event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+
               return;
             }
 
@@ -206,11 +211,14 @@ export const suite = (open: Open) =>
       ([{ before, never, after }]) =>
         Effect.gen(function* () {
           const target = [...before, never, ...after];
+
           const disk = yield* open("none", {
             checkpoint: "before-capture",
             competing: Opaque.make({ target }),
           });
+
           yield* disk.control.install;
+
           // Where the competing link is now. Text cannot carry its target, so a restore that reads
           // the target as text can only put a different link back: the link then stays where the
           // capture put it. `changed` is another entry at the path, `lost` is the link nowhere.
@@ -223,6 +231,7 @@ export const suite = (open: Open) =>
 
             return links.path?.join() === target.join() ? "path" : "changed";
           });
+
           const typed = { defect: false, error: "BrainControlError" };
 
           const first = refusal(yield* Effect.scoped(disk.control.remove).pipe(Effect.exit));
@@ -286,18 +295,22 @@ export const suite = (open: Open) =>
       ([count]) =>
         Effect.gen(function* () {
           const disk = yield* open("none");
+
           const exits = yield* Effect.forEach(
             Array.from({ length: count }),
             () => disk.control.install.pipe(Effect.exit),
             { concurrency: "unbounded" },
           );
+
           expect(exits.every(Exit.isSuccess)).toBe(true);
           const original = yield* disk.read;
           expect(original).not.toBeNull();
           yield* disk.control.install;
           expect(yield* disk.read).toBe(original);
+
           const sync = disk.events.indexOf("sync"),
             publish = disk.events.indexOf("publish");
+
           expect(sync).toBeGreaterThanOrEqual(0);
           expect(publish).toBeGreaterThan(sync);
 

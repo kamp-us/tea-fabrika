@@ -88,6 +88,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
 ) {
   const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
   const root = options.cwd ?? path.resolve();
+
   const relative = (file: string) => {
     const url = URL.parse(file);
     let local = file;
@@ -99,6 +100,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
 
     return path.isAbsolute(local) ? path.relative(root, local) : local;
   };
+
   // The installed tools' own versions, so a build report says what really ran.
   yield* Effect.annotateCurrentSpan({
     phase: options.phase ?? "bundle",
@@ -106,6 +108,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     "effect.version": effectPackage.version,
   });
   const fail = (error: unknown) => BuildError.make({ reason: "bundle", message: String(error), cause: error });
+
   const config = {
     input,
     plugins,
@@ -139,7 +142,9 @@ export const bundle = Effect.fn("build.bundle")(function* (
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
     ...(options.define === undefined ? {} : { transform: { define: { ...options.define } } }),
   };
+
   const output = { format: "esm" as const, codeSplitting: options.split === true, minify: options.minify === true };
+
   const generate = Effect.acquireUseRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown's build API returns a Promise
     Effect.tryPromise({ try: () => rolldown(config), catch: fail }),
@@ -148,6 +153,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
     // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown closes through a Promise
     (b) => Effect.promise(() => b.close()),
   );
+
   return yield* generate.pipe(
     Effect.onExit((exit) =>
       Effect.annotateCurrentSpan(
@@ -186,6 +192,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 
   for (const [name, entry] of Object.entries(options.programs)) {
     const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
+
     const output = yield* bundle(
       "fabrika:program",
       [
@@ -206,10 +213,12 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       ],
       { phase: "program", ...(options.cwd === undefined ? {} : { cwd: options.cwd }) },
     );
+
     const source = output.output
       .filter((o) => o.type === "chunk")
       .map((o) => o.code)
       .join("\n");
+
     programs[name] = { hash: yield* hash(source), source };
   }
 

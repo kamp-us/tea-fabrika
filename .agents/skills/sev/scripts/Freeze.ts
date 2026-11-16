@@ -20,6 +20,7 @@ export const Verdict = Schema.TaggedUnion({
   keep: { reason: Schema.Literals(["queue", "allowed"]) },
   cancel: {},
 });
+
 export type Verdict = typeof Verdict.Type;
 
 /**
@@ -54,6 +55,7 @@ export const running = (entries: ReadonlyArray<Level.Entry>): number => {
 /** The allow list while a sev0 is open; `null` once it closed. */
 const allowed = Effect.fnUntraced(function* (home: string) {
   const { sev0 } = yield* Level.read(home);
+
   return sev0._tag === "open" ? sev0.allow : null;
 });
 
@@ -70,6 +72,7 @@ const beat = Effect.fn("Freeze.beat")(function* (home: string) {
   if (listed._tag === "Failure") {
     const reason = listed.failure.reason;
     yield* note(home, Level.Entry.cases.failed.make({ at: yield* Level.now, call: "unfinished", id: null, reason }));
+
     return yield* Console.log(`sev: could not list the runs: ${reason}`);
   }
 
@@ -127,6 +130,7 @@ export const loop = Effect.fn("Freeze.loop")(function* (home: string, every: Dur
 
 /** How the wait after a close ended: every loop said it ended, or one did not in time. */
 export const Ended = Schema.Literals(["answered", "unanswered"]);
+
 export type Ended = typeof Ended.Type;
 
 /**
@@ -146,5 +150,6 @@ export const ended = Effect.fn("Freeze.ended")(function* (home: string, wait: Du
   }
 
   yield* note(home, Level.Entry.cases.ended.make({ at: yield* Level.now, by: "close" }));
+
   return "unanswered" satisfies Ended;
 });

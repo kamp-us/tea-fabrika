@@ -7,7 +7,9 @@ import * as fc from "fast-check";
 import { inboxMachine } from "./program.ts";
 
 const SEED = 119120;
+
 const RUNS = 100;
+
 const load = () => import("./program.ts");
 
 // Independent shapes from the approved plan, pinned to the product's schemas in I4 (0135).
@@ -21,7 +23,9 @@ const Fields = {
 };
 
 const Row = Schema.TaggedUnion({ added: Fields });
+
 const Model = Schema.Struct({ rows: Schema.Array(Row) });
+
 const Msg = Schema.Struct({ type: Schema.Literal("added"), ...Fields });
 
 const Moves = Arbitrary.array(
@@ -74,6 +78,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
           ({ next, cmds }) => {
             expect(next.rows).toEqual(expected[index++]);
             expect(cmds).toEqual([]);
+
             return true;
           },
           { seed: SEED, numRuns: 1 },

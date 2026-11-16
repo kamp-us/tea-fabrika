@@ -59,10 +59,12 @@ const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string
 const personBases = Effect.fnUntraced(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const home = path.join(root, "person-target"),
     settings = path.join(home, ".fabrika"),
     linked = path.join(root, "person-link"),
     missing = path.join(root, "missing-person");
+
   yield* fs.makeDirectory(settings, { recursive: true });
   yield* fs.symlink("person-target/.fabrika", linked);
   // A lexical parent is readable too, so selecting it cannot pass by accident.
@@ -74,8 +76,10 @@ const personBases = Effect.fnUntraced(function* (root: string) {
     check: Effect.fnUntraced(function* (resolve: Repository["resolve"], absent: boolean, revision: number) {
       const own = `settings ${revision}`,
         parent = `person parent ${revision}`;
+
       yield* fs.writeFileString(path.join(settings, "entry.txt"), own);
       yield* fs.writeFileString(path.join(home, "entry.txt"), parent);
+
       const actual = [],
         expected = [];
 
@@ -89,6 +93,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
               ["entry.txt", own],
               ["../entry.txt", parent],
             ];
+
         const result = yield* resolve(from, "person").pipe(
           Effect.flatMap((source) =>
             Effect.gen(function* () {
@@ -110,6 +115,7 @@ const personBases = Effect.fnUntraced(function* (root: string) {
             onSuccess: (value) => value,
           }),
         );
+
         actual.push({ from, result });
         expected.push({
           from,
@@ -135,10 +141,12 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const blobs = new Map<string, string>([["traversal/entry.txt", "regular file"]]);
+
   const entries = new Map<string, { mode: string; type: string; id: string }>([
     ["traversal", { mode: "040000", type: "tree", id: "b".repeat(40) }],
     ["traversal/entry.txt", { mode: "100644", type: "blob", id: "c".repeat(40) }],
   ]);
+
   const links = [
     { name: "file-link", target: "entry.txt" },
     ...directorySuffixes.map((suffix, index) => ({ name: `target-${index}`, target: `entry.txt${suffix}` })),
@@ -162,6 +170,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
       const file = traversal.inTarget
         ? `target-${directorySuffixes.indexOf(traversal.suffix)}`
         : `file-link${traversal.suffix}`;
+
       const actual = [],
         expected = [];
 
@@ -174,12 +183,14 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         for (const operation of ["resolve", "read"] as const) {
           const requested: Effect.Effect<unknown, RepositoriesError> =
             operation === "resolve" ? resolve(`${from}/${file}`, document) : source.read(file);
+
           const result = yield* requested.pipe(
             Effect.match({
               onFailure: (error) => error.reason._tag,
               onSuccess: (value) => (value === null ? "missing" : "success"),
             }),
           );
+
           actual.push({ document, operation, file, result });
           expected.push({ document, operation, file, result: "ReadFailed" });
         }
@@ -210,13 +221,16 @@ it.effect.prop(
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-source-read-" });
+
         const repo = path.join(root, "repo"),
           person = path.join(root, "person"),
           outside = path.join(root, "outside space");
+
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
         yield* fs.makeDirectory(path.join(repo, "inside space"));
         yield* fs.makeDirectory(person);
         const commit = Schema.decodeSync(ObjectId)("a".repeat(40));
+
         const entries = new Map<string, { mode: string; type: string; id: string }>([
           [".fabrika", { mode: "040000", type: "tree", id: "b".repeat(40) }],
           ["inside space", { mode: "040000", type: "tree", id: "c".repeat(40) }],
@@ -228,6 +242,7 @@ it.effect.prop(
             (name) => [`inside space/${name}`, { mode: "120000", type: "blob", id: "d".repeat(40) }] as const,
           ),
         ]);
+
         const blobs = new Map([
           [".fabrika/local", "../inside space"],
           [".fabrika/outside", "../../outside space"],
@@ -239,6 +254,7 @@ it.effect.prop(
           ["inside space/absolute-local", path.join(repo, "inside space/entry.txt")],
           ["inside space/absolute-outside", path.join(outside, "entry.txt")],
         ]);
+
         const traversal = yield* regularFileLinks(root);
 
         for (const [file, entry] of traversal.entries) {
@@ -256,7 +272,9 @@ it.effect.prop(
           entry: (file) => Effect.succeed(entries.get(file) ?? null),
           read: (file) => Effect.succeed(blobs.has(file) ? new TextEncoder().encode(blobs.get(file)!) : null),
         });
+
         const bases = yield* personBases(root);
+
         const personResolvers = yield* Effect.forEach(
           [bases.linked, bases.missing],
           (base) =>
@@ -269,7 +287,9 @@ it.effect.prop(
             }),
           { concurrency: 1 },
         );
+
         const sources = ["../inside space", "./local", "./absolute", "../../outside space", "./outside"];
+
         let present = false,
           disk = "";
 
@@ -336,6 +356,7 @@ it.effect.prop(
             (personResolve, base) => bases.check(personResolve, base === 1, index),
             { concurrency: 1 },
           );
+
           expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
           checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
           yield* traversal.check(resolve, cell.traversal);
@@ -347,10 +368,12 @@ it.effect.prop(
 
 const string = (value: unknown) => {
   const read = Schema.decodeUnknownSync(Schema.NullOr(SourceRead))(value);
+
   return read === null ? null : new TextDecoder().decode(read.bytes);
 };
 
 const realGitRuns = runsFor({ fast: 3, full: 20 });
+
 const realGitRunBudget = 30_000;
 
 // Loaded host checks took 695 s for 200 runs, then 138 s for 20 runs (6.9 s/run) on real git.
@@ -375,11 +398,14 @@ it.each(GitLaws.gits)(
               Effect.gen(function* () {
                 const fs = yield* FileSystem.FileSystem,
                   path = yield* Path.Path;
+
                 const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-sources-" });
                 yield* RepositoryOpenTest.isolateGit(root);
+
                 const repo = path.join(root, "repo"),
                   origin = path.join(root, "origin.git"),
                   person = path.join(root, "person");
+
                 const outside = path.join(root, "outside space");
                 yield* fs.makeDirectory(person);
                 yield* fs.makeDirectory(outside);
@@ -408,6 +434,7 @@ it.each(GitLaws.gits)(
                 yield* git(repo, ["commit", "-m", "fixture"]);
                 yield* git(repo, ["push", "origin", "stable"]);
                 const bases = yield* personBases(root);
+
                 const personSelections = yield* Effect.forEach(
                   [bases.linked, bases.missing],
                   (base) =>
@@ -416,12 +443,15 @@ it.each(GitLaws.gits)(
                     }).pipe(Effect.provide(RepositoriesGit.layer({ person: base }))),
                   { concurrency: 1 },
                 );
+
                 yield* Effect.gen(function* () {
                   const selected = yield* (yield* Repositories).open(repo);
                   const pinned = selected.snapshot.commit;
+
                   let disk = "outside 0",
                     present = true,
                     checkout = "commit 0";
+
                   const sources = [
                     { from: "../inside space", committed: true },
                     { from: "./local-link", committed: true },
@@ -511,6 +541,7 @@ it.each(GitLaws.gits)(
                       (personSelection, base) => bases.check(personSelection.resolve, base === 1, index),
                       { concurrency: 1 },
                     );
+
                     expect(baseReads.map((read) => read.actual)).toEqual(baseReads.map((read) => read.expected));
                     checkRead(yield* stillGood.read("entry.txt"), true, pinned, "commit 0", root);
                     expect(selected.snapshot.commit).toBe(pinned);

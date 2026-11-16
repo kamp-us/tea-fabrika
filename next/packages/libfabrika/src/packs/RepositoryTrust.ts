@@ -18,19 +18,23 @@ import { Snapshot } from "../settings/Snapshot.ts";
  * @category schemas
  */
 export const RepositoryId = Id.make("repository");
+
 /**
  * Schema for a person's answer to the trust question: `accepted` or `denied`.
  *
  * @category schemas
  */
 export const TrustDecision = Schema.TaggedUnion({ accepted: {}, denied: {} });
+
 /**
  * A person's answer to the trust question.
  *
  * @category models
  */
 export type TrustDecision = typeof TrustDecision.Type;
+
 const identity = { repository: RepositoryId, key: Hash };
+
 const pinned = { commit: ObjectId, hash: Hash };
 
 /**
@@ -74,24 +78,28 @@ export const Event = Schema.TaggedUnion({
     reason: Schema.optionalKey(Schema.Literal("denied")),
   },
 });
+
 /**
  * One event of a repository opening.
  *
  * @category models
  */
 export type Event = typeof Event.Type;
+
 /**
  * Schema for where a written event landed on the ledger: its `rev` and its `pos`.
  *
  * @category schemas
  */
 export const Receipt = Schema.Struct({ rev: Rev, pos: Rev });
+
 /**
  * Where a written event landed on the ledger.
  *
  * @category models
  */
 export type Receipt = typeof Receipt.Type;
+
 /**
  * The sender fields of the ledger line an event is written with: `by`, `for`, `sentAt`, `seen`,
  * `parent`, `traceId` and `build`. The caller gives these; the event gives the line's case and

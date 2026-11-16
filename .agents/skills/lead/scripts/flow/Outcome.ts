@@ -16,12 +16,17 @@ export const Outcome = Schema.TaggedUnion({
   ask: { reason: Schema.String },
   stuck: { reason: Schema.String },
 });
+
 export type Outcome = typeof Outcome.Type;
 
 export const done = (reason: string): Outcome => Outcome.cases.done.make({ reason });
+
 export const skip = (reason: string): Outcome => Outcome.cases.skip.make({ reason });
+
 export const send = (to: string, reason: string): Outcome => Outcome.cases.send.make({ to, reason });
+
 export const ask = (reason: string): Outcome => Outcome.cases.ask.make({ reason });
+
 export const stuck = (reason: string): Outcome => Outcome.cases.stuck.make({ reason });
 
 /**
@@ -37,6 +42,7 @@ export const Spent = Schema.Struct({
   requests: Schema.NullOr(Schema.Finite),
   tools: Schema.Finite,
 });
+
 export type Spent = typeof Spent.Type;
 
 /**
@@ -44,6 +50,7 @@ export type Spent = typeof Spent.Type;
  * that ran no agent. 0064 asks every flow to record dollars and tokens per step.
  */
 export const Answer = Schema.Struct({ outcome: Outcome, spent: Schema.NullOr(Spent) });
+
 export type Answer = typeof Answer.Type;
 
 /** An answer from a step that ran no agent. */

@@ -16,13 +16,16 @@ import { programs } from "./table.ts";
 import type { Project as SeededProject } from "./tasks-wire.test-support.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
+
 const SENT = "2026-11-12T10:00:00.000Z";
 
 const field = (v: string | Uint8Array) => {
   const b = Buffer.from(v);
   const n = Buffer.alloc(4);
   n.writeUInt32BE(b.length);
+
   return Buffer.concat([n, b]);
 };
 
@@ -36,6 +39,7 @@ const identity = () => {
 
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -48,8 +52,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(value).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       const packed = Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -59,6 +65,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, body, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packed
         .toString("base64")
         .match(/.{1,70}/g)
@@ -74,7 +81,9 @@ const Frame = Schema.Struct({
   result: Schema.optionalKey(Schema.Json),
   error: Schema.optionalKey(Schema.Json),
 });
+
 type Frame = typeof Frame.Type;
+
 class Closed extends Schema.TaggedError<Closed>()("Closed", { code: Schema.Int }) {}
 
 const socket = Effect.fnUntraced(function* (
@@ -86,6 +95,7 @@ const socket = Effect.fnUntraced(function* (
   const inbox = yield* Queue.unbounded<Frame | Closed>();
   const frames: Array<Frame> = [];
   let closed: Closed | undefined;
+
   const ws = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const ws = new WebSocket(`${url.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
@@ -98,11 +108,14 @@ const socket = Effect.fnUntraced(function* (
         closed = new Closed({ code: event.code });
         Queue.offerUnsafe(inbox, closed);
       });
+
       return ws;
     }),
     (ws) => Effect.sync(() => ws.close()),
   );
+
   let next = 0;
+
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     if (closed !== undefined) {
       return yield* closed;
@@ -123,6 +136,7 @@ const socket = Effect.fnUntraced(function* (
       }
     }
   });
+
   let challenge: Frame;
 
   do {
@@ -136,6 +150,7 @@ const socket = Effect.fnUntraced(function* (
   } while (challenge.method !== "challenge");
 
   const { nonce } = Schema.decodeUnknownSync(Schema.Struct({ nonce: Schema.String }))(challenge.params);
+
   const answer = yield* call("initialize", {
     versions: [1],
     has: ["git"],
@@ -157,6 +172,7 @@ const socket = Effect.fnUntraced(function* (
 
 const ok = (frame: Frame) => {
   expect(frame.error).toBeUndefined();
+
   return frame.result;
 };
 
@@ -170,11 +186,14 @@ it.live(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
         path = yield* Path.Path;
+
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "tasks-wire-" });
       const port = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
+
       const root = identity(),
         hands = identity(),
         other = identity();
+
       const selected: typeof SeededProject.selected = hands.fingerprint;
       const app = path.resolve(import.meta.dirname, "..");
       const entry = path.join(home, "tasks-entry.ts");
@@ -189,6 +208,7 @@ it.live(
           `export class Project extends SeededProject { static selected = ${JSON.stringify(selected)}; }`,
         ].join("\n"),
       );
+
       const built = yield* build({
         out: path.join(home, "dist"),
         root: path.resolve(app, "../../.."),
@@ -197,6 +217,7 @@ it.live(
         chaos: false,
         files: [],
       });
+
       const oldHome = process.env.ALCHEMY_HOME;
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
@@ -207,6 +228,7 @@ it.live(
           }
         }),
       );
+
       const running = yield* localInstance(
         built,
         // The settings fixture names the same gateway budget, 100,000 a minute.
@@ -219,8 +241,10 @@ it.live(
           port: port.port,
         }),
       );
+
       const url = `http://127.0.0.1:${port.port}`;
       expect(running).toBeDefined();
+
       // A task's requester is always a started name, since only a running program asks the hands. The
       // seeded task names `wire:1`, so the world starts it: a finish wakes that name (P39 slice 3).
       const requester = yield* Effect.tryPromise({
@@ -244,7 +268,9 @@ it.live(
           ),
         catch: (cause: unknown) => new Error("requester start failed", { cause }),
       });
+
       expect(requester).toMatchObject({ process: expect.any(String) });
+
       const grant = Effect.fnUntraced(function* (key: ReturnType<typeof identity>, id: string) {
         const value = grantText({
           id,
@@ -255,6 +281,7 @@ it.live(
           sentAt: SENT,
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
         });
+
         const reply = yield* Effect.tryPromise({
           try: () =>
             fetch(`${url}/grant`, {
@@ -264,15 +291,19 @@ it.live(
             }),
           catch: (cause: unknown) => new Error("grant failed", { cause }),
         });
+
         expect(reply.ok).toBe(true);
       });
+
       yield* grant(hands, "hands");
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
       expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
+
       const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
+
       expect(taken.task.state._tag).toBe("assigned");
 
       if (taken.task.state._tag !== "assigned") {
@@ -297,9 +328,11 @@ it.live(
       );
       const result = Result.cases.exited.make({ code: 0, version: "fixture-result" });
       no(yield* stranger.call("tasks.finish", { ...resource, execution, result, sentAt: SENT, seen: 0 }));
+
       const finished = ok(
         yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: SENT, seen: 0 }),
       );
+
       expect(
         ok(yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: "retry", seen: 0 })),
       ).toEqual(finished);
@@ -309,6 +342,7 @@ it.live(
       expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
         _tag: "idle",
       });
+
       const revoke = revokeText({
         id: "revoke-hands",
         key: hands.raw,
@@ -317,6 +351,7 @@ it.live(
         sentAt: SENT,
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
+
       yield* Effect.tryPromise({
         try: () =>
           fetch(`${url}/grant`, {

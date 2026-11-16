@@ -28,11 +28,15 @@ import * as Keys from "./Keys.ts";
 import { Prefix } from "./Prefix.ts";
 
 const SEED = 119120;
+
 const PLATFORMS = ["browser", "electron", "headless"] as const;
+
 const OSES = ["macos", "windows", "linux", "android", "ios", "unknown"] as const;
+
 const PREFIX = "ctrl+b";
 
 const idle = Prefix.cases.idle.make({});
+
 const armed = Prefix.cases.armed.make({ since: 0 });
 
 /** Every backend a window can be, with its cannot keys, read from the real `Keys.backend`. */
@@ -45,6 +49,7 @@ const CANNOT = BACKENDS.flatMap((b) => b.backend.cannot.map((key) => ({ ...b, ke
 
 /** Made-up commands of a made-up program, so a law never leans on tezgah's own defaults. */
 const WORDS = ["split_right", "split_down", "close", "zoom", "fold", "detach"] as const;
+
 /** Keys no backend refuses: after the prefix, or alone keys a tile would type. */
 const FREE = ["<prefix>%", '<prefix>"', "<prefix>x", "<prefix>|", "<prefix>-", "<prefix>z", "<prefix>g"] as const;
 
@@ -213,6 +218,7 @@ describe("L16: the router takes 0272's steps 1, 2 and 6 in order", () => {
 describe("L14: the keys after the prefix (the router's half)", () => {
   it("L14: the prefix again passes the prefix key to the tile; Escape and an unbound key are dropped; a bound key is its one command", () => {
     const t = table();
+
     const bound = new Map([
       ["%", "demo.split_right"],
       ["|", "demo.split_right"],
@@ -220,10 +226,12 @@ describe("L14: the keys after the prefix (the router's half)", () => {
       ["-", "demo.split_down"],
       ["x", "demo.close"],
     ]);
+
     const pressed = fc.oneof(
       fc.constantFrom(PREFIX, "escape", "%", "|", '"', "-", "x", "o", ";", "y", "n", "enter", "shift+x", "ctrl+x"),
       fc.string({ minLength: 1, maxLength: 3 }),
     );
+
     fc.assert(
       fc.property(pressed, (key) => {
         if (ROUTER_BACKEND.cannot.includes(key)) {
@@ -232,12 +240,14 @@ describe("L14: the keys after the prefix (the router's half)", () => {
 
         const routed = Keys.route(t, armed, null, { key });
         const does = bound.get(key);
+
         const want =
           key === PREFIX
             ? { _tag: "tile", key: PREFIX }
             : does !== undefined
               ? { _tag: "command", does }
               : { _tag: "dropped" };
+
         expect(routed, `L14: ${JSON.stringify(key)} after the prefix`).toEqual(want);
       }),
       { seed: SEED, numRuns: 200 },

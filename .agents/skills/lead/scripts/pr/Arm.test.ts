@@ -18,10 +18,15 @@ import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 
 const oid = "e42d1dce6a74f4ccb246ed19b4db04ad72c0d899";
+
 const older = "0123456789abcdef0123456789abcdef01234567";
+
 const branch = "fabrikalfa/p34c-s4";
+
 const repo = "fixture/repo";
+
 const RED = 43776563690;
+
 const fixtures = `${import.meta.dirname}/../ci/fixtures`;
 
 /** The fixture files, read once per law through the platform's file system. */
@@ -29,6 +34,7 @@ const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const jobs = yield* RunsGh.jobsIn(yield* fs.readFileString(`${fixtures}/run-${RED}-jobs.json`));
   const log = yield* fs.readFileString(`${fixtures}/run-${RED}-next-2.log`);
+
   return { jobs, log };
 }).pipe(Effect.provide(NodeServices.layer));
 
@@ -73,6 +79,7 @@ const Stands = Schema.Literals([
   "older_red",
   "older_running",
 ]);
+
 type Stands = typeof Stands.Type;
 
 type World = {
@@ -92,6 +99,7 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   const github = PullRequestsTest.world([
     { number: 1092, head: branch, oid, state: w.state ?? "OPEN", draft: w.draft ?? false },
   ]);
+
   github.more.set(1092, {
     base: w.base ?? "main",
     title: w.title ?? "Per-program quotas, in next/ (P34c slice 4)",
@@ -101,6 +109,7 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
   const actions = RunsTest.world();
   const stands = w.stands ?? "green";
   const run = (head: string, status: string, conclusion: string | null): Run => ({ id: RED, head, status, conclusion });
+
   const runs: Record<Stands, ReadonlyArray<Run>> = {
     green: [run(oid, "completed", "success")],
     red: [run(oid, "completed", "cancelled")],
@@ -111,16 +120,19 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
     older_red: [run(older, "completed", "cancelled")],
     older_running: [run(older, "in_progress", null)],
   };
+
   actions.runs.set(branch, runs[stands]);
   const isRed = stands === "red" || stands === "older_red";
   actions.jobs.set(RED, w.jobs ?? (isRed ? red.jobs : allGreen(red.jobs)));
   const remote = PushesTest.remote();
+
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github),
     PushesTest.layer(remote, w.leak),
     RunsTest.layer(actions),
     ChecksTest.layer([], red.log),
   );
+
   return { github, actions, layer };
 };
 
@@ -130,11 +142,13 @@ const arm = (m: ReturnType<typeof memory>) => Arm.arm({ repo, dir: ".", pr: 1092
 const armed = (m: ReturnType<typeof memory>) =>
   Effect.gen(function* () {
     const answer = yield* Effect.result(Arm.arm({ repo, dir: ".", pr: 1092 }));
+
     return { answer, leaks: yield* Recorder.calls(Pushes) };
   }).pipe(Effect.provide(m.layer));
 
 /** Which leak check refuses, by its method's name, or none. */
 const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+
 const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
 
 /** The one leak check that refuses, with the error it refuses with. */
@@ -184,6 +198,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
       Effect.gen(function* () {
         const red = yield* fixture;
         const url = `https://github.com/${repo}/actions/runs/${RED}`;
+
         const said = {
           in_progress: `pr 1092: at this head: the full run ${url} is in_progress, not ended; arm it once it is green`,
           queued: `pr 1092: at this head: the full run ${url} is queued, not ended; arm it once it is green`,
@@ -264,6 +279,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         // every branch run since pull request 1404, or a leg.
         const withSkip = red.jobs.map((job) => ({ ...job, conclusion: job.name === skipped ? "skipped" : "success" }));
         const isRed = stands === "red" || stands === "older_red";
+
         const m = memory(
           {
             stands,
@@ -275,6 +291,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
           },
           red,
         );
+
         const answer = yield* Effect.result(arm(m));
         const open = state === "OPEN" && base === "main" && !plan;
         const green = (stands === "green" || stands === "older") && skipped === "none";
@@ -366,10 +383,12 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
+
         const patch = {
           path: "next/apps/fabrika/src/worker-quotas.ts",
           patch: "@@ -0,0 +1 @@\n+export const Quota = 1;",
         };
+
         const bare = memory({}, red);
         bare.github.patches.set(1092, [patch]);
         const refused = yield* Effect.flip(arm(bare));
@@ -400,11 +419,13 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         const { answer, leaks } = yield* armed(m);
         expect(m.github.calls).toEqual(leak === "clean" ? [{ _tag: "ready", number: 1092 }, ...armedAt] : []);
         expect(answer._tag === "Failure" && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
+
         const ran = [
           { method: "leakChange", args: [".", oid] },
           { method: "leakGrep", args: [".", oid] },
           { method: "leakText", args: [".", "Per-program quotas, in next/ (P34c slice 4)\n\n\n"] },
         ];
+
         expect(leaks).toEqual(ran.slice(0, { clean: 3, leakChange: 1, leakGrep: 2, leakText: 3 }[leak]));
       }),
   );
@@ -471,6 +492,7 @@ describe("RunsGh: the shapes GitHub answers", () => {
           { id: 1, head_sha: older, status: "completed", conclusion: "success", name: "scheduled" },
         ],
       });
+
       expect(yield* RunsGh.runsIn(body)).toEqual([
         { id: 2, head: oid, status: "in_progress", conclusion: null },
         { id: 1, head: older, status: "completed", conclusion: "success" },

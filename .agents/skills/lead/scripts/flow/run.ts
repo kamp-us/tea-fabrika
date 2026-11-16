@@ -43,9 +43,11 @@ const boxes = Effect.fn("flow.boxes")(
     const path = yield* Path.Path;
     const env = path.join(import.meta.dirname, "..", "env.sh");
     const handle = yield* ChildProcess.make("sh", ["-c", '. "$0" && printf "%s" "$BOXES"', env]);
+
     const [out, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.stdout)), handle.exitCode], {
       concurrency: 2,
     });
+
     return Number(code) === 0 && out !== "" ? out : yield* Usage.make({ reason: "env.sh gave no BOXES" });
   },
   Effect.scoped,
@@ -55,12 +57,15 @@ const boxes = Effect.fn("flow.boxes")(
 /** The flow file's default export, read as a Flow. */
 const load = Effect.fn("flow.load")(function* (file: string) {
   const path = yield* Path.Path;
+
   const url = yield* path
     .toFileUrl(path.resolve(file))
     .pipe(Effect.mapError(() => Usage.make({ reason: `${file} is no path` })));
+
   const unloadable = (e: unknown) => Usage.make({ reason: `${file} does not load: ${String(e)}` });
   // oxlint-disable-next-line fabrika/no-promises -- edge: Node loads a module by its path only through import()
   const module = yield* Effect.tryPromise({ try: () => import(url.href), catch: unloadable });
+
   return yield* Schema.decodeUnknownEffect(Flow.Flow)(module.default).pipe(
     Effect.mapError((e) => Usage.make({ reason: `${file}'s default export is no Flow: ${e.message}` })),
   );
@@ -79,11 +84,13 @@ const flowCommand = Command.make(
       const flow = yield* load(file);
       const path = yield* Path.Path;
       const saved = Option.isSome(state) ? state.value : path.join(yield* boxes(), "state", `flow-${flow.name}.json`);
+
       const model = yield* runFlow(flow, { state: saved, resume, lead }).pipe(
         Effect.catchTag(["StoreFailed", "SubFailed"], (e) =>
           Effect.fail(Stuck.make({ reason: `${e._tag}: ${String(e.cause)}` })),
         ),
       );
+
       const end = ending(model);
       const spent = model.history.reduce((sum, a) => sum + (a.spent?.usd ?? 0), 0);
       yield* Console.log(

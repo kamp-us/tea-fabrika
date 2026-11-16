@@ -18,6 +18,7 @@ const file = Effect.acquireRelease(
       Effect.sync(() => {
         const db = new DatabaseSync(join(path, "ledger.db"));
         db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+
         return db;
       }),
       (db) => Effect.sync(() => db.close()),

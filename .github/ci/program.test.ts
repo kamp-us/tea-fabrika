@@ -20,6 +20,7 @@ interface Token {
 }
 
 const t = (kind: Kind) => (text: string) => ({ text, kind });
+
 const mark = t("mark");
 
 // Comment-like text inside strings, templates and regexes is part of the program.
@@ -164,6 +165,7 @@ const swap = (token: Token): string => {
 /** A pair from law 9 with one token swapped on the new side. */
 const swapped = pair.chain(([head, list, before, after]) => {
   const open = list.flatMap((token, i) => (swap(token) === token.text ? [] : [i]));
+
   return fc
     .constantFrom(...open)
     .map(
@@ -206,7 +208,9 @@ it("property: one changed token never gives the same program", () => {
 // vite 8.3.2, rolldown 1.2.13, esbuild 0.28.2, oxlint 1.90.0, oxfmt 0.75.0, TypeScript 7.0.2), apart
 // from program.ts. Each body is a comment's text, and each form is where it may stand.
 type Form = "line" | "block" | "doc";
+
 const all: readonly Form[] = ["line", "block", "doc"];
+
 const dash = "-";
 
 const tools: readonly (readonly [string, readonly Form[]])[] = [
@@ -293,8 +297,10 @@ it("property: a tool comment that was added, removed or changed is refused, in a
         const place = at % list.length;
         const put = (text: string) => before.map((g, i) => (i === place ? `${text}${g}` : g));
         const old = how === "added" ? before : how === "removed" ? put(write(form, body)) : put(write(form, body));
+
         const fresh =
           how === "added" ? put(write(form, body)) : how === "removed" ? before : put(write(form, `${body} b`));
+
         expect(sameProgram(file, join(head, list, old), join(head, list, fresh))).toBe(false);
       },
     ),
@@ -370,6 +376,7 @@ it("property: when the program is the same, esbuild gives the same output for bo
 });
 
 const base = "b".repeat(40);
+
 const head = "c".repeat(40);
 
 type Status = "modified" | "changed" | "added" | "deleted" | "unread";
@@ -419,9 +426,11 @@ it("property: samePaths leaves out a file that was added or deleted, is not .ts 
 
         return { status: 128, stdout: "" };
       };
+
       const kept = list
         .filter((file) => file.status === "modified" && /\.tsx?$/.test(file.path))
         .map((file) => file.path);
+
       expect(
         samePaths(
           base,
@@ -443,6 +452,7 @@ it.each(["Sshsig", "Hello", "Webauthn"])(
   (stem) => {
     const read = (side: string) =>
       readFileSync(new URL(`./fixtures/same/${stem}.${side}.txt`, import.meta.url), "utf8");
+
     expect(sameProgram(`${stem}.ts`, read("old"), read("new"))).toBe(true);
   },
 );

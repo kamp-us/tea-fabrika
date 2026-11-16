@@ -14,7 +14,9 @@ const root = join(import.meta.dirname, "..");
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: root });
 
 /** Each form, one a line, with whether the rule reads its count as written. */
@@ -68,9 +70,11 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
     ["--format=json", ...[...cases.keys()].map((file) => relative(root, file))],
     { cwd: root, encoding: "utf8" },
   );
+
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
   };
+
   const found = [...cases.keys()].map((file) => [
     file,
     report.diagnostics
@@ -78,6 +82,7 @@ const cli = (cases: ReadonlyMap<string, ReadonlyArray<number>>) => {
       .map((d) => d.labels[0]!.span.line)
       .sort((a, b) => a - b),
   ]);
+
   expect(Object.fromEntries(found)).toEqual(Object.fromEntries(cases));
 };
 
@@ -165,6 +170,7 @@ const inLaw = (count: number, io: boolean): Plant => [
 /** A count and an IO import, with the IO laws' lines that must fire. */
 const overIo = (count: number, from: string): Plant => {
   const lines = ioForms(count, from);
+
   return [
     [IO_PRELUDE, ...lines.map(([line]) => line), ""].join("\n"),
     (held) => (held ? lines.flatMap(([, fires], i) => (fires ? [i + 2] : [])) : []),

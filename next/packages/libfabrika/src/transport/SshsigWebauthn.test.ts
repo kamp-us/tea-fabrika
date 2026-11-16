@@ -17,11 +17,13 @@ const utf8 = (text: string) => new TextEncoder().encode(text);
 const u32 = (n: number) => {
   const b = Buffer.alloc(4);
   b.writeUInt32BE(n);
+
   return b;
 };
 
 const field = (value: string | Uint8Array) => {
   const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+
   return Buffer.concat([u32(b.length), b]);
 };
 
@@ -63,6 +65,7 @@ const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -83,6 +86,7 @@ const integer = (raw: Uint8Array) => {
   }
 
   const bytes = Buffer.from(raw.slice(at));
+
   return bytes[0] !== undefined && bytes[0] >= 128 ? Buffer.concat([Buffer.from([0]), bytes]) : bytes;
 };
 
@@ -90,10 +94,14 @@ const passkey = Effect.fn("test.passkey")(function* () {
   const pair = yield* web(() =>
     crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]),
   );
+
   const point = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
+
   const rp = "fabrika.test",
     origin = `https://${rp}`;
+
   const blob = Buffer.concat([field("sk-ecdsa-sha2-nistp256@openssh.com"), field("nistp256"), field(point), field(rp)]);
+
   return {
     line: `sk-ecdsa-sha2-nistp256@openssh.com ${blob.toString("base64")}`,
     fingerprint: fingerprint(blob),
@@ -113,6 +121,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
       const flags = over.flags ?? 29,
         counter = over.counter ?? 0,
         space = over.space ?? SPACE;
+
       const clientDataJSON = utf8(
         JSON.stringify({
           type: over.type ?? "webauthn.get",
@@ -121,25 +130,32 @@ const passkey = Effect.fn("test.passkey")(function* () {
           crossOrigin: over.crossOrigin ?? false,
         }),
       );
+
       const extensions = over.extensions ?? new Uint8Array();
+
       const authenticatorData = Buffer.concat([
         createHash("sha256").update(rp).digest(),
         Buffer.from([flags]),
         u32(counter),
         extensions,
       ]);
+
       const bytes = Buffer.concat([authenticatorData, createHash("sha256").update(clientDataJSON).digest()]);
+
       const raw = new Uint8Array(
         yield* web(() => crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, bytes)),
       );
+
       const r = integer(raw.slice(0, 32)),
         s = integer(raw.slice(32));
+
       const der = Buffer.concat([
         Buffer.from([0x30, 4 + r.length + s.length, 2, r.length]),
         r,
         Buffer.from([2, s.length]),
         s,
       ]);
+
       const signature = Buffer.concat([
         field("webauthn-sk-ecdsa-sha2-nistp256@openssh.com"),
         field(Buffer.concat([field(r), field(s)])),
@@ -149,6 +165,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
         field(clientDataJSON),
         field(extensions),
       ]);
+
       return {
         armored: pack(blob, signature, space),
         assertion: {
@@ -191,6 +208,7 @@ const refused = { _tag: "refused", reason: "bad_signature" };
 const blob = (armored = realArmor) => Buffer.from(armored.trim().split("\n").slice(1, -1).join(""), "base64");
 
 const runs = { seed: 119120, numRuns: 40 };
+
 const bodyArb = fc.string({ unit: "binary" });
 
 const passkeyLineArb = fc
@@ -206,7 +224,9 @@ const passkeyLineArb = fc
   );
 
 type Signed = { readonly line: string; readonly armored: string };
+
 const signedArb = fc.record({ body: bodyArb, signed: fc.constant<Signed | null>(null) });
+
 const recorded = { body: text, signed: { line, armored: realArmor } };
 
 const signed = Effect.fnUntraced(function* (a: { body: string; signed: Signed | null }) {
@@ -215,6 +235,7 @@ const signed = Effect.fnUntraced(function* (a: { body: string; signed: Signed | 
   }
 
   const k = yield* passkey();
+
   return { line: k.line, armored: (yield* k.sign(a.body)).armored };
 });
 
@@ -252,6 +273,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .map(([head, tail]) => new Uint8Array([head, ...tail])),
       fc.uint8Array({ maxLength: 253 }).map((tail) => new Uint8Array([0x30, tail.length + 1, ...tail])),
     );
+
     await fc.assert(
       fc.asyncProperty(invalid, (signature) =>
         Effect.runPromise(
@@ -284,41 +306,53 @@ describe("P10 WebAuthn SSHSIG", () => {
             const value = yield* signed(input);
             const source = blob(value.armored);
             let at = 10;
+
             const take = () => {
               const size = source.readUInt32BE(at);
               at += 4;
               const value = source.subarray(at, at + size);
               at += size;
+
               return value;
             };
+
             const key = take(),
               space = take(),
               reserved = take(),
               hash = take(),
               signature = take();
+
             let sigAt = 0;
+
             const sigField = () => {
               const size = signature.readUInt32BE(sigAt);
               sigAt += 4;
               const value = signature.subarray(sigAt, sigAt + size);
               sigAt += size;
+
               return value;
             };
+
             const algorithm = sigField(),
               pair = sigField(),
               tail = signature.subarray(sigAt);
+
             const rLength = pair.readUInt32BE(0),
               r = pair.subarray(4, 4 + rLength);
+
             const s = pair.subarray(8 + rLength);
             // P-256 accepts both s and order-s. The smaller one needs no sign-padding byte.
             const order = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
             const scalar = BigInt(`0x${s.toString("hex")}`);
+
             const low = Buffer.from(
               (scalar < order - scalar ? scalar : order - scalar).toString(16).padStart(64, "0"),
               "hex",
             );
+
             const minimal = integer(low);
             expect(low[0]).toBeLessThan(128);
+
             const wrap = (value: Uint8Array) =>
               armor(
                 Buffer.concat([
@@ -330,6 +364,7 @@ describe("P10 WebAuthn SSHSIG", () => {
                   field(Buffer.concat([field(algorithm), field(Buffer.concat([field(r), field(value)])), tail])),
                 ]),
               );
+
             expect((yield* check(wrap(minimal), value.line, input.body))._tag).toBe("passkey");
             expect(yield* check(wrap(Buffer.concat([Buffer.from([0]), minimal])), value.line, input.body)).toEqual(
               refused,
@@ -357,6 +392,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     Effect.gen(function* () {
       const read = (file: string) =>
         readFileSync(new URL(`../../../../../fixtures/next/sshsig/${file}`, import.meta.url), "utf8");
+
       expect(yield* check(read("ecdsa.sig"), read("ecdsa.pub").trim(), read("text.txt"))).toEqual(refused);
     }),
   );
@@ -380,16 +416,20 @@ describe("P10 WebAuthn SSHSIG", () => {
         clientDataJSON: new Uint8Array(Buffer.from(real.clientDataJSON, "base64url")),
         signature: new Uint8Array(Buffer.from(real.signature, "base64url")),
       };
+
       expect(assertion.signature.length).toBe(72);
+
       const armored = yield* writeWebauthnSshsig({
         text,
         line: Schema.decodeSync(PasskeyLine)(line),
         assertion,
       });
+
       expect(armored).toBe(realArmor);
       expect((yield* check(armored))._tag).toBe("passkey");
     }),
   );
+
   const policyCases = [
     ["UP without UV", { flags: 1 }],
     ["UV without UP", { flags: 4 }],
@@ -402,6 +442,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     ["cross origin", { crossOrigin: true }],
     ["wrong challenge", { challenge: utf8("only a hash would be wrong too") }],
   ] as const;
+
   it("p27 policy: refuses invalid assertions even with a valid P-256 signature", async () => {
     // Plant: require UP alone, without UV. A signed UP-only assertion must be refused.
     const invalid = fc.oneof(
@@ -416,6 +457,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       fc.constant({ crossOrigin: true }),
       fc.uint8Array({ maxLength: 64 }).map((challenge) => ({ challenge })),
     );
+
     await fc.assert(
       fc.asyncProperty(bodyArb, invalid, (body, options) =>
         Effect.runPromise(
@@ -459,11 +501,13 @@ describe("P10 WebAuthn SSHSIG", () => {
       },
     );
   });
+
   const bindingCases = [
     ["text", `${text}!`, {}],
     ["RP", text, { rp: "other.test" }],
     ["origin allowlist", text, { origins: ["https://other.test"] }],
   ] as const;
+
   it("p27 binding: changing expected text, RP or origin allowlist refuses the real assertion", async () => {
     // Plant: ignore policy.rp. The changed-RP example must still be refused.
     const changed: fc.Arbitrary<{
@@ -478,6 +522,7 @@ describe("P10 WebAuthn SSHSIG", () => {
         .array(bodyArb.filter((origin) => origin !== policy.origins[0]))
         .map((origins) => ({ body: text, over: { origins } })),
     );
+
     await fc.assert(
       fc.asyncProperty(changed, ({ body, over }) =>
         Effect.runPromise(
@@ -525,6 +570,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       { ...runs, examples: [[text, "other"]] },
     );
   });
+
   const corruptions = [
     "version",
     "key length",
@@ -534,6 +580,7 @@ describe("P10 WebAuthn SSHSIG", () => {
     "truncated",
     "trailing",
   ] as const;
+
   it("p27 bytes: refuses corrupt fields, signatures, truncation and trailing bytes", async () => {
     // Plant: ignore the SSHSIG version. The version-2 example must still be refused.
     await fc.assert(
@@ -617,6 +664,7 @@ describe("P10 WebAuthn SSHSIG", () => {
             expect(yield* checkSshsig({ text: body, armored, space: SPACE, signers: [supplied] })).toEqual({
               signer: supplied,
             });
+
             const checked = verifySshsig({
               text: body,
               armored,
@@ -624,6 +672,7 @@ describe("P10 WebAuthn SSHSIG", () => {
               signers: [supplied],
               policy,
             });
+
             expect(yield* checked).toEqual({ _tag: "key", signer: supplied });
           }),
         ),

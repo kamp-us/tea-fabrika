@@ -31,7 +31,9 @@ interface Edge {
 const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika/no-effect-run-outside-edge"]);
 
 const DISABLE = /^\s*(?:oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
+
 const REASON = /\s--\s+/;
+
 const CODE = /\.[cm]?[jt]sx?$/;
 
 class Unparsed extends Schema.TaggedError<Unparsed, { readonly brand: unique symbol }>()("Unparsed", {
@@ -54,6 +56,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
     }
 
     const at = rest.search(REASON);
+
     const rules = (at < 0 ? rest : rest.slice(0, at))
       .split(",")
       .map((rule) => rule.trim())
@@ -65,6 +68,7 @@ const edgesIn = Effect.fnUntraced(function* (path: string, text: string) {
 
     const reason = at < 0 ? "" : rest.slice(at).replace(REASON, "").trim();
     const line = text.slice(0, comment.start).split("\n").length;
+
     return [{ path, line, rules: rules.join(", "), reason }];
   });
 });
@@ -112,6 +116,7 @@ class GitFailed extends Schema.TaggedError<GitFailed, { readonly brand: unique s
 /** One git command's output; any exit but 0 fails. */
 const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   const run = yield* ChildProcess.make("git", [...args]);
+
   const [out, code] = yield* Effect.all([run.stdout.pipe(Stream.decodeText(), Stream.mkString), run.exitCode], {
     concurrency: 2,
   });
@@ -129,6 +134,7 @@ const lines = (text: string) => text.split("\n").filter((line) => line !== "");
 const notice = (edge: Edge) => {
   const escape = (s: string) => s.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
   const location = escape(edge.path).replaceAll(":", "%3A").replaceAll(",", "%2C");
+
   return `::notice file=${location},line=${edge.line}::${escape(`${edge.rules} -- ${edge.reason}`)}`;
 };
 
@@ -139,9 +145,11 @@ const main = Effect.gen(function* () {
   const flag = args.indexOf("--base");
   const against = (flag < 0 ? undefined : args[flag + 1]) ?? "origin/main";
   const top = (yield* git(["rev-parse", "--show-toplevel"])).trim();
+
   const at = Effect.fnUntraced(function* (more: ReadonlyArray<string>) {
     return yield* git(["-C", top, ...more]);
   });
+
   const base = (yield* at(["merge-base", against, "HEAD"])).trim();
   const changed = lines(yield* at(["diff", "--name-only", "--no-renames", base, "--", "next"]));
   const atBase = new Set(lines(yield* at(["ls-tree", "-r", "--name-only", base, "--", "next"])));
@@ -161,8 +169,10 @@ const main = Effect.gen(function* () {
   }
 
   const found = yield* asks(before, after);
+
   const head =
     found.length === 0 ? "No new edge comments in this pull request." : "Edges this pull request adds, for the owner:";
+
   yield* Console.log([head, ...found.map(ask)].join("\n"));
   const summary = yield* Config.String("GITHUB_STEP_SUMMARY").pipe(Config.option);
 

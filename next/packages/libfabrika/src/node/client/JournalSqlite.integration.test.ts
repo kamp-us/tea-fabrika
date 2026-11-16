@@ -71,6 +71,7 @@ describe("P39 slice 4b: the journal file after a crash", () => {
           Effect.gen(function* () {
             const fs = yield* FileSystem.FileSystem,
               path = yield* Path.Path;
+
             const home = yield* fs.makeTempDirectoryScoped({ prefix: "p39-j2-" });
             const file = path.join(home, "journal.sqlite");
             const child = path.join(import.meta.dirname, "JournalSqlite.child.test-support.ts");
@@ -80,6 +81,7 @@ describe("P39 slice 4b: the journal file after a crash", () => {
                   cwd: import.meta.dirname,
                   killSignal: "SIGKILL",
                 });
+
                 // The kill delay counts from the first full round, so every run kills a writer
                 // whose sixteen keys are all saved.
                 const ready = yield* handle.stdout.pipe(
@@ -89,6 +91,7 @@ describe("P39 slice 4b: the journal file after a crash", () => {
                   Stream.runHead,
                   Effect.timeout("30 seconds"),
                 );
+
                 expect(Option.isSome(ready), "J2: the child saved all sixteen keys").toBe(true);
                 yield* Effect.sleep(`${delay} millis`);
                 yield* handle.kill({ killSignal: "SIGKILL" });

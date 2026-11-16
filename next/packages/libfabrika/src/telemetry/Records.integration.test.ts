@@ -36,6 +36,7 @@ import { SinkError } from "./Sink.ts";
 import { type Chain, SpanRow } from "./Trace.ts";
 
 type ChainValue = Chain;
+
 type Row = SpanRow;
 
 /** A folder of its own, and every part file opened in it. `RecordManager.sql` asks for a part's
@@ -62,6 +63,7 @@ const folder = Effect.acquireRelease(
 const home = folder.pipe(
   Effect.map(({ dir, dbs }) => {
     const asked: Array<string> = [];
+
     const db = (name: string): DatabaseSync => {
       const known = dbs.get(name);
 
@@ -71,9 +73,12 @@ const home = folder.pipe(
 
       const made = new DatabaseSync(join(dir, `${name.replaceAll("/", "_")}.db`));
       dbs.set(name, made);
+
       return made;
     };
+
     const sqls = new Map<string, Sql>();
+
     const open = (name: string): Sql => {
       asked.push(name);
       const known = sqls.get(name);
@@ -84,17 +89,23 @@ const home = folder.pipe(
 
       const made = nodeSql(db(name));
       sqls.set(name, made);
+
       return made;
     };
+
     const rows = (name: string, table: string): Array<Record<string, unknown>> =>
       dbs.has(name) ? (db(name).prepare(`SELECT * FROM ${table}`).all() as Array<Record<string, unknown>>) : [];
+
     return { open, asked, rows, names: () => [...dbs.keys()] };
   }),
 );
 
 const PROCESS = Effect.runSync(processId);
+
 const job: ChainValue = { _tag: "job", process: PROCESS };
+
 const spans: ChainValue = { _tag: "spans" };
+
 const part = (n: number) => `job/${PROCESS}/${n}`;
 
 /** A span row; `fill` pads one tag so a part reaches a small cap in a few rows. */
@@ -120,6 +131,7 @@ const row = (spanId: string, fill = 0): Row => ({
 const id = (n: number) => `s${String(n).padStart(15, "0")}`;
 
 const CAP = 64 * 1024;
+
 const FILL = 2000;
 
 const read = (chain: ChainValue) => RecordManager.use((records) => Stream.runCollect(records.read(chain)));
@@ -326,10 +338,12 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
           Array.from({ length: 5 }, (_, n) => kept(row(id(n), FILL))),
         ),
       ).pipe(Effect.provide(RecordManager.sql(parts.open, 1024 * 1024 * 1024)));
+
       // The same files under a cap the part is already past.
       const answer = yield* RecordManager.use((records) => records.write(job, 0, [kept(row(id(5)))])).pipe(
         Effect.provide(RecordManager.sql(parts.open, 1)),
       );
+
       expect(answer).toEqual({ _tag: "rolled", next: part(1), had: [] });
       expect(parts.rows(part(0), "spans")).toHaveLength(5);
       expect(parts.rows(part(0), "rolled")).toHaveLength(1);
@@ -352,6 +366,7 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
             },
             size: () => 0,
           };
+
           return Effect.gen(function* () {
             const error = yield* Effect.flip(RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])));
             expect(error).toBeInstanceOf(SinkError);
@@ -365,6 +380,7 @@ describe("p102, the cap is checked before the write (RecordManager.sql)", () => 
 });
 
 const T = Date.UTC(2026, 10, 7, 22, 0, 0, 20);
+
 const MESSAGE = "TypeError: note-body-p100 was not a function\n    at step (counter.ts:12:3)";
 
 describe.each(backends)("p100, content is the one deletable part, on RecordManager.$name", (backend) => {
@@ -379,11 +395,13 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
             const { layer, parts } = yield* backend.make(CAP);
             yield* Effect.gen(function* () {
               const records = yield* RecordManager;
+
               const failed = {
                 ...row(id(0)),
                 ok: false,
                 attributes: { ...row(id(0)).attributes, "error.type": "TypeError" },
               };
+
               yield* records.write(job, 0, [kept(failed, MESSAGE), kept(row(id(1)))]);
               expect(yield* records.content(job, id(0))).toEqual(
                 Option.some({ _tag: "kept", spanId: id(0), message: MESSAGE }),
@@ -397,6 +415,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
                 by: "owner",
                 reason: value,
               });
+
               const deleted = {
                 _tag: "deleted",
                 spanId: id(0),
@@ -404,6 +423,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
                 at: T,
                 reason: value,
               };
+
               expect(yield* records.content(job, id(0))).toEqual(Option.some(deleted));
 
               yield* TestClock.setTime(T + 60_000);
@@ -495,6 +515,7 @@ describe("RecordManager.remote, the record object's stub", () => {
   /** A stub that answers any method the builder names; `then` stays undefined so it is no thenable. */
   const stub = (answer: () => Effect.Effect<unknown, unknown>) => {
     const calls: Array<{ name: string; method: string }> = [];
+
     const make = (name: string): RecordCalls =>
       new Proxy(
         {},
@@ -504,15 +525,18 @@ describe("RecordManager.remote, the record object's stub", () => {
               ? undefined
               : () => {
                   calls.push({ name, method: String(method) });
+
                   return answer();
                 },
         },
       ) as RecordCalls;
+
     return { make, calls };
   };
 
   it.effect("each call goes to the part's own object, by its name", () => {
     const { make, calls } = stub(() => Effect.succeed({ _tag: "written" }));
+
     return Effect.gen(function* () {
       const records = yield* RecordManager;
       expect(yield* records.write(job, 2, [kept(row(id(0)))])).toEqual({ _tag: "written" });
@@ -531,18 +555,22 @@ describe("RecordManager.remote, the record object's stub", () => {
           Effect.gen(function* () {
             const gone = stub(() => Effect.fail(value));
             const odd = stub(() => Effect.succeed({ weird: 1 }));
+
             const unreachable = yield* Effect.flip(
               RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
                 Effect.provide(RecordManager.remote(gone.make)),
               ),
             );
+
             expect(unreachable).toBeInstanceOf(SinkError);
             expect(unreachable.reason).toBe("unreachable");
+
             const bad = yield* Effect.flip(
               RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])).pipe(
                 Effect.provide(RecordManager.remote(odd.make)),
               ),
             );
+
             expect(bad.reason).toBe("bad_row");
             const readFailed = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(gone.make))));
             expect(readFailed.reason).toBe("unreachable");
@@ -561,6 +589,7 @@ describe("RecordManager.remote, the record object's stub", () => {
     ({ reason, held, generated }) =>
       Effect.gen(function* () {
         const typed = new SinkError({ reason, held });
+
         const calls = [
           RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])),
           read(job),
@@ -570,15 +599,18 @@ describe("RecordManager.remote, the record object's stub", () => {
 
         for (const operation of calls) {
           const call: Effect.Effect<unknown, SinkError, RecordManager> = operation;
+
           const same = yield* Effect.flip(
             call.pipe(Effect.provide(RecordManager.remote(stub(() => Effect.fail(typed)).make))),
           );
+
           expect(same).toBe(typed);
 
           for (const cause of [generated, new RpcCallError({ method: "record", cause: generated })]) {
             const failed = yield* Effect.flip(
               call.pipe(Effect.provide(RecordManager.remote(stub(() => Effect.fail(cause)).make))),
             );
+
             expect(failed).toBeInstanceOf(SinkError);
             expect(failed.reason).toBe("unreachable");
             expect(failed.held).toBe(0);
@@ -595,6 +627,7 @@ describe("RecordManager.remote, the record object's stub", () => {
               ),
             ),
           );
+
           expect(thrown).toBeInstanceOf(SinkError);
           expect(thrown.reason).toBe("unreachable");
           expect(thrown.cause).toBe(generated);
@@ -612,8 +645,10 @@ describe("RecordManager.remote, the record object's stub", () => {
         (value) =>
           Effect.gen(function* () {
             const event = value;
+
             const page = (events: ReadonlyArray<unknown>) =>
               stub(() => Effect.succeed({ spans: [{ ...row(id(0)), events }], after: 1, rolled: false }));
+
             const good = yield* read(job).pipe(Effect.provide(RecordManager.remote(page([event]).make)));
             expect(good.map((r) => r.events)).toEqual([[event]]);
 

@@ -38,6 +38,7 @@ export const Run = Schema.Struct({
   created: Schema.String,
   updated: Schema.String,
 });
+
 export type Run = typeof Run.Type;
 
 /** One job of a run. `runner` is null for a job no machine ever took (skipped, or canceled while queued). */
@@ -49,6 +50,7 @@ export const Job = Schema.Struct({
   started: Schema.NullOr(Schema.String),
   completed: Schema.NullOr(Schema.String),
 });
+
 export type Job = typeof Job.Type;
 
 /**
@@ -59,6 +61,7 @@ export const QueueEvent = Schema.TaggedUnion({
   added: { at: Schema.String },
   removed: { at: Schema.String, reason: Schema.NullOr(Schema.String) },
 });
+
 export type QueueEvent = typeof QueueEvent.Type;
 
 /** One merged pull request: its branch, when it merged, and each time it entered or left the merge queue. */
@@ -68,6 +71,7 @@ export const Pull = Schema.Struct({
   merged: Schema.String,
   queue: Schema.Array(QueueEvent),
 });
+
 export type Pull = typeof Pull.Type;
 
 /** One stage over the window: how many PRs it has a number for, and its median and worst 10%. */
@@ -92,18 +96,21 @@ export type Report = {
 };
 
 const at = (iso: string): number => Date.parse(iso);
+
 const minutes = (from: number, to: number): number => (to - from) / 60_000;
 
 /** The nearest-rank percentile: the smallest value at least `p` of them do not exceed; none when empty. */
 export const percentile = (values: ReadonlyArray<number>, p: number): Option.Option<number> => {
   const sorted = values.toSorted((a, b) => a - b);
   const rank = Math.min(sorted.length, Math.max(1, Math.ceil(p * sorted.length)));
+
   return Option.fromUndefinedOr(sorted[rank - 1]);
 };
 
 /** When a run ended: its last job's end, else GitHub's last update of the run. */
 const endedAt = (run: Run, jobs: ReadonlyArray<Job>): number => {
   const ends = jobs.flatMap((job) => (job.completed === null ? [] : [at(job.completed)]));
+
   return ends.length === 0 ? at(run.updated) : Math.max(...ends);
 };
 
@@ -113,6 +120,7 @@ type Times = { readonly [K in StageName]: Option.Option<number> };
 /** The last time the PR entered the queue before it merged; none when it never did. */
 const lastEntry = (pull: Pull, merged: number): Option.Option<number> => {
   const entered = pull.queue.flatMap((e) => (e._tag === "added" ? [at(e.at)] : [])).filter((t) => t <= merged);
+
   return entered.length === 0 ? Option.none() : Option.some(Math.max(...entered));
 };
 
@@ -133,11 +141,14 @@ const lastPush = (pull: Pull, runs: ReadonlyArray<Run>) => {
   const entry = lastEntry(pull, merged);
   const queued = Option.filter(entry, (t) => !droppedAfter(pull, t, merged));
   const cutoff = Option.getOrElse(entry, () => merged);
+
   // A run after the PR entered the queue cannot be of the head that merged.
   const before = runs
     .filter((run) => run.event === "pull_request" && run.branch === pull.branch && at(run.created) <= cutoff)
     .toSorted((a, b) => at(a.created) - at(b.created));
+
   const head = before.at(-1)?.sha;
+
   return { merged, queued, atHead: before.filter((run) => run.sha === head) };
 };
 
@@ -149,6 +160,7 @@ const lastPush = (pull: Pull, runs: ReadonlyArray<Run>) => {
 export const timesFor = (pull: Pull, runs: ReadonlyArray<Run>, jobs: (run: number) => ReadonlyArray<Job>): Times => {
   const { merged, queued, atHead } = lastPush(pull, runs);
   const ready = Option.fromUndefinedOr(atHead.filter((run) => run.conclusion === "success").at(-1));
+
   return {
     pr: Option.map(ready, (run) => minutes(at(run.created), endedAt(run, jobs(run.id)))),
     queue: Option.map(queued, (t) => minutes(t, merged)),
@@ -173,6 +185,7 @@ export const stageFor = (name: StageName, values: ReadonlyArray<number>): Stage 
   const median = percentile(values, 0.5);
   const worst = percentile(values, 0.9);
   const past = (value: Option.Option<number>, limit: number) => Option.exists(value, (v) => v > limit);
+
   return {
     name,
     goal,
@@ -192,6 +205,7 @@ export const busyMinutes = (jobs: ReadonlyArray<Job>, from: number, to: number):
 
     const start = Math.max(from, at(job.started));
     const end = Math.min(to, at(job.completed));
+
     return end > start ? sum + minutes(start, end) : sum;
   }, 0);
 
@@ -215,6 +229,7 @@ export const report = (facts: Facts): Report => {
   const times = pulls.map((pull) => timesFor(pull, facts.runs, jobs));
   const values = (name: StageName) => times.flatMap((t) => Option.toArray(t[name]));
   const perHour = busyMinutes(facts.jobs, from, facts.now) / facts.hours;
+
   return {
     hours: facts.hours,
     pulls: pulls.length,
@@ -240,7 +255,9 @@ export const markdown = (r: Report): string => {
     (s) =>
       `| ${LABEL[s.name]} | ${s.count} | ${shown(s.median)} | ${shown(s.worst)} | ${s.goal.median} / ${s.goal.worst} | ${s.over ? "**over**" : "ok"} |`,
   );
+
   const over = r.stages.filter((s) => s.over).map((s) => LABEL[s.name]);
+
   return [
     `## CI speed, the last ${r.hours} hours`,
     "",
@@ -261,6 +278,7 @@ export type Issue = { readonly number: number; readonly title: string };
 
 /** The one label automation may open issues with here (0534, 0541), and the title this measure's issue starts with. */
 export const LABEL_NAME = "ci-scheduled";
+
 export const TITLE = "CI speed: a stage is over its goal";
 
 /** What the daily run does with its issue: open one, add to the open one, close it, or nothing. */
@@ -270,6 +288,7 @@ export const Move = Schema.TaggedUnion({
   close: { number: Schema.Number },
   none: {},
 });
+
 export type Move = typeof Move.Type;
 
 /** Over goal: add to this measure's open issue, or open one. Within it: close the open one, if any. */

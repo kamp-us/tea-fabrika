@@ -44,13 +44,17 @@ type Options = {
 export const build = Effect.fn("build.app")(function* (options: Options) {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const APP = path.resolve(import.meta.dirname, ".."),
     ROOT = path.resolve(APP, "../../..");
+
   const extra = options.programs ?? {};
+
   const programs: ReadonlyArray<Selection> = [
     ...selected.filter((p) => !Object.hasOwn(extra, p.name)),
     ...Object.entries(extra).map(([name, module]) => ({ name, package: module, export: "program" })),
   ];
+
   const files =
     options.files ??
     (yield* fs.glob("next/**/*.tsx", { root: ROOT }).pipe(
@@ -59,10 +63,13 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
         onSuccess: (found) => found.filter((p) => !p.includes("node_modules") && !p.includes(".test.")),
       }),
     ));
+
   const styles = yield* Effect.forEach(STYLES, (module) => path.fromFileUrl(new URL(import.meta.resolve(module))), {
     concurrency: 1,
   }).pipe(Effect.mapError((cause) => new BuildError({ reason: "read", cause })));
+
   const entry = path.join(APP, "src/brain.ts");
+
   const built = yield* buildOne({
     out: options.out,
     root: ROOT,
@@ -73,5 +80,6 @@ export const build = Effect.fn("build.app")(function* (options: Options) {
     chaos: options.chaos ?? false,
     tab: { entry: path.join(APP, "src/entry/browser.tsx"), styles },
   });
+
   return { ...built, watch: { root: ROOT, entry, programs } };
 });

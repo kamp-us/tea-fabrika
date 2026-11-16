@@ -12,7 +12,9 @@ import { ProcessEvent, ProcessTable } from "./Process.ts";
 import { BadRow, ProcessHistory, ProcessHistoryError, Storage, Unreachable } from "./ProcessHistory.ts";
 
 const Send = Schema.Struct({ m: Schema.Json });
+
 const Position = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
+
 const badRow = (cause: unknown) => new ProcessHistoryError({ reason: new BadRow({ cause }) });
 
 const translate = (cause: LedgerError): ProcessHistoryError =>
@@ -49,10 +51,13 @@ export const layer: Layer.Layer<ProcessHistory, never, Ledger> = Layer.effect(
   ProcessHistory,
   Effect.gen(function* () {
     const ledger = yield* Ledger;
+
     const head = Effect.fnUntraced(function* (stream: string) {
       const waited = yield* ledger.wait(stream, 0).pipe(Effect.mapError(translate));
+
       return waited._tag === "ready" ? waited.rev : 0;
     });
+
     const read = Effect.fnUntraced(function* (stream: string, boundary: number) {
       if (boundary === 0) {
         return [];

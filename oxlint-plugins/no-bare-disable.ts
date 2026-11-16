@@ -28,14 +28,18 @@ import type { CreateRule } from "@oxlint/plugins";
 
 // No word boundary after the keyword: oxlint reads `oxlint-disablefoo` as naming a rule `foo`.
 const DISABLE = /^\s*(oxlint|eslint)-disable(?:-next-line|-line)?(.*)$/s;
+
 // A rule name never holds `--`: oxlint ends the rule list at the first `--`, so `-- -- why` or
 // `--- -- why` names no rule, which means every rule.
 const NAME = String.raw`[\w@./]+(?:-[\w@./]+)*`;
+
 const NAMED_WITH_WHY = new RegExp(String.raw`^\s+${NAME}(?:\s*,\s*${NAME})*\s+--\s+\S`, "s");
 
 // Built from two pieces, so this file's own text never holds the word the checker reads.
 const WORD = ["@effect", "diagnostics"].join("-");
+
 const LEVEL = "(?:off|error|warning|message|suggestion|skip-file)";
+
 const CHECK = String.raw`\w+:${LEVEL}`;
 
 const DIRECTIVE = new RegExp(
@@ -47,6 +51,7 @@ const CHECK_IN_REASON = new RegExp(String.raw`[\w*]+:${LEVEL}(?![\w-])`);
 const START = { line: 1, column: 0 };
 
 const OXLINT_SHAPE = "`// oxlint-disable-next-line <rule> -- <why>`";
+
 const CHECKER_SHAPE = `\`// ${WORD}-next-line <check>:<level> -- <why>\``;
 
 /** What is wrong with the checker's directive in one line comment's text, or null when it is right. */
@@ -69,6 +74,7 @@ const checkerProblems = (text: string, comments: ReadonlyArray<Comment>): Readon
   const own = new Map(
     comments.flatMap((comment) => {
       const at = comment.value.search(/\S/);
+
       // `//` plus the spaces before the word.
       return comment.type === "Line" && comment.value.startsWith(WORD, at)
         ? [[comment.range[0] + 2 + at, comment]]
@@ -78,10 +84,12 @@ const checkerProblems = (text: string, comments: ReadonlyArray<Comment>): Readon
 
   return [...text.matchAll(new RegExp(WORD, "g"))].flatMap(({ index }): ReadonlyArray<readonly [number, string]> => {
     const comment = own.get(index);
+
     const wrong =
       comment === undefined
         ? `is the checker's word outside a line comment of its own, which the checker still obeys: ${CHECKER_SHAPE}`
         : directiveProblem(comment.value);
+
     return wrong === null ? [] : [[index, wrong]];
   });
 };

@@ -50,6 +50,7 @@ const passed = (end: End) => end._tag === "exited" && end.code === 0;
 /** A shell's exit code over 128 is 128 + the number of the signal that killed what it ran. */
 const ended = (code: number): End => {
   const signal = Object.entries(constants.signals).find(([, n]) => code > 128 && n === code - 128)?.[0];
+
   return signal === undefined ? { _tag: "exited", code } : { _tag: "killed", signal, code };
 };
 
@@ -83,6 +84,7 @@ const run = (command: string) =>
     const handle = yield* ChildProcess.make("sh", ["-c", WAITED, "sh", command], { stdin: "ignore" }).pipe(
       Effect.mapError((error): End => ({ _tag: "unstarted", reason: error.message })),
     );
+
     const [output, code] = yield* Effect.all(
       [
         Stream.runCollect(
@@ -93,10 +95,12 @@ const run = (command: string) =>
       ],
       { concurrency: "unbounded" },
     );
+
     const end = Result.match(code, {
       onSuccess: (exited) => ended(Number(exited)),
       onFailure: (error): End => ({ _tag: "unread", reason: error.message }),
     });
+
     return { output, end };
   }).pipe(
     Effect.scoped,
@@ -124,12 +128,14 @@ const lastLine = (output: ReadonlyArray<Piece>): string | undefined => {
       .toString("utf8")
       .split("\n")
       .findLast((line) => line.trim() !== "");
+
   return last("stderr") ?? last("stdout");
 };
 
 /** A failed part as the summary names it, with its last line, the one a failure reason shows. */
 const named = (ran: Ran): string => {
   const line = lastLine(ran.output);
+
   return `  ${ran.command} (${said(ran.end)})${line === undefined ? "" : `\n    ${line}`}`;
 };
 
@@ -138,6 +144,7 @@ const all = Effect.fnUntraced(function* (commands: ReadonlyArray<string>) {
   // Serial on purpose: a fork returns at once, and each part must be a child of this fiber. Forked
   // from a fiber of their own, as `"unbounded"` makes them, they were interrupted as it ended.
   const fibers = yield* Effect.forEach(commands, (command) => Effect.forkChild(run(command)), { concurrency: 1 });
+
   // Serial on purpose too: joining in order is what keeps the output in the order given.
   return yield* Effect.forEach(fibers, (fiber) => Fiber.join(fiber).pipe(Effect.tap(print)), { concurrency: 1 });
 });
@@ -154,6 +161,7 @@ const parallel = Effect.fnUntraced(function* (commands: ReadonlyArray<string>) {
   yield* Console.error(
     `\nparallel: ${failed.length} of ${ran.length} parts failed in ${seconds(took)}:\n${failed.map(named).join("\n")}`,
   );
+
   return yield* Failed.make({ parts: failed.map((part) => part.command) });
 });
 
@@ -161,6 +169,7 @@ if (import.meta.main) {
   const main = Effect.gen(function* () {
     yield* parallel(yield* (yield* Stdio.Stdio).args);
   });
+
   // The run prints its own failure above, so the runtime only sets the exit code.
   NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)), { disableErrorReporting: true });
 }

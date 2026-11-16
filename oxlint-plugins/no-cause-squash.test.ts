@@ -12,11 +12,14 @@ import { noCauseSquash } from "./no-cause-squash.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
 const CODE = "fabrika(no-cause-squash)";
+
 const REFUSED = /turns a typed failure into one unknown value/;
 
 /**
@@ -97,6 +100,7 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
     fc.property(generated, ({ spelling, alias, pieces }) => {
       const at = spelling(alias);
       const { module } = at;
+
       // With `squash` imported by name, the import is the one use, and a call of it adds no report.
       const lines: ReadonlyArray<readonly [string, boolean]> = [
         [at.header, module === null],
@@ -109,6 +113,7 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
             : [NEIGHBORS[form]!(at, i), false],
         ),
       ];
+
       const filename = "next/packages/libfabrika/src/runtime/Case.ts";
       const errors = lines.flatMap(([, fires], i) => (fires ? [{ line: i + 1, message: REFUSED }] : []));
       // The same file with every firing line taken out.

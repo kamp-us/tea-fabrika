@@ -7,19 +7,33 @@ import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
+
 const CODE = "fabrika(one-store-hook)";
+
 const HOOK = "next/packages/tuval/src/window/use-model.ts";
+
 const FIRES = "next/programs/counter/src/view.tsx";
+
 const PASSES = "next/programs/counter/src/tile.tsx";
+
 const RUNTIME = "next/programs/counter/src/dropped-runtime.ts";
+
 const MODEL = "next/programs/counter/src/dropped-model.ts";
+
 const OTHER_HOOKS = "next/programs/counter/src/dropped-hooks.ts";
+
 const OTHER_CALLS = "next/programs/counter/src/other-calls.ts";
+
 const COMPUTED = "next/programs/counter/src/computed.ts";
+
 const PRIVATE = "next/programs/counter/src/private.ts";
+
 const UNARY = "next/programs/counter/src/unary.ts";
+
 const TEST = "next/programs/counter/src/view.test.ts";
+
 const TSX_TEST = "next/programs/counter/src/view.test.tsx";
+
 const OUTSIDE = "programs/counter/src/view.tsx";
 
 const forbidden = [
@@ -69,13 +83,25 @@ const otherHooks = [
   "export const VoidStore = () => { void useSyncExternalStore(run); return null; };", // 7
 ].join("\n");
 
+// Spaced as anti-slop's require-readable-spacing asks, since its folder is on that rule's block and
+// the crash law below wants no finding of any rule.
 const otherCalls = [
   'import {useEffect} from "react";',
   'import {useSyncExternalStore} from "./local-store.ts";',
+  "",
   "export const kept = [useEffect, useSyncExternalStore];",
+  "",
   "declare const helper: () => number;",
+  "",
   "declare const makeHook: () => () => number;",
-  "export const Other = () => { helper(); makeHook()(); helper; return null; };",
+  "",
+  "export const Other = () => {",
+  "  helper();",
+  "  makeHook()();",
+  "  helper;",
+  "",
+  "  return null;",
+  "};",
 ].join("\n");
 
 const computed = [
@@ -174,6 +200,7 @@ describe("one-store-hook", async () => {
         join(at, "next/programs/counter/src/local-store.ts"),
         "export const useSyncExternalStore = () => null;",
       );
+
       const ran = spawnSync(
         join(ROOT, "node_modules", ".bin", "oxlint"),
         [
@@ -185,6 +212,7 @@ describe("one-store-hook", async () => {
         ],
         { cwd: at, encoding: "utf8" },
       );
+
       expect(ran.status, ran.stdout + ran.stderr).toBe(0);
       expect(JSON.parse(ran.stdout)).toMatchObject({ number_of_files: 1, diagnostics: [] });
     } finally {

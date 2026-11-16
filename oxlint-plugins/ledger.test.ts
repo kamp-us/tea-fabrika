@@ -95,6 +95,7 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
 describe("`.agents/` code is held to next/'s rules, 0033", () => {
   const script = ".agents/skills/x/scripts/a.ts";
   const test = ".agents/skills/x/scripts/a.test.ts";
+
   const body = [
     'import {readFileSync} from "node:fs";',
     "export const a = async () => readFileSync(await Promise.resolve(''));",

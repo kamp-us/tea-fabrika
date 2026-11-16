@@ -23,9 +23,13 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const APP = resolve(import.meta.dirname, "..");
+
 const homes: string[] = [];
+
 const runs = { seed: 119120, numRuns: 3 };
+
 const hash = (s: string) => createHash("sha256").update(s).digest("hex");
+
 // The platform's loader and stub types come from the code under test, never by their ambient
 // names (0042, tests included).
 type Platform = Parameters<typeof workerLoader>[0];
@@ -36,6 +40,7 @@ const home = () => {
   vi.stubEnv("FABRIKA_HOME", h);
   vi.stubEnv("TYPESAFE_API_KEY", undefined);
   vi.stubEnv("DO_NOT_TRACK", "1");
+
   return h;
 };
 
@@ -46,11 +51,14 @@ const home = () => {
 const afterChildrenStop = async <A>(task: () => Promise<A>): Promise<A> => {
   const spawn = childProcess.spawn,
     closed: Promise<void>[] = [];
+
   const spy = vi.spyOn(childProcess, "spawn").mockImplementation((...args) => {
     const child = spawn(...args);
     closed.push(new Promise<void>((done) => child.once("close", () => done())));
+
     return child;
   });
+
   syncBuiltinESMExports();
 
   try {
@@ -69,6 +77,7 @@ const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
     Effect.scoped(
       Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
+
         // A failed assertion in `use` is a defect: the run rejects with it and the test goes red.
         return yield* Effect.promise(() => use(held.port));
       }),
@@ -79,6 +88,7 @@ const onHeldPort = <A>(use: (port: number) => Promise<A>) =>
 // Parsing finds P12's loader policy, so the plant cannot silently miss a formatting change.
 const plantPolicy = (source: string, mode: "binding" | "outbound", name: string, value: string) => {
   const ranges: Array<{ start: number; end: number }> = [];
+
   const visit = (node: any): void => {
     if (node === null || typeof node !== "object") {
       return;
@@ -97,15 +107,19 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
       visit(child);
     }
   };
+
   visit(parseSync("brain.mjs", source).program);
   assert.equal(ranges.length, 1, "plant must reach exactly one real loader policy");
   const at = ranges[0]!;
+
   // An empty spread removes the policy without leaving a spare comma before the tail options.
   const changed =
     source.slice(0, at.start) +
     (mode === "binding" ? JSON.stringify({ [name]: value }) : "...{}") +
     source.slice(at.end);
+
   assert.equal(parseSync("brain.mjs", changed).errors.length, 0, "plant must leave executable JavaScript");
+
   return changed;
 };
 
@@ -137,6 +151,7 @@ const turn = async <A>(
 ): Promise<A> => {
   const call = program[method];
   assert(call, `loaded program has no ${method}`);
+
   return Effect.runPromise(Schema.decodeUnknownEffect(schema)(await call(...args)));
 };
 
@@ -154,7 +169,9 @@ afterEach(() => {
 const field = (value: string | Buffer) => {
   const b = Buffer.from(value),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(b.length);
+
   return Buffer.concat([n, b]);
 };
 
@@ -195,11 +212,13 @@ const Bar = Schema.Struct({
   head: Schema.Array(Sample),
   sizes: Schema.Struct({ brain: Schema.Finite, programs: Schema.Finite, window: Schema.Finite }),
 });
+
 type Bar = typeof Bar.Type;
 
 const median = (values: readonly number[]) => {
   assert(values.length > 0, "reading missing");
   const sorted = [...values].sort((a, b) => a - b);
+
   return sorted[Math.floor(sorted.length / 2)]!;
 };
 
@@ -234,6 +253,7 @@ const exportsWindow = (from: string, selected: ReadonlyArray<{ readonly package:
     }
 
     const exports: unknown = JSON.parse(readFileSync(file, "utf8")).exports;
+
     return typeof exports === "object" && exports !== null && Object.hasOwn(exports, "./window");
   });
 
@@ -285,7 +305,9 @@ const localBar = (bar: Bar, digest: string, enforce: boolean, windowed: boolean)
 const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     raw = pair.publicKey.export({ format: "jwk" }).x!;
+
   const blob = Buffer.concat([field("ssh-ed25519"), field(Buffer.from(raw, "base64url"))]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -298,8 +320,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const version = Buffer.alloc(4);
       version.writeUInt32BE(1);
+
       return `-----BEGIN SSH SIGNATURE-----\n${Buffer.concat([
         Buffer.from("SSHSIG"),
         version,
@@ -329,6 +353,7 @@ describe("P16 stack and sealed loader", () => {
           Workers: {
             Worker: (_name: string, props: (typeof calls)[number]) => {
               calls.push(props);
+
               return Effect.succeed({ url: "http://test.invalid" });
             },
           },
@@ -338,13 +363,16 @@ describe("P16 stack and sealed loader", () => {
           Stack: (_name: string, _options: unknown, body: Effect.Effect<unknown>) => body,
         }));
         vi.resetModules();
+
         const { stack } = await import("../alchemy.run.ts"),
           h = home();
+
         const built = {
           brain: join(h, "brain.mjs"),
           build: hash("brain"),
           programs: { counter: { hash: hash("program-marker"), source: "program-marker" } },
         };
+
         let accepted = 0;
 
         for (const name of ["local", "cloud"]) {
@@ -356,6 +384,7 @@ describe("P16 stack and sealed loader", () => {
             window: null,
             build: built.build,
           });
+
           const checked = await Effect.runPromise(readSettings({ INSTANCE: JSON.stringify(settings) }));
           const result = await Effect.runPromise(Effect.result(stack(built, checked)));
           const expectedBytes = Buffer.byteLength(JSON.stringify(settings));
@@ -422,34 +451,43 @@ describe("P16 stack and sealed loader", () => {
         fc.string({ minLength: 1, maxLength: 20 }),
         async (source, process, missing) => {
           const calls: Array<{ key: string | null; config: unknown }> = [];
+
           const unused = () => {
             throw Error("unused Worker Loader capability");
           };
+
           const rpc = {
             describe: async () => ({ name: "fabrika/counter", v: 1, writes: {}, inputs: {}, cmds: [] }),
             fetch: unused,
             connect: unused,
           };
+
           const stub: ReturnType<Platform["get"]> = {
             getEntrypoint: unused,
             getDurableObjectClass: unused,
           };
+
           vi.spyOn(stub, "getEntrypoint").mockReturnValue(rpc);
+
           // Record the real adapter's config; the copied-file tests below exercise workerd itself.
           const platform: Platform = {
             get: (key, callback) => {
               calls.push({ key, config: callback() });
+
               return stub;
             },
             load: unused,
           };
+
           // P40, L4: lookups use the whole qualified name. Another pack's `counter` sits beside it
           // with other code, and the bare short name finds neither.
           const other = `${source}-other-pack`;
+
           const loader = workerLoader(platform, {
             "fabrika/counter": { hash: hash(source), source },
             "other/counter": { hash: hash(other), source: other },
           });
+
           const bare = await Effect.runPromise(Effect.result(loader.load("counter", process)));
           expect(bare).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown", reason: "no_program" } });
           const loaded = await Effect.runPromise(loader.load("fabrika/counter", process));
@@ -527,6 +565,7 @@ class Client {
   async call(method: string, params: unknown) {
     const id = ++this.serial;
     this.ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return this.next((x) => x.id === id);
   }
 
@@ -534,6 +573,7 @@ class Client {
     const {
       params: { nonce },
     } = await this.next((x) => x.method === "challenge");
+
     return this.call("initialize", {
       versions: [1],
       has: ["seal"],
@@ -554,6 +594,7 @@ describe("P16 copied-file real instance, serial", () => {
     await fc.assert(
       fc.asyncProperty(fc.boolean(), fc.integer(), async (fail, value) => {
         let closed = false;
+
         const task = afterChildrenStop(async () => {
           const child = spawn(process.execPath, ["-e", ""]);
           child.once("close", () => {
@@ -588,9 +629,11 @@ describe("P16 copied-file real instance, serial", () => {
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
         const h = home(),
           { build } = await import("./build.ts");
+
         const built = await Effect.runPromise(
           build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
         );
+
         const source = readFileSync(built.brain, "utf8");
 
         for (const mode of ["binding", "outbound"] as const) {
@@ -605,7 +648,9 @@ describe("P16 copied-file real instance, serial", () => {
       fc.asyncProperty(fc.integer({ min: 1, max: 9999 }), async (n) => {
         const h = home(),
           key = identity();
+
         let hits = 0;
+
         const probe = httpServer((_request, response) => {
           hits++;
           response.end("reachable");
@@ -620,6 +665,7 @@ describe("P16 copied-file real instance, serial", () => {
               done(at.port);
             });
           });
+
           const target = `http://127.0.0.1:${port}/probe-${n}`;
           expect((await fetch(target)).ok).toBe(true);
           hits = 0;
@@ -632,9 +678,11 @@ describe("P16 copied-file real instance, serial", () => {
             // program would; only the loader's own refusal counts as denied.
             `import {env, waitUntil} from 'cloudflare:workers'; import {Machine} from '@demlik/tea/effect'; import {Schema} from 'effect'; let outbound='pending'; const probe=()=>{try {waitUntil(fetch(${JSON.stringify(target)}).then(()=>{outbound='allowed'},(e)=>{outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}))} catch (e) {outbound=String(e).includes('not permitted to access the internet')?'denied':'failed'}}; const Model=Schema.Struct({keys:Schema.Array(Schema.String),outbound:Schema.String}); const Msg=Schema.Struct({type:Schema.Literal('read')}); const machine=Machine.make({model:Model,msg:Msg,init:()=>{probe(); return [{keys:Object.keys(env),outbound},[]]},update:{read:s=>[{...s,outbound},[]]}}); export const program={name:'sealed',machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};`,
           );
+
           const { build } = await import("./build.ts"),
             { localInstance } = await import("./local-instance.ts"),
             { localState } = await import("alchemy/State/LocalState");
+
           const built = await Effect.runPromise(
             build({
               out: join(h, "dist"),
@@ -643,6 +691,7 @@ describe("P16 copied-file real instance, serial", () => {
               programs: Object.fromEntries(Array.from({ length: (n % 3) + 1 }, (_, i) => [`p33/sealed-${i}`, file])),
             }).pipe(Effect.provide(NodeServices.layer)),
           );
+
           const alone = join(h, "alone");
           mkdirSync(alone);
           cpSync(built.brain, join(alone, "brain.mjs"));
@@ -673,6 +722,7 @@ describe("P16 copied-file real instance, serial", () => {
                           port: brainPort,
                         }),
                       );
+
                       yield* Effect.tryPromise({
                         try: async () => {
                           expect(Object.keys(built.programs).length).toBeGreaterThan(0);
@@ -757,15 +807,19 @@ describe("P16 copied-file real instance, serial", () => {
         async (messages) => {
           const h = home(),
             key = identity();
+
           const { build } = await import("./build.ts"),
             { localInstance } = await import("./local-instance.ts");
+
           const built = await Effect.runPromise(
             build({ out: join(h, "dist"), files: [], ledger: [] }).pipe(Effect.provide(NodeServices.layer)),
           );
+
           const alone = join(h, "alone");
           mkdirSync(alone);
           cpSync(built.brain, join(alone, "brain.mjs"));
           rmSync(join(h, "dist"), { recursive: true });
+
           const options = (port: number) => ({
             home: h,
             name: "p16-instance",
@@ -774,11 +828,14 @@ describe("P16 copied-file real instance, serial", () => {
             window: key.raw,
             port,
           });
+
           const copied = { ...built, brain: join(alone, "brain.mjs") };
+
           let pid = "",
             first: unknown,
             stamped = "",
             total = 0;
+
           const instance = async (port: number, again: boolean) =>
             afterChildrenStop(async () =>
               Effect.runPromise(
@@ -793,8 +850,10 @@ describe("P16 copied-file real instance, serial", () => {
                         try {
                           expect((await a.hello()).error).toBeUndefined();
                           expect((await b.hello()).error).toBeUndefined();
+
                           const rows = (await a.call("ledger.read", { stream: "processes/counter:1", after: 0 })).result
                             .entries;
+
                           // P40, L4 and L7: the brain's process facts name the qualified code
                           // under the registered name, before and after the restart.
                           expect(rows.findLast((r: any) => r._tag === "started").body).toMatchObject({
@@ -819,6 +878,7 @@ describe("P16 copied-file real instance, serial", () => {
                               sentAt: "2026-11-08T04:00:00.000Z",
                               seen: 0,
                             });
+
                             expect(answer.result).toMatchObject({ _tag: "accepted" });
 
                             if (n === 0) {
@@ -836,6 +896,7 @@ describe("P16 copied-file real instance, serial", () => {
 
                           const inbox = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                             .entries;
+
                           const acknowledged = inbox.filter((r: any) => String(r.id).startsWith("p16-"));
                           expect(acknowledged).toHaveLength(messages.length);
                           expect(new Set(acknowledged.map((r: any) => r.id)).size).toBe(messages.length);
@@ -859,9 +920,12 @@ describe("P16 copied-file real instance, serial", () => {
                               sentAt: "2026-11-08T04:00:00.000Z",
                               seen: 0,
                             });
+
                             expect(retried.result).toMatchObject({ _tag: "accepted" });
+
                             const after = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                               .entries;
+
                             expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);
 
                             for (const c of [a, b]) {
@@ -911,6 +975,7 @@ describe("P16 copied-file real instance, serial", () => {
                 ),
               ),
             );
+
           // The restart comes back on the same port: held across both starts, never re-asked.
           await onHeldPort(async (port) => {
             await instance(port, false);
@@ -929,6 +994,7 @@ describe("P16 copied-file real instance, serial", () => {
       console.log(
         "T10 cap check skipped: P16_LOCAL_BAR is unset, so there is no bar file; the bar blocks on the laptop only",
       );
+
       return;
     }
 

@@ -28,6 +28,7 @@ import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
 
 export const PROVIDERS = ["codex", "codex-read", "codex-exec", "codex-exec-read", "claude"] as const;
+
 export type Provider = (typeof PROVIDERS)[number];
 
 /** The rows that run plain `codex exec` (./codexexec.ts). */
@@ -42,6 +43,7 @@ export const Plant = Schema.Struct({
   plant: Schema.String,
   result: Schema.Literals(["red", "green"]),
 });
+
 export type Plant = typeof Plant.Type;
 
 /** The step's typed answer: the five verbs, as one JSON object at the end of its report. */
@@ -55,6 +57,7 @@ export const Answer = Schema.Struct({
   /** Each plant the step ran once, for its field row (0093): the tests step names one per new law. */
   plants: Schema.optionalKey(Schema.Array(Plant)),
 });
+
 export type Answer = typeof Answer.Type;
 
 /** Where a step may send the quest: any step but itself. A step that needs another round of itself
@@ -74,6 +77,7 @@ export const Judgment = Schema.Struct({
   step: Schema.NullOr(Schema.Literals(["tests", "build", "review"])),
   note: Schema.String,
 });
+
 export type Judgment = typeof Judgment.Type;
 
 /** What one turn spent, for its field row. */
@@ -89,6 +93,7 @@ export const Spent = Schema.Struct({
   /** Tool calls the turn made. */
   tools: Schema.Finite,
 });
+
 export type Spent = typeof Spent.Type;
 
 export const NO_SPENT: Spent = {
@@ -163,6 +168,7 @@ const pnpmInstall: Install = (folder) =>
       ["--dir", folder, "install", "--ignore-workspace", "--frozen-lockfile", "--silent"],
       { extendEnv: true, stdin: "ignore" },
     );
+
     const [out, err, code] = yield* Effect.all(
       [
         ran.stdout.pipe(Stream.decodeText(), Stream.mkString),
@@ -171,6 +177,7 @@ const pnpmInstall: Install = (folder) =>
       ],
       { concurrency: 3 },
     );
+
     return { code: Number(code), said: `${out}${err}`.trim().split("\n").slice(-5).join(" | ") };
   }).pipe(
     Effect.scoped,
@@ -189,6 +196,7 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = modules.replace(/\/$/, "");
+
     const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
       fs.exists(`${root}/${s}`).pipe(
         Effect.map((here) => !here),
@@ -219,6 +227,7 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
     const sessions = yield* Agent.fileSessions(sessionsDir);
     const env = yield* boxEnv(main, process.env);
     const pin = yield* repoNode(main);
+
     const adapters = {
       codex: yield* acpAdapter({ name: "codex", access: "write" }, env),
       "codex-read": yield* acpAdapter({ name: "codex", access: "read" }, env),
@@ -226,6 +235,7 @@ export const makeStepAgents = (sessionsDir: string, main: string) =>
       "codex-exec-read": yield* codexExecAdapter({ access: "read", env, pin }),
       claude: yield* acpAdapter("claude", env),
     };
+
     return Agent.makeAgents({ adapters, sessions, reaper: psReaper });
   }).pipe(Effect.provide(nodeServices));
 
@@ -277,6 +287,7 @@ export const runTurn = <A>(agents: typeof Agent.Agents.Service, ask: TurnAsk<A>)
 
     const { turned, said } = yield* turnOnce(agents, ask, ask.prompt, ask.minutes * 60);
     yield* fs.writeFileString(ask.report, said).pipe(Effect.ignore);
+
     return turned;
   }).pipe(Effect.provide(nodeServices));
 
@@ -291,6 +302,7 @@ const ALONE = /^\{[\s\S]*\}$/;
  */
 export const closingWords = (closing: readonly string[]): string => {
   const last = closing.at(-1) ?? "";
+
   return ALONE.test(last.trim()) ? closing.join("\n\n") : last;
 };
 
@@ -299,6 +311,7 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
   Effect.gen(function* () {
     const state = { closing: [] as string[], spent: NO_SPENT, ended: null as Agent.Ended<A> | null };
     const append = (line: object) => appendTo(ask.events, line);
+
     const turn: Agent.Turn<A> = {
       provider: ask.provider,
       session: ask.session,
@@ -311,6 +324,7 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
       effort: ask.effort,
       limits: { usd: null, tools: null, seconds },
     };
+
     const ran = yield* agents.run(turn).pipe(
       Stream.runForEach((heard) =>
         Effect.gen(function* () {
@@ -335,6 +349,7 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
       Effect.scoped,
       Effect.result,
     );
+
     const failed = (reason: string, message: string) => Failed.make({ reason, message, spent: state.spent });
     const said = () => closingWords(state.closing);
     const done = (turned: Turned<A>) => ({ turned, said: said() });
@@ -342,6 +357,7 @@ const turnOnce = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, seconds: n
     if (Result.isFailure(ran)) {
       const e = ran.failure;
       yield* append(failed(e.why, e.message));
+
       return done(failed(e.why, e.message));
     }
 
@@ -414,6 +430,7 @@ const triedOnCapacity = <A>(agents: Agents, ask: TurnAsk<A>, prompt: string, unt
       const left = (until - (yield* Clock.currentTimeMillis)) / 1000;
       const { turned, said } = yield* turnOnce(agents, ask, prompt, Math.max(1, left));
       spent = plus(spent, turned.spent);
+
       const again =
         turned._tag === "failed" &&
         CAPACITY.test(turned.message) &&
@@ -445,6 +462,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
 
     if (!asks) {
       yield* fs.writeFileString(ask.report, first.said).pipe(Effect.ignore);
+
       return t;
     }
 
@@ -463,6 +481,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     }
 
     const detail = s._tag === "failed" ? `${s.reason}: ${s.message}` : `it stopped ${s.stop} with none`;
+
     return Failed.make({
       reason: "no_answer",
       message: `the report held no answer the schema reads, and the one turn that asked for it gave none (${detail})`,
@@ -514,6 +533,7 @@ export const listUsd = (provider: Provider, model: string, spent: Spent): number
   }
 
   const [input, cached, output] = rate;
+
   return (
     Math.round((((spent.input - spent.cached) * input + spent.cached * cached + spent.output * output) / 1e6) * 1e4) /
     1e4
@@ -563,20 +583,26 @@ export const stepRow = (r: RowAsk): string => {
     const sign = offset >= 0 ? "+" : "-";
     const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
     const shifted = new Date(d.getTime() + offset * 60_000).toISOString().slice(0, 19);
+
     return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
   };
+
   const usd = listUsd(r.provider, r.model, r.spent);
+
   const priced =
     r.provider === "claude"
       ? " Dollars are the Agent SDK's own total_cost_usd for the turn, at Anthropic's list price; the subscription bills no call."
       : usd === null
         ? ""
         : ` Dollars are ${r.model}'s standard list price (fieldrow.py's table); the plan bills no call.`;
+
   const counted =
     r.spent.counted === "last"
       ? " Tokens are what ACP's PromptResponse.usage gave. The adapter labels them the last request's, but five measured turns grew 25,000 to 28,000 a request, so they read as the turn's total (ticket 485)."
       : "";
+
   const measured = r.spent.counted !== "none";
+
   return `${encodeRow({
     date: local(r.started).slice(0, 10),
     run: r.run,

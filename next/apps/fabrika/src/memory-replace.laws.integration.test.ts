@@ -21,23 +21,32 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { rssStandIn } from "./rss.fixture.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-15T04:00:00.000Z";
+
 const PROJECT = "memory-replace";
+
 // The brain's declared defaults, which this instance starts with: 0292's 500 MB mark and the 5 s
 // grace. L9 holds both defaults.
 const LIMIT = 500_000_000;
+
 const GRACE = 5000;
+
 // What `ps` prints for the limit plus one byte, in KiB, rounded up so the brain reads at least that.
 const OVER = Math.ceil((LIMIT + 1) / 1024);
+
 // The bound on a replacement's first listener, as the brain's own first start waits for it.
 const START = 30_000;
+
 // How often the poller asks for `info`, and how often a fact or a process is looked at.
 const POLL = 50;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
@@ -45,8 +54,10 @@ const field = (value: Buffer | string) => {
 const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     raw = pair.publicKey.export({ format: "jwk" }).x!;
+
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -59,8 +70,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -70,6 +83,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -79,6 +93,7 @@ const identity = () => {
 };
 
 type Key = ReturnType<typeof identity>;
+
 type Instance = any;
 
 const pause = (ms = POLL) => new Promise<void>((done) => setTimeout(done, ms));
@@ -88,6 +103,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   const socket = new WebSocket(
     `${instance.url.replace("http", "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`,
   );
+
   const frames: Array<any> = [];
   let closed: number | undefined;
   socket.addEventListener("message", (event) => {
@@ -101,6 +117,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   socket.addEventListener("error", () => {
     closed ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + START;
 
@@ -120,6 +137,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
 
     throw new Error(`no frame in ${START} ms`);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
   socket.send(
     JSON.stringify({
@@ -142,6 +160,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
   );
   const hello = await next((frame) => frame.id === 1);
   expect(hello.error, "the founder's hello is answered").toBeUndefined();
+
   return { open: () => closed === undefined, close: () => socket.close() };
 };
 
@@ -150,9 +169,11 @@ const alive = (pid: number) =>
   Effect.scoped(
     Effect.gen(function* () {
       const ps = yield* ChildProcess.make("ps", ["-o", "pid=", "-p", String(pid)]);
+
       const [text] = yield* Effect.all([Stream.mkString(Stream.decodeText(ps.stdout)), ps.exitCode], {
         concurrency: 2,
       });
+
       return text.trim() === String(pid);
     }),
   ).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
@@ -197,6 +218,7 @@ const chain = (value: unknown): string =>
 const outcome = async (instance: Instance): Promise<Outcome> => {
   try {
     await instance.project(PROJECT).info();
+
     return "answered";
   } catch (error) {
     if (Predicate.hasProperty(error, "reason") && error.reason === "offline") {
@@ -215,11 +237,13 @@ const world = (kib: (pid: number) => number | null) =>
       Effect.sync(() => mkdtempSync(join(tmpdir(), "mrw-"))),
       (dir) => Effect.sync(() => rmSync(dir, { recursive: true, force: true })),
     );
+
     yield* Effect.acquireRelease(
       Effect.sync(() => {
         const previous = process.env.FABRIKA_HOME;
         process.env.FABRIKA_HOME = home;
         process.env.DO_NOT_TRACK = "1";
+
         return previous;
       }),
       (previous) =>
@@ -239,12 +263,15 @@ const world = (kib: (pid: number) => number | null) =>
     const at = yield* Effect.acquireRelease(heldPort(), (held) => held.release);
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
     const built = yield* build({ out: join(home, "dist") }).pipe(Effect.provide(NodeServices.layer));
+
     const platform = Layer.mergeAll(
       rssStandIn(kib).pipe(Layer.provide(NodeServices.layer)),
       localState(),
       SecureRandom.layerWebCrypto,
     ).pipe(Layer.provideMerge(NodeServices.layer));
+
     const context = yield* Layer.build(platform);
+
     const instance: Instance = yield* localInstance(
       built,
       RecordWireTest.startupFixture({
@@ -256,6 +283,7 @@ const world = (kib: (pid: number) => number | null) =>
         port: at.port,
       }),
     ).pipe(Effect.provideContext(context));
+
     return { instance, key };
   });
 
@@ -273,10 +301,12 @@ describe("the memory restart on real workerd, next/", () => {
       Effect.gen(function* () {
         const sizes = new Map<number, number>();
         const { instance, key } = yield* world((pid) => sizes.get(pid) ?? null);
+
         const socket = yield* Effect.acquireRelease(
           Effect.promise(() => wire(instance, key, "memory")),
           (held) => Effect.sync(() => held.close()),
         );
+
         const before = yield* Effect.promise(() =>
           watch(
             () => brain(instance),
@@ -284,6 +314,7 @@ describe("the memory restart on real workerd, next/", () => {
             START,
           ),
         );
+
         const first = before.last!.find((fact) => fact._tag === "started")!.body;
         const old = Number(first.pid);
         expect(yield* alive(old), "the first workerd runs").toBe(true);
@@ -292,6 +323,7 @@ describe("the memory restart on real workerd, next/", () => {
         // A poller calls `info` every 50 ms from before the replace until the replacement answers.
         const seen: Record<Outcome, number> = { answered: 0, offline: 0, refused: 0, other: 0 };
         let polling = true;
+
         const poller = (async () => {
           while (polling) {
             seen[await outcome(instance)]++;
@@ -301,6 +333,7 @@ describe("the memory restart on real workerd, next/", () => {
 
         const switched = Date.now();
         sizes.set(old, OVER);
+
         // The next 1-second sample sends the SIGTERM; the grace and two seconds bound the old pid's end.
         const gone = yield* Effect.promise(() =>
           watch(
@@ -309,17 +342,20 @@ describe("the memory restart on real workerd, next/", () => {
             1000 + GRACE + 2000,
           ),
         );
+
         const replaced = yield* Effect.promise(() =>
           watch(
             async () => {
               const facts = await brain(instance);
               const next = facts?.find((fact) => fact._tag === "started" && fact.body.after === first.start);
+
               return next === undefined ? null : { facts: facts!, next: next.body };
             },
             (found) => found !== null,
             GRACE + START,
           ),
         );
+
         // The replacement answers through the same handle, so on the same control and public ports.
         const answered = yield* Effect.promise(() =>
           watch(
@@ -328,6 +364,7 @@ describe("the memory restart on real workerd, next/", () => {
             START,
           ),
         );
+
         polling = false;
         yield* Effect.promise(() => poller);
         const elapsed = Date.now() - switched;
@@ -369,6 +406,7 @@ describe("the memory restart on real workerd, next/", () => {
       Effect.gen(function* () {
         const sizes = new Map<number, number>();
         const { instance } = yield* world((pid) => sizes.get(pid) ?? null);
+
         const before = yield* Effect.promise(() =>
           watch(
             () => brain(instance),
@@ -376,9 +414,11 @@ describe("the memory restart on real workerd, next/", () => {
             START,
           ),
         );
+
         const first = before.last!.find((fact) => fact._tag === "started")!.body;
         const old = Number(first.pid);
         sizes.set(old, OVER);
+
         const gone = yield* Effect.promise(() =>
           watch(
             () => Effect.runPromise(alive(old)),
@@ -386,10 +426,12 @@ describe("the memory restart on real workerd, next/", () => {
             1000 + GRACE + 2000,
           ),
         );
+
         const replaced = yield* Effect.promise(() =>
           watch(
             async () => {
               const facts = await brain(instance);
+
               return facts?.some((fact) => fact._tag === "started" && fact.body.after === first.start) === true
                 ? facts
                 : null;
@@ -398,6 +440,7 @@ describe("the memory restart on real workerd, next/", () => {
             GRACE + START,
           ),
         );
+
         expect(gone.after, "the old workerd ended").not.toBeNull();
         expect(gone.after!, "it ended before the grace ran out").toBeLessThan(1000 + GRACE);
         expect(replaced.after, "a replacement started").not.toBeNull();

@@ -9,13 +9,17 @@ import { Effect } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];
+
 const children: Array<ChildProcess> = [];
+
 const groups: Array<number> = [];
+
 const ports: Array<Effect.Effect<void>> = [];
 
 const home = () => {
   const h = mkdtempSync(join(tmpdir(), "p12-l-"));
   homes.push(h);
+
   return h;
 };
 
@@ -24,6 +28,7 @@ const pause = () => new Promise<void>((done) => setTimeout(done, 25));
 const living = (pid: number) => {
   try {
     process.kill(pid, 0);
+
     return true;
   } catch {
     return false;
@@ -63,8 +68,10 @@ const tree = (parent: number) => {
     .split("\n")
     .flatMap((row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
+
       return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
     });
+
   const pids = new Set([parent]);
 
   for (let n = 0; n < rows.length; n++) {
@@ -100,6 +107,7 @@ const launch = async (startupGate = false) => {
   }
 
   const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
   const child = spawn(
     process.execPath,
     [
@@ -117,6 +125,7 @@ const launch = async (startupGate = false) => {
     ],
     { env, detached: true, stdio: ["ignore", "pipe", "pipe"] },
   );
+
   children.push(child);
   groups.push(child.pid!);
   let output = "";
@@ -157,8 +166,10 @@ const launch = async (startupGate = false) => {
 
 const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding = 0) => {
   const until = performance.now() + 10_000;
+
   const details = () =>
     `excluding=${excluding}, observed=${JSON.stringify(instance.observed)}\ninstance output:\n${instance.output()}`;
+
   const { brainOutbox } = await import("@kampus/libfabrika/node/local-dev");
   const outbox = await Effect.runPromise(brainOutbox(instance.folder).pipe(Effect.provide(NodeServices.layer)));
 
@@ -235,13 +246,17 @@ describe("P12 local brain life", () => {
   // Outside only: cleanup must address the process group after its leader already exited.
   it("scenario: instance group cleanup still reaches descendants after the leader exits", async () => {
     const s = await launch();
+
     const rows = tree(s.child.pid!),
       leader = rows.find((row) => row.parent === s.child.pid && row.command.includes("--child"));
+
     expect(leader).toBeDefined();
     groups.push(leader!.pid);
+
     const descendants = tree(leader!.pid)
       .filter((row) => row.pid !== leader!.pid)
       .map((row) => row.pid);
+
     expect(descendants.length).toBeGreaterThan(0);
     process.kill(leader!.pid, "SIGKILL");
     const until = performance.now() + 5_000;
@@ -258,6 +273,7 @@ describe("P12 local brain life", () => {
     let prior = 0;
     const pids: Array<number> = [];
     const delays: Array<number> = [];
+
     const details = () =>
       `pids=${JSON.stringify(pids)}, delays=${JSON.stringify(delays)}, observed=${JSON.stringify(s.observed)}\ninstance output:\n${s.output()}`;
 
@@ -288,10 +304,12 @@ describe("P12 local brain life", () => {
         details(),
       ).toEqual([]);
       const { brainOutbox } = await import("@kampus/libfabrika/node/local-dev");
+
       const read = () =>
         Effect.runPromise(
           Effect.flatMap(brainOutbox(s.folder), (o) => o.pending).pipe(Effect.provide(NodeServices.layer)),
         );
+
       // The instance writes `braked` after Alchemy stops, with a synced file write. Wait for
       // that row, as `workerd` waits for a pid, and do not read the outbox once and hope.
       const until = performance.now() + 10_000;

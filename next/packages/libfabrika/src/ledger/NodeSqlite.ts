@@ -33,6 +33,7 @@ const value = (column: SQLOutputValue): SqlValue => {
  */
 export const nodeSql = (db: DatabaseSync): Sql => {
   const statements = new Map<string, StatementSync>();
+
   const prepared = (query: string): StatementSync => {
     const known = statements.get(query);
 
@@ -42,8 +43,10 @@ export const nodeSql = (db: DatabaseSync): Sql => {
 
     const statement = db.prepare(query);
     statements.set(query, statement);
+
     return statement;
   };
+
   return {
     exec: (query, ...params) =>
       prepared(query)
@@ -55,6 +58,7 @@ export const nodeSql = (db: DatabaseSync): Sql => {
       try {
         const done = step();
         db.exec("COMMIT");
+
         return done;
       } catch (error) {
         // SQLite rolls some failures back by itself, SQLITE_FULL among them; then there is none to
@@ -69,6 +73,7 @@ export const nodeSql = (db: DatabaseSync): Sql => {
     size: () => {
       const [count] = prepared("PRAGMA page_count").all();
       const [page] = prepared("PRAGMA page_size").all();
+
       return Number(count?.["page_count"] ?? 0) * Number(page?.["page_size"] ?? 0);
     },
   };

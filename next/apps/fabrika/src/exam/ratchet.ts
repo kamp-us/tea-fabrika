@@ -18,6 +18,7 @@ import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 const ZEROS = "0".repeat(40);
+
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 
 const LintRows = Schema.fromJsonString(
@@ -72,6 +73,7 @@ export const added = (base: ReadonlyArray<string>, head: ReadonlyArray<string>):
   return head.filter((key) => {
     const n = left.get(key) ?? 0;
     left.set(key, n - 1);
+
     return n <= 0;
   });
 };
@@ -84,6 +86,7 @@ const Answer = Schema.TaggedUnion({
     rows: Schema.Array(Schema.String),
   },
 });
+
 type Answer = typeof Answer.Type;
 
 class BaseUnreadable extends Schema.TaggedError<BaseUnreadable, { readonly brand: unique symbol }>()("BaseUnreadable", {
@@ -108,6 +111,7 @@ export const judge = Effect.fnUntraced(function* (
     base === null
       ? []
       : yield* list.keys(base, renames).pipe(Effect.mapError(() => BaseUnreadable.make({ file: list.file })));
+
   const after = yield* list.keys(head).pipe(Effect.option);
 
   if (Option.isNone(after)) {
@@ -115,6 +119,7 @@ export const judge = Effect.fnUntraced(function* (
   }
 
   const rows = added(before, after.value);
+
   return rows.length === 0
     ? Answer.cases.done.make({ file: list.file })
     : Answer.cases.stuck.make({ file: list.file, reason: "row_added", rows: [...rows] });
@@ -133,9 +138,11 @@ const git = Effect.fnUntraced(function* (args: ReadonlyArray<string>) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const proc = yield* ChildProcess.make("git", [...args], { stdin: "ignore" });
+
       const [out, err, code] = yield* Effect.all([text(proc.stdout), text(proc.stderr), proc.exitCode], {
         concurrency: 3,
       });
+
       return { out, err, code: Number(code) };
     }),
   ).pipe(Effect.mapError(() => Failed.make({ message: "could not start git" })));
@@ -178,6 +185,7 @@ const annotation = (answer: Answer, sha: string) => {
     answer.reason === "not_a_list"
       ? `${answer.file} does not read as a list at HEAD.`
       : `${answer.rows.length} row(s) added against ${sha}. A list only shrinks (0524): fix the code, or, where the code is right and the rule does not fit, mark that one line with a disable comment and its reason.`;
+
   return [`::error file=${answer.file}::${escape([head, ...answer.rows].join("\n"))}`];
 };
 
@@ -188,6 +196,7 @@ const main = Effect.gen(function* () {
 
   if (Option.isNone(base)) {
     yield* Console.log("ratchet: no base, nothing to compare");
+
     return 0;
   }
 
@@ -207,6 +216,7 @@ const main = Effect.gen(function* () {
 
     return yield* must(at(["show", `${rev}:${file}`]));
   });
+
   // Each rename from the base to the head, as git finds it: `R<score>\0old\0new\0`. With `-B`, a file
   // that was split, its old path now holding a small new file, shows as `C<score>`, copied to the
   // part that kept its text (0536 split five files this way): its rows are read under that name too.
@@ -214,6 +224,7 @@ const main = Effect.gen(function* () {
   const moved = (yield* must(at(["diff", "--name-status", "-z", "-B", "-M", "--diff-filter=RC", sha, "HEAD"])))
     .split("\0")
     .filter((part) => part !== "");
+
   const renames = new Map<string, string>();
 
   for (let i = 0; i + 2 < moved.length; i += 3) {

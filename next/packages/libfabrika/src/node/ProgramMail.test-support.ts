@@ -22,11 +22,14 @@ const folder = Effect.acquireRelease(
 const databases = Effect.gen(function* () {
   const path = yield* folder;
   const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
+
   const connect = (part: string) => {
     const db = new DatabaseSync(join(path, `${part}.db`));
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+
     return { db, sql: nodeSql(db) };
   };
+
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       for (const { db } of held.values()) {
@@ -36,6 +39,7 @@ const databases = Effect.gen(function* () {
       }
     }),
   );
+
   const handle = (part: string) => {
     const found = held.get(part);
 
@@ -45,10 +49,13 @@ const databases = Effect.gen(function* () {
 
     const made = connect(part);
     held.set(part, made);
+
     return made;
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -61,16 +68,21 @@ const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
+
   const reopen = Effect.sync(() => {
     for (const [part, { db }] of held) {
       db.close();
       held.set(part, connect(part));
     }
   });
+
   const open = () => [...held.values()].filter(({ db }) => db.isOpen).length;
+
   return { sql, reopen, open };
 });
 
@@ -91,21 +103,26 @@ export const runtime = Effect.gen(function* () {
       state.released = true;
     }),
   );
+
   const table = () => {
     const db = sql("alarms");
     db.exec("CREATE TABLE IF NOT EXISTS alarms (name TEXT PRIMARY KEY, at INTEGER NOT NULL)");
+
     return db;
   };
+
   /** Anything that reaches the driver after its scope released it is a task that outlived it. */
   const guard = <A>(f: () => A, empty: A) =>
     Effect.sync(() => {
       if (state.released) {
         state.late++;
+
         return empty;
       }
 
       return f();
     });
+
   const alarms: RuntimeProgramMailTest.Alarms = {
     set: (name, at) =>
       guard(() => {
@@ -130,6 +147,7 @@ export const runtime = Effect.gen(function* () {
         table().exec("DELETE FROM alarms WHERE name = ? AND at = ?", alarm.name, alarm.at);
       }, undefined),
   };
+
   return {
     sql,
     reopen,

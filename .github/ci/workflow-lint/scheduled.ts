@@ -28,35 +28,51 @@ const TOOLING_PROJECT = "--project tooling";
 // red run opens one `ci-scheduled` issue. Half of the organization's 20 runners at most, so pull
 // requests keep theirs.
 const RUNNERS = 10;
+
 // What the workflow's token may do: read runs (the time tables) and the checkout. Canceling a run takes
 // `actions: write`, and a run anything canceled ends `cancelled`, never `failure`.
 const READS = { actions: "read", contents: "read" };
+
 export const VERDICT = "report";
+
 // The one job that holds every test leg, next's and tooling's, so one `fail-fast` stops them all
 // (SC6). A tooling leg's shard starts TOOLING_LEG, which is how scheduled.mjs's `suiteOf` reads it.
 const TESTS_JOB = "tests";
+
 const TOOLING_LEG = "tooling-";
+
 const ON_TOOLING = `startsWith(matrix.shard, '${TOOLING_LEG}')`;
+
 // On every branch: the report job fails unless the run is green, so a red run with no failed job
 // still ends `failure`. scheduled.mjs writes the issue on main alone.
 // A run whose gate said `false` skips the report too, so it leaves the issue as it was; a gate that
 // failed leaves `start` empty, and the report judges that run red (0581).
 const REPORT_IF = "always() && needs.gate.outputs.start != 'false'";
+
 const REPORT = "node .github/ci/scheduled.mjs";
+
 // The gate (0581): the first job, which says whether this run starts the tests. A push to main or
 // the hourly catch-up starts them only when no full run on main started within the gap, and the
 // catch-up only on a head that has had none; a hand start always does.
 const GATE_JOB = "gate";
+
 const GATE = "node .github/ci/gate.mjs";
+
 const GATE_STEP = "decide";
+
 const GATE_OUTPUTS = { start: `\${{ steps.${GATE_STEP}.outputs.start }}` };
+
 const STARTED = `needs.${GATE_JOB}.outputs.start == 'true'`;
+
 // A branch's proof run (0590): `select` runs proof.ts on a hand start on a branch other than main
 // alone, so main's push, catch-up and hand start run the full set on `tests` (SC15, SC17). It says
 // `full` or `changed`, and a changed set runs on `changed`'s legs, each its own list (SC18).
 const SELECT_JOB = "select";
+
 const SELECT = "node .github/ci/proof.ts";
+
 const SELECT_STEP = "set";
+
 const SELECT_IF = `${STARTED} && github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'`;
 
 const SELECT_OUTPUTS = Object.fromEntries(
@@ -64,16 +80,24 @@ const SELECT_OUTPUTS = Object.fromEntries(
 );
 
 const RECORD = `\${{ runner.temp }}/proof-set.json`;
+
 // `tests` runs after a skipped `select`, on main, or after one that said `full`.
 const TESTS_IF = `\${{ !cancelled() && ${STARTED} && (needs.${SELECT_JOB}.result == 'skipped' || needs.${SELECT_JOB}.outputs.scope == 'full') }}`;
+
 const CHANGED_JOB = "changed";
+
 const CHANGED_IF = `${STARTED} && needs.${SELECT_JOB}.outputs.scope == 'changed' && needs.${SELECT_JOB}.outputs.legs != '[]'`;
+
 const CHANGED_LEGS = `\${{ fromJSON(needs.${SELECT_JOB}.outputs.legs) }}`;
+
 const LEG_FILES = `fromJSON(needs.${SELECT_JOB}.outputs.files)[matrix.shard]`;
+
 // The gap (0581, 0069): a setting in the workflow's own env, beside the cron line. 0581's binding
 // constraint is an hour at least.
 const GAP = "GAP_MINUTES";
+
 const LEAST_GAP = 60;
+
 // The hourly catch-up: a fixed minute of every hour, never minute 0, which GitHub's docs name as
 // the busiest ("Events that trigger workflows", schedule).
 const HOURLY = /^([1-9]|[1-5][0-9]) \* \* \* \*$/;
@@ -85,21 +109,29 @@ const REPORT_ENV = {
 };
 
 const RESULTS = '--outputFile.json="$RUNNER_TEMP/results.json"';
+
 const REPORTERS = `--reporter=default --reporter=json --reporter=github-actions ${RESULTS}`;
+
 // Every layer of next/ (0536): the vitest legs run the in-memory and the real-resource projects, and
 // the e2e legs the visual one. A project, not a path, picks the files: `next/` as a path would start
 // `next-visual` on legs with no Chromium, and a project ignores `--exclude`.
 const WHOLE_NEXT = `pnpm exec vitest run --project next --project next-integration --shard "$SHARD" ${REPORTERS}`;
+
 const WHOLE_E2E = `pnpm exec vitest run --project next-visual --shard "\${SHARD#e2e-}" ${REPORTERS}`;
+
 const WHOLE_TOOLING = `pnpm exec vitest run ${TOOLING_PROJECT} --shard "\${SHARD#${TOOLING_LEG}}" --passWithNoTests ${REPORTERS}`;
+
 // A changed leg's one command: its own list, `$FILES` from `select`, over every project CI runs and
 // proof.ts lists, today's left out (0533). No `--changed` and no `--shard`: the list is the leg.
 const CHANGED_RUN = `pnpm exec vitest run --project next --project next-integration --project next-visual --project tooling $FILES ${REPORTERS}`;
+
 // The schedule's test depth (pull request 1274): its laws run their full case count.
 const DEPTH = "full";
+
 // Each suite's test commands, which carry its time limit on their own steps (SC13). The report reads
 // each limit as `LIMIT_<SUITE>` (SC5).
 const SUITES = { next: [WHOLE_NEXT, WHOLE_E2E], tooling: [WHOLE_TOOLING] } as const;
+
 // The test job's own limit is a leg's test step limit and this many minutes more. In green runs
 // 43765797242, 43734956911 and 43734841211 the steps before a test step took at most 56 s in all
 // and the three after it at most 7 s, against their 2 minutes of step limits.
@@ -115,6 +147,7 @@ const limitOf = (jobs: Record<string, unknown>, suite: keyof typeof SUITES): unk
   const commands: readonly string[] = SUITES[suite];
   const found = steps(map(jobs[TESTS_JOB])).filter((s) => typeof s["run"] === "string" && commands.includes(s["run"]));
   const limits = new Set(found.map((s) => s["timeout-minutes"]));
+
   return found.length > 0 && limits.size === 1 ? [...limits][0] : undefined;
 };
 
@@ -125,6 +158,7 @@ const backstop = (next: number, tooling: number) =>
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
 const listed = (job: Record<string, unknown>): unknown[] => {
   const shard = map(map(job["strategy"])["matrix"])["shard"];
+
   return Array.isArray(shard) ? shard : [];
 };
 
@@ -136,9 +170,11 @@ const listed = (job: Record<string, unknown>): unknown[] => {
 const depth = (jobs: Record<string, unknown>, name: string, seen: readonly string[] = []): number => {
   const needs = map(jobs[name])["needs"];
   const list = typeof needs === "string" ? [needs] : Array.isArray(needs) ? needs : [];
+
   const known = list.filter(
     (need): need is string => typeof need === "string" && need in jobs && !seen.includes(need) && need !== name,
   );
+
   return known.length === 0 ? 0 : 1 + Math.max(...known.map((need) => depth(jobs, need, [...seen, name])));
 };
 
@@ -158,7 +194,9 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const workflow = map(source),
     on = map(workflow["on"]),
     jobs = map(workflow["jobs"]);
+
   const errors: string[] = [];
+
   const require = (holds: boolean, reason: string) => {
     if (!holds) {
       errors.push(`scheduled.yaml: ${reason}`);
@@ -239,6 +277,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // judged red. It, the gate's step and the time tables are the steps that get the token.
   const report = map(jobs[VERDICT]),
     others = Object.keys(jobs).filter((name) => name !== VERDICT);
+
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
@@ -247,6 +286,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
         REPORT_IF,
       ), "SC5: the report needs every other job, and runs after any result, on every branch, unless the gate said false");
   const judged = steps(report).filter((s) => "run" in s);
+
   // Each suite's limit, as `LIMIT_<SUITE>`, equal to its test steps' `timeout-minutes` (SC13):
   // scheduled.mjs tells a timed-out leg from a red or a canceled one by it, and reads a leg's suite
   // from its name's shard, so no job sets a `name` of its own.
@@ -259,6 +299,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ]),
     ),
   };
+
   require(Object.values(jobs).every(
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");
@@ -334,6 +375,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // as `proof-set` after a red step too.
   const commandsOf = (job: Record<string, unknown>) =>
     steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+
   const select = map(jobs[SELECT_JOB]);
   const selectSteps = steps(select);
   const selectRuns = selectSteps.filter((s) => "run" in s && s["run"] !== "pnpm install --frozen-lockfile");
@@ -388,9 +430,11 @@ export const lintScheduled = (text: string, check: string): string[] => {
       JSON.stringify(
         ["pnpm install --frozen-lockfile", chromium, CHANGED_RUN, TIME_TABLE].toSorted(),
       ), `SC18: ${CHANGED_JOB} runs only when ${SELECT_JOB} said changed with a leg, each leg its own list over every project at next's limit and backstop, select's LIMIT that limit, chromium first for a visual file, and nothing else`);
+
   const changedKept = changedSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
+
   require(changedKept.length === 1 &&
     compact(changedKept[0]?.["if"]) === "!cancelled()" &&
     changedSteps.indexOf(changedKept[0] ?? {}) >
@@ -462,6 +506,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
     legsOfCheck = legs(nextJob(check)),
     e2eCount = ends(legsOfCheck).length,
     vitestCount = numbered(legsOfCheck).length;
+
   require(legsOfCheck.length > 0 &&
     JSON.stringify(shards.slice(0, nextLegs.length)) === JSON.stringify(nextLegs) &&
     JSON.stringify(nextLegs) ===
@@ -503,6 +548,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const kept = testSteps.filter(
     (s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === `\${{ runner.temp }}/results.json`,
   );
+
   const last = testSteps.findLastIndex((s) => typeof s["run"] === "string" && s["run"].includes(RESULTS));
   require(kept.length === 1 &&
     compact(kept[0]?.["if"]) === "!cancelled()" &&
@@ -532,6 +578,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // job's limit may read `matrix` (GitHub's docs, "Contexts reference").
   const whole = (limit: unknown): limit is number =>
     typeof limit === "number" && Number.isInteger(limit) && limit > 0 && limit + BACKSTOP < 360;
+
   const nextLimit = limitOf(jobs, "next"),
     toolingLimit = limitOf(jobs, "tooling");
 

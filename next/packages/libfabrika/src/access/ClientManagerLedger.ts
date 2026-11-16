@@ -28,6 +28,7 @@ const MEMBERS = "gateway/access";
 const tag = (word: string): string => `fab.access.${word}`;
 
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
+
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
 /** One entry of `gateway/access` and the event it holds; a case this piece does not know is none. */
@@ -83,6 +84,7 @@ const current = ({ folded }: Replayed): Access => members(folded);
 const view = (replayed: Replayed) => {
   const { rows, skipped } = replayed;
   const { keys } = current(replayed);
+
   return {
     [tag("events")]: rows.length,
     [tag("keys")]: keys.size,
@@ -125,6 +127,7 @@ export const layer = (
     ClientManager,
     Effect.gen(function* () {
       const ledger = yield* Ledger;
+
       const founding = MemberEvent.cases.founded.make({
         id: founder.person,
         name: founder.name,
@@ -172,6 +175,7 @@ export const layer = (
             refused: ({ reason }) => ({ [tag("reason")]: reason }),
           }),
         });
+
         return written;
       });
 
@@ -205,6 +209,7 @@ export const layer = (
           }
 
           const reason = (yield* read).skipped.get(placed.rev);
+
           return yield* answer(
             reason === undefined
               ? Written.cases.applied.make({ rev: placed.rev })
@@ -221,6 +226,7 @@ export const layer = (
           Effect.tapError((error) => Effect.annotateCurrentSpan(tag("reason"), error.reason)),
         );
       });
+
       return {
         members: members(),
         write,

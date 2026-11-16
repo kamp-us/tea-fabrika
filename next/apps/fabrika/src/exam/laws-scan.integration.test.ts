@@ -20,6 +20,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
+
 const PBT = "@demlik/tea/pbt";
 
 /** Every `.ts` and `.tsx` file below `dir`, leaving out `node_modules`, `dist` and dot folders. */
@@ -34,6 +35,7 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
         }
 
         const skip = ["node_modules", "dist"].includes(entry.name) || entry.name.startsWith(".");
+
         return skip ? [] : codeFiles(path);
       });
 
@@ -46,16 +48,19 @@ const importsInFile = (file: string): ReadonlyArray<string> =>
 /** Each machine under `next`, with the laws files beside it: `<name>.laws.test.ts` and the like. */
 const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly laws: ReadonlyArray<string> }> => {
   const files = codeFiles(next);
+
   return files
     .filter((file) => !/\.test\.tsx?$/.test(file) && readFileSync(file, "utf8").includes("defineMachine("))
     .map((machine) => {
       const stem = basename(machine).replace(/\.tsx?$/, "");
+
       const laws = files.filter(
         (file) =>
           dirname(file) === dirname(machine) &&
           basename(file).startsWith(`${stem}.`) &&
           basename(file).endsWith(".laws.test.ts"),
       );
+
       return { path: relative(next, machine).split(sep).join("/"), laws };
     })
     .sort((a, b) => (a.path < b.path ? -1 : 1));
@@ -70,6 +75,7 @@ const lawless = (next: string): ReadonlyArray<string> =>
     .map((m) => m.path);
 
 const SYNC_TEST = "syncTest(";
+
 const LEFT_OUT = /\/\/[ \t]*sync test left out:[ \t]*\S/;
 
 /**
@@ -82,6 +88,7 @@ const unsynced = (next: string): ReadonlyArray<string> =>
     .filter((m) =>
       m.laws.every((file) => {
         const text = readFileSync(file, "utf8");
+
         return !text.includes(SYNC_TEST) && !LEFT_OUT.test(text);
       }),
     )

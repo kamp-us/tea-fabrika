@@ -48,16 +48,19 @@ const data = {
 };
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const READER = "connection:t1";
 
 // T246's approved addendum: a parent names the door's process, then its input counter.
 const PARENT = /^in-process_[0-7][0-9a-hjkmnp-tv-z]{25}-[1-9][0-9]*$/;
+
 const PROCESS = Effect.runSync(processId);
 
 const parents = (count: number): ReadonlyArray<string> =>
   fc.sample(fc.stringMatching(PARENT), { seed: SEED, numRuns: count });
 
 const [goodParent = "", otherParent = ""] = parents(2);
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** Texts one slip away from a good parent: none of them may pass. */
@@ -138,6 +141,7 @@ const without = (key: string): Record<string, unknown> =>
   Object.fromEntries(Object.entries(json()).filter(([k]) => k !== key));
 
 const KEYS = ["by", "for", "sentAt", "seen", "parent", "traceId", "build", "_tag", "body"] as const;
+
 const ENTRY_KEYS = [...KEYS, "id", "stream", "pos", "rev", "arrivedAt"].sort();
 
 const refused = (reason: string) => ({ _tag: "refused", reason });
@@ -146,10 +150,13 @@ const refused = (reason: string) => ({ _tag: "refused", reason });
 const handIn = (lines: ReadonlyArray<unknown>) =>
   Effect.gen(function* () {
     const referee = yield* Referee;
+
     const answers = yield* Effect.forEach(lines, (line, i) => referee.append("notes:1", `w-${i + 1}`, line), {
       concurrency: 1,
     });
+
     const entries = yield* referee.read("notes:1", 0, READER);
+
     return { answers, entries };
   });
 
@@ -204,11 +211,14 @@ describe("p92, every entry has every field: the type", () => {
     expectTypeOf<Entry["parent"]>().toEqualTypeOf<string | InputId | null>();
     expectTypeOf<Line["parent"]>().toEqualTypeOf<string | InputId | null>();
     expectTypeOf<typeof ParentText.Type>().toEqualTypeOf<string | InputId>();
+
     // P17a's input schema and parent reader expose the brand. No other data export does.
     type Gives<T> = T extends (...args: never) => infer R ? R : T extends { readonly Type: infer A } ? A : never;
+
     type MakesInputId = {
       [K in keyof typeof data]: [Extract<Gives<(typeof data)[K]>, InputId>] extends [never] ? never : K;
     }[keyof typeof data];
+
     expectTypeOf<MakesInputId>().toEqualTypeOf<"InputId" | "ParentText">();
     expect(Object.keys(data).length).toBeGreaterThan(0);
   });
@@ -257,6 +267,7 @@ describe("p92, every entry has every field: at the referee", () => {
         "a line",
         [json()],
       ];
+
       const { answers, entries } = yield* handIn(wrong);
       expect(answers).toEqual(wrong.map(() => refused("bad_line")));
       expect(entries).toEqual([]);
@@ -284,10 +295,12 @@ describe("p92, every entry has every field: at the referee", () => {
     Effect.gen(function* () {
       const big = "x".repeat(2_000_001);
       const near = "x".repeat(1_900_000);
+
       const { answers, entries } = yield* handIn([
         { ...json(), body: { note: big } },
         { ...json(), body: { note: near } },
       ]);
+
       expect(answers).toEqual([refused("too_big"), { _tag: "placed", rev: 1, pos: 1 }]);
       expect(entries.map((entry) => entry.id)).toEqual(["w-2"]);
     }).pipe(Effect.provide(onReferee(fresh()))),
@@ -298,6 +311,7 @@ describe("p92, every entry has every field: at the referee", () => {
       // The row's bytes: its texts as UTF-8 (stream, id, by, for, sentAt, parent, traceId, build, _tag) and
       // the body as JSON; numbers are not counted. handIn's ids, w-1 and w-2, are the same length.
       const encoder = new TextEncoder();
+
       const rowBytes = (line: Line): number =>
         [
           "notes:1",
@@ -311,12 +325,16 @@ describe("p92, every entry has every field: at the referee", () => {
           line._tag,
           JSON.stringify(line.body),
         ].reduce((n, text) => n + encoder.encode(text).length, 0);
+
       // A thousand two-byte letters, so a count of characters instead of bytes misses the limit.
       const WIDE = "ü".repeat(1_000);
+
       const sized = (total: number): Line => {
         const rest = total - rowBytes({ ...full, body: { note: WIDE } });
+
         return { ...full, body: { note: WIDE + "x".repeat(rest) } };
       };
+
       const atLimit = sized(2_000_000);
       const overLimit = sized(2_000_001);
       expect([rowBytes(atLimit), rowBytes(overLimit)]).toEqual([2_000_000, 2_000_001]);
@@ -371,10 +389,12 @@ describe("p68, an entry keeps its parent", () => {
   it.effect("p68b, old eight-hex parents and malformed TypeID parents are refused bad_parent and write nothing", () =>
     Effect.gen(function* () {
       const bad = badParents(goodParent);
+
       const { answers, entries } = yield* handIn([
         ...bad.map((parent) => ({ ...json(), parent })),
         { ...json(), parent: goodParent },
       ]);
+
       expect(answers).toEqual([...bad.map(() => refused("bad_parent")), { _tag: "placed", rev: 1, pos: 1 }]);
       expect(entries.map((entry) => entry.parent)).toEqual([goodParent]);
     }).pipe(Effect.provide(onReferee(fresh()))),

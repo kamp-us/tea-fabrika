@@ -11,17 +11,21 @@ import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const SPACE = "fabrika-client";
 
 const u32 = (n: number) => {
   const b = Buffer.alloc(4);
   b.writeUInt32BE(n);
+
   return b;
 };
 
 const field = (value: string | Uint8Array) => {
   const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+
   return Buffer.concat([u32(b.length), b]);
 };
 
@@ -63,6 +67,7 @@ const key = Effect.fn("test.key")(function* () {
   const pair = yield* web(() => crypto.subtle.generateKey("Ed25519", false, ["sign", "verify"]));
   const bytes = new Uint8Array(yield* web(() => crypto.subtle.exportKey("raw", pair.publicKey)));
   const blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw: Buffer.from(bytes).toString("base64url"),
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -82,6 +87,7 @@ const url = "https://fabrika.test/project-a",
 const setup = Effect.fnUntraced(function* () {
   const k = yield* key();
   const signed = yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`);
+
   const hello = {
     versions: [1, 2],
     has: ["verify", "seal"],
@@ -94,21 +100,27 @@ const setup = Effect.fnUntraced(function* () {
     sentAt: SENT,
     signed,
   };
+
   const identity = {
     key: k.fingerprint,
     person: PERSON,
     as: "window",
   } satisfies typeof Who.Type;
+
   let used = false;
+
   const consume = vi.fn(() => {
     if (used) {
       return false;
     }
 
     used = true;
+
     return true;
   });
+
   const admit = vi.fn(() => Effect.succeed(Admission.cases.admitted.make({ identity })));
+
   const trusted = {
     url,
     tab,
@@ -119,6 +131,7 @@ const setup = Effect.fnUntraced(function* () {
     consume,
     admit,
   };
+
   return { hello, trusted, identity, consume, admit };
 });
 
@@ -132,6 +145,7 @@ describe("P10 hello", () => {
         Effect.runPromise(
           Effect.gen(function* () {
             const k = yield* key();
+
             const hello = {
               versions: [1, 2],
               has: [],
@@ -144,10 +158,13 @@ describe("P10 hello", () => {
               sentAt: SENT,
               signed: yield* k.sign(`fabrika-hello\n${url}\n${tab}\n${nonce}`),
             };
+
             const consume = vi.fn(() => true);
+
             const admit = vi.fn((_key: string) =>
               Effect.succeed(Admission.cases.refused.make({ reason: "not_granted" })),
             );
+
             const result = yield* checkHello({
               hello,
               url,
@@ -159,6 +176,7 @@ describe("P10 hello", () => {
               consume,
               admit,
             });
+
             expect(admit.mock.calls).toEqual([[k.fingerprint]]);
             expect(result).toEqual({
               _tag: "refused",
@@ -244,11 +262,13 @@ describe("P10 hello", () => {
     it.effect(`p26: changed trusted ${binding} refuses before admission`, () =>
       Effect.gen(function* () {
         const x = yield* setup();
+
         const checked = checkHello({
           hello: x.hello,
           ...x.trusted,
           [binding]: "changed",
         });
+
         const result = yield* checked;
         expect(result._tag).toBe("refused");
         expect(x.admit).not.toHaveBeenCalled();
@@ -277,6 +297,7 @@ describe("P10 hello", () => {
           (value) =>
             Effect.gen(function* () {
               const x = yield* setup();
+
               const hello = {
                 ...x.hello,
                 ...(kind === "signature"
@@ -287,6 +308,7 @@ describe("P10 hello", () => {
                       ? { versions: [8] }
                       : {}),
               };
+
               const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
               const checked = checkHello({ hello, ...x.trusted, admit });
               const result = yield* checked;
@@ -306,10 +328,12 @@ describe("P10 hello", () => {
   it.effect("p82/p66: additive hello fields are ignored, has/os preserved, ping clamped", () =>
     Effect.gen(function* () {
       const x = yield* setup();
+
       const checked = checkHello({
         ...x.trusted,
         hello: { ...x.hello, future: { rank: "person" }, ping: "1ms" },
       });
+
       const result = yield* checked;
       expect(result).toMatchObject({ _tag: "online", identity: x.identity, version: 2, ping: 10_000 });
       assert(result._tag === "online");
@@ -357,6 +381,7 @@ const oldSameOrigin = (a: Parameters<typeof sameOrigin>[0]): boolean => {
   }
 
   const url = new URL(a.origin);
+
   return (
     (url.protocol === "https:" || url.protocol === "http:") && url.origin === a.origin && a.origins.includes(url.origin)
   );
@@ -405,11 +430,13 @@ describe("T737 D1 origin acceptance equals the old check, next/", () => {
       fc.property(Origins, ({ origin, others, allow, host, localHost, forwardedHost }) => {
         const given = origin === null ? [] : [origin];
         const norm = origin === null ? [] : [normalized(origin)];
+
         const origins = [
           ...others,
           ...(allow === "given" || allow === "both" ? given : []),
           ...(allow === "normalized" || allow === "both" ? norm : []),
         ];
+
         const a = {
           origin,
           host,
@@ -417,6 +444,7 @@ describe("T737 D1 origin acceptance equals the old check, next/", () => {
           ...(localHost === undefined ? {} : { localHost }),
           ...(forwardedHost === undefined ? {} : { forwardedHost }),
         };
+
         const expected = oldSameOrigin(a);
         expect(sameOrigin(a)).toBe(expected);
         seen.add(
@@ -446,11 +474,13 @@ it.effect.prop(
     Effect.gen(function* () {
       const x = yield* setup();
       const identity = { ...x.identity, as: "hands" as const };
+
       const result = yield* checkHello({
         ...x.trusted,
         hello: { ...x.hello, has, build },
         admit: () => Effect.succeed(Admission.cases.admitted.make({ identity })),
       });
+
       expect(result).toMatchObject({ _tag: "online", identity, hello: { has, build } });
       const old = yield* setup();
       expect(yield* checkHello({ ...old.trusted, hello: old.hello })).toMatchObject({ _tag: "online" });

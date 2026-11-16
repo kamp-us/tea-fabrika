@@ -24,6 +24,7 @@ import {
 // own; seconds come from scratch tables, so a law holds for any table, not only today's. Each plant
 // was run once on proof.ts and restored; each turned its law red.
 const options = { seed: 119120, numRuns: 100 };
+
 const sha = (c: string) => c.repeat(40);
 
 const seen = (changed: readonly string[]): Seen => ({
@@ -78,12 +79,14 @@ it("pinned: a change to any rerun trigger 0590 names runs the full set, whatever
   // splits a list); `isTrigger` drops `dot: true` (red: .oxlintrc.json reads as plain).
   for (const path of TRIGGERS) {
     expect(isTrigger(path), path).toBe(true);
+
     const proof = choose(
       seen(["next/a.ts", path]),
       triggered(["next/a.ts", path], isTrigger),
       ["next/a.test.ts"],
       real,
     );
+
     const { base, head, at, vitest } = seen([]);
     expect(proof, path).toStrictEqual({ _tag: "full", base, head, at, vitest, triggers: [path] });
     expect(outputs(proof), path).toEqual(["scope=full", "legs=[]", "files={}"]);

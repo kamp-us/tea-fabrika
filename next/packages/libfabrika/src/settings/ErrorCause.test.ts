@@ -21,9 +21,11 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
  * in the encoded form `Schema.Defect()` writes, the one case where `Defect` and `Unknown` differ.
  */
 type Form = "absent" | "undefined" | "json" | "error";
+
 const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json", "error"];
 
 const settingsBefore = Schema.Struct({ ...SettingsError.fields, cause: Schema.optionalKey(Schema.Defect()) });
+
 const snapshotBefore = Schema.Struct({ ...SnapshotError.fields, cause: Schema.optionalKey(Schema.Defect()) });
 
 /**
@@ -48,6 +50,7 @@ const errors = {
 } as const;
 
 type Name = keyof typeof errors;
+
 const NAMES: ReadonlyArray<Name> = ["SettingsError", "SnapshotError"];
 
 /** An Error with a drawn name and message, encoded the way `Schema.Defect()` writes it. */

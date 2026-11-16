@@ -52,6 +52,7 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import { REFUSED, SpanRow } from "../telemetry/Trace.ts";
 
 const PID = "process_0000000000e008000000000001";
+
 const NAME = "checklist:1";
 
 const CODE = {
@@ -85,6 +86,7 @@ const START = StartsTest.fixture(
 const settingsStart = () => Promise.resolve(StartsTest.reply(START));
 
 const OWNER = Writer.cases.person.make({ key: FROM.by, for: FROM.for });
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 const open = Effect.gen(function* () {
@@ -92,9 +94,11 @@ const open = Effect.gen(function* () {
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "isolate-usage-" }).pipe(Effect.orDie);
   const file = path.join(folder, "store.db");
+
   const handle = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const db = new DatabaseSync(file);
+
       return { db, sql: nodeSql(db) };
     }),
     (held) =>
@@ -104,11 +108,13 @@ const open = Effect.gen(function* () {
         }
       }),
   );
+
   const sql: Sql = {
     exec: (query, ...params) => handle.sql.exec(query, ...params),
     transaction: (body) => handle.sql.transaction(body),
     size: () => handle.sql.size(),
   };
+
   return {
     sql,
     reopen: Effect.sync(() => {
@@ -133,6 +139,7 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>
           }),
         },
       } as unknown as Env;
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform timing fields are needed; no platform type is named outside cloudflare/
       return tail(env, props, events as unknown as Parameters<typeof tail>[2]);
     },
@@ -142,6 +149,7 @@ const deliver: IsolateUsageTest.Deliver = (props, events, receive) =>
 const fixture = (executed: () => void) => {
   const Model = Schema.Struct({ sum: Schema.Int });
   const Msg = Schema.Struct({ type: Schema.Literal("add"), n: Schema.Int });
+
   return {
     name: "test/usage-fixture",
     machine: Machine.make({
@@ -152,6 +160,7 @@ const fixture = (executed: () => void) => {
       update: {
         add: (model, msg) => {
           executed();
+
           return [{ sum: model.sum + msg.n }, []];
         },
       },
@@ -172,6 +181,7 @@ const invoke = (process: string) =>
     const loaded = yield* ProgramLoader.use((loader) => loader.load("test/usage-fixture", CODE.hash)).pipe(
       Effect.provide(ProgramLoader.layer({ "test/usage-fixture": fixture(() => {}) }, {})),
     );
+
     yield* loaded.execution
       .step({ sum: 0 }, { type: "add", n: 1 })
       .pipe(Effect.annotateSpans({ "fab.process": process }));
@@ -182,10 +192,13 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
     const ledger = yield* open;
     const state = yield* open;
     let executions = 0;
+
     const program = fixture(() => {
       executions++;
     });
+
     const execution = nodeExecution(program);
+
     // Only Worker Loader transport is doubled; the runner uses the real loader and RPC decoder.
     const rpc = {
       describe: () =>
@@ -215,21 +228,26 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
       check: (kind: string, event: unknown) => Effect.runPromise(execution.check(kind, event)),
       admit: (msg: unknown) => Effect.runPromise(execution.admit(msg)),
     };
+
     // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
     const platform = { get: () => ({ getEntrypoint: () => rpc }) } as unknown as Parameters<typeof workerLoader>[0];
     const loader = workerLoader(platform, { "test/usage-fixture": CODE });
+
     const controller = yield* Effect.acquireRelease(
       Effect.sync(() => new AbortController()),
       (held) => Effect.sync(() => held.abort()),
     );
+
     // oxlint-disable-next-line fabrika/no-type-assertions -- an opaque platform tail represents this runner's independent usage invocation
     const bound = {
       fetch: () => Effect.runPromise(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
     } as unknown as NonNullable<Parameters<typeof loader.load>[2]>;
+
     const data = Layer.mergeAll(
       LedgerSql.layer(ledger.sql, { reader: PID }),
       LedgerTransactionSql.layer(ledger.sql),
     ).pipe(Layer.provide(quiet));
+
     const coordination = ProcessManager.layer(
       {
         owner: Owner.cases.brain.make({}),
@@ -238,6 +256,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
       },
       Effect.succeed(PID),
     ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data))));
+
     const base = yield* Layer.build(coordination);
     yield* ProcessManager.use((manager) =>
       manager.start(
@@ -245,6 +264,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         FROM,
       ),
     ).pipe(Effect.provideContext(base));
+
     const dependencies = Layer.mergeAll(
       ProcessStore.layer(state.sql, { process: PID }),
       Layer.effect(
@@ -259,6 +279,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
       Layer.succeed(Alarm, { set: () => Effect.void }),
       Layer.succeed(Recording, { flush: Effect.void }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(base)));
+
     const context = yield* Layer.build(
       ProgramRunner.withLoader(
         { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER },
@@ -269,8 +290,10 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         },
       ).pipe(Layer.provideMerge(dependencies)),
     );
+
     const service = yield* ProgramRunner.pipe(Effect.provideContext(context));
     yield* service.open("fixture");
+
     const snapshot = Effect.sync(() =>
       Object.fromEntries(
         ["process_state", "process_letters", "process_recovery", "process_receipts"].map((table) => [
@@ -279,6 +302,7 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         ]),
       ),
     );
+
     return {
       step: (id: string, n: number) =>
         service.msg({
@@ -303,6 +327,7 @@ const telemetry: IsolateUsageTest.Rig["telemetry"] = (sql, object) =>
     const context = yield* Layer.build(
       Layer.mergeAll(SpanSink.layer(sql, { object }), RecordManager.memory(1_000_000_000), Archive.memory),
     );
+
     return {
       record: (usage) =>
         SpanSink.use((sink) => sink.batch(IsolateUsage.record(usage))).pipe(Effect.provideContext(context)),
@@ -343,6 +368,7 @@ for (const accepted of [true, false]) {
           const state = yield* open;
           const written: Array<SpanRow> = [];
           const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
+
           // oxlint-disable-next-line fabrika/no-type-assertions -- native storage handles only; the Process service and telemetry sink are real
           const ctx = {
             id: { name: JSON.stringify(["project-test", NAME]) },
@@ -357,6 +383,7 @@ for (const accepted of [true, false]) {
               get: () => Promise.resolve(saved),
             },
           } as unknown as Parameters<typeof processRuntime>[0];
+
           // oxlint-disable-next-line fabrika/no-type-assertions -- record RPC is captured at the platform edge; program execution must remain unopened
           const env = {
             INSTANCE: JSON.stringify(START),
@@ -365,22 +392,27 @@ for (const accepted of [true, false]) {
               getByName: () => ({
                 write: (_chain: unknown, _part: number, sent: ReadonlyArray<{ span: SpanRow }>) => {
                   written.push(...sent.map(({ span }) => span));
+
                   return Promise.resolve(Written.cases.written.make({}));
                 },
               }),
             },
           } as unknown as Env;
+
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() => processRuntime(ctx, env, {})),
             (held) => Effect.promise(() => held.dispose()),
           );
+
           // Initialize first, so no startup flush can accidentally satisfy the wake's obligation.
           yield* Effect.promise(() => runtime.runPromise(ProcessService));
           written.length = 0;
           const input = accepted ? batch : batch.map((row) => ({ ...row, cpuMs: -row.cpuMs - 1 }));
+
           const result = yield* Effect.promise(() =>
             runtime.runPromise(ProcessService.use((service) => Effect.exit(service.usage(input)))),
           );
+
           expect(Exit.isSuccess(result)).toBe(accepted);
           // Inspect delivery now, before disposal or any other service call can flush it.
           const calls = written.filter((row) => row.name === "process.usage");
@@ -400,6 +432,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
       Effect.scoped(
         Effect.gen(function* () {
           const store = yield* open;
+
           const context = yield* Layer.build(
             Layer.mergeAll(
               SpanSink.layer(store.sql, { object: NAME }),
@@ -407,6 +440,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
               Archive.memory,
             ),
           );
+
           const sink = yield* SpanSink.pipe(Effect.provideContext(context));
           const counts = new Map<string, number>();
           let accepted = 0;
@@ -446,6 +480,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
           expect(store.sql.exec("SELECT * FROM sums")).toHaveLength(counts.size);
         }),
       ).pipe(Effect.provide(TestClock.layer()));
+
     const batches = fc.array(
       fc.record({
         refused: fc.array(fc.constantFrom("reserved", "other"), { minLength: 1, maxLength: 32 }),
@@ -453,6 +488,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
       }),
       { minLength: 1, maxLength: 12 },
     );
+
     const property = fc.asyncProperty(batches, (tape) => Effect.runPromise(once(tape)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) }));
   }),
@@ -472,10 +508,12 @@ it.effect(
             const log = yield* open;
             const state = yield* open;
             let next = 1;
+
             const data = Layer.mergeAll(
               LedgerSql.layer(log.sql, { reader: "project-test" }),
               LedgerTransactionSql.layer(log.sql),
             ).pipe(Layer.provide(quiet));
+
             const context = yield* Layer.build(
               ProcessManager.layer(
                 {
@@ -486,6 +524,7 @@ it.effect(
                 Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
               ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(data)))),
             );
+
             const manager = Context.get(context, ProcessManager);
             const ledger = Context.get(context, Ledger);
             yield* manager
@@ -498,10 +537,13 @@ it.effect(
                 FROM,
               )
               .pipe(Effect.provideContext(context));
+
             const rpc = <A, E>(work: Effect.Effect<A, E>) =>
               Effect.runPromise(work.pipe(Effect.provideContext(context)));
+
             const ok = <A, E>(work: Effect.Effect<A, E>) =>
               rpc(Effect.map(work, (value) => ProcessReplies.cases.ok.make({ value })));
+
             const project = {
               read: (stream: string, after: number) => rpc(Stream.runCollect(ledger.read(stream, after))),
               append: (...args: Parameters<typeof ledger.append>) => rpc(ledger.append(...args)),
@@ -512,18 +554,22 @@ it.effect(
               publish: () => Promise.resolve(),
               settingsStart,
             };
+
             const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
             const values = new Map<string, unknown>([["descriptor", saved]]);
             const bound = new Map<object, IsolateUsageTest.Props>();
             const seen: Array<{ key: string; tails: ReadonlyArray<object> | undefined }> = [];
             const execution = nodeExecution(fixture(() => {}));
+
             const loopbacks = {
               IsolateTail: ({ props }: { props: IsolateUsageTest.Props }) => {
                 const tail = { fetch: () => Promise.resolve(new Response()) };
                 bound.set(tail, props);
+
                 return tail;
               },
             };
+
             // oxlint-disable-next-line fabrika/no-type-assertions -- only native object handles are supplied; processRuntime and its loader are real
             const ctx = {
               id: { name: JSON.stringify(["project-test", NAME]) },
@@ -538,6 +584,7 @@ it.effect(
                 get: (key: string) => Promise.resolve(values.get(key)),
                 put: (key: string, value: unknown) => {
                   values.set(key, value);
+
                   return Promise.resolve();
                 },
                 delete: (key: string) => Promise.resolve(values.delete(key)),
@@ -547,6 +594,7 @@ it.effect(
               },
               exports: loopbacks,
             } as unknown as Parameters<typeof processRuntime>[0];
+
             // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
             const env = {
               INSTANCE: JSON.stringify(START),
@@ -555,6 +603,7 @@ it.effect(
               LOADER: {
                 get: (key: string, code: () => { tails?: ReadonlyArray<object> }) => {
                   seen.push({ key, tails: code().tails });
+
                   return {
                     getEntrypoint: () => ({
                       describe: () =>
@@ -572,10 +621,12 @@ it.effect(
                 },
               },
             } as unknown as Env;
+
             const runtime = yield* Effect.acquireRelease(
               Effect.sync(() => processRuntime(ctx, env, { "test/usage-fixture": CODE })),
               (held) => Effect.promise(() => held.dispose()),
             );
+
             const service = yield* Effect.promise(() => runtime.runPromise(ProcessService));
             yield* service.open("first");
 
@@ -605,6 +656,7 @@ it.effect(
             // The Project also loads policies for a name started outside its own cached start path.
             const projectStore = yield* open;
             const projectValues = new Map<string, unknown>();
+
             // oxlint-disable-next-line fabrika/no-type-assertions -- the Project receives only native SQL, storage and loopback handles
             const projectCtx = {
               id: { name: "project-test" },
@@ -619,12 +671,15 @@ it.effect(
                 get: (key: string) => Promise.resolve(projectValues.get(key)),
                 put: (key: string, value: unknown) => {
                   projectValues.set(key, value);
+
                   return Promise.resolve();
                 },
               },
               exports: loopbacks,
             } as unknown as Parameters<typeof projectLayer>[0];
+
             const descriptors = new Map<string, typeof saved>();
+
             // oxlint-disable-next-line fabrika/no-type-assertions -- native Process RPC handles only; descriptors come from the processes started below
             const projectEnv = {
               ...env,
@@ -632,6 +687,7 @@ it.effect(
                 getByName: (object: string) => ({
                   configure: (descriptor: typeof saved) => {
                     descriptors.set(object, descriptor);
+
                     return Promise.resolve();
                   },
                   descriptor: () => Promise.resolve(descriptors.get(object)),
@@ -639,9 +695,12 @@ it.effect(
                 }),
               },
             } as unknown as Env;
+
             let policy: Parameters<ProjectOptions["door"]>[0]["policy"] = () =>
               Effect.die("Project door not initialized");
+
             const beforeProject = seen.length;
+
             const projectOptions: ProjectOptions = {
               programs: { "test/usage-fixture": CODE },
               bootstrap: [{ name: "bootstrap:1", id: "bootstrap", program: "test/usage-fixture" }],
@@ -649,6 +708,7 @@ it.effect(
                 Effect.sync(() => {
                   policy = options.policy;
                   const unused = () => Effect.die("Unexpected door call in loader law");
+
                   return {
                     connect: unused,
                     challenge: unused,
@@ -666,6 +726,7 @@ it.effect(
                   };
                 }),
             };
+
             const projectServices = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
             const p = Context.get(projectServices, ProjectService);
             const bootstrap = seen.slice(beforeProject);
@@ -687,10 +748,12 @@ it.effect(
                 Effect.sync(() => `process_0000000000e00800${String(++next).padStart(10, "0")}`),
               ).pipe(Layer.provide(LedgerTransactionSql.layer(projectStore.sql).pipe(Layer.provide(quiet)))),
             );
+
             const starter = Context.get(starters, ProcessManager);
 
             for (const [n] of tape.entries()) {
               const name = `policy:${n}`;
+
               const first = yield* starter.start(
                 Start.cases.first.make({
                   id: `first-${n}`,
@@ -699,8 +762,10 @@ it.effect(
                 }),
                 FROM,
               );
+
               const restarted = yield* p.processExit(first.process, ExitReason.cases.normal.make({}), FROM);
               expect(restarted._tag).toBe("ok");
+
               const successor = yield* starter.start(
                 Start.cases.again.make({
                   id: `again-${n}`,
@@ -711,6 +776,7 @@ it.effect(
                 }),
                 FROM,
               );
+
               const after = successor.process;
               descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
               yield* policy(after);
@@ -747,6 +813,7 @@ it.effect(
             }
           }),
         );
+
       // Every tape exercises a successor; later moves reload the live process or replace it.
       const tape = fc.array(fc.boolean(), { minLength: 1, maxLength: 8 }).map((moves) => [true, ...moves]);
       const property = fc.asyncProperty(tape, (moves) => Effect.runPromise(once(moves)));

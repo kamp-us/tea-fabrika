@@ -31,9 +31,13 @@ import * as TomlParser from "../../settings/TomlParser.ts";
 import * as Load from "./Load.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const check = { seed: SEED, numRuns: runsFor({ fast: 10, full: 100 }) };
+
 const REPO = ".fabrika/fabrika.toml";
+
 const PERSON = "~/.fabrika/fabrika.toml";
+
 const DEFAULT = 18787;
 
 type File =
@@ -46,7 +50,9 @@ const lay = (repo: File, person: File) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem,
       path = yield* Path.Path;
+
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "t664-" });
+
     const place = (name: string, file: File) =>
       Effect.gen(function* () {
         const at = path.join(root, name, "fabrika.toml");
@@ -63,6 +69,7 @@ const lay = (repo: File, person: File) =>
 
         return at;
       });
+
     return {
       repo: { text: repo._tag === "text" ? repo.text : null, name: REPO },
       person: { path: yield* place("person", person), name: PERSON },
@@ -82,6 +89,7 @@ const start = (
       Effect.gen(function* () {
         const counts = yield* Ref.make({ build: 0, alchemy: 0, write: 0 });
         const places = yield* lay(repo, person);
+
         const exit = yield* Load.load({
           ...places,
           flags: input.flags ?? {},
@@ -93,6 +101,7 @@ const start = (
           Effect.tap(() => Ref.update(counts, (c) => ({ ...c, write: c.write + 1 }))),
           Effect.exit,
         );
+
         return { exit, counts: yield* Ref.get(counts) };
       }),
     ).pipe(Effect.provide(services)),
@@ -104,10 +113,12 @@ const reason = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const fail = exit.cause.reasons.find((r) => r._tag === "Fail");
+
   return fail?._tag === "Fail" && Schema.is(SettingsError)(fail.error) ? fail.error.reason : "not a SettingsError";
 };
 
 const text = (t: string): File => ({ _tag: "text", text: t });
+
 const port = fc.integer({ min: 1, max: 65535 });
 
 // Each failure a start must stop on, the file it sits in, and the reason it gives.
@@ -149,6 +160,7 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
       fc.asyncProperty(failures, fc.option(port, { nil: undefined }), fc.boolean(), async (failure, over, viaEnv) => {
         const bad: File = failure.kind === "read" ? { _tag: "folder" } : text(failure.body);
         const good = text("");
+
         // L7: a flag or env value for the port does not excuse the file's own value.
         const override =
           over === undefined
@@ -156,11 +168,13 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             : viaEnv
               ? { env: { FABRIKA_INSTANCE_PORT: String(over) } }
               : { flags: { "instance.port": String(over) } };
+
         const { exit, counts } = await start(
           failure.in === "repo" ? bad : good,
           failure.in === "person" ? bad : good,
           override,
         );
+
         expect(reason(exit), `${failure.in}: ${failure.body}`).toBe(failure.kind);
         expect(counts).toEqual({ build: 0, alchemy: 0, write: 0 });
       }),
@@ -174,6 +188,7 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
       fc.constant(text("")),
       port.map((p) => text(`# the person's\n\n[instance]\nport = ${p}\n`)),
     );
+
     await fc.assert(
       fc.asyncProperty(
         file,
@@ -185,6 +200,7 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             ...(flag === undefined ? {} : { flags: { "instance.port": String(flag) } }),
             ...(env === undefined ? {} : { env: { FABRIKA_INSTANCE_PORT: String(env) } }),
           });
+
           expect(counts).toEqual({ build: 1, alchemy: 1, write: 1 });
           expect(Exit.isSuccess(exit)).toBe(true);
 
@@ -194,8 +210,10 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
             expect(exit.value.values.port).toBe(want);
             expect(exit.value.snapshot.values["instance.port"]).toBe(want);
             const origin = exit.value.snapshot.origins["instance.port"];
+
             const tag =
               flag !== undefined ? "flag" : env !== undefined ? "env" : fromFile !== undefined ? "file" : "default";
+
             expect(origin?._tag).toBe(tag);
 
             if (tag === "file") {
@@ -224,6 +242,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
       async (v) => {
         const touched: Array<string> = [];
         const fileValue = v.equal ? Declarations.port.default : v.value;
+
         const fs = FileSystem.layerNoop({
           readFileString: (path) => {
             touched.push(path);
@@ -236,6 +255,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             );
           },
         });
+
         const exit = await Effect.runPromise(
           Load.load({
             person: { path: PERSON, name: PERSON },
@@ -247,6 +267,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
             env: {},
           }).pipe(Effect.exit, Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto))),
         );
+
         expect(Exit.isSuccess(exit)).toBe(!(v.selected && v.newer));
 
         if (v.selected && v.newer) {
@@ -281,6 +302,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
 describe("T730, a load keeps the repo file's own minimum, and invents none without a repo", () => {
   const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
   const release = fc.tuple(part, part, part).map((t) => t.join("."));
+
   const repoFile = fc.oneof(
     fc.constant({ _tag: "none" as const }),
     fc.constant({ _tag: "missing" as const }),
@@ -296,6 +318,7 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
         fc.option(release, { nil: undefined }),
         async (repo, flag, env) => {
           const d = Declarations.version;
+
           const { exit } = await Effect.runPromise(
             Effect.scoped(
               Effect.gen(function* () {
@@ -307,6 +330,7 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
                       : { _tag: "missing" },
                   text(""),
                 );
+
                 const exit = yield* Load.load({
                   person: places.person,
                   ...(repo._tag === "none" ? {} : { repo: places.repo }),
@@ -315,10 +339,12 @@ describe("T730, a load keeps the repo file's own minimum, and invents none witho
                   // Newer than every generated release, so no stated minimum refuses the load.
                   version: "200.0.0",
                 }).pipe(Effect.exit);
+
                 return { exit };
               }),
             ).pipe(Effect.provide(services)),
           );
+
           expect(Exit.isSuccess(exit), String(exit)).toBe(true);
 
           if (Exit.isSuccess(exit)) {
@@ -346,20 +372,25 @@ it.effect.prop(
     Effect.gen(function* () {
       const d = Declarations.desktopLinkTtl;
       const reads: Array<string> = [];
+
       const fs = FileSystem.layerNoop({
         readFileString: (path) => {
           reads.push(path);
+
           return Effect.succeed(source === "default" ? "" : `[desktop]\nlink-ttl = ${value}\n`);
         },
       });
+
       const loaded = yield* Load.load({
         person: { path: "person.toml", name: "person.toml" },
         version: "0.0.0",
         flags: source === "flag" ? { [d.path]: String(value + 2) } : {},
         env: source === "env" || source === "flag" ? { [d.env]: String(value + 1) } : {},
       }).pipe(Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)));
+
       const want =
         source === "default" ? d.default : source === "flag" ? value + 2 : source === "env" ? value + 1 : value;
+
       expect(loaded.values.desktopLinkTtl).toBe(want);
       expect(loaded.snapshot.values[d.path]).toBe(want);
       expect(loaded.snapshot.origins[d.path]?._tag).toBe(source);
@@ -378,6 +409,7 @@ it.effect.prop(
     Effect.gen(function* () {
       let started = false;
       const fs = FileSystem.layerNoop({ readFileString: () => Effect.succeed(`[desktop]\nlink-ttl = ${bad}\n`) });
+
       const exit = yield* Load.load({
         person: { path: "person.toml", name: "person.toml" },
         version: "0.0.0",
@@ -392,6 +424,7 @@ it.effect.prop(
         Effect.exit,
         Effect.provide(Layer.mergeAll(fs, TomlParser.layer, Digest.layerWebCrypto)),
       );
+
       expect(reason(exit)).toBe("invalid");
       expect(started).toBe(false);
     }),
@@ -412,6 +445,7 @@ it.effect.prop(
       const body = `[desktop]\n${key} = ${invalid ? 0 : value}\n`;
       const places = yield* lay(text(""), text(body));
       let starts = 0;
+
       const exit = yield* Load.load({ ...places, flags: {}, env: {}, version: "0.0.0" }).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
@@ -420,6 +454,7 @@ it.effect.prop(
         ),
         Effect.exit,
       );
+
       expect(Exit.isSuccess(exit)).toBe(!invalid);
       expect(starts).toBe(invalid ? 0 : 1);
 

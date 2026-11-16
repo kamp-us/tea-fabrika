@@ -68,8 +68,10 @@ import { parseSync, Visitor } from "oxc-parser";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
 export const LABEL = "fabrika.mutbox=1";
+
 /** Whose container it is: the lock file its run held. A sweep removes only its own lock's. */
 export const OWNER = "fabrika.mutbox.lock";
+
 export const PLATFORM = "linux/arm64";
 
 /**
@@ -122,8 +124,10 @@ export const parseRelated = (text: string): ReadonlyArray<string> | null => {
     .split(",")
     .map((p) => p.trim())
     .filter((p) => p !== "");
+
   const plain = (p: string) =>
     /^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$/.test(p) && !p.split("/").includes("..") && !p.startsWith("/");
+
   return paths.length > 0 && paths.every(plain) ? paths : null;
 };
 
@@ -139,11 +143,13 @@ const WINDOWS = new Set(["electron", "playwright", "@playwright/test"]);
  */
 const loads = (file: string, source: string): ReadonlySet<string> => {
   const names = new Set<string>();
+
   const add = (node: { readonly type: string; readonly value?: unknown } | null | undefined) => {
     if (node?.type === "Literal" && typeof node.value === "string") {
       names.add(node.value);
     }
   };
+
   new Visitor({
     ImportDeclaration: (node) => (node.importKind === "type" ? undefined : add(node.source)),
     ExportNamedDeclaration: (node) => (node.exportKind === "type" ? undefined : add(node.source)),
@@ -152,6 +158,7 @@ const loads = (file: string, source: string): ReadonlySet<string> => {
     CallExpression: (node) =>
       node.callee.type === "Identifier" && node.callee.name === "require" ? add(node.arguments[0]) : undefined,
   }).visit(parseSync(file, source).program);
+
   return names;
 };
 
@@ -262,8 +269,10 @@ type FileReach = NonNullable<(typeof Sample.Type)["files"]>[number];
 /** The report's reach line: how many changed files got a mutant, and each one that got none. Pure. */
 export const reachLine = (files: ReadonlyArray<FileReach>): string => {
   const missed = files.filter((f) => f.selected === 0);
+
   const reason = (f: FileReach) =>
     f.total === 0 ? "no mutant on its changed lines" : `${f.total} mutants on its changed lines, none selected`;
+
   return [
     `the sample reached ${files.length - missed.length} of ${files.length} changed files`,
     ...(missed.length > 0 ? [`; zero mutants in ${missed.map((f) => `${f.file} (${reason(f)})`).join(", ")}`] : []),
@@ -277,6 +286,7 @@ export const reachLine = (files: ReadonlyArray<FileReach>): string => {
 export const buildOwns = (owners: Readonly<Record<string, string>>, file: string): boolean => {
   const folders = Object.keys(owners).filter((key) => key.endsWith("/") && file.startsWith(key));
   const key = file in owners ? file : folders.sort((a, b) => b.length - a.length)[0];
+
   return key !== undefined && owners[key] === "build";
 };
 
@@ -307,6 +317,7 @@ const Row = Schema.Struct({
   replacement: Schema.String,
   status: Schema.String,
 });
+
 type Row = typeof Row.Type;
 
 const Arm = Schema.Struct({
@@ -320,6 +331,7 @@ const Arm = Schema.Struct({
   unreached: Schema.Finite,
   survivors: Schema.Array(Row),
 });
+
 type Arm = typeof Arm.Type;
 
 const Named = Schema.Struct({ path: Schema.String, reason: Schema.String });
@@ -362,6 +374,7 @@ const Summary = Schema.Struct({
   /** With a base: each related test left out of arm a, and why. */
   armA: Schema.NullOr(Schema.Struct({ dropped: Schema.Array(Named) })),
 });
+
 type Summary = typeof Summary.Type;
 
 const TESTED = new Set(["Killed", "Survived", "Timeout"]);
@@ -404,6 +417,7 @@ export const tally = (exit: number, from: Arm["from"], rows: ReadonlyArray<Row>,
 /** The mutants arm a kills that arm b lets live. Pure. */
 export const narrowed = (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Row> => {
   const killed = new Set(a.filter((r) => r.status === "Killed" || r.status === "Timeout").map(mutantKey));
+
   return b.filter((r) => (r.status === "Survived" || r.status === "NoCoverage") && killed.has(mutantKey(r)));
 };
 
@@ -504,6 +518,7 @@ export const judge = (seen: {
 
   const owners = seen.owners;
   const files = seen.sample.files;
+
   const owned =
     owners === null || files === undefined ? [] : files.filter((f) => f.total > 0 && buildOwns(owners, f.file));
 
@@ -549,7 +564,9 @@ export const judge = (seen: {
         ]
       : []),
   ];
+
   const unknown = gaps.some((g) => g.reason !== "capped");
+
   return {
     outcome: "done",
     reason: gaps.map((g) => g.reason).join(","),
@@ -576,6 +593,7 @@ export const droppedFromArmA = (
       const failed = (baseline?.testResults ?? [])
         .filter((file) => file.name.replace(/^\/repo\//, "") === p)
         .flatMap((file) => file.assertionResults.filter((t) => t.status === "failed").map((t) => t.fullName));
+
       return {
         path: p,
         reason: !onBase.includes(p)
@@ -610,9 +628,11 @@ const sh = Effect.fnUntraced(
         ? {}
         : { stdin: typeof stdin === "string" ? Stream.make(new TextEncoder().encode(stdin)) : stdin }),
     });
+
     const [out, err, code] = yield* Effect.all([text(ran.stdout), text(ran.stderr), ran.exitCode], {
       concurrency: 3,
     });
+
     return { out, err, code: Number(code) };
   },
   Effect.scoped,
@@ -657,6 +677,7 @@ const heldBy = Effect.fnUntraced(function* (lock: string) {
   }
 
   yield* fs.remove(lock, { force: true }).pipe(Effect.ignore);
+
   return null;
 });
 
@@ -758,13 +779,16 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
 
   if (report !== null) {
     const rows = Object.entries(report.files).flatMap(([file, f]) => f.mutants.map((m) => toRow(file, m)));
+
     return { arm: tally(exit, "report", rows, selected), rows };
   }
 
   const events = path.join(box, name, "events");
+
   const names = (yield* fs.readDirectory(events).pipe(Effect.orElseSucceed(() => []))).filter((n) =>
     /^\d+-onMutantTested\.json$/.test(n),
   );
+
   const rows: Array<Row> = [];
 
   for (const n of names.sort()) {
@@ -781,6 +805,7 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
 const readUsage = Effect.fnUntraced(function* (box: string) {
   const peak = Number((yield* readOut(box, "memory.peak")) ?? Number.NaN);
   const cpu = /^usage_usec (\d+)$/m.exec((yield* readOut(box, "cpu.stat")) ?? "")?.[1];
+
   return Number.isFinite(peak) && cpu !== undefined
     ? { memoryPeakBytes: peak, cpuSeconds: Math.round(Number(cpu) / 10_000) / 100 }
     : null;
@@ -886,12 +911,16 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   // runs it, but a Linux host keeps the folder's owner, so on a CI runner (another uid) the box
   // could not write a byte. Open to any user: it holds only what the container leaves.
   yield* fs.chmod(box, 0o777).pipe(Effect.ignore);
+
   const git = (...args: ReadonlyArray<string>) =>
     sh("git", ["--git-dir", repo, "-c", "core.hooksPath=/dev/null", ...args]);
+
   const resolve = Effect.fnUntraced(function* (ref: string) {
     const got = yield* sh("git", ["-C", ask.checkout, "rev-parse", "-q", "--verify", `${ref}^{commit}`]);
+
     return got.code === 0 ? got.out.trim() : null;
   });
+
   const build = yield* resolve(ask.build);
   const base = ask.base === undefined ? null : yield* resolve(ask.base);
 
@@ -903,6 +932,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   yield* git("init", "-q", "--bare");
+
   const fetch = (sha: string, ref: string, depth: number) =>
     git(
       "fetch",
@@ -915,6 +945,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
       ask.checkout,
       `${sha}:refs/heads/${ref}`,
     );
+
   const fetched = yield* fetch(build, "build", 2);
   const fetchedBase = base === null ? fetched : yield* fetch(base, "base", 1);
 
@@ -927,6 +958,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   const show = Effect.fnUntraced(function* (file: string) {
     const got = yield* git("show", `refs/heads/build:${file}`);
+
     return got.code === 0 ? got.out : null;
   });
 
@@ -1021,6 +1053,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const name = `fabrika-mutbox-${ask.ticket}-${process.pid}`;
   // A hung rm here is stopped at its bound; gc's sweep finds the container by its label later.
   yield* Effect.addFinalizer(() => docker(["rm", "-f", name]).pipe(Effect.ignore));
+
   const ran = yield* sh(
     "docker",
     runArgs({
@@ -1038,6 +1071,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   if (Option.isNone(ran)) {
     // The time limit is the answer; a hung kill is stopped at its bound, and the rm finalizer follows.
     yield* docker(["kill", name]).pipe(Effect.ignore);
+
     return yield* Stuck.make({
       reason: "time_limit",
       detail: `the container passed ${limit} s and was killed; no report was read`,
@@ -1052,18 +1086,22 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const b = yield* readArm(box, "b", sample?.selected ?? 0);
   const a = yield* readArm(box, "a", sample?.selected ?? 0);
   const baseline = yield* decoded(Baseline, yield* readOut(box, "baseline.json"));
+
   const tests = (baseline?.testResults ?? []).flatMap((file) =>
     file.assertionResults.map((t) => ({
       name: `${file.name.replace(/^\/repo\//, "")}: ${t.fullName}`,
       status: t.status,
     })),
   );
+
   // Which base tests passed on the build and ran in arm a; the entry wrote them before arm a.
   const kept = ((yield* readOut(box, "a-kept")) ?? "")
     .trim()
     .split(",")
     .filter((p) => p !== "");
+
   const aBaseline = yield* decoded(Baseline, yield* readOut(box, "a-baseline.json"));
+
   const ended = judge({
     exit: ran.value.code,
     sample,
@@ -1072,6 +1110,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     base: base === null ? null : { a: a?.arm ?? null, has: onBase.length, kept: kept.length },
     owners,
   });
+
   const summary: Summary = {
     ...stuckSummary(ask, started, "", ""),
     ...ended,
@@ -1089,6 +1128,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     narrowing: narrowingUnknown(ended.reason) ? "unknown" : a === null || b === null ? null : narrowed(a.rows, b.rows),
     armA: base === null ? null : { dropped: droppedFromArmA(related, onBase, kept, aBaseline) },
   };
+
   return summary;
 });
 
@@ -1111,6 +1151,7 @@ const run = Command.make(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const started = Date.now();
+
     const summary = yield* boxed(ask, started).pipe(
       Effect.scoped,
       // Whatever went wrong, the answer is `stuck`: there is no other way to run the sample.
@@ -1124,6 +1165,7 @@ const run = Command.make(
         ),
       ),
     );
+
     const line = encode(summary);
     yield* fs.makeDirectory(ask.out, { recursive: true }).pipe(Effect.ignore);
     yield* fs.writeFileString(path.join(ask.out, "mutbox.json"), `${line}\n`).pipe(Effect.ignore);
@@ -1152,11 +1194,13 @@ const gc = Command.make(
       }
 
       const containers = yield* sweepContainers(lock);
+
       // Docker's own cleanup: images with our label that no container uses, made over a week ago.
       const pruned = yield* docker(
         ["image", "prune", "--all", "--force", "--filter", `label=${LABEL}`, "--filter", "until=168h"],
         DOCKER_SECONDS.prune,
       );
+
       const images = pruned.out.split("\n").filter((l) => l.startsWith("untagged: ")).length;
       yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);
     },

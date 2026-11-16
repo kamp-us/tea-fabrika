@@ -31,11 +31,13 @@ it("type: a runner without recovery options does not type-check, in either const
     recovery: { sql: storage().sql, name: "counter:1", capacity: 1024 ** 3 },
     chunk: mailChunk.default,
   };
+
   // Built, never run: the Layer's own type carries what it needs.
   const withLoader = ProgramRunner.withLoader(descriptor, loader, options);
   const layer = ProgramRunner.layer(descriptor, options);
   expectTypeOf(withLoader).toExtend<Layer.Layer<ProgramRunner, never, any>>();
   expectTypeOf(layer).toExtend<Layer.Layer<ProgramRunner, never, any>>();
+
   const uncalled = () => {
     // @ts-expect-error ticket 402: recovery options are required
     ProgramRunner.withLoader(descriptor, loader);
@@ -50,6 +52,7 @@ it("type: a runner without recovery options does not type-check, in either const
     // @ts-expect-error ticket 1041: the chunk size is the setting's byte size, never a bare number
     ProgramRunner.layer(descriptor, { ...options, chunk: 64 * 1_024 });
   };
+
   expectTypeOf(uncalled).toBeFunction();
 });
 
@@ -58,6 +61,7 @@ it("type: ProcessManager is a Layer requirement of both constructors", () => {
     recovery: { sql: storage().sql, name: "counter:1", capacity: 1024 ** 3 },
     chunk: mailChunk.default,
   };
+
   const withLoader = ProgramRunner.withLoader(descriptor, loader, options);
   const layer = ProgramRunner.layer(descriptor, options);
   expectTypeOf<Extract<Needs<typeof withLoader>, ProcessManager>>().not.toBeNever();

@@ -26,6 +26,7 @@ const Clone = Schema.Struct({
   tokens: Schema.Int,
   isNew: Schema.optionalKey(Schema.Boolean),
 });
+
 export type Clone = typeof Clone.Type;
 
 const Report = Schema.Struct({ duplicates: Schema.Array(Clone) });
@@ -53,6 +54,7 @@ export const advice = (clones: ReadonlyArray<Clone>): ReadonlyArray<string> =>
     .map(({ firstFile, secondFile, lines, tokens }) => {
       const at = `${firstFile.name}:${firstFile.startLoc.line}-${firstFile.endLoc.line}`;
       const where = `file=${property(secondFile.name)},line=${secondFile.startLoc.line},endLine=${secondFile.endLoc.line}`;
+
       return `::warning ${where},title=${property("copied code (advice)")}::${lines} lines, ${tokens} tokens, the same as ${at}. Reuse it or say why not in ## Existing tools (0587).`;
     });
 
@@ -61,11 +63,13 @@ const main = (argv: ReadonlyArray<string>): number => {
 
   if (!argv.includes("--base") || !/^[0-9a-f]{40}$/.test(base)) {
     console.log("copies: no base commit, so no clone can be told new; nothing checked");
+
     return 0;
   }
 
   const out = mkdtempSync(join(tmpdir(), "copies-"));
   const bin = join(import.meta.dirname, "../../node_modules/.bin/jscpd");
+
   const ran = spawnSync(
     bin,
     ["--config", ".jscpd.json", "--baseline-from-ref", base, "--reporters", "json", "--output", out, "--silent", "."],
@@ -76,6 +80,7 @@ const main = (argv: ReadonlyArray<string>): number => {
 
   if (ran.error !== undefined || ran.status !== 0) {
     console.log(`copies: jscpd did not run (${ran.error?.message ?? `exit ${ran.status}`}); nothing checked`);
+
     return 0;
   }
 
@@ -83,6 +88,7 @@ const main = (argv: ReadonlyArray<string>): number => {
 
   if (Option.isNone(report)) {
     console.log("copies: jscpd's report is not the shape this reads; nothing checked");
+
     return 0;
   }
 
@@ -93,6 +99,7 @@ const main = (argv: ReadonlyArray<string>): number => {
   }
 
   console.log(`copies: ${lines.length} new clones, advice only`);
+
   return 0;
 };
 

@@ -8,6 +8,7 @@ import { BuiltProgram } from "../runtime/Built.ts";
 import { Declaration, workerExecution, type ExecutionCalls, type ProgramSource } from "../runtime/Execution.ts";
 import { ProgramDown } from "../runtime/Program.ts";
 import type { bind } from "./tail.ts";
+
 export type {
   /**
    * One program's compiled source and its hash, as the build hands it to the loader.
@@ -16,6 +17,7 @@ export type {
    */
   ProgramSource,
 } from "../runtime/Execution.ts";
+
 export {
   /**
    * Returns the `Sql` handle over a Durable Object's own SQLite storage.
@@ -24,6 +26,7 @@ export {
    */
   cloudflareSql,
 } from "./CloudflareSql.ts";
+
 export {
   /**
    * Handles one brain request, with the embedded window table it serves from.
@@ -38,6 +41,7 @@ export {
    */
   serveAsset,
 } from "./fetch.ts";
+
 export {
   /**
    * Reads each tail invocation's props and bindings from Alchemy's live services.
@@ -89,6 +93,7 @@ export const workerLoader = (
     hash?: string,
   ) {
     const built = Object.hasOwn(programs, name) ? programs[name] : undefined;
+
     const found =
       hash === undefined
         ? built
@@ -96,6 +101,7 @@ export const workerLoader = (
           (lookup === undefined
             ? null
             : yield* lookup(hash).pipe(Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })))));
+
     const code =
       found == null
         ? undefined
@@ -112,6 +118,7 @@ export const workerLoader = (
       hash: code.hash,
       role: process === "check" ? "candidate" : "process",
     });
+
     const worker = loader.get(`${code.hash}/${process}`, () => ({
       compatibilityDate: "2026-10-12",
       // Worker Loader reads an ES module only from a ".js" name; ".mjs" fails to load.
@@ -121,14 +128,17 @@ export const workerLoader = (
       globalOutbound: null,
       ...(tail === undefined ? {} : { tails: [tail] }),
     }));
+
     const rpc = worker.getEntrypoint<Calls>();
     const fail = (cause: unknown) => new ProgramDown({ reason: "load", error: "ProgramDown", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader describes its checked declaration through RPC
     const work = Effect.tryPromise({ try: () => rpc.describe(), catch: fail });
     const raw = yield* work;
+
     const declaration = yield* Schema.decodeUnknownEffect(Declaration)(raw).pipe(
       Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
     );
+
     return {
       execution: workerExecution(rpc),
       declaration,

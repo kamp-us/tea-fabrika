@@ -59,9 +59,13 @@ import * as QueueRunnerTest from "../QueueRunnerTest.ts";
 import * as Settings from "../Settings.ts";
 
 const NAME = "queue:1";
+
 const BUILD = "queue-laws";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const owner = Writer.cases.person.make({ key: "SHA256:law", for: "person_01m6v5270hf3c8x2q7w9z4k5mn" });
+
 /** The process manager's own caller: the brain registered every name, so its fold answers them. */
 const brain = Owner.cases.brain.make({});
 
@@ -76,6 +80,7 @@ const from = {
 };
 
 const base = CodeHostTest.commit("d".repeat(40));
+
 const moved = CodeHostTest.commit("c".repeat(40));
 
 const settings = Effect.runSync(
@@ -96,6 +101,7 @@ const stores = Effect.gen(function* () {
   const parent = yield* Scope.Scope;
   let scope = yield* Scope.fork(parent, "sequential");
   const held = new Map<string, Sql>();
+
   const connect = Effect.fnUntraced(function* (part: string) {
     if (held.has(part)) {
       return;
@@ -105,10 +111,13 @@ const stores = Effect.gen(function* () {
       Effect.sync(() => new DatabaseSync(path.join(folder, `${encodeURIComponent(part)}.db`))),
       (db) => Effect.sync(() => db.close()),
     ).pipe(Scope.provide(scope));
+
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
     held.set(part, nodeSql(db));
   });
+
   const adapters = new Map<string, Sql>();
+
   const sql = (part: string): Sql => {
     const known = adapters.get(part);
 
@@ -126,21 +135,28 @@ const stores = Effect.gen(function* () {
 
       return handle;
     };
+
     const made: Sql = {
       exec: (text, ...params) => current().exec(text, ...params),
       transaction: (f) => current().transaction(f),
       size: () => current().size(),
     };
+
     adapters.set(part, made);
+
     return made;
   };
+
   yield* connect("ledger");
   yield* connect("alarms");
+
   const table = () => {
     const db = sql("alarms");
     db.exec("CREATE TABLE IF NOT EXISTS alarms (name TEXT PRIMARY KEY, at INTEGER NOT NULL)");
+
     return db;
   };
+
   return {
     sql,
     connect,
@@ -171,6 +187,7 @@ const stores = Effect.gen(function* () {
 }).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)), Effect.orDie);
 
 type Store = Effect.Success<typeof stores>;
+
 type Services = CiTest.Control | CodeHostTest.Control | CodeHost | import("@kampus/libfabrika/ci/Ci").Ci;
 
 const life = Effect.fnUntraced(function* (
@@ -184,6 +201,7 @@ const life = Effect.fnUntraced(function* (
     LedgerSql.layer(store.sql("ledger"), { reader: "queue-laws" }),
     LedgerTransactionSql.layer(store.sql("ledger")),
   ).pipe(Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })));
+
   const manager = ProcessManager.layer(
     {
       by: from.by,
@@ -192,6 +210,7 @@ const life = Effect.fnUntraced(function* (
     },
     ids,
   );
+
   const shared = MailDeliveryLive.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -212,6 +231,7 @@ const life = Effect.fnUntraced(function* (
     Layer.provideMerge(Mailbox.layer),
     Layer.provideMerge(data),
   );
+
   const context = yield* Layer.buildWithScope(shared, scope);
 
   const registrations: ReadonlyArray<readonly [string, string]> = [
@@ -230,6 +250,7 @@ const life = Effect.fnUntraced(function* (
   }
 
   const runners = new Map<string, ProgramRunner["Service"]>();
+
   const runner = Effect.fnUntraced(function* (name: string) {
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(context));
     const pid = status.state.process;
@@ -241,10 +262,12 @@ const life = Effect.fnUntraced(function* (
 
     yield* store.connect(`model:${pid}`);
     yield* store.connect(`recovery:${pid}`);
+
     const checked = Layer.effect(
       CheckedWriter,
       Effect.gen(function* () {
         const mailbox = yield* Mailbox;
+
         return {
           append: (i: Incoming) =>
             mailbox.send(name, i.id, i.envelope.input, {
@@ -261,6 +284,7 @@ const life = Effect.fnUntraced(function* (
         };
       }),
     );
+
     const own = Layer.mergeAll(
       ProgramLoader.layer(programs, handlers).pipe(Layer.provide(Layer.succeedContext(services))),
       ProcessStore.layer(store.sql(`model:${pid}`), { process: pid }),
@@ -269,6 +293,7 @@ const life = Effect.fnUntraced(function* (
       Layer.succeed(Recording, { flush: Effect.void }),
       checked,
     ).pipe(Layer.provideMerge(Layer.succeedContext(context)));
+
     const built = yield* Layer.buildWithScope(
       ProgramRunner.layer(
         { id: pid, name, program: status.state.code.program, build: BUILD, owner },
@@ -276,10 +301,13 @@ const life = Effect.fnUntraced(function* (
       ).pipe(Layer.provide(own)),
       scope,
     );
+
     const made = Context.get(built, ProgramRunner);
     runners.set(pid, made);
+
     return made;
   });
+
   return { context, runner };
 });
 
@@ -287,16 +315,19 @@ const open = Effect.fnUntraced(function* (
   token?: Redacted.Redacted<string>,
 ): Effect.fn.Return<QueueRunnerTest.World, unknown, Scope.Scope> {
   const store = yield* stores;
+
   const services = yield* Layer.build(
     Layer.merge(
       CodeHostTest.layer(token === undefined ? {} : { token }),
       CiTest.layer(token === undefined ? {} : { token }),
     ),
   );
+
   const host = Context.get(services, CodeHostTest.Control);
   const ci = Context.get(services, CiTest.Control);
   const rawHost = Context.get(services, CodeHost);
   let gap = false;
+
   const wrapped = Context.add(
     services,
     CodeHost,
@@ -318,6 +349,7 @@ const open = Effect.fnUntraced(function* (
         }),
     }),
   );
+
   yield* host.main(base);
 
   for (let change = 1; change <= 6; change++) {
@@ -340,9 +372,11 @@ const open = Effect.fnUntraced(function* (
   const grants: Array<typeof StartGrant.Type> = [{ source: "pipeline/queue", to: "pipeline/merger" }];
   let current = yield* life(store, wrapped, ids, scope, grants);
   let letter = 0;
+
   const deliver = Effect.fnUntraced(function* (input: unknown) {
     const runner = yield* current.runner(NAME);
     const n = ++letter;
+
     return yield* runner.msg({
       id: `incoming:${n}`,
       envelope: {
@@ -356,33 +390,42 @@ const open = Effect.fnUntraced(function* (
       span: { traceId: TRACE, spanId: "00f067aa0ba902b7" },
     });
   });
+
   // One fold of the process table answers every name. `status` folds the whole log on each call,
   // and one call for each name was half of S2's time, which ran out on a busy CI machine.
   const statuses = Effect.gen(function* () {
     const rows = yield* Ledger.use((ledger) => Stream.runCollect(ledger.read("processes", 0)));
+
     const registrations = rows
       .filter((row) => row._tag === "registered")
       .map((row) => Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body));
+
     const processes = yield* ProcessManager;
+
     const answers = yield* LedgerTransaction.use((tx) =>
       tx.transact((turn) => {
         const table = processes.table(turn);
+
         return registrations.map((entry) => ({ entry, status: table.status(entry.name, brain) }));
       }),
     );
+
     return yield* Effect.forEach(
       answers,
       ({ entry, status }) => Effect.fromResult(status).pipe(Effect.map((found) => ({ ...entry, state: found.state }))),
       { concurrency: 1 },
     );
   });
+
   const snapshot = Effect.gen(function* () {
     const info = yield* statuses.pipe(Effect.provide(current.context));
+
     const names = [
       NAME,
       ...Array.from({ length: 6 }, (_, i) => `quest:${i + 1}`),
       ...info.filter((i) => i.program === "pipeline/merger").map((i) => i.name),
     ];
+
     const letters = yield* Effect.forEach(
       names,
       (name) =>
@@ -392,11 +435,13 @@ const open = Effect.fnUntraced(function* (
         ),
       { concurrency: 1 },
     );
+
     const saved = yield* Effect.forEach(
       info.filter((i) => i.program === "pipeline/queue" || i.program === "pipeline/merger"),
       (i) =>
         Effect.gen(function* () {
           yield* store.connect(`model:${i.state.process}`);
+
           return yield* ProcessStore.use((s) => s.load).pipe(
             Effect.provide(ProcessStore.layer(store.sql(`model:${i.state.process}`), { process: i.state.process })),
             Effect.provide(current.context),
@@ -404,16 +449,20 @@ const open = Effect.fnUntraced(function* (
         }),
       { concurrency: 1 },
     );
+
     // Read the queue checkpoint by its process, including its last model after exit.
     const queueInfo = info.find((i) => i.name === NAME)!;
+
     const checkpoint = yield* ProcessStore.use((s) => s.load).pipe(
       Effect.provide(
         ProcessStore.layer(store.sql(`model:${queueInfo.state.process}`), { process: queueInfo.state.process }),
       ),
       Effect.provide(current.context),
     );
+
     const model =
       checkpoint === null ? null : Schema.decodeSync(programs["pipeline/queue"].state.schema)(checkpoint.saved.model);
+
     return {
       model,
       view: model === null ? null : programs["pipeline/queue"].view.select(model),
@@ -428,13 +477,16 @@ const open = Effect.fnUntraced(function* (
       saved,
     };
   });
+
   const notify = Effect.fnUntraced(function* (name: string) {
     const runner = yield* current.runner(name);
     const status = yield* ProcessManager.use((p) => p.status(name)).pipe(Effect.provide(current.context));
+
     const checkpoint = yield* ProcessStore.use((s) => s.load).pipe(
       Effect.provide(ProcessStore.layer(store.sql(`model:${status.state.process}`), { process: status.state.process })),
       Effect.provide(current.context),
     );
+
     const incoming = yield* Mailbox.use((m) => Stream.runHead(m.read(name, checkpoint?.saved.after ?? 0))).pipe(
       Effect.provide(current.context),
     );
@@ -443,6 +495,7 @@ const open = Effect.fnUntraced(function* (
       yield* runner.mailed;
     }
   });
+
   const step = Effect.gen(function* () {
     yield* notify(NAME);
     const info = yield* statuses.pipe(Effect.provide(current.context));
@@ -461,6 +514,7 @@ const open = Effect.fnUntraced(function* (
 
     yield* notify(NAME);
   });
+
   return {
     host,
     ci,
@@ -469,6 +523,7 @@ const open = Effect.fnUntraced(function* (
     enqueue: (change, ref) =>
       Effect.gen(function* () {
         const found = yield* host.read(change);
+
         return yield* deliver({
           type: "enqueue",
           change,

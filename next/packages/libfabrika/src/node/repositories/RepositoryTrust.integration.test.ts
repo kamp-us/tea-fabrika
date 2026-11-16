@@ -11,11 +11,14 @@ import type { Sql } from "../../Sql.ts";
 const open = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem,
     path = yield* Path.Path;
+
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-trust-" });
   const file = path.join(root, "ledger.db");
+
   const held = yield* Effect.acquireRelease(
     Effect.sync(() => {
       const db = new DatabaseSync(file);
+
       return { db, sql: nodeSql(db) };
     }),
     (handle) =>
@@ -25,16 +28,19 @@ const open = Effect.gen(function* () {
         }
       }),
   );
+
   const sql: Sql = {
     exec: (query, ...params) => held.sql.exec(query, ...params),
     transaction: (step) => held.sql.transaction(step),
     size: () => held.sql.size(),
   };
+
   const reopen = Effect.sync(() => {
     held.db.close();
     held.db = new DatabaseSync(file);
     held.sql = nodeSql(held.db);
   });
+
   return { sql, reopen } satisfies RepositoryTrustTest.Store;
 }).pipe(Effect.orDie, Effect.provide(NodeServices.layer));
 

@@ -30,6 +30,7 @@ const scalar = Schema.is(Scalar);
 export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) {
   const failed = (cause: unknown) =>
     BrainControlError.make({ reason: Unsupported.make({ cause: Redacted.make(cause) }) });
+
   const response = yield* Schema.decodeEffect(Response)(input).pipe(Effect.mapError(failed));
   // oxlint-disable-next-line fabrika/no-redacted-value -- edge: parse protected native output; return checked job fields and keep failures protected
   const out = Redacted.value(response.stdout);
@@ -148,6 +149,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
   const executable = fields.get("program"),
     home = env.get("FABRIKA_HOME"),
     configuration = env.get("FABRIKA_BUILD");
+
   const pid = fields.get("pid");
 
   if (
@@ -170,6 +172,7 @@ export const decode = Effect.fnUntraced(function* (input: typeof Response.Type) 
   const checkedPid = yield* Schema.decodeEffect(Status.cases.loaded.fields.pid)(
     pid === undefined ? null : Number(pid),
   ).pipe(Effect.mapError(failed));
+
   return Status.cases.loaded.make({
     executable,
     args: args.slice(1),

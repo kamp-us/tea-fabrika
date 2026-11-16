@@ -24,13 +24,16 @@ const ARGV: Record<Command["_tag"], readonly [string, ReadonlyArray<string>]> = 
 const onPath = Effect.fnUntraced(function* (name: string, PATH: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const runnable = (folder: string) =>
     fs.stat(path.join(folder, name)).pipe(
       Effect.map((info) => info.type === "File" && (info.mode & 0o111) !== 0),
       Effect.orElseSucceed(() => false),
     );
+
   const folders = PATH.split(":").filter((folder) => folder !== "");
   const found = yield* Effect.forEach(folders, runnable, { concurrency: "unbounded" });
+
   return found.includes(true);
 });
 
@@ -53,6 +56,7 @@ export const layer = Layer.effect(
     // The one value of this process's environment that the child gets.
     const PATH = yield* Config.String("PATH");
     const git = yield* onPath("git", PATH);
+
     return Commands.of({
       has: git ? ["git"] : [],
       execute: (command) => capped(spawner, ARGV[command._tag], { PATH }, CAP[command._tag]),

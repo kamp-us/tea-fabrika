@@ -44,6 +44,7 @@ import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
 
 const HOUR = 3_600_000;
+
 export const STUCK = 24 * HOUR;
 
 /** What gc saw of one box. All of it is read before anything is decided. */
@@ -68,8 +69,11 @@ export const Verdict = Schema.TaggedUnion({
   remove: { reason: Schema.Literals(["merged", "closed", "on_remote"]) },
   backup: { to: Schema.Array(Schema.String) },
 });
+
 export type Verdict = typeof Verdict.Type;
+
 const keep = (reason: string) => Verdict.cases.keep.make({ reason });
+
 const remove = (reason: "merged" | "closed" | "on_remote") => Verdict.cases.remove.make({ reason });
 
 /** What gc does with one quest's pinned scripts. */
@@ -77,12 +81,14 @@ export const PinVerdict = Schema.TaggedUnion({
   keep: { reason: Schema.String },
   remove: { reason: Schema.String },
 });
+
 export type PinVerdict = typeof PinVerdict.Type;
 
 /** The branch a box's commits are backed up to, best first. */
 export const backupsOf = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
   const wip = branch === null ? null : wipOf(branch);
+
   return wip?.startsWith("fabrikalfa/") && wip !== own ? [wip, own] : [own];
 };
 
@@ -234,6 +240,7 @@ const sh = (cmd: string, args: readonly string[], cwd?: string) => {
     maxBuffer: 64 * 1024 * 1024,
     env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
   });
+
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
 
@@ -247,6 +254,7 @@ const loadEnv = (): Env => {
     '. "$0" && printf "%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO"',
     join(import.meta.dirname, "env.sh"),
   ]);
+
   const [MAIN = "", BOXES = "", GH_REPO = ""] = r.out.split("\n");
 
   if (r.code !== 0 || !MAIN || !BOXES) {
@@ -270,6 +278,7 @@ export const dirtyIn = (gitDir: string, box: string): number | null => {
     "-z",
     "--untracked-files=all",
   ]);
+
   // No rename pairs, so each NUL-ended entry is one file.
   return r.code === 0 ? r.out.split("\0").filter(Boolean).length : null;
 };
@@ -327,6 +336,7 @@ export const lastLogged = (log: string): number => {
 
   const last = readFileSync(log, "utf8").trimEnd().split("\n").at(-1) ?? "";
   const m = / (\d+) [+-]\d{4}\t/.exec(last);
+
   return m?.[1] ? Number(m[1]) * 1000 : 0;
 };
 
@@ -394,6 +404,7 @@ const sizeMb = (paths: readonly string[]) => {
   }
 
   const r = sh("du", ["-sk", ...there]);
+
   return Math.round(
     r.out
       .split("\n")
@@ -426,6 +437,7 @@ const main = () => {
 
   if (!existsSync(env.BOXES)) {
     console.log("gc: no boxes folder");
+
     return;
   }
 
@@ -434,6 +446,7 @@ const main = () => {
   repo("fetch", "-q", "origin");
   const prsOf = new Map<string, PrState[]>();
   const prsAt = new Map<string, PrState[]>();
+
   const listed = sh("gh", [
     "pr",
     "list",
@@ -477,12 +490,14 @@ const main = () => {
   let removed = 0;
   let freed = 0;
   let keptCount = 0;
+
   const foldersIn = (dir: string, skip: (name: string) => boolean) =>
     existsSync(dir)
       ? readdirSync(dir, { withFileTypes: true })
           .filter((d) => d.isDirectory() && !skip(d.name))
           .map((d) => d.name)
       : [];
+
   const boxes = [
     ...foldersIn(boxTrees(env.BOXES), (n) => n.endsWith("-view")).map((name) => ({
       name,
@@ -495,11 +510,13 @@ const main = () => {
       }),
     ),
   ].sort((a, b) => a.name.localeCompare(b.name));
+
   // The boxes this run removed, or would remove: boxfiles.ts sweeps only a box whose tree is gone.
   const gone: string[] = [];
 
   for (const { name, box } of boxes) {
     const gitDir = gitDirOf(box);
+
     const git =
       gitDir === null
         ? null
@@ -507,13 +524,18 @@ const main = () => {
             const g = (...a: string[]) => sh("git", [...SAFE, `--git-dir=${gitDir}`, ...a]);
             const head = g("rev-parse", "--verify", "-q", "HEAD^{commit}").out.trim() || null;
             const branch = g("symbolic-ref", "-q", "--short", "HEAD").out.trim() || null;
+
             return { head, branch };
           })();
+
     const head = git?.head ?? null;
     const inMain = head !== null && repo("cat-file", "-e", `${head}^{commit}`).code === 0;
+
     const onRemote =
       inMain && repo("for-each-ref", "--count=1", "--contains", head, "refs/remotes/origin").out.trim() !== "";
+
     const branch = git?.branch?.replace(/(-wip)+$/, "") ?? null;
+
     const seen: Seen = {
       name,
       git,
@@ -524,6 +546,7 @@ const main = () => {
       onRemote,
       dirty: gitDir === null ? null : dirtyIn(gitDir, box),
     };
+
     const verdict = decide(seen);
 
     if (verdict._tag === "keep") {
@@ -588,6 +611,7 @@ const main = () => {
         const pushed = verdict.to.find(
           (to) => sh("node", [join(import.meta.dirname, "botpush.mjs"), env.MAIN, to, ref]).code === 0,
         );
+
         repo("update-ref", "-d", ref);
 
         if (pushed === undefined) {
@@ -678,6 +702,7 @@ const main = () => {
     ],
     { encoding: "utf8" },
   );
+
   process.stdout.write(swept.stdout ?? "");
   process.stderr.write(swept.stderr ?? "");
 
@@ -701,12 +726,14 @@ const main = () => {
     const gitDir = gitDirOf(path);
     const branch = ref ?? null;
     const head = lines.find((l) => l.startsWith("HEAD "))?.slice(5) ?? null;
+
     const tips =
       head === null
         ? []
         : repo("for-each-ref", "--points-at", head, "--format=%(refname:lstrip=3)", "refs/remotes/origin")
             .out.split("\n")
             .filter(Boolean);
+
     const verdict = decideWorktree({
       branch,
       locked: lines.some((l) => l === "locked" || l.startsWith("locked ")),
@@ -752,6 +779,7 @@ const main = () => {
       [join(import.meta.dirname, "mutbox.ts"), "gc", "--lock", join(env.BOXES, "state", "docker.lock")],
       { encoding: "utf8", timeout: GC_SECONDS * 1000 },
     );
+
     process.stdout.write(swept.stdout ?? "");
 
     if (swept.error !== undefined) {

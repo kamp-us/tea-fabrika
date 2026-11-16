@@ -41,11 +41,14 @@ export const databases = Effect.gen(function* () {
   const path = yield* folder;
   const paths = yield* Path.Path.pipe(Effect.provide(NodeServices.layer));
   const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
+
   const connect = (part: string) => {
     const db = new DatabaseSync(paths.join(path, `${part}.db`));
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
+
     return { db, sql: nodeSql(db) };
   };
+
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       for (const { db } of held.values()) {
@@ -55,6 +58,7 @@ export const databases = Effect.gen(function* () {
       }
     }),
   );
+
   const handle = (part: string) => {
     const found = held.get(part);
 
@@ -64,11 +68,14 @@ export const databases = Effect.gen(function* () {
 
     const made = connect(part);
     held.set(part, made);
+
     return made;
   };
+
   // One Sql per part across reopens: each call goes to the database open now.
   const sqls = new Map<string, Sql>();
   const bytes = new TextEncoder();
+
   const sql = (part: string): Sql => {
     const known = sqls.get(part);
 
@@ -96,20 +103,26 @@ export const databases = Effect.gen(function* () {
       transaction: (step) => handle(part).sql.transaction(step),
       size: () => handle(part).sql.size(),
     };
+
     sqls.set(part, made);
+
     return made;
   };
+
   const reopen = Effect.sync(() => {
     for (const [part, { db }] of held) {
       db.close();
       held.set(part, connect(part));
     }
   });
+
   const open = () => [...held.values()].filter(({ db }) => db.isOpen).length;
+
   const data = (sql: Sql) =>
     Layer.mergeAll(LedgerSql.layer(sql, { reader: "connection:test" }), LedgerTransactionSql.layer(sql)).pipe(
       Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
     );
+
   const shared: StartChildTest.Store["shared"] = (sql, next, world) =>
     Layer.mergeAll(
       ChildrenLedger.layer({ grants: StartChildTest.STARTS, fabrika: StartChildTest.FABRIKA }).pipe(
@@ -134,6 +147,7 @@ export const databases = Effect.gen(function* () {
       Layer.provideMerge(Mailbox.layer),
       Layer.provideMerge(data(sql)),
     );
+
   const entries: StartChildTest.Store["entries"] = (names) =>
     Effect.forEach(
       ["processes", ...[...new Set(names)].flatMap((name) => [`processes/${name}`, `${name}/inbox`])],
@@ -144,9 +158,11 @@ export const databases = Effect.gen(function* () {
       Effect.provide(data(sql("ledger"))),
       Effect.orDie,
     );
+
   const tracer: StartChildTest.Store["tracer"] = (sql) =>
     Effect.map(Layer.build(SpanSink.layer(sql, { object: "p42-secrets" })), (context) =>
       Context.get(context, Tracer.Tracer),
     );
+
   return { sql, reopen, shared, entries, probe: { open }, tracer } satisfies StartChildTest.Store;
 });

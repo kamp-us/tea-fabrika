@@ -30,6 +30,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const rateReplyTypeLaw = () => {
   // @ts-expect-error a rate refusal cannot be made without its positive delay.
   const missing = Wire.RateRefusal.make({ reason: "rate_limited" });
+
   return missing;
 };
 
@@ -101,16 +102,20 @@ describe("P10 JSON-RPC", () => {
         const attached = online();
         const answer = { ...Answer.cases.refused.make({ reason: "rate_limited" }), retryAfter };
         const spans: Array<Tracer.NativeSpan> = [];
+
         const tracer = Tracer.make({
           span: (options) => {
             const span = new Tracer.NativeSpan(options);
             spans.push(span);
+
             return span;
           },
         });
+
         const reply = yield* answerFrame(frame({ id }), attached, admit, () => Effect.succeed(answer)).pipe(
           Effect.withTracer(tracer),
         );
+
         expect(JSON.parse(reply.send!)).toEqual({
           jsonrpc: "2.0",
           id: id === 0 ? 0 : id, // JSON encodes negative zero as zero.
@@ -147,6 +152,7 @@ describe("P10 JSON-RPC", () => {
       const result = yield* answerFrame(frame({ id: 0 }), online(), admit, () =>
         Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
+
       expect(JSON.parse(result.send!)).toEqual({ jsonrpc: "2.0", id: 0, result: null });
     }),
   );
@@ -186,10 +192,12 @@ describe("P10 JSON-RPC", () => {
       Effect.gen(function* () {
         const attached = online();
         const first = mode === "failure" ? Effect.fail(Offline.make({})) : Effect.die("route crashed");
+
         const route = vi
           .fn<Route>()
           .mockReturnValueOnce(first)
           .mockReturnValueOnce(Effect.succeed(Answer.cases.ok.make({ result: "recovered" })));
+
         const failed = yield* answerFrame(frame(), attached, admit, route);
         expect(failed).toEqual({ send: null, attached });
         const retried = yield* answerFrame(frame(), failed.attached, admit, route);
@@ -233,6 +241,7 @@ describe("P10 JSON-RPC", () => {
               const route = vi.fn((..._: ReadonlyArray<unknown>) =>
                 Effect.succeed(Answer.cases.ok.make({ result: answer })),
               );
+
               const result = yield* answerFrame(frame({ id, method, params }), attached, admit, route);
               expect(result.send).not.toBeNull();
               expect(result.attached).toEqual(attached);
@@ -274,6 +283,7 @@ describe("P10 JSON-RPC", () => {
               const result = yield* answerFrame(frame({ id, method: "gateway.knock" }), attached, admit, () =>
                 Effect.succeed(Answer.cases.parked.make({ stream, after })),
               );
+
               expect(result).toEqual({ send: null, attached });
             }),
           ),
@@ -288,6 +298,7 @@ describe("P10 JSON-RPC", () => {
         const result = yield* answerFrame(frame({ id }), online(), admit, () =>
           Effect.succeed(Answer.cases.parked.make({ stream: "x", after: 8 })),
         );
+
         expect(result.send).toBeNull();
         assert(result.attached._tag === "online");
         expect(result.attached.waits).toEqual([{ id, stream: "x", after: 8 }]);
@@ -301,6 +312,7 @@ describe("P10 JSON-RPC", () => {
       const route = vi.fn((_method: string, _params: unknown, _who: typeof Who.Type) =>
         Effect.succeed(Answer.cases.ok.make({ result: null })),
       );
+
       const attached = online();
       const result = yield* answerFrame(frame({ future: { by: "forged" } }), attached, admit, route);
       expect(JSON.parse(result.send!)).toMatchObject({ id: "r1", result: null });

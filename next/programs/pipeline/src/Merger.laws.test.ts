@@ -14,12 +14,19 @@ import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
 
 type Program = ReturnType<typeof merger>;
+
 type Model = Program["machine"]["model"]["Type"];
+
 type Msg = Program["msg"]["Type"];
+
 type Command = ReturnType<Program["machine"]["init"]>[1][number];
+
 const ctx = stubCtxThrowingProxy<never>();
+
 const LAST = 8.64e15;
+
 const clamp = (time: number) => Math.min(time, LAST);
+
 const faults = ["unavailable", "rate_limited", "refused", "handler_failed", "bad_cmd"] as const;
 
 const positive = fc.oneof(
@@ -69,8 +76,11 @@ const settingsFor = (w: World) =>
   );
 
 const id = (w: World, char: string) => Schema.decodeSync(Commit)(char.repeat(w.size));
+
 const tree = (w: World, char: string) => Schema.decodeSync(Tree)(char.repeat(w.size));
+
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
+
 const equal = (a: unknown, b: unknown) => expect(a).toEqual(b);
 
 const runAt = (w: World, choice: number) => ({
@@ -159,6 +169,7 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
             ? 3
             : drawn
     : drawn;
+
   return Schema.decodeSync(p.msg)(
     cmd.type !== "send" && pick % 5 === 0
       ? {
@@ -178,11 +189,14 @@ const answer = (p: Program, w: World, cmd: Command, drawn: number, at: number): 
 // chooses due/stale timers from the actual state, so shrinking keeps a legal walk.
 const guided = (p: Program, w: World) => {
   const draw = fc.record({ pick: fc.nat(), at: fc.integer({ min: 0, max: LAST }) });
+
   const cell = {
     draw,
     make: (cmd: Command, cell: { pick: number; at: number }) => answer(p, w, cmd, cell.pick, cell.at),
   };
+
   const cells = { change: cell, update: cell, checks: cell, merge: cell, send: cell };
+
   return arbGuidedSequence(
     p.machine,
     ctx,
@@ -215,6 +229,7 @@ const guided = (p: Program, w: World) => {
               : event.at % 3 === 0
                 ? Math.max(clock, due - 1)
                 : Math.max(clock, due);
+
           msg = Schema.decodeSync(p.msg)({ type: "timer", at });
           clock = at;
         } else if ("cmd" in event && event.cmd.type !== "send") {
@@ -517,16 +532,19 @@ const inspect = (p: Program, w: World, msgs: ReadonlyArray<Msg>, law: string) =>
 
     if (law === "L3" && prev._tag !== "idle") {
       const at = "at" in msg ? msg.at : null;
+
       const taken =
         "cmd" in msg &&
         msg.cmd.type === stateCmd(prev) &&
         "attempt" in msg.cmd &&
         msg.cmd.attempt === prev.attempt &&
         prev.step._tag === "asking";
+
       const verdict =
         taken && msg.type === "checks_ok" && prev._tag === "checking"
           ? ChangeKind.verdict(prev.checks, msg.value)._tag
           : null;
+
       const fault =
         (taken && msg.type.endsWith("_err")) ||
         verdict === "lost" ||
@@ -615,8 +633,10 @@ describe("the merger, next/", () => {
     it(`${law}: generated worlds obey the merger's contract at every prefix`, () => {
       const walks = world.chain((w) => {
         const p = merger(settingsFor(w));
+
         return guided(p, w).map((msgs) => ({ w, p, msgs }));
       });
+
       let reached = 0;
       fc.assert(
         fc.property(walks, ({ w, p, msgs }) => {
@@ -654,6 +674,7 @@ describe("the merger, next/", () => {
                 run: (m, { p, w }) => {
                   const prev = m.model;
                   const active = m.current.find((c) => service(c) && "attempt" in c && c.attempt === prev.attempt);
+
                   const late = m.history.filter(
                     (c) =>
                       service(c) &&
@@ -663,6 +684,7 @@ describe("the merger, next/", () => {
                         c.attempt !== prev.attempt ||
                         c.type !== stateCmd(prev)),
                   );
+
                   const moves: Array<() => Msg> = [
                     () => land(w),
                     () =>
@@ -691,6 +713,7 @@ describe("the merger, next/", () => {
                   }
 
                   const msg = moves[cell.move % moves.length]!();
+
                   const refused =
                     msg.type === "land"
                       ? prev._tag !== "idle"
@@ -711,6 +734,7 @@ describe("the merger, next/", () => {
 
                     if (refused !== null) {
                       equal(m.model, prev);
+
                       return;
                     }
                   }
@@ -785,6 +809,7 @@ describe("the merger, next/", () => {
 const roundWalk = (p: Program, w: World) => {
   const ok = (cmd: Command, value: unknown): Msg =>
     Schema.decodeSync(p.msg)({ type: `${cmd.type}_ok`, cmd, value, at: w.at });
+
   return arbGuidedSequence(
     p.machine,
     ctx,
@@ -840,6 +865,7 @@ it("L15: updated heads spend the round budget; behind names the newest head and 
       world.chain((drawn) => {
         const w = { ...drawn, empty: [false, false, false] as [boolean, boolean, boolean] };
         const p = merger(settingsFor(w));
+
         return roundWalk(p, w).map((msgs) => ({ p, w, msgs }));
       }),
       ({ p, w, msgs }) => {
@@ -933,7 +959,9 @@ const OldJob = Schema.Struct({
 });
 
 const oldCounts = { attempt: OldCount, late: OldCount };
+
 const oldWorking = { ...oldCounts, job: OldJob, step: OldStep };
+
 const oldPrepared = { ...oldWorking, kind: ChangeKind.Kind, checks: Schema.NonEmptyArray(ChangeKind.Check) };
 
 const OldModel = Schema.TaggedUnion({

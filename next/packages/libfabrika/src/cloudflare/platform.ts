@@ -29,6 +29,7 @@ export const isolateUsage = Effect.fnUntraced(function* (
       const event = item.event;
       const method = Predicate.hasProperty(event, "rpcMethod") ? event.rpcMethod : undefined;
       const outcome = item.outcome;
+
       return {
         process,
         method: Schema.is(IsolateUsage.Method)(method) ? method : "other",
@@ -82,6 +83,7 @@ export const rejected = (error: unknown): unknown => {
   }
 
   const at = error.message.indexOf(": ");
+
   return at < 0 ? error : Object.assign(new Error(error.message.slice(at + 2)), { name: error.message.slice(0, at) });
 };
 
@@ -262,6 +264,7 @@ export class ProcessClient extends Context.Service<ProcessClient, Calls<Omit<Pro
   static make(stub: ProcessBinding): ProcessClient["Service"] {
     // The object's own LedgerError crosses as itself; a call that got no answer is `unreachable`.
     const process = makeRpcStub<ProcessClient["Service"]>(stub, { errors: [LedgerError] });
+
     return {
       swap: (...args) => reach(process.swap(...args), lost),
       usage: (...args) => reach(process.usage(...args), lost),
@@ -300,6 +303,7 @@ export class GatewayClient extends Context.Service<
     const calls = makeRpcStub<Pick<ConnectionShape, "ring" | "notify" | "probe"> & Pick<Fetcher, "fetch">>(stub, {
       errors: [LedgerError],
     });
+
     return {
       // A lost object is `unreachable` with what the platform threw as its cause. Alchemy's fetcher
       // made a rejected platform fetch a defect; our Alchemy patch makes it fail typed, as an

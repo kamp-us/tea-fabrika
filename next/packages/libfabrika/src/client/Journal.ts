@@ -10,6 +10,7 @@ import { Rev } from "../Rev.ts";
 import { Result } from "../tasks/Task.ts";
 
 const Execution = Schema.NonEmptyString;
+
 /** When the command started, on the client's own clock: the `executing` entry's `at`, kept by each
  *  entry after it, since each entry replaces the one before. Absent when no `executing` entry was
  *  read, as after a journal that was lost. */

@@ -46,6 +46,7 @@ export const load = Effect.fnUntraced(function* (options: {
 }) {
   const fs = yield* FileSystem.FileSystem;
   const toml = yield* Toml;
+
   // A missing file is an empty one; any other read failure stops the start.
   const read = (place: Place) =>
     fs.readFileString(place.path).pipe(
@@ -73,6 +74,7 @@ export const load = Effect.fnUntraced(function* (options: {
         onSuccess: (document) => ({ file: place.name, document }),
       }),
     );
+
   const repo = {
     file: options.repo?.name ?? REPO,
     document:
@@ -88,23 +90,29 @@ export const load = Effect.fnUntraced(function* (options: {
             ),
           ),
   };
+
   // A repo that needs a newer fabrika is refused before the person's file is read.
   yield* Files.supported(repo, options.version);
   const person = yield* read(options.person);
   yield* Files.validate(Declarations.all, { repo, person }, { version: options.version });
+
   const resolved = yield* Sources.resolve(Declarations.all, {
     flags: Sources.flags(options.flags),
     env: Sources.env(options.env),
     repo: Sources.file(repo.file, repo.document),
     person: Sources.file(person.file, person.document),
   });
+
   // The repo's own minimum, as its file states it, before a flag or the environment overrides it.
   const minimum = repo.document.value[Declarations.version.path];
+
   const context =
     options.repo === undefined
       ? {}
       : { repo: { minimum: Predicate.isString(minimum) ? minimum : Declarations.version.default } };
+
   const saved = yield* Snapshot.make(Declarations.all, resolved);
+
   const checked = yield* Snapshot.read(Declarations.all, saved).pipe(
     Effect.mapError((cause) =>
       Files.SettingsError.make({
@@ -114,5 +122,6 @@ export const load = Effect.fnUntraced(function* (options: {
       }),
     ),
   );
+
   return { ...checked, ...context };
 });

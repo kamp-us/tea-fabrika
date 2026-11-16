@@ -30,6 +30,7 @@ export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
     get: Effect.fn("code.get")(function* (hash: string) {
       const row = yield* stored(() => {
         sql.exec("CREATE TABLE IF NOT EXISTS code (hash TEXT PRIMARY KEY, source TEXT NOT NULL)");
+
         return sql.exec("SELECT hash,source FROM code WHERE hash=?", hash)[0];
       });
 
@@ -40,6 +41,7 @@ export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
       const code = yield* Schema.decodeUnknownEffect(BuiltProgram)(row).pipe(
         Effect.mapError((cause) => new CodeStoreError({ reason: new BadRow({ cause }) })),
       );
+
       return Option.some(code);
     }),
   });

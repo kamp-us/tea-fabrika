@@ -26,9 +26,11 @@ const Answer = Schema.TaggedUnion({
   repeated: {},
   refused: { reason: Reason },
 });
+
 type Answer = typeof Answer.Type;
 
 const Model = Schema.Struct({ state: State, answer: Answer });
+
 type Model = typeof Model.Type;
 
 /** @internal */
@@ -39,14 +41,18 @@ export const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("finish"), execution: Execution, result: Result }),
   Schema.Struct({ type: Schema.Literal("collect"), collection: Collection }),
 ]);
+
 /** @internal */
 export type Msg = typeof Msg.Type;
 
 const ACCEPTED = Answer.cases.accepted.make({});
+
 const REPEATED = Answer.cases.repeated.make({});
 
 const answered = (model: Model, answer: Answer): [Model, []] => [{ state: model.state, answer }, []];
+
 const refused = (model: Model, reason: typeof Reason.Type) => answered(model, Answer.cases.refused.make({ reason }));
+
 const moved = (state: State): [Model, []] => [{ state, answer: ACCEPTED }, []];
 
 /** @internal */
@@ -151,6 +157,7 @@ export const task = Machine.make({
 
       if (s._tag === "finished") {
         const { request, assignment, result } = s;
+
         return moved(State.cases.collected.make({ request, assignment, result, collection }));
       }
 

@@ -20,6 +20,7 @@ it("L10: report times advise exactly for stale rows, including unmeasured files"
       ),
       (entries) => {
         const root = resolve("timing-fixture");
+
         const report = {
           testResults: Object.entries(entries).map(([path, value]) => ({
             name: resolve(root, path),
@@ -27,15 +28,20 @@ it("L10: report times advise exactly for stale rows, including unmeasured files"
             endTime: value.start + value.real * 1000,
           })),
         };
+
         const rows: Row[] = Object.entries(entries).map(([path, value]) => ({ path, seconds: value.real }));
         expect(reportRows(report, root)).toEqual(rows);
+
         const table = Object.fromEntries(
           Object.entries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
         );
+
         table["not-run.test.ts"] = 10000;
+
         const expected = rows
           .filter((row) => Math.abs(row.seconds - (entries[row.path]!.row ?? 1)) > LIMIT)
           .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
         expect(staleRows(table, rows)).toEqual(expected);
       },
     ),
