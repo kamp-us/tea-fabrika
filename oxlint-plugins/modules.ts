@@ -50,7 +50,8 @@
 //
 // `modules.test.ts` plants each of these at its real path, with the repo's own config.
 import type { CreateRule, ESTree } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { pathIn } from "./match.ts";
 
 interface Lists {

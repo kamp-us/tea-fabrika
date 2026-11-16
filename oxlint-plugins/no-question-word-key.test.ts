@@ -1,5 +1,7 @@
 import type { Context, ESTree } from "@oxlint/plugins";
-import { Option, pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

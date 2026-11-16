@@ -30,7 +30,8 @@
 // Both diagnostics block since ticket 909: the replay found 1 fire, 1 true and 0 false alarms
 // (README.md).
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { pathIn, type Node } from "./match.ts";
 
 type Made = "Service" | "Reference";

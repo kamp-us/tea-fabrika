@@ -1,4 +1,5 @@
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import valueParser from "postcss-value-parser";
 import { plugin } from "../css-support.ts";
 

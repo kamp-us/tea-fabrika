@@ -16,7 +16,8 @@
 // time (`"sta" + "ge"`), and a regular expression's pattern. No autofix: the rule cannot tell
 // `dev` from `instance`, or move a saved name.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { pathIn } from "./match.ts";
 
 const START = { line: 1, column: 0 };

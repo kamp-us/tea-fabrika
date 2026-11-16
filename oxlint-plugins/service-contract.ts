@@ -3,7 +3,8 @@
 // methods and fields, runtime exports, type-only imports, schema declarations, sibling layers.
 // Oxlint's restricted-imports cannot distinguish a service class from its implementation.
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { dotted, pathIn, type Node } from "./match.ts";
 
 const CONTRACT = /\/desktop\/(BrainService|BrainControl|BrainProbe)\.ts$/;

@@ -3,7 +3,8 @@
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

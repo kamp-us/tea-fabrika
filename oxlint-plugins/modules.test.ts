@@ -12,7 +12,8 @@
 // A law about the whole file (a folder nobody listed, a file name) may report on any line, so those
 // cases ask only whether the rule fired. A law about one statement names its line. Line 1 of every
 // planted file is a comment, so no statement shares a line with a whole-file report.
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 

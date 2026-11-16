@@ -14,7 +14,8 @@
 // call of 2026-11-14 and still make one through Effect's FileSystem. Whether a temp folder alone is
 // a real resource under 0536 is the owner's to rule; until then this rule holds the other kinds.
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { dotted, pathIn, type Node } from "./match.ts";
 
 /** What a call drives, by the module its name came from, and the names in that module that open it. */

@@ -40,7 +40,8 @@
 // project hook it measures. It now drops the folder on purpose and says so.
 // Each of the 13 fires outside tests led to a change or a written reason.
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { grouped, isEmptyString, type Node, quoted } from "./match.ts";
 
 const ON_PURPOSE = "On purpose: // oxlint-disable-next-line fabrika/no-project-settings -- <why>.";

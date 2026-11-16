@@ -1,4 +1,5 @@
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { generated, plugin, references, steps, tokens } from "../css-support.ts";
 
 export default plugin("token-exists", (root, fire) => {

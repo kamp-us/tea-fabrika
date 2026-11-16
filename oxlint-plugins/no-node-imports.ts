@@ -1,7 +1,8 @@
 // next/ uses Effect's platform. A native import needs a reason on its source line.
 import { builtinModules } from "node:module";
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const builtins = new Set(builtinModules);

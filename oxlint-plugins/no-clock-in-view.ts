@@ -10,7 +10,8 @@
 //
 // It sees no types: the same read through a helper in a `.ts` file passes. Report any miss.
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { dotted } from "./match.ts";
 
 /** The written name without a leading `window.` or `globalThis.`. */

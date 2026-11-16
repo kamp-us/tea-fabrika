@@ -21,7 +21,8 @@
 // own config.
 import { matchesGlob } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { pathIn, type Node } from "./match.ts";
 
 interface Part {

@@ -5,7 +5,8 @@
 // the day the rule landed, which may only grow.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";

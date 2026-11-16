@@ -1,6 +1,8 @@
 import { posix } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, type Scope, pipe, String as Str } from "effect";
+import { Effect, FileSystem, Path, type Scope } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { load, reached, scriptReads } from "./script-reads.mjs";

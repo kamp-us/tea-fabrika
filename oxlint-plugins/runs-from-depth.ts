@@ -37,7 +37,8 @@
 // - a count passed as a plain argument to a helper (`prop(name, ..., 200)`, `runs(25)`);
 // - a count built by an expression (`numRuns: n * 2`) or read from another file.
 import type { CreateRule, ESTree, Scope, Variable } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { ancestors, below, pathIn, type Node } from "./match.ts";
 
 /** Modules whose every name is real IO. */

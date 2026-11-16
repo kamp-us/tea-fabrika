@@ -6,7 +6,8 @@
 // `tsconfig.base.json` has comments, so it is read as a JS expression.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 

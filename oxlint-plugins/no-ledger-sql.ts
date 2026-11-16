@@ -1,6 +1,7 @@
 // next/: the ledger's entries and rings belong to the ledger service, including reads.
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const OWNERS = new Set([

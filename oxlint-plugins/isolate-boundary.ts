@@ -1,7 +1,8 @@
 // U11. Syntax only: platform names stay at the Cloudflare edge. Aliases need review.
 // Edge cases: types, optional members, literal computed members, comments, strings, app handoff.
 import type { CreateRule } from "@oxlint/plugins";
-import { pipe, String as Str } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import { pathIn } from "./match.ts";
 
 export const isolateBoundary: CreateRule = {
