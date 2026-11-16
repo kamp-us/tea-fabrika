@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-tests2",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T21:26:23-08:00",
+  "ended": "2026-11-15T21:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step, send-back round, of slice E47 of the Effect-checker sweep (ticket 1075), in our tooling (.agents): globalConsole and globalConsoleInEffect. The build fixed all 41 .agents hits and its lint run pruned one agents-ledger.json entry (chain.ts, fabrika(no-promises), code \"Effect.runPromise(\"), which fired on the .catch the build took off chain.ts's main. agents-ledger.json is an exam path a build may not commit, so this step commits that five-line removal. Nothing is loosened: the ledger only shrinks, and the entry left because the broken code it listed is gone. pnpm lint, run after the hand removal, wrote no further change to the file, so the removal is the same one lint makes. No law was added or changed, so no plant ran. Hits: 41 met in .agents, 41 fixed by the build's hand edits, 0 left there; the 7 exam-path hits the first tests round left (changes.mjs 1, required.mjs 2, scheduled.mjs 2, gitignore.mjs 1, program-package-layout.test.ts 1) still wait on an owner call; none waits on 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Ran at the uncommitted tree on e0d91fd9: pnpm format exit 0; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 exit 0 (17 parts passed); the ratchet against the merge base exits 0 with done on next-ledger.json, agents-ledger.json and unreachable-ledger.json; oxlint-plugins/ledger.test.ts 7 green; next/apps/fabrika/src/exam/ratchet.integration.test.ts 5 green. No pull request was opened (owner ruling: one per sweep).",
+  "step": "tests"
+}

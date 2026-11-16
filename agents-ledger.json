@@ -96,11 +96,6 @@
 			"code": "const headsOf = () => {"
 		},
 		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-promises)",
-			"code": "Effect.runPromise("
-		},
-		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-node-filesystem)",
 			"code": "import {"
