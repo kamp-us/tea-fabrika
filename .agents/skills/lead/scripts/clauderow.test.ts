@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { DateTime, Effect, FileSystem, Layer, PlatformError, Result, Schema } from "effect";
+import { DateTime, Effect, FileSystem, Formatter, Layer, PlatformError, Result, Schema } from "effect";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };
@@ -277,6 +277,21 @@ const transcript = (model: string, calls: ReadonlyArray<Counts>, more = {}, name
 
 const options = { arbitrary: { seed: 119_120, runs: 50 } };
 
+/** A printed row read back: the numbers these laws add up, typed, and every other key kept. */
+const printed = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.StructWithRest(
+      Schema.Struct({
+        listUsd: Schema.Finite,
+        billed: Schema.Finite,
+        inputTokens: Schema.Finite,
+        outputTokens: Schema.Finite,
+      }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
+  ),
+);
+
 describe("clauderow's edge cases, each a law", () => {
   // pinned: Claude Fable 5.2's list price in dollars per million tokens, as Anthropic's pricing
   // page gave it on 2026-11-10 (https://platform.claude.com/docs/en/about-claude/pricing): $8 in,
@@ -288,7 +303,7 @@ describe("clauderow's edge cases, each a law", () => {
     { calls: some(4).check(Schema.isMinLength(1)) },
     ({ calls }) =>
       Effect.gen(function* () {
-        const got = JSON.parse(
+        const got = yield* printed(
           yield* row("agent.jsonl", ask()).pipe(on("UTC", { "agent.jsonl": transcript(FABLE, calls) })),
         );
         const dollars = calls.reduce(
@@ -344,7 +359,7 @@ describe("clauderow's edge cases, each a law", () => {
         expect(refused.reason).toBe(`${key} '${other}' has no price here`);
         // A routing key that is null says nothing, so the price holds.
         const quiet = { "agent.jsonl": transcript(OPUS, [call], { [key]: null }) };
-        expect(JSON.parse(yield* row("agent.jsonl", ask()).pipe(on("UTC", quiet))).model).toBe(OPUS);
+        expect((yield* printed(yield* row("agent.jsonl", ask()).pipe(on("UTC", quiet)))).model).toBe(OPUS);
       }),
     options,
   );
@@ -399,7 +414,7 @@ describe("clauderow's edge cases, each a law", () => {
       const bare = { "agent.jsonl": assistant("2026-11-10T08:00:00.000", "msg_1", OPUS, said) };
       const day = { "agent.jsonl": assistant("2026-11-10", "msg_1", OPUS, said) };
       const none = {
-        "agent.jsonl": JSON.stringify({ type: "assistant", message: { id: "m", model: OPUS, usage: said } }),
+        "agent.jsonl": Formatter.formatJson({ type: "assistant", message: { id: "m", model: OPUS, usage: said } }),
       };
 
       for (const files of [bare, day, none]) {
@@ -412,7 +427,7 @@ describe("clauderow's edge cases, each a law", () => {
 
   it.effect("refuses a row for a transcript with no model calls, and prints no turn for it", () =>
     Effect.gen(function* () {
-      const files = { "agent.jsonl": JSON.stringify({ type: "user", timestamp: "2026-11-10T08:00:01.000Z" }) };
+      const files = { "agent.jsonl": Formatter.formatJson({ type: "user", timestamp: "2026-11-10T08:00:01.000Z" }) };
       const refused = yield* Effect.flip(row("agent.jsonl", ask())).pipe(on("UTC", files));
       expect(refused.reason).toBe("no model calls in agent.jsonl");
       expect(yield* turns("agent.jsonl").pipe(on("UTC", files))).toEqual([]);
@@ -429,8 +444,8 @@ describe("clauderow's edge cases, each a law", () => {
         "agent.meta.json could not be read",
       );
       // `agent.txt` less six letters is `a`: the old script read `a.meta.json` for it.
-      const other = { "agent.txt": line, "a.meta.json": JSON.stringify({ effort: "high", finished: false }) };
-      const got = JSON.parse(yield* row("agent.txt", ask()).pipe(on("UTC", other)));
+      const other = { "agent.txt": line, "a.meta.json": Formatter.formatJson({ effort: "high", finished: false }) };
+      const got = yield* printed(yield* row("agent.txt", ask()).pipe(on("UTC", other)));
       expect([got.effort, got.ended]).toEqual([null, "2026-11-10T08:00:00+00:00"]);
     }),
   );

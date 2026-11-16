@@ -2,7 +2,7 @@
 // only the local instance and not the host check's bundler or launchd code.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { BuiltProgram } from "@kampus/libfabrika/runtime/Built";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Formatter, Schema } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { localInstance } from "../../src/local-instance.ts";
 import { Settings } from "../../src/settings.ts";
@@ -36,7 +36,7 @@ const brain = Effect.fn("P19Host.brain")(function* (file: string) {
   yield* localInstance(input.built, input.options);
   yield* fs.writeFileString(
     `${input.options.home}/ready.json`,
-    JSON.stringify({
+    Formatter.formatJson({
       pid: process.pid,
       build: input.built.build,
       node: process.versions.node,

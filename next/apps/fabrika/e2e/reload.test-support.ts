@@ -8,7 +8,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: inspect the real instance's
 import { build } from "@kampus/libfabrika/build";
 import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Formatter, Option, Path, Queue, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -45,7 +45,7 @@ export const fixture = Effect.gen(function* () {
 
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ name: "@p15e/counter", type: "module", exports: { ".": "./src/program.ts" } }),
+    Formatter.formatJson({ name: "@p15e/counter", type: "module", exports: { ".": "./src/program.ts" } }),
   );
   const file = path.join(pkg, "src/program.ts");
   const write = (text: string) => fs.writeFileString(file, `${text}\nexport { counter as program };\n`);
@@ -141,8 +141,8 @@ export const cli = Effect.fnUntraced(function* (
   const wrapper = `${copy.home}/build.ts`;
   yield* fs.writeFileString(
     wrapper,
-    `import { fixtureBuild } from ${JSON.stringify(import.meta.url)};
-export const build = (options) => fixtureBuild(${JSON.stringify({ home: copy.home, file: copy.file })}, options.out);
+    `import { fixtureBuild } from ${Formatter.formatJson(import.meta.url)};
+export const build = (options) => fixtureBuild(${Formatter.formatJson({ home: copy.home, file: copy.file })}, options.out);
 `,
   );
   const original = yield* fs.readFileString(`${APP}/dev.ts`);
@@ -154,7 +154,7 @@ export const build = (options) => fixtureBuild(${JSON.stringify({ home: copy.hom
 import { Layer } from "effect";
 import { SecureRandom as Real } from "effect/crypto";
 export { Digest } from "effect/crypto";
-const bytes = ${JSON.stringify(fakeBytes)};
+const bytes = ${Formatter.formatJson(fakeBytes)};
 export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
   Real.make(size => size === 32 ? Uint8Array.from(bytes) : crypto.getRandomValues(new Uint8Array(size)))) };
 `,
@@ -163,10 +163,10 @@ export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
   yield* fs.writeFileString(
     entry,
     original
-      .replace('"effect/crypto"', JSON.stringify(random))
-      .replace('"./src/build.ts"', JSON.stringify(wrapper))
-      .replace('"./src/local-instance.ts"', JSON.stringify(`${APP}/src/local-instance.ts`))
-      .replace('"./src/settings.ts"', JSON.stringify(`${APP}/src/settings.ts`)),
+      .replace('"effect/crypto"', Formatter.formatJson(random))
+      .replace('"./src/build.ts"', Formatter.formatJson(wrapper))
+      .replace('"./src/local-instance.ts"', Formatter.formatJson(`${APP}/src/local-instance.ts`))
+      .replace('"./src/settings.ts"', Formatter.formatJson(`${APP}/src/settings.ts`)),
   );
   const env = { ...process.env };
   delete env.TYPESAFE_API_KEY;

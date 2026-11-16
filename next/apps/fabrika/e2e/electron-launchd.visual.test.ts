@@ -1,6 +1,6 @@
 // P19 L13, next/. No native work occurs without explicit host opt-in.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Formatter, Path } from "effect";
 import { Digest } from "effect/crypto";
 import { expect, it } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
@@ -23,11 +23,11 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
         yield* fs.makeDirectory(path.join(home, "node_modules/workerd"), { recursive: true });
         yield* fs.writeFileString(
           path.join(home, "node_modules/workerd/package.json"),
-          JSON.stringify({ main: "../../native.cjs" }),
+          Formatter.formatJson({ main: "../../native.cjs" }),
         );
         yield* fs.writeFileString(importer, 'export { default } from "workerd";');
         const output = path.join(home, "bundle.mjs");
-        const files = yield* Host.bundle(`export { default } from ${JSON.stringify(importer)};`, output, root);
+        const files = yield* Host.bundle(`export { default } from ${Formatter.formatJson(importer)};`, output, root);
         expect(files).toHaveLength(1);
         expect(yield* fs.realPath(files[0]!)).toBe(yield* fs.realPath(dependency));
         expect(yield* fs.readFileString(output)).toContain(files[0]);
@@ -44,7 +44,7 @@ it("pinned: L13 bundles keep native dependencies resolvable outside root node_mo
           const compiled = path.join(home, `${name}.mjs`);
           // Bundled as check bundles them, by a bare import: an `export *` entry keeps a main the
           // treeshake rule would drop.
-          const linked = yield* Host.bundle(`import ${JSON.stringify(entry)};`, compiled, root);
+          const linked = yield* Host.bundle(`import ${Formatter.formatJson(entry)};`, compiled, root);
           expect(yield* fs.exists(compiled)).toBe(true);
           // The app's "sideEffects": false once emptied the helper's bundle, and its mains with it.
           // Each main is known by its dispatch, since check's own body also names the modes as argv.

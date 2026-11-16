@@ -24,7 +24,20 @@
 // real run under TestClock, so a Cmd that waits for an answer, or a timer that never fires, shows.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Function, Layer, Option, Random, Schema, Scope, Tracer } from "effect";
+import {
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Function,
+  Layer,
+  Option,
+  Random,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import * as Clock from "effect/Clock";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
@@ -519,7 +532,7 @@ describe("L10: real runtime progress", () => {
         expect(rows.length).toBeGreaterThan(0);
 
         for (const row of rows) {
-          expect(Schema.is(ClientRow)(row), JSON.stringify(row)).toBe(true);
+          expect(Schema.is(ClientRow)(row), Formatter.format(row)).toBe(true);
           expect(row).toMatchObject({ build: BUILD });
         }
 
@@ -966,7 +979,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           if (act._tag === "open" && ws !== undefined && ws.readyState === 0) {
             ws.open();
             owed++;
-            ws.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
+            ws.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
           } else if (act._tag === "admit" && state.link._tag === "dialing" && dial !== null) {
             yield* run.dispatch({ type: "admitted", dial, ping: 30_000, ms: 0 });
           } else if (act._tag === "beat" && state.link._tag === "online" && dial !== null) {
@@ -996,7 +1009,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
             if (ws.readyState === 0) {
               ws.open();
               owed++;
-              ws.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
+              ws.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce: "n" } }));
               yield* settle;
             }
 
@@ -1034,7 +1047,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           // One constructor call per dial the link is dialing; the start never dials again itself.
           const dials = made.map((m) => m.dial);
           expect(dials.includes(null), "a socket was made with no dial to make it for").toBe(false);
-          expect(new Set(dials).size, `dials made ${JSON.stringify(dials)}`).toBe(dials.length);
+          expect(new Set(dials).size, `dials made ${Formatter.format(dials)}`).toBe(dials.length);
 
           for (const m of made) {
             expect(m.ws.readers, `dial ${m.dial} has more than one reader`).toBeLessThanOrEqual(1);
@@ -1237,15 +1250,15 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         const own = spans.filter((span): span is Tracer.Span => span._tag === "Span");
         expect(own.length, "a span the start made is not its own").toBe(spans.length);
         const outputs = {
-          rows: JSON.stringify(rows),
-          spans: JSON.stringify(
+          rows: Formatter.formatJson(rows),
+          spans: Formatter.formatJson(
             own.map((span) => ({
               name: span.name,
               attributes: [...span.attributes],
               events: Reflect.get(span, "events") ?? [],
             })),
           ),
-          urls: JSON.stringify([...urls, ...urls.map((u) => decodeURIComponent(u))]),
+          urls: Formatter.formatJson([...urls, ...urls.map((u) => decodeURIComponent(u))]),
         };
         const secrets = [...Object.values(s).flatMap(forms), ...forms(signed), ...forms(key.raw)];
 

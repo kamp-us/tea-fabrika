@@ -8,7 +8,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import type { Schema } from "effect";
-import { Arbitrary, Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Arbitrary, Effect, Exit, FileSystem, Formatter, Layer, Path } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -72,7 +72,7 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
             yield* git(root, ["clone", origin, repo]);
             yield* fs.makeDirectory(path.join(repo, ".fabrika/packs/trap"), { recursive: true });
             yield* fs.writeFileString(path.join(repo, document), 'fabrika-version = "0.0.0"\n');
-            const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'executed'); throw new Error('outside code ran');`;
+            const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${Formatter.formatJson(marker)}, 'executed'); throw new Error('outside code ran');`;
 
             for (const file of ["settings.mjs", ".fabrika/packs/trap/index.mjs", ".fabrika/packs/trap/program.mjs"]) {
               yield* fs.writeFileString(path.join(repo, file), tripwire);
@@ -80,7 +80,10 @@ it("L8: refusal, consent and retries never evaluate, bundle or start repository 
 
             yield* fs.writeFileString(
               path.join(repo, "package.json"),
-              JSON.stringify({ type: "module", scripts: { build: "node settings.mjs", start: "node settings.mjs" } }),
+              Formatter.formatJson({
+                type: "module",
+                scripts: { build: "node settings.mjs", start: "node settings.mjs" },
+              }),
             );
             yield* git(repo, ["add", "."]);
             yield* git(repo, ["commit", "-m", "fixture"]);

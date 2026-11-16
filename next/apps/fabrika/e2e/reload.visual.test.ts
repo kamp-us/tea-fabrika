@@ -12,7 +12,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
+import { Effect, FileSystem, Formatter, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { ChildProcess } from "effect/process";
@@ -283,9 +283,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const specifiers = [`p15-missing-${missing}`, `p15-dependency-${missing}`];
               yield* fs.writeFileString(
                 entry,
-                `import ${JSON.stringify(specifiers[0])}; import "../dependency/imported.ts";\n`,
+                `import ${Formatter.formatJson(specifiers[0])}; import "../dependency/imported.ts";\n`,
               );
-              yield* fs.writeFileString(imported, `import ${JSON.stringify(specifiers[1])};\n`);
+              yield* fs.writeFileString(imported, `import ${Formatter.formatJson(specifiers[1])};\n`);
               const warnings = yield* Effect.acquireRelease(
                 Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => {})),
                 (spy) => Effect.sync(() => spy.mockRestore()),
@@ -313,7 +313,11 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               }
 
               for (const forbidden of [home, yield* fs.realPath(home)]) {
-                for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
+                for (const form of [
+                  forbidden,
+                  Formatter.formatJson(forbidden).slice(1, -1),
+                  encodeURIComponent(forbidden),
+                ]) {
                   expect(printed.includes(form), "a printed warning holds an absolute path").toBe(false);
                 }
               }
@@ -324,7 +328,11 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               const actual = warnings.mock.calls.map((args) => args.map(String).join(" ")).join("\n");
 
               for (const forbidden of [ROOT, yield* fs.realPath(ROOT), home, copy.home]) {
-                for (const form of [forbidden, JSON.stringify(forbidden).slice(1, -1), encodeURIComponent(forbidden)]) {
+                for (const form of [
+                  forbidden,
+                  Formatter.formatJson(forbidden).slice(1, -1),
+                  encodeURIComponent(forbidden),
+                ]) {
                   expect(actual.includes(form), "the real brain build printed an absolute path").toBe(false);
                 }
               }
@@ -427,7 +435,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               yield* copy.write(edited(source, k, (t) => `${t}\nglobalThis.__p15 = ${JSON.stringify(sentinel)};\n`));
               yield* changed();
               yield* copy.write(
-                `${source}${"\n".repeat(line)}\nexport const broken = ${JSON.stringify(sentinel)} +;\n`,
+                `${source}${"\n".repeat(line)}\nexport const broken = ${Formatter.formatJson(sentinel)} +;\n`,
               );
               yield* changed();
               const outputs = [
@@ -439,7 +447,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
               for (const output of outputs) {
                 for (const text of forbidden) {
-                  for (const form of [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)]) {
+                  for (const form of [text, Formatter.formatJson(text).slice(1, -1), encodeURIComponent(text)]) {
                     expect(
                       output.includes(form),
                       `an output holds ${text === sentinel ? "the sentinel" : "a path"}`,
@@ -472,7 +480,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             const fs = yield* FileSystem.FileSystem;
             yield* fs.writeFileString(
               `${copy.home}/counter/src/view.tsx`,
-              `export function Bad() { "use no memo"; return <div>{${JSON.stringify(`${sentinel} ${fakeBearer} ${copy.file}`)}}</div>; }\nglobalThis.__p15View = Bad;\n`,
+              `export function Bad() { "use no memo"; return <div>{${Formatter.formatJson(`${sentinel} ${fakeBearer} ${copy.file}`)}}</div>; }\nglobalThis.__p15View = Bad;\n`,
             );
             const run = yield* cli(copy, fakeBytes);
             const s = yield* session(run.url, run.founder.key);
@@ -511,9 +519,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                   "Schema.Struct({ count: Schema.Int, step: Schema.Int })",
                 );
               } else if (move === "syntax") {
-                text += `\nexport const broken = ${JSON.stringify(message)} +;\n`;
+                text += `\nexport const broken = ${Formatter.formatJson(message)} +;\n`;
               } else if (move === "load") {
-                text += `\nthrow new Error(${JSON.stringify(message)});\n`;
+                text += `\nthrow new Error(${Formatter.formatJson(message)});\n`;
               } else if (move === "compiler") {
                 text += '\nimport "./view.tsx";\n';
               }
@@ -555,9 +563,9 @@ describe("P15 slice 1: hot reload on the real instance", () => {
               }
 
               const outputs = [
-                JSON.stringify(denied),
-                JSON.stringify(facts),
-                JSON.stringify(spans),
+                Formatter.formatJson(denied),
+                Formatter.formatJson(facts),
+                Formatter.formatJson(spans),
                 ...run.stdout,
                 ...run.stderr,
               ];
@@ -566,7 +574,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
                 for (const forbidden of [sentinel, fakeBearer, copy.home, run.home, ROOT, text]) {
                   for (const form of [
                     forbidden,
-                    JSON.stringify(forbidden).slice(1, -1),
+                    Formatter.formatJson(forbidden).slice(1, -1),
                     encodeURIComponent(forbidden),
                   ]) {
                     expect(output.includes(form), "a named output copied private input").toBe(false);

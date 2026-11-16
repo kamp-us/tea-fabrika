@@ -18,7 +18,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, Option, Path, Stream } from "effect";
+import { Effect, FileSystem, Formatter, Layer, Option, Path, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import { Journal } from "../../client/Journal.ts";
@@ -40,7 +40,7 @@ const everyKeyWhole = (label: string) =>
 
     for (const [place, task] of TASKS.entries()) {
       const read = yield* journal.read(task).pipe(Effect.result);
-      const shown = JSON.stringify(read).slice(0, 200);
+      const shown = Formatter.format(read).slice(0, 200);
       expect(read._tag, `J2: ${task} ${label} reads without an error: ${shown}`).toBe("Success");
       const entry = read._tag === "Success" ? read.success : null;
       expect(entry, `J2: ${task} ${label} still holds the entry saved before ready`).not.toBeNull();

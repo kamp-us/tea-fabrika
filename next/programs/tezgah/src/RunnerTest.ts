@@ -12,7 +12,7 @@
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Predicate, Schema, type Scope } from "effect";
+import { Effect, Formatter, Predicate, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -101,7 +101,7 @@ const until = <A>(label: string, look: Effect.Effect<A>, done: (a: A) => boolean
       yield* Effect.sleep("1 second");
     }
 
-    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${JSON.stringify(last)}`));
+    return yield* Effect.die(new Error(`${label}: no answer in ${WAIT} s; last saw ${Formatter.format(last)}`));
   });
 
 const readView = (live: Live) => Effect.map(live.view, (v) => Schema.decodeUnknownSync(View)(v));
@@ -152,7 +152,7 @@ const step = Effect.fnUntraced(function* (live: Live, n: number, m: Move, seen: 
     expect(ended.exited.length, `L8: one more exit for ${from.shows}`).toBe(was.exited.length + 1);
     expect(
       Predicate.isTagged(ended.exited.at(-1), "shutdown"),
-      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${JSON.stringify(ended.exited.at(-1))}`,
+      `L8: ${from.shows}, a tile tezgah started, ends with shutdown, not ${Formatter.format(ended.exited.at(-1))}`,
     ).toBe(true);
   } else {
     // A stop takes its turn within a second on a quiet instance; give it three before reading.
@@ -213,7 +213,7 @@ export const suite = (open: Open) =>
 
             expect(
               seen.child > 0 && seen.other > 0,
-              `L8: the walks closed a tile tezgah started and one it did not ${JSON.stringify(seen)}`,
+              `L8: the walks closed a tile tezgah started and one it did not ${Formatter.format(seen)}`,
             ).toBe(true);
           }),
         ),

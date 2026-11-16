@@ -1,7 +1,7 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import { Arbitrary, Effect, Formatter, Result, Schema } from "effect";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -364,7 +364,7 @@ describe("P33, an inbox read is total", () => {
           ).pipe(Effect.provide(manager(store)));
 
           if (placed._tag === "placed" && hasM(body)) {
-            want.push(JSON.stringify(body.m));
+            want.push(Formatter.formatJson(body.m));
           }
         }
 

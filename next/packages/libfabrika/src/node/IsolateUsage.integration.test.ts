@@ -6,7 +6,7 @@ import { Machine } from "@demlik/tea/effect";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Context, Effect, Exit, FileSystem, Formatter, Layer, Path, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
@@ -339,7 +339,7 @@ for (const accepted of [true, false]) {
           const saved = { id: PID, name: NAME, program: "test/usage-fixture", build: CODE.hash, owner: OWNER };
           // oxlint-disable-next-line fabrika/no-type-assertions -- native storage handles only; the Process service and telemetry sink are real
           const ctx = {
-            id: { name: JSON.stringify(["project-test", NAME]) },
+            id: { name: Formatter.formatJson(["project-test", NAME]) },
             storage: {
               sql: {
                 exec: state.sql.exec,
@@ -353,7 +353,7 @@ for (const accepted of [true, false]) {
           } as unknown as Parameters<typeof processRuntime>[0];
           // oxlint-disable-next-line fabrika/no-type-assertions -- record RPC is captured at the platform edge; program execution must remain unopened
           const env = {
-            INSTANCE: JSON.stringify(START),
+            INSTANCE: Formatter.formatJson(START),
             PROJECT: { getByName: () => ({ settingsStart }) },
             RECORD: {
               getByName: () => ({
@@ -520,7 +520,7 @@ it.effect(
             };
             // oxlint-disable-next-line fabrika/no-type-assertions -- only native object handles are supplied; processRuntime and its loader are real
             const ctx = {
-              id: { name: JSON.stringify(["project-test", NAME]) },
+              id: { name: Formatter.formatJson(["project-test", NAME]) },
               storage: {
                 sql: {
                   exec: state.sql.exec,
@@ -543,7 +543,7 @@ it.effect(
             } as unknown as Parameters<typeof processRuntime>[0];
             // oxlint-disable-next-line fabrika/no-type-assertions -- native RPC handles and loader transport only; ledger, manager, runner and bindings stay real
             const env = {
-              INSTANCE: JSON.stringify(START),
+              INSTANCE: Formatter.formatJson(START),
               PROJECT: { getByName: () => project },
               RECORD: { getByName: () => ({ write: () => Promise.resolve(Written.cases.written.make({})) }) },
               LOADER: {
@@ -706,7 +706,7 @@ it.effect(
                 FROM,
               );
               const after = successor.process;
-              descriptors.set(JSON.stringify(["project-test", name]), { ...saved, id: after, name });
+              descriptors.set(Formatter.formatJson(["project-test", name]), { ...saved, id: after, name });
               yield* policy(after);
               const load = seen.at(-1);
               expect(load?.key).toBe(`${CODE.hash}/${after}`);

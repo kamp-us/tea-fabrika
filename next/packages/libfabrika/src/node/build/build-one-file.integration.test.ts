@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { Effect, FileSystem, Formatter, Path, Schema, Tracer } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -91,7 +91,7 @@ for(const n of JSON.parse(process.argv[2])){const type=model.count===0?"inc":n%2
 process.stdout.write(JSON.stringify({model,records,updates}));
 `,
                   file,
-                  JSON.stringify(tape),
+                  Formatter.formatJson(tape),
                 ],
                 { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
               ),
@@ -1238,11 +1238,11 @@ const p40Module = Effect.fn("p40.module")(function* (home: string, id: string, m
 
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ name: `@p40/${id}`, type: "module", exports: { ".": "./program.ts" } }),
+    Formatter.formatJson({ name: `@p40/${id}`, type: "module", exports: { ".": "./program.ts" } }),
   );
   yield* fs.writeFileString(
     path.join(pkg, "program.ts"),
-    `import {counter} from "@kampus/counter"; globalThis.__p40 = ${JSON.stringify(marker)}; export const program = counter;`,
+    `import {counter} from "@kampus/counter"; globalThis.__p40 = ${Formatter.formatJson(marker)}; export const program = counter;`,
   );
 });
 

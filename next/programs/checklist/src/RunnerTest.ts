@@ -8,7 +8,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, DateTime, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, DateTime, Effect, Formatter, Schema, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { checklist } from "./program.ts";
 
@@ -216,7 +216,7 @@ export const suite = (open: Open, fresh: Fresh) =>
               const walled = step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "");
               const bad = malformed(input);
               // Until the 0125 code batch names its reason, a walled input is `refused` (bad_msg today).
-              expect(answer._tag, `${step.by} ${JSON.stringify(input)}`).toBe(
+              expect(answer._tag, `${step.by} ${Formatter.format(input)}`).toBe(
                 walled || refusable || bad ? "refused" : "accepted",
               );
 
@@ -289,7 +289,7 @@ export const suite = (open: Open, fresh: Fresh) =>
                 !(step.by === "agent" && PERSON_ONLY.has(input["type"] ?? "")) &&
                 !(items.has(input["name"] ?? "") && input["type"] === "add") &&
                 !malformed(input);
-              expect(answer._tag, `${step.by} ${JSON.stringify(input)}`).toBe(ok ? "accepted" : "refused");
+              expect(answer._tag, `${step.by} ${Formatter.format(input)}`).toBe(ok ? "accepted" : "refused");
 
               if (ok) {
                 accepted.push({ sent: fresh, answer });

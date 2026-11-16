@@ -6,7 +6,7 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
-import { Effect, FileSystem, Path, Queue, Ref, Result, Schema, Stream } from "effect";
+import { Effect, FileSystem, Formatter, Path, Queue, Ref, Result, Schema, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -92,7 +92,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
       yield* git(root, ["clone", origin, repo]);
       yield* fs.makeDirectory(path.join(repo, ".fabrika/packs/trap"), { recursive: true });
       yield* fs.writeFileString(path.join(repo, ".fabrika/fabrika.toml"), 'fabrika-version = "0.0.0"\n');
-      const code = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'ran'); throw new Error('outside program ran');`;
+      const code = `import { writeFileSync } from 'node:fs'; writeFileSync(${Formatter.formatJson(marker)}, 'ran'); throw new Error('outside program ran');`;
       yield* fs.writeFileString(path.join(repo, ".fabrika/packs/trap/index.mjs"), code);
       yield* git(repo, ["add", "."]);
       yield* git(repo, ["commit", "-m", "fixture"]);
@@ -187,7 +187,7 @@ it.live("scenario: L11 actual dev selects the default commit, saves trust, and r
       const saved = yield* entries(home);
       const decisions = saved.filter((row) => row._tag === "decision");
       expect(decisions).toHaveLength(1);
-      expect(JSON.stringify(decisions[0]?.body)).toContain(commit);
+      expect(Formatter.formatJson(decisions[0]?.body)).toContain(commit);
       const opening = saved.filter((row) => row._tag === "opened");
       expect(opening).toHaveLength(1);
       expect(opening[0]?.parent).not.toBeNull();

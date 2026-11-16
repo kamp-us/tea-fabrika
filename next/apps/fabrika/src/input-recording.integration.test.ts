@@ -5,7 +5,7 @@ import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -101,9 +101,9 @@ const pendingReply = Effect.fnUntraced(function* (
   expect(db.prepare("SELECT value FROM process_receipts WHERE name=? AND letter=?").get(NAME, letter)).toBeUndefined();
   const reply = db.prepare("SELECT value FROM process_replies WHERE name=? AND id=?").get(NAME, letter);
   expect(reply === undefined).toBe(move === "reply_write");
-  const output = JSON.stringify([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
+  const output = Formatter.formatJson([db.prepare("SELECT value FROM process_recovery WHERE name=?").get(NAME), reply]);
 
-  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+  for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
     expect(output).not.toContain(form);
   }
 });
@@ -301,10 +301,10 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
     const rows = Schema.decodeUnknownSync(Schema.Array(Stored))(page);
     const selected = rows.map((row) => Schema.decodeUnknownSync(Schema.Struct({ input: Metadata }))(row.body).input);
     expect(selected).toEqual(received);
-    const output = JSON.stringify(rows);
+    const output = Formatter.formatJson(rows);
 
     for (const body of bodies) {
-      for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+      for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
         expect(output).not.toContain(form);
       }
     }
@@ -332,8 +332,12 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
   const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
 
-  for (const form of [unknown.body, JSON.stringify(unknown.body).slice(1, -1), encodeURIComponent(unknown.body)]) {
-    expect(JSON.stringify(rows)).not.toContain(form);
+  for (const form of [
+    unknown.body,
+    Formatter.formatJson(unknown.body).slice(1, -1),
+    encodeURIComponent(unknown.body),
+  ]) {
+    expect(Formatter.formatJson(rows)).not.toContain(form);
   }
 });
 

@@ -10,7 +10,7 @@
 // newline in `version`. C5, answer `output_limit` without closing the child's scope.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Config, Effect, Layer, Schedule } from "effect";
+import { Config, Effect, Formatter, Layer, Schedule } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
@@ -27,14 +27,14 @@ describe("P39 slice 4b: the real command on a real host", () => {
         const commands = yield* Commands;
         expect(commands.has, "C4: the runner has git on its PATH").toEqual(["git"]);
         const answer = yield* commands.execute(Command.cases.git_version.make({}));
-        expect(answer._tag, `C4: real git exits: ${JSON.stringify(answer)}`).toBe("exited");
+        expect(answer._tag, `C4: real git exits: ${Formatter.format(answer)}`).toBe("exited");
 
         if (answer._tag !== "exited") {
           return;
         }
 
         expect(answer.code).toBe(0);
-        expect(answer.version.startsWith("git version "), `C4: ${JSON.stringify(answer.version)}`).toBe(true);
+        expect(answer.version.startsWith("git version "), `C4: ${Formatter.format(answer.version)}`).toBe(true);
         expect(answer.version.endsWith("\n"), "C4: the trailing newline is dropped").toBe(false);
         // The line C1's vectors replay: one line, far under the cap.
         expect(answer.version.includes("\n")).toBe(false);

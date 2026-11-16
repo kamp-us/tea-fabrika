@@ -15,7 +15,7 @@
 // box) builds once and never sees a save: L10 and L18's save-driven runs then wait for the lead.
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Path, Queue, Stream, Tracer } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Formatter, Option, Path, Queue, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -150,7 +150,7 @@ const fixture = Effect.gen(function* () {
     yield* fs.symlink(pkg, path.join(home, "node_modules/@p15", short));
     yield* fs.writeFileString(
       path.join(pkg, "package.json"),
-      JSON.stringify({ name: `@p15/${short}`, type: "module", exports: { ".": "./program.ts" } }),
+      Formatter.formatJson({ name: `@p15/${short}`, type: "module", exports: { ".": "./program.ts" } }),
     );
     yield* fs.writeFileString(path.join(pkg, "own.ts"), "export const own = 0;\n");
     yield* fs.writeFileString(
@@ -243,10 +243,10 @@ describe("P15 slice 1: the watcher", () => {
               );
               const move = save.move;
               // A duplicate key makes Rolldown warn with a source excerpt while the program still builds.
-              let text = `${original}\nglobalThis.__p15Secret = {${JSON.stringify(sentinel)}: 1, ${JSON.stringify(sentinel)}: 2};\n`;
+              let text = `${original}\nglobalThis.__p15Secret = {${Formatter.formatJson(sentinel)}: 1, ${Formatter.formatJson(sentinel)}: 2};\n`;
 
               if (move === "syntax") {
-                text += `export const broken = ${JSON.stringify(sentinel)} +;\n`;
+                text += `export const broken = ${Formatter.formatJson(sentinel)} +;\n`;
               } else if (move === "compiler") {
                 yield* fs.writeFileString(
                   path.join(home, "programs", short, "view.tsx"),
@@ -313,15 +313,15 @@ describe("P15 slice 1: the watcher", () => {
               expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
 
               for (const output of [
-                JSON.stringify([...span.attributes]),
-                JSON.stringify(answer),
-                JSON.stringify(failures),
-                JSON.stringify(warnings.mock.calls),
+                Formatter.formatJson([...span.attributes]),
+                Formatter.formatJson(answer),
+                Formatter.formatJson(failures),
+                Formatter.formatJson(warnings.mock.calls),
               ]) {
                 for (const forbidden of [sentinel, home]) {
                   for (const form of [
                     forbidden,
-                    JSON.stringify(forbidden).slice(1, -1),
+                    Formatter.formatJson(forbidden).slice(1, -1),
                     encodeURIComponent(forbidden),
                   ]) {
                     expect(output.includes(form), "a rebuild output copied private input").toBe(false);
@@ -431,7 +431,7 @@ describe("P15 slice 1: the watcher", () => {
                 yield* fs.writeFileString(
                   file,
                   broken
-                    ? `export const own = ${JSON.stringify(sentinel)} +; // ${value}\n`
+                    ? `export const own = ${Formatter.formatJson(sentinel)} +; // ${value}\n`
                     : `export const own = ${value};\n`,
                 );
                 const answer = yield* Queue.take(answers).pipe(
@@ -485,10 +485,10 @@ describe("P15 slice 1: the watcher", () => {
                 expect(failures, "one failed save writes one code.failed fact").toHaveLength(broken ? 1 : 0);
 
                 for (const output of [
-                  JSON.stringify([...span.attributes]),
-                  JSON.stringify(answer),
-                  JSON.stringify(late),
-                  JSON.stringify(failures),
+                  Formatter.formatJson([...span.attributes]),
+                  Formatter.formatJson(answer),
+                  Formatter.formatJson(late),
+                  Formatter.formatJson(failures),
                 ]) {
                   for (const forbidden of [sentinel, home]) {
                     expect(output.includes(forbidden)).toBe(false);

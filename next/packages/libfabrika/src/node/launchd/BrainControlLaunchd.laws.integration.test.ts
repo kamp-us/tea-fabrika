@@ -2,7 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schema } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, FileSystem, Formatter, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
@@ -376,7 +376,7 @@ it.effect.prop(
       }
 
       for (const output of [
-        JSON.stringify(failure),
+        Formatter.formatJson(failure),
         String(failure),
         Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "",
       ]) {
@@ -562,7 +562,12 @@ it.effect.prop(
       const failed = yield* Context.get(context, BrainService).up.pipe(Effect.exit);
       expect(Exit.isFailure(failed)).toBe(true);
       const fs = yield* FileSystem.FileSystem;
-      const outputs = [yield* disk.read, JSON.stringify(disk.jobs), JSON.stringify(sent), JSON.stringify(failed)];
+      const outputs = [
+        yield* disk.read,
+        Formatter.formatJson(disk.jobs),
+        Formatter.formatJson(sent),
+        Formatter.formatJson(failed),
+      ];
 
       for (const name of yield* fs.glob("**/*", { root: disk.home })) {
         const stat = yield* fs.stat(`${disk.home}/${name}`);
@@ -576,7 +581,7 @@ it.effect.prop(
         for (const form of [
           secret,
           encodeURIComponent(secret),
-          JSON.stringify([...new TextEncoder().encode(secret)]),
+          Formatter.formatJson([...new TextEncoder().encode(secret)]),
         ]) {
           expect(output).not.toContain(form);
         }

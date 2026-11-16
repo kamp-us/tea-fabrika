@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
+import { Effect, Formatter, Layer, References, Schema, type Scope, Stream, Tracer } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -778,7 +778,8 @@ describe("p96, write tells the truth over any history", () => {
               const answer = yield* write(next);
               const after = yield* entries;
               const changes =
-                JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
+                Formatter.formatJson(view(foldAccess([...kept, next]))) !==
+                Formatter.formatJson(view(foldAccess(kept)));
               expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
               if (changes) {

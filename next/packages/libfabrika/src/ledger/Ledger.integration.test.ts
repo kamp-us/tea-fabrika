@@ -20,7 +20,18 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
+import {
+  Duration,
+  Effect,
+  Formatter,
+  Layer,
+  ManagedRuntime,
+  References,
+  Schema,
+  type Scope,
+  Stream,
+  Tracer,
+} from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -713,7 +724,7 @@ describe("p20, failures are typed, and pass", () => {
               const ledger = yield* Ledger;
               expect(yield* ledger.append("ok", "w-1", line())).toEqual(placed(1, 1));
               plant(2, "a", "w-2", "saved", value);
-              plant(3, "b", "w-3", "", JSON.stringify({ note: "n-7f3a" }));
+              plant(3, "b", "w-3", "", Formatter.formatJson({ note: "n-7f3a" }));
               const errors = [
                 yield* Effect.flip(readAll("a")),
                 yield* Effect.flip(readAll("b")),

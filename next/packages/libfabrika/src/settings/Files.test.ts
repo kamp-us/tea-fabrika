@@ -17,7 +17,7 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Formatter, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -181,7 +181,7 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
         const exit = await Effect.runPromiseExit(
           Effect.gen(function* () {
             const toml = yield* Toml;
-            const document = yield* toml.parse(`[limits]\nrecord = ${JSON.stringify(spelling)}\n`);
+            const document = yield* toml.parse(`[limits]\nrecord = ${Formatter.formatJson(spelling)}\n`);
             const files = {
               repo: { file: REPO, document: v.file === "repo" ? document : { value: {}, spans: [] } },
               person: { file: PERSON, document: v.file === "person" ? document : { value: {}, spans: [] } },
@@ -194,7 +194,9 @@ it("T753 L3 file bytes keep exact values and origins through checked snapshots a
               person: Sources.file(PERSON, files.person.document),
             });
             const saved = yield* Snapshot.make(group, resolved);
-            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(JSON.stringify(saved));
+            const transported = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+              Formatter.formatJson(saved),
+            );
             const checked = yield* Snapshot.read(group, transported);
             return { ...resolved, saved, checked, rows: Reference.rows(group, checked.snapshot) };
           }).pipe(Effect.provide([TomlParser.layer, Digest.layerWebCrypto])),

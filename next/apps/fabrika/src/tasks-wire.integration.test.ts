@@ -7,7 +7,7 @@ import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
-import { Effect, FileSystem, Path, Queue, Schema } from "effect";
+import { Effect, FileSystem, Formatter, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -109,7 +109,7 @@ const socket = Effect.fnUntraced(function* (
     }
 
     const id = ++next;
-    ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    ws.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
 
     while (true) {
       const frame = yield* Queue.take(inbox).pipe(Effect.timeout("20 seconds"));
@@ -184,9 +184,9 @@ it.live(
         entry,
         [
           // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
-          `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
-          `import { Project as SeededProject } from ${JSON.stringify(path.join(app, "src/tasks-wire.test-support.ts"))};`,
-          `export class Project extends SeededProject { static selected = ${JSON.stringify(selected)}; }`,
+          `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
+          `import { Project as SeededProject } from ${Formatter.formatJson(path.join(app, "src/tasks-wire.test-support.ts"))};`,
+          `export class Project extends SeededProject { static selected = ${Formatter.formatJson(selected)}; }`,
         ].join("\n"),
       );
       const built = yield* build({
@@ -260,7 +260,7 @@ it.live(
             fetch(`${url}/grant`, {
               method: "POST",
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ text: value, armored: root.sign(value) }),
+              body: Formatter.formatJson({ text: value, armored: root.sign(value) }),
             }),
           catch: (cause: unknown) => new Error("grant failed", { cause }),
         });
@@ -322,7 +322,7 @@ it.live(
           fetch(`${url}/grant`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: revoke, armored: root.sign(revoke) }),
+            body: Formatter.formatJson({ text: revoke, armored: root.sign(revoke) }),
           }),
         catch: (cause: unknown) => new Error("revoke failed", { cause }),
       });

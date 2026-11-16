@@ -6,7 +6,7 @@
 // never on a laptop step. Every resource is acquired in the scope of `p14.test-support.ts`'s `suite`.
 import { ClientKeyError } from "@kampus/libfabrika/transport/ClientKey";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
-import { Effect, Schema } from "effect";
+import { Effect, Formatter, Schema } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
 import {
@@ -148,7 +148,7 @@ describe("P18 E1: a tile monitors its process and follows the restart, on both b
             if (walk.endedBody !== null) {
               expect(
                 /^\S+$/.test(walk.endedBody.words),
-                `${name}'s ended tile shows one word where its view was, not ${JSON.stringify(walk.endedBody.words)}`,
+                `${name}'s ended tile shows one word where its view was, not ${Formatter.format(walk.endedBody.words)}`,
               ).toBe(true);
               expect(walk.endedBody.ink, `${name}'s ended tile's word is in the tile's text token`).toBe(true);
             }

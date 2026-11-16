@@ -20,7 +20,7 @@
 // Plants, each run once and undone (recorded in the tests step's field row): K1, make a new key when
 // the file does not decode. K2, compute the fingerprint over the key line instead of the raw bytes.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Option, Path } from "effect";
+import { Cause, Effect, Exit, Formatter, Layer, Option, Path } from "effect";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
@@ -307,7 +307,9 @@ describe("P39 slice 4b: the hands key file", () => {
                   Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
                 ),
             });
-            expect(checked._tag, `K2: the door admits the key file's hello: ${JSON.stringify(checked)}`).toBe("online");
+            expect(checked._tag, `K2: the door admits the key file's hello: ${Formatter.format(checked)}`).toBe(
+              "online",
+            );
           }),
         { numRuns: 60 },
       ),

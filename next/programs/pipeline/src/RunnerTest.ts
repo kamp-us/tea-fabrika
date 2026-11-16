@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Logger,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+} from "effect";
 import * as Mail from "./Mail.ts";
 import type { merger } from "./Merger.ts";
 
@@ -259,9 +271,9 @@ export const suite = (driver: Driver) =>
           const savedReplies = yield* h.savedReplies;
           driver.unleaked(
             [
-              JSON.stringify(letters),
-              JSON.stringify(checkpoint),
-              JSON.stringify(savedReplies),
+              Formatter.formatJson(letters),
+              Formatter.formatJson(checkpoint),
+              Formatter.formatJson(savedReplies),
               ...captured.text(),
               ...logs,
             ],
@@ -294,10 +306,10 @@ export const suite = (driver: Driver) =>
             Effect.gen(function* () {
               driver.unleaked(
                 [
-                  JSON.stringify(yield* walk.h.current().checkpoint),
-                  JSON.stringify(yield* walk.h.current().letters(NAME)),
-                  JSON.stringify(yield* walk.h.current().letters("queue")),
-                  JSON.stringify(yield* walk.h.savedReplies),
+                  Formatter.formatJson(yield* walk.h.current().checkpoint),
+                  Formatter.formatJson(yield* walk.h.current().letters(NAME)),
+                  Formatter.formatJson(yield* walk.h.current().letters("queue")),
+                  Formatter.formatJson(yield* walk.h.savedReplies),
                   ...captured.text(),
                   ...logs,
                 ],
@@ -323,9 +335,9 @@ export const suite = (driver: Driver) =>
           yield* finish(final);
           driver.unleaked(
             [
-              JSON.stringify(yield* final.current().checkpoint),
-              JSON.stringify(yield* final.current().letters(NAME)),
-              JSON.stringify(yield* final.current().letters("queue")),
+              Formatter.formatJson(yield* final.current().checkpoint),
+              Formatter.formatJson(yield* final.current().letters(NAME)),
+              Formatter.formatJson(yield* final.current().letters("queue")),
               ...captured.text(),
               ...logs,
             ],

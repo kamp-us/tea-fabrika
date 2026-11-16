@@ -1,6 +1,6 @@
 // T502 PR 2, next/. The installed no-restricted-imports rule handles this shape.
 import { it, expect } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Formatter, Schema } from "effect";
 import { plant } from "./plant.ts";
 
 it.effect.prop(
@@ -12,8 +12,8 @@ it.effect.prop(
       const fires = yield* Effect.promise(() =>
         plant({
           [file]: [
-            `import { value } from ${JSON.stringify(module)};`,
-            `import type { Shape } from ${JSON.stringify(module)};`,
+            `import { value } from ${Formatter.formatJson(module)};`,
+            `import type { Shape } from ${Formatter.formatJson(module)};`,
             'import * as Cloudflare from "@alchemy.run/cloudflare";',
             'import type { Other } from "./runtime.ts";',
             'import { type Mixed } from "./runtime.ts";',

@@ -19,7 +19,7 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
-import { Effect, Fiber, Schema } from "effect";
+import { Effect, Fiber, Formatter, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -84,7 +84,7 @@ const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: stri
       last = yield* read;
     }
 
-    expect(check(last), `${label}: ${JSON.stringify(last)}`).toBe(true);
+    expect(check(last), `${label}: ${Formatter.format(last)}`).toBe(true);
   });
 
 const online = (h: Home, page: import("playwright").Page) =>
@@ -650,7 +650,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     ["grant urls", g.urls.join("\n")],
                   ]),
                   ["server console", dev.output()],
-                  ["spans", JSON.stringify(spans)],
+                  ["spans", Formatter.formatJson(spans)],
                   ...records,
                   ...disk.outputs,
                 ];
@@ -684,7 +684,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const copies = new Set<string>();
 
                 for (const s of [...credentials, ...signatures]) {
-                  for (const form of [s, encodeURIComponent(s), btoa(s), JSON.stringify(s).slice(1, -1)]) {
+                  for (const form of [s, encodeURIComponent(s), btoa(s), Formatter.formatJson(s).slice(1, -1)]) {
                     const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {
@@ -731,8 +731,8 @@ const look = (page: import("playwright").Page, seen: Seen) =>
     );
     const stored = yield* rows(page);
     return [
-      ["page", html + JSON.stringify(values)],
-      ["rows", JSON.stringify(stored)],
+      ["page", html + Formatter.formatJson(values)],
+      ["rows", Formatter.formatJson(stored)],
       ["console", seen.console.join("\n")],
       ["errors", seen.errors.join("\n")],
       ["urls", seen.urls.join("\n")],

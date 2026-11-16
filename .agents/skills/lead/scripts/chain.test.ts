@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { Effect, Formatter, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -1178,7 +1178,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
     ran(
       Effect.gen(function* () {
         const plants = [{ law: "a.test.ts:3", plant: "a.ts:9 drops the row", result: "red" }];
-        const said = `The laws are green.\n${JSON.stringify({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
+        const said = `The laws are green.\n${Formatter.formatJson({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
         const { turned, fake, events, report } = yield* turn({
           raws: [
             { _tag: "tool", id: "t1", title: "pnpm test", status: "in_progress" },

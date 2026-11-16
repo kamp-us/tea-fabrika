@@ -6,6 +6,7 @@ import {
   Deferred,
   Effect,
   FileSystem,
+  Formatter,
   Layer,
   Option,
   Path,
@@ -119,7 +120,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
             Effect.mapError(() => failure("compile")),
           );
           jobs.push(data);
-          const body = JSON.stringify(data);
+          const body = Formatter.formatJson(data);
           const output = args[args.indexOf("-o") + 1];
 
           if (output !== undefined && output !== "-") {

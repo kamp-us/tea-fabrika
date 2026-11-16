@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -126,7 +127,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                   return Effect.succeed(Updated.cases.closed.make({ state: found.state }));
                 }
 
-                const previous = updates.get(JSON.stringify([change, head]));
+                const previous = updates.get(Formatter.formatJson([change, head]));
 
                 if (previous !== undefined && found.head === previous.head) {
                   return Effect.succeed(previous);
@@ -150,7 +151,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                   main,
                 });
                 changes.set(change, { ...found, head: updated.head, tree: updated.tree, base: main });
-                updates.set(JSON.stringify([change, head]), updated);
+                updates.set(Formatter.formatJson([change, head]), updated);
                 return Effect.succeed(updated);
               }),
             ),
@@ -159,7 +160,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           failure({ method: "merge", change, head }).pipe(
             Effect.andThen(
               Effect.suspend((): Effect.Effect<typeof Merged.Type, CodeHostError> => {
-                const previous = merges.get(JSON.stringify([change, head]));
+                const previous = merges.get(Formatter.formatJson([change, head]));
 
                 if (previous !== undefined) {
                   return Effect.succeed(previous);
@@ -186,7 +187,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 const merged = Merged.cases.merged.make({ commit: commit(fresh(head.length)), tree: found.tree });
                 changes.set(change, { ...found, state: "merged" });
                 main = merged.commit;
-                merges.set(JSON.stringify([change, head]), merged);
+                merges.set(Formatter.formatJson([change, head]), merged);
 
                 if (crash) {
                   crash = false;

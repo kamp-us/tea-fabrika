@@ -2,7 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, Exit, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, Exit, FileSystem, Formatter, Path, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
@@ -85,13 +85,13 @@ const personBases = Effect.fnUntraced(function* (root: string) {
         const result = yield* resolve(from, "person").pipe(
           Effect.flatMap((source) =>
             Effect.gen(function* () {
-              expect(JSON.stringify(source)).not.toContain(root);
+              expect(Formatter.formatJson(source)).not.toContain(root);
               const values = [];
 
               for (const [file] of reads) {
                 const value = yield* source.read(file);
                 const read = Schema.decodeUnknownSync(Schema.NullOr(SourceRead))(value);
-                expect(JSON.stringify(value)).not.toContain(root);
+                expect(Formatter.formatJson(value)).not.toContain(root);
                 values.push(read === null ? null : { tag: read._tag, text: new TextDecoder().decode(read.bytes) });
               }
 
@@ -181,7 +181,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         expect(string(yield* source.read("entry.txt"))).toBe("regular file");
       }
 
-      expect(actual, JSON.stringify(actual)).toEqual(expected);
+      expect(actual, Formatter.format(actual)).toEqual(expected);
     }),
   };
 });
@@ -295,7 +295,7 @@ it.effect.prop(
             expect(source.value._tag).toBe(pick < 3 ? "committed" : "disk");
             expect(string(yield* source.value.read("entry.txt"))).toBe(pick < 3 ? "committed" : disk);
             checkRead(yield* source.value.read("entry.txt"), pick < 3, commit, pick < 3 ? "committed" : disk, root);
-            expect(JSON.stringify(source.value)).not.toContain(root);
+            expect(Formatter.formatJson(source.value)).not.toContain(root);
           } else {
             const fail = source.cause.reasons.find((reason) => reason._tag === "Fail");
             expect(fail?._tag === "Fail" && fail.error.reason._tag).toBe("MissingPath");
@@ -469,7 +469,7 @@ it.each(GitLaws.gits)(
                         expect(resolved.value.commit).toBe(pinned);
                       }
 
-                      expect(JSON.stringify(resolved.value)).not.toContain(root);
+                      expect(Formatter.formatJson(resolved.value)).not.toContain(root);
                     } else {
                       const reason = resolved.cause.reasons.find((r) => r._tag === "Fail");
                       expect(reason?._tag === "Fail" && reason.error.reason._tag).toBe("MissingPath");

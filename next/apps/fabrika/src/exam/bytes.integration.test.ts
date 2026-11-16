@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -307,7 +307,11 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   yield* fs.symlink(pkg, path.join(home, "node_modules/@p8/win"));
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ name: "@p8/win", type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
+    Formatter.formatJson({
+      name: "@p8/win",
+      type: "module",
+      exports: { ".": "./program.ts", "./window": "./window.ts" },
+    }),
   );
   yield* fs.writeFileString(
     path.join(pkg, "program.ts"),
@@ -317,7 +321,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
   // A synthetic stand-in for the MCP SDK: only its package path matters to the check.
   yield* fs.writeFileString(
     path.join(sdk, "package.json"),
-    JSON.stringify({ name: "@modelcontextprotocol/sdk", type: "module", exports: { "./client": "./client.js" } }),
+    Formatter.formatJson({ name: "@modelcontextprotocol/sdk", type: "module", exports: { "./client": "./client.js" } }),
   );
   yield* fs.writeFileString(path.join(sdk, "client.js"), `export const client = "p8-mcp-marker";`);
   yield* fs.copy(path.join(app, "src"), path.join(home, "src"));
@@ -385,7 +389,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const tab = yield* windowBuild(
         `export const view = () => "p8-tab-window";`,
-        `import {Effect} from "effect"; export const tab = Effect.succeed(${JSON.stringify(label)});`,
+        `import {Effect} from "effect"; export const tab = Effect.succeed(${Formatter.formatJson(label)});`,
       );
       checkBuild(tab.observed, tab.built, tab.entry);
       const page = tab.built.assets["/index.html"];
@@ -481,7 +485,7 @@ it.effect.prop(
             .join("\n");
           yield* fs.writeFileString(
             path.join(folder, `m${i}.ts`),
-            `export const text = ${JSON.stringify(g.text)}; ${next}`,
+            `export const text = ${Formatter.formatJson(g.text)}; ${next}`,
           );
         }
 
@@ -510,7 +514,7 @@ it.effect.prop(
           const leaf = path.join(folder, `m${modules - 1}.ts`);
           yield* fs.writeFileString(
             leaf,
-            `export const text = ${JSON.stringify(g.text)}; ${style === "dynamic" ? `export const bad = () => import(${JSON.stringify(forbidden)});` : `export * from ${JSON.stringify(forbidden)};`}`,
+            `export const text = ${Formatter.formatJson(g.text)}; ${style === "dynamic" ? `export const bad = () => import(${Formatter.formatJson(forbidden)});` : `export * from ${Formatter.formatJson(forbidden)};`}`,
           );
           const n = observations.builds.length;
           yield* bundle(path.join(folder, "m0.ts"), [

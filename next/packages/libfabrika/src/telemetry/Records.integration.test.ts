@@ -26,7 +26,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer, Scope } from "effect";
-import { Effect, Option, Schema, Stream } from "effect";
+import { Effect, Formatter, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -414,7 +414,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
 
               if (parts !== undefined) {
                 expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
-                const content = JSON.stringify(parts.rows(part(0), "content"));
+                const content = Formatter.formatJson(parts.rows(part(0), "content"));
                 expect(content).not.toContain("note-body-p100");
                 expect(content).toContain("owner");
               }
@@ -619,7 +619,7 @@ describe("RecordManager.remote, the record object's stub", () => {
 
             for (const broken of [{}, { ...event, name: 7 }, { ...event, attributes: { "fab.n": {} } }]) {
               const bad = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))));
-              expect(bad.reason, JSON.stringify(broken)).toBe("bad_row");
+              expect(bad.reason, Formatter.format(broken)).toBe("bad_row");
             }
           }),
         { concurrency: 1, discard: true },

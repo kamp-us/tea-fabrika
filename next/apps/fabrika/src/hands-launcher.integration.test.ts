@@ -31,7 +31,7 @@ import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
+import { Effect, FileSystem, Formatter, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
@@ -192,9 +192,9 @@ const flow = Effect.fnUntraced(
     yield* fs.writeFileString(
       entry,
       [
-        `export { default, Connection, Process, RecordPart, IsolateTail } from ${JSON.stringify(path.join(app, "src/brain.ts"))};`,
+        `export { default, Connection, Process, RecordPart, IsolateTail } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
         // The fixture's Control lets the three test calls past the control door's closed list.
-        `export { Project, Control } from ${JSON.stringify(path.join(app, "src/hands-launcher.test-support.ts"))};`,
+        `export { Project, Control } from ${Formatter.formatJson(path.join(app, "src/hands-launcher.test-support.ts"))};`,
       ].join("\n"),
     );
     const built = yield* build({
@@ -359,7 +359,9 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
     () =>
       Effect.gen(function* () {
         const seen = yield* flow();
-        expect(seen.task.state._tag, `E2: the task ends finished: ${JSON.stringify(seen.task.state)}`).toBe("finished");
+        expect(seen.task.state._tag, `E2: the task ends finished: ${Formatter.format(seen.task.state)}`).toBe(
+          "finished",
+        );
         const result = seen.task.state._tag === "finished" ? seen.task.state.result : null;
         expect(result?._tag, "E2: real git exits").toBe("exited");
         expect(result?._tag === "exited" ? result.code : null, "E2: with code 0").toBe(0);
@@ -409,7 +411,11 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                   expect(seen.lines.length, `S2 (${launch}): the scan read real lines`).toBeGreaterThan(0);
 
                   for (const [name, value] of Object.entries(outputs)) {
-                    const text = JSON.stringify(value, (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v));
+                    const text = yield* Schema.encodeEffect(
+                      Schema.fromJsonString(Schema.Unknown, {
+                        replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                      }),
+                    )(value);
 
                     for (const form of forms) {
                       expect(text.includes(form), `S2: [secrets] the private half is not in ${name}`).toBe(false);

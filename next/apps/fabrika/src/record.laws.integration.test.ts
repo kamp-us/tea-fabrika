@@ -10,7 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Formatter, Layer, Option, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -150,7 +150,7 @@ for (const [kind, live] of [
           const chain = input.job
             ? Chain.cases.job.make({ process: `process_01m6v5270hf3c8x2q7w9z4k5${String(input.at).padStart(2, "0")}` })
             : Chain.cases.spans.make({});
-          const name = JSON.stringify([`law-${sequence++}`, partName(chain, input.at)]);
+          const name = Formatter.formatJson([`law-${sequence++}`, partName(chain, input.at)]);
           const { driver } = yield* Wire;
           const actual = yield* driver(name, cap),
             oracle = yield* node(name, cap);
@@ -192,7 +192,7 @@ for (const [kind, live] of [
         Effect.gen(function* () {
           const input = wellFormed(generated);
           const chain = Chain.cases.spans.make({});
-          const name = JSON.stringify([`full-${sequence++}`, partName(chain, input.at)]);
+          const name = Formatter.formatJson([`full-${sequence++}`, partName(chain, input.at)]);
           const rows = input.rows.map((row, index) => ({
             ...row,
             span: { ...row.span, spanId: String(index) },
@@ -262,7 +262,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const input = wellFormed(generated);
       const chain = Chain.cases.spans.make({});
-      const name = JSON.stringify([`cap-${sequence++}`, partName(chain, input.at)]);
+      const name = Formatter.formatJson([`cap-${sequence++}`, partName(chain, input.at)]);
       const part = yield* node(name, 1);
       const expected = yield* (yield* node(name, 1)).write(chain, input.at, input.rows);
       expect(yield* part.write(chain, input.at, input.rows)).toEqual(expected);

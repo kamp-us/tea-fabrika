@@ -25,7 +25,7 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Formatter, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -920,7 +920,7 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Formatter.formatJson(sample.root).slice(1, -1),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
@@ -1060,7 +1060,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Formatter.formatJson(sample.root).slice(1, -1),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
@@ -1073,7 +1073,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
           const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
           const withoutNode = location.replace(/node:[^)]*/g, "");
-          expect(withoutNode, `a stored frame names a folder: ${JSON.stringify(line)}`).not.toMatch(/[/\\]/);
+          expect(withoutNode, `a stored frame names a folder: ${Formatter.format(line)}`).not.toMatch(/[/\\]/);
         }
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -1104,7 +1104,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           } else {
             // Effect.fn contributes its own real frame, beside the generated Error stacks.
             const own = /^(\s*at sink\.frames(?: \(definition\))? \().*[/\\]([^/\\]+:\d+:\d+\)(?: \{)?)$/s.exec(piece);
-            expect(own, `unexpected Effect.fn frame: ${JSON.stringify(piece)}`).not.toBeNull();
+            expect(own, `unexpected Effect.fn frame: ${Formatter.format(piece)}`).not.toBeNull();
             expect(after[index]).toBe(`${own?.[1]}${own?.[2]}`);
           }
         }

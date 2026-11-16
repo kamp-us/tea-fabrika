@@ -2,7 +2,7 @@
 // in the schema, small enough that no brain line can reach the ledger's per-line limit. The cap is
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Exit, Schema } from "effect";
+import { Arbitrary, Effect, Exit, Formatter, Schema } from "effect";
 import * as fc from "fast-check";
 import {
   A,
@@ -81,7 +81,7 @@ const refusedWritingNothing = <A, E>(store: Storage, call: Effect.Effect<A, E>) 
     expect(Exit.isFailure(answer)).toBe(true);
 
     if (Exit.isFailure(answer)) {
-      expect(JSON.stringify(answer.cause)).toContain('"_tag":"ProcessError"');
+      expect(Formatter.formatJson(answer.cause)).toContain('"_tag":"ProcessError"');
     }
 
     expect(store.rows()).toEqual(before);

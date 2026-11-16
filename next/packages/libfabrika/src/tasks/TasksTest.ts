@@ -16,7 +16,7 @@
 // the public `Ledger.read` and keeps its own list of what each key was asked for. Plant (after
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Result as R, type Scope, Schema, Arbitrary, Stream } from "effect";
+import { Arbitrary, Effect, Formatter, Layer, Result as R, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -697,8 +697,8 @@ const walk = (
         case "finish_other": {
           const saved = on(["finished", "collected"]);
           const other =
-            JSON.stringify(cell.other) === JSON.stringify(saved.result)
-              ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.other)}-other` })
+            Formatter.formatJson(cell.other) === Formatter.formatJson(saved.result)
+              ? Result.cases.exited.make({ code: 1, version: `${Formatter.formatJson(cell.other)}-other` })
               : cell.other;
           refused(
             yield* tasks((j) => j.finish(saved.request.id, saved.execution ?? "", other, recorded)),

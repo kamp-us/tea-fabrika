@@ -17,7 +17,19 @@
 // oracle reads the store's own rows through `Ledger.read`, never the product's fold.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Schema, type Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Predicate,
+  Schema,
+  type Scope,
+  Stream,
+} from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -482,7 +494,7 @@ const m5 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         : null;
     const before = snapshot(w.sql);
     const { answer } = yield* w.watch(watcher, c.bad ? c.badName : c.name, parent);
-    refused(w, answer, before, firstRefusal(c), `M5: ${JSON.stringify({ ...c, name: c.bad ? c.badName : c.name })}`);
+    refused(w, answer, before, firstRefusal(c), `M5: ${Formatter.format({ ...c, name: c.bad ? c.badName : c.name })}`);
   });
 
 const M6Case = fc.record({
@@ -518,7 +530,7 @@ const m6 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const sender = c.sender === "none" ? undefined : senderFrom(c.sender, c.as);
     const parent = sender === undefined ? null : w.deliver(watcher, sender);
     const member = sender ?? recorded;
-    const label = `M6: ${JSON.stringify(c)}`;
+    const label = `M6: ${Formatter.format(c)}`;
     const before = snapshot(w.sql);
     const { id, answer } = yield* w.watch(watcher, target.name, parent);
     const ok =

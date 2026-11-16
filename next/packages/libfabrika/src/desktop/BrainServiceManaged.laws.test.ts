@@ -417,8 +417,8 @@ it.effect.prop(
           for (const form of [
             secret,
             encodeURIComponent(secret),
-            JSON.stringify(secret).slice(1, -1),
-            JSON.stringify([...new TextEncoder().encode(secret)]),
+            Formatter.formatJson(secret).slice(1, -1),
+            Formatter.formatJson([...new TextEncoder().encode(secret)]),
           ]) {
             expect(output).not.toContain(form);
           }

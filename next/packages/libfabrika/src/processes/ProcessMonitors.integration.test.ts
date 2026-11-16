@@ -1,6 +1,6 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Formatter, Layer, Schema } from "effect";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -514,7 +514,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
           expect(real).toHaveLength(1);
           // watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
           // take a signal id, so only another writer's raw row could, and it is plain mail.
-          const id = JSON.stringify(["DOWN", toW, ref, 1]);
+          const id = Formatter.formatJson(["DOWN", toW, ref, 1]);
           const m = Down.make({ ref, process: B, reason: CRASHED, to: toW });
           yield* Ledger.use((ledger) =>
             ledger.append("watcher:1/inbox", id, lineFor(from({ by: CLIENT }), { _tag: "send", m })),

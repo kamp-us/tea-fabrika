@@ -7,7 +7,20 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Context, Effect, Exit, Fiber, FileSystem, Option, Predicate, Schema, Scope } from "effect";
+import {
+  Cause,
+  Clock,
+  Context,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Formatter,
+  Option,
+  Predicate,
+  Schema,
+  Scope,
+} from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -392,7 +405,7 @@ const until = Effect.fnUntraced(function* <A>(label: string, look: Effect.Effect
     yield* TestClock.withLive(Effect.sleep("10 millis"));
   }
 
-  return yield* Effect.die(new Error(`${label}: not seen; last ${JSON.stringify(yield* look)}`));
+  return yield* Effect.die(new Error(`${label}: not seen; last ${Formatter.format(yield* look)}`));
 });
 
 const replaceWorld = Effect.fnUntraced(function* (c: {

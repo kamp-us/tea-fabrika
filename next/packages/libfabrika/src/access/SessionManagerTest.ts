@@ -7,7 +7,7 @@
 // `SessionManagerTest.suite(open)`: the module that owns the driver runs it, so this file names no
 // driver and no ledger file (0043 rule 11, 0062).
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Brand, Effect, Option, Result, Schema, type Scope } from "effect";
+import { Arbitrary, Brand, Effect, Formatter, Option, Result, Schema, type Scope } from "effect";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
@@ -538,8 +538,8 @@ const signalLaws = (open: Open) => {
           const before = snapshot(sql);
 
           for (const id of [
-            JSON.stringify(["notice", key]),
-            `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+            Formatter.formatJson(["notice", key]),
+            `${space}[${space}"notice",${Formatter.formatJson(key)}]${space}`,
             '["notice"',
           ]) {
             refusedFor(yield* Effect.flip(signer(id, "saved")), "signal");

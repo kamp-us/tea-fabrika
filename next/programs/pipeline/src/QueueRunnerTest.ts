@@ -1,6 +1,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Fiber, Logger, Redacted, Schema, type Scope, type Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Logger,
+  Redacted,
+  Schema,
+  type Scope,
+  type Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
@@ -438,10 +450,10 @@ export const suite = (driver: Driver) =>
                 const s = yield* h.snapshot;
                 driver.unleaked(
                   [
-                    JSON.stringify(s.letters),
-                    JSON.stringify(s.saved),
-                    JSON.stringify(s.model),
-                    JSON.stringify(s.view),
+                    Formatter.formatJson(s.letters),
+                    Formatter.formatJson(s.saved),
+                    Formatter.formatJson(s.model),
+                    Formatter.formatJson(s.view),
                     ...capture.text(),
                     ...logs,
                   ],

@@ -8,7 +8,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Stream } from "effect";
+import { Effect, FileSystem, Formatter, Path, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import fc from "fast-check";
 import { API } from "typescript/unstable/sync";
@@ -268,7 +268,7 @@ it.effect(
               yield* fs.makeDirectory(dir, { recursive: true });
               yield* fs.writeFileString(
                 path.join(dir, "tsconfig.json"),
-                JSON.stringify({ compilerOptions: { strict: true, types: [] }, include: ["src"] }),
+                Formatter.formatJson({ compilerOptions: { strict: true, types: [] }, include: ["src"] }),
               );
 
               for (const file of files) {

@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Exit, Schema, Stream } from "effect";
+import { Effect, Exit, Formatter, Schema, Stream } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -1146,7 +1146,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
       const out = args[args.indexOf("--out") + 1] ?? "";
       mkdirSync(out, { recursive: true });
       writeFileSync(join(out, "mutbox.json"), "{}\n");
-      return { code: 0, out: JSON.stringify({ outcome: "done", reason: "", detail: "" }) };
+      return { code: 0, out: Formatter.formatJson({ outcome: "done", reason: "", detail: "" }) };
     });
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<
     "plan" | "tests" | "build" | "mutation" | "review"

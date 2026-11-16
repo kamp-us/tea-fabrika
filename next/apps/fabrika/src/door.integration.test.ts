@@ -49,7 +49,7 @@ import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Formatter, Layer, Logger, Option, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -194,7 +194,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
         counter = over.counter ?? 0,
         space = over.space ?? SPACE;
       const clientDataJSON = utf8(
-        JSON.stringify({
+        Formatter.formatJson({
           type: over.type ?? "webauthn.get",
           challenge: Buffer.from(over.challenge ?? signedBytes(text, space)).toString("base64url"),
           origin: over.origin ?? origin,
@@ -679,7 +679,7 @@ describe("P13 selected input recording", () => {
                   });
 
                   if (result._tag === "Failure") {
-                    printable.push(String(result.failure), JSON.stringify(result.failure));
+                    printable.push(String(result.failure), Formatter.formatJson(result.failure));
                   }
 
                   expect(rawRows(w.db, "gateway/inputs")).toEqual(before);
@@ -696,19 +696,21 @@ describe("P13 selected input recording", () => {
                 expect(rows).toHaveLength(history.length);
 
                 for (const row of rows) {
-                  expect(JSON.parse(String(row.body))).toMatchObject({
+                  expect(
+                    yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(String(row.body)),
+                  ).toMatchObject({
                     input: { type: "comment", ticket: "ticket-7" },
                   });
                 }
 
                 const outputs = [
-                  JSON.stringify(rows),
-                  JSON.stringify(w.sql.exec("SELECT * FROM gateway_bindings")),
+                  Formatter.formatJson(rows),
+                  Formatter.formatJson(w.sql.exec("SELECT * FROM gateway_bindings")),
                   ...printable,
                 ];
 
                 for (const value of bodies) {
-                  for (const form of [value, JSON.stringify(value).slice(1, -1), encodeURIComponent(value)]) {
+                  for (const form of [value, Formatter.formatJson(value).slice(1, -1), encodeURIComponent(value)]) {
                     for (const output of outputs) {
                       expect(output).not.toContain(form);
                     }
@@ -792,7 +794,7 @@ const wire = Effect.fnUntraced(function* (
     createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
   );
   const env = {
-    INSTANCE: JSON.stringify(input),
+    INSTANCE: Formatter.formatJson(input),
     PROJECT: {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(input),
@@ -1408,7 +1410,7 @@ describe("T843 sender budget, next/", () => {
           const batches = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
           yield* TestClock.adjust("16 days");
           yield* SpanSink.use((sink) => sink.summaries(REFUSED_HOUR, REFUSED_HOUR + HOUR));
-          const outputs = JSON.stringify({
+          const outputs = Formatter.formatJson({
             sql: [...w.databases(), ["connection", c.db] as const].map(([name, db]) => [name, allObjectRows(db)]),
             batches,
             archives: [...archives, ...c.archives],
@@ -1419,10 +1421,10 @@ describe("T843 sender budget, next/", () => {
 
           for (const form of [
             markerValue,
-            JSON.stringify(markerValue).slice(1, -1),
-            JSON.stringify(JSON.stringify(markerValue).slice(1, -1)).slice(1, -1),
+            Formatter.formatJson(markerValue).slice(1, -1),
+            Formatter.formatJson(Formatter.formatJson(markerValue).slice(1, -1)).slice(1, -1),
             encodeURIComponent(markerValue),
-            encodeURIComponent(JSON.stringify(markerValue)),
+            encodeURIComponent(Formatter.formatJson(markerValue)),
             Buffer.from(markerValue).toString("base64"),
             Buffer.from(markerValue).toString("base64url"),
           ]) {
@@ -2677,9 +2679,9 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
         const flat = reply.rows.map(savedRow);
         // format: watch replies and the saved value keep the stored row bytes, and the saved
         // value keeps its flat rows-and-settings shape under the same gateway_state key.
-        expect(JSON.stringify(reply.rows)).toBe(JSON.stringify(flat));
+        expect(Formatter.formatJson(reply.rows)).toBe(Formatter.formatJson(flat));
         expect(w.db.prepare("SELECT value FROM gateway_state WHERE name='waiting'").get()?.value).toBe(
-          JSON.stringify({ rows: flat, most, ttl }),
+          Formatter.formatJson({ rows: flat, most, ttl }),
         );
         return reply.rows;
       });
@@ -2723,7 +2725,11 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
           }
 
           const saved = w.db.prepare("SELECT value FROM gateway_state WHERE name=?").get(`client/${connection.client}`);
-          const attached = saved !== undefined && JSON.parse(String(saved.value))._tag === "waiting";
+          const attached =
+            saved !== undefined &&
+            (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ _tag: Schema.String })))(
+              String(saved.value),
+            ))._tag === "waiting";
           yield* d.disconnect(connection.client);
           connections = connections.filter((c) => c !== connection);
           rows = yield* watch();
@@ -2862,7 +2868,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
     // An old row: the value as a door before ticket 707 wrote it, by hand, then a fresh door.
     w.db
       .prepare("UPDATE gateway_state SET value=? WHERE name='waiting'")
-      .run(JSON.stringify({ rows: rows.map(savedRow), most, ttl }));
+      .run(Formatter.formatJson({ rows: rows.map(savedRow), most, ttl }));
     layer = w.reopen(nodeSql(open(join(w.dir, "project.db"))));
   }
 });
@@ -3189,7 +3195,7 @@ describe("P10 signed membership changes", () => {
           saw: SAW,
           sentAt: SENT,
         } satisfies typeof Grant.Type;
-        const text = `${JSON.stringify({ _tag: "granted", grant: value, future: { kept: true } }, null, 2)}\n`;
+        const text = `${Formatter.formatJson({ _tag: "granted", grant: value, future: { kept: true } }, { space: 2 })}\n`;
         const armored = yield* w.root.sign(text);
         const first = yield* d.grant({ text, armored });
         expect(yield* d.grant({ text, armored })).toEqual(first);
@@ -3260,7 +3266,7 @@ describe("P10 inputs, retries and signer", () => {
         for (const [index, method] of ["ledger.read", "ledger.wait", "unknown.method"].entries()) {
           expect(rows[index]?._tag).toBe(index === 2 ? "refused" : "received");
           expect(rows[index]?.by).toBe(w.window.fingerprint);
-          expect(JSON.stringify(rows[index]?.body)).toContain(method);
+          expect(Formatter.formatJson(rows[index]?.body)).toContain(method);
         }
       }).pipe(w.provide);
     }),
@@ -3428,24 +3434,24 @@ describe("P10 inputs, retries and signer", () => {
             expect(w.deliveries).toEqual([]);
             expect(w.usedInputs.length).toBe(before);
             expect(yield* stamped()).toEqual([]);
-            const saved = JSON.stringify([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
+            const saved = Formatter.formatJson([...w.databases()].map(([name, db]) => [name, allObjectRows(db)]));
             expect(saved).not.toContain(`t844-forged:${write.marker}`);
-            expect(saved).not.toContain(JSON.stringify(`t844-forged:${write.marker}`).slice(1, -1));
+            expect(saved).not.toContain(Formatter.formatJson(`t844-forged:${write.marker}`).slice(1, -1));
             expect(saved).not.toContain(forged);
-            expect(saved).not.toContain(JSON.stringify(forged).slice(1, -1));
+            expect(saved).not.toContain(Formatter.formatJson(forged).slice(1, -1));
           }
 
           yield* TestClock.adjust("16 days");
           yield* d.route(client, "ledger.read", { stream: "x", after: 0 });
           yield* SpanSink.use((sink) => sink.flush);
-          const saved = JSON.stringify({
+          const saved = Formatter.formatJson({
             databases: [...w.databases()].map(([name, db]) => [name, allObjectRows(db)]),
             archives,
           });
 
           for (const marker of [`t844-forged:${write.marker}`, forged]) {
             expect(saved).not.toContain(marker);
-            expect(saved).not.toContain(JSON.stringify(marker).slice(1, -1));
+            expect(saved).not.toContain(Formatter.formatJson(marker).slice(1, -1));
           }
         }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
       }),
@@ -4439,7 +4445,7 @@ describe("P33 signal ids belong to the brain", () => {
               const { client } = yield* online(d, w);
               yield* d.route(client, "process.send", request("press"));
               const parent = w.deliveries.at(-1)!.envelope.id;
-              const taken = JSON.stringify(["DOWN", toWatcher, value]);
+              const taken = Formatter.formatJson(["DOWN", toWatcher, value]);
               expect(yield* Effect.flip(writeId(taken, d.signer(parent, PROCESS, "send")))).toMatchObject({
                 _tag: "SigningRefused",
               });
@@ -4956,7 +4962,7 @@ describe("P10 span reader and recording", () => {
             spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
               Stream.runCollect(r.read(Chain.cases.spans.make({}))),
             );
-          const visible = JSON.stringify({
+          const visible = Formatter.formatJson({
             log,
             inputRows,
             spans,
@@ -5740,7 +5746,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           // A key every door call reserves (`id`, `by`, `for`, `arrivedAt`) keeps the door's own
           // `reserved` refusal; any other key is this method's `bad_input`.
           const reserved = ["id", "by", "for", "arrivedAt"].some((k) => Object.hasOwn(extra, k));
-          expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Object.keys(extra))).toMatchObject({
+          expect(yield* d.route(client, "process.monitor", extra), Formatter.format(Object.keys(extra))).toMatchObject({
             _tag: "refused",
             reason: reserved ? "reserved" : "bad_input",
           });

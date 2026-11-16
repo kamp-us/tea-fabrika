@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Formatter, Schema } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";
@@ -144,7 +144,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       commit("and one more row");
       const out = ratchet(start);
       expect(out.status).toBe(1);
-      expect(out.stdout).toContain(JSON.stringify(lintKey({ ...extra, file: "a.integration.ts" })).slice(1, -1));
+      expect(out.stdout).toContain(Formatter.formatJson(lintKey({ ...extra, file: "a.integration.ts" })).slice(1, -1));
     }),
   );
 });

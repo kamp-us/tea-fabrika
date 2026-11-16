@@ -5,7 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Schema, type Scope } from "effect";
+import { Arbitrary, Deferred, Effect, Fiber, Formatter, Schema, type Scope } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
@@ -877,7 +877,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 expect(commands.some((row) => row.attributes["error.type"] === "URIError")).toBe(true);
               }
 
-              const saved = JSON.stringify(yield* world.letters(TARGET));
+              const saved = Formatter.formatJson(yield* world.letters(TARGET));
               expect(saved, "the private body reached real storage").toContain(marker);
             }),
           ),

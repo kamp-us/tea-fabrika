@@ -1,7 +1,7 @@
 // Ticket 884, next/: the app supplies real runner wiring so this program imports only the library's front (0062).
 import { describe, expect, it } from "@effect/vitest";
 import type { ProgramRunner } from "@kampus/libfabrika";
-import { Arbitrary, Effect, Schema, type Scope } from "effect";
+import { Arbitrary, Effect, Formatter, Schema, type Scope } from "effect";
 import { inbox, Row } from "./program.ts";
 
 type Runner = ProgramRunner["Service"];
@@ -38,7 +38,7 @@ export const suite = (open: Open) =>
             const before = (yield* runner.open("before")).view;
             const letters = yield* session.letters;
 
-            for (const id of ["inbox-client-attempt", JSON.stringify(["notice", "inbox-client-attempt"])]) {
+            for (const id of ["inbox-client-attempt", Formatter.formatJson(["notice", "inbox-client-attempt"])]) {
               const answer = yield* runner.msg({
                 id,
                 envelope: {
@@ -58,7 +58,7 @@ export const suite = (open: Open) =>
             expect(yield* session.letters, "a refused input saves no letter").toEqual(letters);
             // The ledger saves JSON, where both arrivedAt and fact.rev lose negative zero's sign.
             const savedRow = Schema.decodeUnknownSync(Schema.fromJsonString(Row))(
-              JSON.stringify(Row.cases.added.make(fields)),
+              Formatter.formatJson(Row.cases.added.make(fields)),
             );
             expect(before, "the brain's saved letter reaches the real program").toEqual({
               rows: [savedRow],

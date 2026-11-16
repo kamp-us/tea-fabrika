@@ -2,7 +2,7 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Option, Schema, Stream } from "effect";
+import { Effect, Formatter, Layer, Option, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -323,7 +323,7 @@ for (const adapter of ["node", "worker"] as const) {
               ]);
               expect(
                 lost.some((none) => none.length === 0),
-                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
+                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${Formatter.format(lost)}`,
               ).toBe(true);
 
               for (const stored of kept.flatMap((c) => frames(c.message))) {
@@ -358,7 +358,7 @@ for (const adapter of ["node", "worker"] as const) {
                   measurements,
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
-                  expect(JSON.stringify(permanent)).not.toContain(JSON.stringify(text).slice(1, -1));
+                  expect(Formatter.formatJson(permanent)).not.toContain(Formatter.formatJson(text).slice(1, -1));
                 }
               }
 
@@ -377,7 +377,7 @@ for (const adapter of ["node", "worker"] as const) {
               });
 
               for (const text of sample.private) {
-                expect(JSON.stringify(after)).not.toContain(JSON.stringify(text).slice(1, -1));
+                expect(Formatter.formatJson(after)).not.toContain(Formatter.formatJson(text).slice(1, -1));
               }
 
               expect(yield* recorded(A)).toEqual(rows);
@@ -463,10 +463,10 @@ describe("P34 supervision recording", () => {
                 at,
                 "the original throw must reach deletable content before guards erase it",
               ).toBeGreaterThanOrEqual(0);
-              expect(JSON.stringify(rows)).not.toContain(secret);
-              expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
-              expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
-              expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(secret);
+              expect(Formatter.formatJson(rows)).not.toContain(secret);
+              expect(Formatter.formatJson(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
+              expect(Formatter.formatJson(yield* read(`processes/${NAME}`))).not.toContain(secret);
+              expect(Formatter.formatJson(yield* read(`${A}/dead`))).not.toContain(secret);
 
               for (const output of [
                 rows,
@@ -474,7 +474,7 @@ describe("P34 supervision recording", () => {
                 yield* read(`processes/${NAME}`),
                 yield* read(`${A}/dead`),
               ]) {
-                expect(JSON.stringify(output)).not.toContain(JSON.stringify(secret).slice(1, -1));
+                expect(Formatter.formatJson(output)).not.toContain(Formatter.formatJson(secret).slice(1, -1));
               }
 
               const span = rows[at]!;

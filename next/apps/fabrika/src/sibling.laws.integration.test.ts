@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Path, Schedule } from "effect";
+import { Effect, FileSystem, Formatter, Layer, Path, Schedule, Schema } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 // Sets one env value for the scope; the release puts the old value back, or deletes it when it was unset.
@@ -39,7 +39,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           const port = yield* Effect.acquireRelease(heldPort(), (p) => p.release);
           yield* env("T502_PORT", String(port.port));
           yield* fs.symlink(resolve(import.meta.dirname, "../node_modules"), path.join(home, "node_modules"));
-          yield* fs.writeFileString(path.join(home, "package.json"), JSON.stringify({ type: "module" }));
+          yield* fs.writeFileString(path.join(home, "package.json"), Formatter.formatJson({ type: "module" }));
           const file = path.join(home, "objects.ts");
           yield* fs.writeFileString(
             file,
@@ -84,7 +84,7 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
           );
           const body = yield* Effect.promise(() => reply.text());
           expect(reply.ok).toBe(!bare);
-          expect(bare ? body : JSON.parse(body)).toEqual(
+          expect(bare ? body : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(body)).toEqual(
             bare ? expect.stringContaining("Pong") : { path: ["ping.hit", "pong.back", "ping.leaf"], n: 3 },
           );
         }),

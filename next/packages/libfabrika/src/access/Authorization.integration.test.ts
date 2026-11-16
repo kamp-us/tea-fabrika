@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Deferred, Effect, Fiber, Layer, Result, Schema, Stream } from "effect";
+import { Deferred, Effect, Fiber, Formatter, Layer, Result, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -447,7 +447,7 @@ describe("P17a, appendAdmitted", () => {
                   });
                   expect(row.ok).toBe(outcome === "placed");
                   expect(row.endTimeUnixNano).toBeDefined();
-                  const tags = JSON.stringify(row.attributes);
+                  const tags = Formatter.formatJson(row.attributes);
                   expect(tags).not.toContain(marker);
                   expect(tags).not.toContain("planted storage error");
                 }

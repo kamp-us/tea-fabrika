@@ -14,7 +14,7 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, Option, Schema, Stream } from "effect";
+import { Console, Effect, Exit, Formatter, Option, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 const ZEROS = "0".repeat(40);
@@ -225,7 +225,7 @@ const main = Effect.gen(function* () {
   for (const list of LISTS) {
     const answer = yield* judge(list, yield* fileAt(sha, list.file), yield* fileAt("HEAD", list.file), renames);
     grew = grew || answer._tag === "stuck";
-    yield* Console.log(JSON.stringify(answer));
+    yield* Console.log(Formatter.formatJson(answer));
 
     for (const line of annotation(answer, sha)) {
       yield* Console.log(line);

@@ -7,7 +7,7 @@
 import { DatabaseSync } from "node:sqlite"; // edge: a real WAL database, as the brain's span queue keeps one
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, FileSystem, Path, PlatformError, Ref } from "effect";
+import { Cause, Effect, Exit, FileSystem, Formatter, Path, PlatformError, Ref } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { stored } from "./stored.test-support.ts";
@@ -43,7 +43,7 @@ describe("stored", () => {
                 const last = (name: string) => JSON.stringify(`stopped_${secret}_${name}`);
 
                 for (const name of files) {
-                  yield* write(name, JSON.stringify("start"));
+                  yield* write(name, Formatter.formatJson("start"));
                 }
 
                 const fs: FileSystem.FileSystem = {
@@ -55,7 +55,7 @@ describe("stored", () => {
                       }
 
                       for (const name of renamed) {
-                        yield* real.writeFileString(path.join(dir, `${name}.tmp`), JSON.stringify("listed"));
+                        yield* real.writeFileString(path.join(dir, `${name}.tmp`), Formatter.formatJson("listed"));
                       }
 
                       const names = yield* real.readDirectory(folder, options);
@@ -146,7 +146,7 @@ describe("stored", () => {
                 yield* fs.makeDirectory(path.join(dir, "records"));
 
                 for (const name of files) {
-                  yield* fs.writeFileString(path.join(dir, name), JSON.stringify(`${name}_${secret}`));
+                  yield* fs.writeFileString(path.join(dir, name), Formatter.formatJson(`${name}_${secret}`));
                 }
 
                 const db = yield* Effect.acquireRelease(
@@ -206,7 +206,7 @@ describe("stored", () => {
                 yield* real.makeDirectory(path.join(dir, "records"));
 
                 for (const name of files) {
-                  yield* real.writeFileString(path.join(dir, name), JSON.stringify(name));
+                  yield* real.writeFileString(path.join(dir, name), Formatter.formatJson(name));
                 }
 
                 const target = path.join(dir, failing);

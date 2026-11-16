@@ -3,7 +3,7 @@
 // scope and gives it back when that scope closes.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import { Effect, Formatter, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -364,7 +364,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         case "bad": {
           const target = choose(live(world), step.pick);
           const answer = yield* as(brain(), (p) => p.exit(target.process, step.bad as ExitReason, from()));
-          refused(answer, `invalid input is refused: ${JSON.stringify(step.bad)}`, "bad_text");
+          refused(answer, `invalid input is refused: ${Formatter.format(step.bad)}`, "bad_text");
           expect(yield* facts(sql, world), "a refused exit leaves every lifecycle fact as it was").toEqual(before);
           const still = yield* as(brain(), (p) => p.isLive(target.process));
           expect(Result.getOrThrow(still), "the process still lives").toBe(true);

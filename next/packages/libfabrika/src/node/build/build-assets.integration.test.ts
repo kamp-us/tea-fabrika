@@ -8,7 +8,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Path, PlatformError, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Formatter, Path, PlatformError, Tracer } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -1094,14 +1094,17 @@ const windowModule = Effect.fn("p40.windowModule")(function* (home: string, id: 
   yield* fs.symlink(pkg, path.join(home, "node_modules/@p40", id));
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
+    Formatter.formatJson({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
   );
   yield* fs.writeFileString(path.join(pkg, "program.ts"), 'export {counter as program} from "@kampus/counter";');
   yield* fs.writeFileString(
     path.join(pkg, "window.ts"),
-    `export const view = () => ${JSON.stringify(marker)}; export const more = import("./chunk.ts");`,
+    `export const view = () => ${Formatter.formatJson(marker)}; export const more = import("./chunk.ts");`,
   );
-  yield* fs.writeFileString(path.join(pkg, "chunk.ts"), `export const text = ${JSON.stringify(`${marker}-chunk`)};`);
+  yield* fs.writeFileString(
+    path.join(pkg, "chunk.ts"),
+    `export const text = ${Formatter.formatJson(`${marker}-chunk`)};`,
+  );
 });
 
 const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<number>) {

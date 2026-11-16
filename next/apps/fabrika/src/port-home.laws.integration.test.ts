@@ -45,7 +45,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
-import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
+import { Clock, Effect, FileSystem, Formatter, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
@@ -184,7 +184,7 @@ const press = Effect.fnUntraced(function* (
   let serial = 0;
   const ask = Effect.fnUntraced(function* (method: string, params: unknown) {
     const n = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id: n, method, params }));
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id: n, method, params }));
     return yield* next((frame) => frame.id === n);
   });
   const challenge = yield* next((frame) => frame.method === "challenge");
@@ -310,7 +310,7 @@ const observe = Effect.fnUntraced(function* (instance: any) {
 
   // Through JSON and back, so a live answer compares as the saved one reads from its file.
   return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Seen))(
-    JSON.stringify({
+    Formatter.formatJson({
       table: rows.map((row) => ({ name: row.name, process: row.process })).sort((a, b) => a.name.localeCompare(b.name)),
       streams,
     }),
@@ -354,6 +354,8 @@ const reopened = Effect.gen(function* () {
 
 /** One Alchemy resource file, read whole so writing it back keeps every field in its place. */
 const Resource = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
+/** A resource file as Alchemy writes it: `JSON.stringify(state, null, 2)`. */
+const AlchemyState = Schema.fromJsonString(Schema.Unknown, { space: 2 });
 
 /** Makes `props.main` in each Alchemy resource file under `home`'s `.alchemy/state/` relative to
  *  the build's out folder, given as `dists` (as passed and as its real path), and changes no other
@@ -386,7 +388,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     // Alchemy writes a resource as `JSON.stringify(state, null, 2)` (`alchemy@2.0.0-beta.85`,
     // `src/State/LocalState.ts`). Writing it back the same way changes only `props.main`; a file
     // in any other shape fails here rather than be rewritten.
-    expect(JSON.stringify(resource, null, 2), `${file} is not in Alchemy's own shape`).toBe(text);
+    expect(yield* Schema.encodeEffect(AlchemyState)(resource), `${file} is not in Alchemy's own shape`).toBe(text);
     const relative = dists.map((dist) => path.relative(dist, main)).find((one) => !one.startsWith(".."));
     expect(relative, `${file}: props.main is outside the build's out folder`).toBeDefined();
     // Why a relative path is safe: Alchemy's local provider diff reads only the new props and the
@@ -398,7 +400,7 @@ const relativeMain = Effect.fnUntraced(function* (home: string, dists: ReadonlyA
     // new bucket and the home would no longer be what the run wrote.
     yield* fs.writeFileString(
       full,
-      JSON.stringify({ ...resource, props: { ...props, main: relative ?? main } }, null, 2),
+      yield* Schema.encodeEffect(AlchemyState)({ ...resource, props: { ...props, main: relative ?? main } }),
     );
   }
 });
@@ -442,7 +444,10 @@ const written = Effect.gen(function* () {
   const staging = yield* fs.makeTempDirectoryScoped({ prefix: "t502-s-" });
   yield* fs.copy(home, path.join(staging, "home"), { overwrite: true });
   yield* relativeMain(path.join(staging, "home"), dists);
-  yield* fs.writeFileString(path.join(staging, "saved.json"), `${JSON.stringify({ founding, key, seen }, null, 2)}\n`);
+  yield* fs.writeFileString(
+    path.join(staging, "saved.json"),
+    `${yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown, { space: 2 }))({ founding, key, seen })}\n`,
+  );
   const hits = yield* machinePaths(staging, yield* machineRoots);
   expect(hits, "the home to be saved names a machine path, so nothing was saved").toEqual([]);
   yield* fs.remove(FIXTURE, { recursive: true, force: true });

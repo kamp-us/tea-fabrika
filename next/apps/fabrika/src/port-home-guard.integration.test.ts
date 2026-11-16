@@ -13,7 +13,7 @@ import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -71,7 +71,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       : plant.form === "plain"
         ? planted.full
         : plant.form === "json"
-          ? JSON.stringify(planted.full).slice(1, -1)
+          ? Formatter.formatJson(planted.full).slice(1, -1)
           : (yield* path.toFileUrl(planted.full)).href;
   let expected: typeof Hit.Type | null = null;
 
@@ -98,14 +98,12 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     const hit = plant !== null && planted !== null && plant.place === "json" && plant.pick % input.jsons.length === n;
     // A JSON file holds the path as a value, so its file holds it JSON-escaped; a URL stays a URL.
     const value = hit ? (plant.form === "url" ? text : planted.full) : file.value;
-    const body = JSON.stringify(
+    const body = yield* Schema.encodeEffect(Schema.fromJsonString(Schema.Unknown, { space: 2 }))(
       file.keys.reduceRight<unknown>((inner, key) => ({ [key]: inner, _note: file.value }), value),
-      null,
-      2,
     );
 
     if (hit) {
-      const at = body.indexOf(JSON.stringify(value).slice(1, -1));
+      const at = body.indexOf(Formatter.formatJson(value).slice(1, -1));
       expected = {
         file: name,
         place: Place.cases.byte.make({ offset: encoder.encode(body.slice(0, at)).length }),

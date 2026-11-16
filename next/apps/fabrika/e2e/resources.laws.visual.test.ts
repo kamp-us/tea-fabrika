@@ -14,7 +14,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, Formatter, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
 import { suite as scopedSuite } from "./p14.test-support.ts";
@@ -79,7 +79,7 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
           env: {
             ...process.env,
             P14_E2E_TRACE: trace,
-            ...(fault === undefined ? {} : { P14_E2E_FAULT: JSON.stringify(fault) }),
+            ...(fault === undefined ? {} : { P14_E2E_FAULT: Formatter.formatJson(fault) }),
           },
           stdio: ["ignore", "ignore", "ignore"],
           detached: true,
@@ -199,7 +199,7 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
       const seen = rows(trace);
       const acquired = seen.flatMap((r) => (r.acquired === undefined ? [] : [r.acquired]));
       const released = seen.flatMap((r) => (r.released === undefined ? [] : [r.released]));
-      const label = JSON.stringify(fault ?? "plain");
+      const label = Formatter.format(fault ?? "plain");
       expect(acquired.length, `${label}: the child reached its first acquisition`).toBeGreaterThan(0);
 
       if (fault !== undefined) {

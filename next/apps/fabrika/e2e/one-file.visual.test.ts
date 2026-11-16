@@ -18,7 +18,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Result, Schema, Scope } from "effect";
+import { Effect, Exit, Formatter, Result, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
@@ -265,7 +265,7 @@ const stopped = Effect.callback<never, Stopped>((resume) => {
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
-      appendFileSync(trace, `${JSON.stringify(row)}\n`);
+      appendFileSync(trace, `${Formatter.formatJson(row)}\n`);
     }
   });
 
