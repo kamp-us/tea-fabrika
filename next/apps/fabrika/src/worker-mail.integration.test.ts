@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import type { Start } from "@kampus/libfabrika/processes/Process";
 import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
@@ -946,7 +947,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
       };
       yield* Effect.promise(async () => {
         const project = instance.project(PROJECT);
-        const start = async (request: object) =>
+        const start = async (request: Start) =>
           Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(
             await Reflect.get(project, "start")(request, from),
           ).process;

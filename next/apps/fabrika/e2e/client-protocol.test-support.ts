@@ -314,20 +314,11 @@ export const served = (h: Home) =>
 
 export type Served = Effect.Success<ReturnType<typeof served>>;
 
-/** A local binding's calls, as the dev command hands them out. */
-type Binding = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
-
-/** One control call, as the chaos-revoke suite's `invoke` makes it: the binding's method, awaited. */
-const invoke = Effect.fnUntraced(function* (binding: Binding, method: string, args: ReadonlyArray<unknown>) {
-  const target = binding[method];
-
-  if (target === undefined) {
-    return yield* new SuiteError({ waited: `the control endpoint's ${method}, which the binding does not have` });
-  }
-
+/** One typed control call, as the chaos-revoke suite's `invoke` makes it, awaited; `method` names it in the failure. */
+const invoke = Effect.fnUntraced(function* <A>(method: string, call: () => Promise<A>) {
   // oxlint-disable-next-line fabrika/no-promises -- edge: the local instance's Durable Object RPC answers a Promise
   return yield* Effect.tryPromise({
-    try: () => Reflect.apply(target, binding, args),
+    try: call,
     catch: () => new SuiteError({ waited: `the control endpoint's ${method}` }),
   });
 });
@@ -362,7 +353,7 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
       return yield* new SuiteError({ waited: `${backend.name}: a live ${PROCESS}` });
     }
 
-    yield* invoke(s.control, "exit", [first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()]);
+    yield* invoke("exit", () => s.control.exit(first, ExitReason.cases.crashed.make({ phase: "step" }), s.from()));
     yield* until(
       `${backend.name}: the tile says Ended (crashed)`,
       Effect.map(backend.state, (words) => words === "Ended (crashed)"),
@@ -370,16 +361,18 @@ export const followRestart = (h: Home, s: Served, backend: Backend) =>
     );
     const ended = yield* backend.state;
     const endedBody = yield* backend.body;
-    const started = yield* invoke(s.control, "start", [
-      Start.cases.again.make({
-        id: "p18-e1-again",
-        name: PROCESS,
-        code: { program: "fabrika/checklist", hash: s.hash },
-        after: first,
-        reason: "p18-e1",
-      }),
-      s.from(),
-    ]);
+    const started = yield* invoke("start", () =>
+      s.control.start(
+        Start.cases.again.make({
+          id: "p18-e1-again",
+          name: PROCESS,
+          code: { program: "fabrika/checklist", hash: s.hash },
+          after: first,
+          reason: "p18-e1",
+        }),
+        s.from(),
+      ),
+    );
     const second = String(field(started, "process"));
     yield* until(
       `${backend.name}: the tile is online on the successor`,
