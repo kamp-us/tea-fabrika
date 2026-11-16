@@ -2,7 +2,7 @@
 // `verdict` on fixed clocks; the read laws write a made-up BOXES folder in a temp folder and set
 // Effect's test clock: no real quest, box or process is read or touched.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Layer, Path, type Scope } from "effect";
+import { Effect, FileSystem, Layer, Path, type Scope, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -371,7 +371,7 @@ describe("Quests.read", () => {
       Effect.gen(function* () {
         const whole = chain(record({ steps: [opened("tests", -MIN)], beat: beat("box", -MIN, -1000) }));
         const lines = yield* linesAt({
-          "state/half-chain.json": whole.slice(0, whole.length / 2),
+          "state/half-chain.json": pipe(whole, Str.slice(0, whole.length / 2)),
           "state/other-chain.json": '{"quest":"other","steps":"not a list"}',
           "state/t1-chain.json": whole,
           "state/t1.lock": "1\n",

@@ -116,7 +116,7 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Context, Duration, Effect, Layer, Result, Schedule, Schema } from "effect";
+import { Context, Duration, Effect, Layer, Result, Schedule, Schema, String as Str, pipe } from "effect";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -213,7 +213,7 @@ export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted>()("Re
 
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {
-  const [verb, check = ""] = outcome.split(":");
+  const [verb, check = ""] = Str.split(outcome, ":");
   return verb === "refused" && (check === "agent_cap" || check === "low_disk") ? check : null;
 };
 
@@ -239,7 +239,7 @@ const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
 export const lineOf = (out: string, exit: number): Line | null => {
-  for (const raw of out.trim().split("\n").toReversed()) {
+  for (const raw of pipe(out, Str.trim, Str.split("\n")).toReversed()) {
     const parsed = Result.try((): unknown => JSON.parse(raw));
 
     if (Result.isFailure(parsed)) {
@@ -302,7 +302,7 @@ const after: Record<StepName, QuestStep | null> = {
  * retries it on `slotSchedule`, and running out is a `RetriesExhausted` on the err channel.
  */
 export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
-  const [verb, to = "", reason = ""] = line.outcome.split(":");
+  const [verb, to = "", reason = ""] = Str.split(line.outcome, ":");
 
   switch (verb) {
     case "done":
@@ -366,15 +366,15 @@ export const moveFrom = (text: string): Judged => {
 
 /** What the judgment agent said on its last `answer:` line; none is a park. */
 export const judgedOf = (text: string): Judged => {
-  for (const line of text.split("\n").toReversed()) {
-    const m = JUDGED.exec(line.trim());
+  for (const line of Str.split(text, "\n").toReversed()) {
+    const m = JUDGED.exec(Str.trim(line));
 
     if (m === null) {
       continue;
     }
 
-    const note = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
-    const to = m[2]?.toLowerCase() ?? "";
+    const note = pipe(m[3] ?? "", Str.replace(/^[`*\s]+|[`*\s]+$/g, ""));
+    const to = Str.toLowerCase(m[2] ?? "");
 
     if (isQuestStep(to)) {
       return toStep(to, `the lead's judgment: ${note}`);
@@ -395,11 +395,11 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   const head: string[] = [];
   const bodies: Record<string, string[]> = {};
 
-  for (const line of text.split("\n")) {
+  for (const line of Str.split(text, "\n")) {
     const m = /^## (\S+)\s*$/.exec(line);
 
     if (m) {
-      name = (m[1] ?? "").toLowerCase();
+      name = Str.toLowerCase(m[1] ?? "");
       bodies[name] ??= [];
       continue;
     }
@@ -412,10 +412,10 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
   }
 
   for (const [k, v] of Object.entries(bodies)) {
-    sections[k] = v.join("\n").trim();
+    sections[k] = Str.trim(v.join("\n"));
   }
 
-  return { head: head.join("\n").trim(), sections };
+  return { head: Str.trim(head.join("\n")), sections };
 };
 
 /**
@@ -466,7 +466,7 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
     (s) =>
       `${s} ${commits
         .filter((c) => c.step === s)
-        .map((c) => c.sha.slice(0, 8))
+        .map((c) => pipe(c.sha, Str.slice(0, 8)))
         .join(" ")}`,
   );
   return `Step commits since the quest left main, oldest first: ${by.join("; ")}.`;
@@ -474,7 +474,7 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
 
 // The parameter keeps the name `lane`: agents-ledger.json holds this line word for word.
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
-  const short = (s: string) => s.slice(0, 8);
+  const short = (s: string) => pipe(s, Str.slice(0, 8));
   const heads = STEPS.filter((s) => f.heads[s]).map((s) => `${s} ${short(f.heads[s] ?? "")}`);
   const lines = [
     lane.head,
@@ -523,7 +523,7 @@ export const MARKS = ["pass", "send", "work", "tool"] as const;
 export type Mark = (typeof MARKS)[number];
 
 export const markFrom = (line: Line): Mark => {
-  const [verb] = line.outcome.split(":");
+  const [verb] = Str.split(line.outcome, ":");
   return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
 };
 
@@ -542,7 +542,7 @@ export type Budget = typeof Budget.Type;
  * and `$<d>`, as in `Estimate: 12 steps, $15`. An estimate in agent hours alone is none.
  */
 export const estimateIn = (text: string): Budget | null => {
-  for (const line of text.split("\n")) {
+  for (const line of Str.split(text, "\n")) {
     const m = /\bestimate\b.*?\b(\d+)\s+steps?\b.*?\$\s?(\d+(?:\.\d+)?)/i.exec(line);
     const steps = Number(m?.[1]);
     const dollars = Number(m?.[2]);
@@ -729,7 +729,7 @@ export const exitOf = (e: End): number => (e.kind === "done" ? 0 : e.kind === "a
  * operating error or an output that never reached the PR: the check fails closed, so it is stuck.
  */
 export const looseningEnd = (pr: number, ran: { readonly code: number; readonly text: string }): End | null => {
-  const text = ran.text.trim();
+  const text = Str.trim(ran.text);
 
   if (ran.code === 0) {
     return null;
@@ -924,7 +924,7 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const line = m.value;
-        const [verb] = line.outcome.split(":");
+        const [verb] = Str.split(line.outcome, ":");
         const accepted = verb === "done" || verb === "send" || verb === "skip";
         const quest: Quest = {
           ...s.quest,
@@ -1007,7 +1007,7 @@ export const makeMachine = (limits: Limits) =>
           return stopped(quest, intensity);
         }
 
-        const said = `CI's typecheck job at ${quest.head.slice(0, 8)} (PR ${s.pr}) answered send:${verdict.to}`;
+        const said = `CI's typecheck job at ${pipe(quest.head, Str.slice(0, 8))} (PR ${s.pr}) answered send:${verdict.to}`;
         return next(quest, verdict.to, `${said}:\n${verdict.lines.join("\n")}`, limits);
       },
       typecheck_read_err: (s): Step =>
@@ -1066,7 +1066,9 @@ type Setup = {
 
 /** The last `n` lines of a file, or a line saying it is not there. */
 const lastLines = (path: string | null, n: number): string =>
-  path !== null && existsSync(path) ? readFileSync(path, "utf8").trim().split("\n").slice(-n).join("\n") : "(none)";
+  path !== null && existsSync(path)
+    ? pipe(readFileSync(path, "utf8"), Str.trim, Str.split("\n")).slice(-n).join("\n")
+    : "(none)";
 
 const JUDGE_TAIL = (quest: string, step: StepName, line: Line, state: string, report: string) => `
 You are the lead's judgment for quest ${quest}, started by chain.ts because the ${step} step
@@ -1080,7 +1082,7 @@ why the lead has to look, in one sentence.
 Send a step again when the fix is clear and that step owns it (a tests step owns test files, a
 build step product code). Park when a plan would change, a decision is needed, a secret or a
 person is involved, or the same step already failed the same way.${
-  line.outcome.startsWith(`send:${step}:`)
+  pipe(line.outcome, Str.startsWith(`send:${step}:`))
     ? `
 The ${step} step sent the quest to itself, which chain.ts never runs as one more round. When what it
 lists as left needs another step's code, a typecheck or --changed, send the next step with that
@@ -1203,8 +1205,7 @@ const handlers = (s: Setup) => {
     const listed = sh("git", ["-C", env.MAIN, "rev-list", "--reverse", `${root}..${head}`]);
     return listed.code !== 0
       ? null
-      : listed.out
-          .split("\n")
+      : Str.split(listed.out, "\n")
           .filter(Boolean)
           .map((sha) => {
             const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
@@ -1337,7 +1338,7 @@ const handlers = (s: Setup) => {
                   listUsd: null,
                 },
               });
-              note(`round ${round}: ${cmd.step} ${e._tag}: ${e.reason.slice(0, 200)}`);
+              note(`round ${round}: ${cmd.step} ${e._tag}: ${pipe(e.reason, Str.slice(0, 200))}`);
             }),
           ),
           // tea's err channel takes a plain tagged record; the class stays inside the handler.
@@ -1392,7 +1393,7 @@ const handlers = (s: Setup) => {
             started,
             ended: new Date(),
             spent: turned.spent,
-            redacted: scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null,
+            redacted: scrubbed.code === 0 ? Number(Str.trim(scrubbed.out)) : null,
           }),
         );
         const answer = move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
@@ -1412,7 +1413,7 @@ const handlers = (s: Setup) => {
         s.beats.enter("typecheck", null);
         const minutes = yield* TypecheckMinutes;
         const every = yield* TypecheckEvery;
-        note(`typecheck: waiting for CI's ${Typecheck.JOB} job at ${cmd.head.slice(0, 8)} (PR ${cmd.pr})`);
+        note(`typecheck: waiting for CI's ${Typecheck.JOB} job at ${pipe(cmd.head, Str.slice(0, 8))} (PR ${cmd.pr})`);
         const pushed = Date.now();
         const verdict = yield* Typecheck.wait({ main: env.MAIN, head: cmd.head, minutes, every });
         const took = Math.round((Date.now() - pushed) / 1000);
@@ -1422,17 +1423,18 @@ const handlers = (s: Setup) => {
     pr_open: (cmd: { head: string }) =>
       Effect.gen(function* () {
         s.beats.enter("pr", null);
-        const title = (s.brief.sections.pr ?? "")
-          .split("\n")[0]
-          ?.replace(/^#+\s*/, "")
-          .trim();
+        const title = pipe(Str.split(s.brief.sections.pr ?? "", "\n")[0], Str.replace(/^#+\s*/, ""), Str.trim);
 
         if (!title) {
           return { pr: null, detail: "the quest brief has no `## pr` section with a title line" };
         }
 
         const body = [
-          (s.brief.sections.pr ?? "").split("\n").slice(1).join("\n").trim(),
+          Str.trim(
+            Str.split(s.brief.sections.pr ?? "", "\n")
+              .slice(1)
+              .join("\n"),
+          ),
           "",
           "## Steps",
           "",
@@ -1446,7 +1448,9 @@ const handlers = (s: Setup) => {
         ].join("\n");
         // The draft opened at the quest's first commit (drive's pushing phase, 0134) takes the brief's
         // words and is marked ready; a quest started before that gets its pull request here.
-        note(`review said merge-ready at ${cmd.head.slice(0, 8)}; pushing ${s.branch} and marking its PR ready`);
+        note(
+          `review said merge-ready at ${pipe(cmd.head, Str.slice(0, 8))}; pushing ${s.branch} and marking its PR ready`,
+        );
         const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
         const readied = yield* Publish.ready({
           dir: env.MAIN,
@@ -1476,15 +1480,15 @@ const handlers = (s: Setup) => {
         sh("git", ["-C", env.MAIN, "fetch", "-q", "origin", "main"]);
         const base = sh("git", ["-C", env.MAIN, "merge-base", "origin/main", cmd.head]);
 
-        if (base.code !== 0 || !base.out.trim()) {
-          return { code: 2, text: `no merge-base of origin/main and ${cmd.head.slice(0, 8)}` };
+        if (base.code !== 0 || !Str.trim(base.out)) {
+          return { code: 2, text: `no merge-base of origin/main and ${pipe(cmd.head, Str.slice(0, 8))}` };
         }
 
-        const from = base.out.trim();
+        const from = Str.trim(base.out);
         const ran = sh("sh", [join(HERE, "loosening.sh"), from, cmd.head], env.MAIN);
-        const text = [ran.out.trim(), ran.err.trim()].filter(Boolean).join("\n");
+        const text = [Str.trim(ran.out), Str.trim(ran.err)].filter(Boolean).join("\n");
         note(
-          `loosening.sh ${from.slice(0, 8)} ${cmd.head.slice(0, 8)} exited ${ran.code}: ${text.split("\n")[0] ?? ""}`,
+          `loosening.sh ${pipe(from, Str.slice(0, 8))} ${pipe(cmd.head, Str.slice(0, 8))} exited ${ran.code}: ${Str.split(text, "\n")[0] ?? ""}`,
         );
         const bodyFile = join(env.BOXES, `${s.quest}-loosening.md`);
         writeFileSync(
@@ -1522,7 +1526,7 @@ const handlers = (s: Setup) => {
         saveStep(entry);
         s.beats.enter("host", null);
         const name = RunId.next(s.quest, "host", runNames(env.BOXES, s.quest));
-        note(`round ${round}: starting host ${name} at ${head.slice(0, 8)} (${s.host.length} commands)`);
+        note(`round ${round}: starting host ${name} at ${pipe(head, Str.slice(0, 8))} (${s.host.length} commands)`);
         const args = {
           main: env.MAIN,
           boxes: env.BOXES,
@@ -1556,7 +1560,9 @@ const handlers = (s: Setup) => {
           listUsd: null,
         };
         saveStep({ ...entry, endedAt: ended, line });
-        note(`round ${round}: host ${line.outcome}, head ${hosted.head.slice(0, 8)}: ${line.reason.slice(0, 200)}`);
+        note(
+          `round ${round}: host ${line.outcome}, head ${pipe(hosted.head, Str.slice(0, 8))}: ${pipe(line.reason, Str.slice(0, 200))}`,
+        );
         return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
       }).pipe(Effect.provide(NodeServices.layer)),
     // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, 0162). The wait is for
@@ -1627,7 +1633,7 @@ export const stepsTable = (
   const dollars = new Map<string, number>();
 
   if (existsSync(rowsFile)) {
-    for (const raw of readFileSync(rowsFile, "utf8").split("\n")) {
+    for (const raw of Str.split(readFileSync(rowsFile, "utf8"), "\n")) {
       // A line that is not JSON, or is JSON null, holds no row.
       const r = Result.getOrUndefined(Result.try(() => JSON.parse(raw) as { run?: string; listUsd?: number } | null));
 
@@ -1658,9 +1664,8 @@ const flag = (args: string[], name: string) => {
 
 const stepSet = (text: string | undefined): Set<StepName> =>
   new Set(
-    (text ?? "")
-      .split(",")
-      .map((s) => s.trim())
+    Str.split(text ?? "", ",")
+      .map((s) => Str.trim(s))
       .filter(isStep),
   );
 

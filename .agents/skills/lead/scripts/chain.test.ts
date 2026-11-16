@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -168,7 +168,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   it("a slot refusal is the one outcome the schedule retries; any refusal that reaches the moves parks", () => {
     fc.assert(
       fc.property(step, outcome, (s, o) => {
-        const [verb, check] = o.split(":");
+        const [verb, check] = Str.split(o, ":");
         const slot = verb === "refused" && (check === "agent_cap" || check === "low_disk");
         expect(slotRefusal(o)).toBe(slot ? check : null);
 
@@ -199,7 +199,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   it("a stuck goes to judgment until MaxStucks in a row on one step, then parks", () => {
     fc.assert(
       fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, reason) => {
-        const m = moveOf(s, line(`stuck:${reason.replaceAll(" ", "_")}`, "h", reason), stucks, max);
+        const m = moveOf(s, line(`stuck:${pipe(reason, Str.replaceAll(" ", "_"))}`, "h", reason), stucks, max);
         expect(m._tag).toBe(stucks >= max ? "park" : "judge");
       }),
       options,
@@ -291,7 +291,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
         expect(text).not.toContain("What changed.");
         expect(text).toContain(`round ${round}`);
         expect(text).toContain(`Last round: ${note}`);
-        expect(text).toContain(head.slice(0, 8));
+        expect(text).toContain(pipe(head, Str.slice(0, 8)));
 
         // A review gets the two full SHAs its template needs; a mutation its build range.
         if (s === "review") {
@@ -321,8 +321,8 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
           ticket: "7",
           branch: "fabrikalfa/x",
           plan: "p.md",
-          root: "r".repeat(40),
-          head: "h".repeat(40),
+          root: pipe("r", Str.repeat(40)),
+          head: pipe("h", Str.repeat(40)),
           round: 1,
           heads: {},
           commits,
@@ -330,11 +330,11 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
           host: null,
           plants: null,
         });
-        expect(text.includes("No step has committed yet.")).toBe(commits.length === 0);
+        expect(pipe(text, Str.includes("No step has committed yet."))).toBe(commits.length === 0);
         expect(text).not.toContain("could not be read");
 
         for (const c of commits) {
-          const by = new RegExp(`[:;] ${c.step} [0-9a-f ]*\\b${c.sha.slice(0, 8)}\\b`);
+          const by = new RegExp(`[:;] ${c.step} [0-9a-f ]*\\b${pipe(c.sha, Str.slice(0, 8))}\\b`);
           expect(text).toMatch(by);
         }
       }),
@@ -344,8 +344,8 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
       ticket: "7",
       branch: "fabrikalfa/x",
       plan: "p.md",
-      root: "r".repeat(40),
-      head: "h".repeat(40),
+      root: pipe("r", Str.repeat(40)),
+      head: pipe("h", Str.repeat(40)),
       round: 1,
       heads: {},
       commits: null,
@@ -358,8 +358,8 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
   });
 
   it("format: the pr section's first line is the title; a heading's case does not matter", () => {
-    const cut = sectionsOf(questBrief.replace("## pr", "## PR"));
-    expect(cut.sections.pr?.split("\n")[0]).toBe("# T7 the title");
+    const cut = sectionsOf(pipe(questBrief, Str.replace("## pr", "## PR")));
+    expect(cut.sections.pr == null ? undefined : Str.split(cut.sections.pr, "\n")[0]).toBe("# T7 the title");
     expect(Object.keys(cut.sections).toSorted()).toEqual([...STEPS, "pr"].toSorted());
   });
 
@@ -375,7 +375,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
       }),
       options,
     );
-    const withoutMutation = questBrief.replace("## mutation\nRun stryker.\n", "");
+    const withoutMutation = pipe(questBrief, Str.replace("## mutation\nRun stryker.\n", ""));
     expect(sectionsOf(withoutMutation).sections.mutation).toBeUndefined();
 
     for (const start of QUEST_STEPS) {
@@ -426,7 +426,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
     for (const [i, s] of QUEST_STEPS.entries()) {
       expect(m).toMatchObject({ phase: "stepping", step: s });
-      const head = String(i + 1).repeat(40);
+      const head = pipe(String(i + 1), Str.repeat(40));
       heads.push(head);
       [m, cmds] = ran(m, line("done", head));
     }
@@ -483,7 +483,7 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
 
         for (const a of answers) {
           if (m.phase === "stepping" && a._tag === "line") {
-            [m, cmds] = ran(m, line(a.o, "c".repeat(40)));
+            [m, cmds] = ran(m, line(a.o, pipe("c", Str.repeat(40))));
           } else if (m.phase === "judging" && a._tag === "judged") {
             [m, cmds] = machine.update.judge_ok(m, { type: "judge_ok", value: { text: a.text } } as never);
           } else {
@@ -542,8 +542,8 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     fc.assert(
       fc.property(questStep, word, (to, reason) => {
         let [m, cmds] = start();
-        [m, cmds] = ran(m, line("done", "a".repeat(40)));
-        [m, cmds] = ran(m, line(`send:${to}:step_said`, "b".repeat(40), reason));
+        [m, cmds] = ran(m, line("done", pipe("a", Str.repeat(40))));
+        [m, cmds] = ran(m, line(`send:${to}:step_said`, pipe("b", Str.repeat(40)), reason));
 
         // The build is the sender here: a send to itself goes to judgment, never another round.
         if (to === "build") {
@@ -627,11 +627,11 @@ describe("T341 the quest machine, stepped by hand, today's tooling", () => {
     let [m] = small.update.start(idle, { type: "start", step: "tests" });
     [m] = small.update.step_run_ok(m, {
       type: "step_run_ok",
-      value: line("done", "a".repeat(40)),
+      value: line("done", pipe("a", Str.repeat(40))),
     } as never);
     [m] = small.update.step_run_ok(m, {
       type: "step_run_ok",
-      value: line("send:tests:step_said", "b".repeat(40)),
+      value: line("send:tests:step_said", pipe("b", Str.repeat(40))),
     } as never);
     expect(m).toMatchObject({ phase: "over", end: { kind: "ask" } });
   });
@@ -706,7 +706,7 @@ describe("the host step runs before every review of a new head, today's tooling"
   // 0076 with the host step: its round is a step and its send a send back. Plants: give the host
   // step no round; leave its mark out of the window; count a host stuck against the quest.
   it("scenario: a host send is a send back in the budget's window, and the host round counts toward the backstop", () => {
-    const h = "a".repeat(40);
+    const h = pipe("a", Str.repeat(40));
     let [m] = built(h);
 
     for (let i = 0; i < 2; i++) {
@@ -740,7 +740,7 @@ describe("the host step runs before every review of a new head, today's tooling"
   });
 
   it("scenario: a host stuck ends the quest stuck (exit 30), and a quest started at review hosts first", () => {
-    const [m] = built("a".repeat(40));
+    const [m] = built(pipe("a", Str.repeat(40)));
     const [over] = hosted(m, "stuck", "", "git worktree add failed");
     expect(over).toMatchObject({ phase: "over", end: { kind: "stuck", reason: "host: git worktree add failed" } });
 
@@ -846,7 +846,7 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
   it("scenario: a red typecheck that fills the intensity window stops the quest (0076)", () => {
     // 2 in 5 here, so one earlier send and the red one trip it.
     const tight = makeMachine({ ...limits(16), intensity: { count: 2, within: 5 } });
-    const [m] = reviewed("a".repeat(40), 1, tight);
+    const [m] = reviewed(pipe("a", Str.repeat(40)), 1, tight);
     expect(m.phase).toBe("typechecking");
     const red = { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] };
     const [stopped, cmds] = answered(m, red, tight);
@@ -855,8 +855,8 @@ describe("CI's typecheck job answers once the pull request opens, with no laptop
   });
 
   it("scenario: after a red one, the next merge-ready review pushes again and reads CI at the new head", () => {
-    const first = "a".repeat(40);
-    const second = "b".repeat(40);
+    const first = pipe("a", Str.repeat(40));
+    const second = pipe("b", Str.repeat(40));
     const [m] = reviewed(first);
     let [back] = answered(m, { _tag: "red", to: "build", lines: ["a.ts(1,1): error TS1: x"] });
     expect(back).toMatchObject({ phase: "stepping", step: "build" });
@@ -1007,7 +1007,7 @@ describe("T341 the pull request's steps table, today's tooling", () => {
         const onExec = STEPS.filter(
           (s) => s !== "mutation" && ran.includes(s) && exec.includes(s) && !claude.includes(s),
         );
-        expect(text.includes("plain codex exec")).toBe(onExec.length > 0);
+        expect(pipe(text, Str.includes("plain codex exec"))).toBe(onExec.length > 0);
       }),
       options,
     );
@@ -1019,11 +1019,11 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     fc.assert(
       fc.property(fc.subarray([...STEPS]), fc.subarray([...STEPS]), (ran, claude) => {
         const text = providers(ran, new Set(claude));
-        expect(text.startsWith("Codex in a box")).toBe(true);
-        expect(text.includes("mutation")).toBe(ran.includes("mutation"));
+        expect(pipe(text, Str.startsWith("Codex in a box"))).toBe(true);
+        expect(pipe(text, Str.includes("mutation"))).toBe(ran.includes("mutation"));
 
         for (const s of QUEST_STEPS) {
-          expect(text.includes(s)).toBe(ran.includes(s) && claude.includes(s));
+          expect(pipe(text, Str.includes(s))).toBe(ran.includes(s) && claude.includes(s));
         }
       }),
       options,
@@ -1205,10 +1205,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
           requests: 2,
           tools: 1,
         });
-        const lines = events
-          .trim()
-          .split("\n")
-          .map((l) => JSON.parse(l) as { _tag: string });
+        const lines = pipe(events, Str.trim, Str.split("\n")).map((l) => JSON.parse(l) as { _tag: string });
         expect(lines.map((l) => l._tag)).toEqual(["started", "tool", "tool", "said", "tokens", "ended"]);
         // The prompt reached the adapter with the schema's form appended, and the system prompt named.
         expect(fake.seen.started[0]?.prompt).toContain("do the step");
@@ -1407,7 +1404,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
     fc.assert(
       fc.property(outcome, fc.string({ maxLength: 80 }), (o, reason) => {
         const fault = faultFrom(o, reason);
-        expect(fault === null).toBe(!o.startsWith("stuck"));
+        expect(fault === null).toBe(!pipe(o, Str.startsWith("stuck")));
 
         if (fault !== null) {
           expect(FAULTS).toContain(fault);
@@ -1422,7 +1419,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
       fc.property(outcome, word, (o, reason) => {
         const l = line(o, "h", reason);
         const mark = markFrom(l);
-        const [verb] = o.split(":");
+        const [verb] = Str.split(o, ":");
         expect(mark).toBe(verb === "send" ? "send" : verb === "stuck" ? l.fault : "pass");
       }),
       options,

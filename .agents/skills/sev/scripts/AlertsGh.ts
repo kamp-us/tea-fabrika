@@ -1,6 +1,6 @@
 // AlertsGh.layer: the Alerts service on `gh issue list`, read only. Every call names the repo, so
 // the checkout it runs in does not pick it.
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema, String as Str } from "effect";
 import { ChildProcessSpawner } from "effect/process";
 import { lastLine, run } from "../../lead/scripts/pr/command.ts";
 import { Alerts, AlertsError } from "./Alerts.ts";
@@ -22,7 +22,7 @@ const Listed = Schema.fromJsonString(
 
 /** `gh issue list --json`'s rows, as `Alert`s, oldest first. */
 export const alertsIn = (out: string): Effect.Effect<ReadonlyArray<Alert>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
+  Effect.map(Schema.decodeUnknownEffect(Listed)(Str.trim(out) || "[]"), (rows) =>
     rows
       .map((r): Alert => ({ number: r.number, title: r.title, since: r.createdAt }))
       .toSorted((a, b) => a.number - b.number),

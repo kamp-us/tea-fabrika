@@ -15,7 +15,7 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
-import { Effect, Layer, Path, Schema, Stream } from "effect";
+import { Effect, Layer, Path, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as ChecksGh from "../ci/ChecksGh.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
@@ -30,7 +30,7 @@ import type { Step } from "./Step.ts";
 export type Ran = { readonly code: number; readonly output: string };
 
 /** The last lines of a command's output, for a reason. */
-export const tail = (output: string, n = 5): string => output.trimEnd().split("\n").slice(-n).join(" | ");
+export const tail = (output: string, n = 5): string => pipe(output, Str.trimEnd, Str.split("\n")).slice(-n).join(" | ");
 
 const run = Effect.fn("landing.run")(
   function* (dir: string, command: string, args: ReadonlyArray<string>) {
@@ -106,7 +106,7 @@ export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
 
 /** The pull request number in `gh pr list --json number -q .[0].number`'s answer, or `null`. */
 export const listedPr = (ran: Ran): number | null => {
-  const n = Number(ran.output.trim());
+  const n = Number(Str.trim(ran.output));
   return ran.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
 };
 

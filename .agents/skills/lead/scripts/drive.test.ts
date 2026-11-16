@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
-import { Effect, Exit, Schema, Stream } from "effect";
+import { Effect, Exit, Option, Schema, Stream, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -69,8 +69,8 @@ const ask = {
   ticket: "1",
   plan: "p",
   branch: "fabrikalfa/l",
-  base: "b".repeat(40),
-  root: "b".repeat(40),
+  base: pipe("b", Str.repeat(40)),
+  root: pipe("b", Str.repeat(40)),
   box: "l-build1",
   run: "r",
   prompt: "",
@@ -106,7 +106,7 @@ const recorded = (
   pushed = true,
 ) => {
   const value = {
-    head: commits > 0 ? "c".repeat(40) : ask.base,
+    head: commits > 0 ? pipe("c", Str.repeat(40)) : ask.base,
     commits,
     unsigned: [],
     exam: [],
@@ -248,7 +248,7 @@ describe("drive takes a skip answer, today's tooling", () => {
     ];
 
     for (const name of names) {
-      const want = { done: "pass", send: "fail", ask: "parked", skip: "skip" }[name.split(":")[0] as "done"];
+      const want = { done: "pass", send: "fail", ask: "parked", skip: "skip" }[Str.split(name, ":")[0] as "done"];
       expect(rowOf(name)).toBe(want ?? "stopped");
     }
 
@@ -289,7 +289,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   const wrap = fc.constantFrom("", "`", "**");
   const spell = fc.constantFrom(
     (l: string) => l,
-    (l: string) => l.toUpperCase(),
+    (l: string) => Str.toUpperCase(l),
   );
   const readable = fc.constantFrom(
     ["done", "done"],
@@ -403,7 +403,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
             fence,
             ...quoted.map(([l]) => l.text),
             "\tanswer: Schema.Json,",
-            closed ? fence.slice(0, 3) : "",
+            closed ? pipe(fence, Str.slice(0, 3)) : "",
           ];
           const cmd = ended(step, ["merge-ready; findings: 0", ...block, own.text].join("\n"));
           expect(cmd.outcome).toBe(closed && own.name !== null ? own.name : "stuck:no_answer");
@@ -567,7 +567,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
           reason: string;
         };
         expect(cmd.outcome).toBe(`refused:${c}`);
-        expect(cmd.outcome.startsWith("stuck")).toBe(false);
+        expect(pipe(cmd.outcome, Str.startsWith("stuck"))).toBe(false);
         expect(cmd.exit).toBe(3);
         expect(cmd.keep).toBe(false);
         expect(cmd.reason).toBe(d);
@@ -596,7 +596,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
     for (const c of [...checks, "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const) {
       const name = endName({ kind: "refused", check: c });
       expect(name).toBe(`refused:${c}`);
-      expect(name.split(":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
+      expect(Str.split(name, ":")[0]).not.toMatch(/^(done|send|ask|skip|stuck)$/);
     }
   });
 });
@@ -636,7 +636,7 @@ describe("T566 a mutation step while another Docker box runs is refused before i
           asked.push(p);
           return alive;
         });
-        const n = Number(text?.trim());
+        const n = Number(text === null ? undefined : Str.trim(text));
         const named = text !== null && Number.isInteger(n) && n > 0;
         expect(holder).toBe(named && alive ? n : null);
         expect(asked).toEqual(named ? [n] : []);
@@ -666,9 +666,9 @@ describe("T569 a review reads the quest's newest mutation report in its prompt, 
 
         const whole = step === "review" && newest?.report !== undefined && newest.report !== null && readable;
         expect(tail === "").toBe(step !== "review");
-        expect(tail.includes(text(newest?.report ?? "none"))).toBe(whole);
-        expect(tail.includes("cannot read outside itself")).toBe(whole);
-        expect(tail.includes("no mutation report")).toBe(step === "review" && !whole);
+        expect(pipe(tail, Str.includes(text(newest?.report ?? "none")))).toBe(whole);
+        expect(pipe(tail, Str.includes("cannot read outside itself"))).toBe(whole);
+        expect(pipe(tail, Str.includes("no mutation report"))).toBe(step === "review" && !whole);
       }),
       options,
     );
@@ -706,7 +706,7 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
         const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
         const named = answers
           .filter(held)
-          .map((a) => `${a.reason} ${a.sha.slice(0, 8)}${a.step ? ` step ${a.step}` : ""}`);
+          .map((a) => `${a.reason} ${pipe(a.sha, Str.slice(0, 8))}${a.step ? ` step ${a.step}` : ""}`);
 
         if (named.length === 0) {
           expect(said).toMatch(/^commits check exit 1: /);
@@ -741,7 +741,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
   });
   const done: Answer = { verb: "done", to: null, reason: "", laws: "a.test.ts" };
   const read = (commits: number, unsigned: readonly string[]) => ({
-    head: "c".repeat(40),
+    head: pipe("c", Str.repeat(40)),
     commits,
     unsigned,
     exam: [] as string[],
@@ -763,7 +763,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
         expect(decide({ ...ask, step }, read(commits, unsigned), done).outcome).toEqual({
           kind: "done",
           part: false,
-          head: "c".repeat(40),
+          head: pipe("c", Str.repeat(40)),
         });
       }),
       options,
@@ -776,7 +776,7 @@ describe("0161 a missing signature never holds a step, and the kept checks still
       fc.property(plain, fc.array(kept, { minLength: 1, maxLength: 3 }), quest, ({ commits, check }, rules, steps) => {
         const out = [check.out, ...rules.map((r) => JSON.stringify({ _tag: "stuck", ...r }))].join("\n");
         const unsigned = heldBy({ ...check, out }, steps);
-        const named = rules.map((r) => `${r.reason} ${r.sha.slice(0, 8)}`);
+        const named = rules.map((r) => `${r.reason} ${pipe(r.sha, Str.slice(0, 8))}`);
         expect(unsigned).toEqual([`commits check: ${named.join("; ")}`]);
         const j = decide(ask, read(commits + rules.length, unsigned), done);
         expect(nameOf(j.outcome)).toBe("stuck:unsigned");
@@ -827,7 +827,7 @@ describe("drive asks the lead for the lockfile, today's tooling", () => {
     machine.update.step_read_ok({ phase: "reading", ask, answer: null, spent: NO_SPENT }, {
       type: "step_read_ok",
       value: {
-        head: "c".repeat(40),
+        head: pipe("c", Str.repeat(40)),
         commits: 1,
         unsigned: [],
         exam: [],
@@ -973,7 +973,7 @@ describe("the box's changes are read from its status, today's tooling", () => {
         const j = decide({ ...ask, step: "tests" }, read, said);
         const records = plants.length > 0 && changed === 0;
         expect(nameOf(j.outcome)).toBe(records ? "done" : "stuck:no_commit");
-        expect(j.reason.includes("the records")).toBe(records);
+        expect(pipe(j.reason, Str.includes("the records"))).toBe(records);
       }),
       options,
     );
@@ -995,7 +995,7 @@ describe("T341 a step commit's subject says what the step did, today's tooling",
           { ticket: "7", step: s },
           alone ? `${answer}\n` : `\n## ${prose}\n\nmore\n${answer}\n`,
         );
-        expect(subject).toBe(`T7 ${s}: ${(alone ? reason : prose).slice(0, 72)}`);
+        expect(subject).toBe(`T7 ${s}: ${pipe(alone ? reason : prose, Str.slice(0, 72))}`);
         expect(subject).not.toContain("\n");
         expect(subject).not.toContain("{");
       }),
@@ -1051,7 +1051,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
     writeFileSync(join(box, ".git"), `gitdir: ${join(root, "nowhere")}\n`);
     const read = boxChanges(env, "b");
     expect(read.code).toBe(0);
-    expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+    expect(read.changes.toSorted((x, y) => pipe(x.path, Str.localeCompare(y.path)))).toEqual([
       { xy: " M", path: "a.ts" },
       { xy: " D", path: "gone.ts" },
       { xy: "??", path: "new/d.ts" },
@@ -1111,7 +1111,7 @@ describe("T341 drive reads what a box holds from outside it, today's tooling", (
     expect(named).not.toContain("src/keep.ts");
 
     if (ignoresCase) {
-      expect(read.changes.toSorted((x, y) => x.path.localeCompare(y.path))).toEqual([
+      expect(read.changes.toSorted((x, y) => pipe(x.path, Str.localeCompare(y.path)))).toEqual([
         { xy: "R ", from: "src/answer.ts", path: "src/Answer.ts" },
         { xy: "R ", from: "src/id.ts", path: "src/Id.ts" },
       ]);
@@ -1197,8 +1197,8 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
               expect(started.length).toBe(1);
               const folder = started[0]?.folder ?? "";
               expect(folder).toBe(step === "plan" ? env.MAIN : boxTree(env.BOXES, `${name}-${step}${n}`));
-              expect(env.BOXES.startsWith(folder)).toBe(false);
-              expect(folder.startsWith(join(env.BOXES, "state"))).toBe(false);
+              expect(pipe(env.BOXES, Str.startsWith(folder))).toBe(false);
+              expect(pipe(folder, Str.startsWith(join(env.BOXES, "state")))).toBe(false);
             }),
           ),
           Effect.asVoid,
@@ -1305,7 +1305,7 @@ describe("T388 drive accepts a step once its backup push lands, today's tooling"
     fc.assert(
       fc.property(answer, fc.integer({ min: 1, max: 3 }), fc.boolean(), (report, commits, landed) => {
         const value = {
-          head: "c".repeat(40),
+          head: pipe("c", Str.repeat(40)),
           commits,
           unsigned: [],
           exam: [],
@@ -1366,13 +1366,13 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
           return;
         }
 
-        const listed = [...head.matchAll(/^- (\S+)$/gm)].map((m) => m[1]);
+        const listed = [...pipe(head, Str.matchAll(/^- (\S+)$/gm))].map((m) => m[1]);
         const allowed = Object.keys(given).filter(
           (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
         );
         expect(listed).toEqual(allowed.toSorted());
         expect(head).toContain("answer ask");
-        expect(head.endsWith("---\n\n")).toBe(true);
+        expect(pipe(head, Str.endsWith("---\n\n"))).toBe(true);
       }),
       options,
     );
@@ -1410,7 +1410,7 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
   it("property: every boxed step's prompt carries the finish rule, and the plan's does not", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, electron) => {
-        expect(agentTail({ step, ticket: "1" }, electron).includes(FINISH)).toBe(step !== "plan");
+        expect(pipe(agentTail({ step, ticket: "1" }, electron), Str.includes(FINISH))).toBe(step !== "plan");
       }),
       options,
     );
@@ -1424,7 +1424,7 @@ describe("a step is never offered itself as a send's to, today's tooling", () =>
   it("property: every step's prompt, the plan's included, says never to ask to run outside the box", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, electron) => {
-        expect(agentTail({ step, ticket: "1" }, electron).includes(NO_ESCALATION)).toBe(true);
+        expect(pipe(agentTail({ step, ticket: "1" }, electron), Str.includes(NO_ESCALATION))).toBe(true);
       }),
       options,
     );
@@ -1450,7 +1450,7 @@ describe("drive holds the Electron lock outside the box, today's tooling", () =>
   it("tells the agent the lock is held exactly when drive holds it", () => {
     fc.assert(
       fc.property(steps, fc.boolean(), (step, flagged) => {
-        const told = agentTail({ step, ticket: "1" }, flagged).includes("state/electron.lock");
+        const told = pipe(agentTail({ step, ticket: "1" }, flagged), Str.includes("state/electron.lock"));
         expect(told).toBe(holdsElectron(step, flagged));
       }),
       options,
@@ -1548,10 +1548,10 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         fc.string(),
         (outcome, reason, detail, noise) => {
           const line = JSON.stringify({ outcome, reason, detail, ticket: "1" });
-          expect(mutboxAnswer(`${noise.replaceAll("\n", " ")}\n${line}\n`).outcome).toBe(outcome);
+          expect(mutboxAnswer(`${pipe(noise, Str.replaceAll("\n", " "))}\n${line}\n`).outcome).toBe(outcome);
           expect(mutboxAnswer(JSON.stringify({ outcome: "passed", reason, detail })).outcome).toBe("stuck");
           expect(mutboxAnswer(`${line}\nnot json`).outcome).toBe("stuck");
-          expect(mutboxAnswer(line.slice(0, -1)).outcome).toBe("stuck");
+          expect(mutboxAnswer(pipe(line, Str.slice(0, -1))).outcome).toBe("stuck");
           expect(mutboxAnswer("").outcome).toBe("stuck");
         },
       ),
@@ -1566,7 +1566,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         const told = mutboxTail(report, skip);
         expect(told).toContain(report);
         expect(told).toContain("Do not run Stryker");
-        expect(told.includes("answer: skip")).toBe(skip);
+        expect(pipe(told, Str.includes("answer: skip"))).toBe(skip);
       }),
       options,
     );
@@ -1584,7 +1584,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
     mutbox: MutboxRun,
     name: string,
     brief: string,
-    heads = { base: "b".repeat(40), root: "a".repeat(40) },
+    heads = { base: pipe("b", Str.repeat(40)), root: pipe("a", Str.repeat(40)) },
   ) =>
     Effect.gen(function* () {
       const row = Agent.fakeAdapter(() => Agent.saying("done"));
@@ -1783,8 +1783,9 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
                 expect(prompt).toContain(brief);
                 expect(prompt).toContain(report);
                 expect(prompt).toContain("Do not run Stryker");
-                expect(prompt.includes("answer: skip")).toBe(skip);
-                expect(prompt.indexOf(brief)).toBeLessThan(prompt.indexOf(report));
+                expect(pipe(prompt, Str.includes("answer: skip"))).toBe(skip);
+                const at = (part: string) => Option.getOrElse(pipe(prompt, Str.indexOf(part)), () => -1);
+                expect(at(brief)).toBeLessThan(at(report));
                 // What the agent was asked is kept: the saved prompt file holds the report too.
                 expect(ran.saved).toContain(report);
                 expect(prompt).toContain(ran.saved);

@@ -2,7 +2,7 @@
 // asks GitHub or git. The log goes to a temporary folder.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Layer, Schema, type Scope } from "effect";
+import { Duration, Effect, FileSystem, Layer, Schema, type Scope, String as Str, pipe } from "effect";
 import * as BranchesTest from "../../lead/scripts/pr/BranchesTest.ts";
 import type { PullRequest } from "../../lead/scripts/pr/PullRequests.ts";
 import * as PullRequestsTest from "../../lead/scripts/pr/PullRequestsTest.ts";
@@ -24,7 +24,7 @@ const law = <A, E>(body: Effect.Effect<A, E, NodeServices.NodeServices | Scope.S
 const pr = (number: number, head: string, state: PullRequest["state"] = "OPEN"): PullRequest => ({
   number,
   head,
-  oid: `${number}`.padStart(40, "0"),
+  oid: pipe(`${number}`, Str.padStart(40, "0")),
   state,
   draft: false,
 });
@@ -50,7 +50,7 @@ const run = (id: number, branch: string): Run => ({
   workflow: "check",
   event: "pull_request",
   branch,
-  sha: "a".repeat(40),
+  sha: pipe("a", Str.repeat(40)),
   status: "completed",
   conclusion: "cancelled",
   created: AT,

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -27,16 +28,16 @@ const folders: ReadonlyArray<Folder> = [".decisions", "experiments", ".patterns"
 const folder = fc.constantFrom(...folders);
 const slug = fc.stringMatching(/^[a-z][a-z0-9-]{0,20}$/);
 // One line of frontmatter text: anything with no line break, quotes, colons and backticks included.
-const value = fc.string({ minLength: 1 }).filter((s) => !/[\r\n]/.test(s) && s.trim() === s);
+const value = fc.string({ minLength: 1 }).filter((s) => !/[\r\n]/.test(s) && Str.trim(s) === s);
 
 describe("nextNumber", () => {
   it("property: the next number is the highest record's number plus one, padded, and never a number already there", () =>
     fc.assert(
       fc.property(fc.constantFrom<Folder>(".decisions", "experiments"), fc.array(fc.nat({ max: 9999 })), (at, ns) => {
         const width = at === ".decisions" ? 4 : 2;
-        const paths = ns.map((n) => `${at}/${String(n).padStart(width, "0")}-x.md`);
+        const paths = ns.map((n) => `${at}/${pipe(String(n), Str.padStart(width, "0"))}-x.md`);
         const next = nextNumber(at, paths) ?? "";
-        expect(next).toBe(String(Math.max(0, ...ns) + 1).padStart(width, "0"));
+        expect(next).toBe(pipe(String(Math.max(0, ...ns) + 1), Str.padStart(width, "0")));
         expect(ns).not.toContain(Number(next));
       }),
     ));
@@ -154,8 +155,8 @@ describe("recordLine", () => {
         const text = `---\ndate: "2026-11-13"\nsummary: ${JSON.stringify(summary)}\n---\n\n# ${n}. ${title}\n`;
         const line = recordLine("experiments", path, text);
         expect(line).not.toContain("\n");
-        expect(line.startsWith(`${n}  2026-11-13  `)).toBe(true);
-        expect(line).toContain(`summary: ${summary.replace(/\s+/g, " ").trim()}`);
+        expect(pipe(line, Str.startsWith(`${n}  2026-11-13  `))).toBe(true);
+        expect(line).toContain(`summary: ${pipe(summary, Str.replace(/\s+/g, " "), Str.trim)}`);
       }),
     ));
 
@@ -305,7 +306,7 @@ describe("records.ts on a real clone", () => {
     git(third, "config", "commit.gpgsign", "false");
 
     for (let n = 2; n <= 10; n++) {
-      const id = String(n).padStart(4, "0");
+      const id = pipe(String(n), Str.padStart(4, "0"));
       put(third, `.decisions/${id}-x.md`, `---\nid: ${id}\ntitle: Rule ${n} about topic${n}\nstatus: accepted\n---\n`);
     }
 
@@ -421,7 +422,7 @@ describe("find", () => {
         // `alpha` sits in `rare` records, `beta` in more of them, and every record holds `filler`.
         const common = rare + more;
         const made = Array.from({ length: 12 + common }, (_, i) => ({
-          path: `experiments/${String(i + 1).padStart(2, "0")}-x.md`,
+          path: `experiments/${pipe(String(i + 1), Str.padStart(2, "0"))}-x.md`,
           title: String(i),
           words: new Set([
             "filler",
@@ -496,7 +497,7 @@ describe("resolve", () => {
   it("property: along any chain of supersessions, every link resolves to the one accepted decision at its end", () =>
     fc.assert(
       fc.property(fc.uniqueArray(fc.integer({ min: 1, max: 9999 }), { minLength: 1, maxLength: 12 }), (ns) => {
-        const ids = ns.map((n) => String(n).padStart(4, "0"));
+        const ids = ns.map((n) => pipe(String(n), Str.padStart(4, "0")));
         const last = ids.at(-1) ?? "";
         const chain = new Map(
           ids.map((id, i) => [

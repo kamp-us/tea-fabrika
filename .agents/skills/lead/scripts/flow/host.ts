@@ -28,7 +28,7 @@
 // rules are the app's own: a start with a `FABRIKA_HOME` and no `FABRIKA_FOREGROUND` is quiet
 // (apps/fabrika/src/launch.ts), so this step sets the one and removes the other.
 
-import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream } from "effect";
+import { Duration, Effect, FileSystem, Option, Path, Schedule, Schema, Stream, String as Str, pipe } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { repoNode } from "../boxnode.ts";
@@ -57,15 +57,15 @@ export const hostCommands = (section: string | undefined): ReadonlyArray<string>
   const commands: string[] = [];
   let fenced = false;
 
-  for (const raw of (section ?? "").split("\n")) {
-    const line = raw.trim();
+  for (const raw of Str.split(section ?? "", "\n")) {
+    const line = Str.trim(raw);
 
-    if (line.startsWith("```")) {
+    if (pipe(line, Str.startsWith("```"))) {
       fenced = !fenced;
       continue;
     }
 
-    if (fenced && line !== "" && !line.startsWith("#")) {
+    if (fenced && line !== "" && !pipe(line, Str.startsWith("#"))) {
       commands.push(line);
     }
   }
@@ -144,7 +144,7 @@ export const electronLock = Effect.fn("host.electronLock")(function* (lock: stri
       return;
     }
 
-    const owner = Number((yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""))).trim());
+    const owner = Number(Str.trim(yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""))));
 
     if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
       return yield* new Held({ pid: owner });
@@ -225,7 +225,7 @@ const runLine = Effect.fn("host.runLine")(
 const logTail = Effect.fn("host.logTail")(function* (log: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(log).pipe(Effect.orElseSucceed(() => ""));
-  return text.trimEnd().split("\n").slice(-TAIL).join("\n");
+  return pipe(text, Str.trimEnd, Str.split("\n")).slice(-TAIL).join("\n");
 });
 
 /**
@@ -276,10 +276,9 @@ export const worktree = Effect.fn("host.worktree")(function* (main: string, dir:
 
 /** The files the commands changed, added or removed, one path each (untracked folders listed by file). */
 export const changedPaths = (porcelain: string): ReadonlyArray<string> =>
-  porcelain
-    .split("\0")
+  Str.split(porcelain, "\0")
     .filter((entry) => entry.length > 3)
-    .map((entry) => entry.slice(3));
+    .map((entry) => pipe(entry, Str.slice(3)));
 
 /**
  * The facts stepcommit.sh checks for a box, written for this run's name and removed with the scope,
@@ -313,7 +312,7 @@ const boxFacts = Effect.fn("host.boxFacts")(function* (a: HostArgs, name: string
   );
 }, Effect.provide(Digest.layerWebCrypto));
 
-const short = (sha: string) => sha.slice(0, 8);
+const short = (sha: string) => pipe(sha, Str.slice(0, 8));
 
 /** The host step, start to end in one scope. See the header for what each outcome means. */
 export const host = Effect.fn("host.run")(function* (a: HostArgs) {
@@ -378,19 +377,21 @@ export const host = Effect.fn("host.run")(function* (a: HostArgs) {
 
   if (committed.code !== 0) {
     return {
-      outcome: Outcome.stuck(`stepcommit.sh exited ${committed.code}: ${committed.output.trim()}`),
+      outcome: Outcome.stuck(`stepcommit.sh exited ${committed.code}: ${Str.trim(committed.output)}`),
       head: a.head,
       log,
     } satisfies Hosted;
   }
 
-  const head = (yield* exec(dir, "git", ["rev-parse", "HEAD"])).output.trim();
+  const head = Str.trim((yield* exec(dir, "git", ["rev-parse", "HEAD"])).output);
   // Pushed before the branch moves, so a failed push leaves the quest where review would find it.
   const pushed = yield* exec(a.main, "node", [path.join(scripts, "botpush.mjs"), a.main, wipOf(a.branch), head]);
 
   if (pushed.code !== 0) {
     return {
-      outcome: Outcome.stuck(`botpush.mjs exited ${pushed.code}: ${pushed.output.trim().split("\n").at(-1) ?? ""}`),
+      outcome: Outcome.stuck(
+        `botpush.mjs exited ${pushed.code}: ${pipe(pushed.output, Str.trim, Str.split("\n")).at(-1) ?? ""}`,
+      ),
       head: a.head,
       log,
     } satisfies Hosted;

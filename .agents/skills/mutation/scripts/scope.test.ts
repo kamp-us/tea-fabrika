@@ -1,6 +1,10 @@
+import { Option, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { inScope, pick, PRODUCT, related } from "./scope.ts";
+
+// Where the last dot sits, or -1 with none, as the native lastIndexOf answered.
+const dot = (path: string) => Option.getOrElse(pipe(path, Str.lastIndexOf(".")), () => -1);
 
 const options = { seed: 119120, numRuns: 200 };
 
@@ -71,10 +75,12 @@ const anyPath = fc.oneof(product, quest, otherLead);
 // product file its two test names, and each changed test, sorted and unique.
 const before = (changed: ReadonlyArray<string>) => {
   const code = (path: string) =>
-    /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) && !path.includes(".test.") && !/\.d\.[mc]?ts$/.test(path);
+    /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) &&
+    !pipe(path, Str.includes(".test.")) &&
+    !/\.d\.[mc]?ts$/.test(path);
   const tests = changed.flatMap((path) =>
     code(path)
-      ? [".test.ts", ".test.tsx"].map((end) => `${path.slice(0, path.lastIndexOf("."))}${end}`)
+      ? [".test.ts", ".test.tsx"].map((end) => `${pipe(path, Str.slice(0, dot(path)))}${end}`)
       : /\.test\.tsx?$/.test(path)
         ? [path]
         : [],
@@ -101,8 +107,8 @@ describe("the mutation run's file pick (0089)", () => {
         fc.array(fc.oneof(product, otherLead), { maxLength: 8 }),
         (ours, rest) => {
           const changed = [...rest, ...ours];
-          expect(pick(changed).filter((path) => path.startsWith(".agents/"))).toEqual(
-            changed.filter((path) => path.startsWith(".agents/") && ours.includes(path)),
+          expect(pick(changed).filter((path) => pipe(path, Str.startsWith(".agents/")))).toEqual(
+            changed.filter((path) => pipe(path, Str.startsWith(".agents/")) && ours.includes(path)),
           );
 
           for (const test of before(ours)) {
@@ -127,9 +133,9 @@ describe("the mutation run's file pick (0089)", () => {
   it("property: a lead `.ts` file's `name.test.ts` is in exactly when the file is", () => {
     fc.assert(
       fc.property(
-        leadCode.filter((path) => path.endsWith(".ts")),
+        leadCode.filter((path) => pipe(path, Str.endsWith(".ts"))),
         (path) => {
-          const code = before([path]).filter((test) => test.endsWith(".test.ts") && test !== path);
+          const code = before([path]).filter((test) => pipe(test, Str.endsWith(".test.ts")) && test !== path);
 
           for (const test of code) {
             expect(inScope(test), test).toBe(inScope(path));

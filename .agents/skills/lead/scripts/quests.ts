@@ -52,7 +52,7 @@
 // sweep log, and the status page read the quest's state file and a clock, which is ticket 685.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, DateTime, Effect, FileSystem, Option, Path, Predicate, Schema } from "effect";
+import { Console, DateTime, Effect, FileSystem, Option, Path, Predicate, Schema, String as Str, pipe } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import * as Beat from "./flow/Beat.ts";
 import { paths } from "./gcloop.ts";
@@ -132,8 +132,8 @@ export type Line = typeof Line.Type;
 
 /** The last `{"outcome":...}` line in a chain's output, among whatever else was printed there. */
 export const lastOutcome = (out: string): Omit<End, "at"> | null => {
-  for (const line of out.split("\n").toReversed()) {
-    const end = Schema.decodeUnknownOption(EndLine)(line.trim());
+  for (const line of Str.split(out, "\n").toReversed()) {
+    const end = Schema.decodeUnknownOption(EndLine)(Str.trim(line));
 
     if (Option.isSome(end)) {
       return { outcome: end.value.outcome, reason: end.value.reason ?? "" };
@@ -147,8 +147,8 @@ export const lastOutcome = (out: string): Omit<End, "at"> | null => {
 const standing = (quest: string, step: string, boxes: ReadonlyArray<string>): string | null => {
   const head = `${quest}-${step}`;
   const runs = boxes
-    .filter((box) => box.startsWith(head) && /^\d+$/.test(box.slice(head.length)))
-    .toSorted((a, b) => Number(a.slice(head.length)) - Number(b.slice(head.length)));
+    .filter((box) => pipe(box, Str.startsWith(head)) && /^\d+$/.test(pipe(box, Str.slice(head.length))))
+    .toSorted((a, b) => Number(pipe(a, Str.slice(head.length))) - Number(pipe(b, Str.slice(head.length))));
   return runs.at(-1) ?? null;
 };
 
@@ -260,8 +260,12 @@ export const read = Effect.fn("quests.read")(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const names = yield* fs.readDirectory(path.join(boxes, "state")).pipe(Effect.catch(() => Effect.succeed([])));
-  const recorded = names.filter((name) => name.endsWith(CHAIN)).map((name) => name.slice(0, -CHAIN.length));
-  const standingBoxes = names.filter((name) => name.endsWith(".box")).map((name) => name.slice(0, -".box".length));
+  const recorded = names
+    .filter((name) => pipe(name, Str.endsWith(CHAIN)))
+    .map((name) => pipe(name, Str.slice(0, -CHAIN.length)));
+  const standingBoxes = names
+    .filter((name) => pipe(name, Str.endsWith(".box")))
+    .map((name) => pipe(name, Str.slice(0, -".box".length)));
   const asked = (options.named.length > 0 ? options.named : recorded).toSorted();
   const now = DateTime.toDate(yield* DateTime.now);
   const lines = yield* Effect.forEach(

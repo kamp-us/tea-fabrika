@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Result, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -252,7 +252,7 @@ const TOOL_SIGNS =
  * person sees it.
  */
 export const faultFrom = (outcome: string, reason: string): Fault | null => {
-  const [verb = "", name = ""] = outcome.split(":");
+  const [verb = "", name = ""] = Str.split(outcome, ":");
 
   if (verb !== "stuck") {
     return null;
@@ -260,10 +260,9 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
 
   if (name === "unsigned") {
     // `commitsSaid` names the first 5 rules and then "and N more"; the sort reads the ones named.
-    const held = reason
-      .replace(/^commits check: /, "")
-      .split("; ")
-      .filter((h) => !/^and \d+ more$/.test(h));
+    const held = pipe(reason, Str.replace(/^commits check: /, ""), Str.split("; ")).filter(
+      (h) => !/^and \d+ more$/.test(h),
+    );
     return held.length > 0 && held.every((h) => /^stale_link\b/.test(h)) ? "tool" : "work";
   }
 
@@ -313,7 +312,7 @@ const exitOf = (o: End): number => {
 
 /** The field row's outcome word for a drive outcome's name (field/README.md, a `step` row). */
 export const rowOf = (outcome: string): string =>
-  ({ done: "pass", send: "fail", ask: "parked", skip: "skip" })[outcome.split(":")[0] ?? ""] ?? "stopped";
+  ({ done: "pass", send: "fail", ask: "parked", skip: "skip" })[Str.split(outcome, ":")[0] ?? ""] ?? "stopped";
 
 // ---------------------------------------------------------------- the moves
 
@@ -468,7 +467,7 @@ const outsideFences = (report: string) => {
   const lines: string[] = [];
   let fenced = false;
 
-  for (const line of report.split("\n").map((l) => l.trim())) {
+  for (const line of Str.split(report, "\n").map((l) => Str.trim(l))) {
     if (FENCE.test(line)) {
       fenced = !fenced;
     } else if (!fenced && line !== "") {
@@ -493,9 +492,9 @@ const readAnswer = (report: string): typeof Said.Type => {
     return Said.cases.unread.make({});
   }
 
-  const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
-  const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
-  return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
+  const verb = Str.toLowerCase(Str.split(m[1] ?? "", /\s+/)[0]);
+  const reason = pipe(m[3] ?? "", Str.replace(/^[`*\s]+|[`*\s]+$/g, ""));
+  return Said.cases.one.make({ verb, to: Str.toLowerCase(m[2] ?? ""), reason });
 };
 
 const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, reason: Schema.String }));
@@ -506,14 +505,14 @@ const AnswerAlone = Schema.fromJsonString(Schema.Struct({ verb: Schema.String, r
  * 871, 2026-11-12), and a correct merge-ready was refused.
  */
 const verdictText = (report: string) =>
-  Option.match(Schema.decodeUnknownOption(AnswerAlone)(report.trim()), {
+  Option.match(Schema.decodeUnknownOption(AnswerAlone)(Str.trim(report)), {
     onNone: () => report,
     onSome: (answer) => answer.reason,
   });
 
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
-  const lines = outsideFences(verdictText(report)).map((l) => l.replace(/^[`*#\s]+/, ""));
+  const lines = outsideFences(verdictText(report)).map((l) => pipe(l, Str.replace(/^[`*#\s]+/, "")));
   return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
@@ -528,7 +527,7 @@ const greenOf = (report: string) => {
     return null;
   }
 
-  return (m[1] ?? "").replace(/[`*\s]+$/, "") || "laws named";
+  return pipe(m[1] ?? "", Str.replace(/[`*\s]+$/, "")) || "laws named";
 };
 
 type Judged = { readonly outcome: Outcome; readonly reason: string };
@@ -562,7 +561,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
   }
 
   if (ask.step === "review" && read.head !== ask.base) {
-    return stuck("review_committed", `the review moved the head to ${read.head.slice(0, 8)}`);
+    return stuck("review_committed", `the review moved the head to ${pipe(read.head, Str.slice(0, 8))}`);
   }
 
   if (read.unsigned.length > 0) {
@@ -587,7 +586,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       outcome: { kind: "ask", who: "lead", for: "lockfile" },
       reason:
         `pnpm-lock.yaml is behind ${read.manifests.join(" ")}, and a box has no network. ` +
-        `Outside the box, on ${wipOf(ask.branch)} at ${read.head.slice(0, 8)}: ` +
+        `Outside the box, on ${wipOf(ask.branch)} at ${pipe(read.head, Str.slice(0, 8))}: ` +
         "pnpm install --lockfile-only, check each new version is exact and the plan names it, " +
         "commit pnpm-lock.yaml unsigned as a lead commit (stepcommit.sh --commit-only lead), and the lead " +
         "session signs it and pushes it to -wip (the lead skill's ready handover, ticket 652), " +
@@ -627,7 +626,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 
         return {
           outcome: { kind: "done", part: false, head: read.head },
-          reason: `no commit: every law already green at ${read.head.slice(0, 8)} (${green})`,
+          reason: `no commit: every law already green at ${pipe(read.head, Str.slice(0, 8))} (${green})`,
         };
       }
 
@@ -642,7 +641,7 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 
         return {
           outcome: { kind: "done", part: false, head: read.head },
-          reason: `no commit: ${plants.length} plant records at ${read.head.slice(0, 8)}. ${said.reason}`,
+          reason: `no commit: ${plants.length} plant records at ${pipe(read.head, Str.slice(0, 8))}. ${said.reason}`,
         };
       }
 
@@ -857,7 +856,7 @@ export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
 
-const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" | ");
+const tail = (text: string, n = 3) => pipe(text, Str.trim, Str.split("\n")).slice(-n).join(" | ");
 
 /** This run's report, or `null` when it wrote none. */
 const writtenReport = (ask: Ask) => {
@@ -872,7 +871,7 @@ export const loadEnv = (): Env => {
     '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
     join(HERE, "env.sh"),
   ]);
-  const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
+  const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = Str.split(r.out, "\n");
 
   if (r.code !== 0 || !MAIN) {
     throw new Error(`env.sh failed: ${r.err}`);
@@ -899,25 +898,24 @@ const SHAPES = [
 const leaksIn = (diff: string, repo: string): string[] => {
   const file = join(homedir(), ".fabrika/leak-words");
   const words = existsSync(file)
-    ? readFileSync(file, "utf8")
-        .split("\n")
-        .map((w) => w.trim().toLowerCase())
+    ? Str.split(readFileSync(file, "utf8"), "\n")
+        .map((w) => pipe(w, Str.trim, Str.toLowerCase))
         .filter(Boolean)
     : [];
   const hits: string[] = [];
   let path: string | null = null;
   let line = 0;
 
-  for (const raw of diff.split("\n")) {
-    if (raw.startsWith("+++ ")) {
-      path = raw.startsWith("+++ b/") ? raw.slice(6) : null;
-    } else if (raw.startsWith("@@")) {
+  for (const raw of Str.split(diff, "\n")) {
+    if (pipe(raw, Str.startsWith("+++ "))) {
+      path = pipe(raw, Str.startsWith("+++ b/")) ? pipe(raw, Str.slice(6)) : null;
+    } else if (pipe(raw, Str.startsWith("@@"))) {
       line = Number(/\+(\d+)/.exec(raw)?.[1] ?? 0);
-    } else if (raw.startsWith("+") && path !== null) {
-      const text = raw.slice(1).replaceAll(repo, "");
-      const low = text.toLowerCase();
+    } else if (pipe(raw, Str.startsWith("+")) && path !== null) {
+      const text = pipe(raw, Str.slice(1), Str.replaceAll(repo, ""));
+      const low = Str.toLowerCase(text);
 
-      if (SHAPES.some((s) => s.test(text)) || words.some((w) => low.includes(w))) {
+      if (SHAPES.some((s) => s.test(text)) || words.some((w) => pipe(low, Str.includes(w)))) {
         hits.push(`${path}:${line}`);
       }
 
@@ -931,8 +929,7 @@ const leaksIn = (diff: string, repo: string): string[] => {
 /** The steps signed on the quest's own commits, from where it left main. */
 const stepsIn = (env: Env, root: string, head: string): Set<string> =>
   new Set(
-    sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`])
-      .out.split("\n")
+    Str.split(sh("git", ["-C", env.MAIN, "rev-list", `${root}..${head}`]).out, "\n")
       .filter(Boolean)
       .flatMap((sha) => {
         const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
@@ -1010,10 +1007,9 @@ export type Change = { readonly xy: string; readonly path: string; readonly from
 
 /** Each file the agent left changed in the box's tree, by its status letters. */
 export const changedFiles = (porcelain: string): Change[] =>
-  porcelain
-    .split("\0")
+  Str.split(porcelain, "\0")
     .filter(Boolean)
-    .map((e) => ({ xy: e.slice(0, 2), path: e.slice(3) }));
+    .map((e) => ({ xy: pipe(e, Str.slice(0, 2)), path: pipe(e, Str.slice(3)) }));
 
 /**
  * Case-only renames, which `git status` cannot see on a disk that ignores case: a tracked `id.ts`
@@ -1033,12 +1029,12 @@ export const caseRenames = (box: string, tracked: readonly string[]): { from: st
       continue;
     }
 
-    const path = realpathSync.native(at).slice(top.length + 1);
+    const path = pipe(realpathSync.native(at), Str.slice(top.length + 1));
 
     if (
       path !== from &&
-      path.toLowerCase() === from.toLowerCase() &&
-      path.split("/").slice(0, -1).join("/") === from.split("/").slice(0, -1).join("/")
+      Str.toLowerCase(path) === Str.toLowerCase(from) &&
+      Str.split(path, "/").slice(0, -1).join("/") === Str.split(from, "/").slice(0, -1).join("/")
     ) {
       out.push({ from, path });
     }
@@ -1065,7 +1061,7 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
     return { ...listed, changes: [] as Change[] };
   }
 
-  const moved = caseRenames(boxTree(env.BOXES, box), listed.out.split("\0").filter(Boolean));
+  const moved = caseRenames(boxTree(env.BOXES, box), Str.split(listed.out, "\0").filter(Boolean));
   const old = new Set(moved.map((m) => m.from));
   const changes: Change[] = [
     ...changedFiles(status.out).filter((c) => !old.has(c.path)),
@@ -1079,13 +1075,14 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
  * (a report can be the answer alone), else a plain stand-in. One line, cut to fit.
  */
 export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
-  const lines = report.split("\n").map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
-  const prose = lines.find((l) => l.length > 0 && !l.startsWith("{"));
+  const lines = Str.split(report, "\n").map((l) => pipe(l, Str.replace(/^[#*`\s]+|[*`\s]+$/g, "")));
+  const prose = lines.find((l) => l.length > 0 && !pipe(l, Str.startsWith("{")));
   const reason = lines
-    .filter((l) => l.startsWith("{"))
-    .map((l) => /"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim())
+    .filter((l) => pipe(l, Str.startsWith("{")))
+    .map((l) => /"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1])
+    .map((w) => (w === undefined ? undefined : pipe(w, Str.replace(/\\(.)/g, "$1"), Str.trim)))
     .find((w) => w !== undefined && w.length > 0);
-  return `T${ask.ticket} ${ask.step}: ${(prose ?? reason ?? "the step's work").slice(0, 72)}`;
+  return `T${ask.ticket} ${ask.step}: ${pipe(prose ?? reason ?? "the step's work", Str.slice(0, 72))}`;
 };
 
 /**
@@ -1125,7 +1122,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
         rmSync(join(wt, old), { force: true });
       }
 
-      if (xy.includes("D")) {
+      if (pipe(xy, Str.includes("D"))) {
         continue;
       }
 
@@ -1169,7 +1166,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
       return { code: r.status ?? -1, out: "", err: `stepcommit: ${r.stdout}${r.stderr}` };
     }
 
-    const head = sh("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim();
+    const head = Str.trim(sh("git", ["-C", wt, "rev-parse", "HEAD"]).out);
     return git("update-ref", `refs/heads/${ask.branch}`, head);
   } finally {
     git("worktree", "remove", "--force", wt);
@@ -1201,10 +1198,9 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
     return Started.cases.made.make({});
   }
 
-  const line = err
-    .split("\n")
+  const line = Str.split(err, "\n")
     .toReversed()
-    .map((l) => /^refused ([a-z_]+): ?(.*)$/.exec(l.trim()))
+    .map((l) => /^refused ([a-z_]+): ?(.*)$/.exec(Str.trim(l)))
     .find((m) => m !== null);
   const check = BOX_CHECKS.find((c) => c === line?.[1]);
 
@@ -1305,7 +1301,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           empty.left = held;
         }
 
-        const head = ask.step === "review" ? ask.base : git("rev-parse", ref).out.trim();
+        const head = ask.step === "review" ? ask.base : Str.trim(git("rev-parse", ref).out);
         const failed = (message: string, r: { code: number; err: string }) => ({
           ...empty,
           head,
@@ -1317,7 +1313,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("rev-list", count);
         }
 
-        const commits = Number(count.out.trim());
+        const commits = Number(Str.trim(count.out));
         // Every path any commit touched, so a change undone by a later commit still counts.
         const touched = git("log", "--format=", "--name-only", `${ask.base}..${head}`);
 
@@ -1325,7 +1321,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("git log", touched);
         }
 
-        const names = [...new Set(touched.out.split("\n").filter(Boolean))];
+        const names = [...new Set(Str.split(touched.out, "\n").filter(Boolean))];
         const at = (rev: string, path: string) => {
           const r = git("show", `${rev}:${path}`);
           return r.code === 0 ? r.out : null;
@@ -1351,10 +1347,9 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           return failed("exam.py", examRun);
         }
 
-        const exam = examRun.out
-          .split("\n")
+        const exam = Str.split(examRun.out, "\n")
           .filter(Boolean)
-          .map((l) => l.split("\t")[0] ?? l);
+          .map((l) => Str.split(l, "\t")[0] ?? l);
         // Each commit's own added lines, so nothing a later commit removed slips past.
         const diff = git("log", "-p", "-U0", "--no-color", "--format=", `${ask.base}..${head}`);
 
@@ -1422,7 +1417,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         // held beside the boxes until a field PR lands it.
         if (existsSync(ask.events)) {
           const scrubbed = sh("sh", [join(HERE, "redact.sh"), ask.report, ask.events]);
-          const redacted = scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null;
+          const redacted = scrubbed.code === 0 ? Number(Str.trim(scrubbed.out)) : null;
 
           if (scrubbed.code !== 0) {
             notes.push(`redact.sh failed: ${tail(scrubbed.err, 1)}`);
@@ -1438,7 +1433,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               model: ask.model,
               effort: ask.effort,
               outcome: rowOf(e.outcome),
-              reason: `drive.ts ${ask.step} in box ${ask.box} at ${ask.base.slice(0, 8)}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}`,
+              reason: `drive.ts ${ask.step} in box ${ask.box} at ${pipe(ask.base, Str.slice(0, 8))}: ${e.outcome}${faultNote(e.outcome, e.reason)}. ${e.reason}`,
               started: new Date(ask.started),
               ended: new Date(ended),
               spent: e.spent,
@@ -1453,7 +1448,9 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const keep = e.keep || !ok;
         // A stuck step, or a build sent back for exam paths, does not move the quest's head.
         const accepted =
-          !outcome.startsWith("stuck") && !outcome.startsWith("refused") && outcome !== "send:tests:exam_paths";
+          !pipe(outcome, Str.startsWith("stuck")) &&
+          !pipe(outcome, Str.startsWith("refused")) &&
+          outcome !== "send:tests:exam_paths";
         const state = join(env.BOXES, "state", `${ask.quest}.json`);
         const saved = savedQuest(state) ?? { quest: ask.quest, steps: [] };
         // From the box made to the agent's first event: the harness and the model starting.
@@ -1488,7 +1485,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         renameSync(`${state}.tmp`, state);
         appendFileSync(
           join(env.BOXES, "state", `${ask.quest}.md`),
-          `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}${faultNote(outcome, e.reason)}, head ${e.head.slice(0, 8)}. ${e.reason}\n`,
+          `- ${ended} drive.ts ${ask.step} in box ${ask.box}: ${outcome}${faultNote(outcome, e.reason)}, head ${pipe(e.head, Str.slice(0, 8))}. ${e.reason}\n`,
         );
 
         if (!keep && ask.step !== "plan" && ask.box) {
@@ -1539,7 +1536,7 @@ export const FINISH =
 export const planTail = (step: StepName, path: string, text: string | null) =>
   step === "plan" || text === null
     ? ""
-    : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+    : `\n\n---\nThe approved plan (${path}), whole. Your box cannot read outside itself, so read it here:\n\n${Str.trim(text)}\n`;
 
 /** A plan's files table as `plancheck.sh --owners-json` prints it: each path, and the step that owns it. */
 const Owners = Schema.fromJsonString(Schema.Record(Schema.String, Schema.String));
@@ -1551,7 +1548,7 @@ const planOwners = (env: Env, plan: string) => {
   }
 
   const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
-  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(r.out.trim())) : null;
+  return r.code === 0 ? Option.getOrNull(Schema.decodeUnknownOption(Owners)(Str.trim(r.out))) : null;
 };
 
 /**
@@ -1594,7 +1591,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
   const text = last?.report ? read(last.report) : null;
   return text === null || !last?.report
     ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
-    : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
+    : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${Str.trim(text)}\n`;
 };
 
 /** How a step's draft runs: what the step is asked, in; how its turn ended, out. */
@@ -1637,7 +1634,10 @@ const turnDraft: DraftRun = (env, agents, ask) => turn(env, agents, ask, readFil
 export const MUTATION_AGENT: AgentName = "claude";
 
 /** The related test paths a mutation brief names, on a line of its own: `RELATED=a.test.ts,b.test.ts`. */
-export const relatedIn = (brief: string): string | undefined => /^RELATED=(\S.*)$/m.exec(brief)?.[1]?.trim();
+export const relatedIn = (brief: string): string | undefined => {
+  const related = /^RELATED=(\S.*)$/m.exec(brief)?.[1];
+  return related === undefined ? undefined : Str.trim(related);
+};
 
 const MutboxLine = Schema.fromJsonString(
   Schema.Struct({
@@ -1649,7 +1649,7 @@ const MutboxLine = Schema.fromJsonString(
 
 /** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
 export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
-  const line = Schema.decodeUnknownOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
+  const line = Schema.decodeUnknownOption(MutboxLine)(pipe(stdout, Str.trim, Str.split("\n")).at(-1) ?? "");
   return line._tag === "Some"
     ? {
         outcome: line.value.outcome,
@@ -1742,7 +1742,7 @@ export const mutationDraft =
       const report = join(env.BOXES, `${ask.box}-mutbox`, "mutbox.json");
       const text = yield* fs.readFileString(report).pipe(Effect.orElseSucceed(() => ""));
 
-      if (text.trim() === "") {
+      if (Str.trim(text) === "") {
         return yield* stop(`mutbox: no report at ${report}`);
       }
 
@@ -1813,13 +1813,17 @@ type Phase = typeof Phase.Type;
 
 /** The `phase <name> <ms>` lines box.sh new prints on stderr, in order. */
 export const phasesIn = (text: string): Phase[] =>
-  [...text.matchAll(/^phase ([a-z_]+) (\d+)$/gm)].map((m) => ({ name: m[1] ?? "", ms: Number(m[2]) }));
+  [...pipe(text, Str.matchAll(/^phase ([a-z_]+) (\d+)$/gm))].map((m) => ({ name: m[1] ?? "", ms: Number(m[2]) }));
 
 const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
 
 /** When the agent's event log says it first did anything, in ms; `null` with no timed first line. */
 export const firstEventAt = (events: string): number | null => {
-  const first = Schema.decodeUnknownOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
+  const firstLine = Option.match(pipe(events, Str.indexOf("\n")), {
+    onNone: () => events,
+    onSome: (end) => pipe(events, Str.slice(0, end)),
+  });
+  const first = Schema.decodeUnknownOption(FirstEvent)(firstLine);
   const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
   return Number.isFinite(at) ? at : null;
 };
@@ -1827,7 +1831,8 @@ export const firstEventAt = (events: string): number | null => {
 /** Whole GB free on the volume that holds `path`, from `df -k`; `null` when df says nothing usable. */
 const freeGb = (path: string): number | null => {
   const r = sh("df", ["-k", path]);
-  const kb = Number(r.out.trim().split("\n").at(-1)?.trim().split(/\s+/)[3]);
+  const last = pipe(r.out, Str.trim, Str.split("\n")).at(-1);
+  const kb = Number(last === undefined ? undefined : pipe(last, Str.trim, Str.split(/\s+/))[3]);
   return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
 };
 
@@ -1837,11 +1842,11 @@ const freeGb = (path: string): number | null => {
  * holds it, so a step that started anyway would lose its fetch after the agent's whole run.
  */
 const holderOf = (porcelain: string, branch: string): string | null => {
-  for (const block of porcelain.split("\n\n")) {
-    const lines = block.split("\n");
+  for (const block of Str.split(porcelain, "\n\n")) {
+    const lines = Str.split(block, "\n");
 
     if (lines.includes(`branch refs/heads/${branch}`)) {
-      return lines.find((l) => l.startsWith("worktree "))?.slice("worktree ".length) ?? "";
+      return pipe(lines.find((l) => pipe(l, Str.startsWith("worktree "))) ?? "", Str.slice("worktree ".length));
     }
   }
 
@@ -1855,7 +1860,7 @@ const holderOf = (porcelain: string, branch: string): string | null => {
  * as a stuck step (layout-mutation3, 2026-11-10; ticket 566).
  */
 export const dockerHolder = (lock: string | null, alive: (pid: number) => boolean): number | null => {
-  const pid = Number(lock?.trim());
+  const pid = Number(lock === null ? undefined : Str.trim(lock));
   return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
 };
 
@@ -1905,7 +1910,7 @@ const holdLock = (lock: string): number | null => {
       return null;
     }
 
-    const owner = Number(readFileSync(lock, "utf8").trim());
+    const owner = Number(Str.trim(readFileSync(lock, "utf8")));
 
     if (owner === process.pid) {
       return null;
@@ -1947,7 +1952,7 @@ export const holdQuest = (boxes: string, quest: string): number | null => {
 export const freeQuest = (boxes: string, quest: string): void => {
   const lock = questLock(boxes, quest);
 
-  if (existsSync(lock) && Number(readFileSync(lock, "utf8").trim()) === process.pid) {
+  if (existsSync(lock) && Number(Str.trim(readFileSync(lock, "utf8"))) === process.pid) {
     rmSync(lock, { force: true });
   }
 };
@@ -2057,7 +2062,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const branch = p.branch ?? saved?.branch ?? `fabrikalfa/${quest}`;
   const plan = p.plan ?? saved?.plan ?? join(env.BOXES, `${quest}-PLAN.md`);
 
-  if (!branch.startsWith("fabrikalfa/")) {
+  if (!pipe(branch, Str.startsWith("fabrikalfa/"))) {
     return usageError("the branch is fabrikalfa/<name>");
   }
 
@@ -2075,14 +2080,14 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   // branch that has work drops that work (2026-11-09), so a saved head off the branch loses.
   const pushed = [branch, wipOf(branch)]
     .map((ref) =>
-      sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `refs/remotes/origin/${ref}^{commit}`]).out.trim(),
+      Str.trim(sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `refs/remotes/origin/${ref}^{commit}`]).out),
     )
     .filter(Boolean);
   const isAncestor = (a: string, b: string) =>
     sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
   const lastHead = startHead(pushed, saved?.head, isAncestor);
   const from = step === "plan" ? "HEAD" : (p.from ?? lastHead ?? "origin/main");
-  const base = sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `${from}^{commit}`]).out.trim();
+  const base = Str.trim(sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `${from}^{commit}`]).out);
 
   if (!base) {
     return usageError(`${from} is not a commit in the main checkout`);
@@ -2091,13 +2096,13 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   // The quest's root: where its base left main, moved up past a caught-up main (quest.ts).
   const root = questRoot(
     saved?.root,
-    sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out.trim(),
+    Str.trim(sh("git", ["-C", env.MAIN, "merge-base", "origin/main", base]).out),
     base,
     isAncestor,
   );
 
   if (!root) {
-    return usageError(`${base.slice(0, 8)} shares no history with origin/main`);
+    return usageError(`${pipe(base, Str.slice(0, 8))} shares no history with origin/main`);
   }
 
   const box = RunId.next(quest, step, runNames(env.BOXES, quest));
@@ -2154,7 +2159,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     const loop = sh(process.execPath, [join(HERE, "gcloop.ts"), "status", "--keeps"]);
     return refusal({
       outcome: endName({ kind: "refused", check: "low_disk" }),
-      reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}; ${loop.out.trim() || `gcloop.ts status failed: ${tail(loop.err)}`}`,
+      reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}; ${Str.trim(loop.out) || `gcloop.ts status failed: ${tail(loop.err)}`}`,
       exit: 3,
     });
   }

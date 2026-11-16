@@ -13,7 +13,7 @@
 //   Beat.says(beat, new Date("2026-11-10T21:00:00Z"))
 //   // { stuck: true, text: "cleanup for 1h50m, no beat for 1h50m: stuck" }
 
-import { Schema } from "effect";
+import { Schema, String as Str, pipe } from "effect";
 
 /**
  * What the chain is doing now. A step's own parts come from its drive machine: `cleanup` (the
@@ -83,7 +83,7 @@ export const spoken = (ms: number): string => {
   const m = Math.floor((s % 3600) / 60);
 
   if (h > 0) {
-    return `${h}h${String(m).padStart(2, "0")}m`;
+    return `${h}h${pipe(String(m), Str.padStart(2, "0"))}m`;
   }
 
   return m > 0 ? `${m}m` : `${s}s`;

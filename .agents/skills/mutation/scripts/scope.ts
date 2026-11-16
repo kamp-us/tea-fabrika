@@ -24,7 +24,7 @@
  * - A test of an in-scope file is in, and a test of an out-of-scope file is out.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Stdio, Stream } from "effect";
+import { Console, Effect, Option, Stdio, Stream, String as Str, pipe } from "effect";
 
 const LEAD = ".agents/skills/lead/scripts/";
 
@@ -49,14 +49,15 @@ export const PRODUCT = [
 
 /** A file that holds mutants: the pathspec above, read as git reads it (its `*` crosses `/`). */
 const product = (path: string) =>
-  EXTENSIONS.some((extension) => path.endsWith(extension)) &&
-  !path.includes(".test.") &&
-  !DECLARATIONS.some((extension) => path.endsWith(extension));
+  EXTENSIONS.some((extension) => pipe(path, Str.endsWith(extension))) &&
+  !pipe(path, Str.includes(".test.")) &&
+  !DECLARATIONS.some((extension) => pipe(path, Str.endsWith(extension)));
 
-const test = (path: string) => TESTS.some((extension) => path.endsWith(extension));
+const test = (path: string) => TESTS.some((extension) => pipe(path, Str.endsWith(extension)));
 
 /** Whether the run may mutate this path, or run it as a test: all but lead tooling, quest code kept. */
-export const inScope = (path: string) => !path.startsWith(".agents/") || QUEST.includes(path) || path.startsWith(FLOW);
+export const inScope = (path: string) =>
+  !pipe(path, Str.startsWith(".agents/")) || QUEST.includes(path) || pipe(path, Str.startsWith(FLOW));
 
 /** The changed paths in scope, in their order. */
 export const pick = (paths: ReadonlyArray<string>) => paths.filter(inScope);
@@ -71,7 +72,8 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export const related = (changed: ReadonlyArray<string>) => {
   const tests = pick(changed).flatMap((path) => {
     if (product(path)) {
-      const stem = path.slice(0, path.lastIndexOf("."));
+      const dot = Option.getOrElse(pipe(path, Str.lastIndexOf(".")), () => -1);
+      const stem = pipe(path, Str.slice(0, dot));
       return TESTS.map((extension) => `${stem}${extension}`);
     }
 
@@ -86,7 +88,7 @@ if (import.meta.main) {
     Effect.gen(function* () {
       const stdio = yield* Stdio.Stdio;
       const text = yield* stdio.stdin.pipe(Stream.decodeText(), Stream.mkString);
-      const tests = related(text.split("\n").filter((line) => line !== ""));
+      const tests = related(Str.split(text, "\n").filter((line) => line !== ""));
 
       if (tests.length > 0) {
         yield* Console.log(tests.join("\n"));

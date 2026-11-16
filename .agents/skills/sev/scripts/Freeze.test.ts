@@ -2,7 +2,7 @@
 // asks GitHub. The log goes to a temporary folder, and the test clock drives the beats.
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Duration, Effect, FileSystem, Fiber, Schema, type Scope } from "effect";
+import { Duration, Effect, FileSystem, Fiber, Schema, type Scope, String as Str, pipe } from "effect";
 import { TestClock } from "effect/testing";
 import * as Freeze from "./Freeze.ts";
 import * as Level from "./Level.ts";
@@ -17,7 +17,7 @@ const made = (id: number, over: Partial<Run>): Run => ({
   workflow: "check",
   event: "pull_request",
   branch: "fabrikalfa/some-feature",
-  sha: "a".repeat(40),
+  sha: pipe("a", Str.repeat(40)),
   status: "in_progress",
   conclusion: null,
   created: AT,

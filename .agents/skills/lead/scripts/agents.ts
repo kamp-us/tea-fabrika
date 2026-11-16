@@ -22,7 +22,7 @@
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { Clock, Context, Effect, FileSystem, Result, Schema, Stream, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
@@ -168,7 +168,7 @@ const pnpmInstall: Install = (folder) =>
       ],
       { concurrency: 3 },
     );
-    return { code: Number(code), said: `${out}${err}`.trim().split("\n").slice(-5).join(" | ") };
+    return { code: Number(code), said: pipe(`${out}${err}`, Str.trim, Str.split("\n")).slice(-5).join(" | ") };
   }).pipe(
     Effect.scoped,
     Effect.catch(() => Effect.succeed({ code: 127, said: "pnpm could not start" })),
@@ -185,7 +185,7 @@ const pnpmInstall: Install = (folder) =>
 export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnpmInstall) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const root = modules.replace(/\/$/, "");
+    const root = pipe(modules, Str.replace(/\/$/, ""));
     const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
       fs.exists(`${root}/${s}`).pipe(
         Effect.map((here) => !here),
@@ -197,7 +197,7 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
       return;
     }
 
-    const ran = yield* install(root.replace(/\/node_modules$/, ""));
+    const ran = yield* install(pipe(root, Str.replace(/\/node_modules$/, "")));
     const still = yield* missing;
 
     if (still.length > 0) {
@@ -288,7 +288,7 @@ const ALONE = /^\{[\s\S]*\}$/;
  */
 export const closingWords = (closing: readonly string[]): string => {
   const last = closing.at(-1) ?? "";
-  return ALONE.test(last.trim()) ? closing.join("\n\n") : last;
+  return ALONE.test(Str.trim(last)) ? closing.join("\n\n") : last;
 };
 
 /** One turn through the agents service, on `prompt` and `seconds`, with its report (`closingWords`). */
@@ -438,7 +438,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     const until = (yield* Clock.currentTimeMillis) + ask.minutes * 60_000;
     const first = yield* triedOnCapacity(agents, ask, ask.prompt, until);
     const t = first.turned;
-    const asks = t._tag === "ended" && t.stop === "end_turn" && t.answer === null && first.said.trim() !== "";
+    const asks = t._tag === "ended" && t.stop === "end_turn" && t.answer === null && Str.trim(first.said) !== "";
 
     if (!asks) {
       yield* fs.writeFileString(ask.report, first.said).pipe(Effect.ignore);
@@ -451,7 +451,7 @@ const execTurn = <A>(agents: Agents, ask: TurnAsk<A>) =>
     );
     const second = yield* triedOnCapacity(agents, ask, ANSWER_PROMPT, until);
     const spent = plus(t.spent, second.turned.spent);
-    const report = second.said.trim() === "" ? first.said : `${first.said}\n\n${second.said}`;
+    const report = Str.trim(second.said) === "" ? first.said : `${first.said}\n\n${second.said}`;
     yield* fs.writeFileString(ask.report, report).pipe(Effect.ignore);
     const s = second.turned;
 
@@ -558,8 +558,8 @@ export const stepRow = (r: RowAsk): string => {
   const local = (d: Date) => {
     const offset = -d.getTimezoneOffset();
     const sign = offset >= 0 ? "+" : "-";
-    const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
-    const shifted = new Date(d.getTime() + offset * 60_000).toISOString().slice(0, 19);
+    const pad = (n: number) => pipe(String(Math.abs(n)), Str.padStart(2, "0"));
+    const shifted = pipe(new Date(d.getTime() + offset * 60_000).toISOString(), Str.slice(0, 19));
     return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
   };
   const usd = listUsd(r.provider, r.model, r.spent);
@@ -575,7 +575,7 @@ export const stepRow = (r: RowAsk): string => {
       : "";
   const measured = r.spent.counted !== "none";
   return `${encodeRow({
-    date: local(r.started).slice(0, 10),
+    date: pipe(local(r.started), Str.slice(0, 10)),
     run: r.run,
     ticket: r.ticket,
     pr: null,

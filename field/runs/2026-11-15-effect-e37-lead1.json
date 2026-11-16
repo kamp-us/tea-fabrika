@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-effect-e37-lead1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T20:32:19-08:00",
+  "ended": "2026-11-15T20:45:44-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": null,
+  "effort": null,
+  "outcome": "done",
+  "why": "Lead step for judgment slice E37 of the Effect-check sweep (preferEffectString in .agents/), one agent under the lead tooling fast track. The checker counted 515 hits; its quick fix fixed none (checkerfix.mjs: 0 of 28 in sizecap.ts, no quick fix offered). A scratch codemod on oxc-parser, driven by the checker's own hit offsets, rewrote 477 plain calls into effect/String calls; 38 hits (optional chains, Option-returning indexOf, lastIndexOf, codePointAt, charCodeAt and match, a split with a limit) were edited by hand to keep each old value. Two variables were typed string[] because Str.split returns a non-empty array. Recount: 0. No lock line, as the owner ruled for judgment slices.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "effect-tsgo diagnostics does not report plain TypeScript errors (a planted one gave 0), so effect-tsgo tsc -p .agents/tsconfig.json --noEmit was the type check. pnpm lint passed with NODE_OPTIONS=--max-old-space-size=6144. 22 test files beside the touched scripts: 412 passed, 1 skipped.",
+  "plants": [],
+  "step": "lead"
+}

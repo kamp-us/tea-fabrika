@@ -61,7 +61,7 @@
 // file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Console, Effect, FileSystem, Option, Path, Schema, Stream, String as Str, pipe } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
@@ -118,17 +118,18 @@ export const timeoutLine = (e: CallTimeout) => `${e.command} passed its ${e.seco
 
 /** The related test paths, or `null` when one is not a plain test file path. */
 export const parseRelated = (text: string): ReadonlyArray<string> | null => {
-  const paths = text
-    .split(",")
-    .map((p) => p.trim())
+  const paths = Str.split(text, ",")
+    .map((p) => Str.trim(p))
     .filter((p) => p !== "");
   const plain = (p: string) =>
-    /^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$/.test(p) && !p.split("/").includes("..") && !p.startsWith("/");
+    /^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$/.test(p) &&
+    !Str.split(p, "/").includes("..") &&
+    !pipe(p, Str.startsWith("/"));
   return paths.length > 0 && paths.every(plain) ? paths : null;
 };
 
 /** Docker's `--mount` reads a comma-separated list, so these three cannot be in a path it takes. */
-export const mountable = (path: string) => path.startsWith("/") && !/[,"\n]/.test(path);
+export const mountable = (path: string) => pipe(path, Str.startsWith("/")) && !/[,"\n]/.test(path);
 
 const WINDOWS = new Set(["electron", "playwright", "@playwright/test"]);
 
@@ -172,7 +173,7 @@ export const baseNode = (dockerfile: string): string | null =>
 export const pnpmVersion = (packageManager: string): string | null =>
   /^pnpm@(\d+\.\d+\.\d+)$/.exec(packageManager)?.[1] ?? null;
 
-export const imageTag = (hash: string) => `fabrika-mutbox:${hash.slice(0, 16)}`;
+export const imageTag = (hash: string) => `fabrika-mutbox:${pipe(hash, Str.slice(0, 16))}`;
 
 /** The whole `docker run` line. Everything the container may touch is named here. */
 export const runArgs = (ask: {
@@ -275,7 +276,7 @@ export const reachLine = (files: ReadonlyArray<FileReach>): string => {
  * (`dir/`) above it, as the box's own owner check reads the same table. Pure.
  */
 export const buildOwns = (owners: Readonly<Record<string, string>>, file: string): boolean => {
-  const folders = Object.keys(owners).filter((key) => key.endsWith("/") && file.startsWith(key));
+  const folders = Object.keys(owners).filter((key) => pipe(key, Str.endsWith("/")) && pipe(file, Str.startsWith(key)));
   const key = file in owners ? file : folders.sort((a, b) => b.length - a.length)[0];
   return key !== undefined && owners[key] === "build";
 };
@@ -373,7 +374,7 @@ const toRow = (
   file: string,
   m: typeof Tested.Type | (typeof Report.Type)["files"][string]["mutants"][number],
 ): Row => ({
-  file: file.replace(/^\/repo\//, ""),
+  file: pipe(file, Str.replace(/^\/repo\//, "")),
   line: m.location.start.line,
   column: m.location.start.column,
   endLine: m.location.end.line,
@@ -574,7 +575,7 @@ export const droppedFromArmA = (
     .filter((p) => !kept.includes(p))
     .map((p) => {
       const failed = (baseline?.testResults ?? [])
-        .filter((file) => file.name.replace(/^\/repo\//, "") === p)
+        .filter((file) => pipe(file.name, Str.replace(/^\/repo\//, "")) === p)
         .flatMap((file) => file.assertionResults.filter((t) => t.status === "failed").map((t) => t.fullName));
       return {
         path: p,
@@ -588,7 +589,7 @@ export const droppedFromArmA = (
 
 /** Whether a done's reason names a gap that leaves narrowing unknown. Pure. */
 export const narrowingUnknown = (reason: string) =>
-  reason.split(",").some((r) => r.startsWith("no_reach:") || r.startsWith("no_arm_a:"));
+  Str.split(reason, ",").some((r) => pipe(r, Str.startsWith("no_reach:")) || pipe(r, Str.startsWith("no_arm_a:")));
 
 export const exitCode = (outcome: Summary["outcome"]) => (outcome === "done" ? 0 : outcome === "skip" ? 40 : 30);
 
@@ -639,7 +640,7 @@ export const bounded = (
 /** One Docker call under its bound (DOCKER_SECONDS). */
 const docker = (args: ReadonlyArray<string>, seconds: number = DOCKER_SECONDS.call) => bounded("docker", args, seconds);
 
-const tail = (s: string) => s.trim().split("\n").slice(-3).join(" | ").slice(-400);
+const tail = (s: string) => pipe(pipe(s, Str.trim, Str.split("\n")).slice(-3).join(" | "), Str.slice(-400));
 
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
@@ -690,7 +691,7 @@ const takeLock = Effect.fnUntraced(function* (lock: string) {
 /** Every container a run under this lock made. Whoever holds the lock may remove them. */
 const sweepContainers = Effect.fnUntraced(function* (lock: string) {
   const listed = yield* docker(["ps", "-aq", "--filter", `label=${OWNER}=${lock}`]);
-  const ids = listed.out.split("\n").filter(Boolean);
+  const ids = Str.split(listed.out, "\n").filter(Boolean);
 
   if (ids.length > 0) {
     yield* docker(["rm", "-f", ...ids]);
@@ -709,10 +710,10 @@ const dockerReady = Effect.fnUntraced(function* () {
     });
   }
 
-  if (server.out.trim() !== PLATFORM) {
+  if (Str.trim(server.out) !== PLATFORM) {
     return yield* new Stuck({
       reason: "not_arm64",
-      detail: `the Docker server is ${server.out.trim()}; only ${PLATFORM} was measured`,
+      detail: `the Docker server is ${Str.trim(server.out)}; only ${PLATFORM} was measured`,
     });
   }
 });
@@ -890,7 +891,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     sh("git", ["--git-dir", repo, "-c", "core.hooksPath=/dev/null", ...args]);
   const resolve = Effect.fnUntraced(function* (ref: string) {
     const got = yield* sh("git", ["-C", ask.checkout, "rev-parse", "-q", "--verify", `${ref}^{commit}`]);
-    return got.code === 0 ? got.out.trim() : null;
+    return got.code === 0 ? Str.trim(got.out) : null;
   });
   const build = yield* resolve(ask.build);
   const base = ask.base === undefined ? null : yield* resolve(ask.base);
@@ -992,11 +993,13 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
     });
   }
 
-  const image = imageTag(hash.out.trim());
+  const image = imageTag(Str.trim(hash.out));
 
   if ((yield* docker(["image", "inspect", "--format", "{{.Id}}", image])).code !== 0) {
     const context = yield* fs.makeTempDirectoryScoped({ prefix: "mutbox-" });
-    const patches = (yield* git("ls-tree", "-r", "--name-only", "build", "patches/")).out.split("\n").filter(Boolean);
+    const patches = Str.split((yield* git("ls-tree", "-r", "--name-only", "build", "patches/")).out, "\n").filter(
+      Boolean,
+    );
     yield* fs.makeDirectory(path.join(context, "patches"), { recursive: true });
     yield* fs.writeFileString(path.join(context, "Dockerfile"), dockerfile);
     yield* fs.writeFileString(path.join(context, "mutbox-entry.sh"), entry);
@@ -1054,15 +1057,12 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const baseline = yield* decoded(Baseline, yield* readOut(box, "baseline.json"));
   const tests = (baseline?.testResults ?? []).flatMap((file) =>
     file.assertionResults.map((t) => ({
-      name: `${file.name.replace(/^\/repo\//, "")}: ${t.fullName}`,
+      name: `${pipe(file.name, Str.replace(/^\/repo\//, ""))}: ${t.fullName}`,
       status: t.status,
     })),
   );
   // Which base tests passed on the build and ran in arm a; the entry wrote them before arm a.
-  const kept = ((yield* readOut(box, "a-kept")) ?? "")
-    .trim()
-    .split(",")
-    .filter((p) => p !== "");
+  const kept = pipe((yield* readOut(box, "a-kept")) ?? "", Str.trim, Str.split(",")).filter((p) => p !== "");
   const aBaseline = yield* decoded(Baseline, yield* readOut(box, "a-baseline.json"));
   const ended = judge({
     exit: ran.value.code,
@@ -1157,7 +1157,7 @@ const gc = Command.make(
         ["image", "prune", "--all", "--force", "--filter", `label=${LABEL}`, "--filter", "until=168h"],
         DOCKER_SECONDS.prune,
       );
-      const images = pruned.out.split("\n").filter((l) => l.startsWith("untagged: ")).length;
+      const images = Str.split(pruned.out, "\n").filter((l) => pipe(l, Str.startsWith("untagged: "))).length;
       yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);
     },
     Effect.catchTag("CallTimeout", (e) => Console.log(`mutbox gc: ${timeoutLine(e)}; the rest waits for the next gc`)),

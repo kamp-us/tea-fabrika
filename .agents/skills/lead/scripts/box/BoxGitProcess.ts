@@ -1,7 +1,7 @@
 // BoxGitProcess.layer: the BoxGit service on real git, run from MAIN. Git sees neither inherited
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Option, Stream, String as Str, pipe } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
@@ -35,7 +35,7 @@ const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record
   const env: Record<string, string> = {};
 
   for (const [key, value] of Object.entries(inherited)) {
-    if (value !== undefined && !key.startsWith("GIT_")) {
+    if (value !== undefined && !pipe(key, Str.startsWith("GIT_"))) {
       env[key] = value;
     }
   }
@@ -45,7 +45,7 @@ const gitEnv = (inherited: Readonly<Record<string, string | undefined>>): Record
 
 const text = new TextDecoder();
 
-const lines = (out: string) => out.split("\n").filter((line) => line !== "");
+const lines = (out: string) => Str.split(out, "\n").filter((line) => line !== "");
 
 export const layer = (
   main: string,
@@ -84,14 +84,14 @@ export const layer = (
       );
 
       return BoxGit.of({
-        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => out.split("\0")),
+        indexEntries: (at) => Effect.map(git(at, ["ls-files", "--stage", "-v", "-z"]), (out) => Str.split(out, "\0")),
         trackedChanges: (at) =>
           Effect.map(git(at, ["status", "--porcelain=v1", "-z", "--untracked-files=no"]), (out) => out !== ""),
         refs: (at) =>
           Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
             lines(out).map((line) => {
-              const space = line.indexOf(" ");
-              return { ref: line.slice(0, space), oid: line.slice(space + 1) };
+              const space = Option.getOrElse(pipe(line, Str.indexOf(" ")), () => -1);
+              return { ref: pipe(line, Str.slice(0, space)), oid: pipe(line, Str.slice(space + 1)) };
             }),
           ),
         objectsAt: (at, ref) => Effect.map(git(at, ["rev-parse", "--verify", `${ref}^{object}`]), lines),
