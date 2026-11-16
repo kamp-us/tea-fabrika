@@ -2312,6 +2312,27 @@
       }
     },
     {
+      // L5 of the Reflect ban (0554): no ignore comment lets a Reflect call through
+      // no-restricted-properties outside the plan's 6 named lines, a has and a get in each of the
+      // three hostile Proxies. Runtime's two are in; transport's (slice 4) and the app's (slice 14)
+      // are counted here before they land. Every other folder, cloudflare/ and e2e/ included, may
+      // hold none. The JSON.parse oracles' ignore comments cover no Reflect line, so they are not
+      // counted (reflect-disables.ts says how).
+      "files": ["next/**", ".agents/**", ".github/**", "oxlint-plugins/**"],
+      "rules": {
+        "fabrika/reflect-disables": [
+          "error",
+          {
+            "allow": {
+              "next/apps/fabrika/src/runtime.decode.test.ts": 2,
+              "next/packages/libfabrika/src/runtime/Program.test.ts": 2,
+              "next/packages/libfabrika/src/transport/Connection.test.ts": 2
+            }
+          }
+        ]
+      }
+    },
+    {
       // Decision 0554: no Reflect.get, Reflect.set or Reflect.has, and no globalThis.Reflect, which
       // would hide the call from this rule. Each of the next three blocks lists the folders where the
       // ban is on: every folder at zero. A folder is listed whole and joins the day its own slice
@@ -2389,6 +2410,7 @@
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
+        "next/packages/libfabrika/src/node/**",
         "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/runtime/**",
         "next/packages/libfabrika/src/telemetry/**"

@@ -1061,6 +1061,21 @@ wait for their own slices: `tuval/src/browser`, `programs/counter`, `programs/pi
 direct files of `apps/fabrika/src` and `apps/fabrika/e2e`, and libfabrika's `client`,
 `cloudflare`, `codehost`, `node`, `runtime`, `settings` and `transport`.
 
+Oxlint honors any ignore comment that names a rule and gives a reason, so the ban alone cannot
+hold the plan's L5: no ignore comment lets a `Reflect` call through outside the 6 lines the plan
+names, a `has` and a `get` in each of the three hostile Proxies. `reflect-disables` counts them.
+It reads each ignore comment that reaches `no-restricted-properties` (by name, with or without
+`eslint/`, or naming no rule), in all three forms and both spellings, and counts it when a line it
+covers names `Reflect` in code. A `JSON.parse` oracle's comment covers no such line, so it is not
+counted. Its `allow` option in `.oxlintrc.json` gives each named file its count, 2 each for
+`runtime/Program.test.ts`, `transport/Connection.test.ts` and the app's `runtime.decode.test.ts`;
+the last two are counted before their slices land. Every other file may hold none, and the rule is
+on for all of `next/` and the tooling, whether or not the folder has joined the ban. The known
+rule, `eslint-comments/no-restricted-disable`, refuses every comment for a rule, which would
+refuse the `JSON.parse` oracles too. It reports at the top of the file, as `no-bare-disable`
+does, so a comment that also named it cannot silence it. `reflect-disables.test.ts` generates the
+files at `next/` and tooling paths and runs them with the real config.
+
 `plants.test.ts` reads the ban blocks from oxlint's own `--print-config` and plants `REFLECT` in
 every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
 blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held

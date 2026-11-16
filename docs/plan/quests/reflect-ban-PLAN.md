@@ -925,6 +925,10 @@ Slices 11 and 12 are a check only: their tests steps are done on `fabrikalfa/ref
   https://github.com/kamp-us/tea-fabrika/pull/1312,** both still open.
 - **Slice 15 folds the blocks and comes last,** after every other slice.
 
+#### 5. Fixed by slice 9's tests step, 2026-11-16 (the merge session's ruling)
+
+- The sketch's `gateways: Pick<DevProject, "join" | "leave" | "online">` refers to the type it sits in; `gateways` gets its own named type for the three calls, which `DevProject` also includes, and L7 reads it as `DevProject["gateways"]`.
+
 #### What this amendment cannot tell us
 
 - Whether `ObjectCalls.ts` and `DevProject` compile as sketched. Nothing was compiled; slice 9's

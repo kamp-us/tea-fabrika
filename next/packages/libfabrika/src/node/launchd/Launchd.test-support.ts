@@ -296,29 +296,36 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
     open: (file, options) =>
       fs.open(file, options).pipe(
         Effect.map(
-          (handle) =>
-            new Proxy(handle, {
-              get(target, key, receiver) {
-                if (key === "sync") {
-                  return Effect.sync(() => {
-                    if (file === home) {
-                      events.push("directory-sync");
-                    }
-
-                    events.push("sync");
-                    events.push(`sync:${file}`);
-                  }).pipe(
-                    Effect.andThen(
-                      (failing && fault === "sync") || (directoryFault && file === home)
-                        ? Effect.fail(failure("sync"))
-                        : target.sync,
-                    ),
-                  );
+          // The node handle keeps its members on its prototype, so each one is forwarded by name.
+          (handle): FileSystem.File => ({
+            [FileSystem.FileTypeId]: FileSystem.FileTypeId,
+            get stat() {
+              return handle.stat;
+            },
+            // A getter, as on the handle, so each sync reads the fault switches when it is taken.
+            get sync() {
+              return Effect.sync(() => {
+                if (file === home) {
+                  events.push("directory-sync");
                 }
 
-                return Reflect.get(target, key, receiver);
-              },
-            }),
+                events.push("sync");
+                events.push(`sync:${file}`);
+              }).pipe(
+                Effect.andThen(
+                  (failing && fault === "sync") || (directoryFault && file === home)
+                    ? Effect.fail(failure("sync"))
+                    : handle.sync,
+                ),
+              );
+            },
+            seek: (offset, from) => handle.seek(offset, from),
+            read: (buffer, options) => handle.read(buffer, options),
+            readAlloc: (size, options) => handle.readAlloc(size, options),
+            truncate: (length) => handle.truncate(length),
+            write: (buffer) => handle.write(buffer),
+            writeAll: (buffer) => handle.writeAll(buffer),
+          }),
         ),
       ),
     link: (from, to) =>
