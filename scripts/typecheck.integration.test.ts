@@ -1,10 +1,11 @@
 // Ticket 1074, today's tooling: on the laptop, `pnpm typecheck` waits for the one typecheck lock and
 // for any compiler already running, and says once what it waits on. Every law runs stand-ins: a node
-// script for the compiler and pnpm, and a copy of `sleep` under a name of the law's own for a
-// compiler the lock does not cover (node, for a language server). Each law names a lock file and a compiler name of its own, so a
-// real typecheck on the same machine never holds up a law, and a law never holds up a real one.
+// script for the compiler and pnpm, and node linked under a name of the law's own for a compiler the
+// lock does not cover or a language server. Each law names a lock file and a compiler name of its
+// own, so a real typecheck on the same machine never holds up a law, and a law never holds up a real
+// one. These laws start processes, so under 0584 they are `.integration.` and run in the full run.
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -61,6 +62,21 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
   writeFileSync(join(bin, "pnpm"), `#!/bin/sh\nexec '${process.execPath}' '${join(dir, "compiler.mjs")}' "$@"\n`, {
     mode: 0o755,
   });
+  // A process named the rig's compiler, which pgrep -x must see under that name. Node names its main
+  // thread `node-MainThread` at start (src/node.cc, through libuv's uv_thread_setname). On Linux the
+  // main thread's name is the process's name, /proc/<pid>/comm, the one pgrep -x reads, so the
+  // stand-in writes its own name back there. macOS keeps a thread's name apart from the process's,
+  // which is the last part of the path it was started from, and has no /proc. A copy of `sleep` did
+  // not do: Ubuntu 26.04's `sleep` is uutils' one binary for every tool, which picks the tool by the
+  // name it was started under and exits at once under any other.
+  writeFileSync(
+    join(dir, "named.mjs"),
+    `import {existsSync, writeFileSync} from 'node:fs';
+import {basename} from 'node:path';
+if (existsSync('/proc/self/comm')) writeFileSync('/proc/self/comm', basename(process.argv0));
+setTimeout(() => {}, 60_000);
+`,
+  );
   // pgrep -x reads a process's name, which Linux cuts to 15 characters.
   const compiler = `tcw${Math.random().toString(36).slice(2, 12)}`;
   return { dir, bin, events, lock: join(dir, "typecheck.lock"), compiler };
@@ -93,15 +109,6 @@ const typecheck = (r: Rig, id: string, env: Record<string, string | undefined> =
   return { child, stderr: () => err };
 };
 
-/** A compiler the lock does not cover: a copy of `sleep` whose process name is the rig's compiler. */
-const foreign = (r: Rig) => {
-  const path = join(r.bin, r.compiler);
-  copyFileSync("/bin/sleep", path);
-  const child = spawn(path, ["60"], { detached: true, stdio: "ignore" });
-  children.push(child);
-  return { child, command: `${path} 60` };
-};
-
 const until = async (test: () => boolean, what: string) => {
   const end = Date.now() + 5_000;
 
@@ -110,6 +117,20 @@ const until = async (test: () => boolean, what: string) => {
   }
 
   expect(test(), what).toBe(true);
+};
+
+/**
+ * A compiler the lock does not cover, or with `--lsp` a language server: node, linked under the rig's
+ * compiler name. It returns once pgrep -x sees that name, so the typecheck after it finds it.
+ */
+const named = async (r: Rig, args: readonly string[] = []) => {
+  const path = join(r.bin, r.compiler),
+    standIn = join(r.dir, "named.mjs");
+  symlinkSync(process.execPath, path);
+  const child = spawn(path, [standIn, ...args], { detached: true, stdio: "ignore" });
+  children.push(child);
+  await until(() => spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started");
+  return { child, command: [path, standIn, ...args].join(" ") };
 };
 
 const events = (r: Rig) => readFileSync(r.events, "utf8");
@@ -143,7 +164,7 @@ describe("T1074 a local typecheck waits for the lock and any running compiler, t
   // Plant: drop the wait for a running compiler.
   it("waits while a compiler the lock does not cover runs, and names it in one line", async () => {
     const r = rig(),
-      other = foreign(r);
+      other = await named(r);
     const a = typecheck(r, "a");
     await until(() => a.stderr() !== "", "the typecheck never said what it waits on");
     expect(a.stderr()).toBe(
@@ -174,22 +195,11 @@ describe("T1074 a local typecheck waits for the lock and any running compiler, t
   });
 
   // An editor's language server runs as `tsgo --lsp --stdio` for as long as the editor is open.
-  // The stand-in is node, linked under the rig's compiler name, so its args hold `--lsp`.
+  // The stand-in's args hold `--lsp`, as the editor's do.
   // Plant: wait on every compiler pgrep finds, the language server included.
   it("does not wait on a language server, a compiler started with --lsp", async () => {
     const r = rig();
-    const path = join(r.bin, r.compiler);
-    symlinkSync(process.execPath, path);
-    children.push(
-      spawn(path, ["-e", "setTimeout(() => {}, 60_000)", "--", "--lsp", "--stdio"], {
-        detached: true,
-        stdio: "ignore",
-      }),
-    );
-    await until(
-      () => spawnSync("pgrep", ["-x", r.compiler]).status === 0,
-      "the stand-in language server never started",
-    );
+    await named(r, ["--lsp", "--stdio"]);
     const a = typecheck(r, "a");
     await until(() => events(r) === "start a\n", "a language server held the typecheck up");
     release(r, "a");
@@ -200,7 +210,7 @@ describe("T1074 a local typecheck waits for the lock and any running compiler, t
   // Plant: drop the CI check, so CI waits on a compiler too.
   it("leaves CI alone: a CI run does not wait on a running compiler", async () => {
     const r = rig();
-    foreign(r);
+    await named(r);
     const a = typecheck(r, "a", { CI: "true" });
     await until(() => events(r) === "start a\n", "CI waited on a running compiler");
     release(r, "a");
