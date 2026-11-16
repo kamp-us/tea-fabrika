@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Effect, Equal, Layer, Result } from "effect";
+import * as Arr from "effect/Array";
 import { fold } from "./internal/relationsTable.ts";
 import type { Change } from "./Relation.ts";
 import { Relations, RelationsError } from "./Relations.ts";
@@ -50,7 +51,7 @@ export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>
       // A test that hands in two rows under one id has a broken fixture, not a refusal to answer.
       yield* Effect.fromResult(add(changes)).pipe(Effect.orDie);
       return Relations.of({
-        within: () => Result.succeed(fold([...held.values()].map(({ row }) => row))),
+        within: () => Result.succeed(fold(Arr.map([...held.values()], ({ row }) => row))),
         write: (batch) => Effect.fromResult(add(batch)),
       });
     }),

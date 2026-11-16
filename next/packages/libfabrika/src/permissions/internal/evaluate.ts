@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // The check's walk over the live tuples (0526): Zanzibar's `_this` and `computed_userset` with
 // union. A permission holds when some relation its unions reach holds for the subject on the object.
 // The visited set ends a loop of permissions, so no depth needs a number, and a loop alone holds
@@ -51,7 +52,7 @@ export const evaluate = (
     }
 
     visited.add(name);
-    return (declared.permissions.get(name) ?? []).some(reaches);
+    return Arr.some(declared.permissions.get(name) ?? [], reaches);
   };
   return reaches(permission);
 };

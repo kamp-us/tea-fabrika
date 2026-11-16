@@ -3,6 +3,7 @@
  *
  * @stability unstable
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -42,7 +43,7 @@ export const Tree = Id.pipe(Schema.brand("Tree"));
 export const Path = Schema.String.check(
   Schema.makeFilter(
     (p) =>
-      (p !== "" && !p.includes("\u0000") && p.split("/").every((s) => s !== "" && s !== "." && s !== "..")) ||
+      (p !== "" && !p.includes("\u0000") && Arr.every(p.split("/"), (s) => s !== "" && s !== "." && s !== "..")) ||
       "not a git path",
   ),
 );

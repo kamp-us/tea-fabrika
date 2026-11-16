@@ -11,6 +11,7 @@
  * @stability unstable
  */
 import { Effect, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Base64, Base64Url } from "effect/encoding";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 
@@ -272,7 +273,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
 
   const signature = join(
     field(SIG),
-    field(join(...ints.map(field))),
+    field(join(...Arr.map(ints, field))),
     auth.slice(32, 37),
     field(decoded.origin),
     field(client),

@@ -17,6 +17,7 @@
  * @stability unstable
  */
 import { Context, Effect, Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";
@@ -115,10 +116,10 @@ const build = <T extends Types>(name: string, declared: ReadonlyMap<string, Decl
       new Map(declared).set(type, {
         relations: new Set(Object.keys(shape.relations ?? {})),
         permissions: new Map(
-          Object.entries<(p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}).map(([permission, rewrite]) => [
-            permission,
-            rewrite(rewrites)[RewriteTypeId],
-          ]),
+          Arr.map(
+            Object.entries<(p: Rewrites<string>) => Rewrite>(shape.permissions ?? {}),
+            ([permission, rewrite]) => [permission, rewrite(rewrites)[RewriteTypeId]],
+          ),
         ),
       }),
     ),

@@ -19,6 +19,7 @@ import type { Access, Folded, Reason } from "./Access.ts";
 import { eventId, MemberEvent, members, signedBy, subject } from "./Access.ts";
 import { allows, EMPTY } from "./AccessFold.ts";
 
+import * as Arr from "effect/Array";
 import { ClientManager, Written, type Founder } from "./ClientManager.ts";
 
 const MEMBERS = "gateway/access";
@@ -84,7 +85,7 @@ const view = (replayed: Replayed) => {
   return {
     [tag("events")]: rows.length,
     [tag("keys")]: keys.size,
-    [tag("live")]: [...keys.values()].filter((k) => k.live).length,
+    [tag("live")]: Arr.filter([...keys.values()], (k) => k.live).length,
     [tag("ignored")]: skipped.size,
   };
 };
@@ -189,7 +190,7 @@ export const layer = (
 
           // An event already in the log goes to the referee as it is: a resend gets its first
           // placing, and the answer is what the fold did with it then.
-          if (!before.rows.some(({ entry }) => entry.id === id)) {
+          if (!Arr.some(before.rows, ({ entry }) => entry.id === id)) {
             const verdict = allows(before.folded, event);
 
             if (Result.isFailure(verdict)) {

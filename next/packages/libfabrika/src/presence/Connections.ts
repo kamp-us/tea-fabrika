@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Context, Effect, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProcessId } from "../ProcessId.ts";
 import type { Sql } from "../Sql.ts";
@@ -121,9 +122,9 @@ export class Connections extends Context.Service<
             }
 
             const connections = yield* stored(() =>
-              sql
-                .exec(`SELECT * FROM process_connections WHERE "key" = ? ORDER BY client`, key)
-                .map((row) => decodeConnection({ ...row, gateway: row.connection })),
+              Arr.map(sql.exec(`SELECT * FROM process_connections WHERE "key" = ? ORDER BY client`, key), (row) =>
+                decodeConnection({ ...row, gateway: row.connection }),
+              ),
             );
             return yield* Effect.forEach(
               connections,
