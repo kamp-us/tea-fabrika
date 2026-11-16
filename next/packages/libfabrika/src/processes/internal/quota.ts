@@ -2,7 +2,7 @@ import { Machine } from "@demlik/tea/effect";
 import * as Schema from "effect/Schema";
 import { Exceeded, RecoveryReserveExhausted, type Allowance } from "../Quotas.ts";
 
-const Amount = Schema.Struct({ writes: Schema.Number, bytes: Schema.Number });
+const Amount = Schema.Struct({ writes: Schema.Finite, bytes: Schema.Finite });
 
 const Decision = Schema.TaggedUnion({ admitted: {}, refused: { reason: Exceeded } });
 
@@ -24,12 +24,12 @@ export type Account = typeof Account.Type;
 
 const Fields = {
   account: Account,
-  at: Schema.Number,
-  writes: Schema.Number,
-  bytes: Schema.Number,
+  at: Schema.Finite,
+  writes: Schema.Finite,
+  bytes: Schema.Finite,
   total: Amount,
   ahead: Amount,
-  groups: Schema.Array(Schema.Struct({ at: Schema.Number, ...Amount.fields })),
+  groups: Schema.Array(Schema.Struct({ at: Schema.Finite, ...Amount.fields })),
   replay: Schema.Struct({ recovery: Schema.String, messages: Schema.Array(Schema.String) }),
   decision: Decision,
 };
@@ -46,16 +46,16 @@ export type Model = typeof Model.Type;
 const Msg = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("propose"),
-    at: Schema.Number,
+    at: Schema.Finite,
     operation: Schema.String,
     ...Amount.fields,
     ahead: Amount,
     replay: Schema.optionalKey(Schema.Struct({ message: Schema.String, recovery: Schema.String })),
   }),
-  Schema.Struct({ type: Schema.Literal("advance"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("resume"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("advance"), at: Schema.Finite }),
+  Schema.Struct({ type: Schema.Literal("resume"), at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("restore"), model: Model }),
-  Schema.Struct({ type: Schema.Literal("settle"), bytes: Schema.Number, ahead: Amount }),
+  Schema.Struct({ type: Schema.Literal("settle"), bytes: Schema.Finite, ahead: Amount }),
 ]);
 
 /** @internal */

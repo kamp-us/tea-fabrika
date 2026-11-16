@@ -177,8 +177,8 @@ describe("P33, signal ids, ownership and delivery", () => {
 
 describe("p79, addressed and independent monitors", () => {
   for (const ended of [false, true]) {
-    it.effect(`an ${ended ? "ended" : "absent"} watcher cannot create a monitor`, () => {
-      return check(text, ["late-watch"], (ref) => {
+    it.effect(`an ${ended ? "ended" : "absent"} watcher cannot create a monitor`, () =>
+      check(text, ["late-watch"], (ref) => {
         const store = storage();
 
         return Effect.gen(function* () {
@@ -191,8 +191,8 @@ describe("p79, addressed and independent monitors", () => {
           expect((yield* Effect.flip(monitor(store, ref))).reason).toBe("ended");
           expect(store.rows()).toEqual(before);
         });
-      });
-    });
+      }),
+    );
   }
 
   it.effect("plant, omit to or collapse monitors: each reference gets one stable addressed DOWN", () =>
@@ -425,8 +425,8 @@ describe("p79, cancellation, replay and stale delivery", () => {
     );
   }
 
-  it.effect("plant, resolve a name at delivery: an old DOWN never retargets a replacement", () => {
-    return check(refs, [["old-target", "new-target"]], ([oldRef, newRef]) => {
+  it.effect("plant, resolve a name at delivery: an old DOWN never retargets a replacement", () =>
+    check(refs, [["old-target", "new-target"]], ([oldRef, newRef]) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -445,8 +445,8 @@ describe("p79, cancellation, replay and stale delivery", () => {
         const later = yield* fresh(store, W, old[0]!.rev);
         expect(later.map((letter) => Schema.decodeUnknownSync(Down)(letter.m).process)).toEqual([B]);
       });
-    });
-  });
+    }),
+  );
   it.effect("plant, reuse a watcher's inbox: a new watcher life cannot receive an old signal", () =>
     check(
       text.filter((ref) => ref !== "new-life-ref"),
@@ -504,8 +504,8 @@ const demonitored = (store: Storage) =>
     .map((row) => row.body as { readonly ref: string; readonly reason?: unknown });
 
 describe("P33, a DOWN is a signal only under its signal id and a matching watch", () => {
-  it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () => {
-    return check(text, ["watch:1"], (ref) => {
+  it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () =>
+    check(text, ["watch:1"], (ref) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -515,8 +515,8 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
         yield* send(store, "forged", Down.make({ ref, process: A, reason: CRASHED, to: toW }));
         expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["forged"]);
       });
-    });
-  });
+    }),
+  );
   it.effect("a DOWN under its signal id with no matching monitored watch is plain mail: cancel never drops it", () =>
     check(
       text.filter((ref) => ref !== "real"),
@@ -562,8 +562,8 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
 });
 
 describe("P33, watches are keyed by (recipient, ref)", () => {
-  it.effect("two recipients may both use ref watch:1, and each cancel is its own", () => {
-    return check(text, ["watch:1"], (ref) => {
+  it.effect("two recipients may both use ref watch:1, and each cancel is its own", () =>
+    check(text, ["watch:1"], (ref) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -578,10 +578,10 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
         ]);
         expect(yield* fresh(store, X)).toEqual([]);
       });
-    });
-  });
-  it.effect("a restarted watcher may reuse its own ref after its old watch ended", () => {
-    return check(text, ["watch:1"], (ref) => {
+    }),
+  );
+  it.effect("a restarted watcher may reuse its own ref after its old watch ended", () =>
+    check(text, ["watch:1"], (ref) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -611,8 +611,8 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
           }),
         ]);
       });
-    });
-  });
+    }),
+  );
 });
 
 describe("P33, monitor again after demonitor", () => {
@@ -636,8 +636,8 @@ describe("P33, monitor again after demonitor", () => {
 });
 
 describe("P33, demonitored records reason", () => {
-  it.effect("a demonitor writes reason canceled; a watcher's exit writes reason watcher_exited", () => {
-    return check(refs, [["by-cancel", "by-exit"]], ([byCancel, byExit]) => {
+  it.effect("a demonitor writes reason canceled; a watcher's exit writes reason watcher_exited", () =>
+    check(refs, [["by-cancel", "by-exit"]], ([byCancel, byExit]) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -651,8 +651,8 @@ describe("P33, demonitored records reason", () => {
           [byExit!]: "watcher_exited",
         });
       });
-    });
-  });
+    }),
+  );
 });
 
 describe("P33, a client's inbox is not a process's inbox", () => {
@@ -688,8 +688,8 @@ describe("P33, a client's inbox is not a process's inbox", () => {
       return true;
     });
 
-  it.effect("a client notes and a process notes each get their DOWN in their own inbox", () => {
-    return check(clientName, ["notes"], (name) => {
+  it.effect("a client notes and a process notes each get their DOWN in their own inbox", () =>
+    check(clientName, ["notes"], (name) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -703,10 +703,10 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         const letters = yield* fresh(store, B);
         expect(letters.map((letter) => letter.m)).toEqual([forProcess[0]!.m]);
       });
-    });
-  });
-  it.effect("plain mail to process notes never reaches client notes's inbox", () => {
-    return check(clientName, ["notes"], (name) => {
+    }),
+  );
+  it.effect("plain mail to process notes never reaches client notes's inbox", () =>
+    check(clientName, ["notes"], (name) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -720,10 +720,10 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         expect(clientInbox.map((row) => row.id)).not.toContain("letter:1");
         expect(clientInbox).toHaveLength(1);
       });
-    });
-  });
-  it.effect("a process named client:notes never shares client notes's inbox", () => {
-    return check(clientName, ["notes"], (name) => {
+    }),
+  );
+  it.effect("a process named client:notes never shares client notes's inbox", () =>
+    check(clientName, ["notes"], (name) => {
       const store = storage();
 
       return Effect.gen(function* () {
@@ -739,8 +739,8 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         expect(forClient).toHaveLength(1);
         expect(forClient[0]!.stream).not.toBe(forProcess[0]!.stream);
       });
-    });
-  });
+    }),
+  );
 });
 
 // P18 slice 2, next/ (ticket 979): P1. A client session is a watcher too: when its socket closes,

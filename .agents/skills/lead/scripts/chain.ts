@@ -213,17 +213,20 @@ export const QueueMinutes = Context.Reference<number>("chain/QueueMinutes", {
 export const slotSchedule = (minutes: number) => Schedule.spaced(Duration.minutes(minutes));
 
 /** drive refused the step for a full laptop (agent_cap or low_disk); retried on `slotSchedule`. */
-export class SlotRefused extends Schema.TaggedError<SlotRefused>()("SlotRefused", {
+export class SlotRefused extends Schema.TaggedError<SlotRefused, { readonly brand: unique symbol }>()("SlotRefused", {
   check: Schema.String,
   reason: Schema.String,
 }) {}
 
 /** A named schedule ran out; the quest reports it as stuck. */
-export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted>()("RetriesExhausted", {
-  schedule: Schema.String,
-  times: Schema.Number,
-  reason: Schema.String,
-}) {}
+export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted, { readonly brand: unique symbol }>()(
+  "RetriesExhausted",
+  {
+    schedule: Schema.String,
+    times: Schema.Finite,
+    reason: Schema.String,
+  },
+) {}
 
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {
@@ -565,7 +568,7 @@ const counted = (window: readonly Mark[]) => ({
 });
 
 /** A quest's size in steps and dollars: the estimate a plan or brief gives, or the backstop from it. */
-const Budget = Schema.Struct({ steps: Schema.Number, dollars: Schema.Number });
+const Budget = Schema.Struct({ steps: Schema.Finite, dollars: Schema.Finite });
 
 export type Budget = typeof Budget.Type;
 
@@ -596,17 +599,17 @@ export const backstopFrom = (estimate: Budget, times: number): Budget => ({
 /** Why the chain stopped to ask a person to redo, cut scope or drop (0076), kept in its record. */
 export const Stop = Schema.TaggedUnion({
   intensity: {
-    count: Schema.Number,
-    within: Schema.Number,
+    count: Schema.Finite,
+    within: Schema.Finite,
     window: Schema.Array(Schema.Literals(MARKS)),
-    steps: Schema.Number,
-    dollars: Schema.Number,
+    steps: Schema.Finite,
+    dollars: Schema.Finite,
   },
   backstop: {
     passed: Schema.Literals(["steps", "dollars"]),
     backstop: Budget,
-    steps: Schema.Number,
-    dollars: Schema.Number,
+    steps: Schema.Finite,
+    dollars: Schema.Finite,
   },
 });
 
@@ -634,7 +637,7 @@ export const stopReason = (stop: Stop): string => {
 const Run = Schema.Struct({
   step: Schema.Literals(STEPS),
   note: Schema.String,
-  round: Schema.Number,
+  round: Schema.Finite,
 });
 
 const lineFields = {
@@ -644,8 +647,8 @@ const lineFields = {
   fault: Schema.NullOr(FaultS),
   report: Schema.NullOr(Schema.String),
   box: Schema.String,
-  exit: Schema.Number,
-  listUsd: Schema.NullOr(Schema.Number),
+  exit: Schema.Finite,
+  listUsd: Schema.NullOr(Schema.Finite),
 };
 
 const LineS = Schema.Struct(lineFields);
@@ -663,7 +666,7 @@ const stepRun = Cmd.make("step_run", { input: Run, ok: LineS, err: ["RetriesExha
 
 /** One step's record, saved before it starts (`line` null) and again when it ends. */
 export const StepRecord = Schema.Struct({
-  round: Schema.Number,
+  round: Schema.Finite,
   step: Schema.Literals([...STEPS, "host"]),
   note: Schema.String,
   startedAt: Schema.String,
@@ -677,7 +680,7 @@ export type StepRecord = typeof StepRecord.Type;
 
 const ChainFields = Schema.Struct({
   quest: Schema.String,
-  pr: Schema.NullOr(Schema.Number),
+  pr: Schema.NullOr(Schema.Finite),
   /** When GitHub was found to have merged the PR already; the chain itself only queues. */
   landed: Schema.NullOr(Schema.String),
   /** When the chain added the PR to GitHub's merge queue. */
@@ -706,32 +709,32 @@ export type ChainRecord = typeof ChainRecord.Type;
 export const roundsIn = (record: ChainRecord): number => record.steps.reduce((most, e) => Math.max(most, e.round), 0);
 
 const judge = Cmd.make("judge", {
-  input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Number }),
-  ok: Schema.Struct({ text: Schema.String, listUsd: Schema.NullOr(Schema.Number) }),
+  input: Schema.Struct({ step: Schema.Literals(STEPS), line: LineS, round: Schema.Finite }),
+  ok: Schema.Struct({ text: Schema.String, listUsd: Schema.NullOr(Schema.Finite) }),
   err: ["unknown"],
 });
 
 const prOpen = Cmd.make("pr_open", {
   input: Schema.Struct({ head: Schema.String }),
-  ok: Schema.Struct({ pr: Schema.NullOr(Schema.Number), detail: Schema.String }),
+  ok: Schema.Struct({ pr: Schema.NullOr(Schema.Finite), detail: Schema.String }),
   err: ["unknown"],
 });
 
 const loosen = Cmd.make("loosen", {
-  input: Schema.Struct({ pr: Schema.Number, head: Schema.String }),
-  ok: Schema.Struct({ code: Schema.Number, text: Schema.String }),
+  input: Schema.Struct({ pr: Schema.Finite, head: Schema.String }),
+  ok: Schema.Struct({ code: Schema.Finite, text: Schema.String }),
   err: ["unknown"],
 });
 
 const land = Cmd.make("land", {
-  input: Schema.Struct({ pr: Schema.Number }),
+  input: Schema.Struct({ pr: Schema.Finite }),
   ok: Done,
   err: ["unknown"],
 });
 
 /** The host step at the quest's head (`""` for a quest started at review: the state file's head). */
 const hostRun = Cmd.make("host_run", {
-  input: Schema.Struct({ round: Schema.Number, head: Schema.String }),
+  input: Schema.Struct({ round: Schema.Finite, head: Schema.String }),
   ok: Schema.Struct({
     outcome: Schema.Literals(["done", "skip", "send", "ask", "stuck"]),
     head: Schema.String,
@@ -742,7 +745,7 @@ const hostRun = Cmd.make("host_run", {
 
 /** CI's typecheck job at the pushed head, read the moment it ends, once the PR is open (0133). */
 const typecheckRead = Cmd.make("typecheck_read", {
-  input: Schema.Struct({ pr: Schema.Number, head: Schema.String }),
+  input: Schema.Struct({ pr: Schema.Finite, head: Schema.String }),
   ok: Typecheck.Verdict,
   err: ["unknown"],
 });
@@ -1353,7 +1356,7 @@ const handlers = (s: Setup) => {
               note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
               s.beats.enter("wait", null);
 
-              return yield* Effect.fail(SlotRefused.make({ check, reason: prepared.reason }));
+              return yield* SlotRefused.make({ check, reason: prepared.reason });
             }
 
             return {

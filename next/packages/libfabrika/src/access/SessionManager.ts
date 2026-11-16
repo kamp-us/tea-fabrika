@@ -84,9 +84,12 @@ export type Session = typeof Session.Type;
  *
  * @category errors
  */
-export class SigningRefused extends Schema.TaggedError<SigningRefused>()("SigningRefused", {
-  reason: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
-}) {}
+export class SigningRefused extends Schema.TaggedError<SigningRefused, { readonly brand: unique symbol }>()(
+  "SigningRefused",
+  {
+    reason: Schema.Literals(["not_delivered", "spent", "person_only", "ended", "signal"]),
+  },
+) {}
 
 /**
  * Error for a request that is not let through: most often a writer whose key does not belong, or
@@ -101,7 +104,7 @@ export class SigningRefused extends Schema.TaggedError<SigningRefused>()("Signin
  *
  * @category errors
  */
-export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {}) {}
+export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand: unique symbol }>()("NotGranted", {}) {}
 
 /**
  * Reason for a session table that could not be read or written: the `Sql` threw. The throw is
@@ -109,7 +112,9 @@ export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a saved input or receipt that does not decode. The decoder's failure is kept as
@@ -117,7 +122,9 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  *
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a membership check that failed for any cause but `NotGranted`, such as the access
@@ -125,7 +132,9 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  *
  * @category errors
  */
-export class Membership extends Schema.TaggedError<Membership>()("Membership", { cause: Schema.Defect() }) {}
+export class Membership extends Schema.TaggedError<Membership, { readonly brand: unique symbol }>()("Membership", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a session call that failed below the session rules: in its own tables, or in the
@@ -134,9 +143,12 @@ export class Membership extends Schema.TaggedError<Membership>()("Membership", {
  *
  * @category errors
  */
-export class SessionManagerError extends Schema.TaggedError<SessionManagerError>()("SessionManagerError", {
-  reason: Schema.Union([Storage, BadRow, Membership]),
-}) {}
+export class SessionManagerError extends Schema.TaggedError<SessionManagerError, { readonly brand: unique symbol }>()(
+  "SessionManagerError",
+  {
+    reason: Schema.Union([Storage, BadRow, Membership]),
+  },
+) {}
 
 /** The manager's own error for a throw in a stored step: a decoder's failure is a bad row. */
 const storageFault = (cause: unknown) =>
@@ -166,7 +178,7 @@ const InputRecord = Schema.Struct({
   digest: Schema.String,
   traceId: Schema.String,
   span: Span,
-  arrivedAt: Schema.Number,
+  arrivedAt: Schema.Finite,
 });
 
 type InputRecord = typeof InputRecord.Type;
@@ -184,7 +196,7 @@ const State = Schema.TaggedUnion({ recorded: {}, delivered: {} });
  *
  * @category models
  */
-export class SavedInput extends Schema.Opaque<SavedInput>()(
+export class SavedInput extends Schema.Opaque<SavedInput, { readonly brand: unique symbol }>()(
   Schema.Struct({
     input: InputRecord,
     state: State,

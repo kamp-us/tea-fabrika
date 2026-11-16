@@ -111,12 +111,12 @@ export const RecordPartLive = RecordPart.make(
     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw storage until PR 8; not reported, 0042 amendment 2026-11-09
     const raw = state.raw as unknown as DurableObjectState;
 
-    return Effect.succeed({
+    return {
       write: (chain, at, rows) => cap.pipe(Effect.flatMap((bytes) => recordWrite(raw, bytes, chain, at, rows))),
       read: (chain, at, after) => cap.pipe(Effect.flatMap((bytes) => recordRead(raw, bytes, chain, at, after))),
       content: (chain, at, id) => cap.pipe(Effect.flatMap((bytes) => recordContent(raw, bytes, chain, at, id))),
       deleteContent: (chain, at, id, by) =>
         cap.pipe(Effect.flatMap((bytes) => recordDelete(raw, bytes, chain, at, id, by))),
-    } satisfies RecordShape);
-  }),
+    } satisfies RecordShape;
+  }).pipe(Effect.map((shape) => Effect.succeed(shape))),
 );

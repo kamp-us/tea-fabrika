@@ -5,7 +5,7 @@ import { Context, Schema } from "effect";
 import type { Effect } from "effect";
 
 /** A git call that exited non-zero or wrote anything to stderr: the inspection cannot be trusted. */
-export class BoxGitError extends Schema.TaggedError<BoxGitError>()("BoxGitError", {
+export class BoxGitError extends Schema.TaggedError<BoxGitError, { readonly brand: unique symbol }>()("BoxGitError", {
   /** The git subcommand, such as `status`. */
   command: Schema.String,
   cause: Schema.optional(Schema.Defect()),

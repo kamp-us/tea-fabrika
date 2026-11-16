@@ -74,10 +74,9 @@ const recovery = {
   process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
 };
 
-const rows = (sql: Sql) => {
+const rows = (sql: Sql) =>
   // oxlint-disable-next-line fabrika/no-ledger-sql -- Independent SQL oracle checks committed rows and transaction rollback (Q3/Q4).
-  return sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row));
-};
+  sql.exec("SELECT * FROM entries ORDER BY rev").map((row) => Schema.decodeUnknownSync(Row)(row));
 
 const bytes = (e: Entry) => new TextEncoder().encode(JSON.stringify(Schema.encodeSync(Entry)(e))).length;
 

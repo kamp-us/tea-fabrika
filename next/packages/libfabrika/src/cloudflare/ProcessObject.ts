@@ -78,7 +78,7 @@ export const layer = (options: {
       const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
       const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));
 
-      return Effect.succeed({
+      return {
         alarm: () =>
           service.pipe(
             Effect.flatMap((process) => process.alarm()),
@@ -97,6 +97,6 @@ export const layer = (options: {
         recover: () => use((process) => process.recover()),
         savedAlarm: () => called(savedAlarm(raw)),
         abort: () => state.abort("storage wake"),
-      } satisfies ProcessShape);
-    }),
+      } satisfies ProcessShape;
+    }).pipe(Effect.map((shape) => Effect.succeed(shape))),
   );

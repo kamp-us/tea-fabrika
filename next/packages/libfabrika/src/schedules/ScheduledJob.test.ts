@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 import * as ScheduledJob from "./ScheduledJob.ts";
 
 const write = Cmd.make("write", {
-  input: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
+  input: Schema.Struct({ due: Schema.Finite, period: Schema.Int }),
   ok: Schema.Json,
   err: ["not_delivered", "ended", "spent"],
 });

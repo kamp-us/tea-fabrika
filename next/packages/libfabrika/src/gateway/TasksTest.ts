@@ -99,7 +99,9 @@ const field = (a: string | Uint8Array) => {
 };
 
 // A shared suite is not a `*.test.ts` file, so its failures are tagged like product code's.
-class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
+class CryptoFailed extends Schema.TaggedError<CryptoFailed, { readonly brand: unique symbol }>()("CryptoFailed", {
+  cause: Schema.Defect(),
+}) {}
 
 const fail = (cause: unknown) => new CryptoFailed({ cause });
 

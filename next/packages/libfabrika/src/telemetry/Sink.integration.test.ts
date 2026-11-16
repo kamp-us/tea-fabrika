@@ -21,11 +21,12 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Scope, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -39,37 +40,27 @@ import { type Chain, type SpanRow } from "./Trace.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
-type ChainValue = typeof Chain.Type;
+type ChainValue = Chain;
 
-type Row = typeof SpanRow.Type;
+type Row = SpanRow;
 
 /** A folder of its own, and every file opened in it. The sink asks for a part's file with a plain
- *  call, so a file cannot be acquired one by one: the folder holds them, and the scope that asked
- *  for the folder closes each one, then removes it (0061). */
-const folder = Effect.acquireRelease(
-  Effect.sync(() => ({ dir: mkdtempSync(join(tmpdir(), "p37-sink-")), opened: new Array<DatabaseSync>() })),
-  ({ dir, opened }) =>
-    Effect.sync(() => {
-      for (const db of opened.splice(0)) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+ *  call, so each file is opened into the scope that asked for the folder: that scope closes each
+ *  one, last opened first, then removes the folder (0061). */
+const folder = Effect.gen(function* () {
+  const scope = yield* Effect.scope;
+  const dir = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "p37-sink-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+  const connect = (file: string): DatabaseSync => Effect.runSync(Scope.provide(scope)(TestDatabase.make(file)));
+  return { dir, connect };
+});
 
 /** A folder of its own: the object's file, and any part files, so a test can read every byte. */
 const home = folder.pipe(
-  Effect.map(({ dir, opened }) => {
-    const open = (file: string): DatabaseSync => {
-      const db = new DatabaseSync(join(dir, file));
-      opened.push(db);
-
-      return db;
-    };
-
+  Effect.map(({ dir, connect }) => {
+    const open = (file: string): DatabaseSync => connect(join(dir, file));
     const db = open("object.db");
     const parts = new Map<string, DatabaseSync>();
     const sqls = new Map<string, Sql>();
@@ -510,13 +501,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0 ? Effect.fail(new SinkError({ reason: value, held: 0 })) : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: value, held: 0 }),
                     ),
+                  ),
               };
 
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
@@ -713,15 +703,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0
-                          ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 }))
-                          : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: "unreachable", held: 0 }),
                     ),
+                  ),
               };
 
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
@@ -1316,8 +1303,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
     );
 
     await fc.assert(
-      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.dictionary(key, value, { maxKeys: 8 }), (tags) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* home;
             yield* Effect.gen(function* () {
@@ -1358,8 +1345,8 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               }
             }).pipe(Effect.provide(world(sql)));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 6, full: 60 }) },
     );
   });
@@ -1525,19 +1512,14 @@ const callsFrom = (seen: Seen): ReadonlyArray<Public> => {
 
 /** One walk's own object file, in a folder of its own, closed and removed when the walk's scope
  *  ends (0061), so 100 runs never hold 100 open files. */
-const walkHome = Effect.acquireRelease(
-  Effect.sync(() => {
-    const dir = mkdtempSync(join(tmpdir(), "t705-sink-"));
-    const db = new DatabaseSync(join(dir, "object.db"));
-
-    return { dir, db, sql: nodeSql(db) };
-  }),
-  ({ dir, db }) =>
-    Effect.sync(() => {
-      db.close();
-      rmSync(dir, { recursive: true, force: true });
-    }),
-);
+const walkHome = Effect.gen(function* () {
+  const dir = yield* Effect.acquireRelease(
+    Effect.sync(() => mkdtempSync(join(tmpdir(), "t705-sink-"))),
+    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+  );
+  const db = yield* TestDatabase.make(join(dir, "object.db"));
+  return { dir, db, sql: nodeSql(db) };
+});
 
 describe("T705, the sink's public calls keep their order through one machine", () => {
   it.effect.prop(
@@ -1686,8 +1668,9 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
       Effect.gen(function* () {
         const { sql } = yield* walkHome;
         yield* Effect.gen(function* () {
-          class Typed extends Schema.TaggedError<Typed>()(sample.tag, { reason: Schema.String }) {}
-
+          class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
+            reason: Schema.String,
+          }) {}
           const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
 
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {

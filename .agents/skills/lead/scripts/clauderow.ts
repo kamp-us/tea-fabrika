@@ -50,7 +50,9 @@ import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 
-export class Refused extends Schema.TaggedError<Refused>()("Refused", { reason: Schema.String }) {}
+export class Refused extends Schema.TaggedError<Refused, { readonly brand: unique symbol }>()("Refused", {
+  reason: Schema.String,
+}) {}
 
 /** One call's tokens by how they are priced: uncached input, the two cache writes, cache reads, output. */
 export interface Tokens {
@@ -358,16 +360,16 @@ const Row = Schema.Struct({
   effort: Text,
   outcome: Text,
   reason: Schema.String,
-  tokens: Schema.Number,
-  tools: Schema.Number,
-  minutes: Schema.Number,
+  tokens: Schema.Finite,
+  tools: Schema.Finite,
+  minutes: Schema.Finite,
   note: Text,
   costUsd: Schema.Null,
-  listUsd: Schema.Number,
-  billed: Schema.Number,
-  inputTokens: Schema.Number,
-  cachedTokens: Schema.Number,
-  outputTokens: Schema.Number,
+  listUsd: Schema.Finite,
+  billed: Schema.Finite,
+  inputTokens: Schema.Finite,
+  cachedTokens: Schema.Finite,
+  outputTokens: Schema.Finite,
   billing: Schema.optionalKey(Billing),
   corrects: Schema.optionalKey(Schema.String),
   step: Schema.optionalKey(Schema.String),
@@ -375,14 +377,14 @@ const Row = Schema.Struct({
 
 /** One model call of a transcript, for the cost curve. */
 const Turn = Schema.Struct({
-  call: Schema.Number,
+  call: Schema.Finite,
   at: Schema.String,
-  context: Schema.Number,
-  write: Schema.Number,
-  output: Schema.Number,
-  tools: Schema.Number,
-  usd: Schema.Number,
-  total: Schema.Number,
+  context: Schema.Finite,
+  write: Schema.Finite,
+  output: Schema.Finite,
+  tools: Schema.Finite,
+  usd: Schema.Finite,
+  total: Schema.Finite,
 });
 
 const encodeRow = Schema.encodeSync(Schema.fromJsonString(Row));

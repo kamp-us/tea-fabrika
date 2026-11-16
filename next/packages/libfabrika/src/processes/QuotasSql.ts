@@ -45,13 +45,13 @@ const key = Schema.encodeSync(Schema.fromJsonString(Quota.Account));
 
 const readAccount = Schema.decodeUnknownSync(Schema.fromJsonString(Quota.Account));
 
-const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Number, build: Schema.String });
+const Stepped = Schema.TaggedStruct("stepped", { input: Schema.String, pos: Schema.Finite, build: Schema.String });
 
-const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Number, build: Schema.String });
+const StepBody = Schema.Struct({ input: Schema.String, pos: Schema.Finite, build: Schema.String });
 
 const readStep = Schema.decodeUnknownOption(StepBody);
 
-const Held = Schema.Struct({ account: Schema.String, bytes: Schema.Number, settled: Schema.Number });
+const Held = Schema.Struct({ account: Schema.String, bytes: Schema.Finite, settled: Schema.Finite });
 
 const readHeld = Schema.decodeUnknownSync(Held);
 
@@ -562,7 +562,7 @@ const LocalTables = [
   "CREATE TABLE IF NOT EXISTS quota_fault (name TEXT PRIMARY KEY,value TEXT NOT NULL)",
 ];
 
-const Pending = Schema.Struct({ operation: Schema.String, writes: Schema.Number, bytes: Schema.Number });
+const Pending = Schema.Struct({ operation: Schema.String, writes: Schema.Finite, bytes: Schema.Finite });
 
 const Fault = Schema.Struct({ ...Pending.fields, fault: RecoveryReserveExhausted });
 

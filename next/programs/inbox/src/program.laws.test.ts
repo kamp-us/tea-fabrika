@@ -112,7 +112,7 @@ describe("ticket 884 the inbox program, slice 1", () => {
         expectTypeOf<typeof Row.Type>().toEqualTypeOf<(typeof inboxView.Type)["rows"][number]>();
         expectTypeOf<typeof Model.Type>().toEqualTypeOf<typeof inboxView.Type>();
         const view = inbox.view.select(model);
-        expect(Schema.decodeUnknownSync(inboxView, { onExcessProperty: "error" })(view)).toEqual(view);
+        expect(Schema.decodeSync(inboxView, { onExcessProperty: "error" })(view)).toEqual(view);
         expect(view).toEqual(model);
       }),
     { arbitrary: { seed: SEED, runs: RUNS } },

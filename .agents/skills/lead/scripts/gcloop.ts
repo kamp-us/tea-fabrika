@@ -105,22 +105,22 @@ export type Removed = typeof Removed.Type;
 export const Sweep = Schema.Struct({
   startedAt: Schema.String,
   endedAt: Schema.String,
-  ms: Schema.Number,
+  ms: Schema.Finite,
   trigger: Schema.Literals(TRIGGERS),
   /** The period this sweep ran under, in minutes. */
-  minutes: Schema.Number,
-  pid: Schema.Number,
+  minutes: Schema.Finite,
+  pid: Schema.Finite,
   outcome: Outcome,
   /** gc's exit code; `null` when it did not end on its own (skipped, timed out, could not start). */
-  code: Schema.NullOr(Schema.Number),
+  code: Schema.NullOr(Schema.Finite),
   removed: Removed,
   /** Each folder gc kept, with its reason, as gc printed it. */
   kept: Schema.Array(Schema.String),
   /** Folders gc looked at: the ones it removed and the ones it kept. */
-  seen: Schema.Number,
-  freedMb: Schema.Number,
+  seen: Schema.Finite,
+  freedMb: Schema.Finite,
   /** KB free on the boxes' volume before and after, from df; `null` when df said nothing. */
-  freeKb: Schema.Struct({ before: Schema.NullOr(Schema.Number), after: Schema.NullOr(Schema.Number) }),
+  freeKb: Schema.Struct({ before: Schema.NullOr(Schema.Finite), after: Schema.NullOr(Schema.Finite) }),
   /** mutbox's line when its Docker sweep was stopped at its time limit. */
   mutbox: Schema.NullOr(Schema.String),
 });
@@ -196,7 +196,7 @@ const ended = (s: Sweep): string => {
 };
 
 /** Who holds the lock, as it says of itself. */
-export const Holder = Schema.Struct({ pid: Schema.Number, startedAt: Schema.String });
+export const Holder = Schema.Struct({ pid: Schema.Finite, startedAt: Schema.String });
 
 export type Holder = typeof Holder.Type;
 
@@ -257,7 +257,9 @@ export const fill = (template: string, values: Readonly<Record<string, string>>)
 // ---------------------------------------------------------------- the world
 
 /** The loop could not do its own part: the env, the record or the unit file. */
-export class Broken extends Schema.TaggedError<Broken>()("Broken", { reason: Schema.String }) {}
+export class Broken extends Schema.TaggedError<Broken, { readonly brand: unique symbol }>()("Broken", {
+  reason: Schema.String,
+}) {}
 
 /** One command run to its end: its exit code, stdout and stderr. */
 const exec = Effect.fn("gcloop.exec")(function* (command: string, args: ReadonlyArray<string>) {
@@ -298,7 +300,7 @@ const freeKb = Effect.fn("gcloop.freeKb")(
 
     return r.code === 0 && Number.isFinite(kb) ? kb : null;
   },
-  Effect.catch(() => Effect.succeed(null)),
+  Effect.orElseSucceed(() => null),
 );
 
 const alive = (pid: number) =>
@@ -321,9 +323,9 @@ const live = Effect.fn("gcloop.live")(function* (holder: Holder, now: Holder, st
 
 const readHolder = Effect.fn("gcloop.readHolder")(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(lock).pipe(Effect.catch(() => Effect.succeed("")));
+  const text = yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => ""));
 
-  return Schema.decodeUnknownOption(HolderText)(text);
+  return Schema.decodeOption(HolderText)(text);
 });
 
 const sameHolder = (a: Option.Option<Holder>, b: Option.Option<Holder>): boolean =>
@@ -345,7 +347,7 @@ const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale
 
   const link = fs.link(mine, lock).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   );
 
   const held = Effect.fn("gcloop.held")(function* () {
@@ -363,7 +365,7 @@ const take = Effect.fn("gcloop.take")(function* (lock: string, me: Holder, stale
 
     const moved = yield* fs.rename(lock, aside).pipe(
       Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
+      Effect.orElseSucceed(() => false),
     );
 
     if (moved) {
@@ -504,9 +506,9 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 /** Every sweep recorded, oldest first; a line that does not read as one is left out. */
 export const sweeps = Effect.fn("gcloop.sweeps")(function* (state: string) {
   const fs = yield* FileSystem.FileSystem;
-  const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.catch(() => Effect.succeed("")));
+  const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.orElseSucceed(() => ""));
 
-  return text.split("\n").flatMap((line) => Option.toArray(Schema.decodeUnknownOption(SweepLine)(line)));
+  return text.split("\n").flatMap((line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
 });
 
 /** The status line now, with the live holder of the lock if a sweep is going. */

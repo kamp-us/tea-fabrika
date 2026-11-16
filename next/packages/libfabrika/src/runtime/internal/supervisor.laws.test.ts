@@ -40,7 +40,7 @@ const PROGRAM = "counter";
 
 const BUILD = "build-a";
 
-type Model = typeof Supervision.Type;
+type Model = Supervision;
 
 type Journal = Model["journal"];
 
@@ -58,7 +58,7 @@ const policy = {
   backoff: { minMs: 100, maxMs: 800, resetAfterMs: 5000 },
 };
 
-const ctx = (p: typeof Policy.Type = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
+const ctx = (p: Policy = policy) => ({ policy: p, process: A, name: NAME, build: BUILD, at: 0 });
 
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
@@ -78,7 +78,7 @@ const canon = (value: unknown): string =>
 const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknownResult(Supervision)(raw));
 
 /** Accepted policies: every brake reachable (the waits of one window fit inside it). */
-const policies: fc.Arbitrary<typeof Policy.Type> = fc
+const policies: fc.Arbitrary<Policy> = fc
   .record({
     intensity: fc.integer({ min: 1, max: 8 }),
     deliveries: fc.integer({ min: 1, max: 6 }),
@@ -178,7 +178,7 @@ const receiptFor = (letter: string, process: string) => ({
 });
 
 /** The smallest time at or after `t` with room in the window, by the fold's own search. */
-const roomAt = (restarts: ReadonlyArray<number>, t: number, p: typeof Policy.Type): number => {
+const roomAt = (restarts: ReadonlyArray<number>, t: number, p: Policy): number => {
   const candidates = [t, ...restarts.map((r) => r + p.periodMs + 1)].filter((c) => c >= t).toSorted((a, b) => a - b);
 
   return candidates.find((c) => restarts.filter((r) => r >= c - p.periodMs).length + 1 <= p.intensity) ?? t;
@@ -425,7 +425,7 @@ const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
 type Observer = (before: Model, move: Move, after: Model, w: World) => void;
 
 /** Folds one tape through the real machine, calling each observer after every step. */
-const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
+const walk = (p: Policy, tape: ReadonlyArray<Cell>, observe: Observer, swaps = false): World => {
   const w: World = {
     model: supervisor.init(null, ctx(p))[0],
     at: 0,
@@ -465,7 +465,7 @@ const walk = (p: typeof Policy.Type, tape: ReadonlyArray<Cell>, observe: Observe
 };
 
 /** Keeps the fold's own account. It reads only its own moves and which way the journal went. */
-const account = (before: Model, move: Move, after: Model, w: World, p: typeof Policy.Type): void => {
+const account = (before: Model, move: Move, after: Model, w: World, p: Policy): void => {
   if (move.stale) {
     return;
   }

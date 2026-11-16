@@ -88,7 +88,7 @@ const headlessKey = Effect.gen(function* () {
       .replaceAll("+", "-")
       .replaceAll("/", "_")
       .replace(/=+$/, ""),
-    line: Schema.decodeUnknownSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
+    line: Schema.decodeSync(KeyLine)(`ssh-ed25519 ${btoa(String.fromCharCode(...blob))}`),
     found: "created" as const,
     sign: (bytes: Uint8Array) =>
       Effect.tryPromise({

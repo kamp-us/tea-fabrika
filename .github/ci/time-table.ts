@@ -209,7 +209,9 @@ export type Io = {
 };
 
 /** An input that could not be read: the network, GitHub's answer, a missing file or bad JSON. */
-export class Unread extends Schema.TaggedError<Unread>()("Unread", { cause: Schema.Defect() }) {}
+export class Unread extends Schema.TaggedError<Unread, { readonly brand: unique symbol }>()("Unread", {
+  cause: Schema.Defect(),
+}) {}
 
 const legOf = (env: Readonly<Record<string, string | undefined>>): Leg => ({
   run: env["GITHUB_RUN_ID"] ?? "",

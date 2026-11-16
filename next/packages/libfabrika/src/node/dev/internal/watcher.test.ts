@@ -60,7 +60,7 @@ it("A-Watcher: rebuilds keep the phase and failed inputs; only an install attemp
         }
 
         expect(step.cmds).toEqual([]);
-        expect(Schema.decodeUnknownSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
+        expect(Schema.decodeSync(json)(Schema.encodeSync(json)(step.next))).toEqual(step.next);
       }
 
       expect(final._tag).toBe(attemptedCount === 0 ? "booting" : "watching");

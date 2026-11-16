@@ -56,10 +56,10 @@ describe("T518, TraceId generation", () => {
         expect(values).toHaveLength(200);
 
         for (const value of values) {
-          expect(Schema.decodeUnknownSync(TraceId)(value)).toBe(value);
+          expect(Schema.decodeSync(TraceId)(value)).toBe(value);
           expect(value).toMatch(/^[0-9a-f]{32}$/);
           const zero = value.replace(/[0-9a-f]/g, "0");
-          expect(() => Schema.decodeUnknownSync(TraceId)(zero)).toThrow();
+          expect(() => Schema.decodeSync(TraceId)(zero)).toThrow();
         }
       }),
     { arbitrary: { seed: 119120, runs: 40 } },

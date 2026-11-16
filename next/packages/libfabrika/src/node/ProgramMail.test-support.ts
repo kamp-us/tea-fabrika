@@ -5,8 +5,11 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
+import * as Scope from "effect/Scope";
+import * as ScopedRef from "effect/ScopedRef";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type * as ProcessesProgramMailTest from "../processes/ProgramMailTest.ts";
 import type * as RuntimeProgramMailTest from "../runtime/ProgramMailTest.ts";
@@ -21,36 +24,25 @@ const folder = Effect.acquireRelease(
 /** One database file per part, each opened on first use; `reopen` closes and reopens every one. */
 const databases = Effect.gen(function* () {
   const path = yield* folder;
-  const held = new Map<string, { db: DatabaseSync; sql: Sql }>();
+  // A part is opened from a plain call, so its handle is acquired into this scope, which closes it.
+  const scope = yield* Effect.scope;
+  const held = new Map<string, ScopedRef.ScopedRef<{ db: DatabaseSync; sql: Sql }>>();
 
-  const connect = (part: string) => {
-    const db = new DatabaseSync(join(path, `${part}.db`));
-    db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=OFF");
-
-    return { db, sql: nodeSql(db) };
-  };
-
-  yield* Effect.addFinalizer(() =>
-    Effect.sync(() => {
-      for (const { db } of held.values()) {
-        if (db.isOpen) {
-          db.close();
-        }
-      }
-    }),
-  );
+  const connect = (part: string) =>
+    TestDatabase.make(join(path, `${part}.db`)).pipe(Effect.map((db) => ({ db, sql: nodeSql(db) })));
 
   const handle = (part: string) => {
     const found = held.get(part);
 
     if (found !== undefined) {
-      return found;
+      return ScopedRef.getUnsafe(found);
     }
 
-    const made = connect(part);
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Sql is synchronous, and a part opens on its first call
+    const made = Effect.runSync(Scope.provide(scope)(ScopedRef.fromAcquire(connect(part))));
     held.set(part, made);
 
-    return made;
+    return ScopedRef.getUnsafe(made);
   };
 
   // One Sql per part across reopens: each call goes to the database open now.
@@ -74,14 +66,12 @@ const databases = Effect.gen(function* () {
     return made;
   };
 
-  const reopen = Effect.sync(() => {
-    for (const [part, { db }] of held) {
-      db.close();
-      held.set(part, connect(part));
-    }
+  const reopen = Effect.forEach(held, ([part, ref]) => ScopedRef.set(ref, connect(part)), {
+    discard: true,
+    concurrency: 1,
   });
 
-  const open = () => [...held.values()].filter(({ db }) => db.isOpen).length;
+  const open = () => [...held.values()].filter((ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
 
   return { sql, reopen, open };
 });

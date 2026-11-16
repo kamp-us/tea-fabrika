@@ -39,7 +39,7 @@ const currentDial = (s: Link): number | null => ("dial" in s ? s.dial : null);
 
 const live = (s: Link): boolean => s._tag !== "removed" && s._tag !== "blocked";
 
-const roundTrip = (s: Link): Link => Schema.decodeUnknownSync(Link)(Schema.encodeSync(Link)(s));
+const roundTrip = (s: Link): Link => Schema.decodeSync(Link)(Schema.encodeSync(Link)(s));
 
 /** One generated step: choice numbers and words the walk turns into a move against its state. */
 const choice = fc.record({

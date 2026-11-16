@@ -13,7 +13,7 @@ import { Answer, Attached, RateCountFailure } from "./Wire.ts";
 const Request = Schema.fromJsonString(
   Schema.Struct({
     jsonrpc: Schema.Literal("2.0"),
-    id: Schema.Union([Schema.String, Schema.Number]),
+    id: Schema.Union([Schema.String, Schema.Finite]),
     method: Schema.String,
     params: Schema.optional(Schema.Unknown),
   }),
@@ -69,7 +69,7 @@ export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E
 ) {
   const text = frame[0];
   const attached: A = frame[1];
-  const request = Schema.decodeUnknownResult(Request)(text);
+  const request = Schema.decodeResult(Request)(text);
 
   if (Result.isFailure(request)) {
     return { send: null, attached };

@@ -93,7 +93,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
     ({ limit, window }) => {
       expect(
         Result.isSuccess(
-          Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
+          Schema.decodeResult(Files.schema(Declarations.all, "person"), { onExcessProperty: "error" })({
             gateway: { limit, window },
           }),
         ),
@@ -102,7 +102,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
       for (const gateway of [{ limit }, { window }, { limit, window }]) {
         expect(
           Result.isFailure(
-            Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
+            Schema.decodeResult(Files.schema(Declarations.all, "repo"), { onExcessProperty: "error" })({
               gateway,
             }),
           ),
@@ -288,14 +288,14 @@ it.prop(
     const value = { desktop: { "link-ttl": lifetime } };
     expect(
       Result.isSuccess(
-        Schema.decodeUnknownResult(Files.schema(Declarations.all, "person"), {
+        Schema.decodeResult(Files.schema(Declarations.all, "person"), {
           onExcessProperty: "error",
         })(value),
       ),
     ).toBe(true);
     expect(
       Result.isFailure(
-        Schema.decodeUnknownResult(Files.schema(Declarations.all, "repo"), {
+        Schema.decodeResult(Files.schema(Declarations.all, "repo"), {
           onExcessProperty: "error",
         })(value),
       ),

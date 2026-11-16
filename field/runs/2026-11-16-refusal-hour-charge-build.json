@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-refusal-hour-charge-build",
+  "ticket": "404",
+  "pr": null,
+  "started": "2026-11-15T23:38:35-08:00",
+  "ended": "2026-11-15T23:41:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for the refusal-hour-charge slice, in next/. The build changed no product code: the lead ruled the law lands as a guard, since the product already charges a refused send that crosses the hour no write and no byte (the door's room check in Gateway.ts refuses before any Process call). RecoveryStore and the supervisor were not touched; the healthy mark's charge is a separate job. At head f27c48bd9, with no override in the box, the whole file next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts ran 14 passed of 14, and the new law alone ran green (1 passed, 13 skipped by name filter). A read of the law confirms it checks its title: it requires that the hour turned inside a refused send from the old hour, and asserts the program's local account is unchanged after the refusal and after the read that follows; the tests step's two plants turned it red. It loosens no existing law: the diff only adds a law and a test-world hook. The branch was not merged with origin/main, whose three newer commits touch no product code.",
+  "laws": [
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte",
+      "red": "green at f27c48bd9 with no product change; the whole file 14 passed of 14"
+    }
+  ],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "The diff from origin/main adds 163 lines and removes none. loosening.sh from the merge base to f27c48bd9 has one hit, 'unrecognized change: line 534' in the law file: the added test-world hook 'let beforeProject = (_method: string) => {};', a no-op by default, so no existing law changes. No typecheck ran, since no code changed in this step; pnpm format and pnpm lint ran on this row.",
+  "step": "build"
+}

@@ -764,7 +764,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         ChildrenLedger.layer({ grants: STARTS, fabrika: Model.ref("fabrika", "p41") }).pipe(
           // T953: no start here has a member's input behind it, so `StartGrant` judges every one, as before.
           Layer.provide(RelationsMemory.layer([])),
-          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeed(Option.none()) })),
+          Layer.provide(Layer.succeed(Senders, { sender: () => Effect.succeedNone })),
         ),
       ),
       Layer.provideMerge(

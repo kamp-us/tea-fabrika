@@ -4,9 +4,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 import { afterAll } from "@effect/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -176,20 +176,27 @@ export const again = (after: string, id = `restart:${after}`, code = CODE) =>
 // imports this file for its builders and never calls `storage()` touches no disk (0584).
 let folder: string | null = null;
 
-const opened: Array<DatabaseSync> = [];
+// A storage opens and reopens its file with plain calls, so each connection is acquired into this
+// one scope, which the file's last hook closes before it removes the folder.
+const stores = Scope.makeUnsafe();
 
 let files = 0;
 
 afterAll(() => {
-  for (const db of opened) {
-    if (db.isOpen) {
-      db.close();
-    }
-  }
+  // The connections close first, then the folder goes, if one was made. Closing hundreds of them
+  // may yield, so the hook hands Vitest the run as a Promise.
+  const teardown = Scope.close(stores, Exit.void).pipe(
+    Effect.andThen(
+      Effect.sync(() => {
+        if (folder !== null) {
+          rmSync(folder, { recursive: true, force: true });
+        }
+      }),
+    ),
+  );
 
-  if (folder !== null) {
-    rmSync(folder, { recursive: true, force: true });
-  }
+  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest's afterAll hook is a plain callback
+  return Effect.runPromise(teardown);
 });
 
 // A real SQLite file, reopened without manager memory. Faults interrupt real INSERTs.
@@ -197,15 +204,12 @@ export const storage = () => {
   folder ??= mkdtempSync(join(tmpdir(), "p33-"));
   const path = join(folder, `${++files}.db`);
 
-  const open = () => {
-    const db = new DatabaseSync(path);
-    // A test process never loses power, so it skips the sync and keeps the rollback journal in memory.
-    // Every byte a law reads stays in the file and survives reopen (ticket 585, decision 0052).
-    db.exec("PRAGMA journal_mode=MEMORY; PRAGMA synchronous=OFF");
-    opened.push(db);
-
-    return db;
-  };
+  // A test process never loses power, so `TestDatabase.make` skips the sync and keeps the rollback
+  // journal in memory. Every byte a law reads stays in the file and survives reopen (ticket 585,
+  // decision 0052).
+  const open = () =>
+    // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: the suites call storage() and reopen() as plain functions
+    Effect.runSync(Scope.provide(stores)(TestDatabase.make(path)));
 
   let db = open();
   let backend = nodeSql(db);

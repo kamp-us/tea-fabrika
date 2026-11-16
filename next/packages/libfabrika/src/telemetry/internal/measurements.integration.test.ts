@@ -22,9 +22,10 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -44,19 +45,8 @@ const folder = Effect.acquireRelease(
   (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
 );
 
-const openDb = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => new DatabaseSync(path)),
-    (db) =>
-      Effect.sync(() => {
-        if (db.isOpen) {
-          db.close();
-        }
-      }),
-  );
-
 const fresh = folder.pipe(
-  Effect.flatMap((path) => openDb(join(path, "object.db"))),
+  Effect.flatMap((path) => TestDatabase.make(join(path, "object.db"))),
   Effect.map((db) => ({ db, sql: nodeSql(db) })),
 );
 
@@ -214,8 +204,8 @@ describe("p101, measurements in two levels", () => {
     });
 
     await fc.assert(
-      fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) => {
-        return Effect.runPromise(
+      fc.asyncProperty(fc.array(one, { minLength: 1, maxLength: 40 }), (made) =>
+        Effect.runPromise(
           Effect.gen(function* () {
             const { sql } = yield* fresh;
             yield* Effect.gen(function* () {
@@ -254,8 +244,8 @@ describe("p101, measurements in two levels", () => {
               expect([...(yield* summaries)].sort(bySummary)).toEqual(rollup(spans));
             }).pipe(Effect.provide(world(sql)), Effect.provide(TestClock.layer()));
           }).pipe(Effect.scoped),
-        );
-      }),
+        ),
+      ),
       { seed: SEED, numRuns: runsFor({ fast: 3, full: 30 }) },
     );
   });

@@ -81,7 +81,7 @@ const Last = Schema.Struct({ link: Schema.String, handshake: Schema.String, rows
 type Last = typeof Last.Type;
 
 /** The suite's own failure: a wait that ran out, named by what it waited for, and what it last saw. */
-export class SuiteError extends Schema.TaggedError<SuiteError>()("SuiteError", {
+export class SuiteError extends Schema.TaggedError<SuiteError, { readonly brand: unique symbol }>()("SuiteError", {
   waited: Schema.String,
   last: Schema.optionalKey(Last),
 }) {}
@@ -215,7 +215,7 @@ export const headlessBackend = (dev: Dev, key: Identity) =>
       shown: Effect.map(state, (s) => {
         const pid = s.tiles[0]?.last;
         const view = pid ? s.client.views[pid]?.view : undefined;
-        const data = Option.getOrUndefined(Schema.decodeUnknownOption(checklistWindow.data)(view));
+        const data = Option.getOrUndefined(Schema.decodeOption(checklistWindow.data)(view));
 
         return (data?.items ?? []).map((i) => ({ name: i.name, checked: i.state === "checked" }));
       }),
@@ -264,7 +264,7 @@ const PROJECT = "p18-follow";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 /** One entry of a stream as the suite reads it: its tag, its place in the whole log and its body. */
-type Fact = typeof Entry.Type;
+type Fact = Entry;
 
 const field = (body: unknown, key: string): unknown => Reflect.get(Object(body), key);
 

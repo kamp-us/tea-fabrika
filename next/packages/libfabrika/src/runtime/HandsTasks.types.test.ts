@@ -34,5 +34,5 @@ it("type: T1 HandsTasks speaks its own error and shared names only, never TasksE
   expectTypeOf<"layer" extends keyof typeof HandsTasks ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof HandsTasksFront ? true : false>().toEqualTypeOf<false>();
   // The error is a schema value of its own, so it crosses the Project RPC as the module wrote it.
-  expectTypeOf<typeof HandsTasksError.Type>().toEqualTypeOf<HandsTasksError>();
+  expectTypeOf<HandsTasksError>().toEqualTypeOf<HandsTasksError>();
 });

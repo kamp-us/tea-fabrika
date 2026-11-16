@@ -9,7 +9,9 @@
 // drop `{{drives}}` or write a fixed name for `{{name}}` (red: K1's message did not match). Older
 // plants on the rule: drop the `:memory:` check (red: the memory cases fired); match the method
 // name without its import (red: the fake FileSystem's and the local `spawn`'s cases fired); skip
-// `.visual.` in NAMED (red: the visual files fired).
+// `.visual.` in NAMED (red: the visual files fired). Ticket 1029 adds the test database's `make` and
+// `open` from `@kampus/vitest/TestDatabase` to starters.ts; its plant, run once and restored: drop
+// that module's entry (red: K1's test database starters passed).
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -126,6 +128,11 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
     tag: "disk",
     build: one("node:sqlite", "DatabaseSync", "sqlite", (ref) => `const db = new ${ref}(join(home, "ledger.db"));`),
   },
+  // The test database's two openers on a file, as `new DatabaseSync(file)` (ticket 1029).
+  ...["make", "open"].map((name) => ({
+    tag: "disk" as const,
+    build: one("@kampus/vitest/TestDatabase", name, "TestDatabase", (ref) => `const db = yield* ${ref}(file);`),
+  })),
   ...[
     ["node:fs", "mkdtempSync"],
     ["node:fs", "mkdtemp"],
@@ -233,6 +240,12 @@ const STAND_INS = [
   "const fake = { makeTempDirectory: () => 0, spawnSync: () => 0 };\nfake.spawnSync();\nfake.makeTempDirectory();",
   // SQLite inside the process.
   'import { DatabaseSync } from "node:sqlite";\nconst db = new DatabaseSync(":memory:");',
+  // The test database on `:memory:`, the package root's `runsFor`, and look-alikes of its openers.
+  'import * as TestDatabase from "@kampus/vitest/TestDatabase";\nconst db = TestDatabase.make(":memory:");',
+  'import { runsFor } from "@kampus/vitest";\nconst runs = runsFor({ fast: 5, full: 50 });',
+  'import * as TestDatabase from "@kampus/vitest";\nTestDatabase.make(file);',
+  "const TestDatabase = { make: (_: string) => 0 };\nTestDatabase.make(file);",
+  'import { make } from "./TestDatabase.ts";\nmake(file);',
   // Rolldown bundles in memory: reading repo files in the process is plain (0584).
   'import { rolldown } from "rolldown";\nconst bundle = await rolldown({ input: "src/a.ts" });',
   // Reading a repository file is plain (0584).
@@ -271,12 +284,28 @@ it("K2: a stand-in never fires: a spy, a fake spawner or fake object, SQLite on 
   }
 });
 
+/**
+ * next/'s committed source files, for a scan of the real tree. Other tooling laws plant files in
+ * dot folders under next/ while this one runs, and oxlint walks those, so a scan of the folder read
+ * their fires as the tree's (full run 43799861377). Git's list holds only what is committed.
+ */
+const committed = () =>
+  spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+    .stdout.split("\0")
+    .filter((file) => /\.[cm]?[jt]sx?$/.test(file));
+
 /** The integration-test-name fires oxlint finds, by file from the repo's top, as lines. */
 const fires = (paths: readonly string[]) => {
   const out = spawnSync(join(root, "node_modules/.bin/oxlint"), ["--format=json", ...paths], {
     cwd: root,
     encoding: "utf8",
+    // Node's default cap is 1 MiB, and a cut report is not JSON: read all of it.
+    maxBuffer: Infinity,
   });
+
+  if (out.error !== undefined) {
+    throw out.error;
+  }
 
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{ code: string; filename: string; labels: Array<{ span: { line: number } }> }>;
@@ -315,5 +344,5 @@ it("scenario: next/'s tree is at zero, so the rule blocks from the start (0523)"
   // The real tree is the input. Measured on main before the renames (oxlint-plugins/README.md): 4
   // plain files fired, all 4 start git or write a temp folder, and each was renamed or given a
   // stand-in: 0 false alarms.
-  expect(Object.fromEntries(fires(["next"]))).toEqual({});
+  expect(Object.fromEntries(fires(committed()))).toEqual({});
 });

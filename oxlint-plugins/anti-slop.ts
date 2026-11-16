@@ -114,7 +114,7 @@ const Printed = Schema.fromJsonString(
 /** What the lock's oxlint run reports, as `--format=json` prints it. */
 const Report = Schema.fromJsonString(
   Schema.Struct({
-    number_of_files: Schema.Number,
+    number_of_files: Schema.Finite,
     diagnostics: Schema.Array(
       Schema.Struct({ code: Schema.optionalKey(Schema.String), filename: Schema.optionalKey(Schema.String) }),
     ),

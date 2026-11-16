@@ -114,7 +114,7 @@ export const RateCountFailure = Schema.Struct({
  * @category models
  */
 export const Wait = Schema.Struct({
-  id: Schema.Union([Schema.String, Schema.Number]),
+  id: Schema.Union([Schema.String, Schema.Finite]),
   stream: Schema.String,
   after: Schema.Int,
 });

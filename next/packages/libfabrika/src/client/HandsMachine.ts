@@ -183,7 +183,7 @@ const TakeReply = Schema.TaggedUnion({ idle: {}, assigned: { task: Task }, refus
 
 const Admitted = Schema.Struct({ identity: Schema.Struct({ key: Schema.String }) });
 
-const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Number });
+const WaitingCode = Schema.Struct({ code: Schema.String, until: Schema.Finite });
 
 const Nonce = Schema.Struct({ nonce: Schema.String });
 
@@ -205,7 +205,7 @@ const interrupted = Result.cases.unknown.make({ reason: "interrupted" });
 // --- The work ------------------------------------------------------------------------------------
 
 /** Names the next call on the online dial and writes it. Only an online link calls. */
-const calling = (s: HandsModel, method: string, params: typeof Schema.Json.Type) => {
+const calling = (s: HandsModel, method: string, params: Schema.Json) => {
   const dial = socketDial(s.link) ?? 0;
   const id = `j${dial}.${s.sent + 1}`;
 

@@ -104,15 +104,15 @@ export const KILL_GRACE_SECONDS = 2;
  */
 export const GC_SECONDS = 3 * DOCKER_SECONDS.call + DOCKER_SECONDS.prune + 4 * KILL_GRACE_SECONDS + 10;
 
-class Stuck extends Schema.TaggedError<Stuck>()("Stuck", {
+class Stuck extends Schema.TaggedError<Stuck, { readonly brand: unique symbol }>()("Stuck", {
   reason: Schema.String,
   detail: Schema.String,
 }) {}
 
 /** A command passed its time limit and was stopped; nothing it would have said was read. */
-export class CallTimeout extends Schema.TaggedError<CallTimeout>()("CallTimeout", {
+export class CallTimeout extends Schema.TaggedError<CallTimeout, { readonly brand: unique symbol }>()("CallTimeout", {
   command: Schema.String,
-  seconds: Schema.Number,
+  seconds: Schema.Finite,
 }) {}
 
 /** The one line a timed-out call leaves in a report. Pure. */
@@ -237,7 +237,7 @@ export const runArgs = (ask: {
   "/usr/local/bin/mutbox-entry",
 ];
 
-const Position = Schema.Struct({ line: Schema.Number, column: Schema.Number });
+const Position = Schema.Struct({ line: Schema.Finite, column: Schema.Finite });
 
 const mutantFields = {
   mutatorName: Schema.String,
@@ -253,14 +253,14 @@ const Report = Schema.Struct({
 const Tested = Schema.Struct({ ...mutantFields, fileName: Schema.String });
 
 const Sample = Schema.Struct({
-  seed: Schema.Number,
+  seed: Schema.Finite,
   ranges: Schema.Array(Schema.String),
-  total: Schema.Number,
-  selected: Schema.Number,
-  left: Schema.Number,
+  total: Schema.Finite,
+  selected: Schema.Finite,
+  left: Schema.Finite,
   /** Every changed file's mutants and how many were selected; a sampler from before ticket 655 has none. */
   files: Schema.optional(
-    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Number, selected: Schema.Number })),
+    Schema.Array(Schema.Struct({ file: Schema.String, total: Schema.Finite, selected: Schema.Finite })),
   ),
 });
 
@@ -309,10 +309,10 @@ const Manifest = Schema.Struct({
 /** One mutant's answer, as the report gives it to a reader. */
 const Row = Schema.Struct({
   file: Schema.String,
-  line: Schema.Number,
-  column: Schema.Number,
-  endLine: Schema.Number,
-  endColumn: Schema.Number,
+  line: Schema.Finite,
+  column: Schema.Finite,
+  endLine: Schema.Finite,
+  endColumn: Schema.Finite,
   mutator: Schema.String,
   replacement: Schema.String,
   status: Schema.String,
@@ -322,13 +322,13 @@ type Row = typeof Row.Type;
 
 const Arm = Schema.Struct({
   /** run.sh's exit code: 0, or 124 when its five minutes ran out. */
-  exit: Schema.Number,
+  exit: Schema.Finite,
   /** `report`: Stryker finished. `events`: the cap stopped it, and this is what it kept. */
   from: Schema.Literals(["report", "events", "nothing"]),
-  counts: Schema.Record(Schema.String, Schema.Number),
-  tested: Schema.Number,
+  counts: Schema.Record(Schema.String, Schema.Finite),
+  tested: Schema.Finite,
   /** Selected mutants the cap stopped before they were tested. */
-  unreached: Schema.Number,
+  unreached: Schema.Finite,
   survivors: Schema.Array(Row),
 });
 
@@ -346,14 +346,14 @@ const Summary = Schema.Struct({
   image: Schema.NullOr(Schema.String),
   network: Schema.Literal("none"),
   limits: Schema.Struct({
-    cpus: Schema.Number,
+    cpus: Schema.Finite,
     memory: Schema.String,
-    pids: Schema.Number,
-    seconds: Schema.Number,
+    pids: Schema.Finite,
+    seconds: Schema.Finite,
   }),
-  seconds: Schema.Number,
+  seconds: Schema.Finite,
   /** From the container's own cgroup: `memory.peak` and `cpu.stat`. */
-  usage: Schema.NullOr(Schema.Struct({ memoryPeakBytes: Schema.Number, cpuSeconds: Schema.Number })),
+  usage: Schema.NullOr(Schema.Struct({ memoryPeakBytes: Schema.Finite, cpuSeconds: Schema.Finite })),
   related: Schema.Array(Schema.String),
   /** Related tests left out before the run, each with why. They did not run. */
   excluded: Schema.Array(Named),
@@ -636,7 +636,7 @@ const sh = Effect.fnUntraced(
     return { out, err, code: Number(code) };
   },
   Effect.scoped,
-  Effect.catch(() => Effect.succeed({ out: "", err: "the command could not start", code: 127 })),
+  Effect.orElseSucceed(() => ({ out: "", err: "the command could not start", code: 127 })),
 );
 
 /**
@@ -664,13 +664,13 @@ const tail = (s: string) => s.trim().split("\n").slice(-3).join(" | ").slice(-40
 const alive = (pid: number) =>
   Effect.try({ try: () => process.kill(pid, 0), catch: () => "gone" }).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   );
 
 /** Whether a live process holds the lock; a lock whose owner is dead is removed. */
 const heldBy = Effect.fnUntraced(function* (lock: string) {
   const fs = yield* FileSystem.FileSystem;
-  const owner = Number(yield* fs.readFileString(lock).pipe(Effect.catch(() => Effect.succeed(""))));
+  const owner = Number(yield* fs.readFileString(lock).pipe(Effect.orElseSucceed(() => "")));
 
   if (Number.isInteger(owner) && owner > 0 && (yield* alive(owner))) {
     return owner;
@@ -744,11 +744,11 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
   const path = yield* Path.Path;
   const file = path.join(box, name);
 
-  if (!(yield* fs.exists(file).pipe(Effect.catch(() => Effect.succeed(false))))) {
+  if (!(yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false)))) {
     return null;
   }
 
-  const real = yield* fs.realPath(file).pipe(Effect.catch(() => Effect.succeed("")));
+  const real = yield* fs.realPath(file).pipe(Effect.orElseSucceed(() => ""));
 
   if (real !== file) {
     return yield* Stuck.make({
@@ -757,14 +757,14 @@ const readOut = Effect.fnUntraced(function* (box: string, name: string) {
     });
   }
 
-  return yield* fs.readFileString(file).pipe(Effect.catch(() => Effect.succeed(null)));
+  return yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => null));
 });
 
 /** Decode one output file; text that does not fit is `null`, and never quoted anywhere. */
 const decoded = <S extends Schema.Top>(schema: S, raw: string | null) =>
   raw === null
     ? Effect.succeed(null)
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.catch(() => Effect.succeed(null)));
+    : Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(Effect.orElseSucceed(() => null));
 
 const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selected: number) {
   const fs = yield* FileSystem.FileSystem;
@@ -785,7 +785,7 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
 
   const events = path.join(box, name, "events");
 
-  const names = (yield* fs.readDirectory(events).pipe(Effect.catch(() => Effect.succeed([])))).filter((n) =>
+  const names = (yield* fs.readDirectory(events).pipe(Effect.orElseSucceed(() => []))).filter((n) =>
     /^\d+-onMutantTested\.json$/.test(n),
   );
 
@@ -884,7 +884,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   yield* fs.makeDirectory(ask.out, { recursive: true }).pipe(Effect.ignore);
-  const out = yield* fs.realPath(ask.out).pipe(Effect.catch(() => Effect.succeed(ask.out)));
+  const out = yield* fs.realPath(ask.out).pipe(Effect.orElseSucceed(() => ask.out));
   const box = path.join(out, "box");
   const input = path.join(out, "in");
 

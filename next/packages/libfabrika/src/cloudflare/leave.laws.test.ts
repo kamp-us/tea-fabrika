@@ -31,7 +31,9 @@ vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject
 const SEED = 119120;
 
 /** A Promise the law awaited rejected: fast-check's failed assertion. */
-class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
+class Rejected extends Schema.TaggedError<Rejected, { readonly brand: unique symbol }>()("Rejected", {
+  cause: Schema.Defect(),
+}) {}
 
 const rejected = (cause: unknown) => new Rejected({ cause });
 

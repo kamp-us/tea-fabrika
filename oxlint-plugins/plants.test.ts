@@ -452,6 +452,9 @@ describe("each rule refuses what it is there to refuse", () => {
       // 0536's rule is on for next/'s test files only: integration-test-name.test.ts plants a plain
       // and a named file under next/ and runs oxlint over them with the real lint config.
       "integration-test-name",
+      // Ticket 1029's rule reads only next/'s test files, suites and test kits: test-database.test.ts
+      // plants generated lines at those paths, and at product and outside paths it must pass.
+      "test-database",
       // 0535's rule reads only next/'s test files: its scoped plant and its in-memory twin are below.
       "runs-from-depth",
     ];

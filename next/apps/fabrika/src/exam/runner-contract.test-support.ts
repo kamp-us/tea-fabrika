@@ -64,7 +64,7 @@ export const Msg = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("save"),
     body: Schema.String,
-    base: Schema.Number,
+    base: Schema.Finite,
     work: Schema.Boolean,
   }),
   // A person-only write port, so the runner's person-only refusal has a real port to guard.
@@ -121,7 +121,7 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
 
 export const person = "person_0000000000e008000000000001";
 
-export const process = Schema.decodeUnknownSync(Id.Process)("process_0000000000e008000000000001");
+export const process = Schema.decodeSync(Id.Process)("process_0000000000e008000000000001");
 
 export const writer = Writer.cases.agent.make({ key: "SHA256:exam-agent", for: person });
 
@@ -135,7 +135,7 @@ export const id = (prefix: "input" | "letter", n: number) =>
 export const incoming = (n: number, body: string, base = 0, work = false): Incoming => ({
   id: id("letter", n),
   envelope: {
-    id: Schema.decodeUnknownSync(Id.InputId)(id("input", n)),
+    id: Schema.decodeSync(Id.InputId)(id("input", n)),
     by: writer,
     arrivedAt: n,
     input: { type: "save", body, base, work },

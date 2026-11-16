@@ -17,12 +17,12 @@ export const LABEL = "ci-scheduled";
 const LIMIT = 100;
 
 const Listed = Schema.fromJsonString(
-  Schema.Array(Schema.Struct({ number: Schema.Number, title: Schema.String, createdAt: Schema.String })),
+  Schema.Array(Schema.Struct({ number: Schema.Finite, title: Schema.String, createdAt: Schema.String })),
 );
 
 /** `gh issue list --json`'s rows, as `Alert`s, oldest first. */
 export const alertsIn = (out: string): Effect.Effect<ReadonlyArray<Alert>, Schema.SchemaError> =>
-  Effect.map(Schema.decodeUnknownEffect(Listed)(out.trim() || "[]"), (rows) =>
+  Effect.map(Schema.decodeEffect(Listed)(out.trim() || "[]"), (rows) =>
     rows
       .map((r): Alert => ({ number: r.number, title: r.title, since: r.createdAt }))
       .toSorted((a, b) => a.number - b.number),
