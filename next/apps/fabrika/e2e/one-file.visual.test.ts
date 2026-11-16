@@ -251,7 +251,7 @@ const STOPS = ["SIGTERM", "SIGINT", "disconnect"] as const;
  *  against the fixture, this closes the scope first, as `NodeRuntime.runMain` does for a main. */
 const stopped = Effect.callback<never, Stopped>((resume) => {
   const stops = STOPS.map((reason) => {
-    const stop = () => resume(Effect.fail(new Stopped({ reason })));
+    const stop = () => resume(Effect.fail(Stopped.make({ reason })));
     process.once(reason, stop);
     return () => process.off(reason, stop);
   });
@@ -304,7 +304,7 @@ const owned = <A, E, R>(
       fault?.at !== at
         ? Effect.void
         : fault.kind === "setup"
-          ? Effect.fail(new SetupFault({ at }))
+          ? Effect.fail(SetupFault.make({ at }))
           : fault.kind === "hold"
             ? note({ holding: at }).pipe(Effect.andThen(Effect.never))
             : Effect.void,

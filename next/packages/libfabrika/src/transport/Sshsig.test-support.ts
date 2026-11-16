@@ -3,7 +3,8 @@
 // real `ssh-keygen` and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";
@@ -122,7 +123,7 @@ export type Key = {
 // it was under `Effect.promise`: no law expects WebCrypto to fail.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
 
-const fail = (cause: unknown) => new CryptoFailed({ cause });
+const fail = (cause: unknown) => CryptoFailed.make({ cause });
 
 export const freshKey = (comment?: string): Effect.Effect<Key> =>
   Effect.gen(function* () {

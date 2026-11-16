@@ -1,7 +1,5 @@
 /**
  * The `MailDelivery` layer over program mail and wakeups.
- *
- * @stability unstable
  */
 import { Effect, Layer } from "effect";
 import { ProgramMail } from "../processes/ProgramMail.ts";
@@ -21,7 +19,6 @@ import { Queued } from "./Send.ts";
  * A `full` inbox wakes its recipient before the Send fails: a reader whose ack was lost reads
  * again and acks, so its writer is never left waiting on an inbox that is already read.
  *
- * @stability unstable
  * @category layers
  */
 export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> = Layer.effect(

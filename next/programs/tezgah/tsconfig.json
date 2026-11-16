@@ -1,4 +1,14 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // A program imports Effect from the barrel, `import { Effect } from "effect"` (0577).
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "barrelImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferBarrelImport": "error" }
+      }
+    ]
+  },
   "include": ["src"]
 }

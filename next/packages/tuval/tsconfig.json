@@ -4,7 +4,15 @@
     // The window is React in a browser tab; its machines and their laws also run on Node.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "types": ["node"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    // A library imports each Effect module by its path (0577). All of tuval is at zero.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "namespaceImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferNamespaceImport": "error" }
+      }
+    ]
   },
   "include": ["src"]
 }

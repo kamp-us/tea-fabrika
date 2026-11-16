@@ -184,7 +184,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
     fc.assert(
       fc.property(fc.integer({ min: 1, max: 60 }), word, (minutes, reason) => {
         expect(slotSchedule(minutes)).toBeDefined();
-        const e = new RetriesExhausted({
+        const e = RetriesExhausted.make({
           schedule: `slotSchedule(${minutes} minutes)`,
           times: 7,
           reason,
