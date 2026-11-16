@@ -7,7 +7,7 @@
 // does not run. `Recorder.calls(Service)` reads every record, and `Recorder.calls(Service, m)` reads
 // one method's argument lists. Each build of the layer starts with no calls.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Fiber, Layer, Schema, Sink, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Match, Predicate, Schema, Sink, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as Recorder from "./Recorder.ts";
 import { Full, Shelf, ShelfId } from "./Shelf.test-support.ts";
@@ -88,29 +88,29 @@ const ordered = (m: typeof Moves.Type): ReadonlyArray<Move> =>
 /** The coverage every case must reach, or the law fails loudly rather than pass on less. */
 const covered = (moves: ReadonlyArray<Move>) => {
   expect(new Set(moves.map((m) => m._tag))).toEqual(new Set(["put", "count", "size", "watch"]));
-  expect(moves.filter((m) => m._tag === "put").length).toBeGreaterThanOrEqual(3);
-  expect(moves.some((m) => m._tag === "put" && m.count < 0)).toBe(true);
+  expect(moves.filter((m) => Predicate.isTagged(m, "put")).length).toBeGreaterThanOrEqual(3);
+  expect(moves.some((m) => Predicate.isTagged(m, "put") && m.count < 0)).toBe(true);
 };
 
 /** Runs one move on a shelf, to its end, and keeps how it ended. */
 const run = (s: Service, m: Move): Effect.Effect<Exit.Exit<unknown, Full>> =>
-  m._tag === "put"
-    ? Effect.exit(s.put(m.name, m.count))
-    : m._tag === "count"
-      ? Effect.exit(s.count(m.name))
-      : m._tag === "size"
-        ? Effect.exit(s.size)
-        : Effect.exit(Stream.runCollect(s.watch(m.name)));
+  Match.valueTags(m, {
+    put: (put) => Effect.exit(s.put(put.name, put.count)),
+    count: (count) => Effect.exit(s.count(count.name)),
+    size: () => Effect.exit(s.size),
+    watch: (watch) => Effect.exit(Stream.runCollect(s.watch(watch.name))),
+  });
 
 /** The record a move must leave: its method and exactly its args, `[]` for the Effect member. */
-const recorded = (m: Move): Recorder.Call<Service> =>
-  m._tag === "put"
-    ? { method: "put", args: [m.name, m.count] }
-    : m._tag === "count"
-      ? { method: "count", args: [m.name] }
-      : m._tag === "size"
-        ? { method: "size", args: [] }
-        : { method: "watch", args: [m.name] };
+const recorded: (m: Move) => Recorder.Call<Service> = Match.type<Move>().pipe(
+  Match.withReturnType<Recorder.Call<Service>>(),
+  Match.tagsExhaustive({
+    put: (put) => ({ method: "put", args: [put.name, put.count] }),
+    count: (count) => ({ method: "count", args: [count.name] }),
+    size: () => ({ method: "size", args: [] }),
+    watch: (watch) => ({ method: "watch", args: [watch.name] }),
+  }),
+);
 
 /** What a run answered, as plain data a law can compare: the value, the error, or the defect. */
 const answer = (exit: Exit.Exit<unknown, Full>) =>
@@ -155,7 +155,8 @@ describe("Recorder.layer records each run of a watched member (0579)", () => {
     ({ moves, failing }) => {
       const ran: Array<string> = [];
       const plain = shelf([]);
-      const failed = (m: Move): Failing | null => (m._tag !== "count" && failing.includes(m._tag) ? m._tag : null);
+      const failed = (m: Move): Failing | null =>
+        !Predicate.isTagged(m, "count") && failing.includes(m._tag) ? m._tag : null;
       return Effect.gen(function* () {
         const list = ordered(moves);
         covered(list);

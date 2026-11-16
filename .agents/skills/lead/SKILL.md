@@ -551,13 +551,14 @@ visible, and never weaken the rules to hide this message.
    in the background: it merges main in, signs, pushes and opens or updates the PR, then queues it.
    For any other pull request, run `land.ts queue <pr>` once its checks
    are green. Both leak-check the change, each commit and the title and description, then add it to
-   the queue with one squash pinned to the head; `land.ts`'s header says how.
+   the queue with one squash pinned to the head; `land.ts`'s header says how. `land.ts merge <pr>`
+   is the only way to merge by hand; a bare `gh pr merge` is never used, since it skips the leak
+   check (it once merged past a printed hit).
    GitHub then tests the pull request on newest main and merges it. Nobody merges main in to catch
    up, and nobody runs the checks again on newest main by hand. The squash commit's title and
    message are the pull request's title and description, so write them to be read on main. Never
-   pass `--admin`, and never run a plain `gh pr merge` or pass `--auto` on a head whose `ci-required`
-   is not green: with a queue on, that arms auto-merge by side effect, so use `land.ts arm` on
-   purpose instead. Two exceptions take `--admin`: a sev0 fix
+   pass `--auto`. Two exceptions take `land.ts merge <pr> --admin`, which refuses any other: a sev0
+   fix on a branch the open sev0 allows
    ([0532](../../../.decisions/0532-a-sev0-freezes-ci.md), the [sev skill](../sev/SKILL.md)) and a
    docs-only pull request ([0183](../../../.decisions/0183-the-lead-admin-merges-docs-only.md)).
    A pull request the queue puts back out stays open: the
