@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-law-options-0580-tests2",
+  "ticket": "580",
+  "pr": "kamp-us/tea-fabrika#1497",
+  "started": "2026-11-15T23:16:54-08:00",
+  "ended": "2026-11-15T23:26:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second tests round for slice 1 of docs/plan/quests/law-options-0580-PLAN.md, next/ and tooling, sent back by the build for two tests-owned items. (1) next/packages/vitest/src/Law.integration.test.ts:32 passed Schema.Defect, which in the installed effect 4.1.3 is a function (node_modules/effect/src/Schema.ts:9433, Defect(options?)), so the package's typecheck gave TS2769 and TS2741. It now calls Schema.Defect(), as the neighbors do. The line is a helper class outside every law body; no law's claim, title or plant changed. (2) The build moved @effect/vitest, fast-check and vitest to dependencies in next/packages/vitest/package.json; a plain pnpm install rewrote pnpm-lock.yaml with only that move under importers next/packages/vitest (9 lines added, 9 removed), and pnpm install --frozen-lockfile then passed. The whole pnpm typecheck then found a third tests-owned item: .github/ci/plant-check.ts:386 (written in this quest's first tests commit, a96d4d2) returned the raw cause from Effect.try's catch, which the unknownInEffectCatch check refuses. The cause is now wrapped in a tagged error, as .github/ci/time-table.ts:204 does; an unreadable history still exits 2.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "No law was added or changed, so no plant ran. Ran: the package typecheck of next/packages/vitest (exit 0; effect-tsgo diagnostics show 4 advice-level messages and no error), vitest on next/packages/vitest/src/Law.integration.test.ts (3 passed) and .github/ci/plant-check.test.ts (5 passed), plant-check.ts once with an unreadable BASE (exit 2), pnpm format, pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (17 parts passed), the list ratchet (exit 0), and one pnpm typecheck: the first run failed on plant-check.ts:386, and after the fix it passed in all 30 projects.",
+  "step": "tests"
+}

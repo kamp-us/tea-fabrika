@@ -29,7 +29,7 @@ const verdicts = (files: ReadonlyArray<RunnerTestFile>): ReadonlyMap<string, Ver
 
 /** Runs the fixture's laws for one case in a vitest of its own, and answers each law's verdict by title. */
 /** A nested run that could not start or finish: the run itself broke, not a law in it. */
-class NestedRun extends Schema.TaggedError<NestedRun>()("NestedRun", { cause: Schema.Defect }) {}
+class NestedRun extends Schema.TaggedError<NestedRun>()("NestedRun", { cause: Schema.Defect() }) {}
 
 const nested = (lawCase: LawCase) =>
   Effect.acquireUseRelease(

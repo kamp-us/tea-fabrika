@@ -379,13 +379,16 @@ export const readInputs = (base: string, head: string, event: string, run: Runne
   };
 };
 
+/** Git history or a row that could not be read: the check did not finish, which is not a pass. */
+class Unread extends Schema.TaggedError<Unread>()("Unread", { cause: Schema.Defect() }) {}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A history that cannot be read stops the check with exit 2, never an empty pass.
   const ran = Effect.runSync(
     Effect.exit(
       Effect.try({
         try: () => readInputs(process.env["BASE"] ?? "", process.env["HEAD"] ?? "", process.env["EVENT"] ?? ""),
-        catch: (cause) => cause,
+        catch: (cause) => new Unread({ cause }),
       }),
     ),
   );
