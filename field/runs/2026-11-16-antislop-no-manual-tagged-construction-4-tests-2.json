@@ -1,0 +1,22 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-4-tests-2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T01:17:28-08:00",
+  "ended": "2026-11-16T01:23:20-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Small tests-step follow-up of anti-slop judgment slice AS-no-manual-tagged-construction-4 (ticket 1057), on branch fabrikalfa/antislop-no-manual-tagged-construction-4 from the build's head 44d8fff19. The build removed the hand-written RetriesExhausted tag in .agents/skills/lead/scripts/chain.ts, which left one stale agents-ledger.json entry; agents-ledger.json is an exam path, so the build could not commit it. This step pruned it the repo's way: node oxlint-plugins/lint.ts, the lint part that rewrites the ledgers, said 'agents-ledger.json: pruned 1 fixed entries; commit the file'. The diff is exactly that one entry (file .agents/skills/lead/scripts/chain.ts, rule fabrika(no-hand-tag), code '_tag: \"RetriesExhausted\" as const,'), 5 lines removed and nothing else; a pnpm format run after it left the diff the same. The ledger only shrinks; nothing was added. No law written or changed, no product file touched, no .oxlintrc.json line and no lock line.",
+  "laws": [],
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "No test file changed, so no vitest ran. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) passes 17 of its 18 parts and no longer asks for the ledger commit; the red part is oxlint-plugins/lint.ts, which only asks that five folders now at zero (.agents, next/packages/libfabrika/src/processes, schedules and transport, next/programs/inbox) join the rule's block in .oxlintrc.json, the later lock pull request's job. The list ratchet (next/apps/fabrika/src/exam/ratchet.ts --base 5c94f12f4) exits 0 and reads agents-ledger.json as done.",
+  "step": "tests"
+}

@@ -47,11 +47,6 @@
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-hand-tag)",
-			"code": "_tag: \"RetriesExhausted\" as const,"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { join } from \"node:path\";"
 		},
