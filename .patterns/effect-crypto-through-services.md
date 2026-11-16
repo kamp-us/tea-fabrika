@@ -18,7 +18,7 @@ flowchart LR
 ```
 
 ```ts
-// next/packages/libfabrika/src/settings/Snapshot.ts:9 and :50-51
+// next/packages/libfabrika/src/settings/Snapshot.ts:9 and :56-58
 import { Digest } from "effect/crypto";
 
   const digest = yield* Digest.Digest;
@@ -64,18 +64,18 @@ release. We use them anyway, and a bump re-reads them.
 Rules:
 
 - **Ask for the service; let the edge provide it.** `Snapshot.make` yields `Digest.Digest`
-  (`Snapshot.ts:50`), so its type says it needs one, and `cli.ts:16` and `dev.ts:111` provide
+  (`Snapshot.ts:56`), so its type says it needs one, and `cli.ts:16` and `dev.ts:120` and `:128` provide
   `Digest.layerWebCrypto`.
 - **A hash whose failure must stay typed reads `crypto.subtle` through the `WebCrypto` reference,
   not `Digest`.** `Digest` would turn a rejection into a defect. `Archive.ts:36-44` (`sha256`, a
-  `SinkError` `storage`) and `Gateway.ts:2111-2135` (`fingerprint` and `hash`, a `LedgerError`
+  `SinkError` `storage`) and `Gateway.ts:2254-2280` (`fingerprint` and `hash`, a `LedgerError`
   `crypto`) yield `WebCrypto.WebCrypto` and hash under one `Effect.tryPromise` whose `catch` makes
   the typed error, its `fabrika/no-promises` edge comment directly above. A reference needs no
   provide, so the callers do not change. A law hands in a stand-in with `WebCrypto.layer`
-  (`next/packages/libfabrika/src/crypto.test-support.ts:29` and `:59`, read at
-  `telemetry/ErrorCause.test.ts:40-41`).
-- **Random bytes and ids come from `SecureRandom`.** `grant.ts:69` makes a grant id with
-  `SecureRandom.SecureRandom.use((random) => random.uuidV4())`, and `grant.ts:132` provides
+  (`next/packages/libfabrika/src/crypto.test-support.ts:31` and `:68`, read at
+  `telemetry/ErrorCause.test.ts:41-42`).
+- **Random bytes and ids come from `SecureRandom`.** `grant.ts:76` makes a grant id with
+  `SecureRandom.SecureRandom.use((random) => random.uuidV4())`, and `grant.ts:136` provides
   `SecureRandom.layerWebCrypto`. `Id.makeGenerator` (`next/packages/libfabrika/src/Id.ts:205-211`)
   yields `SecureRandom.SecureRandom` and draws its 10 bytes with `randomBytes(10)`, and a law
   provides `SecureRandom.make(fill)` with the bytes it wants (`Id.test-support.ts`, `generatorWith`).
@@ -102,9 +102,9 @@ field that counts up, so every id's bits and the `exhausted` edge would change (
 
 - `next/packages/libfabrika/src/runtime/Built.ts:30-31` uses `Digest` but provides
   `Digest.layerWebCrypto` inside `hash` itself, so its callers cannot pick the layer.
-- `next/packages/libfabrika/src/gateway/Gateway.ts:732` and `:2109` call the global
+- `next/packages/libfabrika/src/gateway/Gateway.ts:786` and `:2252` call the global
   `crypto.getRandomValues`.
-- `next/packages/libfabrika/src/gateway/GatewayNonce.ts:37`, `:61`, `:68`, `:71` and `:98` make a
+- `next/packages/libfabrika/src/gateway/GatewayNonce.ts:37`, `:65`, `:74`, `:77` and `:108` make a
   key and salt with `crypto.getRandomValues`, and import an HMAC key, sign and verify with
   `crypto.subtle`. The stateless nonce itself stays (a SYN cookie); only the calls move to `Mac` and
   `SecureRandom`.
@@ -129,8 +129,8 @@ test, so a law patches the global with `vi.spyOn`. The opposite mistake is to mo
   `eslint/no-restricted-properties`, with one `vi` entry per member, refuses a call chained onto the
   `vi` call, such as `vi.fn().mockReturnValue(1)`, which the vitest rule misses
   ([oxc#29656](https://github.com/oxc-project/oxc/issues/29656)). Their plants are `VI_METHODS` and
-  `VI_PROPERTIES` in `oxlint-plugins/builtin-plants.ts:87` and `:107`, run by
-  `oxlint-plugins/plants.test.ts:680`.
+  `VI_PROPERTIES` in `oxlint-plugins/builtin-plants.ts:97` and `:149`, run by
+  `oxlint-plugins/plants.test.ts:784`.
 - The laws that pass only through the reference: `telemetry/ErrorCause.test.ts` C1 (the rejected
   digest is `storage`, and the stand-in saw exactly the body) and the three paused-hash laws of
   `gateway/GatewayRevocation.integration.test.ts`.
