@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1057-safety4-review1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:16:30-08:00",
+  "ended": "2026-11-15T22:24:30-08:00",
+  "parent": "2026-11-15-t1057-safety4-build1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of anti-slop judgment slice AS-require-safety-comment-4 at fa34c4bd0, in next/, branch fabrikalfa/antislop-require-safety-comment-4, no pull request (one per sweep): merge-ready, no finding rows. The rule anti-slop/require-safety-comment-for-type-assertion with its SAFETY marker, run from vendor/anti-slop through a scratch config outside the repo over the slice's 11 folders, gives 73 hits on bcad0080d and 1 on fa34c4bd0: next/packages/libfabrika/src/settings/StartsTest.ts:100, a file of PR 1366, untouched. No file of PR 1366's 67 is in the diff. 18 casts are kept, each with a SAFETY comment, and each was read against the code it names and is true: tea's template-string reply Msgs (BrainLife.ts responses gives a _ok and _err case per Command; BrainControl and BrainProbe give inspect a Status, ready Readiness, cleanup Children, the rest void), ScheduledJob's okType and errType keys, IndexedDB's complete event after the read handler in tuval browser/key.ts, an empty CryptoKey that the verify spy replaces before WebCrypto is reached, fromJsonSchemaDocument building only service-free schemas and checks (effect 4.1.3 internal/schema/fromJsonSchemaDocument.ts), the RecordCalls Proxy, measurements.ts writing JSON.stringify lines and Sink.ts land storing encodeRow of a SpanRow, ProcessName refusing a client: lead, the seven one-dot pipeline setting paths, two deliberate top-level stray keys, and toWellFormed on Node 26. The other 54 casts went by annotation, satisfies, a decode with the library's own schema, Predicate guards, an explicit type argument or constantFrom; no assertion was dropped or narrowed (loosening.sh's four removed-expect hits are rewritten expects of the same strength, Mail.test.ts adds one), no comment was lost (the two old plain comments became SAFETY lines), no disable line, no Reflect, no .oxlintrc.json, tsconfig or lock change.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row. Ran at fa34c4bd0, one file at a time under nice -n 19 --maxWorkers=1, all green: access/Passkey, desktop/BrainLife.laws and BrainServiceManaged.laws, node/ErrorCause (runs ledger/LedgerCauseTest), ledger/LedgerTurnReads (runs LedgerTurnEndTest) and LedgerStreams.types, schedules/ScheduledJob, settings Files, JsonSchema, Mail, Print, Reference, Setting, Snapshot, tezgah Fold.laws and Layout.laws, transport Connection, ErrorCause and Handshake.laws, tuval window/Layout.laws, counter window.types, pipeline Merger.laws, Settings and handlers. One pnpm typecheck: exit 0. pnpm lint: only the ten lines asking to add access, desktop, ledger, schedules, telemetry, tezgah, transport, tuval, programs/counter and programs/pipeline to the rule's block, held for the lock PR. Not run: telemetry/Records.integration.test.ts (0178 guard refused it), measurements.integration and LedgerTurnReads.integration, whose changes are types and comments only and were judged by reading; tuval browser/key.laws.visual. Plants by reading, not committed: a reason of bad_row or a stringified cause in ledgerStore turns LedgerCauseTest C2 red through its Predicate reads; a mail chunk read as a plain number turns Mail.test's new isByteSize expect red; an extra key or a non-object error turns handlers.test L12 red. git merge-tree with origin/main 623e161f7: no conflict, and main's four new commits touch none of the slice's folders.",
+  "step": "review"
+}
