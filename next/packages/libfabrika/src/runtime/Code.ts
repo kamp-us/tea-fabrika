@@ -112,6 +112,7 @@ export const code = Machine.make({
     Schema.Struct({ type: Schema.Literal("loaded"), id: Schema.String, program: ProgramName, hash: Hash }),
   ]),
   cmds: [append, swap],
+  // SAFETY: `types` only carries the empty ctx type; tea never reads this value at run time.
   types: { ctx: {} as Record<string, never> },
   init: (saved) => [saved ?? {}, []],
   update: {

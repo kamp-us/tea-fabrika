@@ -555,6 +555,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         }
 
         if (Object.hasOwn(members, method)) {
+          // SAFETY: Object.hasOwn just found `method` among members' own keys.
           return members[method as keyof Members];
         }
 

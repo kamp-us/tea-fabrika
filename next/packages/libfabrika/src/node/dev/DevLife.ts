@@ -257,6 +257,7 @@ export const devLife = Machine.make({
   model: DevState,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` only carries the Ctx type; tea never reads this value at run time.
   types: { ctx: {} as Ctx },
   init: (_saved, ctx) => [DevState.cases.starting.make({ last: ctx.last }), []],
   update: {
