@@ -61,7 +61,10 @@ export type Rig = {
 const SEED = 119120;
 
 /** fast-check's assertion rejected: a walk failed, and its counterexample is the cause. */
-class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", { cause: Schema.Defect() }) {}
+class PropertyFailure extends Schema.TaggedError<PropertyFailure, { readonly brand: unique symbol }>()(
+  "PropertyFailure",
+  { cause: Schema.Defect() },
+) {}
 
 const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
 /** P40: the counter's qualified name; its registered names stay `counter:N`. */

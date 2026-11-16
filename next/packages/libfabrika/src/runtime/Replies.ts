@@ -20,13 +20,16 @@ export type Reply = typeof ReplySchema.Type;
  *
  * @category errors
  */
-export class RepliesError extends Schema.TaggedError<RepliesError>()("RepliesError", {
-  /** `storage`: SQLite threw, or the store is full. `bad_row`: a stored reply does not decode or
-   *  disagrees with its key. */
-  reason: Schema.Literals(["storage", "bad_row"]),
-  /** For a bad row, only the paths that failed: a decoder's own message may quote input text. */
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class RepliesError extends Schema.TaggedError<RepliesError, { readonly brand: unique symbol }>()(
+  "RepliesError",
+  {
+    /** `storage`: SQLite threw, or the store is full. `bad_row`: a stored reply does not decode or
+     *  disagrees with its key. */
+    reason: Schema.Literals(["storage", "bad_row"]),
+    /** For a bad row, only the paths that failed: a decoder's own message may quote input text. */
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that keeps a program's refusal of a letter, so the same letter gets the same answer

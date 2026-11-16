@@ -10,11 +10,14 @@ import type { Effect } from "effect";
  *
  * @category errors
  */
-export class MailWakeupsError extends Schema.TaggedError<MailWakeupsError>()("MailWakeupsError", {
-  /** `unavailable`: the schedule was not saved. The same wake may be asked again. */
-  reason: Schema.Literal("unavailable"),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class MailWakeupsError extends Schema.TaggedError<MailWakeupsError, { readonly brand: unique symbol }>()(
+  "MailWakeupsError",
+  {
+    /** `unavailable`: the schedule was not saved. The same wake may be asked again. */
+    reason: Schema.Literal("unavailable"),
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that schedules a name's runner to read its inbox.

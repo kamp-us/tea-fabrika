@@ -139,7 +139,9 @@ const requesterCode = built("requester");
 const responderCode = built("responder");
 
 /** A call on a Durable Object stub rejected. */
-class StubFailure extends Schema.TaggedError<StubFailure>()("StubFailure", { cause: Schema.Defect() }) {}
+class StubFailure extends Schema.TaggedError<StubFailure, { readonly brand: unique symbol }>()("StubFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-08T04:00:00.000Z";

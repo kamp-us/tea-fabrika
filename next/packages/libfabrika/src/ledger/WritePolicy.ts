@@ -14,7 +14,10 @@ import type { Entry } from "./Log.ts";
  *
  * @category errors
  */
-export class QuotaRefused extends Schema.TaggedError<QuotaRefused>()("QuotaRefused", {}) {}
+export class QuotaRefused extends Schema.TaggedError<QuotaRefused, { readonly brand: unique symbol }>()(
+  "QuotaRefused",
+  {},
+) {}
 
 /**
  * Schema for who trusted code says a write is for: `runtime`, a process's runtime writing its own

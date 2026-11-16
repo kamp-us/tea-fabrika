@@ -15,7 +15,7 @@ import type { Line } from "../ledger/Log.ts";
  *
  * @category errors
  */
-export class Exceeded extends Schema.TaggedError<Exceeded>()("Exceeded", {
+export class Exceeded extends Schema.TaggedError<Exceeded, { readonly brand: unique symbol }>()("Exceeded", {
   resource: Schema.Literals(["writes", "storage"]),
   used: Schema.Finite,
   limit: Schema.Finite,
@@ -29,17 +29,17 @@ export class Exceeded extends Schema.TaggedError<Exceeded>()("Exceeded", {
  *
  * @category errors
  */
-export class RecoveryReserveExhausted extends Schema.TaggedError<RecoveryReserveExhausted>()(
-  "RecoveryReserveExhausted",
-  {
-    resource: Schema.Literals(["writes", "storage"]),
-    location: Schema.Literals(["project", "process"]),
-    process: Schema.String,
-    required: Schema.Finite,
-    remaining: Schema.Finite,
-    cause: Schema.Defect(),
-  },
-) {}
+export class RecoveryReserveExhausted extends Schema.TaggedError<
+  RecoveryReserveExhausted,
+  { readonly brand: unique symbol }
+>()("RecoveryReserveExhausted", {
+  resource: Schema.Literals(["writes", "storage"]),
+  location: Schema.Literals(["project", "process"]),
+  process: Schema.String,
+  required: Schema.Finite,
+  remaining: Schema.Finite,
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a store failure while accounting rows were read or written, with that failure as its
@@ -47,14 +47,18 @@ export class RecoveryReserveExhausted extends Schema.TaggedError<RecoveryReserve
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a committed entry whose owning program accounting could not resolve.
  *
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error the accounting calls fail with. Its `reason` is one of `Exceeded`,
@@ -62,7 +66,7 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  *
  * @category errors
  */
-export class QuotasError extends Schema.TaggedError<QuotasError>()("QuotasError", {
+export class QuotasError extends Schema.TaggedError<QuotasError, { readonly brand: unique symbol }>()("QuotasError", {
   reason: Schema.Union([Exceeded, RecoveryReserveExhausted, Storage, BadRow]),
 }) {}
 

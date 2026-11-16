@@ -118,7 +118,7 @@ describe("S3 saved state and named upgrades", () => {
   });
   it("plant, omit a save field: version, build and inbox cursor survive JSON text", async () => {
     const { Saved } = await import("./State.ts");
-    const current = { v: 3, model: { count: 7, step: 1 }, build: "b-123", after: 29 };
+    const current = Saved.make({ v: 3, model: { count: 7, step: 1 }, build: "b-123", after: 29 });
     const text = Schema.encodeSync(Schema.fromJsonString(Saved))(current);
     expect(Schema.decodeUnknownSync(Schema.fromJsonString(Saved))(text)).toEqual(current);
 

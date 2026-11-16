@@ -61,12 +61,15 @@ export const Watched = Schema.TaggedStruct("monitored", { ref: Text, process: Pr
  *
  * @category errors
  */
-export class MonitorsError extends Schema.TaggedError<MonitorsError>()("MonitorsError", {
-  /** A refusal, which writes nothing, or `storage`: the ledger failed, and the watch may be asked again. */
-  reason: Schema.Literals(["bad_name", "stale_sender", "forbidden", "no_name", "storage"]),
-  /** Only `storage` carries one, for the library caller; nothing renders it into an output. */
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class MonitorsError extends Schema.TaggedError<MonitorsError, { readonly brand: unique symbol }>()(
+  "MonitorsError",
+  {
+    /** A refusal, which writes nothing, or `storage`: the ledger failed, and the watch may be asked again. */
+    reason: Schema.Literals(["bad_name", "stale_sender", "forbidden", "no_name", "storage"]),
+    /** Only `storage` carries one, for the library caller; nothing renders it into an output. */
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that watches a process by its registered name for a program, and ends that watch.

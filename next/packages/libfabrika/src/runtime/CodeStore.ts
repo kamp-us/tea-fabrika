@@ -11,23 +11,30 @@ import type { BuiltProgram } from "./Built.ts";
  *
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a stored code row that does not decode, or whose source does not hash to its hash.
  *
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for stored code that could not be read or written.
  *
  * @category errors
  */
-export class CodeStoreError extends Schema.TaggedError<CodeStoreError>()("CodeStoreError", {
-  reason: Schema.Union([Storage, BadRow]),
-}) {}
+export class CodeStoreError extends Schema.TaggedError<CodeStoreError, { readonly brand: unique symbol }>()(
+  "CodeStoreError",
+  {
+    reason: Schema.Union([Storage, BadRow]),
+  },
+) {}
 
 /**
  * Service for program code stored by hash.

@@ -75,7 +75,7 @@ const Frame = Schema.Struct({
   error: Schema.optionalKey(Schema.Json),
 });
 type Frame = typeof Frame.Type;
-class Closed extends Schema.TaggedError<Closed>()("Closed", { code: Schema.Int }) {}
+class Closed extends Schema.TaggedError<Closed, { readonly brand: unique symbol }>()("Closed", { code: Schema.Int }) {}
 
 const socket = Effect.fnUntraced(function* (
   url: string,

@@ -233,7 +233,7 @@ const add = (instance: any, key: typeof TestKey.Type, pid: string, letter: strin
     Effect.map((answer) => answer.result.view.items.map((item) => item.name)),
   );
 
-class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
+class InstanceError extends Schema.TaggedError<InstanceError, { readonly brand: unique symbol }>()("InstanceError", {
   method: Schema.String,
   cause: Schema.Defect(),
 }) {}

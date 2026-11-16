@@ -46,11 +46,14 @@ export const Reply = Schema.TaggedUnion({
  *
  * @category errors
  */
-export class HandsTasksError extends Schema.TaggedError<HandsTasksError>()("HandsTasksError", {
-  /** `storage`: a task read or write failed. `unavailable`: the call did not come back. */
-  reason: Schema.Literals(["storage", "unavailable"]),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class HandsTasksError extends Schema.TaggedError<HandsTasksError, { readonly brand: unique symbol }>()(
+  "HandsTasksError",
+  {
+    /** `storage`: a task read or write failed. `unavailable`: the call did not come back. */
+    reason: Schema.Literals(["storage", "unavailable"]),
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that keeps one hands Cmd's task: `ask` saves its request, or reads it back, and collects

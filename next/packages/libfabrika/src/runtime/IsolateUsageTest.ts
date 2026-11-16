@@ -85,7 +85,9 @@ const DeliveryCell = fc.record({
 type DeliveryCell = typeof DeliveryCell extends fc.Arbitrary<infer A> ? A : never;
 const DeliveryTape = fc.array(DeliveryCell, { minLength: 1, maxLength: 24 });
 
-class DeliveryError extends Schema.TaggedError<DeliveryError>()("DeliveryError", { message: Schema.String }) {}
+class DeliveryError extends Schema.TaggedError<DeliveryError, { readonly brand: unique symbol }>()("DeliveryError", {
+  message: Schema.String,
+}) {}
 
 const sample = (process: string, cpuMs: number): typeof IsolateUsage.Usage.Type => ({
   process,

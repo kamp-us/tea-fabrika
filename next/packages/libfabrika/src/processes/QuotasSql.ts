@@ -516,7 +516,10 @@ const Fault = Schema.Struct({ ...Pending.fields, fault: RecoveryReserveExhausted
 const faultEncode = Schema.encodeSync(Schema.fromJsonString(Fault));
 const faultDecode = Schema.decodeUnknownSync(Schema.fromJsonString(Fault));
 
-class Stopped extends Schema.TaggedError<Stopped>()("Stopped", { pending: Pending, fault: RecoveryReserveExhausted }) {}
+class Stopped extends Schema.TaggedError<Stopped, { readonly brand: unique symbol }>()("Stopped", {
+  pending: Pending,
+  fault: RecoveryReserveExhausted,
+}) {}
 
 /**
  * Creates the accounting port for one name's own store. It keeps the name's local account, its

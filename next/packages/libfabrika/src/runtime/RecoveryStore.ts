@@ -16,7 +16,9 @@ import { changes, JournalState, Receipt, Work } from "./internal/recovery.ts";
  * @stability unstable
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a saved journal or receipt that does not decode, or that is stored under another
@@ -25,7 +27,9 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * @stability unstable
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Reason for a save the process's account refused: the charge did not fit, such as the brain's
@@ -35,7 +39,9 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  * @stability unstable
  * @category errors
  */
-export class Quota extends Schema.TaggedError<Quota>()("Quota", { cause: QuotasError }) {}
+export class Quota extends Schema.TaggedError<Quota, { readonly brand: unique symbol }>()("Quota", {
+  cause: QuotasError,
+}) {}
 
 /**
  * Error for a recovery journal that could not be loaded or saved.
@@ -43,9 +49,12 @@ export class Quota extends Schema.TaggedError<Quota>()("Quota", { cause: QuotasE
  * @stability unstable
  * @category errors
  */
-export class RecoveryStoreError extends Schema.TaggedError<RecoveryStoreError>()("RecoveryStoreError", {
-  reason: Schema.Union([Storage, BadRow, Quota]),
-}) {}
+export class RecoveryStoreError extends Schema.TaggedError<RecoveryStoreError, { readonly brand: unique symbol }>()(
+  "RecoveryStoreError",
+  {
+    reason: Schema.Union([Storage, BadRow, Quota]),
+  },
+) {}
 
 /** A saved row this store did not write under that name or letter: there is no lower fault to keep. */
 const misplaced = () => new RecoveryStoreError({ reason: new BadRow({ cause: undefined }) });

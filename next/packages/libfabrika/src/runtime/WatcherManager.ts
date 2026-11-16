@@ -18,7 +18,9 @@ export const Publication = Schema.TaggedUnion({ sent: {}, gone: {} });
  *
  * @category errors
  */
-export class Gone extends Schema.TaggedError<Gone>()("Gone", { cause: Schema.Defect() }) {}
+export class Gone extends Schema.TaggedError<Gone, { readonly brand: unique symbol }>()("Gone", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a delivery whose outcome is unknown: the call failed, or its reply did not decode. The
@@ -26,7 +28,9 @@ export class Gone extends Schema.TaggedError<Gone>()("Gone", { cause: Schema.Def
  *
  * @category errors
  */
-export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
+export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a view update that did not reach its client. Its `reason` says whether the client is
@@ -34,9 +38,12 @@ export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable"
  *
  * @category errors
  */
-export class WatcherManagerError extends Schema.TaggedError<WatcherManagerError>()("WatcherManagerError", {
-  reason: Schema.Union([Gone, Unreachable]),
-}) {}
+export class WatcherManagerError extends Schema.TaggedError<WatcherManagerError, { readonly brand: unique symbol }>()(
+  "WatcherManagerError",
+  {
+    reason: Schema.Union([Gone, Unreachable]),
+  },
+) {}
 
 /**
  * Service that delivers a view update to one client. A failed delivery is a `WatcherManagerError`:

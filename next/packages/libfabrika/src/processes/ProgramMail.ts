@@ -77,11 +77,14 @@ export const MailFailure = Schema.TaggedUnion({
  * @stability unstable
  * @category errors
  */
-export class ProgramMailError extends Schema.TaggedError<ProgramMailError>()("ProgramMailError", {
-  /** A refusal, `full` (the target's inbox is at its cap) or `storage` (the ledger failed). */
-  reason: MailFailure,
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {
+export class ProgramMailError extends Schema.TaggedError<ProgramMailError, { readonly brand: unique symbol }>()(
+  "ProgramMailError",
+  {
+    /** A refusal, `full` (the target's inbox is at its cap) or `storage` (the ledger failed). */
+    reason: MailFailure,
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {
   /** A refusal: a `MailRefusal` reason as its `MailFailure` case. */
   static refused(reason: typeof MailRefusal.Type): ProgramMailError {
     return new ProgramMailError({ reason: MailFailure.cases[reason].make({}) });

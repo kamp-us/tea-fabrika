@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e64-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:16:01-08:00",
+  "ended": "2026-11-16T00:20:29-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Effect sweep slice E64, check schemaClassMissingBrand, mechanical, on a base after PR 1366 merged. Recount with effect-tsgo diagnostics and only this check at error found 177 hits, not the plan's 60, because the plan counted fewer folders. Every hit in next/packages/libfabrika/src and next/apps/fabrika got `{ readonly brand: unique symbol }` as the second type argument (172 Schema.TaggedError, 1 S.TaggedError, 1 Schema.Class, 3 Schema.Opaque) by a scratchpad codemod, then pnpm format. Saved became branded, so State.test.ts now builds its value with Saved.make. No lock entry and no L1 plant, as the coordinator ruled. Both package typechecks exit 0 with the check at error in a temporary local override that was not committed. Folders with a hit: next/apps/fabrika, e2e, e2e/node, src, src/exam; libfabrika src top folder, access, ci, client, cloudflare, codehost, desktop, gateway, ledger, ledger/internal, node/dev, node/repositories, packs, permissions, processes, repositories, runtime, schedules, settings, tasks, telemetry, transport, transport/internal. Hits left and not fixed, outside the slice: next/packages/vitest/src/Shelf.test-support.ts:10, oxlint-plugins/parallel.ts:44, about 35 sites under .agents/skills/*/scripts, and .github/ci (typecheck failed, errors not read).",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 64,
+  "note": "First commit b0fc754 was made on origin/main. Then the fold branch fabrikalfa/effect-mechanical at 891075e7a was merged in (merge, no rebase). Four conflicts, all kept both sides: the fold's Schema.Finite fields plus this slice's brand, in e2e/p14.test-support.ts, src/exam/compiler.ts, src/exam/tsconfig-scope.integration.test.ts and processes/Quotas.ts. After the merge the fold's own E6 locks already cover .agents, .github/ci, oxlint-plugins, next/packages/vitest, next/programs/pipeline and parts of libfabrika and the app; a recount with the check at error in a temporary tsconfig.base.json override (not committed) gave zero in libfabrika, fabrika, vitest, .agents, oxlint-plugins, next/programs/pipeline and next/programs/counter. packages/fabrika (today's version) has many hits and is out of this slice. pnpm format, pnpm lint (the one transient promise-types failure passed when rerun alone) and the list ratchet pass. Tests run after the merge: State.test.ts, Answer.test.ts, tail.test.ts, hands-client.test.ts and the integration laws tsconfig-scope, Runner, Sink, dev-secrets, port-home, tasks-wire and chaos-revoke all pass. runtime-recovery.laws.integration.test.ts fails one law (T753 L16, a 60 s timeout) and fails the same way on the unchanged fold head 891075e7a, so it is not from this change. No law was refused by the 0178 guard. A --changed origin/main run was abandoned after over 30 minutes.",
+  "step": "tests"
+}
