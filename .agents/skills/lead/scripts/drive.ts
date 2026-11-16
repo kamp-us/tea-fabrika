@@ -113,6 +113,7 @@ import {
   answerFor,
   sendsFrom,
   Ended,
+  Failed,
   listUsd,
   makeStepAgents,
   NO_SPENT,
@@ -407,8 +408,6 @@ type Cmds =
   | ReturnType<typeof record>;
 
 type DraftSub = Sub<"draft", Ask>;
-/** The agent's turn, as it ended (./agents.ts). */
-type Drafted = { readonly type: "drafted"; readonly turned: Turned<Answer> };
 
 type Model =
   | { readonly phase: "idle" }
@@ -442,7 +441,12 @@ type Model =
 /** Where the step's machine is; the chain's heartbeat names it. */
 export type DrivePhase = Model["phase"];
 
-type Msg = { readonly type: "start"; readonly ask: Ask } | Drafted;
+/** The step's Msgs: its start, and the agent's turn as it ended (./agents.ts). */
+const Msg = Schema.TaggedUnion({
+  start: { ask: Ask },
+  drafted: { turned: Schema.Union([Ended.mapFields((f) => ({ ...f, answer: Schema.NullOr(Answer) })), Failed]) },
+});
+type Msg = typeof Msg.Type;
 
 // ---------------------------------------------------------------- the Check
 
@@ -706,7 +710,8 @@ const recordIt = (
 
 /** The Draft: the agent's one turn, a Sub keyed on the Ask while the step drafts. */
 const draft: DepKeyedSub<Model, DraftSub> = {
-  type: "draft",
+  // oxlint-disable-next-line fabrika/no-hand-tag -- a tea Sub entry: tea gives a built-in Sub no maker, and its `deps` is a function no schema makes
+  _tag: "draft",
   deps: (s: Model) => (s.phase === "drafting" ? s.ask : null),
 } as DepKeyedSub<Model, DraftSub>;
 
@@ -1761,7 +1766,7 @@ export const agentsDraft =
   (sub: DraftSub) =>
     Stream.fromEffect(
       (sub.deps.step === "mutation" ? mutationDraft(mutbox) : turnDraft)(env, agents, sub.deps).pipe(
-        Effect.map((turned) => ({ type: "drafted", turned }) satisfies Drafted),
+        Effect.map((turned) => Msg.cases.drafted.make({ turned })),
       ),
     );
 
@@ -2283,7 +2288,7 @@ export const driveStep = (
     const runtime = yield* handle.ready;
     // tea's change notifier fires after each transition and before its first Cmd starts.
     runtime.subscribe(() => onPhase(runtime.getState().phase));
-    yield* runtime.dispatch({ type: "start", ask });
+    yield* runtime.dispatch(Msg.cases.start.make({ ask }));
     const end = yield* runtime.done();
 
     if (end.phase !== "over") {

@@ -782,7 +782,9 @@ type Model =
   | { readonly phase: "landing"; readonly quest: Quest; readonly pr: number }
   | { readonly phase: "over"; readonly quest: Quest; readonly end: End };
 
-type Msg = { readonly type: "start"; readonly step: StepName };
+/** The chain's one Msg: start at a step. */
+const Msg = Schema.TaggedStruct("start", { step: Schema.Literals(STEPS) });
+type Msg = typeof Msg.Type;
 type Step = readonly [Model, readonly Cmds[]];
 
 const stay = (s: Model): Step => [s, []];
@@ -1765,7 +1767,7 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     // The beat between phase changes; it stops with this scope, or with a call that blocks.
     const every = Schedule.spaced(Duration.millis(Beat.EVERY));
     yield* Effect.sync(beats.tick).pipe(Effect.repeat(every), Effect.forkScoped);
-    yield* runtime.dispatch({ type: "start", step: start });
+    yield* runtime.dispatch(Msg.make({ step: start }));
     const end = yield* runtime.done();
 
     if (end.phase !== "over") {

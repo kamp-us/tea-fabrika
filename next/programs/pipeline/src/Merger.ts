@@ -106,11 +106,14 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
   ok: O,
   tags: ReadonlyArray<T>,
 ) => {
-  const cmd = input.mapFields((fields) => ({ ...fields, type: Schema.Literal(name) }));
+  const cmd = input.mapFields((fields) => ({
+    ...fields,
+    // oxlint-disable-next-line fabrika/no-hand-tag -- a Cmd's input restated as tea's value, keyed `_tag` by tea; slice 5 (demlik 952) deletes this helper
+    _tag: Schema.Literal(name),
+  }));
   return Schema.Union([
-    Schema.Struct({ type: Schema.Literal(`${name}_ok`), cmd, value: ok, at: Schema.Number }),
-    Schema.Struct({
-      type: Schema.Literal(`${name}_err`),
+    Schema.TaggedStruct(`${name}_ok`, { cmd, value: ok, at: Schema.Number }),
+    Schema.TaggedStruct(`${name}_err`, {
       cmd,
       error: Schema.Union(tags.map((tag) => Schema.TaggedStruct(tag, {}))),
       at: Schema.Number,
@@ -121,7 +124,7 @@ const answers = <const N extends string, F extends Schema.Struct.Fields, O exten
 const Msg = Schema.Union([
   Land,
   Abandon,
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.TaggedStruct("timer", { at: Schema.Number }),
   answers(change.cmdType, Inputs.change, CodeHost.Change, Faults),
   answers(update.cmdType, Inputs.update, CodeHost.Updated, Faults),
   answers(checks.cmdType, Inputs.checks, Ci.Checks, Faults),
@@ -169,7 +172,7 @@ export const merger = (settings: Values) => {
     | typeof Msg.Type
     | Settled<typeof change | typeof update | typeof checks | typeof merge | typeof Send.send>;
   const reduce = (s: Model, m: Message): Cell => {
-    if (m.type === "send_ok" || m.type === "send_err") {
+    if (m._tag === "send_ok" || m._tag === "send_err") {
       return [s, []];
     }
 
@@ -177,7 +180,7 @@ export const merger = (settings: Values) => {
       if (
         s._tag === "idle" ||
         s.step._tag !== "asking" ||
-        m.cmd.type !== commandFor(s) ||
+        m.cmd._tag !== commandFor(s) ||
         m.cmd.attempt !== s.attempt
       ) {
         return [{ ...s, late: s.late + 1 }, []];
@@ -188,7 +191,7 @@ export const merger = (settings: Values) => {
       }
     }
 
-    if (m.type === "land") {
+    if (m._tag === "land") {
       if (s._tag !== "idle") {
         return [s, []];
       }
@@ -204,7 +207,7 @@ export const merger = (settings: Values) => {
       return [s, []];
     }
 
-    if (m.type === "timer") {
+    if (m._tag === "timer") {
       if (s.step.at === null || m.at < s.step.at) {
         return [s, []];
       }
@@ -217,11 +220,11 @@ export const merger = (settings: Values) => {
       );
     }
 
-    if (m.type === "abandon") {
+    if (m._tag === "abandon") {
       return s._tag === "merging" || s.job.ref !== m.ref ? [s, []] : finish(s, Reply.cases.abandoned.make(identity(s)));
     }
 
-    if (s._tag === "reading" && m.type === "change_ok") {
+    if (s._tag === "reading" && m._tag === "change_ok") {
       const v = m.value;
 
       if (v._tag === "missing") {
@@ -259,7 +262,7 @@ export const merger = (settings: Values) => {
       );
     }
 
-    if (s._tag === "updating" && m.type === "update_ok") {
+    if (s._tag === "updating" && m._tag === "update_ok") {
       const v = m.value;
 
       if (v._tag === "current" || v._tag === "updated") {
@@ -304,7 +307,7 @@ export const merger = (settings: Values) => {
       return finish(s, Reply.cases.closed.make({ ...identity(s), state: v.state }));
     }
 
-    if (s._tag === "checking" && m.type === "checks_ok") {
+    if (s._tag === "checking" && m._tag === "checks_ok") {
       const verdict = Change.verdict(s.checks, m.value);
 
       if (verdict._tag === "red") {
@@ -345,7 +348,7 @@ export const merger = (settings: Values) => {
       ];
     }
 
-    if (s._tag === "merging" && m.type === "merge_ok") {
+    if (s._tag === "merging" && m._tag === "merge_ok") {
       const v = m.value;
 
       if (v._tag === "merged") {
@@ -406,11 +409,11 @@ export const merger = (settings: Values) => {
       late: s.late,
     }),
     refuse: (s, m) =>
-      m.type === "land"
+      m._tag === "land"
         ? s._tag === "idle"
           ? null
           : { reason: "busy" }
-        : m.type !== "abandon"
+        : m._tag !== "abandon"
           ? null
           : s._tag === "idle"
             ? { reason: "idle" }

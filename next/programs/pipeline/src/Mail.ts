@@ -4,18 +4,17 @@ import { Kind } from "./Change.ts";
 
 export const Ref = Schema.NonEmptyString;
 
-export const Land = Schema.Struct({
-  type: Schema.Literal("land"),
+export const Land = Schema.TaggedStruct("land", {
   ref: Ref,
   change: CodeHost.ChangeId,
   head: CodeHost.Commit,
   reply: Schema.NonEmptyString,
 });
 
-export const Abandon = Schema.Struct({ type: Schema.Literal("abandon"), ref: Ref });
+export const Abandon = Schema.TaggedStruct("abandon", { ref: Ref });
 
+/** Each reply kind is its own Msg, keyed by its own `_tag` (0214; Elm's one Msg case per kind). */
 const reply = <F extends Schema.Struct.Fields>(fields: F) => ({
-  type: Schema.tag("reply"),
   ref: Ref,
   change: CodeHost.ChangeId,
   ...fields,
@@ -43,12 +42,11 @@ export const Reply = Schema.TaggedUnion({
 
 const Name = Schema.NonEmptyString.check(Schema.isMaxLength(256));
 
-export const Enqueue = Schema.Struct({
-  type: Schema.Literal("enqueue"),
+export const Enqueue = Schema.TaggedStruct("enqueue", {
   change: CodeHost.ChangeId,
   head: CodeHost.Commit,
   reply: Schema.optionalKey(Schema.Struct({ to: Name, ref: Ref.check(Schema.isMaxLength(256)) })),
 });
 
-export const Drop = Schema.Struct({ type: Schema.Literal("drop"), change: CodeHost.ChangeId });
-export const Resume = Schema.Struct({ type: Schema.Literal("resume") });
+export const Drop = Schema.TaggedStruct("drop", { change: CodeHost.ChangeId });
+export const Resume = Schema.TaggedStruct("resume", {});

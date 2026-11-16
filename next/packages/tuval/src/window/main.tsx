@@ -21,10 +21,12 @@ import {
   type windowMachineFor,
   type WindowModel,
   type WindowMsg,
+  WindowOwn,
 } from "@kampus/libfabrika/client/WindowMachine";
 import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
+import { LinkMsg } from "@kampus/libfabrika/transport/Link";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
@@ -129,8 +131,8 @@ const TileBody = ({
     <registration.View
       data={data}
       tile={row.own}
-      press={(m) => send({ type: "press", tile: row.id, m, via: "button" })}
-      send={(msg) => send({ type: "tile", id: row.id, msg })}
+      press={(m) => send(WindowOwn.cases.press.make({ tile: row.id, m, via: "button" }))}
+      send={(msg) => send(WindowOwn.cases.tile.make({ id: row.id, msg }))}
       refusal={refusalFor(registration, row.refusal)}
     />
   );
@@ -191,7 +193,7 @@ const useKeys = (run: LiveWindow, machine: PageProps["machine"], table: Keys.Tab
         return;
       }
 
-      const press: KeyPress = { type: "key", key, at: Math.max(0, e.timeStamp) };
+      const press: KeyPress = WindowOwn.cases.key.make({ key, at: Math.max(0, e.timeStamp) });
       const judged = handle(machine, table, run.getState(), line.unread, press);
       line.unread = judged.unread;
 
@@ -226,7 +228,7 @@ const useSize = (send: (msg: WindowMsg) => void) => {
       if (entry !== undefined) {
         // The tiles are laid out inside the desk's padding, one gap on each side.
         const { width, height } = entry.contentRect;
-        send({ type: "size", width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - 2 * GAP) });
+        send(WindowOwn.cases.size.make({ width: Math.max(0, width - 2 * GAP), height: Math.max(0, height - 2 * GAP) }));
       }
     });
     observer.observe(element);
@@ -261,7 +263,7 @@ const useFocusIn = (send: (msg: WindowMsg) => void) =>
       const at = focusAt(e.target);
 
       if (at !== null) {
-        send({ type: "focus", ...at });
+        send(WindowOwn.cases.focus.make({ ...at }));
       }
     };
     document.addEventListener("focusin", listener, true);
@@ -354,7 +356,7 @@ const Desk = (props: PageProps) => {
             cursor={cursor}
             size={size}
             strips={size === null ? new Set() : fold(space, size)}
-            open={(tile) => send({ type: "focus", tile: tile.id, cursor: tile.cursor })}
+            open={(tile) => send(WindowOwn.cases.focus.make({ tile: tile.id, cursor: tile.cursor }))}
           >
             {(tile) => <TileBody run={props.run} tile={tile} windowFor={props.windowFor} />}
           </Layout>
@@ -401,7 +403,7 @@ const Page = (props: PageProps) => {
         <h1>Removed</h1>
         <p>This window was removed</p>
         <p>Ask again to make a new key and wait for a new grant.</p>
-        <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
+        <Button variant="primary" onClick={() => send(LinkMsg.cases.ask_again.make({ dial: dials + 1 }))}>
           Ask again
         </Button>
       </main>

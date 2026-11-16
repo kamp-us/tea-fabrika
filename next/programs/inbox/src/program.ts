@@ -18,7 +18,7 @@ export const Row = Schema.TaggedUnion({ added: Added });
 
 const Model = Schema.Struct({ rows: Schema.Array(Row) });
 
-const Msg = Schema.Union([Schema.Struct({ type: Schema.Literal("added"), ...Added })]);
+const Msg = Schema.TaggedUnion({ added: Added });
 
 /** Keeps the first letter for each fact, in arrival order, without Cmds. */
 export const inboxMachine = Machine.make({
@@ -32,7 +32,7 @@ export const inboxMachine = Machine.make({
         return [model, []];
       }
 
-      const { type: _type, ...fields } = msg;
+      const { _tag: _type, ...fields } = msg;
       return [{ rows: [...model.rows, Row.cases.added.make(fields)] }, []];
     },
   },

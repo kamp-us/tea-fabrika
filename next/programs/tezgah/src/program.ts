@@ -38,10 +38,9 @@ const Leaves = Schema.optionalKey(Schema.NullOr(Workspace.CursorKey));
 
 const Msg = Schema.Union([
   /** A window's first look at workspace `workspace`: makes it, with `tile` first, when it is missing. */
-  Schema.Struct({ type: Schema.Literal("attach"), workspace: Schema.Int, tile: Workspace.TileId }),
+  Schema.TaggedStruct("attach", { workspace: Schema.Int, tile: Workspace.TileId }),
   /** A split, given in tile `from`; `tile` is the new tile's id, minted by the window. */
-  Schema.Struct({
-    type: Schema.Literal("did"),
+  Schema.TaggedStruct("did", {
     does: Schema.Literals(["tezgah.split_right", "tezgah.split_down"]),
     from: Workspace.TileId,
     via: Via,
@@ -50,8 +49,7 @@ const Msg = Schema.Union([
   }),
   /** A focus move from tile `from` to tile `to`, which the window worked out on its own drawn
    *  layout and sends absolute (0278); tezgah takes moves in arrival order, never by `sentAt`. */
-  Schema.Struct({
-    type: Schema.Literal("did"),
+  Schema.TaggedStruct("did", {
     does: Schema.Literals(FOCUS),
     from: Workspace.TileId,
     to: Workspace.TileId,
@@ -59,8 +57,7 @@ const Msg = Schema.Union([
     cursor: Leaves,
   }),
   /** A close of tile `from`. */
-  Schema.Struct({
-    type: Schema.Literal("did"),
+  Schema.TaggedStruct("did", {
     does: Schema.Literal("tezgah.close"),
     from: Workspace.TileId,
     via: Via,
@@ -234,7 +231,7 @@ export const tezgahMachine = Machine.make({
  *  `last_tile` for a close of a workspace's only tile; `id_reused` for a new tile's id that is
  *  already a tile's or a waiting start's. */
 const refuse = (m: Model, msg: Msg): Refusal | null => {
-  if (msg.type === "attach") {
+  if (msg._tag === "attach") {
     return !exists(m, msg.workspace) && known(m, msg.tile) ? { reason: "id_reused" } : null;
   }
 

@@ -1,8 +1,8 @@
 import { defineWindow, type TileProps, type WindowProps } from "@kampus/libfabrika";
 import { Button, Checkbox, Input } from "@manti-ui/react";
 import { useId } from "react";
-import { checklist, checklistView } from "./program.ts";
-import { tile } from "./tile.ts";
+import { ChecklistMsg, checklist, checklistView } from "./program.ts";
+import { TileMsg, tile } from "./tile.ts";
 
 type Props = WindowProps<typeof checklist> & TileProps<typeof tile>;
 const states = { new: "Open", open: "Open", late: "Late", checked: "Done" } as const;
@@ -22,7 +22,9 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
               <Checkbox
                 checked={item.state === "checked"}
                 aria-label={item.name}
-                onCheckedChange={() => press({ type: item.state === "checked" ? "uncheck" : "check", name: item.name })}
+                onCheckedChange={() =>
+                  press(ChecklistMsg.cases[item.state === "checked" ? "uncheck" : "check"].make({ name: item.name }))
+                }
               >
                 <span className="checklist-name">{item.name}</span>
               </Checkbox>
@@ -31,7 +33,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
                 variant="tertiary"
                 size="sm"
                 aria-label={`Remove ${item.name}`}
-                onClick={() => press({ type: "remove", name: item.name })}
+                onClick={() => press(ChecklistMsg.cases.remove.make({ name: item.name }))}
               >
                 Remove
               </Button>
@@ -43,7 +45,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          send({ type: "submit" });
+          send(TileMsg.cases.submit.make({}));
         }}
       >
         <Input
@@ -52,7 +54,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
           maxLength={80}
           value={own.draft}
           aria-describedby={refusal ? description : undefined}
-          onChange={(event) => send({ type: "typed", text: event.target.value })}
+          onChange={(event) => send(TileMsg.cases.typed.make({ text: event.target.value }))}
         />
         <p id={description} className="checklist-refusal">
           {refusal ?? ""}
@@ -63,7 +65,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
 };
 
 const refused = (m: typeof checklist.machine.msg.Type, reason: string): string => {
-  if (m.type !== "timer" && (reason === "missing" || (reason === "taken" && m.type === "add"))) {
+  if (m._tag !== "timer" && (reason === "missing" || (reason === "taken" && m._tag === "add"))) {
     return reason === "taken" ? `"${m.name}" is already on the list.` : `"${m.name}" is not on the list any more.`;
   }
 
