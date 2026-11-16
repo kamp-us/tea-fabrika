@@ -1,4 +1,4 @@
-
+Approved by the lead agent, builds 0593, 0143, 0153; body b1f7828897bd
 Plancheck-Version: 3
 
 # Plan: a program pays nothing for its supervisor's bookkeeping saves
@@ -108,13 +108,13 @@ Replies (`RepliesSql.ts:76`) stay on recovery.
 
 - **Erlang/OTP keeps restart bookkeeping in the supervisor.** The supervisor process holds its
   children's specs and the restart history it checks against intensity and period; a child's own
-  state never holds it. Design principles, "Restart Intensity"
-  (https://www.erlang.org/doc/system/sup_princ.html#restart-intensity): "If more than `MaxR`
+  state never holds it. Design principles, "Maximum Restart Intensity"
+  (https://www.erlang.org/doc/system/sup_princ.html#maximum-restart-intensity): "If more than `MaxR`
   number of restarts occur in the last `MaxT` seconds, the supervisor terminates all the child
   processes and then itself." The `supervisor` reference, "Supervision Principles" and the
   `sup_flags` type (https://www.erlang.org/doc/apps/stdlib/supervisor.html#t:sup_flags/0): the
-  supervisor's own flags carry `intensity` and `period`. Not fetched in this session: the session
-  cannot reach www.erlang.org. The quotes are as experiment 239
+  supervisor's own flags carry `intensity` and `period`. Fetched and checked by the lead on 2026-11-16: the quote is word for word, and the anchors are
+  `#maximum-restart-intensity` and `#t:sup_flags/0`. The quotes are also as experiment 239
   (`experiments/239-supervision-vs-otp.md`, read 2026-11-09) and experiment 254
   (`experiments/254-how-a-lane-should-stop.md`) read them; the anchors are the ones I believe
   correct. Our supervisor differs in one way the OTP table already records
@@ -122,22 +122,22 @@ Replies (`RepliesSql.ts:76`) stay on recovery.
   program's own object, so its state shares the program's SQLite. That is why the store must tell
   the two apart by the record's fields; OTP gets it free from a second process.
 - **Kubernetes does not count the kubelet's status writes against a namespace.** A
-  `ResourceQuota` "provides constraints that limit aggregate resource consumption per namespace. It
-  can limit the quantity of objects that can be created in a namespace by type, as well as the
-  total amount of compute resources"
-  (https://kubernetes.io/docs/concepts/policy/resource-quotas/, opening section "Resource Quotas").
-  It counts objects and compute, never writes, so the kubelet's updates to a pod's `.status` are
+  `ResourceQuota` "provides constraints that limit aggregate resource consumption per namespace. A
+  ResourceQuota can also limit the quantity of objects that can be created in a namespace by API kind,
+  as well as the total amount of infrastructure resources that may be consumed by API objects found
+  in that namespace"
+  (https://kubernetes.io/docs/concepts/policy/resource-quotas/, opening section).
+  It counts objects and the resources they use, never writes, so the kubelet's updates to a pod's `.status` are
   not charged to the namespace. The kubelet's own bookkeeping writes are its node's: "Nodes",
   section "Heartbeats" (https://kubernetes.io/docs/concepts/architecture/nodes/#node-heartbeats):
   heartbeats are "updates to the `.status` of a Node" and "Lease objects within the
   `kube-node-lease` namespace", a namespace of their own; "Leases", section "Node heartbeats"
   (https://kubernetes.io/docs/concepts/architecture/leases/#node-heart-beats). Their rate is held
   by API Priority and Fairness at a system priority level, not by a namespace's quota
-  (https://kubernetes.io/docs/concepts/cluster-administration/flow-control/, "Defaults"). Not
-  fetched in this session: the session cannot reach kubernetes.io. The quota page is the one
-  `docs/direction/follows/kubernetes.md` cites as `[quotas]`; the section names and anchors for the
-  other three are the ones I believe correct, and the tests step or the lead checks them before the
-  pull request body cites them.
+  (https://kubernetes.io/docs/concepts/cluster-administration/flow-control/, "Defaults"). Fetched and checked by the lead on 2026-11-16: the quota page's opening sentence is quoted word
+  for word, `#node-heartbeats`, `#node-heart-beats` and `#defaults` exist, and the two heartbeat
+  forms are as quoted. The quota page is the one `docs/direction/follows/kubernetes.md` cites as
+  `[quotas]`.
 - **Elm.** The update is pure and returns the new model; who caused a change is the Msg, and the
   model's fields say whose state it is. The store sits below the machine and sees only the record,
   so the data-shape answer is to name which fields are the supervisor's, beside the machine's own
@@ -422,11 +422,11 @@ For the pull request's `## New names` section:
   (https://kubernetes.io/docs/concepts/policy/resource-quotas/), the opening section, for charging
   use to its owner.
 - `supervisor`, a case of `Account` and a field of `Accounting.status`: OTP's supervisor, whose
-  own state holds restart bookkeeping. Source: https://www.erlang.org/doc/system/sup_princ.html,
-  "Restart Intensity".
+  own state holds restart bookkeeping. Source: https://www.erlang.org/doc/system/sup_princ.html#maximum-restart-intensity,
+  "Maximum Restart Intensity".
 - `bookkeeping` (`next/packages/libfabrika/src/runtime/internal/supervisor.ts`, internal): the
   supervisor's own state, as 0593 says "bookkeeping writes". Source:
-  https://www.erlang.org/doc/apps/stdlib/supervisor.html, "Supervision Principles".
+  https://www.erlang.org/doc/apps/stdlib/supervisor.html, "Supervision Principles" (`#module-supervision-principles`).
 
 ## Size
 
