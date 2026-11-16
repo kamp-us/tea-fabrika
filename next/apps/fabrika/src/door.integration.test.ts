@@ -305,12 +305,13 @@ const top = mkdtempSync(join(tmpdir(), "p10-door-"));
 const files = Scope.makeUnsafe();
 
 afterAll(() => {
-  // Closing hundreds of connections may yield, so the hook hands Vitest the run as a Promise.
-  return Effect.runPromise(
-    Scope.close(files, Exit.void).pipe(
-      Effect.andThen(Effect.sync(() => rmSync(top, { recursive: true, force: true }))),
-    ),
+  // The connections close first, then the folder goes. Closing hundreds of them may yield, so the
+  // hook hands Vitest the run as a Promise.
+  const teardown = Scope.close(files, Exit.void).pipe(
+    Effect.andThen(Effect.sync(() => rmSync(top, { recursive: true, force: true }))),
   );
+
+  return Effect.runPromise(teardown);
 });
 
 // Each world is a fresh SQLite file, and every door call commits. No law here kills the process

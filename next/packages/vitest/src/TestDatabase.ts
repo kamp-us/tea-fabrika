@@ -16,10 +16,13 @@ import type * as Scope from "effect/Scope";
  *
  * @category errors
  */
-export class TestDatabaseError extends Schema.TaggedError<TestDatabaseError>()("TestDatabaseError", {
-  file: Schema.String,
-  cause: Schema.Defect(),
-}) {}
+export class TestDatabaseError extends Schema.TaggedError<TestDatabaseError, { readonly brand: unique symbol }>()(
+  "TestDatabaseError",
+  {
+    file: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {}
 
 const close = (db: DatabaseSync): Effect.Effect<void> =>
   Effect.sync(() => {

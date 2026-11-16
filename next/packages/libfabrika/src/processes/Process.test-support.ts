@@ -166,19 +166,20 @@ const stores = Scope.makeUnsafe();
 let files = 0;
 
 afterAll(() => {
-  // Closing hundreds of connections may yield, so the hook hands Vitest the run as a Promise.
-  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest's afterAll hook is a plain callback
-  return Effect.runPromise(
-    Scope.close(stores, Exit.void).pipe(
-      Effect.andThen(
-        Effect.sync(() => {
-          if (folder !== null) {
-            rmSync(folder, { recursive: true, force: true });
-          }
-        }),
-      ),
+  // The connections close first, then the folder goes, if one was made. Closing hundreds of them
+  // may yield, so the hook hands Vitest the run as a Promise.
+  const teardown = Scope.close(stores, Exit.void).pipe(
+    Effect.andThen(
+      Effect.sync(() => {
+        if (folder !== null) {
+          rmSync(folder, { recursive: true, force: true });
+        }
+      }),
     ),
   );
+
+  // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest's afterAll hook is a plain callback
+  return Effect.runPromise(teardown);
 });
 
 // A real SQLite file, reopened without manager memory. Faults interrupt real INSERTs.
