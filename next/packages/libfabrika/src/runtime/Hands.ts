@@ -3,8 +3,6 @@
  * gets one answer back. The runner saves it as a task request under the Cmd's own id and answers it
  * when the task's result is collected, or refuses it when the person set no `hands.target` or the
  * task saved under its id is another process's.
- *
- * @stability unstable
  */
 import { Cmd } from "@demlik/tea/effect";
 import { Schema } from "effect";
@@ -15,7 +13,6 @@ import { Refusal } from "./HandsTasks.ts";
  * Schema for the hands command's operand: one closed command, never shell text. The runner binds
  * who asks and which hands key the request targets.
  *
- * @stability unstable
  * @category schemas
  */
 export const HandsInput = Schema.Struct({ command: Command });
@@ -25,7 +22,6 @@ export const HandsInput = Schema.Struct({ command: Command });
  * answer is the task's checked `Result`, `no_hands` when no hands key is set, or `id_reused` when the
  * task saved under its id is not its process's.
  *
- * @stability unstable
  * @category commands
  */
 export const hands = Cmd.make("hands", { input: HandsInput, ok: Result, err: Refusal.literals });

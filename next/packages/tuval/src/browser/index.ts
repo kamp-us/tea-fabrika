@@ -1,5 +1,6 @@
 import { ErrorClass } from "@kampus/libfabrika/transport/ClientRows";
-import { Predicate, Schema } from "effect";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 
 /** The page's main runner, Effect's own (0250). */
 export { runMain } from "@effect/platform-browser/BrowserRuntime";

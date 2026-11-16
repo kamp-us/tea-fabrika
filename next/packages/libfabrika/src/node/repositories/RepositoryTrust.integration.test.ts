@@ -1,7 +1,9 @@
 // T878, next/, L5/L6 on real SQLite. The packs module owns the laws, this module owns the driver.
 import { DatabaseSync } from "node:sqlite"; // edge: the referee needs synchronous SQLite transactions
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import * as RepositoryTrustTest from "../../packs/RepositoryTrustTest.ts";
 import type { Sql } from "../../Sql.ts";
