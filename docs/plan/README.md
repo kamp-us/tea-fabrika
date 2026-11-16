@@ -55,6 +55,15 @@ request goes by hand, by its own agent, and is logged.
 
 ## Where we are now
 
+*2026-11-16:* in `next/` and our tooling, tea's Msgs, Cmds, Subs and state table are keyed `_tag`
+([0569](../../.decisions/0569-tea-msgs-are-keyed-on-tag.md) and its amendment), made by their
+schemas' makers. tea's maintainer merged the same change upstream as
+[demlik pull 966](https://github.com/kamp-us/demlik/pull/966), not yet released; until the release,
+`patches/@demlik__tea@0.27.0.patch` carries 966 applied to 0.27.0. This is slice 2 of
+[the tea plan](./quests/tea-msg-tag-PLAN.md), [pull request 1431](https://github.com/kamp-us/tea-fabrika/pull/1431);
+slices 3 to 12 each add one demlik ask to the same patch. Today's version stays on tea 0.25.0 and
+keeps `type`.
+
 *2026-11-13:* the order of work changed ([0159](../../.decisions/0159-fabsh-pipes-summon-join-first.md)). The next thing built in `next/` is `fabsh`,
 pipes, `summon` and `join`, working for real, with whatever they need (the window, a second tile and its
 keys, the link to the agent harnesses, rooms), so fabrika is built inside

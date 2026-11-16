@@ -63,7 +63,7 @@ Neither is a measurement.
 
 ```ts
 // A sketch, today's version. Ticket #7 in t1, the owner's tile.
-desk.step({type: "summon", agent: "claude", tile: "t1"}); // a tea Msg keeps `type`; focus stays
+desk.step({type: "summon", agent: "claude", tile: "t1"}); // today's tea Msg keeps `type` (next/ keys it `_tag`, 0569); focus stays
 // presence: show it, never save it, never decide with it. Today it is desk state;
 // in next/ it rides the five layers' ephemeral lane.
 {_tag: "presence", client: "agent:claude for:github:42", location: "tile:t1", writing: "ticket:7/ask/a-1"}

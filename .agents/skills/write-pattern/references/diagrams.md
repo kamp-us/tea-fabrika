@@ -33,4 +33,4 @@ Things that break on GitHub:
   Write `<` and `>` in a label as `#lt;` and `#gt;`.
 - A node id is one plain word. `end` as a lowercase id breaks a flowchart.
 - `%%` starts a comment. Use it to name the source file a diagram was read from.
-- In `stateDiagram-v2`, a transition label is the Msg's real `type`: `idle --> asking : ask_sent`.
+- In `stateDiagram-v2`, a transition label is the Msg's real `_tag`: `idle --> asking : ask_sent`.

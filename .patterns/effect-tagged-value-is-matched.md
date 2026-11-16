@@ -1,6 +1,6 @@
 ---
 where: "next/ and our tooling"
-when: "Branching on a value's `_tag` or a Msg's `type`: an `if`, a ternary, a `switch`, or a tea machine's `update` handler"
+when: "Branching on a value's `_tag`, a tea Msg's included: an `if`, a ternary, a `switch`, or a tea machine's `update` handler"
 ---
 
 # A tagged value is matched by its union, never compared by hand
@@ -9,9 +9,7 @@ when: "Branching on a value's `_tag` or a Msg's `type`: an `if`, a ternary, a `s
 flowchart TD
   value["code that branches on a tagged value"] --> known{"is the value's type known?"}
   known -- "no, it is unknown" --> guard["Predicate.isTagged"]
-  known -- yes --> key{"which key names the case?"}
-  key -- "type, a tea Msg" --> msg["Match.discriminators('type')"]
-  key -- "_tag" --> own{"is the value its whole union, and has the union a matcher?"}
+  known -- yes --> own{"is the value its whole union, and has the union a matcher?"}
   own -- yes --> first["1. Union.match, Union.matchOrElse, Union.isAnyOf"]
   own -- "no, or it is already narrowed" --> second["2. Match.valueTags"]
   first --> inner["3. each inner answer: its own union's match"]
@@ -59,8 +57,9 @@ branches on a tagged value uses them, in this order.
    - `Match.valueTags(value, {...})` (`Match.ts:474`), where the value is already narrowed to some
      of the union's cases, or the union has no matcher of its own. `Union.match` wants a key for
      every case of the union, the ones the value can no longer be included.
-   - `Match.discriminators("type")({...})` (`Match.ts:1121`) for a tea Msg, which is keyed by
-     `type`. It leaves the matcher open, so `Match.exhaustive` or `Match.orElse` follows it.
+   - A tea Msg is no longer a case apart: in `next/` and our tooling it is keyed `_tag` like every
+     other union ([0569](../.decisions/0569-tea-msgs-are-keyed-on-tag.md)), so it is matched by its
+     own union, or by `Match.valueTags` once narrowed. `Match.discriminators("type")` goes.
 3. **Each inner answer is matched by its own union,** inside the case that holds it: the outer
    matcher picks the state, and the answer the Msg carries is matched with that answer's union.
    In use at `next/packages/libfabrika/src/transport/Answer.ts:106`.
@@ -72,7 +71,8 @@ branches on a tagged value uses them, in this order.
 
 A sketch, not on main. It is the merge machine's `reduce` and `refuse`
 (`next/programs/pipeline/src/Merger.ts:262` and `:408` today), rewritten and type-checked against
-effect 4.1.2 and tea 0.25.0 for the decision. Its own 12 laws pass against it.
+effect 4.1.2 and tea 0.25.0 for the decision, when a Msg was still keyed `type`. Its own 12 laws
+passed against it. With 0569, `m.type` reads `m._tag`, and `refuse` takes the Msg's own union.
 
 ```ts
     return Match.valueTags(s, {                      // point 2: `s` is narrowed, `idle` is gone
@@ -132,9 +132,8 @@ cleanup lands:
 ## Intended scope
 
 The cleanup goes state side first: the `_tag` checks on our states and answers and on `Exit`,
-`Option` and `Result`. The checks on a Msg's `type` come last, since whether a Msg stays keyed by
-`type` on the Effect side is still open. The bump to effect 4.1.3 lands before the cleanup leans
-on `isAnyOf`.
+`Option` and `Result`. The checks on a Msg come last; since 0569 a Msg is keyed `_tag` and matched
+like any other union. The bump to effect 4.1.3 lands before the cleanup leans on `isAnyOf`.
 
 ## Decision
 

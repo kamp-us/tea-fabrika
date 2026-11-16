@@ -115,7 +115,7 @@ A TypeScript brand stops a mistake, not a forger. The signer stays the real chec
 ## Why
 
 Today's `Program.make` (PR 522) spreads a program over about ten places and links them by names that
-must match: a Msg's `type` and an input's key, a fact's `_tag` and a `writes` key, a Cmd named exactly
+must match: a Msg's `_tag` (its `type` before 0569) and an input's key, a fact's `_tag` and a `writes` key, a Cmd named exactly
 `write` that each program declares again, and two `personOnly` flags kept in step by hand. Five parts
 must be written even when empty (`state`, `refuse`, `outputs`, `writes`, `wake`), and the declared
 output has no way to be sent. Experiment 235 wrote the real ticket program three ways and made each

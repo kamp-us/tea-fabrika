@@ -21,11 +21,11 @@ tooling stops signing, so the paragraph above no longer holds for it. This note 
 
 ```ts
 // A sketch, next/. One step program, after its agent answers. The agent ran no git and holds no key.
-// tea's Msgs keep `type`; our outcomes are `_tag` unions with the five verbs.
+// tea's Msgs are `_tag` unions too (0569), like our outcomes with the five verbs.
 type Msg =
-	| {type: "drafted"; change: Change} // Draft: the agent hands back files, nothing else
-	| {type: "committed"; sha: string; link: Link} // Act: code committed and signed, as this step
-	| {type: "commit_failed"};
+	| {_tag: "drafted"; change: Change} // Draft: the agent hands back files, nothing else
+	| {_tag: "committed"; sha: string; link: Link} // Act: code committed and signed, as this step
+	| {_tag: "commit_failed"};
 
 const update = (m: Model, msg: Msg): [Model, Cmd<Msg>] => {
 	switch (msg.type) {

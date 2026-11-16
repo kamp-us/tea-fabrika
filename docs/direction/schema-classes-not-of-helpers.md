@@ -42,7 +42,8 @@ Schema.encodeSync(OpenTicket)({...t, now: 3}); // a spread still encodes, so a k
   method makes every plain literal and every spread fail to typecheck.
 - **A member of a union is a `Schema.TaggedStruct` wrapped the same way.**
   Every union we define uses `_tag`, written by Effect Schema and never by hand.
-  tea's Msgs and Cmds keep `type`, and third-party shapes keep theirs. In `next/`, `kind`
+  tea's Msgs, Cmds and Subs are `_tag` too in `next/` ([0569](../../.decisions/0569-tea-msgs-are-keyed-on-tag.md)
+  and its amendment); today's version keeps `type`, and third-party shapes keep theirs. In `next/`, `kind`
   on ledger entries becomes `_tag` too, settled when the owner approved Tier 1 on
   2026-11-01, and ticket 32 tracks it. Today's code keeps `kind`. A tagged member inside a
   `Schema.Union` was tested and works. *(Changed 2026-11-01; it used to say `_tag`
