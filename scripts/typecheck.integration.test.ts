@@ -74,6 +74,7 @@ setInterval(() => { if (existsSync(process.env.TEST_RELEASE)) process.exit(0); }
     `import {existsSync, writeFileSync} from 'node:fs';
 import {basename} from 'node:path';
 if (existsSync('/proc/self/comm')) writeFileSync('/proc/self/comm', basename(process.argv0));
+process.stdout.write('ready\\n');
 setTimeout(() => {}, 60_000);
 `,
   );
@@ -121,15 +122,24 @@ const until = async (test: () => boolean, what: string) => {
 
 /**
  * A compiler the lock does not cover, or with `--lsp` a language server: node, linked under the rig's
- * compiler name. It returns once pgrep -x sees that name, so the typecheck after it finds it.
+ * compiler name. The stand-in prints `ready` once it runs under that name, and only then does pgrep -x
+ * look for it, once, so the typecheck after it finds it. A wall-clock poll for its start flaked on a
+ * loaded CI runner, where node took longer than the poll to start.
  */
 const named = async (r: Rig, args: readonly string[] = []) => {
   const path = join(r.bin, r.compiler),
     standIn = join(r.dir, "named.mjs");
   symlinkSync(process.execPath, path);
-  const child = spawn(path, [standIn, ...args], { detached: true, stdio: "ignore" });
+  const child = spawn(path, [standIn, ...args], { detached: true, stdio: ["ignore", "pipe", "ignore"] });
   children.push(child);
-  await until(() => spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started");
+  await new Promise<void>((ready, failed) => {
+    child.stdout!.once("data", () => ready());
+    child.once("error", failed);
+    child.once("exit", (code, signal) =>
+      failed(new Error(`the stand-in compiler ended before it was ready: ${code ?? signal}`)),
+    );
+  });
+  expect(spawnSync("pgrep", ["-x", r.compiler]).status === 0, "the stand-in compiler never started").toBe(true);
   return { child, command: [path, standIn, ...args].join(" ") };
 };
 
