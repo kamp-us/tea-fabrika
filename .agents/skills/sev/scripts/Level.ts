@@ -2,7 +2,7 @@
 // Today's lead tooling, run on our own laptop; it is not product.
 //
 //   sev0   the owner called it; the log below holds it, from `opened` to `closed`
-//   sev1   no sev0 is open, and at least one `ci-scheduled` issue is open: the 3-hour run is red,
+//   sev1   no sev0 is open, and at least one `ci-scheduled` issue is open: the full run is red,
 //          or a CI speed number is over its goal. Nobody calls it, and nothing here stores it
 //   none   neither
 //

@@ -1,4 +1,5 @@
-// T730, P38 slice 2, next/: L1 and L9 of the approved plan. Written before the build.
+// T730, P38 slice 2, next/: L1 and L9 of the approved plan. Written before the build. L9 calls
+// `plant`, which spawns oxlint in a temp folder, so the file is `.integration.` (0584).
 //
 // The shape these tests hold the app and libfabrika to:
 // - The committed `next/apps/fabrika/person.json` and `repo.json` are, byte for byte,
@@ -184,7 +185,7 @@ const caller = fc.oneof(
     .constantFrom(
       "next/apps/fabrika/settings-generate.ts",
       "next/apps/fabrika/build.ts",
-      "next/apps/fabrika/src/settings-generated.test.ts",
+      "next/apps/fabrika/src/settings-generated.integration.test.ts",
     )
     .map((file) => ({ file, adapter: false, parser: false })),
   fc

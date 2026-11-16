@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-typecheck-lock-linux-fix1",
+  "ticket": 1074,
+  "pr": "kamp-us/tea-fabrika#1419",
+  "started": "2026-11-15T19:35:00-08:00",
+  "ended": "2026-11-15T20:00:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round on the typecheck lock, in today's tooling. Two laws were green on the Mac and red on CI's Linux runner (full run 43798526473, leg tooling-1): the wait law never saw a wait line, and the language-server law's stand-in was never seen by pgrep -x. Both stand-ins lost their name on Linux. The copy of /bin/sleep: the runner is ubuntu-26.04, whose sleep is uutils' one binary for every tool (coreutils 9.5-1ubuntu2+0.0.0~ubuntu25, the transitional package); it picks the tool by the name it runs under, so under the rig's name it exits at once and pgrep finds nothing. The node link: Node 26.13.0 calls uv_thread_setname(\"node-MainThread\") at start (src/node.cc); on Linux libuv's pthread_setname_np renames the main thread, which is /proc/<pid>/comm, the name pgrep -x reads; on macOS a thread name is not the process name, so the Mac stayed green. Fix: one stand-in for both laws, node linked under the rig's name, which writes its name back to /proc/self/comm where that exists, and the helper waits until pgrep -x sees it. The file is renamed scripts/typecheck.integration.test.ts under 0584, since its laws start processes; the tooling project's scripts/*.test.ts glob still picks it up.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": "On this Mac: a scratchpad Node script ran the stand-in and scripts/typecheck.sh (pgrep -x found it with args intact, the one wait line named it, the typecheck ran once it ended, exit 0), and the six laws passed narrowly on Node 26.13.0. Linux is reasoned from the code, not run: no Docker daemon was up. CI's full run is the proof on Linux.",
+  "step": "build"
+}

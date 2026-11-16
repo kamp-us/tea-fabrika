@@ -1,4 +1,5 @@
 // T878, next/, L7. Resolve through the public Repository handle, using committed tree and disk bytes.
+// It runs `git` on Node's own layer in temp folders, so it is `.integration.` (0584).
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";

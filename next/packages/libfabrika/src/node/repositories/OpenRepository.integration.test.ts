@@ -1,8 +1,8 @@
 // T878, next/, L8 against real git: refusal, consent and retries never run a command the clone's
 // git config names (hooks, fsmonitor, ssh command, upload-pack). Only real git can show that git
 // itself leaves them alone, so this law drives git, temp folders and a spawned process, and runs on
-// the schedule (0536). OpenRepository.test.ts keeps L3, L9 and the injected L8, which hold the
-// repository-code tripwires on every pull request. The arbitraries below are that file's own.
+// the schedule (0536). OpenRepository.composed.integration.test.ts keeps L3, L9 and the injected L8,
+// which hold the repository-code tripwires. The arbitraries below are that file's own.
 import { DatabaseSync } from "node:sqlite"; // edge: synchronous transactions are the ledger's driver contract
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
