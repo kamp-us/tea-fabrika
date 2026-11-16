@@ -5,6 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 // log (../ci/fixtures/run-43776563690-next-2.log): one leg's vitest step failed, and that leg's stop
 // step canceled the other nine, so the run's own conclusion reads `cancelled`.
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
 import { FileSystem } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
@@ -13,6 +14,7 @@ import * as RunsGh from "../ci/RunsGh.ts";
 import * as RunsTest from "../ci/RunsTest.ts";
 import * as Arm from "./Arm.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
+import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesTest from "./PushesTest.ts";
 
 const oid = "e42d1dce6a74f4ccb246ed19b4db04ad72c0d899";
@@ -93,10 +95,31 @@ const memory = (w: World, red: { readonly jobs: ReadonlyArray<Job>; readonly log
     RunsTest.layer(actions),
     ChecksTest.layer([], red.log),
   );
-  return { github, actions, remote, layer };
+  return { github, actions, layer };
 };
 
 const arm = (m: ReturnType<typeof memory>) => Arm.arm({ repo, dir: ".", pr: 1092 }).pipe(Effect.provide(m.layer));
+
+/** One arm, and the leak checks it asked for, read inside the layer that recorded them. */
+const armed = (m: ReturnType<typeof memory>) =>
+  Effect.gen(function* () {
+    const answer = yield* Effect.result(Arm.arm({ repo, dir: ".", pr: 1092 }));
+    return { answer, leaks: yield* Recorder.calls(Pushes) };
+  }).pipe(Effect.provide(m.layer));
+
+/** Which leak check refuses, by its method's name, or none. */
+const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
+
+/** The one leak check that refuses, with the error it refuses with. */
+const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
+  leak === "clean"
+    ? {}
+    : leak === "leakChange"
+      ? { leakChange: hit }
+      : leak === "leakGrep"
+        ? { leakGrep: hit }
+        : { leakText: hit };
 
 const armedAt = [{ _tag: "arm", number: 1092, oid }];
 
@@ -254,23 +277,20 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
   // grep of the commits or of the words. The hit on 2026-11-15 was in a description.
   it.effect.prop(
     "property: over a green full run it arms only when the leak grep passed on the change, each commit and the title and description; a refusal from any of them, or a grep that could not run, arms nothing",
-    { leak: Schema.Literals(["clean", "leakChange", "leak", "leakText"]) },
+    { leak: Leak },
     ({ leak }) =>
       Effect.gen(function* () {
         const red = yield* fixture;
-        const m = memory(
-          { stands: "green", draft: true, leak: leak === "clean" ? {} : { [leak]: "leakgrep.sh exited 1" } },
-          red,
-        );
-        const answer = yield* Effect.result(arm(m));
+        const m = memory({ stands: "green", draft: true, leak: leaking(leak) }, red);
+        const { answer, leaks } = yield* armed(m);
         expect(m.github.calls).toEqual(leak === "clean" ? [{ _tag: "ready", number: 1092 }, ...armedAt] : []);
         expect(answer._tag === "Failure" && answer.failure._tag).toBe(leak === "clean" ? false : "LeakGrepRefused");
         const ran = [
-          `leakchange ${oid}`,
-          `leakgrep ${oid}`,
-          "leaktext Per-program quotas, in next/ (P34c slice 4)\n\n\n",
+          { method: "leakChange", args: [".", oid] },
+          { method: "leakGrep", args: [".", oid] },
+          { method: "leakText", args: [".", "Per-program quotas, in next/ (P34c slice 4)\n\n\n"] },
         ];
-        expect(m.remote.calls).toEqual(ran.slice(0, { clean: 3, leakChange: 1, leak: 2, leakText: 3 }[leak]));
+        expect(leaks).toEqual(ran.slice(0, { clean: 3, leakChange: 1, leakGrep: 2, leakText: 3 }[leak]));
       }),
   );
 });

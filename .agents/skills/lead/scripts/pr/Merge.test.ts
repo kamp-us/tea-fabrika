@@ -7,12 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { afterEach, describe, expect, it, vi } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Option, Schema } from "effect";
 import * as ChecksTest from "../ci/ChecksTest.ts";
 import * as Merge from "./Merge.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
-import { Pushes } from "./Pushes.ts";
+import { LeakGrepRefused, Pushes } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 
@@ -21,7 +22,20 @@ const branch = "fabrikalfa/decision-1415";
 const title = "Decision 0583: a room is one process";
 const body = "What it decides.";
 
-const Leak = Schema.Literals(["clean", "leakChange", "leak", "leakText"]);
+/** Which leak check refuses, by its method's name, or none. */
+const Leak = Schema.Literals(["clean", "leakChange", "leakGrep", "leakText"]);
+const hit = new LeakGrepRefused({ reason: "leakgrep.sh exited 1" });
+
+/** The one leak check that refuses, with the error it refuses with. */
+const leaking = (leak: typeof Leak.Type): PushesTest.Failing =>
+  leak === "clean"
+    ? {}
+    : leak === "leakChange"
+      ? { leakChange: hit }
+      : leak === "leakGrep"
+        ? { leakGrep: hit }
+        : { leakText: hit };
+
 const Files = Schema.Literals(["docs", "code", "none"]);
 
 const FILES = {
@@ -43,24 +57,34 @@ const memory = (w: World = {}) => {
   github.more.set(1415, { title: w.title ?? title, body });
   github.files.set(1415, FILES[w.files ?? "docs"]);
   const remote = PushesTest.remote();
-  const leak = w.leak === undefined || w.leak === "clean" ? {} : { [w.leak]: "leakgrep.sh exited 1" };
   const job = { id: 1, status: "completed", conclusion: w.required ?? "success" };
   const layer = Layer.mergeAll(
     PullRequestsTest.layer(github),
-    PushesTest.layer(remote, leak),
+    PushesTest.layer(remote, leaking(w.leak ?? "clean")),
     ChecksTest.layer([Option.some(job)], ""),
   );
-  return { github, remote, layer };
+  return { github, layer };
 };
 
 const merge = (m: ReturnType<typeof memory>, route: Merge.Route) =>
   Merge.merge({ dir: ".", pr: 1415, route }).pipe(Effect.provide(m.layer));
 
+/** One merge, and the leak checks it asked for, read inside the layer that recorded them. */
+const merged = (m: ReturnType<typeof memory>, route: Merge.Route) =>
+  Effect.gen(function* () {
+    const answer = yield* Effect.result(Merge.merge({ dir: ".", pr: 1415, route }));
+    return { answer, leaks: yield* Recorder.calls(Pushes) };
+  }).pipe(Effect.provide(m.layer));
+
 const queue = Merge.Route.cases.queue.make({});
 const admin = (sev0: ReadonlyArray<string> = []) => Merge.Route.cases.admin.make({ sev0 });
 
 /** The three leak checks, in order, as the gate runs them on pull request 1415. */
-const gate = [`leakchange ${oid}`, `leakgrep ${oid}`, `leaktext ${title}\n\n${body}\n`];
+const gate = [
+  { method: "leakChange", args: [".", oid] },
+  { method: "leakGrep", args: [".", oid] },
+  { method: "leakText", args: [".", `${title}\n\n${body}\n`] },
+];
 
 describe("merge: the lead's one way to merge by hand runs the leak gate first", () => {
   // Plants: merge before the gate, or past a refusal from it; skip the commit or the word grep;
@@ -77,7 +101,7 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
     ({ route, leak, files, sev0, required }) =>
       Effect.gen(function* () {
         const m = memory({ leak, files, required });
-        const answer = yield* Effect.result(merge(m, route === "queue" ? queue : admin(sev0 ? [branch] : [])));
+        const { answer, leaks } = yield* merged(m, route === "queue" ? queue : admin(sev0 ? [branch] : []));
         const clean = leak === "clean";
         const docs = files === "docs";
         const merges =
@@ -87,12 +111,12 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
         expect(answer._tag).toBe(merges ? "Success" : "Failure");
 
         if (merges) {
-          expect(m.remote.calls).toEqual(gate);
+          expect(leaks).toEqual(gate);
         }
 
         // An admin merge GitHub's rules would not allow refuses before any grep runs.
         if (route === "admin" && !docs && !sev0) {
-          expect(m.remote.calls).toEqual([]);
+          expect(leaks).toEqual([]);
         }
       }),
   );
@@ -103,9 +127,9 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
     () =>
       Effect.gen(function* () {
         const m = memory({ leak: "leakText" });
-        const refused = yield* Effect.flip(merge(m, admin()));
-        expect(refused).toMatchObject({ _tag: "LeakGrepRefused" });
-        expect(m.remote.calls).toEqual(gate);
+        const { answer, leaks } = yield* merged(m, admin());
+        expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
+        expect(leaks).toEqual(gate);
         expect(m.github.calls).toEqual([]);
       }),
   );
@@ -113,9 +137,10 @@ describe("merge: the lead's one way to merge by hand runs the leak gate first", 
   it.effect("scenario: a leak word in a commit refuses, with or without --admin, and nothing merges", () =>
     Effect.gen(function* () {
       for (const route of [queue, admin()]) {
-        const m = memory({ leak: "leak" });
-        expect(yield* Effect.flip(merge(m, route))).toMatchObject({ _tag: "LeakGrepRefused" });
-        expect(m.remote.calls).toEqual(gate.slice(0, 2));
+        const m = memory({ leak: "leakGrep" });
+        const { answer, leaks } = yield* merged(m, route);
+        expect(answer._tag === "Failure" && answer.failure).toMatchObject({ _tag: "LeakGrepRefused" });
+        expect(leaks).toEqual(gate.slice(0, 2));
         expect(m.github.calls).toEqual([]);
       }
     }),
