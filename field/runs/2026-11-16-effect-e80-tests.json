@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e80-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:15:24-08:00",
+  "ended": "2026-11-15T23:22:06-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E80 of the Effect-check sweep (strictEffectProvide), in next/, under decision 0565 as amended (library and program source only, not test files). Recount at origin/main b510ed2 (PR 1366 merged as e3f72bf): 717 hits in the five folders, against the plan's 703. Per folder, all / test files and test support (exam paths, out of this check's scope) / product source: lib:runtime 358 / 354 / 4; app:src 219 / 216 / 3; lib:cloudflare 68 / 54 / 14; lib:gateway 35 / 33 / 2; lib:settings 37 / 37 / 0. Every exam-path hit sits in a test file (*.test.ts), a test support file (*.test-support.ts) or a shared suite (*Test.ts), 694 hits in 98 files, so the tests step has nothing to fix. The 23 product hits, all for the build: lib:runtime: next/packages/libfabrika/src/runtime/Built.ts:35, ProcessStore.ts:247 (1366 file), Runner.ts:531 and 544 (1366 file). app:src: next/apps/fabrika/src/instance.ts:62 and 63, runtime.ts:57. lib:cloudflare: next/packages/libfabrika/src/cloudflare/SettingsInput.ts:53 and 91, SettingsRecorded.ts:43, SettingsStartsLedger.ts:145 and 146, runtime.ts:923, 927, 936, 961, 974, 1260, 1278, 1291, 2437 (1366 file). lib:gateway: next/packages/libfabrika/src/gateway/Gateway.ts:418 and 432 (1366 file). lib:settings: none in product source. Of the 23, 14 sit in PR 1366's files and are now part of the slice. Entry points: none of the 23 is a runMain, Worker or Durable Object entry. The Durable Object's runtime is built in cloudflare/runtime.ts's projectRuntime and processRuntime, which hold no hit; the cloudflare and gateway hits provide a per-start layer while the Project's or Process's layer is being built, and Built.ts and the Settings files provide the stateless Digest.layerWebCrypto inside library functions. The one candidate the lead may rule on is next/apps/fabrika/src/runtime.ts:57, the Project's door, which provides Gateway.layer inside the Durable Object's assembly but not at its outermost edge; the lean is a fix (the door hands the Project a Layer that the Project builds in its own scope, which cloudflare/runtime.ts's ProjectOptions.door can now take since 1366 merged), not a disable line. No browser page.evaluate body is among the hits. Overlap: the unmerged slice branch fabrikalfa/effect-e30 already fixes app:src instance.ts:62 and 63 (Layer.buildWithScope in the dev run's scope), so the app:src build should take that change or wait for it, not write a second one. Folders with any hit, for the lock: lib:runtime, app:src, lib:cloudflare, lib:gateway, lib:settings. Build groups with product hits: lib:runtime (4), app:src (3), and lib:cloudflare plus lib:gateway (16; lib:settings has none). No law written and no plant run: the slice adds no lock and changes no exam-path file. No lock line, no tsconfig override, no LOCKED row.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 7.5,
+  "note": "Count: pnpm exec effect-tsgo diagnostics --format json --project for next/packages/libfabrika/tsconfig.json and next/apps/fabrika/tsconfig.json, with an --lspconfig setting only strictEffectProvide to error and includeSuggestionsInTsc true; nothing written to a tsconfig. Both tsconfigs include every file of these folders directly (src, and **/*.ts), so no file is reached only by import. Hits joined by file and offset. Exam paths matched against exam-paths.json; PR 1366's files read from git's diff of its squash commit e3f72bf (70 files). No code changed, so no law or narrow test ran. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) and the exam ratchet ran before the commit.",
+  "step": "tests"
+}
