@@ -87,7 +87,8 @@ alone unless he names it.
     them today.
 - **Effect:** every union is keyed by `_tag`. `Schema.TaggedUnion` and `TaggedStruct` write it;
   `Union.match`, `Union.isAnyOf`, `Match.valueTags` read it. `Types.Tags<E>` and
-  `Types.ExtractTag<E, K>` (`effect/dist/Types.d.ts:121`, `:196`, effect 4.1.2) are the type forms of
+  `Types.ExtractTag<E, K>` (`effect/dist/Types.d.ts:121`, `:196`, read in effect 4.1.2; main moved to 4.1.3 in
+  [pull request 1375](https://github.com/kamp-us/tea-fabrika/pull/1375), so the tests step re-reads them) are the type forms of
   `M["type"]` and `Extract<M, { type: K }>`. Reading an old encoding into a new type is a schema
   transformation: `Schema.decodeTo` with `SchemaTransformation.transform` (`Schema.d.ts:4674`,
   `SchemaTransformation.d.ts:401`).
@@ -707,7 +708,6 @@ Clashes, from `gh pr view <n> --json files` against the 234 files that hold a Ms
 | [1341](https://github.com/kamp-us/tea-fabrika/pull/1341) program watch | none | waits for it: 7 files, among them `Runner.ts`, `Program.ts`, `Program.test.ts`, `processes/Process.ts`, `cloudflare/runtime.ts` |
 | [1331](https://github.com/kamp-us/tea-fabrika/pull/1331) hands client | none | waits for it: `client/HandsStart.ts` |
 | [1366](https://github.com/kamp-us/tea-fabrika/pull/1366) reader ack | none | waits for it: 10 files, among them `Runner.ts`, `Gateway.ts`, `RepliesSql.ts`, `telemetry/Sink.ts` and four integration tests |
-| [1375](https://github.com/kamp-us/tea-fabrika/pull/1375) effect 4.1.3 (plan; its build changes the lockfile, the workspace file and a patch) | lockfile, `pnpm-workspace.yaml` | lockfile, `pnpm-workspace.yaml`; a different patch file |
 | [1312](https://github.com/kamp-us/tea-fabrika/pull/1312) tezgah new tile | none | 14 files |
 | [1301](https://github.com/kamp-us/tea-fabrika/pull/1301) test SQLite store | lockfile | 14 files, lockfile |
 | [1232](https://github.com/kamp-us/tea-fabrika/pull/1232) cloud fabsh | lockfile | 15 files, lockfile |
