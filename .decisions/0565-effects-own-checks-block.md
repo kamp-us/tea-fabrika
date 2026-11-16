@@ -360,3 +360,11 @@ The lead is about 75% sure. The doubt: the makers' page never names tests, and `
 `layer(...)` helper is another way to give a test its layer. Moving the 757 sites to that helper
 would keep tests in the lock. If the owner prefers that, this amendment is reversed and E30 moves
 the tests instead.
+
+### 2026-11-15: the four bare-Node CI scripts stay outside the Effect checks
+
+Four scripts in `.github/ci/` run with bare Node before `pnpm install`, so `changes.mjs` can pick a
+run's CI jobs before anyone pays for an install (0175). The Effect checks ask for Effect-native
+counterparts, and those cannot load before install. The lead ruled that each lock lists these four
+files by exact path in its `exclude`, never by a glob, with this reason. A new script then needs
+its own diff and its own reason.
