@@ -1,7 +1,7 @@
 ---
 id: 0534
 title: The merge line runs only the tests a change reaches, a schedule runs the whole next/ suite every 3 hours and opens a GitHub issue when red, and the queue builds two groups at once
-status: amended-in-part by [0539](0539-the-merge-line-runs-no-tooling-tests.md), [0541](0541-ci-speed-has-a-goal-and-a-daily-check.md)
+status: amended-in-part by [0539](0539-the-merge-line-runs-no-tooling-tests.md), [0541](0541-ci-speed-has-a-goal-and-a-daily-check.md), [0581](0581-main-full-run-starts-on-push-and-hourly.md)
 date: 2026-11-14
 tags: [ci, merge-queue, schedule, tests, next, main, github-issues]
 ---
@@ -85,3 +85,10 @@ groups at once.**
   off the merge queue and main.
 - Not decided here: lower property run counts on pull requests with the full count on the schedule
   (the audit's fix 3). That narrows what a law proves on a pull request, so it is its own call.
+
+## Amendments
+
+- 2026-11-15: the schedule line no longer holds. The full run on main starts on a push to main when
+  none started in the last hour, and an hourly cron (`17 * * * *`) starts one only when main's head
+  has had none, in place of "every 3 hours" and the 3-hour cron
+  ([0581](0581-main-full-run-starts-on-push-and-hourly.md)). The interval is still a setting (0069).

@@ -1,7 +1,7 @@
 ---
 id: 0544
 title: Every pull request whose review passed has merge when ready on, with no full run first, and a break the 3-hour run finds is fixed there
-status: accepted
+status: amended-in-part by [0584](0584-a-tests-kind-follows-what-it-uses.md)
 date: 2026-11-15
 tags: [merge-queue, lead, auto-merge, order, ci, scheduled]
 ---
