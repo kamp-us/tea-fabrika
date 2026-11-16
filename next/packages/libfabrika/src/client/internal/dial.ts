@@ -7,6 +7,7 @@
  */
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Queue from "effect/Queue";
@@ -44,21 +45,28 @@ export type DialMsg =
 const answerId = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ id: Schema.Number })));
 
 /** The class of a socket that failed to open: the thrown error's own class, or a network failure. */
-const openFailure = (error: Socket.SocketError): ErrorClass => {
-  const reason = error.reason;
+const openFailure = (error: Socket.SocketError): ErrorClass =>
+  Match.value(error.reason).pipe(
+    Match.when({ _tag: "SocketOpenError", kind: "Timeout" }, (): ErrorClass => "TimeoutError"),
+    Match.orElse((reason) => {
+      const cause = "cause" in reason ? reason.cause : undefined;
+      const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
+      return Schema.is(ErrorClass)(name) ? name : "NetworkError";
+    }),
+  );
 
-  if (reason._tag === "SocketOpenError" && reason.kind === "Timeout") {
-    return "TimeoutError";
-  }
-
-  const cause = "cause" in reason ? reason.cause : undefined;
-  const name = Predicate.hasProperty(cause, "name") ? cause.name : null;
-  return Schema.is(ErrorClass)(name) ? name : "NetworkError";
-};
+/** Whether a reader's failure is the socket's own close, which carries its code. */
+const closed = Match.type<Socket.SocketErrorReason>().pipe(
+  Match.tag("SocketCloseError", () => true),
+  Match.orElse(() => false),
+);
 
 /** The close code a reader's failure carries, or 1006 when the socket ended without one. */
 const closeCode = (error: Socket.SocketError): number =>
-  error.reason._tag === "SocketCloseError" ? error.reason.code : 1006;
+  Match.value(error.reason).pipe(
+    Match.tag("SocketCloseError", (reason) => reason.code),
+    Match.orElse(() => 1006),
+  );
 
 /** One socket for `url`, from the platform's constructor. A throwing constructor is an open failure. */
 const acquire = (make: Socket.WebSocketConstructor["Service"], url: string) =>
@@ -129,7 +137,7 @@ export const dialer =
             Effect.gen(function* () {
               const at = yield* Clock.currentTimeMillis;
 
-              if (error.reason._tag !== "SocketCloseError") {
+              if (!closed(error.reason)) {
                 emit({ type: "socket_failure", dial, op: "connect", error: openFailure(error) });
               }
 

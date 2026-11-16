@@ -53,8 +53,11 @@ export const prefixMachine = Machine.make({
   cmds: [],
   init: (loaded) => [loaded ?? Prefix.cases.idle.make({}), []],
   update: {
-    arm: (s, m): Step => [s._tag === "idle" ? Prefix.cases.armed.make({ since: m.at }) : s, []],
-    question: (s, m): Step => [s._tag === "armed" ? Prefix.cases.asking.make({ tile: m.tile, since: m.at }) : s, []],
+    arm: (s, m): Step => [Prefix.isAnyOf(["idle"])(s) ? Prefix.cases.armed.make({ since: m.at }) : s, []],
+    question: (s, m): Step => [
+      Prefix.isAnyOf(["armed"])(s) ? Prefix.cases.asking.make({ tile: m.tile, since: m.at }) : s,
+      [],
+    ],
     done: (): Step => [Prefix.cases.idle.make({}), []],
   },
 });

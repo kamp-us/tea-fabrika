@@ -7,12 +7,13 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { ExitReason } from "../processes/ExitReason.ts";
-import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
+import { clientInbox, Down, inSignalSpace, Recipient } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
 import type { Program } from "../runtime/Program.ts";
 import { Sent } from "../runtime/Runner.ts";
@@ -424,7 +425,7 @@ const wrote = (s: WindowModel, dial: number, calls: ReadonlyArray<Call>): Step =
 };
 
 const flush = (s: WindowModel): Step => {
-  if (s.link._tag !== "online") {
+  if (!Link.isAnyOf(["online"])(s.link)) {
     return [s, []];
   }
 
@@ -465,7 +466,7 @@ const isBrain = (by: string): boolean => by === "brain" || by.startsWith("brain:
 
 /** The watch a tile holds and the pid it shows, while it is opening or open. */
 const held = (reach: Reach): { readonly pid: string; readonly ref: string } | null =>
-  reach._tag === "opening" || reach._tag === "open" ? reach : null;
+  Reach.isAnyOf(["opening", "open"])(reach) ? reach : null;
 
 const nameStream = (name: string): string => `processes/${name}`;
 
@@ -582,7 +583,7 @@ const downFor = (s: WindowModel, raw: unknown) => {
 
   const down = Option.getOrNull(decodeDown(letter.body.m));
 
-  if (down === null || down.to._tag !== "client" || down.to.client !== s.tab) {
+  if (down === null || !Recipient.isAnyOf(["client"])(down.to) || down.to.client !== s.tab) {
     return null;
   }
 
@@ -615,7 +616,7 @@ const inboxRead = (s: WindowModel, dial: number, page: ReadonlyArray<unknown>): 
 const monitorAnswered = (s: WindowModel, m: On, result: "watching" | "refused"): Step => {
   const found = answered(s, m, "monitor");
 
-  if (found === null || found.call._tag !== "monitor") {
+  if (found === null || !Call.isAnyOf(["monitor"])(found.call)) {
     return [s, []];
   }
 
@@ -639,7 +640,7 @@ const waitAnswered = (s: WindowModel, m: On, woke: boolean): Step => {
 
   const next = { ...s, flight: found.rest };
 
-  if (s.inbox._tag === "waiting" && s.inbox.id === m.id) {
+  if (Inbox.isAnyOf(["waiting"])(s.inbox) && s.inbox.id === m.id) {
     if (!woke) {
       return [inboxIdle(next), []];
     }
@@ -649,13 +650,13 @@ const waitAnswered = (s: WindowModel, m: On, woke: boolean): Step => {
     return [{ ...written, inbox: Inbox.cases.reading.make({ after, id: s.serial }) }, out];
   }
 
-  const tile = s.tiles.find((t) => t.reach._tag === "ended" && t.reach.id === m.id);
+  const tile = s.tiles.find((t) => Reach.isAnyOf(["ended"])(t.reach) && t.reach.id === m.id);
   return tile === undefined ? [next, []] : resolveAgain(next, m.dial, new Set([tile.id]));
 };
 
 /** A tezgah link whose read `id` failed: its process is missing. */
 const lostRead = (link: TezgahLink | null, id: number): TezgahLink | null =>
-  link !== null && link.reach._tag === "resolving" && link.reach.id === id
+  link !== null && TezgahReach.isAnyOf(["resolving"])(link.reach) && link.reach.id === id
     ? { ...link, reach: TezgahReach.cases.missing.make({}) }
     : link;
 
@@ -731,7 +732,7 @@ const opened = (s: WindowModel, pid: string): WindowModel => ({
     const watch = held(t.reach);
     return watch?.pid === pid ? { ...t, last: pid, reach: Reach.cases.open.make({ pid, ref: watch.ref }) } : t;
   }),
-  flight: s.flight.filter((f) => f.call._tag !== "open" || f.call.pid !== pid),
+  flight: s.flight.filter((f) => !Call.isAnyOf(["open"])(f.call) || f.call.pid !== pid),
 });
 
 const pressed = (s: WindowModel, step: ClientStep, tile: string, m: Schema.Json, via: "button" | "key"): Step => {
@@ -784,7 +785,7 @@ const followed = (s: WindowModel, fresh: (t: Shown) => TileRow): Step => {
 
   const next = { ...s, tiles };
 
-  if (s.link._tag !== "online" || added.length === 0) {
+  if (!Link.isAnyOf(["online"])(s.link) || added.length === 0) {
     return [next, []];
   }
 
@@ -819,10 +820,10 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
   );
   const reopen =
     asks.length > 0 &&
-    after.link._tag === "online" &&
-    !after.flight.some((f) => f.call._tag === "open" && f.call.pid === pid);
+    Link.isAnyOf(["online"])(after.link) &&
+    !after.flight.some((f) => Call.isAnyOf(["open"])(f.call) && f.call.pid === pid);
   const [written, writes] =
-    reopen && after.link._tag === "online"
+    reopen && Link.isAnyOf(["online"])(after.link)
       ? wrote(after, after.link.dial, [Call.cases.open.make({ pid })])
       : ([after, []] as const);
   return [written, [...focusRows(cmds), ...reads, ...writes, ...(due ? [mint({})] : [])]];
@@ -898,7 +899,7 @@ const roomFor = (space: Workspace, at: TileId, dir: Dir, size: typeof Size.Type)
 const toTezgah = (s: WindowModel, step: ClientStep, m: Schema.Json, does: string, from: string): Step => {
   const link = s.tezgah;
 
-  if (link === null || link.reach._tag !== "open") {
+  if (link === null || !TezgahReach.isAnyOf(["open"])(link.reach)) {
     return [s, []];
   }
 
@@ -964,7 +965,7 @@ const moved = (
   via: typeof ByKeys.Type | typeof ByClick.Type,
 ): Step => {
   const link = s.tezgah;
-  const pid = link === null ? null : link.reach._tag === "open" ? link.reach.pid : link.last;
+  const pid = link === null ? null : TezgahReach.isAnyOf(["open"])(link.reach) ? link.reach.pid : link.last;
 
   if (link === null || pid === null) {
     return [s, []];
@@ -980,7 +981,14 @@ const moved = (
       client,
       polite: null,
       tezgah: { ...link, client: moving },
-      from: { ...s.from, [n]: { tile: from, via: via._tag === "click" ? "click" : "key", does } },
+      from: {
+        ...s.from,
+        [n]: {
+          tile: from,
+          via: Match.valueTags(via, { click: (): typeof By.Type => "click", key: (): typeof By.Type => "key" }),
+          does,
+        },
+      },
     },
     [now({ n })],
   ];
@@ -1015,30 +1023,32 @@ const pressedKey = (s: WindowModel, step: ClientStep, table: Keys.Table, key: st
   const routed = Keys.route(table, s.prefix, null, { key });
   const prefix = (msg: typeof prefixMachine.msg.Type) => applyCell(prefixMachine, s.prefix, msg)[0];
 
-  if (routed._tag === "platform") {
+  if (Keys.Routed.isAnyOf(["platform"])(routed)) {
     return [s, []];
   }
 
-  if (routed._tag === "prefix") {
+  if (Keys.Routed.isAnyOf(["prefix"])(routed)) {
     return [{ ...s, prefix: prefix({ type: "arm", at }), polite: null }, []];
   }
 
-  if (routed._tag === "answer") {
+  if (Keys.Routed.isAnyOf(["answer"])(routed)) {
     const asked = s.prefix;
     const done = { ...s, prefix: prefix({ type: "done" }) };
-    return routed.yes && asked._tag === "asking" ? closing(done, step, asked.tile, `${table.prefix} x y`) : [done, []];
+    return routed.yes && Prefix.isAnyOf(["asking"])(asked)
+      ? closing(done, step, asked.tile, `${table.prefix} x y`)
+      : [done, []];
   }
 
-  if (routed._tag === "tile" || routed._tag === "dropped") {
-    return [s.prefix._tag === "idle" ? s : { ...s, prefix: prefix({ type: "done" }) }, []];
+  if (Keys.Routed.isAnyOf(["tile", "dropped"])(routed)) {
+    return [Prefix.isAnyOf(["idle"])(s.prefix) ? s : { ...s, prefix: prefix({ type: "done" }) }, []];
   }
 
   const does = routed.does;
-  const keys = s.prefix._tag === "armed" ? `${table.prefix} ${key}` : key;
+  const keys = Prefix.isAnyOf(["armed"])(s.prefix) ? `${table.prefix} ${key}` : key;
   const row = record({
     record: ClientRecord.cases.prefix.make({
       does,
-      ms: s.prefix._tag === "armed" ? Math.max(0, at - s.prefix.since) : 0,
+      ms: Prefix.isAnyOf(["armed"])(s.prefix) ? Math.max(0, at - s.prefix.since) : 0,
     }),
   });
   const done: WindowModel = { ...s, prefix: prefix({ type: "done" }) };
@@ -1148,7 +1158,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   const input = m.type === "ask_again" ? { ...m, dial: Math.max(s.dials + 1, m.dial) } : m;
   const [link, cmds] = applyCell(linkMachine, s.link, input);
   const open = socketDial(link);
-  const granted = m.type === "granted" && s.link._tag === "waiting_grant" && s.link.dial === m.dial;
+  const granted = m.type === "granted" && Link.isAnyOf(["waiting_grant"])(s.link) && s.link.dial === m.dial;
   let next: WindowModel = {
     ...s,
     link,
@@ -1158,9 +1168,9 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
         ? applyCell(handshakeMachine, s.handshake, { type: "opened", dial: open })[0]
         : s.handshake,
     dials: Math.max(s.dials, open ?? 0),
-    tries: link._tag === "dialing" && open !== socketDial(s.link) ? (link.tries ?? 0) : s.tries,
+    tries: Link.isAnyOf(["dialing"])(link) && open !== socketDial(s.link) ? (link.tries ?? 0) : s.tries,
     persist: granted ? "due" : s.persist,
-    rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
+    rejected: Link.isAnyOf(["removed"])(link) ? link.fingerprint : s.rejected,
     flight: s.flight.filter((f) => f.dial === open),
   };
   const out: Array<Out[number]> = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
@@ -1169,13 +1179,13 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
   next = knocked;
   out.push(...writes);
   const result =
-    s.link._tag !== "online" && link._tag === "online"
+    !Link.isAnyOf(["online"])(s.link) && Link.isAnyOf(["online"])(link)
       ? "online"
-      : s.link._tag !== "waiting_grant" && link._tag === "waiting_grant"
+      : !Link.isAnyOf(["waiting_grant"])(s.link) && Link.isAnyOf(["waiting_grant"])(link)
         ? "waiting"
-        : s.link._tag !== "removed" && link._tag === "removed"
+        : !Link.isAnyOf(["removed"])(s.link) && Link.isAnyOf(["removed"])(link)
           ? "removed"
-          : s.link._tag !== "retrying" && link._tag === "retrying"
+          : !Link.isAnyOf(["retrying"])(s.link) && Link.isAnyOf(["retrying"])(link)
             ? m.type === "closed"
               ? "closed"
               : "stalled"
@@ -1194,12 +1204,12 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     );
   }
 
-  if (s.link._tag === "removed" && m.type === "ask_again" && link._tag === "dialing") {
+  if (Link.isAnyOf(["removed"])(s.link) && m.type === "ask_again" && Link.isAnyOf(["dialing"])(link)) {
     out.push(key({ rejected: s.link.fingerprint }));
   }
 
-  if (link._tag !== "online") {
-    if (s.link._tag === "online") {
+  if (!Link.isAnyOf(["online"])(link)) {
+    if (Link.isAnyOf(["online"])(s.link)) {
       out.push(...Object.keys(s.patches).flatMap((pid) => runEnd(s, pid)));
     }
 
@@ -1213,18 +1223,18 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
         })),
         tezgah: next.tezgah === null ? null : { ...next.tezgah, reach: TezgahReach.cases.unresolved.make({}) },
         sent: [],
-        patches: s.link._tag === "online" ? {} : s.patches,
+        patches: Link.isAnyOf(["online"])(s.link) ? {} : s.patches,
       },
       out,
     ];
   }
 
-  if (s.link._tag === "online") {
+  if (Link.isAnyOf(["online"])(s.link)) {
     return [next, out];
   }
 
   // A tezgah window reads its person's tezgah first: the person is the one the door admitted.
-  const person = next.handshake._tag === "admitted" ? next.handshake.person : null;
+  const person = Handshake.isAnyOf(["admitted"])(next.handshake) ? next.handshake.person : null;
   const first =
     next.tezgah === null || person === null
       ? []
@@ -1268,15 +1278,20 @@ type HandshakeIn =
 
 /** The Link Msg a change of the hello exchange means, if any. */
 const outcome = (was: Handshake, now: Handshake, fingerprint: string): LinkMsg | null => {
-  if (now._tag === "admitted" && was._tag !== "admitted") {
+  if (Handshake.isAnyOf(["admitted"])(now) && !Handshake.isAnyOf(["admitted"])(was)) {
     return { type: "admitted", dial: now.dial, ping: now.ping, ms: now.ms };
   }
 
-  if (now._tag === "waiting" && (was._tag !== "waiting" || was.code !== now.code || was.until !== now.until)) {
+  if (
+    Handshake.isAnyOf(["waiting"])(now) &&
+    (!Handshake.isAnyOf(["waiting"])(was) || was.code !== now.code || was.until !== now.until)
+  ) {
     return { type: "not_granted", dial: now.dial, fingerprint, code: now.code, until: now.until, ms: now.ms };
   }
 
-  return was._tag === "waiting" && now._tag === "initializing" ? { type: "granted", dial: now.dial } : null;
+  return Handshake.isAnyOf(["waiting"])(was) && Handshake.isAnyOf(["initializing"])(now)
+    ? { type: "granted", dial: now.dial }
+    : null;
 };
 
 /** Steps the hello exchange by hand, sends its Cmds on and tells the Link what changed. */
@@ -1294,7 +1309,7 @@ const shook = (s: WindowModel, m: HandshakeIn): Step => {
   const next: WindowModel = { ...s, handshake };
   const sent: Out = cmds.map((c) => (c.type === "knock" ? enroll({ dial: c.dial, id: c.id }) : c));
 
-  if (handshake._tag === "failed" && s.handshake._tag !== "failed") {
+  if (Handshake.isAnyOf(["failed"])(handshake) && !Handshake.isAnyOf(["failed"])(s.handshake)) {
     const [blocked, out] = linked(next, { type: "blocked", reason: handshake.error });
     return [
       blocked,
@@ -1304,7 +1319,7 @@ const shook = (s: WindowModel, m: HandshakeIn): Step => {
 
   // The door's reason exists only in its answer, so the refusal is written the moment it comes. The
   // Link keeps its own stall and backoff path, so a passing refusal heals on its own.
-  if (handshake._tag === "refused" && s.handshake._tag !== "refused") {
+  if (Handshake.isAnyOf(["refused"])(handshake) && !Handshake.isAnyOf(["refused"])(s.handshake)) {
     const { dial, reason, ms } = handshake;
     return [
       next,
@@ -1375,7 +1390,7 @@ const answerTo = (
       return Option.match(Schema.decodeUnknownOption(WaitingCode)(result), {
         onNone: () => [],
         onSome: (w) => [
-          ...(handshake._tag === "waiting" && handshake.dial === on.dial
+          ...(Handshake.isAnyOf(["waiting"])(handshake) && handshake.dial === on.dial
             ? [{ type: "not_granted" as const, dial: on.dial, fingerprint, ...w, ms }]
             : []),
           { type: "knock_ok", ...on, value: null, ms },
@@ -1591,7 +1606,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         // A queued submit can arrive after the link drops. Keep its draft until a press can land.
-        if (cmds.some((cmd) => cmd.type === "press") && t.reach._tag !== "open") {
+        if (cmds.some((cmd) => cmd.type === "press") && !Reach.isAnyOf(["open"])(t.reach)) {
           return [s, []];
         }
 
@@ -1645,19 +1660,18 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const next: WindowModel = {
           ...s,
           flight: found.rest,
-          tezgah: call._tag === "read" ? lostRead(s.tezgah, m.cmd.id) : s.tezgah,
-          sent: call._tag === "send" ? s.sent.filter((l) => l !== call.letter) : s.sent,
-          tiles:
-            call._tag === "read"
-              ? s.tiles.map((t) =>
-                  t.reach._tag === "resolving" && t.reach.id === m.cmd.id
-                    ? { ...t, reach: Reach.cases.missing.make({}) }
-                    : t,
-                )
-              : s.tiles,
+          tezgah: Call.isAnyOf(["read"])(call) ? lostRead(s.tezgah, m.cmd.id) : s.tezgah,
+          sent: Call.isAnyOf(["send"])(call) ? s.sent.filter((l) => l !== call.letter) : s.sent,
+          tiles: Call.isAnyOf(["read"])(call)
+            ? s.tiles.map((t) =>
+                Reach.isAnyOf(["resolving"])(t.reach) && t.reach.id === m.cmd.id
+                  ? { ...t, reach: Reach.cases.missing.make({}) }
+                  : t,
+              )
+            : s.tiles,
         };
         // The inbox's own call never reached the door: it waits for the resend timer.
-        return [s.inbox._tag !== "idle" && s.inbox.id === m.cmd.id ? inboxIdle(next) : next, []];
+        return [!Inbox.isAnyOf(["idle"])(s.inbox) && s.inbox.id === m.cmd.id ? inboxIdle(next) : next, []];
       },
       read_ok: (s, m): Step => {
         const found = answered(s, m, "read");
@@ -1666,13 +1680,18 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [s, []];
         }
 
-        if (s.inbox._tag === "reading" && s.inbox.id === m.id) {
+        if (Inbox.isAnyOf(["reading"])(s.inbox) && s.inbox.id === m.id) {
           return inboxRead({ ...s, flight: found.rest }, m.dial, m.value);
         }
 
         const link = s.tezgah;
 
-        if (link !== null && link.reach._tag === "resolving" && link.reach.id === m.id && found.call._tag === "read") {
+        if (
+          link !== null &&
+          TezgahReach.isAnyOf(["resolving"])(link.reach) &&
+          link.reach.id === m.id &&
+          Call.isAnyOf(["read"])(found.call)
+        ) {
           const name = found.call.stream.slice("processes/".length);
           const pid = C.resolveName(m.value, name, isBrain);
           const next = { ...s, flight: found.rest };
@@ -1688,7 +1707,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           ];
         }
 
-        const tile = s.tiles.find((t) => t.reach._tag === "resolving" && t.reach.id === m.id);
+        const tile = s.tiles.find((t) => Reach.isAnyOf(["resolving"])(t.reach) && t.reach.id === m.id);
 
         if (tile?.reach._tag !== "resolving") {
           return [{ ...s, flight: found.rest }, []];
@@ -1709,7 +1728,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       read_err: (s, m): Step => {
         const found = answered(s, m, "read");
 
-        if (found !== null && s.inbox._tag === "reading" && s.inbox.id === m.id) {
+        if (found !== null && Inbox.isAnyOf(["reading"])(s.inbox) && s.inbox.id === m.id) {
           return [inboxIdle({ ...s, flight: found.rest }), []];
         }
 
@@ -1722,7 +1741,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                 trouble: "No process",
                 tezgah: lostRead(s.tezgah, m.id),
                 tiles: s.tiles.map((t) =>
-                  t.reach._tag === "resolving" && t.reach.id === m.id
+                  Reach.isAnyOf(["resolving"])(t.reach) && t.reach.id === m.id
                     ? { ...t, reach: Reach.cases.missing.make({}) }
                     : t,
                 ),
@@ -1733,7 +1752,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       open_ok: (s, m): Step => {
         const found = answered(s, m, "open");
 
-        if (found === null || found.call._tag !== "open") {
+        if (found === null || !Call.isAnyOf(["open"])(found.call)) {
           return [s, []];
         }
 
@@ -1747,10 +1766,10 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         const [next, rows, asks] = noticed({ ...s, flight: found.rest }, step, pid, { type: "whole", ...m.value });
 
-        if (asks.length > 0 && s.link._tag === "online") {
+        if (asks.length > 0 && Link.isAnyOf(["online"])(s.link)) {
           const calls = asks
             .filter((p) => next.tiles.some((t) => held(t.reach)?.pid === p))
-            .filter((p) => !next.flight.some((f) => f.call._tag === "open" && f.call.pid === p))
+            .filter((p) => !next.flight.some((f) => Call.isAnyOf(["open"])(f.call) && f.call.pid === p))
             .map((p) => Call.cases.open.make({ pid: p }));
           const [written, writes] = wrote({ ...next, trouble: "Bad view" }, s.link.dial, calls);
           return [written, [...rows, ...writes]];
@@ -1768,17 +1787,17 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       send_ok: (s, m): Step => {
         const found = answered(s, m, "send");
 
-        if (found === null || found.call._tag !== "send") {
+        if (found === null || !Call.isAnyOf(["send"])(found.call)) {
           return [s, []];
         }
 
         const letter = found.call.letter;
-        const slot = s.client.pending.find((p) => p._tag === "ready" && p.letter === letter);
+        const slot = s.client.pending.find((p) => C.Pending.isAnyOf(["ready"])(p) && p.letter === letter);
         const [client] = step(s.client, { type: "reply", letter, answer: m.value });
         const owner = slot && s.from[slot.n]?.tile;
         // A letter to tezgah names its command, and its refusal is no tile's.
         const refusal =
-          m.value._tag === "refused" &&
+          Sent.isAnyOf(["refused"])(m.value) &&
           slot !== undefined &&
           s.from[slot.n]?.does === undefined &&
           s.tiles.some((t) => t.id === owner)
@@ -1787,7 +1806,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         // A focus move is dropped on its refusal, or once its position is shown (0167).
         const [moves, rows] = tezgahStep(
           s,
-          m.value._tag === "accepted"
+          Sent.isAnyOf(["accepted"])(m.value)
             ? { type: "accepted", letter, pos: m.value.pos, ms: m.ms }
             : { type: "refused", letter, ms: m.ms },
         );
@@ -1811,7 +1830,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
                 result: m.value._tag,
                 attempts: s.attempts[letter] ?? 0,
                 ms: m.ms,
-                ...(m.value._tag === "refused"
+                ...(Sent.isAnyOf(["refused"])(m.value)
                   ? { reason: /^[a-z_]{1,40}$/.test(m.value.reason) ? m.value.reason : "other" }
                   : {}),
               }),
@@ -1823,7 +1842,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       send_err: (s, m): Step => {
         const found = answered(s, m, "send");
 
-        if (found === null || found.call._tag !== "send") {
+        if (found === null || !Call.isAnyOf(["send"])(found.call)) {
           return [s, []];
         }
 
@@ -1832,7 +1851,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           {
             ...s,
             flight: found.rest,
-            sent: m.error._tag === "unreachable" ? s.sent.filter((l) => l !== letter) : s.sent,
+            sent: CallError.isAnyOf(["unreachable"])(m.error) ? s.sent.filter((l) => l !== letter) : s.sent,
           },
           [],
         ];
@@ -1867,11 +1886,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         const [next, rows, asks] = noticed(s, step, m.pid, m.note);
         const after = next.client.views[m.pid] !== s.client.views[m.pid] ? opened(next, m.pid) : next;
 
-        if (asks.length === 0 || s.link._tag !== "online" || !s.tiles.some((t) => held(t.reach)?.pid === m.pid)) {
+        if (
+          asks.length === 0 ||
+          !Link.isAnyOf(["online"])(s.link) ||
+          !s.tiles.some((t) => held(t.reach)?.pid === m.pid)
+        ) {
           return [after, rows];
         }
 
-        if (after.flight.some((f) => f.call._tag === "open" && f.call.pid === m.pid)) {
+        if (after.flight.some((f) => Call.isAnyOf(["open"])(f.call) && f.call.pid === m.pid)) {
           return [after, rows];
         }
 
@@ -1889,7 +1912,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
         const [flushed, out] = flush({ ...quiet, redate: [] });
         const [next, waits] =
-          flushed.link._tag === "online" && flushed.inbox._tag === "idle"
+          Link.isAnyOf(["online"])(flushed.link) && Inbox.isAnyOf(["idle"])(flushed.inbox)
             ? waitInbox(flushed, flushed.link.dial, flushed.inbox.after)
             : [flushed, []];
         return [next, [...s.redate.map((n) => now({ n })), ...out, ...waits]];
@@ -1902,12 +1925,13 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         s,
         [
           record({
-            record:
-              m.error._tag === "unsupported"
-                ? ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" })
-                : m.error._tag === "ClientKeyError"
-                  ? ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(m.error) })
-                  : ClientRecord.cases.persist.make({ result: "failed" }),
+            record: Match.valueTags(m.error, {
+              unsupported: () => ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" }),
+              ClientKeyError: (error) =>
+                ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(error) }),
+              failed: () => ClientRecord.cases.persist.make({ result: "failed" }),
+              malformed_result: () => ClientRecord.cases.persist.make({ result: "failed" }),
+            }),
           }),
         ],
       ],
@@ -1915,7 +1939,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
       // A failure row is attempted once; a failing failure row cannot recurse.
       record_err: (s, m): Step => [
         s,
-        m.cmd.record._tag === "failure"
+        ClientRecord.isAnyOf(["failure"])(m.cmd.record)
           ? []
           : [record({ record: ClientRecord.cases.failure.make({ op: "record", error: platformFailure(m.error) }) })],
       ],
@@ -1950,7 +1974,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           return [s, []];
         }
 
-        if (link.reach._tag !== "open") {
+        if (!TezgahReach.isAnyOf(["open"])(link.reach)) {
           return [{ ...s, tezgah: { ...link, attach: "waiting" } }, []];
         }
 
@@ -1971,8 +1995,8 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         deps: (s) =>
           s.redate.length > 0 ||
           s.said.messages.length > 0 ||
-          (s.link._tag === "online" &&
-            (s.inbox._tag === "idle" || C.sendable(s.client).some((p) => !s.sent.includes(p.letter))))
+          (Link.isAnyOf(["online"])(s.link) &&
+            (Inbox.isAnyOf(["idle"])(s.inbox) || C.sendable(s.client).some((p) => !s.sent.includes(p.letter))))
             ? { ms: 2000, msg: { type: "resend" as const, dial: socketDial(s.link) ?? 0 } }
             : null,
       },
@@ -2053,9 +2077,10 @@ export const handle = (
   const ahead = waiting.reduce((s, m) => applyCell(window, s, m)[0], now);
   const routed = Keys.route(table, ahead.prefix, null, press);
   const handling: Handling =
-    routed._tag === "platform" || (routed._tag === "tile" && ahead.prefix._tag === "idle")
+    Keys.Routed.isAnyOf(["platform"])(routed) ||
+    (Keys.Routed.isAnyOf(["tile"])(routed) && Prefix.isAnyOf(["idle"])(ahead.prefix))
       ? "leave"
-      : routed._tag === "tile"
+      : Keys.Routed.isAnyOf(["tile"])(routed)
         ? "pass"
         : "take";
   return {

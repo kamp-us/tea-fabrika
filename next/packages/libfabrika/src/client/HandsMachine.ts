@@ -195,7 +195,7 @@ const calling = (s: HandsModel, method: string, params: typeof Schema.Json.Type)
 
 /** Lists the open tasks for this key, keeping the failures in a row so far. */
 const list = (s: HandsModel, tries = 0): Step => {
-  if (s.link._tag !== "online") {
+  if (!Link.isAnyOf(["online"])(s.link)) {
     return offline(s);
   }
 
@@ -205,11 +205,11 @@ const list = (s: HandsModel, tries = 0): Step => {
 
 /** Lists again once `backoff` of one more failure has passed: nothing is out until the timer fires. */
 const relist = (s: HandsModel, tries: number): Step =>
-  s.link._tag === "online" ? [{ ...s, work: Work.cases.listing.make({ tries: tries + 1 }) }, []] : offline(s);
+  Link.isAnyOf(["online"])(s.link) ? [{ ...s, work: Work.cases.listing.make({ tries: tries + 1 }) }, []] : offline(s);
 
 /** Sends the finish for `task` with `result`. Offline, the result waits in the journal for the next link. */
 const report = (s: HandsModel, task: Assigned, result: Result, tries: number, startedAt?: string): Step => {
-  if (s.link._tag !== "online") {
+  if (!Link.isAnyOf(["online"])(s.link)) {
     return offline(s);
   }
 
@@ -276,30 +276,25 @@ const recover = (
 };
 
 /** What follows a saved entry: start, run, report or list again. */
-const saved = (s: HandsModel, task: Assigned, entry: Entry): Step => {
-  switch (entry._tag) {
-    case "prepared": {
-      if (s.link._tag !== "online") {
+const saved = (s: HandsModel, task: Assigned, entry: Entry): Step =>
+  Entry.match(entry, {
+    prepared: (): Step => {
+      if (!Link.isAnyOf(["online"])(s.link)) {
         return offline(s);
       }
 
       const params = { process: task.process, task: task.id, execution: task.execution, seen: s.seen };
       const asked = calling(s, "tasks.started", params);
       return [{ ...asked.s, work: Work.cases.starting.make({ ...task, call: asked.call }) }, asked.out];
-    }
-    case "executing":
-      return [
-        { ...s, work: Work.cases.executing.make({ ...task, startedAt: entry.at }) },
-        [execute({ command: task.command })],
-      ];
-    case "result":
-      return report(s, task, entry.result, 0, entry.startedAt);
-    case "acknowledged":
-      return list(s);
-    case "held":
-      return hold(s, task);
-  }
-};
+    },
+    executing: ({ at }): Step => [
+      { ...s, work: Work.cases.executing.make({ ...task, startedAt: at }) },
+      [execute({ command: task.command })],
+    ],
+    result: ({ result, startedAt }): Step => report(s, task, result, 0, startedAt),
+    acknowledged: (): Step => list(s),
+    held: (): Step => hold(s, task),
+  });
 
 /**
  * The listed task to take next, or none. A take names a process, so a process with two open tasks
@@ -362,7 +357,8 @@ const refusal = (reason: string | null, result: unknown): string | null =>
   reason ??
   Option.match(Schema.decodeUnknownOption(TakeReply)(result), {
     onNone: () => null,
-    onSome: (reply) => (reply._tag === "idle" ? "idle" : reply._tag === "refused" ? reply.reason : "not_allowed"),
+    onSome: (reply) =>
+      TakeReply.match(reply, { idle: () => "idle", refused: ({ reason }) => reason, assigned: () => "not_allowed" }),
   });
 
 /** Skips `task` on this link while the list stays at its rev, and lists again at once. */
@@ -374,7 +370,7 @@ const BadEntry = Schema.Struct({ reason: Schema.Literal("bad_entry") });
 /** The assignment in a take's answer, when it is this client's own for an open task. */
 const assignment = (s: HandsModel, result: unknown) =>
   Option.flatMap(Schema.decodeUnknownOption(TakeReply)(result), (reply) => {
-    const state = reply._tag === "assigned" ? reply.task.state : null;
+    const state = TakeReply.isAnyOf(["assigned"])(reply) ? reply.task.state : null;
     return (state?._tag === "assigned" || state?._tag === "started") &&
       s.key !== null &&
       state.assignment.executor.key === s.key
@@ -392,102 +388,102 @@ const assignment = (s: HandsModel, result: unknown) =>
 
 /** The brain answered the live work call: `result` when it is ok, else the door's `reason`. */
 const answered = (s: HandsModel, result: unknown, reason: string | null, at: string): Step => {
-  const w = s.work;
   const woke = reason === null ? Option.getOrNull(Schema.decodeUnknownOption(Woke)(result)) : null;
   const heard: HandsModel = woke === null ? s : { ...s, seen: Math.max(s.seen, woke.rev) };
 
-  switch (w._tag) {
-    case "listing": {
-      const listed = reason === null ? Option.getOrNull(Schema.decodeUnknownOption(Listed)(result)) : null;
+  return Work.matchOrElse(
+    s.work,
+    {
+      listing: (w): Step => {
+        const listed = reason === null ? Option.getOrNull(Schema.decodeUnknownOption(Listed)(result)) : null;
 
-      if (listed === null) {
-        return relist(s, w.tries);
-      }
+        if (listed === null) {
+          return relist(s, w.tries);
+        }
 
-      // A list at another rev means new work came: every task this link skipped may be tried again.
-      const next = {
-        ...s,
-        seen: Math.max(s.seen, listed.rev),
-        skip: listed.rev === s.skip.rev ? s.skip : Skip.make({ rev: listed.rev, tasks: [] }),
-      };
-      const pick = takeable(next, listed.tasks, w.tries);
+        // A list at another rev means new work came: every task this link skipped may be tried again.
+        const next = {
+          ...s,
+          seen: Math.max(s.seen, listed.rev),
+          skip: listed.rev === s.skip.rev ? s.skip : Skip.make({ rev: listed.rev, tasks: [] }),
+        };
+        const pick = takeable(next, listed.tasks, w.tries);
 
-      if (pick === undefined) {
-        const asked = calling(next, "tasks.wait", { after: listed.rev });
-        return [{ ...asked.s, work: Work.cases.watching.make({ rev: listed.rev, call: asked.call }) }, asked.out];
-      }
+        if (pick === undefined) {
+          const asked = calling(next, "tasks.wait", { after: listed.rev });
+          return [{ ...asked.s, work: Work.cases.watching.make({ rev: listed.rev, call: asked.call }) }, asked.out];
+        }
 
-      const asked = calling(next, "tasks.take", { process: pick.process, seen: next.seen });
-      return [{ ...asked.s, work: Work.cases.taking.make({ ...pick, call: asked.call, tries: w.tries }) }, asked.out];
-    }
-    case "watching":
-      return woke === null ? relist(s, 0) : list(heard);
-    case "taking": {
-      // An idle, a refusal, or a task assigned to another key: nothing here runs, and the list is
-      // asked again. A refusal that time alone cannot change skips the task on this link.
-      const mine = reason === null ? assignment(s, result) : Option.none();
-      return Option.match(mine, {
-        onNone: () => (lasts(refusal(reason, result)) === "later" ? relist(s, w.tries) : skip(s, w.id)),
-        onSome: ({ task, state }) => [
-          { ...s, work: Work.cases.recalling.make({ ...task, state }) },
-          [journalRead({ task: task.id })],
-        ],
-      });
-    }
-    case "starting":
-      return woke === null
-        ? relist(s, 0)
-        : save(heard, assigned(w), Entry.cases.executing.make({ execution: w.execution, at }));
-    case "reporting": {
-      const task = assigned(w);
+        const asked = calling(next, "tasks.take", { process: pick.process, seen: next.seen });
+        return [{ ...asked.s, work: Work.cases.taking.make({ ...pick, call: asked.call, tries: w.tries }) }, asked.out];
+      },
+      watching: (): Step => (woke === null ? relist(s, 0) : list(heard)),
+      taking: (w): Step => {
+        // An idle, a refusal, or a task assigned to another key: nothing here runs, and the list is
+        // asked again. A refusal that time alone cannot change skips the task on this link.
+        const mine = reason === null ? assignment(s, result) : Option.none();
+        return Option.match(mine, {
+          onNone: () => (lasts(refusal(reason, result)) === "later" ? relist(s, w.tries) : skip(s, w.id)),
+          onSome: ({ task, state }) => [
+            { ...s, work: Work.cases.recalling.make({ ...task, state }) },
+            [journalRead({ task: task.id })],
+          ],
+        });
+      },
+      starting: (w): Step =>
+        woke === null
+          ? relist(s, 0)
+          : save(heard, assigned(w), Entry.cases.executing.make({ execution: w.execution, at })),
+      reporting: (w): Step => {
+        const task = assigned(w);
 
-      const started = since(w.startedAt);
+        const started = since(w.startedAt);
 
-      if (reason === null && woke !== null) {
-        return save(
-          heard,
-          task,
-          Entry.cases.acknowledged.make({ execution: w.execution, result: w.result, rev: woke.rev, ...started, at }),
-        );
-      }
+        if (reason === null && woke !== null) {
+          return save(
+            heard,
+            task,
+            Entry.cases.acknowledged.make({ execution: w.execution, result: w.result, rev: woke.rev, ...started, at }),
+          );
+        }
 
-      if (reason !== null && lasts(reason) === "never") {
-        // Refused for good: why is saved first, so no process sends this result again, then the
-        // client lists again and the rest of the work goes on.
-        return save(
-          s,
-          task,
-          Entry.cases.held.make({ execution: w.execution, result: w.result, reason, ...started, at }),
-        );
-      }
+        if (reason !== null && lasts(reason) === "never") {
+          // Refused for good: why is saved first, so no process sends this result again, then the
+          // client lists again and the rest of the work goes on.
+          return save(
+            s,
+            task,
+            Entry.cases.held.make({ execution: w.execution, result: w.result, reason, ...started, at }),
+          );
+        }
 
-      // The journal still holds the result: a take on a new link, or at a list of another rev,
-      // reports it again.
-      if (lasts(reason) !== "later") {
-        return skip(s, w.id);
-      }
+        // The journal still holds the result: a take on a new link, or at a list of another rev,
+        // reports it again.
+        if (lasts(reason) !== "later") {
+          return skip(s, w.id);
+        }
 
-      // Time alone may let it pass, as a failed wake, a full budget or a dead Worker call may: the
-      // same result goes again after a backoff.
-      return [
-        { ...s, work: Work.cases.reporting.make({ ...task, result: w.result, ...started, tries: w.tries + 1 }) },
-        [],
-      ];
-    }
-    default:
-      return stay(s);
-  }
+        // Time alone may let it pass, as a failed wake, a full budget or a dead Worker call may: the
+        // same result goes again after a backoff.
+        return [
+          { ...s, work: Work.cases.reporting.make({ ...task, result: w.result, ...started, tries: w.tries + 1 }) },
+          [],
+        ];
+      },
+    },
+    (): Step => stay(s),
+  );
 };
 
 /** The work's timer: the backoff a state waits before it calls or writes again, or null. */
 const workTimer = (w: Work): { readonly ms: number; readonly msg: Own } | null =>
-  ((w._tag === "listing" || w._tag === "reporting") && w.call === undefined) || (w._tag === "saving" && w.due)
+  (Work.isAnyOf(["listing", "reporting"])(w) && w.call === undefined) || (Work.isAnyOf(["saving"])(w) && w.due)
     ? { ms: backoff(w.tries), msg: { type: "again", tries: w.tries } }
     : null;
 
 /** The work state a journal Cmd's answer is for: the write out now, of the same entry for the same task. */
 const writing = (w: Work, cmd: { readonly task: string; readonly entry: Entry }) =>
-  w._tag === "saving" &&
+  Work.isAnyOf(["saving"])(w) &&
   !w.due &&
   w.id === cmd.task &&
   w.entry._tag === cmd.entry._tag &&
@@ -502,16 +498,16 @@ const writing = (w: Work, cmd: { readonly task: string; readonly entry: Entry })
  * not. A new link skips nothing yet: a refusal for good is kept for the link it came on.
  */
 const moved = (was: HandsModel, [stepped, out]: Step): Step => {
-  const fresh = was.link._tag !== "online" && stepped.link._tag === "online";
+  const fresh = !Link.isAnyOf(["online"])(was.link) && Link.isAnyOf(["online"])(stepped.link);
   const s = fresh ? { ...stepped, skip: noSkip } : stepped;
 
-  if (fresh && s.work._tag === "offline") {
+  if (fresh && Work.isAnyOf(["offline"])(s.work)) {
     const [listed, calls] = list(s);
     return [listed, [...out, ...calls]];
   }
 
-  const local = s.work._tag === "executing" || s.work._tag === "saving";
-  return s.link._tag !== "online" && !local ? [offline(s)[0], out] : [s, out];
+  const local = Work.isAnyOf(["executing", "saving"])(s.work);
+  return !Link.isAnyOf(["online"])(s.link) && !local ? [offline(s)[0], out] : [s, out];
 };
 
 /** Steps the Link by hand. A new dial starts its own hello exchange; a grant wait's renewal knocks. */
@@ -526,7 +522,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
     ...s,
     link,
     handshake: fresh ? applyCell(handshakeMachine, s.handshake, { type: "opened", dial: open })[0] : s.handshake,
-    tries: fresh && link._tag === "dialing" ? (link.tries ?? 0) : s.tries,
+    tries: fresh && Link.isAnyOf(["dialing"])(link) ? (link.tries ?? 0) : s.tries,
     sent: renew ? s.sent + 1 : s.sent,
   };
   const pings = cmds.filter((c): c is ReturnType<typeof ping> => c.type === "ping");
@@ -539,15 +535,20 @@ type HandshakeIn =
 
 /** The Link Msg a change of the hello exchange means, if any. */
 const outcome = (was: Handshake, now: Handshake, fingerprint: string): LinkMsg | null => {
-  if (now._tag === "admitted" && was._tag !== "admitted") {
+  if (Handshake.isAnyOf(["admitted"])(now) && !Handshake.isAnyOf(["admitted"])(was)) {
     return { type: "admitted", dial: now.dial, ping: now.ping, ms: now.ms };
   }
 
-  if (now._tag === "waiting" && (was._tag !== "waiting" || was.code !== now.code || was.until !== now.until)) {
+  if (
+    Handshake.isAnyOf(["waiting"])(now) &&
+    (!Handshake.isAnyOf(["waiting"])(was) || was.code !== now.code || was.until !== now.until)
+  ) {
     return { type: "not_granted", dial: now.dial, fingerprint, code: now.code, until: now.until, ms: now.ms };
   }
 
-  return was._tag === "waiting" && now._tag === "initializing" ? { type: "granted", dial: now.dial } : null;
+  return Handshake.isAnyOf(["waiting"])(was) && Handshake.isAnyOf(["initializing"])(now)
+    ? { type: "granted", dial: now.dial }
+    : null;
 };
 
 /** Steps the hello exchange by hand, sends its Cmds on and tells the Link what changed. */
@@ -559,7 +560,7 @@ const shook = (s: HandsModel, m: HandshakeIn): Step => {
   );
   const next: HandsModel = { ...s, handshake };
   const told: LinkMsg | null =
-    handshake._tag === "failed" && s.handshake._tag !== "failed"
+    Handshake.isAnyOf(["failed"])(handshake) && !Handshake.isAnyOf(["failed"])(s.handshake)
       ? { type: "blocked", reason: handshake.error }
       : outcome(s.handshake, handshake, s.key ?? "");
 
@@ -618,7 +619,7 @@ const frameIn = (s: HandsModel, m: { readonly dial: number; readonly text: strin
       at: m.at,
     });
     // The key the door admitted is the one every assignment this client runs must name.
-    const admitted = next.handshake._tag === "admitted" && s.handshake._tag !== "admitted";
+    const admitted = Handshake.isAnyOf(["admitted"])(next.handshake) && !Handshake.isAnyOf(["admitted"])(s.handshake);
     const key = admitted ? Option.getOrNull(Schema.decodeUnknownOption(Admitted)(frame.result)) : null;
     return [key === null ? next : { ...next, key: key.identity.key }, out];
   }
@@ -691,15 +692,15 @@ export const handsMachine = Machine.make({
     again: (s): Step => {
       const w = s.work;
 
-      if (w._tag === "listing" && w.call === undefined) {
+      if (Work.isAnyOf(["listing"])(w) && w.call === undefined) {
         return list(s, w.tries);
       }
 
-      if (w._tag === "reporting" && w.call === undefined) {
+      if (Work.isAnyOf(["reporting"])(w) && w.call === undefined) {
         return report(s, assigned(w), w.result, w.tries, w.startedAt);
       }
 
-      return w._tag === "saving" && w.due ? save(s, assigned(w), w.entry, w.tries) : stay(s);
+      return Work.isAnyOf(["saving"])(w) && w.due ? save(s, assigned(w), w.entry, w.tries) : stay(s);
     },
     write_ok: stay,
     // The socket is gone: its close moves the Link, and the work with it.
@@ -712,14 +713,14 @@ export const handsMachine = Machine.make({
     ping_err: stay,
     journal_read_ok: (s, m): Step => {
       const w = s.work;
-      return w._tag === "recalling" && w.id === m.cmd.task
+      return Work.isAnyOf(["recalling"])(w) && w.id === m.cmd.task
         ? recover(s, assigned(w), w.state, m.value, iso(m.at))
         : stay(s);
     },
     // An entry that cannot be read proves nothing: list, take and read it again after a backoff. A
     // saved value that is no entry reads the same every time: the task is skipped on this link.
     journal_read_err: (s, m): Step =>
-      s.work._tag !== "recalling" || s.work.id !== m.cmd.task
+      !Work.isAnyOf(["recalling"])(s.work) || s.work.id !== m.cmd.task
         ? stay(s)
         : Option.isSome(Schema.decodeUnknownOption(BadEntry)(m.error))
           ? skip(s, s.work.id)
@@ -735,7 +736,7 @@ export const handsMachine = Machine.make({
     },
     execute_ok: (s, m): Step => {
       const w = s.work;
-      return w._tag === "executing"
+      return Work.isAnyOf(["executing"])(w)
         ? save(
             s,
             assigned(w),
@@ -746,7 +747,7 @@ export const handsMachine = Machine.make({
     // A command whose answer came back malformed may have run: its result is not known.
     execute_err: (s, m): Step => {
       const w = s.work;
-      return w._tag === "executing"
+      return Work.isAnyOf(["executing"])(w)
         ? save(
             s,
             assigned(w),

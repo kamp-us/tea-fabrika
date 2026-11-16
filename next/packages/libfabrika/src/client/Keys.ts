@@ -16,7 +16,7 @@ import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
-import type { Prefix } from "./Prefix.ts";
+import { Prefix } from "./Prefix.ts";
 
 /**
  * The backend a window runs on, from the hello's own words: its command key, and the keys it can
@@ -172,25 +172,25 @@ export const route = (table: Table, prefix: Prefix, _mode: null, press: { readon
     return R.platform.make({});
   }
 
-  if (prefix._tag === "asking") {
-    return R.answer.make({ yes: key === "y" });
-  }
-
-  if (prefix._tag === "armed") {
-    const does = table.after.get(key);
-    return key === table.prefix
-      ? R.tile.make({ key })
-      : does === undefined
-        ? R.dropped.make({})
-        : R.command.make({ does });
-  }
-
-  const does = table.alone.get(key);
-  return key === table.prefix
-    ? R.prefix.make({})
-    : does === undefined
-      ? R.tile.make({ key })
-      : R.command.make({ does });
+  return Prefix.match(prefix, {
+    asking: () => R.answer.make({ yes: key === "y" }),
+    armed: () => {
+      const does = table.after.get(key);
+      return key === table.prefix
+        ? R.tile.make({ key })
+        : does === undefined
+          ? R.dropped.make({})
+          : R.command.make({ does });
+    },
+    idle: () => {
+      const does = table.alone.get(key);
+      return key === table.prefix
+        ? R.prefix.make({})
+        : does === undefined
+          ? R.tile.make({ key })
+          : R.command.make({ does });
+    },
+  });
 };
 
 /** The keys a press names by its own name, lower case. */

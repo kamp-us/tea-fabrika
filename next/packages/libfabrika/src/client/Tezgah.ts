@@ -124,7 +124,8 @@ type Mutation = typeof PendingMutation.Type;
 const S = MoveState.cases;
 
 /** The letter a move went out as, or null while it waits for one. */
-const sentAs = (p: Mutation): string | null => (p.state._tag === "waiting" ? null : p.state.letter);
+const sentAs = (p: Mutation): string | null =>
+  MoveState.match(p.state, { waiting: () => null, sent: ({ letter }) => letter, answered: ({ letter }) => letter });
 
 /** The focus the window draws on its workspace with `pending` over the server state. */
 const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null =>
@@ -137,7 +138,7 @@ const confirmed = (s: TezgahClient): Step => {
   const rows: Array<TezgahCmd> = [];
 
   for (const p of s.pendingMutations) {
-    if (p.state._tag !== "answered" || p.state.pos > s.rev) {
+    if (!MoveState.isAnyOf(["answered"])(p.state) || p.state.pos > s.rev) {
       continue;
     }
 
@@ -210,7 +211,9 @@ export const tezgahMachine = Machine.make({
       {
         ...s,
         pendingMutations: s.pendingMutations.map((p) =>
-          p.state._tag === "waiting" && p.state.n === m.n ? { ...p, state: S.sent.make({ letter: m.letter }) } : p,
+          MoveState.isAnyOf(["waiting"])(p.state) && p.state.n === m.n
+            ? { ...p, state: S.sent.make({ letter: m.letter }) }
+            : p,
         ),
       },
       [],
@@ -220,7 +223,7 @@ export const tezgahMachine = Machine.make({
       confirmed({
         ...s,
         pendingMutations: s.pendingMutations.map((p) =>
-          p.state._tag === "sent" && p.state.letter === m.letter
+          MoveState.isAnyOf(["sent"])(p.state) && p.state.letter === m.letter
             ? { ...p, state: S.answered.make({ letter: m.letter, pos: m.pos, ms: m.ms }) }
             : p,
         ),

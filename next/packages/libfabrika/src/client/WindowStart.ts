@@ -9,6 +9,7 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import type * as Stream from "effect/Stream";
@@ -65,32 +66,18 @@ const F = Failure.cases;
 type Write = ReturnType<typeof write>;
 
 /** One call as the JSON-RPC method and params the door takes. */
-const wire = (call: Write["call"], label: string) => {
-  switch (call._tag) {
-    case "read":
-      return { method: "ledger.read", params: { stream: call.stream, after: call.after } };
-    case "wait":
-      return { method: "ledger.wait", params: { stream: call.stream, after: call.after } };
-    case "monitor":
-      return { method: "process.monitor", params: { ref: call.ref, pid: call.pid } };
-    case "open":
-      return { method: "view.open", params: { pid: call.pid } };
-    case "knock":
-      return { method: "gateway.knock", params: { label } };
-    case "send":
-      return {
-        method: "process.send",
-        params: {
-          pid: call.pid,
-          letter: call.letter,
-          m: call.m,
-          sentAt: call.sentAt,
-          seen: call.seen,
-          ...(call.traceId ? { traceId: call.traceId } : {}),
-        },
-      };
-  }
-};
+const wire = (call: Write["call"], label: string) =>
+  Match.valueTags(call, {
+    read: ({ stream, after }) => ({ method: "ledger.read", params: { stream, after } }),
+    wait: ({ stream, after }) => ({ method: "ledger.wait", params: { stream, after } }),
+    monitor: ({ ref, pid }) => ({ method: "process.monitor", params: { ref, pid } }),
+    open: ({ pid }) => ({ method: "view.open", params: { pid } }),
+    knock: () => ({ method: "gateway.knock", params: { label } }),
+    send: ({ pid, letter, m, sentAt, seen, traceId }) => ({
+      method: "process.send",
+      params: { pid, letter, m, sentAt, seen, ...(traceId ? { traceId } : {}) },
+    }),
+  });
 
 /**
  * Boots a window parent and runs every Cmd to hand-off; the door's answers arrive as Msgs.
