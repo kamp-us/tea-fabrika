@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0579, 0555, 0557, 0538; body 00cffc6c8f40
+
 Plancheck-Version: 3
 
 # Plan: `@kampus/vitest` gets a `Recorder`, the one typed way a law watches a service's calls (ticket 1067)
@@ -341,6 +341,11 @@ Property laws are `it.effect.prop` with Schemas as inputs (0579), and the seed i
 | R11. `Recorder.ts` holds no double cast | lint | lint | add `impl as unknown as S` in `Recorder.ts`: `fabrika/no-type-assertions` red | next/packages/vitest/src/Recorder.ts |
 | R12. Publish and Queue keep their laws: the leak checks run before the push, in the same order, and a refused check or push stops what follows | test | Effect Arbitrary: Branch | swap the leak grep and the push in `Publish.ts`: R12 red. Default runs | .agents/skills/lead/scripts/pr/Publish.test.ts, .agents/skills/lead/scripts/pr/Queue.test.ts |
 | R13. The settings command reads only the person's file, once, and calls no write method of `FileSystem` | test | Effect Arbitrary: Inputs | make the command call `writeFile` once: R13 red. Default runs | next/packages/libfabrika/src/node/settings/Command.test.ts |
+| R14. `calls(Service, m)` with a union of names answers each name's own arg list, so a wrong arg type does not compile; `Args` and `Failure` are each name's own (fix round one) | type | type | read `Args` without splitting it over each name: R14 red in a typecheck | next/packages/vitest/src/Recorder.types.test.ts |
+| R15. An optional effectful member is a method, with its own args and error type, since `watch` records it (fix round one) | type | type | read a member as `S[K]`, `undefined` and all: R15 red in a typecheck | next/packages/vitest/src/Recorder.types.test.ts |
+| R16. A service with an overloaded effectful method does not compile as a Recorder layer, since `infer` reads only the last signature and no one `Args` is true of every call; a generic method, one signature, does compile (fix round one) | type | type | let every service through the overload refusal: R16 red in a typecheck | next/packages/vitest/src/Recorder.types.test.ts |
+| R17. `fails` names only a method `impl` gives, a `Fails<S>` value included, and `impl` names only the service's own members, read through `layer`'s key type argument (fix rounds one and two) | type | type | type `fails` as `Fails<S>` again: R17 red in a typecheck | next/packages/vitest/src/Recorder.types.test.ts |
+| R18. In the inferred call as a law writes it, `impl` inline on `Shelf` with its symbol member, a `fails` entry `impl` leaves out and a misspelled `impl` key do not compile, and a valid `fails` entry does and fails as given (fix round two) | test | scenario: one inferred `Recorder.layer` call on `Shelf` each way | type `fails` as `Fails<S>` again: R18's `@ts-expect-error` goes unused, red in a typecheck | next/packages/vitest/src/Recorder.test.ts |
 
 - R5, R6 and R7 draw `Moves`, a Schema of a list of `Shelf` calls, each a tagged pick with its
   args, so Effect's Arbitrary builds the inputs. `Branch` and `Inputs` are the Schemas those test
