@@ -546,6 +546,8 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
 
       symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
       symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+      // The config loads the vendored anti-slop plugins from here (0563).
+      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
         cwd: at,
         encoding: "utf8",
@@ -882,6 +884,8 @@ it("pinned: L6 a second machine is planted and lint.ts exits 1", async () => {
 
   copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
   symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+  // The config loads the vendored anti-slop plugins from here (0563).
+  symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   mkdirSync(join(at, "next"));
   const file = join(at, "next/machine.ts");

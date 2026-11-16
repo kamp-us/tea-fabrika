@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t404-build-fix2",
+  "ticket": "404",
+  "pr": "1366",
+  "started": "2026-11-15T16:57:51-08:00",
+  "ended": "2026-11-15T18:23:33-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Ticket 404 fix round (P34c slice 4, quotas, in next/). Two product fixes: the Process object's activity marker is kept in the object's own key-value storage again, as on main, and charged in a SQL transaction before it is put; and a person's repository trust stream (repository/) is the brain's own, so a dev repo open is no longer refused as quota. Two laws are judged wrong and left untouched: Q13 writes restarts with the brain file's digest as the program build (worker-quotas.integration.test.ts:402), so the Project refuses an unknown program and the call answers unreachable; and the door law at runtime-recovery.laws.integration.test.ts:1865 counts the measurement rows its own open(\"audit\") call writes between its counts. Branch full run 43789105625: repository-open L11 green; the door law red as expected, and its leg's stop canceled the rest, so the ticket 646 scenario and Q13 did not run; start-child L11 hit its 60 s timeout in a leg about 1.5 times slower across the whole file.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 86,
+  "note": "Diagnosis came from CI job logs and two scratch copies of runtime-quotas.laws.test.ts, run once as unit tests and deleted. A refused send changed no row in either store; one open(\"audit\") added 17 measurement rows to the Project store and 12 to the Process store. One mistake: a --changed run reached start-child.laws.integration.test.ts on the laptop for about two minutes before it was stopped; no process from it was left. The first build commit was made with --commit-only and is unsigned; the second is signed (version 3).",
+  "driver_caused": false,
+  "step": "build",
+  "costUsd": null,
+  "billed": null
+}

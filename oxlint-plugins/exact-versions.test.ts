@@ -5,6 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Rec from "effect/Record";
+import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
 const SCRIPT = join(import.meta.dirname, "exact-versions.ts");
@@ -64,7 +65,6 @@ const BAD = [
   "workspace:^",
   "workspace:~",
   "workspace:1.2.3",
-  "catalog:other",
   "git+https://example.com/a.git",
   "github:a/b",
   "file:../a",
@@ -162,6 +162,94 @@ describe("a pnpm-workspace.yaml", () => {
   it("passes exact versions, and settings it does not read", () => {
     const text = "packages:\n  - a\nsavePrefix: ''\ncatalog:\n  a: 1.2.3\noverrides:\n  b: 2.0.0\n";
     expect(run({ "pnpm-workspace.yaml": text }).status).toBe(0);
+  });
+});
+
+// E1 (docs/plan/quests/tea-msg-tag-PLAN.md): a named catalog's pointer is exact too, since its entry
+// is checked exact in pnpm-workspace.yaml's `catalogs.<name>`. Today's version sits on `catalog:old`.
+// Plant (a): `POINTERS` left as it was, so `catalog:old` is refused. Plant (b): a pointer pattern that
+// takes any text after `catalog:`, so `catalog:^1` passes. Each run holds every case below at once,
+// so 10 runs reach them all.
+describe("a named catalog's pointer", () => {
+  const runs = { seed: 119120, numRuns: 10 };
+
+  // A plain name, one with a digit and one with a dash, so each is reached in every run.
+  const names = fc
+    .tuple(
+      fc.stringMatching(/^[a-z]{1,8}$/),
+      fc.stringMatching(/^[a-z][a-z]{0,3}[0-9][a-z0-9]{0,3}$/),
+      fc.stringMatching(/^[a-z][a-z0-9]{0,3}-[a-z0-9]{1,4}$/),
+    )
+    .map((drawn) => [...new Set(drawn)]);
+
+  /** Each name a catalog holding `thing` at `version`, and one package naming each by its pointer. */
+  const tree = (all: readonly string[], version: string) => ({
+    "pnpm-workspace.yaml": `catalogs:\n${all.map((name) => `  ${name}:\n    thing: ${version}\n`).join("")}`,
+    "packages/one/package.json": JSON.stringify({
+      dependencies: Rec.fromEntries(all.map((name, i) => [`thing${i}`, `catalog:${name}`])),
+    }),
+  });
+
+  it("passes `catalog:<name>` for any lower-case name whose catalog is exact", () => {
+    fc.assert(
+      fc.property(names, (all) => {
+        expect(run(tree(all, "1.2.3"))).toEqual({ status: 0, said: expect.stringContaining("every version exact") });
+      }),
+      runs,
+    );
+  });
+
+  it("refuses a range inside that named catalog, naming it", () => {
+    fc.assert(
+      fc.property(names, (all) => {
+        const { status, said } = run(tree(all, "^1.2.3"));
+        expect(status).toBe(1);
+
+        for (const name of all) {
+          expect(said).toContain(`pnpm-workspace.yaml: catalogs.${name}: thing: "^1.2.3"`);
+        }
+      }),
+      runs,
+    );
+  });
+
+  // Everything after `catalog:` that is not one lower-case name, and the name alone as a bare tag.
+  const notNames = (name: string): readonly string[] => [
+    "catalog:^1",
+    `catalog:^${name}`,
+    `catalog:~${name}`,
+    `catalog: ${name}`,
+    `catalog:${name} `,
+    `catalog:${name.toUpperCase()}`,
+    `catalog:1${name}`,
+    `catalog:-${name}`,
+    `catalog:${name}/x`,
+    `catalog:${name}@1.2.3`,
+    `catalog:${name}:${name}`,
+    `catalog:${name}.x`,
+    `catalog:${name}_x`,
+    "catalog:*",
+    name,
+  ];
+
+  it("still refuses `catalog:^1`, `catalog: <name>`, any other text after `catalog:`, and a bare tag", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/), (name) => {
+        const bad = notNames(name);
+        const { status, said } = run({
+          "pnpm-workspace.yaml": `catalogs:\n  ${name}:\n    thing: 1.2.3\n`,
+          "packages/one/package.json": JSON.stringify({
+            dependencies: Rec.fromEntries(bad.map((version, i) => [`thing${i}`, version])),
+          }),
+        });
+        expect(status).toBe(1);
+
+        for (const [i, version] of bad.entries()) {
+          expect(said).toContain(`packages/one/package.json: dependencies: thing${i}: ${JSON.stringify(version)}`);
+        }
+      }),
+      runs,
+    );
   });
 });
 

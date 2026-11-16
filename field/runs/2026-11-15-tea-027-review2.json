@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-review2",
+  "ticket": "1061",
+  "pr": "1391",
+  "started": "2026-11-15T19:08:00-08:00",
+  "ended": "2026-11-15T19:17:00-08:00",
+  "parent": "2026-11-15-tea-027-review1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice 1 at 07967e5d8 after the fourth tests round. ede851331 makes diagnosticSeverity optional in the schema of next/apps/fabrika/src/exam/effect-checks.test.ts, as @effect/tsgo 0.63.0's schema.json requires no override field. The law is not loosened: its assertion is unchanged, and diagnosticSeverity is the only override field that can set a check's level. The law file passed locally. Three plants in a scratch copy: the .agents override widened to next/ and lowering globalFetchInEffect to warning, red; the globalDateInEffect line lost, red; an override with empty options, green as meant. The merge 9bd0a4a05 has no hand-resolved hunk, and one pnpm typecheck on the merged head exited 0. pnpm commits check stops on three unsigned commits (this quest's first review row, the lead's findings commit and the merge), which decision 0161 says never hold a step; CI does not run that check, and ci-required is the only required check.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9.0,
+  "note": null,
+  "costUsd": null,
+  "step": "review"
+}

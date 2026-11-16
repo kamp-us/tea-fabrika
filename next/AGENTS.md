@@ -51,6 +51,7 @@ libfabrika
 | A part imports only the names of our packages its table allows, and no file of the library, tests included, names another of ours | `fabrika/package-imports` |
 | A test that drives a real resource is named `*.integration.test.ts`, or `*.visual.test.ts` for a browser or Electron, so pull requests leave it to the schedule (0536) | `fabrika/integration-test-name` |
 | No `Reflect.get`, `Reflect.set` or `Reflect.has`, and no `globalThis.Reflect`: decode with Schema, narrow with `Predicate.hasProperty`, or assign through the type ([0554](../.decisions/0554-no-reflect-get-set-has.md)). It is on for every folder at zero, each folder joining when its slice reaches zero | `eslint/no-restricted-properties` |
+| The anti-slop plugin, vendored whole and pinned: eight of its rules, each on folder by folder where it has no hit ([0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md)); see [the section in the plugins README](../oxlint-plugins/README.md#the-anti-slop-plugin-taken-as-it-ships) | `anti-slop/*`, `anti-slop-effect/*` |
 
 A Promise edge the platform demands is one line, marked
 `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, and the lead reads each one at

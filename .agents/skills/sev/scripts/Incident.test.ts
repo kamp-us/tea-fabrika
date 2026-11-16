@@ -134,7 +134,7 @@ describe("close", () => {
             "sev: 2 open pull requests had runs canceled; walk them in this order, on the merge line:",
             "  11 fabrikalfa/b: 3 commits behind main; merge main in and push",
             "  10 fabrikalfa/a: holds main's head; a fresh run needs its next push",
-            `sev: start the 3-hour full run by hand, since the freeze canceled it: ${Incident.FULL_RUN}`,
+            `sev: start the full run by hand, since the freeze canceled it: ${Incident.FULL_RUN}`,
           ]);
           expect(closed.level).toEqual(Level.Level.cases.sev1.make({ issues: [red] }));
           expect((yield* Level.log(dir)).at(-1)).toMatchObject({ _tag: "closed", by: "owner" });
@@ -162,9 +162,11 @@ describe("close", () => {
   );
 
   it("vector: with nothing to walk, close still says to start the full run by hand", () => {
+    // format: the line names no clock, since a push or the hourly catch-up starts the full run now
+    // (0581). Plant: today's Incident.ts, which still prints "start the 3-hour full run by hand" (red).
     expect(Incident.nextLines([])).toEqual([
       "sev: the freeze canceled no run of an open pull request",
-      "sev: start the 3-hour full run by hand, since the freeze canceled it: gh workflow run scheduled.yaml --ref main",
+      "sev: start the full run by hand, since the freeze canceled it: gh workflow run scheduled.yaml --ref main",
     ]);
   });
 });

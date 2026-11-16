@@ -191,6 +191,8 @@ const repo = (config: object | string, files: Readonly<Record<string, string>>) 
 
   symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
   symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+  // The real config loads the vendored anti-slop plugins from here (0563).
+  symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
   mkdirSync(join(at, ".agents/skills"), { recursive: true });
   writeFileSync(join(at, ".oxlintrc.json"), typeof config === "string" ? config : JSON.stringify(config));
 
@@ -526,6 +528,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
     try {
       copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
       symlinkSync(join(ROOT, "oxlint-plugins"), join(at, "oxlint-plugins"));
+      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
       const files = planted("next/packages/zero/src/clean");
 
       for (const [path, text] of Rec.toEntries(files)) {

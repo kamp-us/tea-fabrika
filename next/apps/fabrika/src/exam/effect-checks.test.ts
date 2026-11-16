@@ -19,7 +19,11 @@ const CHECKS: ReadonlyArray<readonly [check: string, exclude: ReadonlyArray<stri
   ["globalDateInEffect", TESTS],
 ];
 
-// `tsconfig.base.json` is JSON with comments, which a JavaScript parser reads as one object.
+// `tsconfig.base.json` is JSON with comments, which a JavaScript parser reads as one object. An
+// override may set no severity at all, as the checker's own schema allows (@effect/tsgo's
+// `effectLanguageServicePluginOverrideOptionsDefinition` requires no field): the `.agents/**`
+// override carries only `allowedDuplicatedPackages`. Such an override sets no check, so it cannot
+// lower one either.
 const Config = Schema.Struct({
   compilerOptions: Schema.Struct({
     plugins: Schema.Array(
@@ -29,7 +33,9 @@ const Config = Schema.Struct({
           Schema.Struct({
             include: Schema.Array(Schema.String),
             exclude: Schema.optional(Schema.Array(Schema.String)),
-            options: Schema.Struct({ diagnosticSeverity: Schema.Record(Schema.String, Schema.String) }),
+            options: Schema.Struct({
+              diagnosticSeverity: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+            }),
           }),
         ),
       }),
@@ -67,9 +73,9 @@ describe("tsconfig.base.json", () => {
   it("T910 pinned: Effect's checks for next/ are set at error under the plugin's next/ overrides", () => {
     for (const [check, exclude] of CHECKS) {
       const set = overrides
-        .filter((o) => check in o.options.diagnosticSeverity)
+        .filter((o) => check in (o.options.diagnosticSeverity ?? {}))
         .map((o) => ({
-          severity: o.options.diagnosticSeverity[check],
+          severity: o.options.diagnosticSeverity?.[check],
           include: o.include,
           exclude: o.exclude ?? [],
         }));
