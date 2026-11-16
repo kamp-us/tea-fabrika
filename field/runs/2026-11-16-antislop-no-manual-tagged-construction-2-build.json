@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-manual-tagged-construction-2-build",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:26:46-08:00",
+  "ended": "2026-11-16T00:32:30-08:00",
+  "parent": "2026-11-15-antislop-no-manual-tagged-construction-2-tests",
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "stopped",
+  "why": "Build step of anti-slop judgment slice AS-no-manual-tagged-construction-2 (ticket 1057, decisions 0562, 0563 with its amendments, 0214, 0573), on branch fabrikalfa/antislop-no-manual-tagged-construction-2 from the tests step's head bd242edc2. The three product hits of anti-slop-effect/no-manual-tagged-construction the tests step left are all in next/packages/libfabrika/src/ledger/Log.ts: :62 (the Line schema's open `_tag: Text` field), :105 (lineFor's `{ ...from, _tag, body }`) and :114 (valueFor's `{ _tag: entry._tag }`). None was fixed, because none has a clear fix inside this slice's rules. The log stores any event and knows no cases, so a line's `_tag` is an open string that is the writer's own case; it is the one edge of fabrika/no-hand-tag (oxlint-plugins/no-hand-tag.ts sets EDGE to this file). Its `_tag` is also a SQLite column (next/packages/libfabrika/src/ledger/internal/ledgerStore.ts:26 and :256) and a wire key, read by about 61 files through lineFor and valueFor, and 0214 made it `_tag` on purpose (ticket 32). The two ways out are both outside this step: (1) change the stored shape (a new key or a nested value), which walks back 0214's ledger line and changes the row, the wire and the readers, so it is a design call; docs/plan/quests/trusted-rules-0573-PLAN.md (section on no-hand-tag) names exactly this choice as 0562's cleanup's call; (2) keep the shape with three `// oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- <why>` lines, which 0562 allows for right code, but .oxlintrc.json sets reportUnusedDisableDirectives to error and the rule's block (.oxlintrc.json:2846-2859) does not list ledger/**, so the lines fail lint until the rule's lock line, which the owner ruled waits for the later lock pull request. Hiding the key (a computed key, or a pick) is refused by 0562. So this build changed no product file and no exam path, added no disable line, lock line or .oxlintrc.json change, and narrowed no assertion. The 14 exam frames the tests step listed are untouched and still wait for the lock pull request.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 5,
+  "note": "Checks at bd242edc2 (no code changed by this step): the ledger folder's 9 runnable test files ran green by name under nice -n 15 vitest --maxWorkers=3 (118 passed), the .integration. ones included (Ledger, LedgerSpans, LedgerTurnReads, Log, Rings), with no override; the two .types. files are covered by the typecheck. One root pnpm typecheck exits 0. pnpm format was not run, since this step changed only this row. pnpm lint ran once, with NODE_OPTIONS=--max-old-space-size=6144: 17 of its 18 parts pass; the one red part is oxlint-plugins/lint.ts asking that next/packages/tuval/** and next/programs/pipeline/** (now at zero for this rule) be added to the rule's block in .oxlintrc.json, the same ask the tests step met, which waits for the lock pull request by the owner's ruling. The list ratchet (next/apps/fabrika/src/exam/ratchet.ts --base b490a3203) exits 0. --changed origin/main was not run: no code changed since the tests step, which ran the 31 touched test files green.",
+  "step": "build"
+}
