@@ -18,8 +18,9 @@ export const make = <A extends object>(
   own: Partial<A> = {},
 ): A => {
   const members: Readonly<Record<string, unknown>> = own;
-  // Sound: the Proxy answers every key through the trap below, and a test uses a stub only through
-  // the members it names, so the empty target never shows through as an `A`.
+  // The one cast. It holds for calls only: reads go through the `get` trap below, but key listing,
+  // `in` and spread see this empty null-prototype object, so a stub stands in for calls and nothing
+  // more.
   const target = Object.create(null) as A;
   return new Proxy<A>(target, {
     get: (_target, key) => {
