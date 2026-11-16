@@ -9,7 +9,7 @@ import { watchPrograms } from "@kampus/libfabrika/node/watch";
 import * as RepositoryTrustLedger from "@kampus/libfabrika/packs/RepositoryTrustLedger";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
-import { Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
+import { Array as Arr, Config, Effect, FileSystem, Layer, Path, Schema, Stream } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
 import { ChildProcess } from "effect/process";
@@ -28,7 +28,7 @@ const declarations = Declarations.all.declarations;
 // Each declared setting is a flag at its own path, as --instance.port. --port stays the port's
 // alias, for the commands and instance tests written before the setting.
 const settings = Object.fromEntries(
-  declarations.map((d) => {
+  Arr.map(declarations, (d) => {
     const flag = Flag.String(d.path);
     return [d.path, (d === Declarations.port ? Flag.withAlias(flag, "port") : flag).pipe(Flag.withDefault(undefined))];
   }),
@@ -40,7 +40,7 @@ const Saved = Schema.Struct({ ...Founding.fields, port: Schema.optionalKey(Decla
 
 /** The entries that hold a value, as one record. */
 const present = (entries: ReadonlyArray<readonly [string, string | undefined]>) =>
-  Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => entry[1] !== undefined));
+  Object.fromEntries(Arr.filter(entries, (entry): entry is readonly [string, string] => entry[1] !== undefined));
 
 // The settings flags are one nested record, so the start reads each by its declared path.
 const flags = {
@@ -62,7 +62,7 @@ for (let n = 2; n < process.argv.length; n++) {
     value = process.argv[n + 1];
   const flag =
     (/^--(repo|port|name|person|founder|window|parent)$/.test(word) ||
-      declarations.some((d) => word === `--${d.path}`)) &&
+      Arr.some(declarations, (d) => word === `--${d.path}`)) &&
     value !== undefined;
   words.push(flag ? `${word}=${value}` : word);
 
@@ -99,8 +99,8 @@ const command = Command.make("dev", flags, (options) => {
         };
         const loadOptions = {
           person,
-          flags: present(declarations.map((d) => [d.path, options.settings[d.path]])),
-          env: present(declarations.map((d) => [d.env, process.env[d.env]])),
+          flags: present(Arr.map(declarations, (d) => [d.path, options.settings[d.path]])),
+          env: present(Arr.map(declarations, (d) => [d.env, process.env[d.env]])),
           version: VERSION,
         };
         const prepared =

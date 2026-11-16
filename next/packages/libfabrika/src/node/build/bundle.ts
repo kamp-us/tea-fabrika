@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Cause, Effect, Exit, Path } from "effect";
+import * as Arr from "effect/Array";
 import effectPackage from "effect/package.json" with { type: "json" };
 import {
   rolldown,
@@ -59,7 +60,9 @@ const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 /** The bytes a bundle emitted, chunks and assets alike. */
 const emitted = (output: RolldownOutput) =>
-  output.output.reduce(
+  Arr.reduce(
+    output.output,
+    0,
     (total, item) =>
       total +
       (item.type === "chunk"
@@ -67,7 +70,6 @@ const emitted = (output: RolldownOutput) =>
         : typeof item.source === "string"
           ? bytes(item.source)
           : item.source.byteLength),
-    0,
   );
 
 /**
@@ -210,10 +212,13 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       ],
       { phase: "program", ...(options.cwd === undefined ? {} : { cwd: options.cwd }) },
     );
-    const source = output.output
-      .filter((o) => o.type === "chunk")
-      .map((o) => o.code)
-      .join("\n");
+    const source = Arr.join(
+      Arr.map(
+        Arr.filter(output.output, (o) => o.type === "chunk"),
+        (o) => o.code,
+      ),
+      "\n",
+    );
     programs[name] = { hash: yield* hash(source), source };
   }
 

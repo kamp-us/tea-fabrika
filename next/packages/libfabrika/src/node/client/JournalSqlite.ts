@@ -6,6 +6,7 @@
  */
 import { DatabaseSync } from "node:sqlite"; // edge: no Effect SQL client for Node's SQLite is installed; the repo's node:sqlite handle is the existing one
 import { Effect, Layer, Predicate } from "effect";
+import * as Arr from "effect/Array";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";
 import type { Sql } from "../../Sql.ts";
@@ -44,7 +45,12 @@ const store = (sql: Sql) => {
       Effect.map(([row]) => Number(row?.["total"] ?? 0)),
     ),
     keys: exec("keys", undefined, "SELECT key FROM journal").pipe(
-      Effect.map((rows) => rows.map((row) => row["key"]).filter(Predicate.isString)),
+      Effect.map((rows) =>
+        Arr.filter(
+          Arr.map(rows, (row) => row["key"]),
+          Predicate.isString,
+        ),
+      ),
     ),
   });
 };

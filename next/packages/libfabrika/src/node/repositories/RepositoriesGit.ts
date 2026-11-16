@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import { Effect, Fiber, FileSystem, Layer, Path, Redacted, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import {
@@ -95,7 +96,7 @@ export const layer = (options: { readonly person: string }) =>
             const bytes = yield* child.stdout.pipe(Stream.runCollect);
             const code = yield* child.exitCode;
             const stderr = yield* Fiber.join(errors);
-            const size = bytes.reduce((n, part) => n + part.length, 0);
+            const size = Arr.reduce(bytes, 0, (n, part) => n + part.length);
             const output = new Uint8Array(size);
             let offset = 0;
 
@@ -198,7 +199,7 @@ export const layer = (options: { readonly person: string }) =>
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
             const lines = advertised.trim().split("\n");
-            const symbolic = lines.filter((line) => line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+            const symbolic = Arr.filter(lines, (line) => line.startsWith("ref: ") && line.endsWith("\tHEAD"));
 
             if (symbolic.length !== 1) {
               return yield* failure("default branch", "missing or ambiguous HEAD", true);
@@ -213,7 +214,7 @@ export const layer = (options: { readonly person: string }) =>
             const branch = yield* Schema.decodeUnknownEffect(Branch)(ref.slice(11)).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
-            const heads = lines.filter((line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
+            const heads = Arr.filter(lines, (line) => !line.startsWith("ref: ") && line.endsWith("\tHEAD"));
 
             if (heads.length !== 1) {
               return yield* failure("default branch", "missing HEAD object", true);

@@ -21,6 +21,7 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
+import * as Arr from "effect/Array";
 import { SecureRandom } from "effect/crypto";
 import { Base64Url } from "effect/encoding";
 import { HttpClient, HttpClientRequest } from "effect/http";
@@ -97,9 +98,10 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
   }
 
   const { sha256 } = yield* Schema.decodeUnknownEffect(Schema.Struct({ sha256: Schema.String }))(raw);
+  const pairs: ReadonlyArray<string> = sha256.match(/../g) ?? [];
   return {
     checksums: {
-      sha256: Uint8Array.from((sha256.match(/../g) ?? []).map((byte) => Number.parseInt(byte, 16))).buffer,
+      sha256: Uint8Array.from(Arr.map(pairs, (byte) => Number.parseInt(byte, 16))).buffer,
     },
   };
 });

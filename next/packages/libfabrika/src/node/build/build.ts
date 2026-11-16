@@ -10,6 +10,7 @@
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
 import { Context, Effect, Exit, FileSystem, Option, Path, Schema } from "effect";
+import * as Arr from "effect/Array";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -183,19 +184,24 @@ const stylesheets = (
 const embed = (tables: Tables): Plugin => {
   const texts: Array<string> = [];
   const text = (body: string) => `t${texts.push(body) - 1}`;
-  const programs = Object.entries(tables.programs).map(
+  const programs = Arr.map(
+    Object.entries(tables.programs),
     ([name, p]) => `${JSON.stringify(name)}: {hash: ${JSON.stringify(p.hash)}, source: ${text(p.source)}}`,
   );
-  const assets = Object.entries(tables.assets).map(
+  const assets = Arr.map(
+    Object.entries(tables.assets),
     ([route, a]) =>
       `${JSON.stringify(route)}: {hash: ${JSON.stringify(a.hash)}, type: ${JSON.stringify(a.type)}, body: ${text(a.body)}}`,
   );
-  const imports = texts.map((_, n) => `import t${n} from ${JSON.stringify(`${TEXT}${n}`)};`);
-  const code = [
-    ...imports,
-    `export const programs = {${programs.join(", ")}};`,
-    `export const assets = {${assets.join(", ")}};`,
-  ].join("\n");
+  const imports = Arr.map(texts, (_, n) => `import t${n} from ${JSON.stringify(`${TEXT}${n}`)};`);
+  const code = Arr.join(
+    [
+      ...imports,
+      `export const programs = {${Arr.join(programs, ", ")}};`,
+      `export const assets = {${Arr.join(assets, ", ")}};`,
+    ],
+    "\n",
+  );
   return {
     name: "fabrika-built",
     resolveId(id) {
@@ -250,24 +256,27 @@ const attribute = (text: string): string =>
 /** The tab's page: every stylesheet embedded in order, and the script at `/window.js`, which `build`
  *  names for the rows the tab records. No other request: the icon is empty. */
 const page = (styles: ReadonlyArray<string>, build: string): string =>
-  [
-    "<!doctype html>",
-    '<html lang="en">',
-    "<head>",
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<meta name="color-scheme" content="light dark">',
-    `<meta name="fabrika-build" content="${attribute(build)}">`,
-    "<title>fabrika</title>",
-    '<link rel="icon" href="data:,">',
-    ...styles.map((css) => `<style>${inert(css)}</style>`),
-    "</head>",
-    "<body>",
-    '<div id="root"></div>',
-    '<script type="module" src="/window.js"></script>',
-    "</body>",
-    "</html>",
-  ].join("\n");
+  Arr.join(
+    [
+      "<!doctype html>",
+      '<html lang="en">',
+      "<head>",
+      '<meta charset="utf-8">',
+      '<meta name="viewport" content="width=device-width, initial-scale=1">',
+      '<meta name="color-scheme" content="light dark">',
+      `<meta name="fabrika-build" content="${attribute(build)}">`,
+      "<title>fabrika</title>",
+      '<link rel="icon" href="data:,">',
+      ...Arr.map(styles, (css) => `<style>${inert(css)}</style>`),
+      "</head>",
+      "<body>",
+      '<div id="root"></div>',
+      '<script type="module" src="/window.js"></script>',
+      "</body>",
+      "</html>",
+    ],
+    "\n",
+  );
 
 const asset = (type: AssetType, body: string) =>
   hash(body).pipe(
@@ -278,10 +287,13 @@ const asset = (type: AssetType, body: string) =>
 const PAGE = "index.html";
 
 const tabScript = (output: ReadonlyArray<OutputChunk | OutputAsset>): string =>
-  output
-    .filter((o) => o.type === "chunk")
-    .map((o) => o.code)
-    .join("\n");
+  Arr.join(
+    Arr.map(
+      Arr.filter(output, (o) => o.type === "chunk"),
+      (o) => o.code,
+    ),
+    "\n",
+  );
 
 // The tab's page is an asset of the tab's own call, so the call that made the script made the page.
 const tabPage = (styles: ReadonlyArray<string>): Plugin => ({
@@ -319,15 +331,15 @@ const tabAssets = Effect.fn("build.tab")(function* (
     define: { "process.env.NODE_ENV": JSON.stringify("production") },
     minify: true,
   });
-  const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
+  const html = Arr.findFirst(output.output, (o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
-  if (html === undefined || typeof html.source !== "string") {
+  if (Option.isNone(html) || typeof html.value.source !== "string") {
     return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 
   return {
     "/window.js": yield* asset("text/javascript; charset=utf-8", tabScript(output.output)),
-    "/index.html": yield* asset("text/html; charset=utf-8", html.source),
+    "/index.html": yield* asset("text/html; charset=utf-8", html.value.source),
   };
 });
 
@@ -455,17 +467,17 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
     root: path.dirname(entry),
     cwd: root,
     plugins: [compiler],
-    programs: Object.fromEntries(options.programs.map((p) => [p.name, { module: p.package, name: p.export }])),
+    programs: Object.fromEntries(Arr.map(options.programs, (p) => [p.name, { module: p.package, name: p.export }])),
   });
   const findings = check(
     files,
-    ledger.filter((row) => files.has(row.file)),
+    Arr.filter(ledger, (row) => files.has(row.file)),
   );
 
   if (findings.length > 0) {
     return yield* new BuildError({
       reason: "compiler",
-      cause: findings.map(({ file, line }) => ({ path: file, line })),
+      cause: Arr.map(findings, ({ file, line }) => ({ path: file, line })),
     });
   }
 
@@ -503,11 +515,11 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     path = yield* Path.Path;
   const context = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
   yield* Effect.annotateCurrentSpan({ chaos: options.chaos, programs: options.programs.length });
-  const names = options.programs.map((p) => p.name);
+  const names = Arr.map(options.programs, (p) => p.name);
 
   if (
     new Set(names).size !== names.length ||
-    !options.programs.every((p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
+    !Arr.every(options.programs, (p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
   ) {
     return yield* new BuildError({ reason: "table" });
   }
@@ -580,7 +592,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   };
   const assets: Record<string, Asset> = Object.keys(windows).length
     ? yield* bundle(
-        Object.fromEntries(Object.keys(windows).map((name) => [name, `${WINDOW}${name}`])),
+        Object.fromEntries(Arr.map(Object.keys(windows), (name) => [name, `${WINDOW}${name}`])),
         [entries, compiler, stylesheets(context, path)],
         {
           phase: "window",
@@ -607,20 +619,23 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     cwd: root,
     define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
   });
-  const brain = output.output
-    .filter((o) => o.type === "chunk")
-    .map((o) => o.code)
-    .join("\n");
+  const brain = Arr.join(
+    Arr.map(
+      Arr.filter(output.output, (o) => o.type === "chunk"),
+      (o) => o.code,
+    ),
+    "\n",
+  );
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
   if (check(files, ledger).length) {
     return yield* new BuildError({ reason: "compiler" });
   }
 
-  const size = (bodies: ReadonlyArray<string>) => bodies.reduce((total, body) => total + bytes(body), 0);
+  const size = (bodies: ReadonlyArray<string>) => Arr.reduce(bodies, 0, (total, body) => total + bytes(body));
   const digest = yield* publish(options.out, brain, {
-    programs: size(Object.values(programs).map((p) => p.source)),
-    window: size(Object.values(assets).map((a) => a.body)),
+    programs: size(Arr.map(Object.values(programs), (p) => p.source)),
+    window: size(Arr.map(Object.values(assets), (a) => a.body)),
   });
   return {
     build: digest,

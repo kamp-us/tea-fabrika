@@ -5,6 +5,7 @@
  * @stability unstable
  */
 import { Config, Effect, FileSystem, Layer, Path } from "effect";
+import * as Arr from "effect/Array";
 import { ChildProcessSpawner } from "effect/process";
 import { Commands } from "../../client/Commands.ts";
 import type { Command } from "../../tasks/Task.ts";
@@ -27,7 +28,7 @@ const onPath = Effect.fnUntraced(function* (name: string, PATH: string) {
       Effect.map((info) => info.type === "File" && (info.mode & 0o111) !== 0),
       Effect.orElseSucceed(() => false),
     );
-  const folders = PATH.split(":").filter((folder) => folder !== "");
+  const folders = Arr.filter(PATH.split(":"), (folder) => folder !== "");
   const found = yield* Effect.forEach(folders, runnable, { concurrency: "unbounded" });
   return found.includes(true);
 });
