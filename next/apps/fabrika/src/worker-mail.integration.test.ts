@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { DateTime, Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -175,7 +175,7 @@ export class Control extends Brain.Control {
 const mailDiagnostics = () => {
   const frames: Array<{ at: number; elapsed: number; raw: string }> = [];
   const events: Array<{ at: number; elapsed: number; event: string; value: unknown }> = [];
-  const stamp = () => ({ at: Date.now(), elapsed: performance.now() });
+  const stamp = () => ({ at: DateTime.toEpochMillis(DateTime.nowUnsafe()), elapsed: performance.now() });
   const note = (event: string, value: unknown = null) => events.push({ ...stamp(), event, value });
   note("start");
 
@@ -408,10 +408,10 @@ const until = async <A>(
   done: (value: A) => boolean,
   ms = WAIT,
 ): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
     try {
       const value = await look();
       last = { value };
@@ -468,10 +468,10 @@ const wire = async (
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
     diagnostics?.note("wait.start", { end });
 
-    while (Date.now() < end) {
+    while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
       const index = frames.findIndex(match);
 
       if (index >= 0) {

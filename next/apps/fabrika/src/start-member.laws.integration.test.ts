@@ -7,7 +7,7 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Schema, Scope } from "effect";
+import { DateTime, Effect, Exit, Schema, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -35,12 +35,15 @@ const WAIT = 25_000;
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean): Promise<A> => {
-  const end = Date.now() + WAIT;
+  const end = now() + WAIT;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -82,9 +85,9 @@ const client = async (instance: Instance, key: Key, tab: string) => {
   let serial = 0;
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const index = frames.findIndex(match);
 
       if (index >= 0) {
@@ -127,9 +130,9 @@ const client = async (instance: Instance, key: Key, tab: string) => {
 
   const close = async () => {
     socket.close();
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (!closed && Date.now() < end) {
+    while (!closed && now() < end) {
       await pause(20);
     }
   };

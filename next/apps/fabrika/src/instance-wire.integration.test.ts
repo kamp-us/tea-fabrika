@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, DateTime, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -668,10 +668,10 @@ it.live.each(["flags", "env", "file"] as const)(
 const reconnected = (s: Launched, tab: string) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
-      const end = Date.now() + WAIT;
+      const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT;
       let last: unknown = null;
 
-      while (Date.now() < end) {
+      while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
         try {
           return await connected(s, tab);
         } catch (error) {
@@ -711,12 +711,12 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
  *  the test with the tags it saw, so a missing restart is a failure, never a hang. */
 const restartedAfter = (c: Client, stream: string, after: string) =>
   Effect.promise(async () => {
-    const end = Date.now() + WAIT,
+    const end = DateTime.toEpochMillis(DateTime.nowUnsafe()) + WAIT,
       tags: Array<string> = [];
 
     let seen = 0;
 
-    while (Date.now() < end) {
+    while (DateTime.toEpochMillis(DateTime.nowUnsafe()) < end) {
       const rows = await read(c, stream, seen);
       tags.push(...rows.map((row) => row._tag));
       const hit = rows.find((row) => row._tag === "restarted" && (row.body as { after?: string }).after === after);

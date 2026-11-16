@@ -342,7 +342,9 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
         fc.record({
           by: fc.uuid(),
           for: fc.uuid(),
-          sentAt: fc.integer({ min: 0, max: 2_000_000_000_000 }).map((ms) => new Date(ms).toISOString()),
+          sentAt: fc
+            .integer({ min: 0, max: 2_000_000_000_000 })
+            .map((ms) => DateTime.formatIso(DateTime.makeUnsafe(ms))),
           seen: fc.nat(),
           parent: fc.option(
             fc.integer({ min: 1, max: 1_000_000 }).map((id) => `in-process_${"0".repeat(26)}-${id}`),

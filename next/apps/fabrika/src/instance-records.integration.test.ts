@@ -17,7 +17,7 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { DateTime, Effect, Layer, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
@@ -399,12 +399,15 @@ export class Control extends Brain.Control {
 
 const pause = (ms = 20) => new Promise<void>((done) => setTimeout(done, ms));
 
+/** The wall clock in ms, for the waits and the wakes set against real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
 /** Looks until `done` says yes, for at most `wait` ms. The platform's alarm retry sets the bound. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, wait = 25_000) => {
-  const end = Date.now() + wait;
+  const end = now() + wait;
   let last: A | undefined;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     last = await look();
 
     if (done(last)) {
@@ -1062,7 +1065,7 @@ describe("P12 real object adapters", () => {
       const started = await fixture.start("sleeper:1", "p12/alarm-fixture");
       const object = instance.process(started.process);
       // An hour away: the wake is saved, and no alarm arrives to keep the object awake.
-      const far = Date.now() + 3_600_000;
+      const far = now() + 3_600_000;
 
       const send = (letter: string, m: unknown) =>
         routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
@@ -1107,7 +1110,7 @@ describe("P12 real object adapters", () => {
 
       // 1. A saved alarm fires once: one timer letter for the wake, and the wake is spent.
       const once = await fixture.start("once:1", "p12/alarm-fixture");
-      const first = Date.now() + 1_000;
+      const first = now() + 1_000;
       expect(await send(once.process, "arm", { type: "schedule", at: first })).toMatchObject(accepted);
       expect(await instance.process(once.process).alarm()).toBe(first);
       await until(
@@ -1128,12 +1131,12 @@ describe("P12 real object adapters", () => {
 
       // 2. A deleted alarm never fires: the platform delivers nothing after the wake is dropped.
       const never = await fixture.start("never:1", "p12/alarm-fixture");
-      const second = Date.now() + 2_000;
+      const second = now() + 2_000;
       expect(await send(never.process, "arm", { type: "schedule", at: second })).toMatchObject(accepted);
       expect(await instance.process(never.process).alarm()).toBe(second);
       expect(await send(never.process, "drop", { type: "cancel" })).toMatchObject(accepted);
       expect(await instance.process(never.process).alarm()).toBeNull();
-      await pause(Math.max(0, second - Date.now()) + 1_500);
+      await pause(Math.max(0, second - now()) + 1_500);
       expect(await timers("never:1")).toEqual([]);
       expect(await instance.process(never.process).testAlarms()).toEqual({ delivered: 0, failed: 0 });
       expect(await instance.process(never.process).open("audit")).toMatchObject({ view: { fired: 0, wake: null } });
@@ -1141,7 +1144,7 @@ describe("P12 real object adapters", () => {
       // 3. A failed alarm is retried: it fails while the descriptor is gone, and its wake is
       // delivered, once, by a later try after the descriptor is back.
       const retried = await fixture.start("retry:1", "p12/alarm-fixture");
-      const third = Date.now() + 2_000;
+      const third = now() + 2_000;
       expect(await send(retried.process, "arm", { type: "schedule", at: third })).toMatchObject(accepted);
       // Both exam calls end in a platform abort, which rejects the call that asked for it.
       await instance

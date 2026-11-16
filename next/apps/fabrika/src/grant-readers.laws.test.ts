@@ -1,7 +1,7 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
+import { Cause, DateTime, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -251,7 +251,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
         try {
           vi.resetModules();
           await import("../grant.ts");
-          const before = Date.now();
+          const before = DateTime.toEpochMillis(DateTime.nowUnsafe());
           const exit = await run();
           const reason = results[mode];
 
@@ -298,7 +298,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
               sentAt: expect.any(String),
             });
             expect(Date.parse(grant.sentAt)).toBeGreaterThanOrEqual(before);
-            expect(Date.parse(grant.sentAt)).toBeLessThanOrEqual(Date.now());
+            expect(Date.parse(grant.sentAt)).toBeLessThanOrEqual(DateTime.toEpochMillis(DateTime.nowUnsafe()));
             expect(text).toBe(grantText(grant));
           }
 

@@ -3,7 +3,7 @@
 // L9 is the Reflect ban's (ticket 1056, slice 5): hostile keys and a scalar in the middle of a path.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, DateTime, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -781,7 +781,7 @@ describe("T877 public TOML edits, next/", () => {
           -Infinity,
           Number.MAX_SAFE_INTEGER + 1,
           1n,
-          new Date(0),
+          DateTime.toDateUtc(DateTime.makeUnsafe(0)),
           new Map(),
           sparse,
         ];

@@ -37,7 +37,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, DateTime, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -329,7 +329,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
                     () => {
                       entry!.object.call("alarm", []).catch(() => {});
                     },
-                    Math.max(0, at - Date.now()),
+                    Math.max(0, at - DateTime.toEpochMillis(DateTime.nowUnsafe())),
                   );
                 }
               });

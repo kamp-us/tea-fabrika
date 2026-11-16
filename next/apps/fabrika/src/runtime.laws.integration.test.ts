@@ -19,7 +19,7 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Cause, DateTime, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -1011,7 +1011,7 @@ describe("P12 Connection recording", () => {
         storage: storage(db),
         getWebSockets: () => [ws],
         getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-        getWebSocketAutoResponseTimestamp: () => new Date(42),
+        getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
       } as unknown as DurableObjectState;
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand
@@ -1097,7 +1097,7 @@ describe("P12 Connection recording", () => {
       storage: storage(db),
       getWebSockets: () => [ws],
       getTags: () => ["session-test", "tab-a", w.key.fingerprint],
-      getWebSocketAutoResponseTimestamp: () => new Date(42),
+      getWebSocketAutoResponseTimestamp: () => DateTime.toDateUtc(DateTime.makeUnsafe(42)),
     } as unknown as DurableObjectState;
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- this Node RPC double has no workerd namespace brand

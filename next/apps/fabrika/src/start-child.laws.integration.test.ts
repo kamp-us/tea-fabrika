@@ -12,7 +12,7 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, DateTime, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -57,6 +57,9 @@ type Instance = Fixture["instance"] & Record<string, any>;
 
 const pause = (ms = 50) => new Promise<void>((done) => setTimeout(done, ms));
 
+/** The wall clock in ms, for the polls that wait on real workerd. */
+const now = () => DateTime.toEpochMillis(DateTime.nowUnsafe());
+
 /**
  * A real 5 ms pause on Effect's live clock, whatever clock the law runs on: the test clock under
  * `it.effect`, the live one inside a fast-check run.
@@ -65,10 +68,10 @@ const realPause = Effect.sleep("5 millis").pipe(Effect.provideService(Clock.Cloc
 
 /** Polls an observable fact. A timeout fails with the last observed state. */
 const until = async <A>(label: string, look: () => Promise<A>, done: (value: A) => boolean, ms = WAIT): Promise<A> => {
-  const end = Date.now() + ms;
+  const end = now() + ms;
   let last: { value: A } | { error: string } | null = null;
 
-  while (Date.now() < end) {
+  while (now() < end) {
     try {
       const value = await look();
       last = { value };
@@ -112,9 +115,9 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
   });
 
   const next = async (match: (frame: any) => boolean) => {
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (Date.now() < end) {
+    while (now() < end) {
       const index = frames.findIndex(match);
 
       if (index >= 0) {
@@ -140,9 +143,9 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
 
   const close = async () => {
     socket.close();
-    const end = Date.now() + WAIT;
+    const end = now() + WAIT;
 
-    while (closeCode === undefined && Date.now() < end) {
+    while (closeCode === undefined && now() < end) {
       await pause(20);
     }
   };
