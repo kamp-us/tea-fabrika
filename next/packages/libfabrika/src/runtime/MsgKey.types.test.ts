@@ -15,8 +15,6 @@ const Msg = Schema.TaggedUnion({
   save: { n: Schema.Int },
 });
 
-const Disk = Schema.TaggedStruct("disk", {});
-
 const store = Cmd.make("store", {
   input: Schema.Struct({ n: Schema.Int }),
   ok: Schema.Int,
@@ -50,7 +48,7 @@ it("type: K1 a TaggedUnion Msg is taken by Machine.make, and its cells and answe
   expectTypeOf<Answer["cmd"]["n"]>().toEqualTypeOf<number>();
   expectTypeOf<ReturnType<typeof store>["_tag"]>().toEqualTypeOf<"store">();
   expectTypeOf<ReturnType<typeof store.err>["_tag"]>().toEqualTypeOf<"store_err">();
-  expectTypeOf<Parameters<typeof store.err>[1]>().toEqualTypeOf<typeof Disk.Type>();
+  expectTypeOf<ReturnType<typeof store.ok>["cmd"]["_tag"]>().toEqualTypeOf<"store">();
 });
 
 // Every refusal has a valid neighbor beside it. These functions are never called, even by Vitest.
@@ -99,12 +97,14 @@ function authoringTypeErrors() {
 }
 
 function dispatchTypeErrors(run: EffectRun<typeof Model.Type, typeof Msg.Type>) {
-  run.dispatch(Msg.cases.inc.make({}));
-  run.dispatch(Msg.cases.save.make({ n: 1 }));
-  // @ts-expect-error A misspelled Msg: `inq` is no case of the machine's Msg.
-  run.dispatch(Schema.TaggedStruct("inq", {}).make({}));
-  // @ts-expect-error A Msg keyed `type` is refused: `{ type: "inc" }` has no `_tag`.
-  run.dispatch({ type: "inc" });
+  return [
+    run.dispatch(Msg.cases.inc.make({})),
+    run.dispatch(Msg.cases.save.make({ n: 1 })),
+    // @ts-expect-error A misspelled Msg: `inq` is no case of the machine's Msg.
+    run.dispatch(Schema.TaggedStruct("inq", {}).make({})),
+    // @ts-expect-error A Msg keyed `type` is refused: `{ type: "inc" }` has no `_tag`.
+    run.dispatch({ type: "inc" }),
+  ];
 }
 
 void authoringTypeErrors;

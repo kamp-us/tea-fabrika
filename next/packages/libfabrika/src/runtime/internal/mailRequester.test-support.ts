@@ -18,25 +18,30 @@ export const Model = Schema.TaggedUnion({
 /** @internal */
 export type Model = typeof Model.Type;
 
-/** `to` and `claim` let a law aim one request elsewhere, or have it claim another sender. */
-const Start = Schema.Struct({
-  type: Schema.Literal("start"),
-  ref: Schema.NonEmptyString,
-  value: Schema.Int,
-  to: Schema.optionalKey(Schema.NonEmptyString),
-  claim: Schema.optionalKey(Schema.NonEmptyString),
-  parent: Schema.optionalKey(Schema.String),
+/** @internal `start`'s `to` and `claim` let a law aim one request elsewhere, or have it claim another
+ *  sender. */
+export const Msg = Schema.TaggedUnion({
+  start: {
+    ref: Schema.NonEmptyString,
+    value: Schema.Int,
+    to: Schema.optionalKey(Schema.NonEmptyString),
+    claim: Schema.optionalKey(Schema.NonEmptyString),
+    parent: Schema.optionalKey(Schema.String),
+  },
+  answer: {
+    ref: Schema.String,
+    value: Schema.Int,
+    parent: Schema.optionalKey(Schema.String),
+  },
 });
 
-const Answer = Schema.Struct({
-  type: Schema.Literal("answer"),
+/** The request the responder takes, the same shape restated here: the requester shares the shape,
+ *  never the responder's code. */
+const Request = Schema.TaggedStruct("request", {
   ref: Schema.String,
   value: Schema.Int,
-  parent: Schema.optionalKey(Schema.String),
+  reply: Schema.String,
 });
-
-/** @internal */
-export const Msg = Schema.Union([Start, Answer]);
 
 const idle = Model.cases.idle.make({});
 
@@ -53,7 +58,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
           return [s, []];
         }
 
-        const body = { type: "request", ref: m.ref, value: m.value, reply: config.self };
+        const body = Request.make({ ref: m.ref, value: m.value, reply: config.self });
         // A claimed sender rides beside the operands, as a program could try; the host binds the real one.
         const input =
           m.claim === undefined
@@ -81,7 +86,7 @@ export const mailRequester = (config: { readonly self: string; readonly peer: st
     machine,
     state: { v: 1, upgrades: [] },
     view: (s) => s,
-    refuse: (s, m) => (m.type === "start" && s._tag === "waiting" ? { reason: "busy" } : null),
+    refuse: (s, m) => (Msg.guards.start(m) && s._tag === "waiting" ? { reason: "busy" } : null),
     inputs: { start: "Start a request", answer: "An answer from a responder" },
     outputs: {},
     writes: {},

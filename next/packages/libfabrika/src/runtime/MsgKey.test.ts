@@ -172,6 +172,9 @@ const table = Machine.make({
   },
 });
 
+/** One reducer answer: the next phase and no Cmd. */
+type Stepped = readonly [Phase, ReadonlyArray<never>];
+
 const reducer = Machine.make({
   model: Phase,
   msg: PhaseMsg,
@@ -180,18 +183,18 @@ const reducer = Machine.make({
   update: {
     go: (s) =>
       Phase.match(s, {
-        idle: (i) => [Phase.cases.running.make({ runs: i.runs + 1, ticks: 0 }), []],
-        running: (r) => [r, []],
+        idle: (i): Stepped => [Phase.cases.running.make({ runs: i.runs + 1, ticks: 0 }), []],
+        running: (r): Stepped => [r, []],
       }),
     tick: (s) =>
       Phase.match(s, {
-        idle: (i) => [i, []],
-        running: (r) => [Phase.cases.running.make({ runs: r.runs, ticks: r.ticks + 1 }), []],
+        idle: (i): Stepped => [i, []],
+        running: (r): Stepped => [Phase.cases.running.make({ runs: r.runs, ticks: r.ticks + 1 }), []],
       }),
     halt: (s) =>
       Phase.match(s, {
-        idle: (i) => [i, []],
-        running: (r) => [Phase.cases.idle.make({ runs: r.runs }), []],
+        idle: (i): Stepped => [i, []],
+        running: (r): Stepped => [Phase.cases.idle.make({ runs: r.runs }), []],
       }),
   },
 });
