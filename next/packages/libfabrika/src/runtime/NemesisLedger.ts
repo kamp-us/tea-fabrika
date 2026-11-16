@@ -9,13 +9,13 @@ import * as Chaos from "./Chaos.ts";
 import { BadRow, Nemesis, NemesisError, Storage, Unreachable } from "./Nemesis.ts";
 
 const translate = (cause: ProcessHistoryError): NemesisError =>
-  new NemesisError({
+  NemesisError.make({
     reason:
       cause.reason._tag === "Unreachable"
-        ? new Unreachable({ cause })
+        ? Unreachable.make({ cause })
         : cause.reason._tag === "BadRow"
-          ? new BadRow({ cause })
-          : new Storage({ cause }),
+          ? BadRow.make({ cause })
+          : Storage.make({ cause }),
   });
 
 const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"]) {

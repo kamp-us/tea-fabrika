@@ -181,14 +181,14 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             const cause = new RangeError(secret);
 
             for (const reason of [
-              new Off({ cause }),
-              new BadTarget({ cause }),
-              new NotGranted({ cause }),
-              new Unreachable({ cause }),
-              new BadRow({ cause }),
-              new Storage({ cause }),
+              Off.make({ cause }),
+              BadTarget.make({ cause }),
+              NotGranted.make({ cause }),
+              Unreachable.make({ cause }),
+              BadRow.make({ cause }),
+              Storage.make({ cause }),
             ]) {
-              const error = new NemesisError({ reason });
+              const error = NemesisError.make({ reason });
               const nemesis = yield* service(sql, () => Effect.fail(error));
               const result = yield* failed(nemesis.fire(request(fault, n)), reason._tag);
               expect(result.reason.cause).toBe(cause);
@@ -358,7 +358,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             const recording = yield* telemetry(sql, process);
             const live = yield* service(sql, () =>
               refuse
-                ? Effect.fail(new NemesisError({ reason: new BadTarget({ cause: new Error(errorText) }) }))
+                ? Effect.fail(NemesisError.make({ reason: BadTarget.make({ cause: new Error(errorText) }) }))
                 : Effect.succeed(outcome),
             );
             const off = Context.get(yield* Layer.build(NemesisNone.layer), Nemesis);

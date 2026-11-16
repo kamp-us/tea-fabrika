@@ -270,7 +270,7 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
   const saved = Schema.decodeUnknownResult(Activity)(raw);
 
   if (Result.isFailure(saved)) {
-    return Result.fail(new LedgerError({ reason: "bad_row", cause: saved.failure }));
+    return Result.fail(LedgerError.make({ reason: "bad_row", cause: saved.failure }));
   }
 
   const value = saved.success;
@@ -379,7 +379,7 @@ export type ProcessInfo = {
 };
 
 const decodeDown = Schema.decodeUnknownOption(Down);
-const denied = (reason: ProcessError["reason"]) => Result.fail(new ProcessError({ reason }));
+const denied = (reason: ProcessError["reason"]) => Result.fail(ProcessError.make({ reason }));
 const isText = Schema.is(Text);
 
 /**

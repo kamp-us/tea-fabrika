@@ -44,15 +44,15 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
   const bytes = Base64Url.decode(secret);
 
   if (Result.isFailure(bytes)) {
-    return yield* new GatewayError({ reason: new Storage({ cause: bytes.failure }) });
+    return yield* GatewayError.make({ reason: Storage.make({ cause: bytes.failure }) });
   }
 
   // A key of the wrong length decoded fine: no failure to keep.
   if (bytes.success.length !== 32) {
-    return yield* new GatewayError({ reason: new Storage({ cause: undefined }) });
+    return yield* GatewayError.make({ reason: Storage.make({ cause: undefined }) });
   }
 
-  const fail = (cause: unknown) => new GatewayError({ reason: new Crypto({ cause }) });
+  const fail = (cause: unknown) => GatewayError.make({ reason: Crypto.make({ cause }) });
   const args: Parameters<SubtleCrypto["importKey"]> = [
     "raw",
     new Uint8Array(bytes.success),
@@ -109,7 +109,7 @@ export const gatewayNonce = Effect.fn("gateway.nonce")(function* (
     }
 
     if (Number(store.sql.exec("SELECT count(*) n FROM gateway_spent WHERE until>?", at)[0]?.n ?? 0) >= cap) {
-      return Result.fail(new GatewayError({ reason: new Storage({ cause: undefined }) }));
+      return Result.fail(GatewayError.make({ reason: Storage.make({ cause: undefined }) }));
     }
 
     store.sql.exec("DELETE FROM gateway_spent WHERE until<=?", at);

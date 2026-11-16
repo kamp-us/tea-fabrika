@@ -63,7 +63,7 @@ const SEED = 119120;
 /** fast-check's assertion rejected: a walk failed, and its counterexample is the cause. */
 class PropertyFailure extends Schema.TaggedError<PropertyFailure>()("PropertyFailure", { cause: Schema.Defect() }) {}
 
-const propertyFailure = (cause: unknown) => new PropertyFailure({ cause });
+const propertyFailure = (cause: unknown) => PropertyFailure.make({ cause });
 /** P40: the counter's qualified name; its registered names stay `counter:N`. */
 const PROGRAM = "fabrika/counter";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -322,7 +322,7 @@ const loader = (code: Code) => ({
       const spec = build === undefined ? undefined : code.variants.get(build);
 
       if (name !== PROGRAM || build === undefined || spec === undefined) {
-        return yield* new ProgramDown({ reason: name === PROGRAM ? "load" : "no_program" });
+        return yield* ProgramDown.make({ reason: name === PROGRAM ? "load" : "no_program" });
       }
 
       code.calls.loads.push(build);
@@ -505,7 +505,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
 
                 w.cuts.armed = null;
                 w.cuts.hits.push(at);
-                return Effect.fail(new LedgerError({ reason: "unreachable" }));
+                return Effect.fail(LedgerError.make({ reason: "unreachable" }));
               });
             yield* cut("before_acceptance");
             const appended = yield* mailbox.send(name, i.id, i.envelope.input, {
@@ -524,7 +524,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
               w.durable.attempts.push(id);
 
               if (w.durable.blocked) {
-                return yield* new LedgerError({ reason: "unreachable" });
+                return yield* LedgerError.make({ reason: "unreachable" });
               }
 
               w.durable.completed.add(id);
@@ -542,7 +542,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
             w.durable.attempts.push(mail.command);
 
             if (w.durable.blocked) {
-              return yield* new MailDeliveryError({ reason: "unavailable" });
+              return yield* MailDeliveryError.make({ reason: "unavailable" });
             }
 
             w.durable.completed.add(mail.command);
@@ -572,7 +572,7 @@ const open = Effect.fnUntraced(function* (w: World, name: string, build: string)
 
             w.cuts.armed = null;
             w.cuts.hits.push(cut);
-            return Effect.fail(new LedgerError({ reason: "unreachable" }));
+            return Effect.fail(LedgerError.make({ reason: "unreachable" }));
           }),
       },
     ).pipe(Layer.provideMerge(services));

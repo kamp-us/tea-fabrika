@@ -471,7 +471,7 @@ describe("p101, no raw row is ever lost", () => {
             const { db, sql } = yield* fresh;
             const r2 = bucket();
             const failing = {
-              put: () => Effect.fail(new SinkError({ reason: "unreachable", held: 0 })),
+              put: () => Effect.fail(SinkError.make({ reason: "unreachable", held: 0 })),
             };
             const wrong = { put: () => Effect.succeed({ sha256: value }) };
             const liar = bucket(true);
@@ -598,7 +598,7 @@ describe("p101, an archive that fails is never silent", () => {
             const { db, sql } = yield* fresh;
             const r2 = bucket();
             const failing = {
-              put: () => Effect.fail(new SinkError({ reason: "unreachable", held: 0 })),
+              put: () => Effect.fail(SinkError.make({ reason: "unreachable", held: 0 })),
             };
             const wrong = { put: () => Effect.succeed({ sha256: "0".repeat(64) }) };
             const liar = bucket(true);
@@ -756,7 +756,7 @@ describe("p101, a sink.archive row's time, duration and span", () => {
                 put: (key: string, body: Uint8Array) =>
                   TestClock.adjust(ms).pipe(
                     Effect.andThen(
-                      fail ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 })) : real.put(key, body),
+                      fail ? Effect.fail(SinkError.make({ reason: "unreachable", held: 0 })) : real.put(key, body),
                     ),
                   ),
               });

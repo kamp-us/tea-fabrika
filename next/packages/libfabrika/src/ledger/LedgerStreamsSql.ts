@@ -22,14 +22,13 @@ export const layer = (sql: Sql): Layer.Layer<LedgerStreams> =>
       list: (prefix: string) =>
         Stream.paginate(null as string | null, (after) =>
           store.streams(prefix, after).pipe(
-            Effect.mapError(
-              (error) =>
-                new LedgerStreamsError({
-                  reason:
-                    error.reason === "bad_row"
-                      ? new BadRow({ cause: error.cause })
-                      : new Storage({ cause: error.cause }),
-                }),
+            Effect.mapError((error) =>
+              LedgerStreamsError.make({
+                reason:
+                  error.reason === "bad_row"
+                    ? BadRow.make({ cause: error.cause })
+                    : Storage.make({ cause: error.cause }),
+              }),
             ),
             Effect.map(
               (names) => [names, names.length < PAGE ? Option.none() : Option.fromUndefinedOr(names.at(-1))] as const,

@@ -82,7 +82,7 @@ export const subtle = Effect.fn("transport.crypto")(function* <M extends CryptoM
   ...args: CryptoArgs[M]
 ): Effect.fn.Return<CryptoResult[M], WebCryptoError> {
   const api: CryptoApi = crypto.subtle;
-  const fail = (cause: unknown) => new WebCryptoError({ cause });
+  const fail = (cause: unknown) => WebCryptoError.make({ cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto answers only with a Promise
   return yield* Effect.tryPromise({ try: () => api[method](...args), catch: fail });
 });

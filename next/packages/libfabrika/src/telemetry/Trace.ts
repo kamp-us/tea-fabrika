@@ -317,7 +317,7 @@ export class SinkError extends Schema.TaggedError<SinkError>()("SinkError", {
  * @category constructors
  */
 export const sinkError = (error: unknown): SinkError =>
-  new SinkError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0, cause: error });
+  SinkError.make({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", held: 0, cause: error });
 
 /**
  * Returns the class of a thrown or failed value, for the `error.type` tag: an `Error`'s name, else

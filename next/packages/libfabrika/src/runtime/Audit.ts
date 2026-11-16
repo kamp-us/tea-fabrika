@@ -87,7 +87,7 @@ const reasons = { Input, Selection, Output, Transport, Reply };
  * @category constructors
  */
 export const restore = (answer: typeof Answer.cases.AuditError.Type): AuditError =>
-  new AuditError({ reason: new reasons[answer.reason._tag]({}) });
+  AuditError.make({ reason: reasons[answer.reason._tag].make({}) });
 
 const Minimal = Schema.Struct({ type: Schema.String });
 
@@ -111,23 +111,23 @@ type Declaration = {
 export const select = (program: Declaration, raw: unknown): Result.Result<Schema.Json, AuditError> => {
   const decoded = Result.try({
     try: () => Schema.decodeUnknownResult(program.msg)(raw),
-    catch: (cause) => new AuditError({ reason: new Input({ cause: Redacted.make(cause) }) }),
+    catch: (cause) => AuditError.make({ reason: Input.make({ cause: Redacted.make(cause) }) }),
   }).pipe(
     Result.flatMap((result) =>
-      Result.mapError(result, (cause) => new AuditError({ reason: new Input({ cause: Redacted.make(cause) }) })),
+      Result.mapError(result, (cause) => AuditError.make({ reason: Input.make({ cause: Redacted.make(cause) }) })),
     ),
   );
 
   return Result.flatMap(decoded, (msg) => {
     const selected = Result.try({
       try: () => (program.audit === undefined ? Schema.decodeUnknownSync(Minimal)(msg) : program.audit.select(msg)),
-      catch: (cause) => new AuditError({ reason: new Selection({ cause: Redacted.make(cause) }) }),
+      catch: (cause) => AuditError.make({ reason: Selection.make({ cause: Redacted.make(cause) }) }),
     });
     return Result.flatMap(selected, (value) =>
       Result.try({
         try: () =>
           Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(program.audit?.data ?? Minimal)(value)),
-        catch: (cause) => new AuditError({ reason: new Output({ cause: Redacted.make(cause) }) }),
+        catch: (cause) => AuditError.make({ reason: Output.make({ cause: Redacted.make(cause) }) }),
       }),
     );
   });

@@ -206,7 +206,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
             expect(Exit.isFailure(result)).toBe(true);
 
             if (Exit.isFailure(result)) {
-              expect(Cause.squash(result.cause)).toEqual(new LedgerError({ reason }));
+              expect(Cause.squash(result.cause)).toEqual(LedgerError.make({ reason }));
             }
 
             const span = spans.at(-1)!;

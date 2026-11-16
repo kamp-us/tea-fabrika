@@ -55,11 +55,11 @@ type Client<S> = {
 const thrown = (cause: unknown) =>
   cause instanceof Error ? `${cause.name}: ${cause.message}` : `${typeof cause}: ${String(cause)}`;
 
-const unreachable = (cause: unknown) => new LedgerError({ reason: "unreachable", message: thrown(cause), cause });
+const unreachable = (cause: unknown) => LedgerError.make({ reason: "unreachable", message: thrown(cause), cause });
 
 /** A call the typed stub could not make. Its RpcCallError is the cause, and the message names what
  *  the platform threw inside it, in the form `unreachable` writes. */
-const lost = (cause: RpcCallError) => new LedgerError({ reason: "unreachable", message: thrown(cause.cause), cause });
+const lost = (cause: RpcCallError) => LedgerError.make({ reason: "unreachable", message: thrown(cause.cause), cause });
 
 /** An object's contract as its callers see it: each call needs nothing, and fails with `LedgerError`. */
 type Calls<S> = {

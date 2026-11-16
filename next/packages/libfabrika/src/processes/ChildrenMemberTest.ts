@@ -122,7 +122,7 @@ const gateway = (inputs: ReadonlyMap<string, Input>) =>
 
         return input.state === "live"
           ? Effect.succeed(Option.some(input.sender))
-          : Effect.fail(new SendersError({ reason: input.state }));
+          : Effect.fail(SendersError.make({ reason: input.state }));
       }),
   });
 

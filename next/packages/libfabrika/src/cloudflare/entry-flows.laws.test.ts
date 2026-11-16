@@ -157,7 +157,7 @@ SettingsTest.suite((recipe, secret) =>
 
       const work =
         fault === "refused"
-          ? Effect.fail(new Starts.StartsError({ reason: new Starts.Refused({ cause: lower }) }))
+          ? Effect.fail(Starts.StartsError.make({ reason: Starts.Refused.make({ cause: lower }) }))
           : starts.record(wire as StartsTest.Input);
       const reply = yield* settingsReply(work);
       captured[reply._tag === "ok" ? "transport" : "RPC failures"].push(reply);
@@ -429,7 +429,7 @@ SettingsTest.suite((recipe, secret) =>
                       );
               return Reflect.apply(runtime.runPromise, runtime, [work]);
             },
-            catch: (cause: unknown) => new EntryFailure({ cause }),
+            catch: (cause: unknown) => EntryFailure.make({ cause }),
           });
       }
 

@@ -95,7 +95,7 @@ const located = (place: Place, path: Path) => {
 export const refused = (location: string, d: Declaration, shown: string) => {
   const expected = SchemaAST.resolveTitle(d.schema.ast) ?? "a valid value";
   const rule = SchemaAST.resolveDescription(d.schema.ast) ?? "fabrika settings lists every setting.";
-  return new SettingsError({
+  return SettingsError.make({
     reason: "invalid",
     message: `${location}: ${d.path} = ${shown} is not ${expected}.\n  ${rule} ${STOP}`,
   });
@@ -163,7 +163,7 @@ const explain = (
     const d = own.find((d) => same(d.segments, path));
     return d !== undefined
       ? refused(located(place, path), d, shape(at(place.document.value, path)))
-      : new SettingsError({
+      : SettingsError.make({
           reason: "invalid",
           message: `${located(place, path)}: ${path.join(".")} is a table of settings.\n  fabrika settings lists every setting. ${STOP}`,
         });
@@ -174,7 +174,7 @@ const explain = (
   const other = declarations.find((d) => under(d, key));
 
   if (other !== undefined) {
-    return new SettingsError({
+    return SettingsError.make({
       reason: "scope",
       message:
         `${location}: ${other.path} is ${owner[other.scope[0]]} setting, so ${owner[file]} file may not set it.\n` +
@@ -184,7 +184,7 @@ const explain = (
 
   // A guess names only a key this file may set.
   const near = own.map((d) => d.path).find((p) => distance(p, key.join(".")) <= 2);
-  return new SettingsError({
+  return SettingsError.make({
     reason: "unknown",
     message:
       `${location}: there is no setting ${key.join(".")}.${near === undefined ? "" : ` Did you mean ${near}?`}\n` +
@@ -236,7 +236,7 @@ export const supported = Effect.fnUntraced(function* (repo: Place, version: stri
   }
 
   if (newer(wanted, version)) {
-    return yield* new SettingsError({
+    return yield* SettingsError.make({
       reason: "version",
       message: `${located(repo, d.segments)}: This repo needs fabrika ${wanted} or newer. You have ${version}.\n  ${STOP}`,
     });

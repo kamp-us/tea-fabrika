@@ -91,7 +91,7 @@ it.effect.prop(
   ({ method, reason, text }) =>
     Effect.gen(function* () {
       // The bridge answers a typed failure as data: Alchemy's error envelope around the encoded error.
-      const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason, message: text })) };
+      const envelope = { _tag: ErrorTag, error: encodeRpcError(LedgerError.make({ reason, message: text })) };
       const call: () => Effect.Effect<unknown, unknown> = Reflect.get(
         ProcessClient.make(answeringProcess(envelope)),
         method,
@@ -163,7 +163,7 @@ it.effect.prop(
 
       // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`).
       const typed = yield* Effect.flip(
-        method(answering({ _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) })),
+        method(answering({ _tag: ErrorTag, error: encodeRpcError(LedgerError.make({ reason })) })),
       );
       expect(typed).toBeInstanceOf(LedgerError);
       expect(typed).toMatchObject({ reason });
@@ -348,7 +348,7 @@ it.effect.prop(
   },
   ({ name, text }) =>
     Effect.sync(() => {
-      const thrown = rejected(new LedgerError({ reason: "unreachable", message: `${name}: ${text}` }));
+      const thrown = rejected(LedgerError.make({ reason: "unreachable", message: `${name}: ${text}` }));
       expect(thrown).toBeInstanceOf(Error);
       expect(thrown).not.toBeInstanceOf(LedgerError);
       expect(Reflect.get(Object(thrown), "name")).toBe(name);
@@ -366,10 +366,10 @@ it.effect.prop(
   ({ reason, text }) =>
     Effect.sync(() => {
       const others = [
-        new LedgerError({ reason, message: `Error: ${text}` }),
-        new LedgerError({ reason }),
-        new LedgerError({ reason: "unreachable" }),
-        new LedgerError({ reason: "unreachable", message: text.replaceAll(": ", "") }),
+        LedgerError.make({ reason, message: `Error: ${text}` }),
+        LedgerError.make({ reason }),
+        LedgerError.make({ reason: "unreachable" }),
+        LedgerError.make({ reason: "unreachable", message: text.replaceAll(": ", "") }),
         new Error(`Error: ${text}`),
       ];
 

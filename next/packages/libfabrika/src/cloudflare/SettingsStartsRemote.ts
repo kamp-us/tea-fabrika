@@ -28,7 +28,7 @@ export interface Calls {
   readonly settingsRead: (start: string) => PromiseLike<unknown>;
 }
 
-const unreachable = (cause: unknown) => new StartsError({ reason: new Unreachable({ cause }) });
+const unreachable = (cause: unknown) => StartsError.make({ reason: Unreachable.make({ cause }) });
 
 /**
  * Layer that records and reads instance starts by calling the object that keeps them.
@@ -65,20 +65,20 @@ const call = Effect.fnUntraced(function* (
   input?: Start.Input,
 ) {
   yield* Schema.decodeUnknownEffect(Start.Input.fields.start)(start).pipe(
-    Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
+    Effect.mapError((cause) => StartsError.make({ reason: Decode.make({ cause }) })),
   );
   const raw = yield* work;
   const reply = yield* Schema.decodeUnknownEffect(Start.Reply)(raw, { onExcessProperty: "error" }).pipe(
-    Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
+    Effect.mapError((cause) => StartsError.make({ reason: Decode.make({ cause }) })),
   );
 
   if (reply._tag === "ok") {
     const saved = yield* SettingsInput.receipt(reply.value, input).pipe(
-      Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
+      Effect.mapError((cause) => StartsError.make({ reason: Decode.make({ cause }) })),
     );
 
     if (saved.start !== start) {
-      return yield* new StartsError({ reason: new Decode({ cause: "Start acknowledgement mismatch" }) });
+      return yield* StartsError.make({ reason: Decode.make({ cause: "Start acknowledgement mismatch" }) });
     }
 
     return saved;
@@ -86,13 +86,13 @@ const call = Effect.fnUntraced(function* (
 
   const reason =
     reply._tag === "Missing"
-      ? new Missing({ target: MissingTarget.cases.instance.make({ start }) })
+      ? Missing.make({ target: MissingTarget.cases.instance.make({ start }) })
       : reply._tag === "Decode"
-        ? new Decode({ cause: reply })
+        ? Decode.make({ cause: reply })
         : reply._tag === "Refused"
-          ? new Refused({ cause: reply })
+          ? Refused.make({ cause: reply })
           : reply._tag === "Storage"
-            ? new Storage({ cause: reply })
-            : new Unreachable({ cause: reply });
-  return yield* new StartsError({ reason });
+            ? Storage.make({ cause: reply })
+            : Unreachable.make({ cause: reply });
+  return yield* StartsError.make({ reason });
 });

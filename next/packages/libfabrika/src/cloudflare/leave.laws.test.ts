@@ -33,7 +33,7 @@ const SEED = 119120;
 /** A Promise the law awaited rejected: fast-check's failed assertion. */
 class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
 
-const rejected = (cause: unknown) => new Rejected({ cause });
+const rejected = (cause: unknown) => Rejected.make({ cause });
 const PROGRAM = "fabrika/counter";
 const BRAIN_BUILD = "brain-build-test";
 const CLIENTS = ["window-a", "window-b", "window-c"];

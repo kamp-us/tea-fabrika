@@ -139,7 +139,7 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
       : Schema.Struct(Object.fromEntries(group.declarations.map((d) => [d.path, declaredOrigin(d)])));
   const envelope = Schema.Struct({ values: fields(Schema.Json), origins, hash: Schema.String });
   const refused = (cause: unknown) =>
-    new SnapshotError({
+    SnapshotError.make({
       message: "The saved settings are invalid.",
       cause: Redacted.make(cause),
     });
@@ -154,7 +154,7 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const hash = yield* hashValues(canonical);
 
   if (saved.hash !== hash) {
-    return yield* new SnapshotError({ message: "The saved settings hash does not match their values." });
+    return yield* SnapshotError.make({ message: "The saved settings hash does not match their values." });
   }
 
   const snapshot: Snapshot = { values: canonical, origins: saved.origins, hash };

@@ -72,7 +72,7 @@ export class Connections extends Context.Service<
                 return step();
               }),
             catch: (error) =>
-              new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
+              LedgerError.make({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
           });
         });
         const probe = Effect.fn("connections.probe")(function* (connection: Connection) {

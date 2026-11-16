@@ -592,7 +592,7 @@ it.effect.prop(
           const choices = unvisited.length > 0 ? unvisited : (["success", "failure"] as const);
           const outcome = choices[draw.pick % choices.length]!;
           const answer = Answer.cases.ok.make({ result: draw.value });
-          const failure = new LedgerError({ reason: "unreachable" });
+          const failure = LedgerError.make({ reason: "unreachable" });
           const exit = yield* Effect.exit(
             Runtime.complete(outcome === "success" ? Effect.succeed(answer) : Effect.fail(failure)),
           );

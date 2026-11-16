@@ -242,7 +242,7 @@ const services = Layer.mergeAll(NodeServices.layer, SecureRandom.layerWebCrypto)
 
 /** One call on the live instance, its answer read as `answer`, a rejection kept as an `InstanceError`. */
 const call = <S extends Schema.Top>(method: string, answer: S, run: () => Promise<unknown>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new InstanceError({ method, cause }) }).pipe(
+  Effect.tryPromise({ try: run, catch: (cause) => InstanceError.make({ method, cause }) }).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(answer)),
   );
 

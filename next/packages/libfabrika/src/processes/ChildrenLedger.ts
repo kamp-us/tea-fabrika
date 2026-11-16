@@ -34,8 +34,10 @@ const decodeChild = Schema.decodeUnknownResult(Child);
 const isName = Schema.is(ProcessName);
 const decodeLetter = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Json }));
 
-const refuse = (reason: Exclude<ChildrenError["reason"], "storage">) => new ChildrenError({ reason });
-const storage = (cause: LedgerError | RelationsError | SendersError) => new ChildrenError({ reason: "storage", cause });
+const refuse = (reason: Exclude<ChildrenError["reason"], "storage">) => ChildrenError.make({ reason });
+
+const storage = (cause: LedgerError | RelationsError | SendersError) =>
+  ChildrenError.make({ reason: "storage", cause });
 
 /** The proof a start's write needs. */
 type Proof = (typeof StartProgram)["Service"];
@@ -278,7 +280,7 @@ const guarded = <A>(work: Effect.Effect<A, ChildrenError>, defect: string) =>
             Exit.isSuccess(exit)
               ? exit
               : Exit.fail(
-                  new ChildrenError({
+                  ChildrenError.make({
                     reason:
                       Option.isSome(error) && error.value instanceof ChildrenError ? error.value.reason : "storage",
                   }),

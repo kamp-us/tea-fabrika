@@ -125,7 +125,7 @@ const history = Effect.fnUntraced(function* (entry: Entry) {
   const sent = decodeSent(entry.body);
 
   if (Option.isNone(sent)) {
-    return yield* new LedgerError({ reason: "bad_row" });
+    return yield* LedgerError.make({ reason: "bad_row" });
   }
 
   return Option.some<History>({

@@ -43,7 +43,7 @@ export const layer = (config: { readonly by: string }): Layer.Layer<Relations, n
           const row = decodeRow(valueFor(entry));
 
           if (Result.isFailure(row)) {
-            return Result.fail(new RelationsError({ reason: "bad_row", cause: row.failure }));
+            return Result.fail(RelationsError.make({ reason: "bad_row", cause: row.failure }));
           }
 
           rows.push(row.success);
@@ -61,7 +61,7 @@ export const layer = (config: { readonly by: string }): Layer.Layer<Relations, n
                 turn.append(STREAM, id, lineFor({ ...writer, by: config.by }, row));
               }
             })
-            .pipe(Effect.mapError((cause) => new RelationsError({ reason: "storage", cause })));
+            .pipe(Effect.mapError((cause) => RelationsError.make({ reason: "storage", cause })));
         }),
       });
     }),

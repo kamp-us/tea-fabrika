@@ -240,7 +240,7 @@ export const suite = (law: Law, fresh: () => Sql, corrupt: (sql: Sql, text: stri
       }),
       ({ method, reason, failure }) =>
         Effect.gen(function* () {
-          const thrown = new LedgerError({ reason, cause: failure });
+          const thrown = LedgerError.make({ reason, cause: failure });
           const planted = throwing(fresh(), thrown);
           const ledger = LedgerSql.layer(planted.sql, { reader: READER }).pipe(Layer.provide(ring));
           yield* Effect.provide(callOn("append"), ledger);

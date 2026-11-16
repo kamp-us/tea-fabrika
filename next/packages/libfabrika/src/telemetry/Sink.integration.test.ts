@@ -468,7 +468,7 @@ describe("p98, a span that ends is never dropped", () => {
               const real = yield* RecordManager;
               const down = {
                 ...real,
-                write: () => Effect.fail(new SinkError({ reason: value, held: 0 })),
+                write: () => Effect.fail(SinkError.make({ reason: value, held: 0 })),
               };
               const failed = yield* Effect.flip(flush.pipe(Effect.provideService(RecordManager, down)));
               expect(failed).toBeInstanceOf(SinkError);
@@ -484,7 +484,7 @@ describe("p98, a span that ends is never dropped", () => {
                     .write(...args)
                     .pipe(
                       Effect.flatMap((written) =>
-                        lose-- > 0 ? Effect.fail(new SinkError({ reason: value, held: 0 })) : Effect.succeed(written),
+                        lose-- > 0 ? Effect.fail(SinkError.make({ reason: value, held: 0 })) : Effect.succeed(written),
                       ),
                     ),
               };
@@ -686,7 +686,7 @@ describe("p98, a span that ends is never dropped", () => {
                     .pipe(
                       Effect.flatMap((written) =>
                         lose-- > 0
-                          ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 }))
+                          ? Effect.fail(SinkError.make({ reason: "unreachable", held: 0 }))
                           : Effect.succeed(written),
                       ),
                     ),
@@ -1524,7 +1524,7 @@ describe("T705, the sink's public calls keep their order through one machine", (
                 expect(
                   Exit.isFailure(exit) ? Cause.squash(exit.cause) : exit,
                   "a held span or an unreported failure blocks the flush",
-                ).toEqual(new SinkError({ reason: "storage", held: seen.held.length }));
+                ).toEqual(SinkError.make({ reason: "storage", held: seen.held.length }));
                 expect(yield* sent(), "a blocked flush sends nothing").toBe(before);
                 seen = { ...seen, unreported: false };
               } else {
@@ -1543,7 +1543,7 @@ describe("T705, the sink's public calls keep their order through one machine", (
 
               if (call === "summaries_fail") {
                 expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : exit).toEqual(
-                  new SinkError({ reason: "storage", held: seen.held.length }),
+                  SinkError.make({ reason: "storage", held: seen.held.length }),
                 );
                 seen = { ...seen, unreported: true };
               } else {
@@ -1561,7 +1561,7 @@ describe("T705, the sink's public calls keep their order through one machine", (
           expect(Exit.isFailure(owed), "only an unreported failure fails the flush after").toBe(seen.unreported);
 
           if (Exit.isFailure(owed)) {
-            expect(Cause.squash(owed.cause)).toEqual(new SinkError({ reason: "storage", held: 0 }));
+            expect(Cause.squash(owed.cause)).toEqual(SinkError.make({ reason: "storage", held: 0 }));
             yield* flush;
           }
 
@@ -1625,7 +1625,7 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
           class Typed extends Schema.TaggedError<Typed>()(sample.tag, { reason: Schema.String }) {}
           const names = sample.names.map((name, depth) => `typed.${name}.${depth}`);
           const innermost = Effect.fn(names.at(-1) ?? "typed.none.0")(function* () {
-            return yield* new Typed({ reason: sample.reason });
+            return yield* Typed.make({ reason: sample.reason });
           });
           const outermost = names
             .slice(0, -1)

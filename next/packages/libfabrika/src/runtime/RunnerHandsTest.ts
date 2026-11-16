@@ -327,7 +327,7 @@ const host = Effect.fnUntraced(function* (
         if (world.fault.before) {
           world.fault.before = false;
           world.done.add("lose_before:fired");
-          return yield* new HandsTasksError({ reason: "unavailable" });
+          return yield* HandsTasksError.make({ reason: "unavailable" });
         }
 
         if (world.fault.foreign) {
@@ -343,7 +343,7 @@ const host = Effect.fnUntraced(function* (
         if (world.fault.after) {
           world.fault.after = false;
           world.done.add(`lose_after:${reply._tag}`);
-          return yield* new HandsTasksError({ reason: "unavailable" });
+          return yield* HandsTasksError.make({ reason: "unavailable" });
         }
 
         if (world.fault.checkpoint) {

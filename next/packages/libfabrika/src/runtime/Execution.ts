@@ -53,7 +53,7 @@ const shown = (error: ProgramDown): unknown =>
   !Object.hasOwn(error, "cause")
     ? error
     : error.error === "ProgramDown"
-      ? new ProgramDown({ reason: error.reason, error: error.error })
+      ? ProgramDown.make({ reason: error.reason, error: error.error })
       : error.cause;
 
 /**
@@ -78,7 +78,7 @@ const programFailure = (failure: typeof ExecutionFailure.Type) => {
   // Restore only checked text, never an arbitrary remote object or prototype.
   const cause = new Error(failure.content);
   cause.stack = failure.content;
-  return new ProgramDown({ reason: failure.reason, error: failure.error, cause });
+  return ProgramDown.make({ reason: failure.reason, error: failure.error, cause });
 };
 
 /**
@@ -177,7 +177,7 @@ export type ExecutionCalls = {
 const attempt = <A>(reason: ProgramDown["reason"], f: () => A) =>
   Effect.try({
     try: f,
-    catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({ reason, cause })),
+    catch: (cause) => (cause instanceof ProgramDown ? cause : ProgramDown.make({ reason, cause })),
   });
 
 const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> => Schema.isSchema(schema);
@@ -185,7 +185,7 @@ const isCodec = (schema: unknown): schema is Schema.Codec<unknown, unknown> => S
 /** A Cmd answer as its schema encodes it, as JSON; a schema that is not a codec answers nothing. */
 const encodeAnswer = (schema: unknown, value: unknown): Schema.Json => {
   if (!isCodec(schema)) {
-    throw new ProgramDown({ reason: "step" });
+    throw ProgramDown.make({ reason: "step" });
   }
 
   return Schema.decodeUnknownSync(Schema.Json)(Schema.encodeUnknownSync(schema)(value));
@@ -208,7 +208,7 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
   const def = defs.find((d) => d.cmdType === type);
 
   if (def === undefined) {
-    throw new ProgramDown({ reason: "step" });
+    throw ProgramDown.make({ reason: "step" });
   }
 
   const outcome = Schema.decodeUnknownSync(Outcome)(raw);
@@ -225,7 +225,7 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
   const tag = outcome.error._tag;
 
   if (!def.errTags.includes(tag)) {
-    throw new ProgramDown({ reason: "step" });
+    throw ProgramDown.make({ reason: "step" });
   }
 
   return Schema.decodeUnknownSync(Schema.Json)({
@@ -251,7 +251,7 @@ const reply = (defs: ReadonlyArray<AnyCmdDef>, cmd: unknown, raw: unknown): Sche
  */
 export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   const pure = Effect.fromResult(stepper(declared)).pipe(
-    Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+    Effect.mapError((cause) => ProgramDown.make({ reason: "load", error: "ProgramDown", cause })),
   );
   const run = <A>(reason: ProgramDown["reason"], f: (pure: Stepper) => A) =>
     pure.pipe(Effect.flatMap((loaded) => attempt(reason, () => f(loaded))));
@@ -266,7 +266,9 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
     ),
     audit: Effect.fn("execution.audit")((msg) =>
       pure.pipe(
-        Effect.mapError((cause) => new Audit.AuditError({ reason: new Audit.Input({ cause: Redacted.make(cause) }) })),
+        Effect.mapError((cause) =>
+          Audit.AuditError.make({ reason: Audit.Input.make({ cause: Redacted.make(cause) }) }),
+        ),
         Effect.flatMap((pure) => Effect.fromResult(Audit.select(pure.program, msg))),
       ),
     ),
@@ -296,10 +298,10 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
   const method = binding[key];
 
   if (method === undefined) {
-    return Effect.fail(new RpcError({ method: key }));
+    return Effect.fail(RpcError.make({ method: key }));
   }
 
-  const rejected = (cause: unknown) => new RpcError({ method: key, cause });
+  const rejected = (cause: unknown) => RpcError.make({ method: key, cause });
   // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader RPC enters Effect
   return Effect.tryPromise({ try: () => Reflect.apply(method, binding, args), catch: rejected });
 };
@@ -322,7 +324,7 @@ const invoke = (binding: ExecutionCalls, key: keyof ExecutionCalls, args: Readon
  */
 export const workerExecution = (binding: ExecutionCalls): Execution => {
   const call = (method: keyof ExecutionCalls, args: ReadonlyArray<unknown>, reason: ProgramDown["reason"]) =>
-    invoke(binding, method, args).pipe(Effect.mapError((cause) => new ProgramDown({ reason, source: "rpc", cause })));
+    invoke(binding, method, args).pipe(Effect.mapError((cause) => ProgramDown.make({ reason, source: "rpc", cause })));
   const ask = <A>(
     schema: Schema.Decoder<A>,
     work: Effect.Effect<unknown, ProgramDown>,
@@ -339,7 +341,7 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
         const decoded = Schema.decodeUnknownResult(schema)(raw);
         return Result.isSuccess(decoded)
           ? Effect.succeed(decoded.success)
-          : Effect.fail(new ProgramDown({ reason, source: "decode", cause: decoded.failure }));
+          : Effect.fail(ProgramDown.make({ reason, source: "decode", cause: decoded.failure }));
       }),
     );
   return {
@@ -349,13 +351,13 @@ export const workerExecution = (binding: ExecutionCalls): Execution => {
     ),
     audit: Effect.fn("execution.audit")((msg) =>
       invoke(binding, "audit", [msg]).pipe(
-        Effect.mapError(
-          (cause) => new Audit.AuditError({ reason: new Audit.Transport({ cause: Redacted.make(cause) }) }),
+        Effect.mapError((cause) =>
+          Audit.AuditError.make({ reason: Audit.Transport.make({ cause: Redacted.make(cause) }) }),
         ),
         Effect.flatMap((raw) =>
           Schema.decodeUnknownEffect(Audit.Answer)(raw).pipe(
-            Effect.mapError(
-              (cause) => new Audit.AuditError({ reason: new Audit.Reply({ cause: Redacted.make(cause) }) }),
+            Effect.mapError((cause) =>
+              Audit.AuditError.make({ reason: Audit.Reply.make({ cause: Redacted.make(cause) }) }),
             ),
           ),
         ),

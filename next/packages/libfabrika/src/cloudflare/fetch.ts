@@ -102,7 +102,7 @@ export const fetch = Effect.fn("workers.fetch")(function* (
   if (url.pathname.startsWith("/grant/client/") && request.method === "GET") {
     const target = yield* Effect.try({
       try: () => decodeURIComponent(url.pathname.slice("/grant/client/".length)),
-      catch: (cause) => new LedgerError({ reason: "bad_row", cause }),
+      catch: (cause) => LedgerError.make({ reason: "bad_row", cause }),
     });
     return Response.json(yield* rpc(project.target(target, url.searchParams.get("code") ?? "")));
   }

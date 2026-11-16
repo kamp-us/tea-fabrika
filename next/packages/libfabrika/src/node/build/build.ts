@@ -89,7 +89,7 @@ const Manifest = Schema.Struct({
   exports: Schema.optionalKey(Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.Unknown)])),
 });
 
-const fail = (reason: string) => (cause: unknown) => new BuildError({ reason, cause });
+const fail = (reason: string) => (cause: unknown) => BuildError.make({ reason, cause });
 const bytes = (text: string) => new TextEncoder().encode(text).byteLength;
 
 // The window a selected package exports, if any. A path, not a package name, has no manifest.
@@ -139,7 +139,7 @@ const collect = Effect.fn("build.collect")(function* (output: ReadonlyArray<Outp
       type = contentType(item.fileName);
 
     if (type === undefined || Object.hasOwn(assets, route)) {
-      return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+      return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
     }
 
     const body =
@@ -322,7 +322,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
   const html = output.output.find((o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
   if (html === undefined || typeof html.source !== "string") {
-    return yield* new BuildError({ reason: "bundle", message: "the tab's call emitted no page" });
+    return yield* BuildError.make({ reason: "bundle", message: "the tab's call emitted no page" });
   }
 
   return {
@@ -463,7 +463,7 @@ export const buildPrograms = Effect.fn("build.programs")(function* (
   );
 
   if (findings.length > 0) {
-    return yield* new BuildError({
+    return yield* BuildError.make({
       reason: "compiler",
       cause: findings.map(({ file, line }) => ({ path: file, line })),
     });
@@ -509,7 +509,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     new Set(names).size !== names.length ||
     !options.programs.every((p) => isProgramName(p.name) && IDENTIFIER.test(p.export))
   ) {
-    return yield* new BuildError({ reason: "table" });
+    return yield* BuildError.make({ reason: "table" });
   }
 
   // Rolldown names modules by their real paths, so the ledger's relative paths start from the real
@@ -594,7 +594,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   if (options.tab !== undefined) {
     for (const [route, file] of Object.entries(yield* tabAssets(options.tab, [compiler], root))) {
       if (Object.hasOwn(assets, route)) {
-        return yield* new BuildError({ reason: "bundle", message: "two window files on one route" });
+        return yield* BuildError.make({ reason: "bundle", message: "two window files on one route" });
       }
 
       assets[route] = file;
@@ -614,7 +614,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
 
   // Every module a bundle reached is in `files` now: check them all, and the ledger for stale rows.
   if (check(files, ledger).length) {
-    return yield* new BuildError({ reason: "compiler" });
+    return yield* BuildError.make({ reason: "compiler" });
   }
 
   const size = (bodies: ReadonlyArray<string>) => bodies.reduce((total, body) => total + bytes(body), 0);

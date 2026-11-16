@@ -27,10 +27,10 @@ const tag = (word: string): string => `fab.monitors.${word}`;
 const isName = Schema.is(ProcessName);
 const encodeWatched = Schema.encodeSync(Watched);
 
-const refuse = (reason: Exclude<MonitorsError["reason"], "storage">) => new MonitorsError({ reason });
+const refuse = (reason: Exclude<MonitorsError["reason"], "storage">) => MonitorsError.make({ reason });
 
 const storage = (cause: LedgerError | ProcessError | RelationsError | SendersError) =>
-  new MonitorsError({ reason: "storage", cause });
+  MonitorsError.make({ reason: "storage", cause });
 
 /**
  * What the look turn found: a saved watch, answered again, or a fresh one to write, bound to the

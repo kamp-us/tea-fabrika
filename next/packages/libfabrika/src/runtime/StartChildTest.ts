@@ -437,7 +437,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
     yield* Layer.buildWithScope(
       SessionManager.layer(
         store.sql("sessions"),
-        (key) => (key === OUTSIDER_KEY ? Effect.fail(new NotGranted()) : Effect.succeed(memberWriter(key))),
+        (key) => (key === OUTSIDER_KEY ? Effect.fail(NotGranted.make()) : Effect.succeed(memberWriter(key))),
         { input: () => false, event: () => false },
       ),
       scope,

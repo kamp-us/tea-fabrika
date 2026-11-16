@@ -58,7 +58,7 @@ const acquire = (make: Socket.WebSocketConstructor["Service"], url: string) =>
   Effect.acquireRelease(
     Effect.try({
       try: () => make(url),
-      catch: (cause) => new Socket.SocketError({ reason: new Socket.SocketOpenError({ kind: "Unknown", cause }) }),
+      catch: (cause) => Socket.SocketError.make({ reason: Socket.SocketOpenError.make({ kind: "Unknown", cause }) }),
     }),
     (ws) => Effect.sync(() => ws.close(1000)),
   );

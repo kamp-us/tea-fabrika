@@ -113,7 +113,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
             : Schema.decodeUnknownSync(Declaration)(
                 yield* Effect.tryPromise({
                   try: () => box.describe(),
-                  catch: (cause) => new ProgramDown({ reason: "load", cause }),
+                  catch: (cause) => ProgramDown.make({ reason: "load", cause }),
                 }),
               );
         const execution =

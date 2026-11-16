@@ -47,7 +47,7 @@ const encoded = fc
   })
   .map(({ reason, form, json, error }) => ({
     form,
-    value: { ...Schema.encodeUnknownSync(before)(new SendersError({ reason })), ...causeKey(form, json, error) },
+    value: { ...Schema.encodeUnknownSync(before)(SendersError.make({ reason })), ...causeKey(form, json, error) },
   }));
 
 /**

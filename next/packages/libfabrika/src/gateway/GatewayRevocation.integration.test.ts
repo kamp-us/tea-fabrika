@@ -250,8 +250,8 @@ const world = Effect.fnUntraced(function* (input: Schema.Codec<unknown, unknown>
       inputs: { schema: input, personOnly: [], raw: [] },
       audit: (_process, message) =>
         Schema.encodeUnknownEffect(Schema.toCodecJson(input))(message).pipe(
-          Effect.mapError(
-            (cause) => new Audit.AuditError({ reason: new Audit.Output({ cause: Redacted.make(cause) }) }),
+          Effect.mapError((cause) =>
+            Audit.AuditError.make({ reason: Audit.Output.make({ cause: Redacted.make(cause) }) }),
           ),
         ),
       events: { personOnly: [] },

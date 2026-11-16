@@ -617,7 +617,7 @@ const failures = (results: ReadonlyArray<Result.Result<unknown, unknown>>): Read
 const guard = <A>(reason: ProgramDown["reason"], f: () => A): A => {
   const done = Result.try({
     try: f,
-    catch: (cause) => (cause instanceof ProgramDown ? cause : new ProgramDown({ reason, cause })),
+    catch: (cause) => (cause instanceof ProgramDown ? cause : ProgramDown.make({ reason, cause })),
   });
 
   if (Result.isFailure(done)) {
@@ -707,7 +707,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const decoded = decodeModel(raw);
 
     if (Result.isFailure(decoded)) {
-      throw new ProgramDown({ reason, error: "ProgramDown", cause: decoded.failure });
+      throw ProgramDown.make({ reason, error: "ProgramDown", cause: decoded.failure });
     }
 
     return decoded.success;
@@ -762,14 +762,14 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
     const json = cmds.map((cmd) => (cmdOk(cmd) ? decodeJson(cmd) : Result.fail(null)));
 
     if (Result.isFailure(encoded) || Result.isFailure(view) || Result.isFailure(wake) || json.some(Result.isFailure)) {
-      throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([encoded, view, wake, ...json]) });
+      throw ProgramDown.make({ reason, error: "ProgramDown", cause: failures([encoded, view, wake, ...json]) });
     }
 
     const model = decodeJson(encoded.success);
     const shown = decodeJson(view.success);
 
     if (Result.isFailure(model) || Result.isFailure(shown)) {
-      throw new ProgramDown({ reason, error: "ProgramDown", cause: failures([model, shown]) });
+      throw ProgramDown.make({ reason, error: "ProgramDown", cause: failures([model, shown]) });
     }
 
     return Step.cases.stepped.make({
@@ -783,7 +783,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
   const checked = <A>(f: () => A): Result.Result<A, ProgramDown> =>
     Result.try({
       try: f,
-      catch: (cause) => (Schema.is(ProgramDown)(cause) ? cause : new ProgramDown({ reason: "step", cause })),
+      catch: (cause) => (Schema.is(ProgramDown)(cause) ? cause : ProgramDown.make({ reason: "step", cause })),
     });
   const fresh: Stepper["fresh"] = (raw, msg) =>
     checked(() => {
@@ -797,7 +797,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const refusal = guard("step", () => decodeRefusal(program.refuse(now, m.value)));
 
       if (Result.isFailure(refusal)) {
-        throw new ProgramDown({ reason: "step", error: "ProgramDown", cause: refusal.failure });
+        throw ProgramDown.make({ reason: "step", error: "ProgramDown", cause: refusal.failure });
       }
 
       return refusal.success === null
@@ -810,7 +810,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const m = message(msg, false);
 
       if (Option.isNone(m) || !cells.has(m.value.type)) {
-        throw new ProgramDown({ reason: "step" });
+        throw ProgramDown.make({ reason: "step" });
       }
 
       const [next, cmds] = guard("step", () => applyCell(machine, now, m.value));
@@ -861,7 +861,7 @@ export const stepper = (declared: unknown): Result.Result<Stepper, Schema.Schema
       const m = message(msg, true);
 
       if (Option.isNone(m)) {
-        throw new ProgramDown({ reason: "saved_letter" });
+        throw ProgramDown.make({ reason: "saved_letter" });
       }
 
       const [next, cmds] = guard("saved_letter", () => applyCell(machine, now, m.value));

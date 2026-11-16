@@ -70,7 +70,7 @@ export const wakeups = (env: Pick<Env, "PROCESS">, project: string): Layer.Layer
       yield* rpc(
         ProcessClient.make(processStub(env, project, name))
           .mailed(Option.isSome(span) ? { traceId: span.value.traceId, spanId: span.value.spanId } : undefined)
-          .pipe(Effect.mapError(() => new MailWakeupsError({ reason: "unavailable" }))),
+          .pipe(Effect.mapError(() => MailWakeupsError.make({ reason: "unavailable" }))),
       );
     }),
   });

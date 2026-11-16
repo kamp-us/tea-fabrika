@@ -54,7 +54,7 @@ export const load = Effect.fnUntraced(function* (options: {
         cause.reason._tag === "NotFound"
           ? Effect.succeed("")
           : Effect.fail(
-              new Files.SettingsError({
+              Files.SettingsError.make({
                 reason: "read",
                 message: `${place.name} could not be read.\n  ${Files.STOP}`,
                 cause,
@@ -64,7 +64,7 @@ export const load = Effect.fnUntraced(function* (options: {
       Effect.flatMap(toml.parse),
       Effect.mapError((cause) =>
         cause._tag === "TomlError"
-          ? new Files.SettingsError({
+          ? Files.SettingsError.make({
               reason: "syntax",
               message: `${place.name}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
               cause,
@@ -79,13 +79,12 @@ export const load = Effect.fnUntraced(function* (options: {
       options.repo?.text == null
         ? { value: {}, spans: [] }
         : yield* toml.parse(options.repo.text).pipe(
-            Effect.mapError(
-              (cause) =>
-                new Files.SettingsError({
-                  reason: "syntax",
-                  message: `${options.repo?.name ?? REPO}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
-                  cause,
-                }),
+            Effect.mapError((cause) =>
+              Files.SettingsError.make({
+                reason: "syntax",
+                message: `${options.repo?.name ?? REPO}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
+                cause,
+              }),
             ),
           ),
   };
@@ -107,13 +106,12 @@ export const load = Effect.fnUntraced(function* (options: {
       : { repo: { minimum: Predicate.isString(minimum) ? minimum : Declarations.version.default } };
   const saved = yield* Snapshot.make(Declarations.all, resolved);
   const checked = yield* Snapshot.read(Declarations.all, saved).pipe(
-    Effect.mapError(
-      (cause) =>
-        new Files.SettingsError({
-          reason: "invalid",
-          message: `The saved settings could not be checked.\n  ${Files.STOP}`,
-          cause,
-        }),
+    Effect.mapError((cause) =>
+      Files.SettingsError.make({
+        reason: "invalid",
+        message: `The saved settings could not be checked.\n  ${Files.STOP}`,
+        cause,
+      }),
     ),
   );
   return { ...checked, ...context };

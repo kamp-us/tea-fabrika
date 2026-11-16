@@ -11,7 +11,7 @@ import { type Env, projectStub, rpc } from "./runtime.ts";
 /** A reply with a field the contract does not have is not one the runner may trust. */
 const decodeReply = Schema.decodeUnknownEffect(Reply, { onExcessProperty: "error" });
 
-const unavailable = (cause: unknown) => new HandsTasksError({ reason: "unavailable", cause });
+const unavailable = (cause: unknown) => HandsTasksError.make({ reason: "unavailable", cause });
 
 /**
  * Layer that asks the Project for a hands Cmd's task.

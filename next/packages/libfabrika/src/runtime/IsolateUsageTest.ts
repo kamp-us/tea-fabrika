@@ -346,7 +346,7 @@ export const suite = (rig: Rig) =>
                   behavior === "hang"
                     ? Effect.never
                     : behavior === "fail"
-                      ? Effect.fail(new DeliveryError({ message: `PRIVATE_DELIVERY_${cell.error}_END` }))
+                      ? Effect.fail(DeliveryError.make({ message: `PRIVATE_DELIVERY_${cell.error}_END` }))
                       : Effect.void;
                 const delivery = rig.deliver(
                   { project: "project-test", name: "checklist:1", process: pid(1) },

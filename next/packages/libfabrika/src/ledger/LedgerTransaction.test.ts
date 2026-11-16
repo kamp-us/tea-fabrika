@@ -266,7 +266,7 @@ describe("p79, LedgerTransaction", () => {
             const store = setup(db, () =>
               Effect.sync(() => {
                 rings++;
-              }).pipe(Effect.andThen(Effect.fail(new LedgerError({ reason: "unreachable" })))),
+              }).pipe(Effect.andThen(Effect.fail(LedgerError.make({ reason: "unreachable" })))),
             );
             return Effect.gen(function* () {
               const ledger = yield* Ledger;

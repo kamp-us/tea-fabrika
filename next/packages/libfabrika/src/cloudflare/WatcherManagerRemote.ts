@@ -10,11 +10,11 @@ export const layer = <E>(
     publish: Effect.fn("watchers.remote.publish")(function* (client: string, update: Update) {
       const outcome = yield* Effect.suspend(() => publish(client, update)).pipe(
         Effect.flatMap(Schema.decodeUnknownEffect(Publication)),
-        Effect.mapError((cause) => new WatcherManagerError({ reason: new Unreachable({ cause }) })),
+        Effect.mapError((cause) => WatcherManagerError.make({ reason: Unreachable.make({ cause }) })),
       );
 
       if (outcome._tag === "gone") {
-        return yield* new WatcherManagerError({ reason: new Gone({ cause: outcome }) });
+        return yield* WatcherManagerError.make({ reason: Gone.make({ cause: outcome }) });
       }
     }),
   });

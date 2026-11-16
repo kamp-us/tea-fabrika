@@ -442,7 +442,7 @@ const walk = Effect.fnUntraced(function* (
                     return yield* control.mode === "rpc" ||
                     control.mode === "cleanup" ||
                     control.mode === "abandon_save"
-                      ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                      ? Effect.fail(ProgramDown.make({ reason: "step", source: "rpc" }))
                       : loaded.execution.fresh(s, m);
                   }),
                 update: (s: unknown, m: unknown) =>
@@ -469,7 +469,7 @@ const walk = Effect.fnUntraced(function* (
                       control.mode === "update_cleanup" ||
                       control.mode === "update_abandon_save"
                     ) {
-                      return yield* new ProgramDown({ reason: "step", source: "rpc" });
+                      return yield* ProgramDown.make({ reason: "step", source: "rpc" });
                     }
 
                     return yield* loaded.execution.update(s, m);
@@ -508,7 +508,7 @@ const walk = Effect.fnUntraced(function* (
 
           control.cut = "";
           control.hits++;
-          return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
+          return Effect.fail(SinkError.make({ reason: "storage", held: 0 }));
         }),
       }),
     ).pipe(Layer.provideMerge(Layer.succeedContext(services)));

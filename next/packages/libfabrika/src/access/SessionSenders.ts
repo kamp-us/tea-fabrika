@@ -19,13 +19,13 @@ const refused = (cause: unknown) => {
   }
 
   if (isNotGranted(cause)) {
-    return Effect.fail(new SendersError({ reason: "removed" }));
+    return Effect.fail(SendersError.make({ reason: "removed" }));
   }
 
   return Effect.fail(
     isRefused(cause) && cause.reason === "ended"
-      ? new SendersError({ reason: "ended" })
-      : new SendersError({ reason: "storage", cause }),
+      ? SendersError.make({ reason: "ended" })
+      : SendersError.make({ reason: "storage", cause }),
   );
 };
 
@@ -33,7 +33,7 @@ const refused = (cause: unknown) => {
 const decoded = (writer: Writer) =>
   Result.match(decodeSender(writer), {
     onSuccess: (sender) => Effect.succeedSome(sender),
-    onFailure: (cause) => Effect.fail(new SendersError({ reason: "storage", cause })),
+    onFailure: (cause) => Effect.fail(SendersError.make({ reason: "storage", cause })),
   });
 
 /**

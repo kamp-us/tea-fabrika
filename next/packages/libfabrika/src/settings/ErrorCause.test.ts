@@ -36,14 +36,14 @@ const errors = {
     before: settingsBefore,
     encoded: fc
       .record({ reason: fc.constantFrom(...SettingsError.fields.reason.literals), message: fc.string() })
-      .map((fields) => Schema.encodeUnknownSync(settingsBefore)(new SettingsError(fields))),
+      .map((fields) => Schema.encodeUnknownSync(settingsBefore)(SettingsError.make(fields))),
   },
   SnapshotError: {
     now: SnapshotError,
     before: snapshotBefore,
     encoded: fc
       .record({ message: fc.string() })
-      .map((fields) => Schema.encodeUnknownSync(snapshotBefore)(new SnapshotError(fields))),
+      .map((fields) => Schema.encodeUnknownSync(snapshotBefore)(SnapshotError.make(fields))),
   },
 } as const;
 

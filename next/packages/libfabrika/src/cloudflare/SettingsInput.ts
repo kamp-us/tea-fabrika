@@ -84,7 +84,7 @@ export const receipt = Effect.fnUntraced(function* (raw: unknown, expected?: Sta
       }) ||
         (expected.origin !== undefined && !Equal.equals(origin, expected.origin))))
   ) {
-    return yield* new StartsError({ reason: new Decode({ cause: "Invalid instance receipt" }) });
+    return yield* StartsError.make({ reason: Decode.make({ cause: "Invalid instance receipt" }) });
   }
 
   return saved;
@@ -100,6 +100,6 @@ export const receipt = Effect.fnUntraced(function* (raw: unknown, expected?: Sta
 export const read = Effect.gen(function* () {
   const env = yield* WorkerEnvironment;
   return yield* decode(env.INSTANCE).pipe(
-    Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
+    Effect.mapError((cause) => StartsError.make({ reason: Decode.make({ cause }) })),
   );
 });

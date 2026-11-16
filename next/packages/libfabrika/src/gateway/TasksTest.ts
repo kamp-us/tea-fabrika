@@ -97,7 +97,7 @@ const field = (a: string | Uint8Array) => {
 // A shared suite is not a `*.test.ts` file, so its failures are tagged like product code's.
 class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
 
-const fail = (cause: unknown) => new CryptoFailed({ cause });
+const fail = (cause: unknown) => CryptoFailed.make({ cause });
 
 const key = Effect.fnUntraced(function* () {
   const s = crypto.subtle;
@@ -273,7 +273,7 @@ const world = Effect.fnUntraced(function* (open: Effect.Effect<Store, never, Sco
 
         if (wakeFault.fail) {
           wakeFault.fail = false;
-          return yield* new MailWakeupsError({ reason: "unavailable" });
+          return yield* MailWakeupsError.make({ reason: "unavailable" });
         }
       }),
   });

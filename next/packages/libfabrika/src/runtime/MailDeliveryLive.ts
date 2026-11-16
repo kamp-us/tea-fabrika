@@ -39,13 +39,12 @@ export const layer: Layer.Layer<MailDelivery, never, ProgramMail | MailWakeups> 
           yield* wakeups.wake(receipt.to.name);
           return Queued.make({ id: receipt.id });
         },
-        Effect.mapError(
-          (error) =>
-            new MailDeliveryError({
-              // A mail failure's reason is its case; a wake's is already a word.
-              reason: error._tag === "ProgramMailError" ? error.reason._tag : error.reason,
-              cause: error,
-            }),
+        Effect.mapError((error) =>
+          MailDeliveryError.make({
+            // A mail failure's reason is its case; a wake's is already a word.
+            reason: error._tag === "ProgramMailError" ? error.reason._tag : error.reason,
+            cause: error,
+          }),
         ),
       ),
     });

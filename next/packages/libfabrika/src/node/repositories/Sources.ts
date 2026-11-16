@@ -17,14 +17,14 @@ import {
 type Entry = { readonly mode: string; readonly type: string; readonly id: string };
 
 const failed = (cause: unknown) =>
-  new RepositoriesError({
-    reason: new ReadFailed({ cause: Redacted.make(cause) }),
+  RepositoriesError.make({
+    reason: ReadFailed.make({ cause: Redacted.make(cause) }),
     message: "Selected repository: source read failed.",
   });
 
 const missing = (cause: unknown) =>
-  new RepositoriesError({
-    reason: new MissingPath({ cause: Redacted.make(cause) }),
+  RepositoriesError.make({
+    reason: MissingPath.make({ cause: Redacted.make(cause) }),
     message: "Selected repository: source folder is missing.",
   });
 

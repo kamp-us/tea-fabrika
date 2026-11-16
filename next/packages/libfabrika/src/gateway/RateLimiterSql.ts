@@ -24,8 +24,8 @@ const decode = Schema.decodeUnknownSync(Schema.fromJsonString(Saved));
 const encode = Schema.encodeSync(Schema.fromJsonString(Saved));
 
 const fail = (cause: unknown) =>
-  new RateLimiter.RateLimiterError({
-    reason: new RateLimiter.RateLimitStoreError({ message: "Gateway budget storage failed", cause }),
+  RateLimiter.RateLimiterError.make({
+    reason: RateLimiter.RateLimitStoreError.make({ message: "Gateway budget storage failed", cause }),
   });
 
 const unsupported = Effect.fail(fail(new Error("Unsupported gateway budget operation")));

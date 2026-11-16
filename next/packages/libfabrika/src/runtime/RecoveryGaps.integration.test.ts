@@ -186,7 +186,7 @@ const world = Effect.fnUntraced(function* () {
 
             controls.hits.push(cut);
             controls.cut = "";
-            return Effect.fail(new LedgerError({ reason: "unreachable" }));
+            return Effect.fail(LedgerError.make({ reason: "unreachable" }));
           }),
       },
     ).pipe(
@@ -241,7 +241,7 @@ const world = Effect.fnUntraced(function* () {
           }),
           Layer.succeed(Recording, {
             flush: Effect.suspend(() =>
-              controls.flush ? Effect.fail(new LedgerError({ reason: "storage" })) : Effect.void,
+              controls.flush ? Effect.fail(LedgerError.make({ reason: "storage" })) : Effect.void,
             ),
           }),
           ProcessManager.layer(brain(), next.next),

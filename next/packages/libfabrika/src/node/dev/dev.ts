@@ -82,12 +82,12 @@ const sample = (pid: number) =>
       });
 
       if (code !== 0) {
-        return yield* new ControlError({ reason: "sample" });
+        return yield* ControlError.make({ reason: "sample" });
       }
 
       return Number(text.trim()) * 1024;
     }),
-  ).pipe(Effect.mapError((cause) => new ControlError({ reason: "sample", cause })));
+  ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "sample", cause })));
 
 const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) {
   const raw = yield* work;
@@ -205,11 +205,11 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     args: ReadonlyArray<unknown>,
   ) {
     if (port === null) {
-      return yield* new ControlError({ reason: "offline" });
+      return yield* ControlError.make({ reason: "offline" });
     }
 
     const url = `http://127.0.0.1:${port}`;
-    const fail = (cause: unknown) => new ControlError({ reason: "unreachable", cause });
+    const fail = (cause: unknown) => ControlError.make({ reason: "unreachable", cause });
     const body = yield* Effect.try({
       try: () => JSON.stringify({ target, project, name, method, args }),
       catch: fail,
@@ -223,13 +223,13 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
       Effect.mapError(fail),
     );
-    const raw = yield* response.json.pipe(Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })));
+    const raw = yield* response.json.pipe(Effect.mapError((cause) => ControlError.make({ reason: "bad_row", cause })));
     const answer = yield* Schema.decodeUnknownEffect(Response)(raw).pipe(
-      Effect.mapError((cause) => new ControlError({ reason: "bad_row", cause })),
+      Effect.mapError((cause) => ControlError.make({ reason: "bad_row", cause })),
     );
 
     if (answer.error !== undefined) {
-      return yield* new ControlError(answer.error);
+      return yield* ControlError.make(answer.error);
     }
 
     return answer.value;
@@ -305,13 +305,12 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
       ],
       start: Effect.fnUntraced(function* (ports) {
         const port = yield* Schema.decodeUnknownEffect(Schema.Int)(ports["fabrika-control"]).pipe(
-          Effect.mapError(
-            (cause) =>
-              new SystemError({
-                subtag: "control_port",
-                message: "The local runtime returned an invalid control port",
-                cause,
-              }),
+          Effect.mapError((cause) =>
+            SystemError.make({
+              subtag: "control_port",
+              message: "The local runtime returned an invalid control port",
+              cause,
+            }),
           ),
         );
         const [prev, next] = yield* send({ type: "listened", port });
@@ -396,7 +395,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         // or below reaches a whole process group. A first start that brings one fails the start.
         if (!isPid(pid)) {
           yield* Effect.logError("The local runtime reported a start with no process id", { pid });
-          yield* Deferred.fail(started, new ControlError({ reason: "bad_pid" }));
+          yield* Deferred.fail(started, ControlError.make({ reason: "bad_pid" }));
           return;
         }
 
@@ -444,7 +443,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
         if (id !== null && ready !== undefined) {
           replacements.delete(id);
-          yield* Deferred.fail(ready, new ControlError({ reason: event.reason }));
+          yield* Deferred.fail(ready, ControlError.make({ reason: event.reason }));
         }
 
         const at = yield* Clock.currentTimeMillis;
@@ -467,7 +466,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
     yield* Deferred.await(listening).pipe(
       Effect.timeoutOrElse({
         duration: START_BOUND,
-        orElse: () => Effect.fail(new ControlError({ reason: "start_timeout" })),
+        orElse: () => Effect.fail(ControlError.make({ reason: "start_timeout" })),
       }),
     );
     yield* Deferred.await(started);
@@ -572,10 +571,10 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         call("project", config.name, "", "codeInstall", [code]).pipe(
           Effect.flatMap(Schema.decodeUnknownEffect(Installed)),
         ),
-      ).pipe(Effect.mapError((cause) => new ControlError({ reason: "install", cause }))),
+      ).pipe(Effect.mapError((cause) => ControlError.make({ reason: "install", cause }))),
     failed: (fact: (typeof CodeEvent.cases)["code.failed"]["Type"]): Effect.Effect<void, ControlError> =>
       recorded(call("project", config.name, "", "codeFailed", [fact]).pipe(Effect.asVoid)).pipe(
-        Effect.mapError((cause) => new ControlError({ reason: "install", cause })),
+        Effect.mapError((cause) => ControlError.make({ reason: "install", cause })),
       ),
     url: `http://127.0.0.1:${config.port}`,
     project: (project: string) =>

@@ -83,13 +83,13 @@ const dispatch = Effect.fnUntraced(function* (
     if (method === "put") {
       const [key, bytes, checksum] = yield* Schema.decodeUnknownEffect(
         Schema.Tuple([Schema.String, Schema.Array(Schema.Number), Schema.String]),
-      )(args).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+      )(args).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })));
       return yield* checkedPut(env.MEASUREMENTS, key, Uint8Array.from(bytes), checksum);
     }
 
     if (method === "head") {
       const [key] = yield* Schema.decodeUnknownEffect(Schema.Tuple([Schema.String]))(args).pipe(
-        Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })),
+        Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })),
       );
       return yield* bucketHead(env.MEASUREMENTS, key);
     }

@@ -21,7 +21,7 @@ export interface Env extends Bindings {
 }
 
 const checkedSettings = (env: Pick<Env, "INSTANCE">) =>
-  readSettings(env).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
+  readSettings(env).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "bad_row", cause })));
 
 export const settings = Effect.fn("instance.settings")(function* (env: Pick<Env, "INSTANCE">) {
   const checked = yield* checkedSettings(env);

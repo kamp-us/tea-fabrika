@@ -22,11 +22,11 @@ const part = Effect.fnUntraced(function* (
 ) {
   const [, name] = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String])),
-  )(ctx.id.name).pipe(Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })));
+  )(ctx.id.name).pipe(Effect.mapError((cause) => SinkError.make({ reason: "bad_row", held: 0, cause })));
   const expected = chain._tag === "spans" ? `spans/${at}` : `job/${chain.process}/${at}`;
 
   if (name !== expected) {
-    return yield* new SinkError({ reason: "bad_row", held: 0 });
+    return yield* SinkError.make({ reason: "bad_row", held: 0 });
   }
 
   return recordPart(cloudflareSql(ctx.storage), chain, at, bytes ?? 1_000_000_000);
@@ -88,7 +88,7 @@ export const RecordPartLive = RecordPart.make(
       RecordedStart.pipe(
         Effect.tap((start) =>
           Schema.decodeUnknownEffect(Legacy)(start.input).pipe(
-            Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
+            Effect.mapError((cause) => SinkError.make({ reason: "bad_row", held: 0, cause })),
           ),
         ),
       ),

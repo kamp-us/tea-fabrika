@@ -308,7 +308,7 @@ law(
       const error = yield* Effect.flip<unknown, ProgramDown, never>(causedAt[site](bad));
       expect(error).toBeInstanceOf(ProgramDown);
       expect(error.cause, "the site keeps a cause in memory").toBeDefined();
-      const before = new ProgramDown({ reason: error.reason }).errorClass;
+      const before = ProgramDown.make({ reason: error.reason }).errorClass;
       expect(error.errorClass, "the class an observation stores").toBe(before);
       expect(executionFailure(error).error, "the class the RPC reply carries").toBe(before);
     }),

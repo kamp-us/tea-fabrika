@@ -111,11 +111,11 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
             attempted.push(client);
 
             if (!routes.has(client)) {
-              return Effect.fail(new WatcherManagerError({ reason: new Gone({ cause: null }) }));
+              return Effect.fail(WatcherManagerError.make({ reason: Gone.make({ cause: null }) }));
             }
 
             if (unknown.has(client)) {
-              return Effect.fail(new WatcherManagerError({ reason: new Unreachable({ cause: null }) }));
+              return Effect.fail(WatcherManagerError.make({ reason: Unreachable.make({ cause: null }) }));
             }
 
             frames.push({ client, update });

@@ -23,17 +23,17 @@ describe("recorded settings dependency, next/", () => {
         const input = yield* StartsTest.input(recipe);
         let constructed = 0;
         let called = 0;
-        let reason: Starts.Refused | Starts.Storage | Starts.Unreachable = new Starts.Refused({ cause: detail });
+        let reason: Starts.Refused | Starts.Storage | Starts.Unreachable = Starts.Refused.make({ cause: detail });
         const starts = Layer.succeed(Starts.Starts, {
           record: () =>
             Effect.suspend(() => {
               called++;
-              return Effect.fail(new Starts.StartsError({ reason }));
+              return Effect.fail(Starts.StartsError.make({ reason }));
             }),
           read: () =>
             Effect.fail(
-              new Starts.StartsError({
-                reason: new Starts.Missing({
+              Starts.StartsError.make({
+                reason: Starts.Missing.make({
                   target: Starts.MissingTarget.cases.instance.make({ start: input.start }),
                 }),
               }),
@@ -53,10 +53,10 @@ describe("recorded settings dependency, next/", () => {
           // Each new build is an attempted entry; failure cuts target its next record call.
           reason =
             choice % 3 === 0
-              ? new Starts.Refused({ cause: detail })
+              ? Starts.Refused.make({ cause: detail })
               : choice % 3 === 1
-                ? new Starts.Storage({ cause: detail })
-                : new Starts.Unreachable({ cause: detail });
+                ? Starts.Storage.make({ cause: detail })
+                : Starts.Unreachable.make({ cause: detail });
           const exits = yield* Effect.forEach(
             Array.from({ length: 1 + (choice % 5) }),
             () => Effect.scoped(Effect.exit(Layer.build(consumer))),
@@ -105,7 +105,7 @@ describe("recorded settings dependency, next/", () => {
 
         yield* Deferred.fail(
           acknowledgement,
-          new Starts.StartsError({ reason: new Starts.Refused({ cause: "append not placed" }) }),
+          Starts.StartsError.make({ reason: Starts.Refused.make({ cause: "append not placed" }) }),
         );
         const exits = yield* Effect.forEach(fibers, Fiber.await, { concurrency: "unbounded" });
         expect(exits.every(Exit.isFailure)).toBe(true);

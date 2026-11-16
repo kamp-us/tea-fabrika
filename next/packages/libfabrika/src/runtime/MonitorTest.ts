@@ -437,7 +437,7 @@ const host = Effect.fnUntraced(function* (
           }
 
           world.done.add("lose_after");
-          return yield* new MonitorsError({ reason: "storage" });
+          return yield* MonitorsError.make({ reason: "storage" });
         }
 
         return answer;

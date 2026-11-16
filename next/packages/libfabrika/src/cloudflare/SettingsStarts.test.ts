@@ -368,10 +368,10 @@ StartsTest.law(
       expect.hasAssertions();
       const lower = new Error(secret, { cause: { password: secret } });
       const reasons = [
-        new Decode({ cause: lower }),
-        new Refused({ cause: lower }),
-        new Storage({ cause: lower }),
-        new Unreachable({ cause: lower }),
+        Decode.make({ cause: lower }),
+        Refused.make({ cause: lower }),
+        Storage.make({ cause: lower }),
+        Unreachable.make({ cause: lower }),
       ];
       let placed = false;
 
@@ -383,7 +383,7 @@ StartsTest.law(
           const reason = Option.getOrThrow(
             Option.fromUndefinedOr(reasons[Math.floor(choice / moves.length) % reasons.length]),
           );
-          const reply = yield* settingsReply(Effect.fail(new StartsError({ reason })));
+          const reply = yield* settingsReply(Effect.fail(StartsError.make({ reason })));
           StartsTest.exclude(reply, secret);
           expect(JSON.stringify(reply)).not.toContain("cause");
         } else {

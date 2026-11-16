@@ -256,18 +256,18 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   });
 
   if (Option.isNone(parsed)) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const { blob, key, ints } = parsed.value;
   const decoded = yield* Effect.try({
     try: () => Schema.decodeUnknownSync(Client)(text(client)),
-    catch: (cause) => new BadAssertion({ cause }),
+    catch: (cause) => BadAssertion.make({ cause }),
   });
   const rpHash = new Uint8Array(yield* subtle("digest", "SHA-256", key.rp));
 
   if (!same(rpHash, auth.slice(0, 32))) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   const signature = join(
@@ -286,7 +286,7 @@ export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(fu
   });
 
   if (checked === null) {
-    return yield* new BadAssertion({});
+    return yield* BadAssertion.make({});
   }
 
   return armor(

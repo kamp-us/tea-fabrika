@@ -104,7 +104,7 @@ export const cut = (send: Send, size: number): Result.Result<NonEmptyReadonlyArr
     }
 
     // Nothing fit: the next item alone is over the size, or an empty send's own fields are.
-    return Result.fail(new TooBig({ index: from, bytes: weigh(Math.min(from + 1, end), sizes[from] ?? 0) }));
+    return Result.fail(TooBig.make({ index: from, bytes: weigh(Math.min(from + 1, end), sizes[from] ?? 0) }));
   };
   const first = take(0, 0);
 

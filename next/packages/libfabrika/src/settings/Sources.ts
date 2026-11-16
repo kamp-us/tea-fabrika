@@ -150,8 +150,8 @@ export const resolve = Effect.fnUntraced(function* <A>(group: Setting.Group<A>, 
       const node = yield* source.provider
         .load(d.segments)
         .pipe(
-          Effect.mapError(
-            (cause) => new SettingsError({ reason: "read", message: `${d.path} could not be read.\n  ${STOP}`, cause }),
+          Effect.mapError((cause) =>
+            SettingsError.make({ reason: "read", message: `${d.path} could not be read.\n  ${STOP}`, cause }),
           ),
         );
 
@@ -174,7 +174,7 @@ export const resolve = Effect.fnUntraced(function* <A>(group: Setting.Group<A>, 
         issue === undefined ? [] : (SchemaIssue.makeFormatterStandardSchemaV1()(issue).issues[0]?.path ?? []);
       const d = group.declarations.find((d) => d.segments.join(".") === path.join("."));
       return d === undefined
-        ? new SettingsError({ reason: "read", message: `The settings could not be read.\n  ${STOP}`, cause: error })
+        ? SettingsError.make({ reason: "read", message: `The settings could not be read.\n  ${STOP}`, cause: error })
         : refused(location(origins[d.path] ?? Origin.cases.default.make({})), d, supplied[d.path] ?? "");
     }),
   );

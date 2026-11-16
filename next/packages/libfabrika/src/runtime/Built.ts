@@ -158,6 +158,6 @@ export type Built = typeof Built.Type;
  */
 export const decodeBuilt = Effect.fn("build.decode")(function* (raw: unknown) {
   return yield* Schema.decodeUnknownEffect(Built)(raw).pipe(
-    Effect.mapError((cause) => new BuildError({ reason: "table", cause })),
+    Effect.mapError((cause) => BuildError.make({ reason: "table", cause })),
   );
 });

@@ -62,7 +62,7 @@ const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 /** A doorbell whose delivery to `fails` fails, as a gateway that went away would. */
 const failing = (fails: string) =>
   Layer.succeed(Doorbell, {
-    ring: (to) => (to === fails ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void),
+    ring: (to) => (to === fails ? Effect.fail(LedgerError.make({ reason: "unreachable" })) : Effect.void),
   });
 
 // Each takes the store as a scoped Effect, so the layer's own scope holds the open file.

@@ -560,7 +560,7 @@ describe("RecordManager.remote, the record object's stub", () => {
     { reason: SinkError.fields.reason, held: SinkError.fields.held, generated: Schema.Unknown },
     ({ reason, held, generated }) =>
       Effect.gen(function* () {
-        const typed = new SinkError({ reason, held });
+        const typed = SinkError.make({ reason, held });
         const calls = [
           RecordManager.use((records) => records.write(job, 0, [kept(row(id(0)))])),
           read(job),

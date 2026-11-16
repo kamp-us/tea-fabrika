@@ -94,7 +94,7 @@ const OPEN: ReadonlySet<Task["state"]["_tag"]> = new Set(["requested", "assigned
 
 /** A ledger failure as the tasks module's: a line the referee refused is the caller's input. */
 const translated = (cause: LedgerError) =>
-  new TasksError({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
+  TasksError.make({ reason: cause.reason === "refused" ? "bad_input" : "storage", cause });
 
 /** One task as its stream holds it, read inside a turn: its state and its events. */
 const saved = (turn: LedgerTurn, id: string): Task => {
@@ -125,7 +125,7 @@ export const layer = Layer.effect(
       const found = yield* ledger.transact((turn) => saved(turn, id)).pipe(Effect.mapError(translated));
 
       if (found.state._tag === "absent") {
-        return yield* new TasksError({ reason: "not_found" });
+        return yield* TasksError.make({ reason: "not_found" });
       }
 
       return found satisfies Task;
@@ -136,7 +136,7 @@ export const layer = Layer.effect(
       const decoded = decodeCall({ msg: input, recorded: said });
 
       if (R.isFailure(decoded)) {
-        return yield* new TasksError({ reason: "bad_input", cause: decoded.failure });
+        return yield* TasksError.make({ reason: "bad_input", cause: decoded.failure });
       }
 
       const { msg, recorded } = decoded.success;
@@ -173,7 +173,7 @@ export const layer = Layer.effect(
         .pipe(Effect.mapError(translated));
 
       if (R.isFailure(answer)) {
-        return yield* new TasksError({ reason: answer.failure });
+        return yield* TasksError.make({ reason: answer.failure });
       }
 
       return answer.success;
@@ -186,7 +186,7 @@ export const layer = Layer.effect(
       take: Effect.fn("tasks.take")(function* (id: string, executor: Executor, recorded: Recorded) {
         const proposed = yield* ids
           .next(Execution)
-          .pipe(Effect.mapError((cause) => new TasksError({ reason: "storage", cause })));
+          .pipe(Effect.mapError((cause) => TasksError.make({ reason: "storage", cause })));
         const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
         // An accepted or repeated take leaves the task owned, so the saved assignment is there.
         const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
@@ -219,7 +219,7 @@ export const layer = Layer.effect(
       }),
       forProcess: (process: typeof ProcessId.Type) =>
         streams.list(PREFIX).pipe(
-          Stream.mapError((cause) => new TasksError({ reason: "storage", cause })),
+          Stream.mapError((cause) => TasksError.make({ reason: "storage", cause })),
           Stream.mapEffect((name) => read(name.slice(PREFIX.length))),
           Stream.filter((task) => task.state._tag !== "absent" && task.state.request.process === process),
         ),

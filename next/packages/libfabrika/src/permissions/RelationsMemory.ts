@@ -36,7 +36,7 @@ export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>
             next.set(change.id, change);
           } else if (!Equal.equals(first.row, change.row)) {
             return Result.fail(
-              new RelationsError({ reason: "storage", cause: `the id ${change.id} holds another row` }),
+              RelationsError.make({ reason: "storage", cause: `the id ${change.id} holds another row` }),
             );
           }
         }

@@ -303,7 +303,7 @@ describe("T285, ledger tracing keep-laws", () => {
                 return Effect.die(new Error("generated ring defect"));
               }
 
-              return mode === "fail" ? Effect.fail(new LedgerError({ reason: "unreachable" })) : Effect.void;
+              return mode === "fail" ? Effect.fail(LedgerError.make({ reason: "unreachable" })) : Effect.void;
             },
           });
 
@@ -672,7 +672,7 @@ describe("T285, sink keep-law", () => {
                     now += sample.ms;
 
                     if (sample.failure === "fail") {
-                      return yield* Effect.fail(new LedgerError({ reason: "storage" }));
+                      return yield* Effect.fail(LedgerError.make({ reason: "storage" }));
                     }
 
                     if (sample.failure === "die") {
@@ -866,7 +866,7 @@ const runnerWorld = (
       return {
         append: Effect.fnUntraced(function* (input: Incoming) {
           if (fault.at === "append_storage") {
-            return yield* new LedgerError({ reason: "storage" });
+            return yield* LedgerError.make({ reason: "storage" });
           }
 
           return yield* mailbox.send(a.name, input.id, input.envelope.input, {
@@ -885,7 +885,7 @@ const runnerWorld = (
           const receipt = yield* sessions.receipt(id, session.parent, writer.process, event._tag);
 
           if (fault.at === "write_storage") {
-            return yield* new LedgerError({ reason: "storage" });
+            return yield* LedgerError.make({ reason: "storage" });
           }
 
           if (fault.at === "write_refused") {
@@ -911,7 +911,7 @@ const runnerWorld = (
         }),
         own: Effect.fnUntraced(function* (...[id, stream, event]: Parameters<typeof CheckedWriter.Service.own>) {
           if (fault.at === "write_storage") {
-            return yield* new LedgerError({ reason: "storage" });
+            return yield* LedgerError.make({ reason: "storage" });
           }
 
           if (fault.at === "write_refused") {

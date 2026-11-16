@@ -9,7 +9,7 @@ import { BuiltProgram } from "./Built.ts";
 import { BadRow, CodeStore, CodeStoreError, Storage } from "./CodeStore.ts";
 
 const stored = <A>(step: () => A) =>
-  Effect.try({ try: step, catch: (cause) => new CodeStoreError({ reason: new Storage({ cause }) }) });
+  Effect.try({ try: step, catch: (cause) => CodeStoreError.make({ reason: Storage.make({ cause }) }) });
 
 /**
  * Layer that provides `CodeStore` over the given SQL handle.
@@ -41,7 +41,7 @@ export const layer = (sql: Sql): Layer.Layer<CodeStore> =>
       }
 
       const code = yield* Schema.decodeUnknownEffect(BuiltProgram)(row).pipe(
-        Effect.mapError((cause) => new CodeStoreError({ reason: new BadRow({ cause }) })),
+        Effect.mapError((cause) => CodeStoreError.make({ reason: BadRow.make({ cause }) })),
       );
       return Option.some(code);
     }),

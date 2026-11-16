@@ -20,11 +20,11 @@ const Row = Schema.Struct({
 const decodeRow = Schema.decodeUnknownResult(Row);
 const decodeJson = Schema.decodeUnknownResult(Schema.Json);
 
-const down = (): ProgramDown => new ProgramDown({ reason: "saved_state" });
+const down = (): ProgramDown => ProgramDown.make({ reason: "saved_state" });
 
 /** The same, keeping the failure that stopped it. */
 const downFrom = (cause: unknown): ProgramDown =>
-  new ProgramDown({ reason: "saved_state", error: "ProgramDown", cause });
+  ProgramDown.make({ reason: "saved_state", error: "ProgramDown", cause });
 
 /**
  * Schema for a saved model: the model as JSON, the version `v` of its shape, the build that saved

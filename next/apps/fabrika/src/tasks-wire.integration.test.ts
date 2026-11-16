@@ -95,7 +95,7 @@ const socket = Effect.fnUntraced(function* (
         Queue.offerUnsafe(inbox, f);
       });
       ws.addEventListener("close", (event) => {
-        closed = new Closed({ code: event.code });
+        closed = Closed.make({ code: event.code });
         Queue.offerUnsafe(inbox, closed);
       });
       return ws;

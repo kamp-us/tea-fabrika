@@ -19,11 +19,11 @@ import {
 import * as Sources from "./Sources.ts";
 
 const failure = (operation: string, cause: unknown, unknown = false) =>
-  new RepositoriesError({
+  RepositoriesError.make({
     message: `Selected repository: ${operation} failed.`,
     reason: unknown
-      ? new DefaultUnknown({ cause: Redacted.make(cause) })
-      : new ReadFailed({ cause: Redacted.make(cause) }),
+      ? DefaultUnknown.make({ cause: Redacted.make(cause) })
+      : ReadFailed.make({ cause: Redacted.make(cause) }),
   });
 
 const safeConfig = [
@@ -281,8 +281,8 @@ export const layer = (options: { readonly person: string }) =>
             const old = yield* entry("fabrika.toml");
 
             if (old !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy root settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy root settings file") }),
                 message: "fabrika.toml moved to .fabrika/fabrika.toml: move it there",
               });
             }
@@ -290,8 +290,8 @@ export const layer = (options: { readonly person: string }) =>
             const document = yield* entry(file);
 
             if (document === null && (yield* entry(".fabrika.jsonc")) !== null) {
-              return yield* new RepositoriesError({
-                reason: new ReadFailed({ cause: Redacted.make("legacy-only settings file") }),
+              return yield* RepositoriesError.make({
+                reason: ReadFailed.make({ cause: Redacted.make("legacy-only settings file") }),
                 message: ".fabrika.jsonc moved to [review] in .fabrika/fabrika.toml: move it there",
               });
             }

@@ -19,7 +19,8 @@ const encode = Schema.encodeSync(Schema.fromJsonString(Saved));
 const stored = <A>(f: () => A) =>
   Effect.try({
     try: f,
-    catch: (cause) => (Schema.is(WatchersError)(cause) ? cause : new WatchersError({ reason: new Storage({ cause }) })),
+    catch: (cause) =>
+      Schema.is(WatchersError)(cause) ? cause : WatchersError.make({ reason: Storage.make({ cause }) }),
   });
 
 const load = (sql: Sql, name: string) => {
@@ -33,11 +34,11 @@ const load = (sql: Sql, name: string) => {
   const saved = decode(row.value);
 
   if (Result.isFailure(saved)) {
-    throw new WatchersError({ reason: new BadRow({ cause: saved.failure }) });
+    throw WatchersError.make({ reason: BadRow.make({ cause: saved.failure }) });
   }
 
   if (saved.success.name !== name) {
-    throw new WatchersError({ reason: new BadRow({ cause: new Error("watcher key mismatch") }) });
+    throw WatchersError.make({ reason: BadRow.make({ cause: new Error("watcher key mismatch") }) });
   }
 
   return watchers.init(saved.success.state, {})[0];

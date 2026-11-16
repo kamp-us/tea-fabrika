@@ -13,7 +13,7 @@ import { type Ask, HandsTasks, HandsTasksError, Reply } from "./HandsTasks.ts";
 const translated = (cause: TasksError) =>
   cause.reason === "conflict" || cause.reason === "wrong_process"
     ? Effect.succeed(Reply.cases.refused.make({ reason: "id_reused" }))
-    : Effect.fail(new HandsTasksError({ reason: "storage", cause }));
+    : Effect.fail(HandsTasksError.make({ reason: "storage", cause }));
 
 /**
  * Layer that supplies `HandsTasks` over `Tasks`. `target` is the person's `hands.target`, `null` when
@@ -68,7 +68,7 @@ export const layer = (options: { readonly target: string | null; readonly settin
             const requested = saved.events.find((event) => event.event === "requested");
 
             if (requested === undefined) {
-              return yield* new HandsTasksError({ reason: "storage" });
+              return yield* HandsTasksError.make({ reason: "storage" });
             }
 
             return Reply.cases.waiting.make({ rev: requested.rev, arrivedAt: requested.arrivedAt });

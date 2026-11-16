@@ -103,16 +103,16 @@ export const workerLoader = (
         : (Object.values(programs).find((p) => p.hash === hash) ??
           (lookup === undefined
             ? null
-            : yield* lookup(hash).pipe(Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })))));
+            : yield* lookup(hash).pipe(Effect.mapError((cause) => ProgramDown.make({ reason: "load", cause })))));
     const code =
       found == null
         ? undefined
         : yield* Schema.decodeUnknownEffect(BuiltProgram)(found).pipe(
-            Effect.mapError((cause) => new ProgramDown({ reason: "load", cause })),
+            Effect.mapError((cause) => ProgramDown.make({ reason: "load", cause })),
           );
 
     if (code === undefined) {
-      return yield* new ProgramDown({ reason: "no_program" });
+      return yield* ProgramDown.make({ reason: "no_program" });
     }
 
     yield* Effect.annotateCurrentSpan({
@@ -130,12 +130,12 @@ export const workerLoader = (
       ...(tail === undefined ? {} : { tails: [tail] }),
     }));
     const rpc = worker.getEntrypoint<Calls>();
-    const fail = (cause: unknown) => new ProgramDown({ reason: "load", error: "ProgramDown", cause });
+    const fail = (cause: unknown) => ProgramDown.make({ reason: "load", error: "ProgramDown", cause });
     // oxlint-disable-next-line fabrika/no-promises -- edge: Worker Loader describes its checked declaration through RPC
     const work = Effect.tryPromise({ try: () => rpc.describe(), catch: fail });
     const raw = yield* work;
     const declaration = yield* Schema.decodeUnknownEffect(Declaration)(raw).pipe(
-      Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+      Effect.mapError((cause) => ProgramDown.make({ reason: "load", error: "ProgramDown", cause })),
     );
     return {
       execution: workerExecution(rpc),

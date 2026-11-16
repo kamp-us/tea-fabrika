@@ -138,7 +138,7 @@ const index = (text: string, program: AST.TOMLProgram): Edit.Index => {
 };
 
 const failure = (reason: Syntax | Value | Conflict, line: number): TomlError =>
-  new TomlError({
+  TomlError.make({
     reason,
     message: reason.cause instanceof Error ? reason.cause.message : "The TOML operation failed.",
     line,
@@ -148,7 +148,7 @@ const failure = (reason: Syntax | Value | Conflict, line: number): TomlError =>
 const parseSource = Effect.fnUntraced(function* (text: string) {
   return yield* Effect.try({
     try: () => index(text, syntax(text)),
-    catch: (cause: unknown) => failure(new Syntax({ cause }), cause instanceof ParseError ? cause.lineNumber : 1),
+    catch: (cause: unknown) => failure(Syntax.make({ cause }), cause instanceof ParseError ? cause.lineNumber : 1),
   });
 });
 
@@ -218,13 +218,13 @@ const render = Effect.fnUntraced(function* (path: ReadonlyArray<string>, value: 
       });
       return { value: checked, text: source.slice(...assignment.value.range), keys };
     },
-    catch: (cause: unknown) => failure(new Value({ cause }), 1),
+    catch: (cause: unknown) => failure(Value.make({ cause }), 1),
   });
 });
 
 const planned = <A>(result: Result.Result<A, Edit.Refusal>, path: ReadonlyArray<string>): Effect.Effect<A, TomlError> =>
   Result.isFailure(result)
-    ? Effect.fail(failure(new Conflict({ path, cause: result.failure.cause }), result.failure.line))
+    ? Effect.fail(failure(Conflict.make({ path, cause: result.failure.cause }), result.failure.line))
     : Effect.succeed(result.success);
 
 const parse = Effect.fnUntraced(function* (text: string): Effect.fn.Return<TomlDocument, TomlError> {

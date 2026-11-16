@@ -59,7 +59,7 @@ const SEED = 119120;
 /** A Promise the law awaited rejected: fast-check's failed assertion, or a Response body that did not read. */
 class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
 
-const rejected = (cause: unknown) => new Rejected({ cause });
+const rejected = (cause: unknown) => Rejected.make({ cause });
 
 const ProcessKey = Schema.fromJsonString(Schema.Tuple([Schema.String, Schema.String]));
 

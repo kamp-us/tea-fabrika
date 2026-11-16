@@ -14,9 +14,9 @@ import { Nemesis, NemesisError, Off } from "./Nemesis.ts";
  */
 export const layer: Layer.Layer<Nemesis> = Layer.succeed(Nemesis, {
   fire: Effect.fn("nemesis.off.fire")(function* () {
-    return yield* new NemesisError({ reason: new Off({ cause: null }) });
+    return yield* NemesisError.make({ reason: Off.make({ cause: null }) });
   }),
   check: Effect.fn("nemesis.off.check")(function* () {
-    return yield* new NemesisError({ reason: new Off({ cause: null }) });
+    return yield* NemesisError.make({ reason: Off.make({ cause: null }) });
   }),
 });

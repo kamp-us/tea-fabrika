@@ -149,7 +149,7 @@ describe("T695, a remote record part keeps what failed", () => {
     fc.record({ failure: failures, reason: fc.constantFrom("unreachable", "bad_row", "storage") }),
     ({ failure, reason }) =>
       Effect.gen(function* () {
-        const thrown = new SinkError({ reason, held: 0, cause: failure });
+        const thrown = SinkError.make({ reason, held: 0, cause: failure });
         const calls: RecordCalls = {
           write: () => Effect.fail(thrown),
           read: () => Effect.fail(thrown),

@@ -36,7 +36,7 @@ const loadTail = Effect.gen(function* () {
   const url = new URL("./tail.ts", import.meta.url).href;
   const api: typeof import("./tail.ts") = yield* Effect.tryPromise({
     try: () => import(/* @vite-ignore */ url),
-    catch: (cause) => new TailImportError({ cause }),
+    catch: (cause) => TailImportError.make({ cause }),
   });
   return api.tail;
 });

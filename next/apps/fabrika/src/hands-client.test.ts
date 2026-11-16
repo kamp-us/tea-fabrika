@@ -112,7 +112,7 @@ const PKCS8 = new Uint8Array([
 const keyFrom = Effect.fnUntraced(function* (seed: Uint8Array) {
   const s = crypto.subtle;
   const pkcs8 = join(PKCS8, seed);
-  const fail = (cause: unknown) => new CryptoFailed({ cause });
+  const fail = (cause: unknown) => CryptoFailed.make({ cause });
   const signer = yield* Effect.tryPromise({
     try: () => s.importKey("pkcs8", pkcs8, "Ed25519", true, ["sign"]),
     catch: fail,
@@ -417,7 +417,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
           line: hands.line,
           found: "reused" as const,
           sign: (bytes: Uint8Array) =>
-            hands.sign(bytes).pipe(Effect.mapError(() => new ClientKeyError({ op: "sign", error: "OperationError" }))),
+            hands.sign(bytes).pipe(Effect.mapError(() => ClientKeyError.make({ op: "sign", error: "OperationError" }))),
         }),
       claimPersist: Effect.succeed(false),
       persist: Effect.succeed(true),
@@ -577,7 +577,7 @@ const law = (name: string, focus: "E1" | "S1", required: ReadonlyArray<string>, 
         yield* Effect.tryPromise({
           try: () =>
             fc.assert(fc.asyncProperty(Flow, check), { seed: SEED, numRuns: runs, includeErrorInReport: true }),
-          catch: (cause) => new PropertyFailed({ cause }),
+          catch: (cause) => PropertyFailed.make({ cause }),
         });
         // An empty flow cannot pass: every move the law is about ran at least once.
         expect([...done]).toEqual(expect.arrayContaining([...required]));

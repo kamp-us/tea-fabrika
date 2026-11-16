@@ -15,6 +15,8 @@ import { NotGranted } from "./SessionManager.ts";
 const known: ReadonlySet<string> = new Set(Object.keys(MemberEvent.cases));
 const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
 
+const badRow = (cause: unknown) => LedgerError.make({ reason: "bad_row", cause });
+
 /**
  * Appends a line to a stream only if the key is admitted by the membership as it stands now.
  *
@@ -52,14 +54,14 @@ export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(
         const event = decodeEvent(valueFor(row));
 
         if (Result.isFailure(event)) {
-          return Result.fail(new LedgerError({ reason: "bad_row", cause: event.failure }));
+          return Result.fail(badRow(event.failure));
         }
 
         events.push(event.success);
       }
 
       if ("reason" in admitted(foldAccess(events), key)) {
-        return Result.fail(new NotGranted({}));
+        return Result.fail(NotGranted.make({}));
       }
 
       return Result.succeed(Appended.cases.placed.make(turn.append(write.stream, write.id, write.line)));

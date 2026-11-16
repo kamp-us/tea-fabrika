@@ -453,9 +453,9 @@ describe("p21, no Layer fails at build", () => {
   it.effect("a Mailbox over a Ledger that always fails builds, and each call fails with its error", () =>
     check(json, [1], (m) => {
       const broken = Layer.succeed(Ledger, {
-        append: () => Effect.fail(new LedgerError({ reason: "unreachable" })),
-        read: () => Stream.fail(new LedgerError({ reason: "unreachable" })),
-        wait: () => Effect.fail(new LedgerError({ reason: "unreachable" })),
+        append: () => Effect.fail(LedgerError.make({ reason: "unreachable" })),
+        read: () => Stream.fail(LedgerError.make({ reason: "unreachable" })),
+        wait: () => Effect.fail(LedgerError.make({ reason: "unreachable" })),
       });
       return Effect.gen(function* () {
         expect((yield* Effect.flip(send("notes:1", LETTER, m))).reason).toBe("unreachable");

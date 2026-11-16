@@ -89,7 +89,7 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
   Effect.acquireRelease(
     Effect.try({
       try: () => new DatabaseSync(copy, { readOnly: true }),
-      catch: (cause) => new GuardError({ file, cause }),
+      catch: (cause) => GuardError.make({ file, cause }),
     }),
     (db) => Effect.sync(() => db.close()),
   ).pipe(
@@ -121,7 +121,7 @@ const cellHits = (file: string, copy: string, roots: Forms) =>
 
           return hits;
         },
-        catch: (cause) => new GuardError({ file, cause }),
+        catch: (cause) => GuardError.make({ file, cause }),
       }),
     ),
   );

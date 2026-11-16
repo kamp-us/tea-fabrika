@@ -122,7 +122,7 @@ describe("P12 Connection attachment laws", () => {
   law("a failed wait registration answers once and removes the saved request", ({ id }) =>
     Effect.gen(function* () {
       for (const reason of LedgerError.fields.reason.literals) {
-        const f = yield* setup(() => Effect.fail(new LedgerError({ reason })));
+        const f = yield* setup(() => Effect.fail(LedgerError.make({ reason })));
         // Inspect state even when the event fails, so an escaped failure cannot hide the lost reply.
         yield* Effect.exit(f.c.frame(request(id)));
         expect
@@ -143,7 +143,7 @@ describe("P12 Connection attachment laws", () => {
         let ring: Connection["ring"] = () => Effect.void;
         const bell = Layer.succeed(Doorbell, {
           ring: (_reader, stream, rev) =>
-            ring(stream, rev).pipe(Effect.mapError((cause) => new LedgerError({ reason: "storage", cause }))),
+            ring(stream, rev).pipe(Effect.mapError((cause) => LedgerError.make({ reason: "storage", cause }))),
         });
         const layer = Layer.mergeAll(RefereeSql.layer(sql), LedgerSql.layer(sql, { reader: "writer" })).pipe(
           Layer.provide(bell),
@@ -252,7 +252,7 @@ describe("P12 Connection attachment laws", () => {
           expect(read()).toMatchObject({ waits: [{ id, stream, after }] });
           // Reentrant RPC, before registration returns.
           yield* ring(stream, after + 1).pipe(
-            Effect.mapError((cause) => new LedgerError({ reason: "storage", cause })),
+            Effect.mapError((cause) => LedgerError.make({ reason: "storage", cause })),
           );
           return { _tag: "parked" } as const;
         }),

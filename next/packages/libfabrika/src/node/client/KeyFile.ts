@@ -50,9 +50,9 @@ const errorClass = (cause: unknown): ErrorClass => {
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";
 };
 
-const failure = (op: Op) => (cause: unknown) => new ClientKeyError({ op, error: errorClass(cause) });
+const failure = (op: Op) => (cause: unknown) => ClientKeyError.make({ op, error: errorClass(cause) });
 
-const damaged = (op: Op) => () => new ClientKeyError({ op, error: "DataError" });
+const damaged = (op: Op) => () => ClientKeyError.make({ op, error: "DataError" });
 
 /** The stored key, imported to sign only, with its public names. A key that does not import is damaged. */
 const load = Effect.fnUntraced(function* (stored: Stored, op: Op) {
@@ -77,7 +77,7 @@ const make = Effect.gen(function* () {
   const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ED, true, ["sign", "verify"]), catch: bad });
 
   if (!("privateKey" in pair)) {
-    return yield* new ClientKeyError({ op: "make", error: "TypeError" });
+    return yield* ClientKeyError.make({ op: "make", error: "TypeError" });
   }
 
   const key = pair.privateKey;
@@ -145,7 +145,7 @@ export const layer = (options: { readonly file: string }) =>
 
         // As OpenSSH does: a key file others may read is refused, never used.
         if ((info.value.mode & 0o077) !== 0) {
-          return yield* new ClientKeyError({ op: "read", error: "NotAllowedError" });
+          return yield* ClientKeyError.make({ op: "read", error: "NotAllowedError" });
         }
 
         const text = yield* fs.readFileString(file).pipe(Effect.mapError(failure("read")));
@@ -208,7 +208,7 @@ export const layer = (options: { readonly file: string }) =>
         const theirs = yield* read;
 
         if (Option.isNone(theirs)) {
-          return yield* new ClientKeyError({ op: "read", error: "NotFoundError" });
+          return yield* ClientKeyError.make({ op: "read", error: "NotFoundError" });
         }
 
         return identity(theirs.value, "reused");

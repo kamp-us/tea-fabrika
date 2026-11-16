@@ -14,16 +14,16 @@ import { BadRow, ProcessHistory, ProcessHistoryError, Storage, Unreachable } fro
 
 const Send = Schema.Struct({ m: Schema.Json });
 const Position = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER }));
-const badRow = (cause: unknown) => new ProcessHistoryError({ reason: new BadRow({ cause }) });
+const badRow = (cause: unknown) => ProcessHistoryError.make({ reason: BadRow.make({ cause }) });
 
 const translate = (cause: LedgerError): ProcessHistoryError =>
-  new ProcessHistoryError({
+  ProcessHistoryError.make({
     reason:
       cause.reason === "unreachable"
-        ? new Unreachable({ cause })
+        ? Unreachable.make({ cause })
         : cause.reason === "bad_row"
-          ? new BadRow({ cause })
-          : new Storage({ cause }),
+          ? BadRow.make({ cause })
+          : Storage.make({ cause }),
   });
 
 const validate = Effect.fnUntraced(function* (entry: Entry) {

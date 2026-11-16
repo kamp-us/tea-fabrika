@@ -82,7 +82,7 @@ export const suite = (database: Database) =>
             const publish: WatcherManager["Service"]["publish"] = (client, update) =>
               Effect.suspend(() => {
                 if (gone.has(client)) {
-                  return Effect.fail(new WatcherManagerError({ reason: new Gone({ cause: null }) }));
+                  return Effect.fail(WatcherManagerError.make({ reason: Gone.make({ cause: null }) }));
                 }
 
                 frames.push({ client, update });
@@ -181,7 +181,7 @@ export const suite = (database: Database) =>
             const watches = yield* build(faulty, "counter:fault", (client) =>
               Effect.suspend(() => {
                 if (gone) {
-                  return Effect.fail(new WatcherManagerError({ reason: new Gone({ cause: null }) }));
+                  return Effect.fail(WatcherManagerError.make({ reason: Gone.make({ cause: null }) }));
                 }
 
                 frames.push(client);
@@ -244,12 +244,12 @@ export const suite = (database: Database) =>
                 const route = routes.get(client);
 
                 if (route === "gone") {
-                  return Effect.fail(new WatcherManagerError({ reason: new Gone({ cause: null }) }));
+                  return Effect.fail(WatcherManagerError.make({ reason: Gone.make({ cause: null }) }));
                 }
 
                 if (route === "unknown") {
                   return Effect.fail(
-                    new WatcherManagerError({ reason: new Unreachable({ cause: new Error("send failed") }) }),
+                    WatcherManagerError.make({ reason: Unreachable.make({ cause: new Error("send failed") }) }),
                   );
                 }
 

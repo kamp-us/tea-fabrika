@@ -96,9 +96,10 @@ export const watchPrograms = (options: {
       const events = yield* Queue.unbounded<RolldownWatcherEvent>();
       // Results are owned as soon as the callback receives them, including during interruption.
       const results = new Set<Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]>();
+      const closeFailed = () => ControlError.make({ reason: "watch_close" });
       const close = (result: Extract<RolldownWatcherEvent, { code: "BUNDLE_END" | "ERROR" }>["result"]) =>
         // oxlint-disable-next-line fabrika/no-promises -- edge: Rolldown result cleanup returns a Promise
-        Effect.tryPromise({ try: () => result.close(), catch: () => new ControlError({ reason: "watch_close" }) }).pipe(
+        Effect.tryPromise({ try: () => result.close(), catch: closeFailed }).pipe(
           Effect.orDie,
           Effect.tap(() => Effect.sync(() => results.delete(result))),
         );
@@ -153,7 +154,7 @@ export const watchPrograms = (options: {
         }),
         (watcher) =>
           Effect.gen(function* () {
-            const failed = () => new ControlError({ reason: "watch_close" });
+            const failed = () => ControlError.make({ reason: "watch_close" });
             // oxlint-disable-next-line fabrika/no-promises -- edge: closing Rolldown stops its event callbacks
             yield* Effect.tryPromise({ try: () => watcher.close(), catch: failed }).pipe(Effect.orDie);
 

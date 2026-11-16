@@ -438,7 +438,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
 
         if (world.fault.wake) {
           world.fault.wake = false;
-          return yield* new MailWakeupsError({ reason: "unavailable" });
+          return yield* MailWakeupsError.make({ reason: "unavailable" });
         }
 
         // M6: the sender's send is still in flight, before its answer is read.
@@ -462,7 +462,7 @@ const host = Effect.fnUntraced(function* (store: Store, world: World, next: Effe
           yield* Deferred.succeed(entered, undefined);
         }
 
-        yield* target.mailed.pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
+        yield* target.mailed.pipe(Effect.mapError((cause) => MailWakeupsError.make({ reason: "unavailable", cause })));
 
         if (world.records !== undefined) {
           const span = yield* Effect.currentSpan.pipe(Effect.orDie);
@@ -1667,7 +1667,7 @@ const pipeHost = Effect.fnUntraced(function* (
         const target = runners.get(name);
         return target === undefined
           ? Effect.die(`no runner for ${name}`)
-          : target.mailed.pipe(Effect.mapError((cause) => new MailWakeupsError({ reason: "unavailable", cause })));
+          : target.mailed.pipe(Effect.mapError((cause) => MailWakeupsError.make({ reason: "unavailable", cause })));
       }),
   });
   const shared = MailDeliveryLive.layer.pipe(

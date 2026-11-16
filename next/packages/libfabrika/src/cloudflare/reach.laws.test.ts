@@ -7,7 +7,7 @@ import { Chain, SinkError } from "../telemetry/Trace.ts";
 import { reach } from "./reach.ts";
 import { recordStub, type Env } from "./runtime.ts";
 
-const unreachable = (cause: RpcCallError) => new SinkError({ reason: "unreachable", held: 0, cause });
+const unreachable = (cause: RpcCallError) => SinkError.make({ reason: "unreachable", held: 0, cause });
 const Method = Schema.Literals(["write", "read", "content", "deleteContent"]);
 
 it.effect.prop(
@@ -32,7 +32,7 @@ it.effect.prop(
   { reason: Schema.Literals(["bad_row", "storage"]), held: Schema.Int },
   ({ reason, held }) =>
     Effect.gen(function* () {
-      const failure = new SinkError({ reason, held });
+      const failure = SinkError.make({ reason, held });
       const translated: Effect.Effect<never, SinkError> = reach(Effect.fail(failure), unreachable);
       const result = yield* Effect.result(translated);
       expect(Result.match(result, { onSuccess: () => undefined, onFailure: (e) => e })).toBe(failure);
@@ -54,7 +54,7 @@ it.effect.prop(
           calls.push(method);
           // Platform RPC boundary: resolve the bridge envelope or reject the transport call.
           return typed
-            ? Promise.resolve({ _tag: ErrorTag, error: encodeRpcError(new SinkError({ reason, held })) })
+            ? Promise.resolve({ _tag: ErrorTag, error: encodeRpcError(SinkError.make({ reason, held })) })
             : Promise.reject(thrown);
         };
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only RECORD.getByName is consumed by recordStub; other platform handles are unused

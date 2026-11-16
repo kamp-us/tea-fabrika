@@ -43,7 +43,8 @@ export const gatewayStore = (sql: Sql) => {
           ensure();
           return step();
         }),
-      catch: (cause) => (Schema.is(GatewayError)(cause) ? cause : new GatewayError({ reason: new Storage({ cause }) })),
+      catch: (cause) =>
+        Schema.is(GatewayError)(cause) ? cause : GatewayError.make({ reason: Storage.make({ cause }) }),
     });
   });
   const get = <A>(name: string, schema: Schema.Codec<A>) => {
@@ -56,7 +57,7 @@ export const gatewayStore = (sql: Sql) => {
     const decoded = Schema.decodeUnknownResult(Schema.fromJsonString(schema))(row.value);
 
     if (Result.isFailure(decoded)) {
-      throw new GatewayError({ reason: new BadRow({ cause: decoded.failure }) });
+      throw GatewayError.make({ reason: BadRow.make({ cause: decoded.failure }) });
     }
 
     return decoded.success;

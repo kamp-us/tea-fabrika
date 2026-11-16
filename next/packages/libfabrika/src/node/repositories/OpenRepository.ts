@@ -24,8 +24,8 @@ class OpenRepositoryError extends Schema.TaggedError<OpenRepositoryError>()("Ope
 }) {}
 
 const failed = (reason: "storage" | "document" | "read", cause: unknown, message?: string) =>
-  new OpenRepositoryError({
-    reason: new (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed)({
+  OpenRepositoryError.make({
+    reason: (reason === "storage" ? Storage : reason === "document" ? InvalidDocument : ReadFailed).make({
       cause: Redacted.make(cause),
     }),
     message:

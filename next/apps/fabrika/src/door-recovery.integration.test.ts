@@ -286,7 +286,7 @@ const world = ({ disk }: Disks) => {
 
               controls.cutFlush = false;
               controls.cuts++;
-              return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
+              return Effect.fail(SinkError.make({ reason: "storage", held: 0 }));
             }),
           };
         }),
@@ -388,7 +388,7 @@ const world = ({ disk }: Disks) => {
       deliveries.push({ process: pid, parent: envelope.id, letter: meta?.id });
 
       if (controls.failDelivery) {
-        return Effect.fail(new LedgerError({ reason: "unreachable" }));
+        return Effect.fail(LedgerError.make({ reason: "unreachable" }));
       }
 
       return A.ProgramRunner.use((r) =>

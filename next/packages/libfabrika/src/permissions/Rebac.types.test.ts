@@ -79,8 +79,8 @@ const forged = (sender: typeof Sender.Type, tuples: Tuples) => {
  */
 const uncaused = (cause: unknown) => {
   // @ts-expect-error every caller of RelationsError has a cause, so the field is required (0568).
-  const bare = new RelationsError({ reason: "storage" });
-  const kept = new RelationsError({ reason: "bad_row", cause });
+  const bare = RelationsError.make({ reason: "storage" });
+  const kept = RelationsError.make({ reason: "bad_row", cause });
   return { bare, kept };
 };
 

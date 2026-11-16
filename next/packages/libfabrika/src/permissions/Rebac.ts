@@ -186,7 +186,7 @@ export const Permission =
       const holds = (rows: Tuples) => evaluate(model.declared, rows, subject, permission, object);
       return holds(tuples)
         ? Result.succeed(mint<Self>(sender, permission, object, key, holds))
-        : Result.fail(new Denied({ subject, permission, object }));
+        : Result.fail(Denied.make({ subject, permission, object }));
     };
     return Object.assign(key, { within });
   };

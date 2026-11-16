@@ -165,7 +165,7 @@ describe("p21, CoordinationLayer", () => {
     it.effect(`plant, fail at layer build: ${reason} stays a per-call failure`, () =>
       check(fc.jsonValue(), [1], (m) => {
         const { first } = fixture("build-a");
-        const failure = new LedgerError({ reason });
+        const failure = LedgerError.make({ reason });
         const broken = Layer.mergeAll(
           Layer.succeed(Ledger, {
             append: () => Effect.fail(failure),

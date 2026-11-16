@@ -48,7 +48,7 @@ const row = Effect.fnUntraced(function* (entry: Entry) {
   const event = decodeEvent(valueFor(entry));
 
   if (Result.isFailure(event)) {
-    return yield* new LedgerError({ reason: "bad_row", cause: event.failure });
+    return yield* LedgerError.make({ reason: "bad_row", cause: event.failure });
   }
 
   return { entry, event: event.success } satisfies Row;
@@ -153,7 +153,7 @@ export const layer = (
         const placed = yield* ledger.append(MEMBERS, "founded", lineFor(from, founding));
 
         if (placed._tag === "refused" && placed.reason !== "id_reused") {
-          return yield* new LedgerError({
+          return yield* LedgerError.make({
             reason: "refused",
             message: `founded refused: ${placed.reason}`,
           });

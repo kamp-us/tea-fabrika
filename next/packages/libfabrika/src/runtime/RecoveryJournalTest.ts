@@ -234,15 +234,15 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
                 // Transport loss decides nothing about the input: the program never sees it.
                 step: (model: unknown, msg: unknown) =>
                   controls.transport
-                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    ? Effect.fail(ProgramDown.make({ reason: "step", source: "rpc" }))
                     : loaded.execution.step(model, msg),
                 fresh: (model: unknown, msg: unknown) =>
                   controls.transport
-                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    ? Effect.fail(ProgramDown.make({ reason: "step", source: "rpc" }))
                     : loaded.execution.fresh(model, msg),
                 update: (model: unknown, msg: unknown) =>
                   controls.transport
-                    ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
+                    ? Effect.fail(ProgramDown.make({ reason: "step", source: "rpc" }))
                     : loaded.execution.update(model, msg),
               },
             })),
@@ -277,7 +277,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
 
             controls.cut = "";
             controls.hits.push(cut);
-            return Effect.fail(new LedgerError({ reason: "unreachable" }));
+            return Effect.fail(LedgerError.make({ reason: "unreachable" }));
           }),
       },
     ).pipe(

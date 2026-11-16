@@ -147,7 +147,7 @@ const lifeFor = (s: Model, process: string): Life => {
   const life = s.lives.get(process);
 
   if (life === undefined) {
-    throw new LedgerError({ reason: "bad_row" });
+    throw LedgerError.make({ reason: "bad_row" });
   }
 
   return life;

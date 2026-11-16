@@ -482,7 +482,7 @@ export class RecordManager extends Context.Service<
       method: M,
       ...args: Parameters<RecordCalls[M]>
     ): Effect.fn.Return<A, SinkError> {
-      const fail = (cause: unknown) => new SinkError({ reason: "unreachable", held: 0, cause });
+      const fail = (cause: unknown) => SinkError.make({ reason: "unreachable", held: 0, cause });
       const rpc = yield* Effect.try({ try: () => stub(name), catch: fail });
       const io: Effect.Effect<unknown, SinkError> = Reflect.apply(rpc[method], rpc, args).pipe(
         Effect.mapError((cause: unknown) => (Schema.is(SinkError)(cause) ? cause : fail(cause))),
@@ -490,7 +490,7 @@ export class RecordManager extends Context.Service<
       return yield* io.pipe(
         Effect.flatMap((raw) =>
           Schema.decodeUnknownEffect(answer)(raw).pipe(
-            Effect.mapError((cause) => new SinkError({ reason: "bad_row", held: 0, cause })),
+            Effect.mapError((cause) => SinkError.make({ reason: "bad_row", held: 0, cause })),
           ),
         ),
       );

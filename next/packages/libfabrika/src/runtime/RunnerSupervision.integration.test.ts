@@ -326,7 +326,7 @@ const world = (
               // Commit the real event, then lose only its reply.
               if (controls.loseWriteReply) {
                 controls.loseWriteReply = false;
-                return yield* new LedgerError({ reason: "unreachable" });
+                return yield* LedgerError.make({ reason: "unreachable" });
               }
 
               return answer;
@@ -348,7 +348,7 @@ const world = (
 
             controls.cut = "";
             controls.hits.push(cut);
-            return Effect.fail(new LedgerError({ reason: "unreachable" }));
+            return Effect.fail(LedgerError.make({ reason: "unreachable" }));
           }),
       },
     ).pipe(
@@ -379,7 +379,7 @@ const world = (
 
                   controls.flushOnce = false;
                   controls.flushFailures++;
-                  return Effect.fail(new LedgerError({ reason: "storage" }));
+                  return Effect.fail(LedgerError.make({ reason: "storage" }));
                 }),
               };
             }),

@@ -14,8 +14,8 @@ import { Decode, Missing, MissingTarget, Refused, Starts, StartsError, Storage }
 import type { Sql } from "../Sql.ts";
 import * as SettingsInput from "./SettingsInput.ts";
 
-const storage = (cause: unknown) => new StartsError({ reason: new Storage({ cause }) });
-const decode = (cause: unknown) => new StartsError({ reason: new Decode({ cause }) });
+const storage = (cause: unknown) => StartsError.make({ reason: Storage.make({ cause }) });
+const decode = (cause: unknown) => StartsError.make({ reason: Decode.make({ cause }) });
 const event = Schema.TaggedStruct("instance_started", Start.Body.fields);
 const stream = (start: string) => `settings/instance/${start}`;
 
@@ -76,8 +76,8 @@ export const fromLedger = () =>
         const entry = entries[0];
 
         if (entry === undefined) {
-          return yield* new StartsError({
-            reason: new Missing({ target: MissingTarget.cases.instance.make({ start }) }),
+          return yield* StartsError.make({
+            reason: Missing.make({ target: MissingTarget.cases.instance.make({ start }) }),
           });
         }
 
@@ -109,7 +109,7 @@ export const fromLedger = () =>
             !Equal.equals(original, body) ||
             (input.origin !== undefined && !Equal.equals(origin, input.origin))
           ) {
-            return yield* new StartsError({ reason: new Refused({ cause: "Conflicting instance start" }) });
+            return yield* StartsError.make({ reason: Refused.make({ cause: "Conflicting instance start" }) });
           }
 
           return receipt;
@@ -130,7 +130,7 @@ export const fromLedger = () =>
         const ack = yield* Schema.decodeUnknownEffect(Appended)(reply).pipe(Effect.mapError(decode));
 
         if (ack._tag !== "placed") {
-          return yield* new StartsError({ reason: new Refused({ cause: ack }) });
+          return yield* StartsError.make({ reason: Refused.make({ cause: ack }) });
         }
 
         const receipt = yield* read(input.start);

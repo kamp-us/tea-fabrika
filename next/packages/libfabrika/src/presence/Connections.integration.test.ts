@@ -33,7 +33,7 @@ const setup = (now: number) => {
         Effect.suspend(() => {
           asked.push({ gateway, session });
           return failed.has(session)
-            ? Effect.fail(new LedgerError({ reason: "unreachable" }))
+            ? Effect.fail(LedgerError.make({ reason: "unreachable" }))
             : Effect.succeed(pings.get(session) ?? null);
         }),
     });

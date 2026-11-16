@@ -300,7 +300,7 @@ const walk = (
             }
 
             control.flush = false;
-            return Effect.fail(new SinkError({ reason: "storage", held: 0 }));
+            return Effect.fail(SinkError.make({ reason: "storage", held: 0 }));
           }),
         }),
       ).pipe(Layer.provideMerge(Layer.succeedContext(coordination)));

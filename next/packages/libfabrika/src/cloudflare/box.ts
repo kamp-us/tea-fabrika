@@ -35,7 +35,7 @@ export const programBox = (declared: unknown, build: string) => {
       ),
   };
   const declaration = Effect.fromResult(stepper(declared)).pipe(
-    Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
+    Effect.mapError((cause) => ProgramDown.make({ reason: "load", error: "ProgramDown", cause })),
     Effect.map((pure) =>
       Declaration.make({
         name: pure.program.name,

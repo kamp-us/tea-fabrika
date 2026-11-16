@@ -10,7 +10,7 @@ import { Entry, Journal, JournalError } from "./Journal.ts";
 
 /** A store failure as the journal's own: a value that does not decode is a bad entry. */
 const translated = (cause: KeyValueStore.KeyValueStoreError | Schema.SchemaError) =>
-  new JournalError({ reason: Schema.isSchemaError(cause) ? "bad_entry" : "storage", cause });
+  JournalError.make({ reason: Schema.isSchemaError(cause) ? "bad_entry" : "storage", cause });
 
 /**
  * Layer that supplies `Journal` from the `KeyValueStore` in context.

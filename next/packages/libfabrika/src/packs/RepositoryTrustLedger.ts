@@ -21,10 +21,12 @@ import {
 // A bounded read fails closed instead of trusting a truncated history. Never discard old decisions.
 const LIMIT = 4096;
 const stream = (key: string, person: string) => `repository/${person}/${key}`;
-const storage = (cause: unknown) => new RepositoryTrustError({ reason: new Storage({ cause: Redacted.make(cause) }) });
+
+const storage = (cause: unknown) =>
+  RepositoryTrustError.make({ reason: Storage.make({ cause: Redacted.make(cause) }) });
 
 const invalid = (cause: unknown) =>
-  new RepositoryTrustError({ reason: new InvalidHistory({ cause: Redacted.make(cause) }) });
+  RepositoryTrustError.make({ reason: InvalidHistory.make({ cause: Redacted.make(cause) }) });
 
 /**
  * Layer that provides `RepositoryTrust` on the ledger, in the stream `repository/<person>/<key>`.

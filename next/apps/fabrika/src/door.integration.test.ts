@@ -411,7 +411,7 @@ const world = Effect.fnUntraced(function* (
         });
 
         if (placing._tag === "refused") {
-          return yield* new LedgerError({ reason: "refused" });
+          return yield* LedgerError.make({ reason: "refused" });
         }
       }
 
@@ -3327,7 +3327,7 @@ describe("P10 inputs, retries and signer", () => {
                       // Lose the answer only after the real input transaction commits.
                       if (lose && appended) {
                         lose = false;
-                        return yield* new LedgerError({ reason: "unreachable" });
+                        return yield* LedgerError.make({ reason: "unreachable" });
                       }
 
                       return placing;
@@ -3870,7 +3870,7 @@ describe("P10 inputs, retries and signer", () => {
 
                   if (first) {
                     first = false;
-                    return yield* new LedgerError({ reason: "unreachable" });
+                    return yield* LedgerError.make({ reason: "unreachable" });
                   }
                 });
               yield* Effect.flip(d.route(client, "process.send", request(value)));
@@ -4159,7 +4159,7 @@ describe("P10 revocation and append", () => {
               const other = yield* online(d, w, "other", w.otherWindow);
               yield* d.route(agent.client, "process.send", request("old-agent"));
               const parent = w.deliveries.at(-1)!.envelope.id;
-              w.controls.notify = () => Effect.fail(new LedgerError({ reason: "unreachable" }));
+              w.controls.notify = () => Effect.fail(LedgerError.make({ reason: "unreachable" }));
               const text = revokeText({
                 id: value,
                 key: w.root.line,
@@ -4564,7 +4564,7 @@ describe("P10 span reader and recording", () => {
                         Stream.unwrap(
                           Effect.sync(() => {
                             poisoned++;
-                            return Stream.fail(new SinkError({ reason: "unreachable", held: 0 }));
+                            return Stream.fail(SinkError.make({ reason: "unreachable", held: 0 }));
                           }),
                         ),
                       ),
@@ -4622,7 +4622,7 @@ describe("P10 span reader and recording", () => {
                 Effect.map((real: typeof SpanSink.Service) => ({
                   ...real,
                   flush: Effect.suspend(() =>
-                    block ? Effect.fail(new SinkError({ reason: value, held: 1 })) : real.flush,
+                    block ? Effect.fail(SinkError.make({ reason: value, held: 1 })) : real.flush,
                   ),
                 })),
               ),
@@ -4709,7 +4709,7 @@ describe("P10 span reader and recording", () => {
               RecordManager.pipe(
                 Effect.map((r: typeof RecordManager.Service) => ({
                   ...r,
-                  read: () => Stream.fail(new SinkError({ reason: value, held: 0 })),
+                  read: () => Stream.fail(SinkError.make({ reason: value, held: 0 })),
                 })),
               ),
             ).pipe(Layer.provide(w.env));
@@ -4850,7 +4850,7 @@ describe("P10 span reader and recording", () => {
                           if (block && stream === "gateway/inputs") {
                             block = false;
                             // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- LedgerTransaction catches this synchronous callback's throw as a typed failure.
-                            throw new LedgerError({ reason: "storage" });
+                            throw LedgerError.make({ reason: "storage" });
                           }
 
                           return turn.append(stream, id, line);
@@ -4891,7 +4891,7 @@ describe("P10 span reader and recording", () => {
             yield* Effect.gen(function* () {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
-              w.controls.deliver = () => Effect.fail(new LedgerError({ reason: "unreachable" }));
+              w.controls.deliver = () => Effect.fail(LedgerError.make({ reason: "unreachable" }));
               yield* Effect.flip(d.route(client, "process.send", request(value)));
               const spans = yield* RecordManager.use((r: typeof RecordManager.Service) =>
                 Stream.runCollect(r.read(Chain.cases.spans.make({}))),
@@ -5295,7 +5295,7 @@ describe("P10 refusal records and checked writes", () => {
                   write: (...args: Parameters<typeof real.write>) => {
                     if (fail) {
                       fail = false;
-                      return Effect.fail(new LedgerError({ reason: "unreachable" }));
+                      return Effect.fail(LedgerError.make({ reason: "unreachable" }));
                     }
 
                     return real.write(...args);
