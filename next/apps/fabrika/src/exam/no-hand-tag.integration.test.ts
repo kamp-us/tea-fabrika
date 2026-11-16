@@ -1,5 +1,6 @@
-import { Array as Arr } from "effect";
 // `no-hand-tag` (exam item 5): no hand-written `_tag` in next/; a read and a schema tool pass.
+
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 

@@ -1,6 +1,7 @@
-import { Array as Arr } from "effect";
 // React's own rules (exam item 13, C2, C3 and C6): `react/refs`, `react/immutability` and
 // `react/display-name` block in next/'s `.tsx` files, tests left out.
+
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 

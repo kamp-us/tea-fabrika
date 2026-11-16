@@ -1,4 +1,3 @@
-import { Array as Arr, pipe } from "effect";
 // The exam's row reader: which rows of the rule file (`layer-rules.json`) claim a file. `pnpm
 // lint:layers` (code-graph) reads the same file, so the exam and the tool keep one list of paths.
 // The lead's move checker asks whether a moved file kept its row.
@@ -16,6 +15,8 @@ import { Array as Arr, pipe } from "effect";
 //
 // A row may carry a `layer` (the local patch, demlik issue 913). A module's rank is its layer, so
 // moving a module is one edit and no other module moves. The exam's layers test reads it.
+
+import { Array as Arr, pipe } from "effect";
 
 /** One row of the rule file, as far as the exam reads it. */
 export interface Row {

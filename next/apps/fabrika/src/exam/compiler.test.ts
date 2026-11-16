@@ -1,6 +1,7 @@
-import { Array as Arr } from "effect";
 // The React Compiler check (exam item 13, C1 and C5): every skip and purity finding fails, and the
 // one way out is `"use no memo"` with a ledger row.
+
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { check, type Row } from "./compiler.ts";
 

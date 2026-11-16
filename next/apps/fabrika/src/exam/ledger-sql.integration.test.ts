@@ -1,5 +1,6 @@
-import { Array as Arr, pipe } from "effect";
 // P12, next/. Shape belongs in lint; these laws test that rule with planted source.
+
+import { Array as Arr, pipe } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";

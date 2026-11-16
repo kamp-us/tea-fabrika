@@ -122,18 +122,22 @@ const current = (page: Page, rejected: string | null) =>
 const claim = (page: Page) =>
   Effect.promise((): Promise<Answer<boolean>> => page.evaluate(() => Reflect.get(globalThis, "__key").claim()));
 
+/** One stored value, described: a key by its type and whether it can leave, bytes and strings as hex. */
+type Stored = {
+  readonly kind: string;
+  readonly extractable?: boolean;
+  readonly exported?: boolean;
+  readonly hex?: string;
+};
+
 /** Every value the profile's IndexedDB holds, described: private keys by their extractability, bytes and
- *  strings as hex, so the law can say no private material is stored. */
+ *  strings as hex, so the law can say no private material is stored. The page sends the raw bytes and the
+ *  hex is made here, since the function given to `page.evaluate` runs in the page, where no module import
+ *  reaches. */
 const stored = (page: Page) =>
   Effect.promise(() =>
     page.evaluate(async () => {
-      const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; hex?: string }> = [];
-      const hex = (b: ArrayBufferLike | ArrayBufferView) =>
-        Function.pipe(
-          [...new Uint8Array(ArrayBuffer.isView(b) ? b.buffer : b)],
-          Arr.map((x) => x.toString(16).padStart(2, "0")),
-          Arr.join(""),
-        );
+      const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; bytes?: Array<number> }> = [];
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(
@@ -142,16 +146,9 @@ const stored = (page: Page) =>
           );
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
-          out.push({ kind: "bytes", hex: hex(v) });
+          out.push({ kind: "bytes", bytes: [...new Uint8Array(ArrayBuffer.isView(v) ? v.buffer : v)] });
         } else if (typeof v === "string") {
-          out.push({
-            kind: "string",
-            hex: Function.pipe(
-              [...new TextEncoder().encode(v)],
-              Arr.map((x) => x.toString(16).padStart(2, "0")),
-              Arr.join(""),
-            ),
-          });
+          out.push({ kind: "string", bytes: [...new TextEncoder().encode(v)] });
         } else if (typeof v === "object" && v !== null) {
           for (const one of Object.values(v)) {
             await walk(one);
@@ -183,6 +180,21 @@ const stored = (page: Page) =>
 
       return out;
     }),
+  ).pipe(
+    Effect.map(
+      Arr.map(({ bytes, ...rest }): Stored =>
+        bytes === undefined
+          ? rest
+          : {
+              ...rest,
+              hex: Function.pipe(
+                bytes,
+                Arr.map((x) => x.toString(16).padStart(2, "0")),
+                Arr.join(""),
+              ),
+            },
+      ),
+    ),
   );
 
 /** Makes the tab's IndexedDB refuse to open, as private mode, a full quota or a block does. */

@@ -1,6 +1,7 @@
-import { Array as Arr } from "effect";
 // `no-of` (exam item 4): no bare `of` and no `xOf` name declared in next/; a use passes. A module's
 // top-level exported `of` passes and a named import of `of` fires (0029).
+
+import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import { plant } from "./plant.ts";
 
