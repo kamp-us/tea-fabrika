@@ -1,12 +1,12 @@
 ---
-id: 0566
+id: 0567
 title: In next/ and our tooling, a tagged value is matched, by its union's own matcher first and Effect's Match module second, never by comparing _tag by hand, and that holds inside a tea machine's update too
 status: accepted
 date: 2026-11-15
 tags: [match, tag, union, schema, effect, tea, update, lint, anti-slop, next, tooling]
 ---
 
-# 0566: In next/ and our tooling, a tagged value is matched, by its union's own matcher first and Effect's Match module second, never by comparing _tag by hand, and that holds inside a tea machine's update too
+# 0567: In next/ and our tooling, a tagged value is matched, by its union's own matcher first and Effect's Match module second, never by comparing _tag by hand, and that holds inside a tea machine's update too
 
 ```mermaid
 flowchart TD
@@ -62,8 +62,9 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
 - **The hits:** 2,433 for the first rule and 247 for the second. Both are the research's syntax
   counts, not runs of the rules. A plain line search made for this file, on `origin/main` at
   `9a53b828d` over `next/`, `.agents/`, `.github/` and `oxlint-plugins/`, finds about 2,290
-  compared `_tag`s and 20 switches, so the first number is of the right size. The first run of the
-  installed plugin gives the real ones.
+  compared `_tag`s and 20 switches, so the first number is of the right size. The plugin is not in
+  the repo yet: it comes in as its `src/` folder, whole and unchanged at one commit (0563's
+  amendment of 2026-11-15). Its first run gives the real numbers.
 - **This is stricter than the Effect team's own code, and it is the owner's choice.**
   [0560](0560-an-order-for-effect-code.md) asks a file to say so plainly. What was read, in the
   installed `node_modules/effect/src` at 4.1.2:
@@ -130,11 +131,7 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
    version.
    - `Union.match(value, {...})`, one key per case, when each case does its own work.
    - `Union.matchOrElse(value, {...}, orElse)`, some cases and then the rest.
-   - `Union.isAnyOf([...])`, a yes or no for a subset of cases. A check for one case is a subset
-     of one.
-   - One of Effect's own types uses its own module the same way: `Exit.match` and
-     `Exit.isSuccess` (`Exit.ts:776`, `:406`), `Option.match` and `Option.isSome`
-     (`Option.ts:418`, `:385`), `Result.match` and `Result.isSuccess` (`Result.ts:1218`, `:744`).
+   - `Union.isAnyOf([...])`, a yes or no for a subset of cases.
 2. **The `Match` module second,** where a union has no matcher of its own, or the value is already
    narrowed to some of its cases: `Match.valueTags(value, {...})`. For a tea Msg, which is keyed
    by `type`: `Match.discriminators("type")({...})`, closed with `Match.exhaustive` or
@@ -143,6 +140,18 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
    `CodeHost.Updated.match(m.value, {...})` inside the `updating` state's case.
 4. **Never `Predicate.isTagged` on a value whose type is known.** It is for `unknown`. The first
    rule's own message offers it "for a simple reusable predicate"; we do not take that offer.
+
+**Two readings by the writer of this file, not the owner's words.** The ruling gave the four
+points above and did not spell these two out. Each follows from point 1, and each is open to a
+later ruling:
+
+- **A check for one case is a subset of one:** `Union.isAnyOf(["idle"])`. The ruling names
+  `isAnyOf` for a subset check and gives no other form for a single case.
+- **Point 1 covers Effect's own `Exit`, `Option` and `Result`,** through their own `match` and
+  guards: `Exit.match` and `Exit.isSuccess` (`Exit.ts:776`, `:406`), `Option.match` and
+  `Option.isSome` (`Option.ts:418`, `:385`), `Result.match` and `Result.isSuccess`
+  (`Result.ts:1218`, `:744`). The ruling puts the `_tag` checks on these three in the state side
+  of the cleanup, and does not say which form replaces them.
 
 ```ts
 // next/programs/pipeline/src/Merger.ts:262, on main: the state and the answer, compared by hand.

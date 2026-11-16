@@ -110,7 +110,7 @@ has nothing, marked as an edge with its reason
   ([0046](../.decisions/0046-one-tea-machine-per-file.md)).
 - **A tagged value is matched, never compared by hand,** in an `update` handler too: the union's
   own `match`, `matchOrElse` or `isAnyOf` first, then Effect's `Match` module
-  ([0566](../.decisions/0566-a-tagged-value-is-matched.md),
+  ([0567](../.decisions/0567-a-tagged-value-is-matched.md),
   [the pattern](../.patterns/effect-tagged-value-is-matched.md)).
 
 ## Words

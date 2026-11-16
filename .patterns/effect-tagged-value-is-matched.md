@@ -49,8 +49,9 @@ branches on a tagged value uses them, in this order.
    - `Union.matchOrElse(value, {...}, orElse)`: some cases, then the rest
      (`Schema.ts:6502`). The fallback gets the value narrowed to the cases that have no key.
    - `Union.isAnyOf([...])`: a yes or no for a subset of cases, which also narrows
-     (`Schema.ts:6543`). A check for one case is a subset of one.
-   - One of Effect's own types uses its own module: `Exit.match` and `Exit.isSuccess`
+     (`Schema.ts:6543`). A check for one case is a subset of one, which is the decision writer's
+     reading and not the owner's words (0567 says so).
+   - One of Effect's own types uses its own module, by the same reading: `Exit.match` and `Exit.isSuccess`
      (`Exit.ts:776`, `:406`), `Option.match` and `Option.isSome` (`Option.ts:418`, `:385`),
      `Result.match` and `Result.isSuccess` (`Result.ts:1218`, `:744`). In use at
      `next/packages/libfabrika/src/transport/Answer.ts:94`.
@@ -137,7 +138,7 @@ on `isAnyOf`.
 
 ## Decision
 
-[0566](../.decisions/0566-a-tagged-value-is-matched.md) holds the rule, the two lint rules that
+[0567](../.decisions/0567-a-tagged-value-is-matched.md) holds the rule, the two lint rules that
 will block a hand comparison, the order of the cleanup and what is still open. It also says where
 this is stricter than the Effect team's own code.
 
