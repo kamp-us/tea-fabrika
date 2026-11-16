@@ -248,6 +248,7 @@ const decodeRequester = Schema.decodeUnknownOption(RequesterModel);
 const decodeResponder = Schema.decodeUnknownOption(ResponderModel);
 // A reader that knows no cases: it reads any letter body's key, as tea writes it (plan, "The
 // readers that know no program").
+// oxlint-disable-next-line fabrika/no-hand-tag -- a reader that knows no cases, as the log is
 const Body = Schema.Struct({ _tag: Schema.String, ref: Schema.optionalKey(Schema.String) });
 const decodeBody = Schema.decodeUnknownOption(Body);
 

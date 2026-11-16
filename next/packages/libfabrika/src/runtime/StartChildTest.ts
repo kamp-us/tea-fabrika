@@ -65,16 +65,16 @@ import type { Sql } from "../Sql.ts";
 import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { childStarter, Model, Msg as ChildMsg } from "./internal/childStarter.test-support.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
+import { ProcessStore } from "./ProcessStore.ts";
+import { Program } from "./Program.ts";
+import { ProgramRunner } from "./Runner.ts";
+import * as StartChild from "./StartChild.ts";
 
 /** The key of each input these laws hand a starter or a stopper, and of the raw Cmd and answer they
  *  read back, made by its schema (0569, 0562). A law sets the other fields, as the program's own
  *  schema then judges them. */
 const Tag = Schema.TaggedUnion({ start: {}, end: {}, stop: {}, start_child: {}, exit_err: {} });
 const ping = ChildMsg.cases.ping.make({});
-import { ProcessStore } from "./ProcessStore.ts";
-import { Program } from "./Program.ts";
-import { ProgramRunner } from "./Runner.ts";
-import * as StartChild from "./StartChild.ts";
 
 /** Real stores. `sql(part)` is one database per part; `probe.open` counts the handles still open. */
 export type Store = {

@@ -45,6 +45,7 @@ const Step = Schema.TaggedUnion({
   reply_written: {},
   attempt_cleared: {},
 });
+
 const Later = Schema.Literals(["finished", "reply_written", "attempt_cleared"]);
 
 const COUNTS: Runs = { fast: 10, full: 40 };

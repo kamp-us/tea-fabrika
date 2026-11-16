@@ -67,6 +67,7 @@ const Msg = Schema.TaggedUnion({
   add: { n: Schema.Int },
   poison: { key: Schema.String },
 });
+
 const add = Msg.cases.add.make({ n: 1 });
 
 /** An Error whose class is named `name`, as a program's own error class would be. */

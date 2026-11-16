@@ -124,11 +124,13 @@ const decodeModel = Schema.decodeUnknownOption(Model);
 
 /** A hands answer as the inbox keeps it: its Cmd and its value or its reason. */
 const EchoedCmd = Schema.TaggedStruct("hands", { command: Command });
+
 const HandsFields = {
   cmd: EchoedCmd,
   value: Schema.optionalKey(TaskResult),
   reason: Schema.optionalKey(Schema.String),
 };
+
 const HandsOk = Schema.TaggedStruct("hands_ok", HandsFields);
 const HandsErr = Schema.TaggedStruct("hands_err", HandsFields);
 const HandsLetter = Schema.Union([HandsOk, HandsErr]);

@@ -1,0 +1,31 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-s2-tests",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1431",
+  "started": "2026-11-15T19:24:00-08:00",
+  "ended": "2026-11-15T20:25:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "First tests round for slice 2 of docs/plan/quests/tea-msg-tag-PLAN.md: tea 0.27.0 keys Msgs, Cmds, answers, Subs and the state table on _tag. The tests step owns the tea patch here, so patches/@demlik__tea@0.27.0.patch (287 changed lines over the dist JS and .d.ts) is this round's product, and laws K1, K2 and K2b are green with it and red without it, as the plants show. K3 (Program.test.ts) and K9 (the counter's laws) are red now for the plan's reason: next/'s Program.ts and the counter still read and write type, so a valid _tag Msg is refused bad_msg. The sweep moved the shared suites and test programs to schema makers: chain.test.ts, drive.test.ts, Program.test.ts, ProgramMailTest.ts, StartChildTest.ts, MonitorTest.ts, ReloadTest.ts, RecoveryJournalTest.ts, RunnerHandsTest.ts, RunnerAdmissionTest.ts and the mail, chunk and child-start test programs. About 80 test files remain for the plan's second tests round. The plan's .d.ts list leaves out runtime-types-C11LhO_3.d.ts, which its every-entry scope covers; it is patched.",
+  "plants": [
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.test.ts: K2", "plant": "chunk-SKI5V64W.js lookupCell record[msg._tag] back to msg.type", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.test.ts: K2", "plant": "chunk-BXLD374W.js callHandler reads cmd.type", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.test.ts: K2", "plant": "chunk-BXLD374W.js runnerFor(sub.type)", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.test.ts: K2", "plant": "pbt arbConstantMsg and arbRecordMsg write type", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.test.ts: K2b", "plant": "chunk-SKI5V64W.js lookupCell state key read from state.type", "result": "red" },
+    { "law": "next/programs/counter/src/program.laws.test.ts: K9", "plant": "chunk-SKI5V64W.js record[msg._tag] back to msg.type (K2's plant a)", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.types.test.ts: K1", "plant": "every patched .d.ts back to unpatched 0.27.0", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.types.test.ts: K1", "plant": "core Reducer's Extract keyed on type: K", "result": "red" },
+    { "law": "next/packages/libfabrika/src/runtime/MsgKey.types.test.ts: K1", "plant": "Cmd<T> back on readonly type", "result": "red" }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 61,
+  "note": "Each plant ran once on a copy of the installed tea file and was restored by copy; the narrow tsc and K2 were green again after. K3's plants (settled bypassing program.msg, fold taking a type-keyed answer) need the build first, since K3 is red now on Program.ts, and so does the re-record of fixtures/next/port-home/, whose writer is an integration test. pnpm format, pnpm lint and the ratchet pass. One pnpm typecheck, started when pgrep -x tsgo found none: red, failing first in .agents on chain.ts and drive.ts, product files the build moves, which stopped the other projects. A narrow tsc over the libfabrika suites shows only ProgramMachine errors from Program.ts. The in-memory hands law (RunnerHands.test.ts) is red with NoCellError from the tasks machine's type-keyed Msgs, also the build's. No integration, visual, workerd or spawned-process test ran.",
+  "step": "tests"
+}

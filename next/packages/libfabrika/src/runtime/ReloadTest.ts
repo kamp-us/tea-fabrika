@@ -12,6 +12,7 @@ import {
   Fiber,
   Layer,
   Option,
+  Predicate,
   Result,
   Schedule,
   Schema,
@@ -106,8 +107,9 @@ const schemaFor = (spec: Spec) =>
 /** A narrowed counter never leaves its bounds, so its own steps keep its model readable. */
 const clamp = (spec: Spec, n: number) => (spec.shape === "narrowed" ? Math.min(spec.max, Math.max(spec.min, n)) : n);
 
-/** The `_tag` of a letter the inbox kept. */
-const tagOf = (m: unknown): string => Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.String }))(m)._tag;
+/** The `_tag` of a letter the inbox kept, or nothing when it has none. */
+const letterTag = (m: unknown): string =>
+  Predicate.hasProperty(m, "_tag") && typeof m._tag === "string" ? m._tag : "";
 
 /** The variant's update for a Msg's `_tag`, as plain functions the oracle folds too. */
 const updateFor = (spec: Spec, model: CounterModel, tag: string): CounterModel =>
@@ -704,7 +706,7 @@ const replay = (
         continue;
       }
 
-      model = updateFor(code.variants.get(String(body.build)) ?? spec, model, tagOf(letter.m));
+      model = updateFor(code.variants.get(String(body.build)) ?? spec, model, letterTag(letter.m));
     } else if (fact.tag === "state.upgraded") {
       upgraded = { ran: (body.ran as ReadonlyArray<string>) ?? [] };
     } else if (fact.tag === "code.swapped") {
