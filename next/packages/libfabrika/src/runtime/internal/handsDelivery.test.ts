@@ -62,7 +62,7 @@ const loaded = fc.oneof(
     .map((fields) => Schema.decodeUnknownSync(State)(Schema.encodeSync(Reply)(Reply.cases.waiting.make(fields)))),
 );
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const same = (a: Schema.Json, b: Schema.Json) => JSON.stringify(a) === JSON.stringify(b);
 
 const key = (msg: Msg) =>
   msg.reply._tag === "refused" ? `replied:refused:${msg.reply.reason}` : `replied:${msg.reply._tag}`;

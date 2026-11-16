@@ -12,6 +12,7 @@ import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
+import type { decodeBuilt } from "./Built.ts";
 
 type Program = { readonly hash: string; readonly source: string };
 type Asset = { readonly hash: string; readonly type: string; readonly body: string };
@@ -25,7 +26,7 @@ type Api = {
   readonly Built: Schema.Codec<Built>;
   readonly Asset: Schema.Codec<Asset>;
   readonly BuiltProgram: Schema.Codec<Program>;
-  readonly decodeBuilt: (raw: unknown) => Effect.Effect<Built, { _tag: string; reason: string }>;
+  readonly decodeBuilt: typeof decodeBuilt;
 };
 
 const load = async () => {

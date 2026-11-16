@@ -20,7 +20,7 @@ type Fault = {
 
 type Store = {
   readonly load: Effect.Effect<unknown, Fault>;
-  readonly save: (value: unknown) => Effect.Effect<void, Fault>;
+  readonly save: (value: Schema.Json) => Effect.Effect<void, Fault>;
   readonly input: (letter: string) => Effect.Effect<unknown, Fault>;
   readonly receipt: (letter: string) => Effect.Effect<unknown, Fault>;
 };

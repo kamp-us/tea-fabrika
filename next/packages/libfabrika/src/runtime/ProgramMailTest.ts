@@ -680,7 +680,7 @@ const walk = (
     });
     const requesterState = (k: Pair) =>
       Effect.map(inContext(savedModel(store, requesterName(k))), (m) => Option.getOrNull(decodeRequester(m)));
-    const deliverAs = Effect.fnUntraced(function* (source: string, to: string, m: unknown) {
+    const deliverAs = Effect.fnUntraced(function* (source: string, to: string, m: Schema.Json) {
       const status = yield* inContext(ProcessManager.use((p) => p.status(source)));
       const command = `${status.state.process}/${1_000_000 + ++world.forged}/0`;
       world.forgedIds.add(`${command}/mail`);
@@ -992,7 +992,7 @@ const walk = (
           // Mail another program could send: it takes the recipient's ordinary admission.
           const k = choose(pairs, cell.pick);
           const ref = `forged-${++world.forged}`;
-          const shapes: ReadonlyArray<unknown> = [
+          const shapes: ReadonlyArray<Schema.Json> = [
             { type: "request", value: cell.value, reply: requesterName(k) },
             { type: "approve" },
             { type: "request", ref, value: Math.abs(cell.value), reply: requesterName(k), parent: `in-${PIDS[0]}-1` },
@@ -1272,7 +1272,7 @@ const alarmLaw = (open: Effect.Effect<Store, never, Scope.Scope>, stopped: boole
           const name = responderName(1);
           const runner = () => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
           const within = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.provide(life.context));
-          const input = (m: unknown): Incoming => ({
+          const input = (m: Schema.Json): Incoming => ({
             id: `timer-${++world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: world.n, input: m },
             sentAt: "2026-11-11T00:00:00Z",
@@ -1487,7 +1487,7 @@ const noteLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           const runner = () => Option.getOrThrow(Option.fromUndefinedOr(life.runners.get(name)));
           const within = <A, E, R>(work: Effect.Effect<A, E, R>) => work.pipe(Effect.provide(life.context));
           const saved = () => Effect.map(store.alarms.saved, (rows) => rows.find((a) => a.name === name)?.at ?? null);
-          const input = (m: unknown): Incoming => ({
+          const input = (m: Schema.Json): Incoming => ({
             id: `timer-${++world.n}`,
             envelope: { id: inputId(world.n), by: person, arrivedAt: world.n, input: m },
             sentAt: "2026-11-11T00:00:00Z",
@@ -1812,7 +1812,7 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
   );
   let letters = 0;
   /** A person's input to the writer, as the door delivers it. */
-  const input = (m: unknown) =>
+  const input = (m: Schema.Json) =>
     call(
       runner(PIPE_WRITER).msg({
         id: `input-${++letters}`,
@@ -2279,7 +2279,7 @@ const refuseLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               const view = yield* pipeWorld(open, pipe);
               const before = yield* view.inbox;
               /** One too_big send: its turn answers, and the Cmd gets exactly one answer, `too_big`. */
-              const refused = Effect.fnUntraced(function* (input: unknown, label: string) {
+              const refused = Effect.fnUntraced(function* (input: Schema.Json, label: string) {
                 const answer = yield* view.input(input);
                 expect(
                   Result.isSuccess(answer),
@@ -2678,7 +2678,8 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         },
         { maxLength: 40 },
       );
-      const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+      const same = (a: typeof RequesterModel.Type, b: typeof RequesterModel.Type) =>
+        JSON.stringify(a) === JSON.stringify(b);
       propertyInvariant(
         machine,
         ctx,

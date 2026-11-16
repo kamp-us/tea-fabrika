@@ -978,7 +978,7 @@ const runnerWorld = (
     ProgramLoader.layer(
       { [program.name]: program },
       {
-        work: Effect.fnUntraced(function* (_cmd: unknown) {
+        work: Effect.fnUntraced(function* () {
           if (fault.at === "handler_fail") {
             return yield* Effect.fail(new Error("generated handler failure"));
           }
@@ -1028,7 +1028,7 @@ const runnerWorld = (
     },
     { recovery: { sql: state.sql, name: a.name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
   ).pipe(Layer.provideMerge(observed));
-  const input = (n: number, m: unknown) =>
+  const input = (n: number, m: Schema.Json) =>
     decodeIncoming({
       id: `letter-${n}`,
       envelope: {

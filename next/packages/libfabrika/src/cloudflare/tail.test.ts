@@ -60,7 +60,7 @@ it("U4 U5 U6 tail closes words and never reads trace content or sends it to a Pr
               const env = {
                 PROCESS: {
                   getByName: (object: string) => ({
-                    usage: (rows: unknown) => {
+                    usage: (rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => {
                       calls.push({ object, rows });
                       return Promise.resolve();
                     },

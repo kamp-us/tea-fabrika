@@ -44,6 +44,9 @@ import { Refusal } from "./Program.ts";
 import { RecoveryStore, recoveryStore } from "./RecoveryStore.ts";
 import { type Descriptor, ProgramRunner } from "./Runner.ts";
 
+/** The object's storage calls, as ProcessStore.layer takes them. */
+type ActivityStorage = NonNullable<Parameters<typeof ProcessStore.layer>[1]["storage"]>;
+
 const NAME = "counter:1";
 /** A saved letter's fold that throws RangeError, as `crashAdd` and `savedThrows` do. */
 const SAVED_RANGE = ExitReason.cases.crashed.make({ phase: "saved_letter", error: "RangeError" });
@@ -148,9 +151,9 @@ const world = (
     state.sql.exec("CREATE TABLE p34_activity (key TEXT PRIMARY KEY, value TEXT NOT NULL)");
   }
 
-  const activityStorage = platformActivity
+  const activityStorage: ActivityStorage | undefined = platformActivity
     ? {
-        put: (key: string, value: unknown) =>
+        put: (key, value) =>
           Effect.sync(() => {
             state.sql.exec(
               "INSERT INTO p34_activity (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -158,7 +161,7 @@ const world = (
               JSON.stringify(value),
             );
           }),
-        get: (key: string) =>
+        get: (key) =>
           Effect.sync(() => {
             const [row] = state.sql.exec("SELECT value FROM p34_activity WHERE key=?", key);
             return row === undefined ? undefined : JSON.parse(String(row.value));
@@ -169,7 +172,7 @@ const world = (
     : undefined;
   const alarms: Array<number | null> = [];
   let alarm: number | null = null;
-  const input = (id = "poison", m: unknown = { type: "poison", key: id }): Incoming => ({
+  const input = (id = "poison", m: Schema.Json = { type: "poison", key: id }): Incoming => ({
     id,
     envelope: {
       id: Schema.decodeUnknownSync(InputId)(
@@ -427,7 +430,7 @@ const failed = <A, E, R>(e: Effect.Effect<A, E, R>) =>
 /** A letter accepted before the saved model, as P11 marks one: sent and indexed as placed. */
 const accepted = (
   id: string,
-  m: unknown,
+  m: Schema.Json,
   saved: { saved: unknown; turn: unknown; cmds: ReadonlyArray<unknown> } | null,
 ) =>
   Effect.gen(function* () {

@@ -264,7 +264,7 @@ SettingsTest.suite((recipe, secret) =>
             consumers++;
             return values.get(name);
           },
-          put: async (name: string, value: unknown) => {
+          put: async <T>(name: string, value: T) => {
             captured.descriptors.push({ name, value });
             values.set(name, value);
           },

@@ -13,7 +13,7 @@ import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { Owner, Recipient, Start } from "../processes/Process.ts";
 import { Alarm, CheckedWriter, Incoming, ProgramLoader, Recording, WatcherManager } from "../runtime/Entry.ts";
-import { workerExecution } from "../runtime/Execution.ts";
+import { type Execution, workerExecution } from "../runtime/Execution.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { mailChunk } from "../settings/Declarations.ts";
 import { programBox } from "./box.ts";
@@ -174,7 +174,7 @@ const replyCase = (
           ProgramLoader.layer(
             { reply: program },
             {
-              work: (cmd: unknown) =>
+              work: (cmd) =>
                 Effect.sync(() => {
                   handlerCalls++;
                   expect(cmd).toEqual(work({ n }));
@@ -214,11 +214,11 @@ const replyCase = (
           return box.reply(cmd, outcome);
         },
       });
-      const execution =
+      const execution: Execution =
         adapter === "node"
           ? {
               ...remote,
-              reply: (cmd: unknown, outcome: unknown) =>
+              reply: (cmd, outcome) =>
                 Effect.suspend(() => {
                   before = checkpoint();
                   replyCalls++;

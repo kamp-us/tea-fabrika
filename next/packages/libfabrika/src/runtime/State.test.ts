@@ -1,20 +1,21 @@
 // S3, next/. Saved.upgrade(saved, state, build) returns {saved, ran}; no I/O.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import type { State } from "./Program.ts";
 
 const Model = Schema.Struct({ count: Schema.Int, step: Schema.Int });
 const old = { v: 1, model: { n: 7 }, build: "old-build", after: 12 };
 const N = Schema.Struct({ n: Schema.Int });
 const Count = Schema.Struct({ count: Schema.Int });
 
-const state = (calls: string[] = []) => ({
+const state = (calls: string[] = []): State => ({
   v: 3,
   schema: Model,
   upgrades: [
     {
       name: "n_to_count",
       from: 1,
-      run: (raw: unknown) => {
+      run: (raw) => {
         calls.push("n_to_count");
         return { count: Schema.decodeUnknownSync(N)(raw).n };
       },
@@ -22,7 +23,7 @@ const state = (calls: string[] = []) => ({
     {
       name: "add_step",
       from: 2,
-      run: (raw: unknown) => {
+      run: (raw) => {
         calls.push("add_step");
         return { ...Schema.decodeUnknownSync(Count)(raw), step: 1 };
       },
@@ -98,11 +99,11 @@ describe("S3 saved state and named upgrades", () => {
   it("plant, upgrade in place: even a mutating failed upgrade cannot destroy saved bytes", async () => {
     const { Saved } = await import("./State.ts");
     const raw = JSON.parse(JSON.stringify(old));
-    const upgrades = [
+    const upgrades: State["upgrades"] = [
       {
         name: "mutating",
         from: 1,
-        run: (value: unknown) => {
+        run: (value) => {
           Object.assign(Schema.decodeUnknownSync(Schema.Struct({ n: Schema.Int }))(value), { n: 99 });
 
           if (typeof value === "object" && value !== null) {

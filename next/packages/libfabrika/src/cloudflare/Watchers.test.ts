@@ -34,7 +34,7 @@ describe("watcher delivery evidence, next/", () => {
             transaction: (f) => f(),
             size: () => 0,
           };
-          const publish = Publish.make(sql, (connection: string, client: string, news: unknown) =>
+          const publish = Publish.make(sql, (connection, client, news) =>
             Effect.suspend(() => {
               if (failSend) {
                 return Effect.fail(new Error("unknown send failure"));

@@ -2,7 +2,7 @@
 // Imports are inside each law so an absent planned module reports every law, not zero tests.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
+import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue, type StandardSchema } from "effect";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -707,7 +707,11 @@ describe("P11 program contract and p22 refusal", () => {
               ...save,
               schema: {
                 ...save.schema,
-                ok: { "~standard": { validate: (value: unknown) => Promise.resolve({ value }) } },
+                ok: {
+                  "~standard": {
+                    validate: (value) => Promise.resolve({ value }),
+                  } satisfies Pick<StandardSchema.StandardSchemaV1["~standard"], "validate">,
+                },
               },
             };
             const broken: unknown = { ...spec(), machine: { ...machine, cmds: [asyncSave] } };
@@ -877,8 +881,8 @@ describe("P11 program contract and p22 refusal", () => {
         _tag: "read",
         schema: Schema.Null,
         description: "Read count",
-        answer: (v: unknown) => v,
-      }),
+        answer: (v) => v,
+      } satisfies Input),
     ).toMatchObject({ _tag: "read" });
     expect(decode({ _tag: "write", schema: Msg, description: "Add", personOnly: false })).toMatchObject({
       _tag: "write",
@@ -919,7 +923,7 @@ describe("P11 program contract and p22 refusal", () => {
 
 describe("P34 a program sets its own maxDeliveries, next/", () => {
   // The declaration takes an optional limit, an integer 1 to 32. The default (3) is the wiring's.
-  const withLimit = (fields: object, maxDeliveries: unknown): unknown => ({
+  const withLimit = (fields: object, maxDeliveries: number | string | null): unknown => ({
     ...fields,
     maxDeliveries,
   });
@@ -989,7 +993,7 @@ describe("P34 a program sets its own maxDeliveries, next/", () => {
 // T737 D4 to D6, next/. Program's guards read their input with Predicate now. Independent copies of
 // the checks before that change are the oracles: same acceptance, and the machine and a saved Msg
 // keep their identity, since a Struct projection would strip their fields.
-const oldIsSteps = (u: unknown) =>
+const oldIsSteps = (u: unknown): u is { readonly update: object; readonly init: (...args: never) => unknown } =>
   typeof u === "object" &&
   u !== null &&
   "update" in u &&
@@ -1001,7 +1005,7 @@ const oldIsSteps = (u: unknown) =>
 const oldTyped = (u: unknown): u is { readonly type: string } =>
   typeof u === "object" && u !== null && "type" in u && typeof u.type === "string";
 
-const oldCode = (u: unknown) => typeof u === "function";
+const oldCode = (u: unknown): u is (...args: never) => unknown => typeof u === "function";
 
 /** A made program's `machine`. A value Reflect.get cannot read fails the law, as its throw did. */
 const madeMachine = (made: unknown): unknown => {

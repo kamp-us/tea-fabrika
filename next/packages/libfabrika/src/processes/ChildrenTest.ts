@@ -287,7 +287,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 };
 
 /** A copy with every object's keys in reverse order: equal values, another key order. */
-const reorder = (value: unknown): unknown =>
+const reorder = (value: Schema.Json): Schema.Json =>
   Array.isArray(value)
     ? value.map(reorder)
     : typeof value === "object" && value !== null
@@ -299,7 +299,7 @@ const reorder = (value: unknown): unknown =>
       : value;
 
 /** Equal JSON values, whatever their key order: the model's own comparison. */
-const sorted = (value: unknown): unknown =>
+const sorted = (value: Schema.Json): Schema.Json =>
   Array.isArray(value)
     ? value.map(sorted)
     : typeof value === "object" && value !== null
@@ -310,7 +310,10 @@ const sorted = (value: unknown): unknown =>
         )
       : value;
 
-const sameJson = (a: unknown, b: unknown) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+const sameJson = (a: Schema.Json, b: Schema.Json) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+
+/** A ledger body's field, read as JSON: nothing when it is not. */
+const asJson = Schema.decodeUnknownOption(Schema.Json);
 
 const Json = fc.jsonValue({ maxDepth: 2 }).map((m) => copied({ v: m }).v as Schema.Json);
 
@@ -1196,11 +1199,14 @@ const race = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Tally) =>
       const label = `L2: racer ${index} (${child.id}, ${child.code.program}, ${requester}) at rev ${at}, answered ${shown(answer)}`;
 
       if (p !== undefined && p.rev <= at && child.id === p.id) {
+        const input = child.input;
         const same =
           child.code.program === body(p)["program"] &&
           child.requester.process === (body(p)["requester"] as { process?: string } | undefined)?.process &&
-          ((child.input === undefined && letter === undefined) ||
-            (child.input !== undefined && letter !== undefined && sameJson(child.input, body(letter)["m"])));
+          ((input === undefined && letter === undefined) ||
+            (input !== undefined &&
+              letter !== undefined &&
+              Option.exists(asJson(body(letter)["m"]), (m) => sameJson(input, m))));
 
         if (same) {
           expect(Result.isSuccess(answer) ? answer.success : answer.failure, label).toEqual(

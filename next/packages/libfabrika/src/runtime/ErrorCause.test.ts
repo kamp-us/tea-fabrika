@@ -14,7 +14,7 @@ import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
 import { executionFailure, nodeExecution } from "./Execution.ts";
-import { ProgramDown, stepper } from "./Program.ts";
+import { ProgramDown, type State, stepper } from "./Program.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
@@ -51,11 +51,11 @@ type Faults = {
 };
 
 /** The v1-to-v2 upgrade, which misbehaves as `faults` says. */
-const upgrades = (faults: Faults) => [
+const upgrades = (faults: Faults): State["upgrades"] => [
   {
     from: 1,
     name: "one-to-two",
-    run: (old: unknown) => {
+    run: (old) => {
       const upgrade = faults.upgrade;
 
       if (upgrade !== undefined && "throws" in upgrade) {
@@ -177,7 +177,7 @@ describe("T695, a step's ProgramDown keeps what failed", () => {
 });
 
 describe("T695, saved state keeps what failed", () => {
-  const row = (v: number, model: unknown) => ({ v, build: "b-1", model, after: 0 });
+  const row = (v: number, model: Schema.Json) => ({ v, build: "b-1", model, after: 0 });
 
   // C3, State.ts:36. Plant: replace `row.failure` with `undefined`.
   law(
@@ -280,16 +280,19 @@ describe("T695, a declaration that does not load keeps why", () => {
 const row1 = { v: 1, build: "b-1", model: { count: 1 }, after: 0 };
 
 /** A step, upgrade or load that fails at a site this ticket gave a cause, and the call it makes. */
+/** A value no site accepts, as C7 generates it: a boolean or a failure object. */
+type Bad = boolean | object;
+
 const causedAt = {
-  saved_model: (bad: unknown) => nodeExecution(program({})).init({ count: bad }),
-  step_model: (bad: unknown) => nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, { type: "inc" }),
-  step_view: (bad: unknown) => nodeExecution(program({ view: { count: bad } })).step({ count: 1 }, { type: "inc" }),
-  refusal: (bad: unknown) =>
+  saved_model: (bad: Bad) => nodeExecution(program({})).init({ count: bad }),
+  step_model: (bad: Bad) => nodeExecution(program({ model: { count: bad } })).step({ count: 1 }, { type: "inc" }),
+  step_view: (bad: Bad) => nodeExecution(program({ view: { count: bad } })).step({ count: 1 }, { type: "inc" }),
+  refusal: (bad: Bad) =>
     nodeExecution(program({ refusal: { ...Refusal, reason: bad } })).step({ count: 1 }, { type: "inc" }),
-  saved_row: (bad: unknown) => nodeExecution(program({})).upgrade({ ...row1, after: bad }),
-  upgrade_throws: (bad: unknown) => nodeExecution(program({ upgrade: { throws: bad } })).upgrade(row1),
-  upgrade_gives: (bad: unknown) => nodeExecution(program({ upgrade: { gives: { count: bad } } })).upgrade(row1),
-  load: (bad: unknown) => nodeExecution({ name: bad, v: "1" }).init(null),
+  saved_row: (bad: Bad) => nodeExecution(program({})).upgrade({ ...row1, after: bad }),
+  upgrade_throws: (bad: Bad) => nodeExecution(program({ upgrade: { throws: bad } })).upgrade(row1),
+  upgrade_gives: (bad: Bad) => nodeExecution(program({ upgrade: { gives: { count: bad } } })).upgrade(row1),
+  load: (bad: Bad) => nodeExecution({ name: bad, v: "1" }).init(null),
 } as const;
 
 // C7, Program.ts:379 and Runner.ts:742. A ProgramDown's class is the code-defined summary that

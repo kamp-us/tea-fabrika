@@ -18,7 +18,7 @@ import { ExitReason } from "../processes/ExitReason.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
 import { Activity, Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
-import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Alarm, CheckedWriter, type Incoming, type Loaded, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -227,20 +227,20 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
         const real = yield* ProgramLoader;
         return {
           load: (name: string, build?: string) =>
-            Effect.map(real.load(name, build), (loaded) => ({
+            Effect.map(real.load(name, build), (loaded): Loaded => ({
               ...loaded,
               execution: {
                 ...loaded.execution,
                 // Transport loss decides nothing about the input: the program never sees it.
-                step: (model: unknown, msg: unknown) =>
+                step: (model, msg) =>
                   controls.transport
                     ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                     : loaded.execution.step(model, msg),
-                fresh: (model: unknown, msg: unknown) =>
+                fresh: (model, msg) =>
                   controls.transport
                     ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                     : loaded.execution.fresh(model, msg),
-                update: (model: unknown, msg: unknown) =>
+                update: (model, msg) =>
                   controls.transport
                     ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                     : loaded.execution.update(model, msg),
@@ -370,7 +370,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
 
     expect.fail("recovery did not settle to a live successor");
   });
-  const input = (id: string, m: unknown): Incoming => ({
+  const input = (id: string, m: Schema.Json): Incoming => ({
     id,
     envelope: {
       id: Schema.decodeUnknownSync(InputId)(`input_0000000000e008${(++inputs).toString(16).padStart(12, "0")}`),
@@ -385,7 +385,7 @@ const world = Effect.fnUntraced(function* (rig: Rig, limits: Limits) {
   let inputs = 0;
   const bodies = new Map<string, Incoming>();
   /** The same delivery each time a letter is resent: its id and its body. */
-  const letter = (id: string, m: unknown): Incoming => {
+  const letter = (id: string, m: Schema.Json): Incoming => {
     const known = bodies.get(id) ?? input(id, m);
     bodies.set(id, known);
     return known;

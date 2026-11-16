@@ -43,12 +43,12 @@ const failures: fc.Arbitrary<object> = fc.oneof(
   fc.record({ code: fc.string(), detail: fc.jsonValue() }, { noNullPrototype: true }),
 );
 
-/** A platform object whose every method rejects with `failure`, whatever its name. */
-const rejecting = <A>(failure: unknown): A =>
+/** A platform object whose every method rejects with `cause`, whatever its name. */
+const rejecting = <A>(cause: unknown): A =>
   new Proxy(
     {},
     {
-      get: (_, key) => (key === "then" ? undefined : () => Promise.reject(failure)),
+      get: (_, key) => (key === "then" ? undefined : () => Promise.reject(cause)),
     },
   ) as A;
 
@@ -56,12 +56,12 @@ const rejecting = <A>(failure: unknown): A =>
 const fake = <A>(value: object): A => value as A;
 
 /** Every client the shared callback serves, built on a rejecting platform object. */
-const clients = (failure: unknown): Record<string, Record<string, (...args: Array<never>) => unknown>> => ({
-  project: ProjectClient.make(rejecting(failure)),
-  process: ProcessClient.make(rejecting(failure)),
-  gateway: GatewayClient.make(rejecting(failure)),
-  storage: StorageClient.make(rejecting(failure)),
-  bucket: BucketClient.make(rejecting(failure)),
+const clients = (cause: unknown): Record<string, Record<string, (...args: Array<never>) => unknown>> => ({
+  project: ProjectClient.make(rejecting(cause)),
+  process: ProcessClient.make(rejecting(cause)),
+  gateway: GatewayClient.make(rejecting(cause)),
+  storage: StorageClient.make(rejecting(cause)),
+  bucket: BucketClient.make(rejecting(cause)),
 });
 
 const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
@@ -188,7 +188,10 @@ describe("T695, the worker loader keeps why a program did not load", () => {
 });
 
 /** A Durable Object state with this name, and storage whose `get` answers `saved`. */
-const objectState = (name: unknown, saved: unknown = undefined): DurableObjectState =>
+const objectState = (
+  name: string | number | undefined,
+  saved: Schema.Json | undefined = undefined,
+): DurableObjectState =>
   fake({
     id: { name },
     storage: {

@@ -31,7 +31,7 @@ import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { Supervision } from "./internal/supervisor.ts";
 import { MailDelivery, MailDeliveryError } from "./MailDelivery.ts";
 import type { RuntimeRecord } from "./ProcessStore.ts";
-import { Program, ProgramDown, Write } from "./Program.ts";
+import { Program, ProgramDown, type State, Write } from "./Program.ts";
 import { recoveryStore } from "./RecoveryStore.ts";
 import { ProgramRunner, type Swapped } from "./Runner.ts";
 import { Queued, send } from "./Send.ts";
@@ -119,13 +119,13 @@ const updateFor = (spec: Spec, model: CounterModel, m: { readonly type: string }
           : model;
 
 /** The chain: one upgrade per number below `v`, except the gaps. A field variant's upgrades add `step`. */
-const upgradesFor = (spec: Spec) =>
+const upgradesFor = (spec: Spec): State["upgrades"] =>
   Array.from({ length: spec.v - 1 }, (_, i) => i + 1)
     .filter((from) => !spec.gaps.includes(from))
     .map((from) => ({
       name: `${spec.shape}_${from}`,
       from,
-      run: (m: unknown): unknown =>
+      run: (m) =>
         spec.shape === "field" && typeof m === "object" && m !== null && !("step" in m) ? { ...m, step: 1 } : m,
     }));
 
@@ -331,7 +331,7 @@ const loader = (code: Code) => ({
           ProgramLoader.layer(
             { [PROGRAM]: programFor(spec) },
             {
-              ping: (cmd: unknown) =>
+              ping: (cmd) =>
                 Effect.gen(function* () {
                   if (code.cmdStarted !== null) {
                     yield* Deferred.succeed(code.cmdStarted, undefined);
@@ -369,16 +369,16 @@ const loader = (code: Code) => ({
         handler: loaded.handler,
         execution: {
           ...execution,
-          init: (saved: unknown) =>
+          init: (saved) =>
             Effect.suspend(() => {
               code.calls.inits.push(build);
               return execution.init(saved);
             }),
-          step: (model: unknown, m: unknown) => Effect.andThen(gated, execution.step(model, m)),
+          step: (model, m) => Effect.andThen(gated, execution.step(model, m)),
           // Main's runner steps an admitted letter through `update`, so the same gate holds it.
-          update: (model: unknown, m: unknown) => Effect.andThen(gated, execution.update(model, m)),
+          update: (model, m) => Effect.andThen(gated, execution.update(model, m)),
         },
-      };
+      } satisfies Loaded;
     }),
 });
 

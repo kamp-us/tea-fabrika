@@ -51,7 +51,7 @@ const from = (over: Partial<From> = {}): From => ({
 
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 /** A value as JSON text carries it, so -0 and other values JSON cannot keep are normalized. */
-const copied = (value: unknown): Schema.Json => decodeJson(JSON.stringify(value));
+const copied = (value: fc.JsonValue): Schema.Json => decodeJson(JSON.stringify(value));
 
 /** Letter bodies the walk cycles through, as a program would send them. */
 const Bodies = fc.array(
@@ -149,7 +149,7 @@ const mail = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       return { answer, rows: count.rows - before.rows, bytes: count.bytes - before.bytes };
     });
     /** A new delivery of the next command, with one of the walk's bodies. */
-    const fresh = (m: unknown) =>
+    const fresh = (m: Schema.Json | undefined) =>
       deliver({ command: `${source.process}/${++sent}/0`, source, to: RESPONDER, m, from: from() });
     let filled = 0;
     /** T1041: one letter straight into the responder's inbox, of about `size` bytes, counted by nothing. */

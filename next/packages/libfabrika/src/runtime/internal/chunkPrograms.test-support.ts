@@ -13,7 +13,7 @@
 // `type` (`CmdInput` is `{ type?: never }`, and `Cmd.make`'s value is `{ ...input, type: name }`,
 // @demlik/tea 0.25.0), so a `type` operand would be overwritten by "send_chunks".
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { flow, Schema } from "effect";
 import { Program } from "../Program.ts";
 import { send, sendChunks } from "../Send.ts";
 
@@ -56,20 +56,19 @@ export const madeItems = (n: number, count: number, size: number, tail: number) 
   Array.from({ length: count }, (_, i) => ({ s: n, i, pad: "x".repeat(i === count - 1 ? tail : size) }));
 
 /** A plain send's number, read back from the letter its answer echoes. */
-const numbered = (m: unknown): number => {
-  const plain = Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ n: Schema.Int }) }))(m);
-  return plain._tag === "Some" ? plain.value.m.n : -1;
-};
+const numbered = flow(
+  Schema.decodeUnknownOption(Schema.Struct({ m: Schema.Struct({ n: Schema.Int }) })),
+  (plain): number => (plain._tag === "Some" ? plain.value.m.n : -1),
+);
 
 const decodeEcho = Schema.decodeUnknownOption(
   Schema.Struct({ cmd: Schema.Struct({ to: Schema.String, as: Schema.String }) }),
 );
 
 /** A chunked send's echoed `{to, as}`, read back from its answer's Cmd; nothing when it names none. */
-const address = (m: unknown): Partial<typeof Answer.Type> => {
-  const echo = decodeEcho(m);
-  return echo._tag === "Some" ? { to: echo.value.cmd.to, as: echo.value.cmd.as } : {};
-};
+const address = flow(decodeEcho, (echo): Partial<typeof Answer.Type> =>
+  echo._tag === "Some" ? { to: echo.value.cmd.to, as: echo.value.cmd.as } : {},
+);
 
 const answered = (s: WriterModel, n: number, answer: string, extra: Partial<typeof Answer.Type> = {}) => ({
   ...s,

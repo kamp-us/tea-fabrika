@@ -1,5 +1,6 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -8,8 +9,11 @@ type Patch = {
   readonly value?: unknown;
 };
 
-const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
-  let root = structuredClone(before);
+/** What the applicator answers, checked as JSON: the check hands back the same value. */
+const json = Schema.decodeUnknownSync(Schema.Json);
+
+const apply = (before: Schema.Json, patches: ReadonlyArray<Patch>): unknown => {
+  let root: unknown = structuredClone(before);
 
   for (const patch of patches) {
     if (patch.path === "") {
@@ -21,7 +25,7 @@ const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
       .slice(1)
       .split("/")
       .map((s) => s.replaceAll("~1", "/").replaceAll("~0", "~"));
-    let object = root;
+    let object: unknown = root;
 
     for (const key of keys.slice(0, -1)) {
       object = Reflect.get(Object(object), key);
@@ -71,10 +75,10 @@ describe("p22 whole view plus patches", () => {
     const { diff } = await import("./Patch.ts");
     fc.assert(
       fc.property(fc.array(fc.jsonValue(), { minLength: 2, maxLength: 12 }), (views) => {
-        let watcher: unknown = structuredClone(views[0]);
+        let watcher = json(views[0]);
 
         for (const next of views.slice(1)) {
-          watcher = apply(watcher, diff(watcher, next));
+          watcher = json(apply(watcher, diff(watcher, next)));
           expect(watcher).toEqual(next);
         }
       }),
@@ -97,7 +101,7 @@ describe("p22 whole view plus patches", () => {
 type Json = null | boolean | number | string | ReadonlyArray<Json> | { readonly [key: string]: Json };
 
 /** The paths `value` holds now, as pointer tokens, the root included. */
-const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyArray<string>> => {
+const paths = (value: fc.JsonValue | undefined, at: ReadonlyArray<string> = []): Array<ReadonlyArray<string>> => {
   const out: Array<ReadonlyArray<string>> = [at];
 
   if (Array.isArray(value)) {
@@ -113,11 +117,11 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
   return out;
 };
 
-const read = (value: unknown, at: ReadonlyArray<string>): unknown =>
+const read = (value: fc.JsonValue | Schema.Json, at: ReadonlyArray<string>): unknown =>
   at.reduce<unknown>((v, key) => (typeof v === "object" && v !== null ? Reflect.get(v, key) : undefined), value);
 
 /** `value` with `f` done to the container at `at`, copied on the way down. */
-const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => unknown): unknown => {
+const change = (value: fc.JsonValue, at: ReadonlyArray<string>, f: (v: fc.JsonValue) => fc.JsonValue): fc.JsonValue => {
   const [key, ...rest] = at;
 
   if (key === undefined) {
@@ -126,11 +130,11 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
 
   if (Array.isArray(value)) {
     const copy = [...value];
-    copy[Number(key)] = change(copy[Number(key)], rest, f);
+    copy[Number(key)] = change(copy[Number(key)]!, rest, f);
     return copy;
   }
 
-  return { ...(value as Record<string, unknown>), [key]: change(Reflect.get(Object(value), key), rest, f) };
+  return { ...(value as Record<string, fc.JsonValue>), [key]: change(Reflect.get(Object(value), key), rest, f) };
 };
 
 /** One generated edit: which path the value holds now, and what to do there. */
@@ -145,7 +149,7 @@ type EditChoice = typeof editChoice extends fc.Arbitrary<infer E> ? E : never;
 
 /** `before` changed by edits chosen from the paths it holds at each step: replace a value, drop a key or
  *  an item, or add one. */
-const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
+const edited = (before: fc.JsonValue, edits: ReadonlyArray<EditChoice>): fc.JsonValue =>
   edits.reduce((value, e) => {
     const all = paths(value);
     const at = all[e.pick % all.length]!;
@@ -162,7 +166,9 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
       return change(value, parent, (p) =>
         Array.isArray(p)
           ? p.filter((_, i) => String(i) !== last)
-          : Object.fromEntries(Object.entries(Object(p)).filter(([k]) => k !== last)),
+          : typeof p === "object" && p !== null
+            ? Object.fromEntries(Object.entries(p).filter(([k]) => k !== last))
+            : p,
       );
     }
 

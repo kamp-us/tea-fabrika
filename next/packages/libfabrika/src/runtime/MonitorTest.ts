@@ -216,7 +216,7 @@ const writerFrom = (): From => ({
 const inputId = (n: number) =>
   Schema.decodeUnknownSync(InputId)(`input_0000000000e00a${n.toString(16).padStart(12, "0")}`);
 
-const letter = (n: number, input: unknown): Incoming => ({
+const letter = (n: number, input: Schema.Json): Incoming => ({
   id: `letter-${n}`,
   envelope: { id: inputId(n), by: person, arrivedAt: 1794099600000 + n, input },
   sentAt: "2026-11-15T01:00:00Z",
@@ -523,7 +523,7 @@ const host = Effect.fnUntraced(function* (
     );
     const own = Layer.mergeAll(
       ProgramLoader.layer(PROGRAMS, {
-        ping: (cmd: unknown) =>
+        ping: (cmd) =>
           Effect.sync(() => {
             const ref = typeof cmd === "object" && cmd !== null && "ref" in cmd ? String(cmd.ref) : "";
             world.pings.push(ref);
@@ -611,7 +611,7 @@ const walk = (
     const wake = Effect.fnUntraced(function* (name: string) {
       yield* answers(runner(name).due(yield* now), `${name}'s wake`);
     });
-    const say = Effect.fnUntraced(function* (name: string, input: unknown) {
+    const say = Effect.fnUntraced(function* (name: string, input: Schema.Json) {
       return yield* answers(runner(name).msg(letter(++world.n, input)), `${name}'s ${JSON.stringify(input)}`);
     });
     /** Supervision ends a watched life; a retried exit, with the same reason, answers again. */

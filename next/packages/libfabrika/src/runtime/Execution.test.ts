@@ -3,9 +3,9 @@
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Result, Schema } from "effect";
+import { Cause, Effect, Exit, flow, Result, Schema } from "effect";
 import * as fc from "fast-check";
-import { executionFailure, nodeExecution, workerExecution } from "./Execution.ts";
+import { executionFailure, nodeExecution, workerExecution, type Execution, type ExecutionCalls } from "./Execution.ts";
 import { stepper, Step, type Admission, type Prepared, type ProgramDown } from "./Program.ts";
 import { Saved } from "./State.ts";
 
@@ -87,17 +87,17 @@ describe("P13 split execution", () => {
 
                 return Result.getOrThrow(f());
               };
-              const calls = {
-                init: async (s: unknown) => pure.init(s),
-                step: async (s: unknown, m: unknown) => {
+              const calls: ExecutionCalls = {
+                init: async (s) => pure.init(s),
+                step: async (s, m) => {
                   composed++;
                   return pure.step(s, m);
                 },
-                fresh: async (s: unknown, m: unknown) => invoke(() => pure.fresh(s, m)),
-                update: async (s: unknown, m: unknown) => invoke(() => pure.update(s, m)),
+                fresh: async (s, m) => invoke(() => pure.fresh(s, m)),
+                update: async (s, m) => invoke(() => pure.update(s, m)),
                 audit: async () => ({ _tag: "ok", value: { type: "inc" } }),
-                fold: async (s: unknown, m: unknown) => pure.fold(s, m),
-                upgrade: async (saved: unknown) => ({ saved, ran: [] }),
+                fold: async (s, m) => pure.fold(s, m),
+                upgrade: async (saved) => ({ saved, ran: [] }),
                 reply: async () => null,
               };
 
@@ -199,14 +199,6 @@ describe("P13 split execution", () => {
   });
 });
 
-type Execution = {
-  init: (saved: unknown) => Effect.Effect<Step, unknown>;
-  step: (model: unknown, msg: unknown) => Effect.Effect<Step, unknown>;
-  fold: (model: unknown, msg: unknown) => Effect.Effect<Step, unknown>;
-  upgrade: (saved: unknown) => Effect.Effect<unknown, unknown>;
-  reply: (cmd: unknown, outcome: unknown) => Effect.Effect<unknown, unknown>;
-};
-
 describe("P12 Effect execution adapter", () => {
   it("P11 handoff plant: treating an RPC Promise as a pure Step breaks checked parity", async () => {
     await fc.assert(
@@ -220,16 +212,16 @@ describe("P12 Effect execution adapter", () => {
               const node: Execution = nodeExecution(declared);
               // Independent pure implementation stays in P11. RPC introduces a genuine async boundary.
               const remote: Execution = workerExecution({
-                init: async (saved: unknown) => pure.init(saved),
-                step: async (model: unknown, msg: unknown) => pure.step(model, msg),
-                fresh: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.fresh(model, msg)),
-                update: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.update(model, msg)),
-                audit: async (msg: unknown) => ({
+                init: async (saved) => pure.init(saved),
+                step: async (model, msg) => pure.step(model, msg),
+                fresh: async (model, msg) => Result.getOrThrow(pure.fresh(model, msg)),
+                update: async (model, msg) => Result.getOrThrow(pure.update(model, msg)),
+                audit: async (msg) => ({
                   _tag: "ok",
                   value: await Effect.runPromise(nodeExecution(declared).audit(msg)),
                 }),
-                fold: async (model: unknown, msg: unknown) => pure.fold(model, msg),
-                upgrade: async (saved: unknown) => Saved.upgrade(saved, declared.state, "build-a"),
+                fold: async (model, msg) => pure.fold(model, msg),
+                upgrade: async (saved) => Saved.upgrade(saved, declared.state, "build-a"),
                 reply: rejectedRpc,
               });
               expect(yield* node.init(saved)).toEqual(pure.init(saved));
@@ -298,9 +290,9 @@ describe("P12 Effect execution adapter", () => {
                   {
                     name: "rename",
                     from: 1,
-                    run: (raw: unknown) => ({
-                      count: Schema.decodeUnknownSync(Schema.Struct({ total: Schema.Int }))(raw).total,
-                    }),
+                    run: flow(Schema.decodeUnknownSync(Schema.Struct({ total: Schema.Int })), ({ total }) => ({
+                      count: total,
+                    })),
                   },
                 ],
               },

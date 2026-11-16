@@ -698,7 +698,7 @@ const walk = (
     const inContext = <A, E>(effect: Effect.Effect<A, E, Layer.Success<ReturnType<Store["shared"]>>>) =>
       effect.pipe(Effect.provide(life.context));
     const all = (extra: Iterable<string> = []) => inContext(store.entries([...world.names.keys(), ...extra]));
-    const letter = (input: unknown, by: Writer = person): Incoming => {
+    const letter = (input: object, by: Writer = person): Incoming => {
       const n = ++world.n;
       return {
         id: `letter-${n}`,
@@ -718,7 +718,7 @@ const walk = (
           return answer;
         }),
       );
-    const door = Effect.fnUntraced(function* (name: string, input: unknown, by: Writer = person) {
+    const door = Effect.fnUntraced(function* (name: string, input: object, by: Writer = person) {
       const runner = yield* life.runner(name);
       yield* call(runner.msg(letter(input, by)), `${name}'s letter`);
     });

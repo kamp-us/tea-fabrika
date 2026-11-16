@@ -49,13 +49,13 @@ const thrown = fc.oneof(
   fc.func(fc.jsonValue()),
 );
 
-const failureClass = (value: unknown) =>
-  value instanceof Error ? value.constructor.name : value === null ? "null" : typeof value;
+const failureClass = (cause: unknown) =>
+  cause instanceof Error ? cause.constructor.name : cause === null ? "null" : typeof cause;
 
 type Policy = typeof Supervision.Type.policy;
 type Policies = { program?: Policy; wiring?: Policy | null };
 
-const world = (adapter: "node" | "worker", limit: number | undefined, failure: unknown, policies?: Policies) => {
+const world = (adapter: "node" | "worker", limit: number | undefined, cause: unknown, policies?: Policies) => {
   const ledger = storage(),
     state = storage();
   const next = ids(...PIDS);
@@ -81,7 +81,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
           calls++;
 
           if (move === "throw") {
-            throw failure;
+            throw cause;
           }
 
           return [{ count: s.count + m.n }, []];

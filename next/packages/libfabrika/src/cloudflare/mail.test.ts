@@ -471,7 +471,7 @@ const project = Effect.fnUntraced(function* () {
       },
       transactionSync: sql.transaction,
       get: async (key: string) => values.get(key),
-      put: async (key: string, value: unknown) => {
+      put: async <T>(key: string, value: T) => {
         values.set(key, value);
       },
     },

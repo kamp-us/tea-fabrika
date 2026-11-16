@@ -22,15 +22,15 @@ const faults = [
   { name: "WireFault", make: (message: string): Error => new WireFault(message) },
 ] as const;
 
-/** A platform stub whose every method rejects with `fault`, standing in for a binding, storage or
+/** A platform stub whose every method rejects with `cause`, standing in for a binding, storage or
  *  bucket; a method `own` holds answers as `own` says. */
-const rejecting = <A>(fault: unknown, own: object = {}) =>
+const rejecting = <A>(cause: unknown, own: object = {}) =>
   new Proxy(own, {
     get: (target, key) =>
       Reflect.has(target, key)
         ? Reflect.get(target, key)
         : async () => {
-            throw fault;
+            throw cause;
           },
   }) as A;
 
@@ -79,7 +79,7 @@ it.effect.prop(
 const processMethods = Object.keys(ProcessClient.make(rejecting(new Error("probe"))));
 
 /** A Process stub whose every method resolves with `answer`, as the object's bridge does. */
-const answeringProcess = <A>(answer: unknown) => new Proxy({}, { get: () => async () => answer }) as A;
+const answeringProcess = <A>(answer: object) => new Proxy({}, { get: () => async () => answer }) as A;
 
 it.effect.prop(
   "a LedgerError the Process object fails with crosses ProcessClient as itself, never as unreachable by translation",
@@ -135,7 +135,7 @@ it.effect.prop(
 const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
 
 /** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
-const answering = <A>(answer: unknown) =>
+const answering = <A>(answer: object) =>
   new Proxy(
     {},
     {

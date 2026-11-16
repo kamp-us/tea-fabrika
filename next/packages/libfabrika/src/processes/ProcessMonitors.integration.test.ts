@@ -476,7 +476,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
 // ref and target, live or canceled. Anything else is plain mail. Watches key on (recipient, ref).
 const toW = Recipient.cases.process.make({ process: W });
 
-const send = (store: Storage, id: string, m: unknown) =>
+const send = (store: Storage, id: string, m: Schema.Json) =>
   Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from())).pipe(Effect.provide(manager(store)));
 
 const demonitored = (store: Storage) =>

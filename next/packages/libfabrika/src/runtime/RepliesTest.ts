@@ -275,7 +275,7 @@ const walk = (
       const name = nth(NAMES, step.kind);
       return { name, id: reuse?.id ?? `${step.id}-${n}` };
     };
-    const note = (error: unknown) => {
+    const note = (error: Module.RepliesError | null) => {
       errors.push(String(error), JSON.stringify(error), Cause.pretty(Cause.fail(error)));
     };
 

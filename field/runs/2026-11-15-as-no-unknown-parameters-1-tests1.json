@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-as-no-unknown-parameters-1-tests1",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T21:51:40-08:00",
+  "ended": "2026-11-15T22:17:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for anti-slop judgment slice AS-no-unknown-parameters-1, in next/: anti-slop/no-unknown-parameters over next/packages/libfabrika/src/runtime, cloudflare, processes and tezgah, counted with the rule forced to error in a scratch config outside the repo. On origin/main at bcad0080d (which holds 9186e6c49) the rule met 378 hits: 78 in pull request 1366's files (14 exam, 64 product; never touched, waiting on 1366), 120 in product files (left for the build step), and 180 in exam paths. Of the 180, 139 were fixed by hand edits (exact string replacements; no quick fix exists for this rule) and 41 are left, each listed below with why. No disable line was committed: the rule is not on in these folders and no lock line may be written in this slice, so an ignore line would be an unused oxlint-disable, which pnpm lint refuses. No .oxlintrc.json change, no assertion deleted or narrowed, no law loosened. The fixes take the type from where it already lives: the product contract a fixture implements (ExecutionCalls, Execution, Loaded, State['upgrades'], ClientChecks, Input, a Handler, Publish.make, ProcessStore.layer's storage), Schema.Json or fast-check's JsonValue where the value is JSON, a decode with a Schema first (flow with Schema.decodeUnknownSync or decodeUnknownOption), a type guard for an oracle predicate, the generator's own type (boolean | object, number | string | null), the platform's own generic put<T>, and the rule's own cause name for a thrown or rejected value. Left, by kind. (a) A helper that feeds a door that decodes with a Schema first, 0563's ignore-line kind, which waits for the folder's lock line: runtime/StartChildTest.ts:213, runtime/internal/childStarter.test-support.ts:78, runtime/Program.test.ts:187, 366, 930, 1644, runtime/Built.test.ts:68, processes/MonitorsTest.ts:170, processes/Mailbox.test.ts:69, cloudflare/supervision.laws.integration.test.ts:285, cloudflare/readers.laws.test.ts:297, 351, 354, 357. (b) A law's reader of a door's raw input or output, where the honest type is unknown and neither 0563 kind fits: runtime/Program.test.ts:942, 1011, 1357, 1399, runtime/Client.laws.test.ts:99, 504, 507, runtime/StartChildTest.ts:294, runtime/NemesisTest.ts:130. (c) A JSON.stringify replacer or a logger's message map, where the platform types the value as any, so dropping the annotation trades unknown for any: runtime/ProgramMailTest.ts:270, cloudflare/mail.test.ts:197, runtime/internal/supervisor.laws.test.ts:64 and 65, runtime/IsolateUsageTest.ts:328. (d) A platform double behind an as-unknown-as-Env or fake cast whose product method takes unknown: runtime/StartChildTest.ts:472 (ProgramRunner msg, Runner.ts in 1366), cloudflare/reload.laws.test.ts:209 and 211 (ProjectService codeInstall and codeFailed, runtime.ts in 1366), cloudflare/fetch.test.ts:63, cloudflare/connection.test.ts:125 and 145, cloudflare/entry-flows.laws.test.ts:146, 292 and 298, cloudflare/mail.test.ts:217 and 622, cloudflare/ProjectAuditTest.ts:52 and 178. Product hits left for the build step, 120: runtime/Execution.ts 36, runtime/Program.ts 20, cloudflare/box.ts 19, runtime/Patch.ts 8, runtime/Client.ts 7, cloudflare/bindings.ts 6, cloudflare/objects.ts 3, cloudflare/SettingsInput.ts 3, and 1 or 2 each in Mailbox.ts, Process.ts, internal/programMail.ts, State.ts, Built.ts, tail.ts, Chunk.ts, mail.ts, Publish.ts, Audit.ts, Entry.ts, platform.ts. Waiting on 1366, 78: cloudflare/runtime.ts 28, runtime/Runner.ts 23, runtime/Runner.integration.test.ts 7, runtime/RecoveryStore.ts 7, runtime/ProcessStore.ts 3, runtime/RuntimeCauseTest.ts 3, cloudflare/connection.ts 3, runtime/ProcessStore.integration.test.ts 2, cloudflare/ObjectService.test.ts 1, cloudflare/alarm.laws.test.ts 1.",
+  "plants": [
+    {
+      "law": "anti-slop/no-unknown-parameters, forced to error in the scratch config, on next/packages/libfabrika/src/tezgah",
+      "plant": "Layout.laws.test.ts encode given back its `w: unknown` parameter: the rule reports Layout.laws.test.ts:55 again; restored by copy, the folder counts 0",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 26,
+  "note": "tezgah is now at zero, so pnpm lint's anti-slop audit fails with one line: .oxlintrc.json: anti-slop/no-unknown-parameters has no hit left in next/packages/libfabrika/src/tezgah/**: add the folder to its block (0563). The owner ruling holds the lock lines for one later pull request, so that line is left for it; every other part of pnpm lint (run with NODE_OPTIONS=--max-old-space-size=6144) passes, as does the list ratchet. libfabrika's own tsc --noEmit -p . passes (0 errors) after the edits. The 28 plain test files that reach the changed files pass at the step's working tree (219 tests); the 21 integration files they reach were refused locally by the test config's host-only guard (decision 0178) and are left to CI's full run. Ticket 1053's open branch fabrikalfa/unknown-params also edits runtime/Patch.test.ts, Client.laws.test.ts, connection.test.ts, platform.test.ts, readers.laws.test.ts and Watchers.test.ts, so the integrator may meet text conflicts there.",
+  "step": "tests"
+}

@@ -23,7 +23,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { flow, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -55,9 +55,9 @@ const ctx = (p: typeof Policy.Type = policy) => ({ policy: p, process: A, name: 
 
 const step = (model: Model, msg: Msg): Model => applyCell(supervisor, model, msg as never)[0];
 
-const valid = (model: unknown): boolean => Schema.is(Supervision)(model);
+const valid = Schema.is(Supervision);
 
-const roundTrip = (model: Model): unknown =>
+const roundTrip = (model: Model): Schema.Json =>
   Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(Schema.encodeSync(Supervision)(model)));
 
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
@@ -68,7 +68,7 @@ const canon = (value: unknown): string =>
       : v,
   );
 
-const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknownResult(Supervision)(raw));
+const decodes = flow(Schema.decodeUnknownResult(Supervision), Result.isSuccess);
 
 /** Accepted policies: every brake reachable (the waits of one window fit inside it). */
 const policies: fc.Arbitrary<typeof Policy.Type> = fc
@@ -1014,7 +1014,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
 });
 
 /** Invalid copies of one saved model: a wrong tag, a missing payload, an old version, a broken identity. */
-const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
+const mutations = (saved: Schema.Json, pick: number): ReadonlyArray<unknown> => {
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
   const fields = Object.keys(journal).filter((key) => key !== "_tag");

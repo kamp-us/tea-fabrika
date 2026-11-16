@@ -12,7 +12,7 @@ import { Mailbox } from "../processes/Mailbox.ts";
 import { Start } from "../processes/Process.ts";
 import { ProcessManager } from "../processes/ProcessManager.ts";
 import type { Sql } from "../Sql.ts";
-import { Alarm, CheckedWriter, type Incoming, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
+import { Alarm, CheckedWriter, type Incoming, type Loaded, ProgramLoader, Recording, WatcherManager } from "./Entry.ts";
 import { ANY_CHUNK } from "./internal/chunk.test-support.ts";
 import { defaultPolicy, supervisor, Supervision } from "./internal/supervisor.ts";
 import { ProcessStore } from "./ProcessStore.ts";
@@ -426,11 +426,11 @@ const walk = Effect.fnUntraced(function* (
         const loaded = yield* ProgramLoader.use((l) => l.load(PROGRAM));
         return {
           load: () =>
-            Effect.succeed({
+            Effect.succeed<Loaded>({
               ...loaded,
               execution: {
                 ...loaded.execution,
-                fresh: (s: unknown, m: unknown) =>
+                fresh: (s, m) =>
                   Effect.gen(function* () {
                     if (enabled.includes("admission_save")) {
                       expect(
@@ -445,7 +445,7 @@ const walk = Effect.fnUntraced(function* (
                       ? Effect.fail(new ProgramDown({ reason: "step", source: "rpc" }))
                       : loaded.execution.fresh(s, m);
                   }),
-                update: (s: unknown, m: unknown) =>
+                update: (s, m) =>
                   Effect.gen(function* () {
                     control.updates++;
 

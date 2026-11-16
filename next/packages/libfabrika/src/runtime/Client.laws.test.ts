@@ -27,7 +27,7 @@ import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { ProcessId } from "../ProcessId.ts";
-import type { Client, ClientMsg, NameFold, Pending } from "./Client.ts";
+import type { Client, ClientChecks, ClientMsg, NameFold, Pending } from "./Client.ts";
 import { clientMachineFor, foldName, resolveName, sendable } from "./Client.ts";
 import { apply, diff } from "./Patch.ts";
 
@@ -135,8 +135,8 @@ const edit = (kind: Kind, value: unknown, e: number, at: number, word: string): 
 };
 
 /** Each pid's own decoder, counting which pid's decoder checked which notice. */
-const checksWith = (kinds: ReadonlyMap<string, Kind>, log: Array<string>) => ({
-  decode: (pid: string) => (view: unknown) => {
+const checksWith = (kinds: ReadonlyMap<string, Kind>, log: Array<string>): ClientChecks => ({
+  decode: (pid) => (view) => {
     log.push(pid);
     return Schema.decodeUnknownSync(SHAPES[kinds.get(pid) ?? "list"])(view);
   },
@@ -385,7 +385,7 @@ const brainStep = (b: Brain, c: ViewChoice): unknown => {
  *  list of ops at all. */
 const corrupt = (b: Brain, c: ViewChoice): unknown => {
   const rev = b.rev;
-  const next = (patch: unknown) => ({ type: "patch", base: rev, rev: rev + 1, patch });
+  const next = (patch: Schema.Json) => ({ type: "patch", base: rev, rev: rev + 1, patch });
   const wrongType =
     b.kind === "list"
       ? [{ op: "replace", path: "/left", value: "three" }]
@@ -497,7 +497,9 @@ const viewWalks = fc.tuple(
 );
 
 const pidKind = (pid: string): Kind => pid.slice(pid.lastIndexOf("_") + 1) as Kind;
-const decodes = (pid: string, view: unknown): boolean => Schema.is(SHAPES[pidKind(pid)])(view);
+
+const decodes = (pid: string, view: unknown): view is ListView | TagsView | RecordView =>
+  Schema.is(SHAPES[pidKind(pid)])(view);
 
 const noteType = (note: unknown): unknown =>
   typeof note === "object" && note !== null ? Reflect.get(note, "type") : null;

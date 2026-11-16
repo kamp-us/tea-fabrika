@@ -140,7 +140,7 @@ const world = Effect.fnUntraced(function* () {
     writes: { saved: { schema: Schema.TaggedStruct("saved", { count: Schema.Int }), personOnly: false } },
     wake: () => null,
   };
-  const input = (id: string, m: unknown = { type: "poison" }): Incoming => ({
+  const input = (id: string, m: Schema.Json = { type: "poison" }): Incoming => ({
     id,
     envelope: {
       id: Schema.decodeUnknownSync(InputId)("input_0000000000e008000000000001"),
@@ -551,7 +551,7 @@ describe("P34 interrupted recovery", () => {
     async () => {
       type Status = { process: string; state: string; until: number | null };
       type Instance = {
-        send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
+        send: (id: string, m: Schema.Json) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
         status: Effect.Effect<Status, unknown>;
         evict: Effect.Effect<void, unknown>;
         waitForRecovery: Effect.Effect<void, unknown>;

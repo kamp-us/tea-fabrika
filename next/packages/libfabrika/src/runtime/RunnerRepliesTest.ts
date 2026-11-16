@@ -7,7 +7,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, flow, Layer, Schema, Scope, Stream } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -346,10 +346,9 @@ const walk = (
       view: { notes: Object.fromEntries([...versions].sort(([a], [b]) => a.localeCompare(b))) },
       rev: accepted,
     });
-    const sorted = (view: unknown) => {
-      const notes = (view as Model).notes;
-      return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
-    };
+    const sorted = flow(Schema.decodeUnknownSync(Model), ({ notes }) => ({
+      notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))),
+    }));
 
     const letter = (note: string, base: number, body: string, by = { key: "SHA256:writer", for: "person-writer" }) =>
       ({

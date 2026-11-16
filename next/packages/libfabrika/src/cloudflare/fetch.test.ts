@@ -34,7 +34,7 @@ const law = (
 const world = (
   port: number,
   name: string,
-  settingsStart: (reply: unknown) => Promise<unknown> = async (reply) => reply,
+  settingsStart: (reply: ReturnType<typeof StartsTest.reply>) => Promise<unknown> = async (reply) => reply,
 ) => {
   const calls: Array<{ to: string; method: string; args: unknown[] }> = [];
   const response = new Response("gateway", { status: 202 });
@@ -77,7 +77,7 @@ const world = (
     method = "GET",
     originHeader: string | null = origin,
     host = `127.0.0.1:${port}`,
-    body?: unknown,
+    body?: fc.JsonValue,
   ) =>
     new Request(`${origin}${path}`, {
       method,

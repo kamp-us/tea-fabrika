@@ -14,10 +14,10 @@ import * as Chunk from "./Chunk.ts";
 
 const SEED = 119120;
 const encoder = new TextEncoder();
-const bytes = (value: unknown): number => encoder.encode(JSON.stringify(value)).length;
+const bytes = (value: Schema.Json | undefined): number => encoder.encode(JSON.stringify(value)).length;
 const decodeJson = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json));
 /** A value as JSON text carries it, so -0 and other values JSON cannot keep are normalized. */
-const copied = (value: unknown): Schema.Json => decodeJson(JSON.stringify(value));
+const copied = (value: fc.JsonValue): Schema.Json => decodeJson(JSON.stringify(value));
 
 /** The bytes one item takes alone in a chunk of this send at `seq`. */
 const alone = (send: { readonly id: string; readonly type: string }, item: Schema.Json, seq: number, last: boolean) =>

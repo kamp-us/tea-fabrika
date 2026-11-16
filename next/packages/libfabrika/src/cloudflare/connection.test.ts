@@ -345,7 +345,7 @@ it.effect.prop(
       yield* TestClock.setTime(H - 16 * 24 * HOUR);
       yield* Effect.gen(function* () {
         const service = yield* ConnectionService;
-        const send = (id: number, params: unknown) =>
+        const send = (id: number, params: Schema.Json) =>
           service.message(w.socket, JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params }));
         w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
         yield* send(0, {});
