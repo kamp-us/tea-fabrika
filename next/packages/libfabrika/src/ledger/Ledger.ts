@@ -24,7 +24,7 @@ import type { Appended, Entry, Line, Waited } from "./Log.ts";
  * @stability unstable
  * @category errors
  */
-export class LedgerError extends Schema.TaggedError<LedgerError>()("LedgerError", {
+export class LedgerError extends Schema.TaggedError<LedgerError, { readonly brand: unique symbol }>()("LedgerError", {
   /** `unreachable`: a call that never reached the referee. `bad_row`: an answer or a row that does
    *  not decode. `storage`: SQLite threw, for example `SQLITE_FULL`. `refused`: the ledger refused
    *  a line the caller needed written.

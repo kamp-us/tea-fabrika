@@ -2,13 +2,15 @@ import { Cause, Effect, Path, Predicate, Schema } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type { Options } from "./settings.ts";
 
-class BrainError extends Schema.TaggedError<BrainError>()("BrainError", {
+class BrainError extends Schema.TaggedError<BrainError, { readonly brand: unique symbol }>()("BrainError", {
   reason: Schema.Literal("storage"),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
-class PortError extends Schema.TaggedError<PortError>()("PortError", { message: Schema.String }) {}
+class PortError extends Schema.TaggedError<PortError, { readonly brand: unique symbol }>()("PortError", {
+  message: Schema.String,
+}) {}
 
 // The runtime refuses a taken port as a ConfigError with subtag AddressInUse, and Node as EADDRINUSE;
 // either may arrive as the cause of another error.

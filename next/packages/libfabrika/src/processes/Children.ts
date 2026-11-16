@@ -118,22 +118,25 @@ export type ChildStop = {
  * @stability unstable
  * @category errors
  */
-export class ChildrenError extends Schema.TaggedError<ChildrenError>()("ChildrenError", {
-  /** A refusal, which writes nothing, or `storage`: the ledger failed, and the start may be asked again. */
-  reason: Schema.Literals([
-    "forbidden",
-    "stale_sender",
-    "bad_name",
-    "bad_input",
-    "id_reused",
-    "name_taken",
-    "not_child",
-    "noproc",
-    "storage",
-  ]),
-  /** Only `storage` carries one, for the library caller; nothing renders it into an output. */
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class ChildrenError extends Schema.TaggedError<ChildrenError, { readonly brand: unique symbol }>()(
+  "ChildrenError",
+  {
+    /** A refusal, which writes nothing, or `storage`: the ledger failed, and the start may be asked again. */
+    reason: Schema.Literals([
+      "forbidden",
+      "stale_sender",
+      "bad_name",
+      "bad_input",
+      "id_reused",
+      "name_taken",
+      "not_child",
+      "noproc",
+      "storage",
+    ]),
+    /** Only `storage` carries one, for the library caller; nothing renders it into an output. */
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that starts a child process for a requester, under a registered name, and stops one.

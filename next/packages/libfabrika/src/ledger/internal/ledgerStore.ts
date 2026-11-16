@@ -144,7 +144,9 @@ const decide = (
   });
 
 /** What an atomic step threw: a SQL error, or a row that did not decode. Typed at once below. */
-class Threw extends Schema.TaggedError<Threw>()("Threw", { error: Schema.Unknown }) {}
+class Threw extends Schema.TaggedError<Threw, { readonly brand: unique symbol }>()("Threw", {
+  error: Schema.Unknown,
+}) {}
 
 /** SQLite's own error code, as node:sqlite gives it (`errcode`), or the platform's `code`. */
 const errorCode = (error: unknown): Option.Option<string | number> => {

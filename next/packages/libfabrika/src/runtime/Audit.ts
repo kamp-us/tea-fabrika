@@ -17,35 +17,35 @@ const Cause = { cause: Schema.optionalKey(Schema.Redacted(Schema.Unknown, { disa
  * @stability unstable
  * @category errors
  */
-export class Input extends Schema.TaggedError<Input>()("Input", Cause) {}
+export class Input extends Schema.TaggedError<Input, { readonly brand: unique symbol }>()("Input", Cause) {}
 /**
  * The program's selector failed.
  *
  * @stability unstable
  * @category errors
  */
-export class Selection extends Schema.TaggedError<Selection>()("Selection", Cause) {}
+export class Selection extends Schema.TaggedError<Selection, { readonly brand: unique symbol }>()("Selection", Cause) {}
 /**
  * The selected value cannot be encoded as checked JSON.
  *
  * @stability unstable
  * @category errors
  */
-export class Output extends Schema.TaggedError<Output>()("Output", Cause) {}
+export class Output extends Schema.TaggedError<Output, { readonly brand: unique symbol }>()("Output", Cause) {}
 /**
  * Audit transport failed without deciding anything about the program.
  *
  * @stability unstable
  * @category errors
  */
-export class Transport extends Schema.TaggedError<Transport>()("Transport", Cause) {}
+export class Transport extends Schema.TaggedError<Transport, { readonly brand: unique symbol }>()("Transport", Cause) {}
 /**
  * The remote audit reply could not be checked.
  *
  * @stability unstable
  * @category errors
  */
-export class Reply extends Schema.TaggedError<Reply>()("Reply", Cause) {}
+export class Reply extends Schema.TaggedError<Reply, { readonly brand: unique symbol }>()("Reply", Cause) {}
 
 /**
  * Audit failures retain private causes in memory and print only safe tags.
@@ -53,7 +53,7 @@ export class Reply extends Schema.TaggedError<Reply>()("Reply", Cause) {}
  * @stability unstable
  * @category errors
  */
-export class AuditError extends Schema.TaggedError<AuditError>()("AuditError", {
+export class AuditError extends Schema.TaggedError<AuditError, { readonly brand: unique symbol }>()("AuditError", {
   reason: Schema.Union([Input, Selection, Output, Transport, Reply]),
 }) {}
 

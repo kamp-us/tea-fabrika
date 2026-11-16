@@ -53,10 +53,13 @@ export type Entry = typeof Entry.Type;
  * @stability unstable
  * @category errors
  */
-export class JournalError extends Schema.TaggedError<JournalError>()("JournalError", {
-  reason: Schema.Literals(["storage", "bad_entry"]),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class JournalError extends Schema.TaggedError<JournalError, { readonly brand: unique symbol }>()(
+  "JournalError",
+  {
+    reason: Schema.Literals(["storage", "bad_entry"]),
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * Service that keeps the hands client's journal: `read` answers a task's last entry, or null before

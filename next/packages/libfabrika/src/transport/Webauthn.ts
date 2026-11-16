@@ -202,7 +202,7 @@ export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
   );
 });
 
-class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
+class BadAssertion extends Schema.TaggedError<BadAssertion, { readonly brand: unique symbol }>()("BadAssertion", {
   cause: Schema.optional(Schema.Defect()),
 }) {}
 

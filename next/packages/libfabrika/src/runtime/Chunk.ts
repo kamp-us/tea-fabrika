@@ -53,7 +53,10 @@ export const input = <const T extends string, S extends Schema.Top>(type: T, ite
  * @stability unstable
  * @category errors
  */
-export class TooBig extends Schema.TaggedError<TooBig>()("TooBig", { index: Schema.Int, bytes: Schema.Int }) {}
+export class TooBig extends Schema.TaggedError<TooBig, { readonly brand: unique symbol }>()("TooBig", {
+  index: Schema.Int,
+  bytes: Schema.Int,
+}) {}
 
 type Send = { readonly id: string; readonly type: string; readonly items: ReadonlyArray<Schema.Json> };
 type Chunk = typeof Chunk.Type;

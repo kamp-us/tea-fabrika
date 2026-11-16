@@ -2894,7 +2894,7 @@ export class ProgramRunner extends Context.Service<
  * @stability unstable
  * @category errors
  */
-export class RunnerError extends Schema.TaggedError<RunnerError>()("RunnerError", {
+export class RunnerError extends Schema.TaggedError<RunnerError, { readonly brand: unique symbol }>()("RunnerError", {
   reason: Schema.Literals(["bad_input", "bad_client"]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: Schema.optional(Schema.Defect()),

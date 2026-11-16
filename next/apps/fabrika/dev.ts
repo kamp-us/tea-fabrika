@@ -17,7 +17,7 @@ import { build } from "./src/build.ts";
 import { localInstance } from "./src/local-instance.ts";
 import { Founding } from "./src/settings.ts";
 
-class InstanceError extends Schema.TaggedError<InstanceError>()("InstanceError", {
+class InstanceError extends Schema.TaggedError<InstanceError, { readonly brand: unique symbol }>()("InstanceError", {
   reason: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}

@@ -29,7 +29,10 @@ import * as RevokeHold from "./chaos-revoke.test-support.ts";
 const PERSON = "person_0000000000e008000000000001";
 const PROJECT = "p17b-revoke";
 const SENT = "2026-11-12T00:00:00.000Z";
-class WireFailure extends Schema.TaggedError<WireFailure>()("WireFailure", { cause: Schema.Defect() }) {}
+
+class WireFailure extends Schema.TaggedError<WireFailure, { readonly brand: unique symbol }>()("WireFailure", {
+  cause: Schema.Defect(),
+}) {}
 
 const field = (raw: string | Uint8Array) => {
   const bytes = Buffer.from(raw);

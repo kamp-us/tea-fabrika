@@ -9,7 +9,7 @@ const maxTime = 2 ** 48 - 1;
 export type IdValue<P extends string> = Brand.Branded<string, P>;
 export type IdSchema<P extends string> = S.Codec<IdValue<P>, string>;
 
-export class IdError extends S.TaggedError<IdError>()("IdError", {
+export class IdError extends S.TaggedError<IdError, { readonly brand: unique symbol }>()("IdError", {
   reason: S.Literals(["prefix", "clock", "entropy", "exhausted"]),
   /** The failure this error translates, kept in memory for diagnosis. */
   cause: S.optional(S.Defect()),

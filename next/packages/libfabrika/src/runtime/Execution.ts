@@ -287,7 +287,7 @@ export const nodeExecution = (declared: unknown, build = "node"): Execution => {
   };
 };
 
-class RpcError extends Schema.TaggedError<RpcError>()("RpcError", {
+class RpcError extends Schema.TaggedError<RpcError, { readonly brand: unique symbol }>()("RpcError", {
   method: Schema.String,
   cause: Schema.optionalKey(Schema.Defect()),
 }) {}

@@ -27,7 +27,7 @@ import "./record.ts";
 import { ProcessService, ProjectService, processRuntime, projectRuntime, settingsReply, type Env } from "./runtime.ts";
 import * as SettingsTest from "./SettingsTest.ts";
 
-class EntryFailure extends Schema.TaggedError<EntryFailure>()("EntryFailure", {
+class EntryFailure extends Schema.TaggedError<EntryFailure, { readonly brand: unique symbol }>()("EntryFailure", {
   cause: Schema.Defect(),
 }) {}
 

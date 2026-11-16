@@ -98,10 +98,14 @@ const join = (...parts: ReadonlyArray<Uint8Array>) => {
 const hex = (bytes: Uint8Array) => [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 
 // A shared test's failures are tagged like product code's, never thrown.
-class CryptoFailed extends Schema.TaggedError<CryptoFailed>()("CryptoFailed", { cause: Schema.Defect() }) {}
+class CryptoFailed extends Schema.TaggedError<CryptoFailed, { readonly brand: unique symbol }>()("CryptoFailed", {
+  cause: Schema.Defect(),
+}) {}
 
 /** fast-check's report, with its counterexample, as the law's typed failure. */
-class PropertyFailed extends Schema.TaggedError<PropertyFailed>()("PropertyFailed", { cause: Schema.Defect() }) {}
+class PropertyFailed extends Schema.TaggedError<PropertyFailed, { readonly brand: unique symbol }>()("PropertyFailed", {
+  cause: Schema.Defect(),
+}) {}
 
 /** PKCS#8's fixed prefix for an Ed25519 seed (RFC 8410): a generated seed becomes a WebCrypto key. */
 const PKCS8 = new Uint8Array([

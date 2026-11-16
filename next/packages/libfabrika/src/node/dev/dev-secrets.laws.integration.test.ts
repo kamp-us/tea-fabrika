@@ -31,7 +31,7 @@ import { rssLayer } from "./dev.fixture.ts";
 import { startDev } from "./dev.ts";
 import { brainOutbox } from "./local-dev.ts";
 
-class CallError extends Schema.TaggedError<CallError>()("CallError", {
+class CallError extends Schema.TaggedError<CallError, { readonly brand: unique symbol }>()("CallError", {
   cause: Schema.Unknown,
 }) {}
 

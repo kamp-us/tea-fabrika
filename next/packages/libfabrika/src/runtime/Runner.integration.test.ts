@@ -135,9 +135,9 @@ const work = Cmd.make("work", {
   err: ["disk"],
 });
 
-class DiskError extends Schema.TaggedError<DiskError>()("disk", {}) {}
+class DiskError extends Schema.TaggedError<DiskError, { readonly brand: unique symbol }>()("disk", {}) {}
 
-class WorkValue extends Schema.Class<WorkValue>("WorkValue")({
+class WorkValue extends Schema.Class<WorkValue, { readonly brand: unique symbol }>("WorkValue")({
   n: Schema.Int,
   extra: Schema.optionalKey(Schema.String),
 }) {}

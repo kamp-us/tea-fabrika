@@ -13,7 +13,9 @@ import type { Fire, Fired, Report, Target } from "./Chaos.ts";
  * @stability unstable
  * @category errors
  */
-export class Off extends Schema.TaggedError<Off>()("Off", { cause: Schema.Defect() }) {}
+export class Off extends Schema.TaggedError<Off, { readonly brand: unique symbol }>()("Off", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The requested target cannot be used.
@@ -21,7 +23,9 @@ export class Off extends Schema.TaggedError<Off>()("Off", { cause: Schema.Defect
  * @stability unstable
  * @category errors
  */
-export class BadTarget extends Schema.TaggedError<BadTarget>()("BadTarget", { cause: Schema.Defect() }) {}
+export class BadTarget extends Schema.TaggedError<BadTarget, { readonly brand: unique symbol }>()("BadTarget", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The caller lacks the required grant.
@@ -29,7 +33,9 @@ export class BadTarget extends Schema.TaggedError<BadTarget>()("BadTarget", { ca
  * @stability unstable
  * @category errors
  */
-export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", { cause: Schema.Defect() }) {}
+export class NotGranted extends Schema.TaggedError<NotGranted, { readonly brand: unique symbol }>()("NotGranted", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The operation did not reach its destination.
@@ -37,7 +43,9 @@ export class NotGranted extends Schema.TaggedError<NotGranted>()("NotGranted", {
  * @stability unstable
  * @category errors
  */
-export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
+export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * History contained an undecodable known row or invalid position.
@@ -45,7 +53,9 @@ export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable"
  * @stability unstable
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Storage failed while reading the check's snapshot.
@@ -53,7 +63,9 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  * @stability unstable
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The service's own error, retaining the original cause in its reason.
@@ -61,9 +73,12 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * @stability unstable
  * @category errors
  */
-export class NemesisError extends Schema.TaggedError<NemesisError>()("NemesisError", {
-  reason: Schema.Union([Off, BadTarget, NotGranted, Unreachable, BadRow, Storage]),
-}) {}
+export class NemesisError extends Schema.TaggedError<NemesisError, { readonly brand: unique symbol }>()(
+  "NemesisError",
+  {
+    reason: Schema.Union([Off, BadTarget, NotGranted, Unreachable, BadRow, Storage]),
+  },
+) {}
 
 /**
  * Performs trusted faults and checks bounded history.

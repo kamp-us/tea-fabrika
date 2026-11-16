@@ -18,7 +18,10 @@ import type { ProgramRunner } from "./Runner.ts";
  * @stability unstable
  * @category errors
  */
-export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting>()("QuotaWaiting", {}) {}
+export class QuotaWaiting extends Schema.TaggedError<QuotaWaiting, { readonly brand: unique symbol }>()(
+  "QuotaWaiting",
+  {},
+) {}
 
 /**
  * Returns the reserve fault an error names: its own, or the one a lower module kept as its

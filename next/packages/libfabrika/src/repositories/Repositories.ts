@@ -78,9 +78,12 @@ export type Snapshot = typeof Snapshot.Type;
  * @stability unstable
  * @category errors
  */
-export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown>()("DefaultUnknown", {
-  cause: Schema.Defect(),
-}) {}
+export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown, { readonly brand: unique symbol }>()(
+  "DefaultUnknown",
+  {
+    cause: Schema.Defect(),
+  },
+) {}
 
 /**
  * Error for a read that failed: git or the file system failed, or what was found has the wrong
@@ -89,14 +92,19 @@ export class DefaultUnknown extends Schema.TaggedError<DefaultUnknown>()("Defaul
  * @stability unstable
  * @category errors
  */
-export class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", { cause: Schema.Defect() }) {}
+export class ReadFailed extends Schema.TaggedError<ReadFailed, { readonly brand: unique symbol }>()("ReadFailed", {
+  cause: Schema.Defect(),
+}) {}
+
 /**
  * Error for a source folder's path that does not exist, in the commit or on disk.
  *
  * @stability unstable
  * @category errors
  */
-export class MissingPath extends Schema.TaggedError<MissingPath>()("MissingPath", { cause: Schema.Defect() }) {}
+export class MissingPath extends Schema.TaggedError<MissingPath, { readonly brand: unique symbol }>()("MissingPath", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for any `Repositories` failure. `reason` holds which of the three it was, with the lower
@@ -106,10 +114,13 @@ export class MissingPath extends Schema.TaggedError<MissingPath>()("MissingPath"
  * @stability unstable
  * @category errors
  */
-export class RepositoriesError extends Schema.TaggedError<RepositoriesError>()("RepositoriesError", {
-  reason: Schema.Union([DefaultUnknown, ReadFailed, MissingPath]),
-  message: Schema.optionalKey(Schema.String),
-}) {}
+export class RepositoriesError extends Schema.TaggedError<RepositoriesError, { readonly brand: unique symbol }>()(
+  "RepositoriesError",
+  {
+    reason: Schema.Union([DefaultUnknown, ReadFailed, MissingPath]),
+    message: Schema.optionalKey(Schema.String),
+  },
+) {}
 
 /**
  * Schema for where a source's bytes come from: `committed`, with the commit they were read at, or

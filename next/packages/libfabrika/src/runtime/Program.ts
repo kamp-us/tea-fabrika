@@ -556,7 +556,7 @@ export type Prepared = typeof Step.cases.stepped.Type;
  * @stability unstable
  * @category errors
  */
-export class ProgramDown extends Schema.TaggedError<ProgramDown>()("ProgramDown", {
+export class ProgramDown extends Schema.TaggedError<ProgramDown, { readonly brand: unique symbol }>()("ProgramDown", {
   reason: Schema.Literals(["load", "no_program", "step", "saved_state", "saved_letter"]),
   /** An RPC or reply decode failure decided nothing about the input. It must be retried. */
   source: Schema.optionalKey(Schema.Literals(["rpc", "decode"])),

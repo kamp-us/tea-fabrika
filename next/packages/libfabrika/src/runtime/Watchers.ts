@@ -13,7 +13,9 @@ import type { Update } from "./Entry.ts";
  * @stability unstable
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for a saved membership row that does not decode, or that is stored under another name.
@@ -21,7 +23,9 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * @stability unstable
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Error for saved view membership that could not be read or written. A delivery that fails is never
@@ -30,9 +34,12 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  * @stability unstable
  * @category errors
  */
-export class WatchersError extends Schema.TaggedError<WatchersError>()("WatchersError", {
-  reason: Schema.Union([Storage, BadRow]),
-}) {}
+export class WatchersError extends Schema.TaggedError<WatchersError, { readonly brand: unique symbol }>()(
+  "WatchersError",
+  {
+    reason: Schema.Union([Storage, BadRow]),
+  },
+) {}
 
 /**
  * Service for a process's saved view membership and fanout. Transport failures retain membership.

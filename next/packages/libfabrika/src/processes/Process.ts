@@ -323,23 +323,26 @@ export const canRestart = (times: ReadonlyArray<number>, now: number, period: nu
  * @stability unstable
  * @category errors
  */
-export class ProcessError extends Schema.TaggedError<ProcessError>()("ProcessError", {
-  reason: Schema.Literals([
-    "not_parent",
-    "name_taken",
-    "alive",
-    "stale",
-    "id_reused",
-    "id_collision",
-    "ended",
-    "bad_ref",
-    "bad_name",
-    "bad_text",
-    "forbidden",
-  ]),
-  /** The failure this error translates, kept in memory for diagnosis. */
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class ProcessError extends Schema.TaggedError<ProcessError, { readonly brand: unique symbol }>()(
+  "ProcessError",
+  {
+    reason: Schema.Literals([
+      "not_parent",
+      "name_taken",
+      "alive",
+      "stale",
+      "id_reused",
+      "id_collision",
+      "ended",
+      "bad_ref",
+      "bad_name",
+      "bad_text",
+      "forbidden",
+    ]),
+    /** The failure this error translates, kept in memory for diagnosis. */
+    cause: Schema.optional(Schema.Defect()),
+  },
+) {}
 
 /** A watch as queries return it, with `canceled` read from its state; it is never stored. */
 type Watch = Omit<typeof ProcessEvent.cases.monitored.Type, "member"> & {

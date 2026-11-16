@@ -86,7 +86,9 @@ const Answer = Schema.TaggedUnion({
 });
 type Answer = typeof Answer.Type;
 
-class BaseUnreadable extends Schema.TaggedError<BaseUnreadable>()("BaseUnreadable", { file: Schema.String }) {}
+class BaseUnreadable extends Schema.TaggedError<BaseUnreadable, { readonly brand: unique symbol }>()("BaseUnreadable", {
+  file: Schema.String,
+}) {}
 
 /**
  * One list's answer from its text at the base and at the head; `null` means the file is absent. The
@@ -120,7 +122,9 @@ export const judge = Effect.fnUntraced(function* (
 
 // The edge: the base from the flag, and git through effect/process.
 
-class Failed extends Schema.TaggedError<Failed>()("Failed", { message: Schema.String }) {}
+class Failed extends Schema.TaggedError<Failed, { readonly brand: unique symbol }>()("Failed", {
+  message: Schema.String,
+}) {}
 
 const text = (s: Stream.Stream<Uint8Array, unknown>) => s.pipe(Stream.decodeText(), Stream.mkString);
 

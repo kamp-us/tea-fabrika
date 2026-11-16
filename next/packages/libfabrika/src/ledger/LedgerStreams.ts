@@ -12,7 +12,7 @@ import type { Stream } from "effect";
  * @stability unstable
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", {
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
   cause: Schema.Defect(),
 }) {}
 
@@ -22,7 +22,7 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", {
  * @stability unstable
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", {
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
   cause: Schema.Defect(),
 }) {}
 
@@ -32,9 +32,12 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", {
  * @stability unstable
  * @category errors
  */
-export class LedgerStreamsError extends Schema.TaggedError<LedgerStreamsError>()("LedgerStreamsError", {
-  reason: Schema.Union([Storage, BadRow]),
-}) {}
+export class LedgerStreamsError extends Schema.TaggedError<LedgerStreamsError, { readonly brand: unique symbol }>()(
+  "LedgerStreamsError",
+  {
+    reason: Schema.Union([Storage, BadRow]),
+  },
+) {}
 
 /**
  * Service that lists distinct names matching a literal prefix in storage order.

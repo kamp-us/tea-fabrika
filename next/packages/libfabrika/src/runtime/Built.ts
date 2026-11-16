@@ -17,7 +17,7 @@ import { ProgramName } from "../packs/ProgramName.ts";
  * @stability unstable
  * @category errors
  */
-export class BuildError extends Schema.TaggedError<BuildError>()("BuildError", {
+export class BuildError extends Schema.TaggedError<BuildError, { readonly brand: unique symbol }>()("BuildError", {
   reason: Schema.String,
   message: Schema.optionalKey(Schema.String),
   /** The failure this error translates, kept in memory for diagnosis. */

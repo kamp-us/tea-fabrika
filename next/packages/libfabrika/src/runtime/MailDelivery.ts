@@ -24,10 +24,13 @@ import { type Queued } from "./Send.ts";
  * @stability unstable
  * @category errors
  */
-export class MailDeliveryError extends Schema.TaggedError<MailDeliveryError>()("MailDeliveryError", {
-  reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage", "unavailable"])]),
-  cause: Schema.optionalKey(Schema.Defect()),
-}) {}
+export class MailDeliveryError extends Schema.TaggedError<MailDeliveryError, { readonly brand: unique symbol }>()(
+  "MailDeliveryError",
+  {
+    reason: Schema.Union([MailRefusal, Schema.Literals(["full", "storage", "unavailable"])]),
+    cause: Schema.optionalKey(Schema.Defect()),
+  },
+) {}
 
 /**
  * One saved Send: its command ID, the life that runs it, its operands and the writer's own facts.

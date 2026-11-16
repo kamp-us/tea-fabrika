@@ -14,7 +14,9 @@ import type { ProcessId } from "../ProcessId.ts";
  * @stability unstable
  * @category errors
  */
-export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable", { cause: Schema.Defect() }) {}
+export class Unreachable extends Schema.TaggedError<Unreachable, { readonly brand: unique symbol }>()("Unreachable", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * A history row or its position is invalid: the ledger answered `bad_row`, a position is not a
@@ -23,7 +25,9 @@ export class Unreachable extends Schema.TaggedError<Unreachable>()("Unreachable"
  * @stability unstable
  * @category errors
  */
-export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Schema.Defect() }) {}
+export class BadRow extends Schema.TaggedError<BadRow, { readonly brand: unique symbol }>()("BadRow", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * Any other ledger failure, which stopped the bounded read before it completed.
@@ -31,7 +35,9 @@ export class BadRow extends Schema.TaggedError<BadRow>()("BadRow", { cause: Sche
  * @stability unstable
  * @category errors
  */
-export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: Schema.Defect() }) {}
+export class Storage extends Schema.TaggedError<Storage, { readonly brand: unique symbol }>()("Storage", {
+  cause: Schema.Defect(),
+}) {}
 
 /**
  * The history service's failure, retaining the lower cause.
@@ -39,9 +45,12 @@ export class Storage extends Schema.TaggedError<Storage>()("Storage", { cause: S
  * @stability unstable
  * @category errors
  */
-export class ProcessHistoryError extends Schema.TaggedError<ProcessHistoryError>()("ProcessHistoryError", {
-  reason: Schema.Union([Unreachable, BadRow, Storage]),
-}) {}
+export class ProcessHistoryError extends Schema.TaggedError<ProcessHistoryError, { readonly brand: unique symbol }>()(
+  "ProcessHistoryError",
+  {
+    reason: Schema.Union([Unreachable, BadRow, Storage]),
+  },
+) {}
 
 /**
  * Two separately captured stream boundaries and the facts read through them.

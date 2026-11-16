@@ -2,10 +2,13 @@ import { Context, type Effect, Schema } from "effect";
 import { ErrorClass } from "./ClientRows.ts";
 import type { KeyLine } from "./Sshsig.ts";
 
-export class ClientKeyError extends Schema.TaggedError<ClientKeyError>()("ClientKeyError", {
-  op: Schema.Literals(["open", "read", "write", "make", "sign"]),
-  error: ErrorClass,
-}) {}
+export class ClientKeyError extends Schema.TaggedError<ClientKeyError, { readonly brand: unique symbol }>()(
+  "ClientKeyError",
+  {
+    op: Schema.Literals(["open", "read", "write", "make", "sign"]),
+    error: ErrorClass,
+  },
+) {}
 
 /** Only the public key can leave the store. Signing keeps the private half there. */
 export type Identity = {

@@ -20,7 +20,7 @@ export const Place = Schema.TaggedUnion({
 /** One machine path found: the file, relative to the folder read, the place in it, and the root it names. */
 export const Hit = Schema.Struct({ file: Schema.String, place: Place, root: Schema.String });
 
-class GuardError extends Schema.TaggedError<GuardError>()("GuardError", {
+class GuardError extends Schema.TaggedError<GuardError, { readonly brand: unique symbol }>()("GuardError", {
   file: Schema.String,
   cause: Schema.Defect(),
 }) {}

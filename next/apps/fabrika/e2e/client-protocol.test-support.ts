@@ -78,7 +78,7 @@ const Last = Schema.Struct({ link: Schema.String, handshake: Schema.String, rows
 type Last = typeof Last.Type;
 
 /** The suite's own failure: a wait that ran out, named by what it waited for, and what it last saw. */
-export class SuiteError extends Schema.TaggedError<SuiteError>()("SuiteError", {
+export class SuiteError extends Schema.TaggedError<SuiteError, { readonly brand: unique symbol }>()("SuiteError", {
   waited: Schema.String,
   last: Schema.optionalKey(Last),
 }) {}

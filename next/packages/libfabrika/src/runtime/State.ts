@@ -39,7 +39,7 @@ const downFrom = (cause: unknown): ProgramDown =>
  * @stability unstable
  * @category schemas
  */
-export class Saved extends Schema.Opaque<Saved>()(Row) {
+export class Saved extends Schema.Opaque<Saved, { readonly brand: unique symbol }>()(Row) {
   /**
    * Climbs `raw` to `state.v` through `state.upgrades`, in order, then decodes it with the state's
    * schema. Answers the new saved value, stamped with `build`, and the upgrades that ran. A gap, a
