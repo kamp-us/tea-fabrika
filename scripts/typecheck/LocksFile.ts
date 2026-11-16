@@ -4,19 +4,22 @@
 // EEXIST when the name is there, so the label is made whole in one step and never seen empty. A
 // waiter that finds the label reads it and `<lock>.child`, asks Processes about each pid, and lets
 // `judge` decide. A stale lock is broken only while `<lock>.break` is held, looked at again under it:
-// Mercurial's "must do this with another lock held, or can race and break valid lock". While a
+// Mercurial's "must do this with another lock held, or can race and break valid lock". A `.break`
+// left by a dead breaker is broken the same way, under `<lock>.break.break`, as Mercurial's
+// `_testlock` takes `.break` as a lock of its own with `timeout=0`. While a
 // command runs, its pid is in `<lock>.child`, so a compiler that outlives a killed wrapper keeps the
 // lock. Today's tooling (0113, 0410 as amended on 2026-11-15), following next/'s rules (0033).
-import { Console, Effect, FileSystem, Layer, Option, type PlatformError } from "effect";
+import { Console, Effect, FileSystem, Layer, Option, type PlatformError, Predicate } from "effect";
 import { type Held, LockError, Locks } from "./Locks.ts";
-import { judge, Liveness, type Look, pidIn, type Read, type Seen } from "./Look.ts";
+import { judge, Liveness, type Look, pidIn, type Read, Seen } from "./Look.ts";
 import { Processes } from "./Processes.ts";
 
 // How long a waiter sleeps between looks at a held lock.
 const POLL = "250 millis";
 
 /** Whether a file operation failed because its name is taken, or because there is no such file. */
-const failedWith = (tag: "AlreadyExists" | "NotFound") => (e: PlatformError.PlatformError) => e.reason._tag === tag;
+const failedWith = (tag: "AlreadyExists" | "NotFound") => (e: PlatformError.PlatformError) =>
+  Predicate.isTagged(e.reason, tag);
 
 export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes> = Layer.effect(
   Locks,
@@ -86,41 +89,48 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
       return judge(found);
     });
 
+    /** Removes the label at `path` only if it still names this process. */
+    const removeIfOurs = Effect.fnUntraced(function* (path: string) {
+      const now = yield* read(path);
+
+      if (Option.isSome(now) && now.value.text === label) {
+        yield* fs.remove(path, { force: true }).pipe(Effect.mapError(lockError(path, "does not remove")));
+      }
+    });
+
     /**
-     * Breaks a stale lock under `.break`. Answers `busy` when another live breaker holds `.break`,
-     * and `again` when the lock should be tried at once. Uninterruptible as a whole: a breaker that
-     * stopped halfway would leave `.break` naming a live process.
+     * Breaks a stale label at `path` under `<path>.break`, and the running command's file with it
+     * when `path` is the lock (`withChild`). Answers `busy` when a live breaker holds `.break`, which
+     * is never waited on here, and `again` when the lock should be tried at once. A `.break` left by
+     * a dead breaker is broken the same way, by this step one level down, under `.break.break`.
+     * Uninterruptible as a whole: a breaker that stopped halfway would leave `.break` naming a live
+     * process.
      */
-    const breakStale = (lock: string) =>
+    const breakStale = (path: string, withChild: boolean): Effect.Effect<"busy" | "again", LockError> =>
       Effect.uninterruptible(
         Effect.gen(function* () {
-          const breaker = `${lock}.break`;
+          const breaker = `${path}.break`;
 
-          if (!(yield* link(lock, breaker))) {
-            // A `.break` whose holder is gone is removed directly: that only races if two breakers
-            // both died within a few milliseconds.
-            const seen = yield* look(breaker, false);
-
-            if (seen._tag === "held") {
-              return "busy" as const;
-            }
-
-            if (seen._tag === "stale") {
-              yield* fs.remove(breaker, { force: true }).pipe(Effect.mapError(lockError(breaker, "does not remove")));
-            }
-
-            return "again" as const;
+          if (!(yield* link(path, breaker))) {
+            return yield* Seen.match(yield* look(breaker, false), {
+              held: () => Effect.succeed("busy" as const),
+              stale: () => breakStale(breaker, false),
+              free: () => Effect.succeed("again" as const),
+            });
           }
 
           yield* Effect.gen(function* () {
             // Looked at again under `.break`: another breaker may have taken the lock since.
-            if ((yield* look(lock, true))._tag === "stale") {
-              yield* fs.remove(lock, { force: true }).pipe(Effect.mapError(lockError(lock, "does not remove")));
-              yield* fs
-                .remove(`${lock}.child`, { force: true })
-                .pipe(Effect.mapError(lockError(`${lock}.child`, "does not remove")));
+            if (Seen.guards.stale(yield* look(path, withChild))) {
+              yield* fs.remove(path, { force: true }).pipe(Effect.mapError(lockError(path, "does not remove")));
+
+              if (withChild) {
+                yield* fs
+                  .remove(`${path}.child`, { force: true })
+                  .pipe(Effect.mapError(lockError(`${path}.child`, "does not remove")));
+              }
             }
-          }).pipe(Effect.ensuring(fs.remove(breaker, { force: true }).pipe(Effect.ignore)));
+          }).pipe(Effect.ensuring(removeIfOurs(breaker).pipe(Effect.ignore)));
           return "again" as const;
         }),
       );
@@ -129,11 +139,7 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
     const release = (lock: string) =>
       Effect.gen(function* () {
         yield* fs.remove(`${lock}.child`, { force: true });
-        const now = yield* read(lock);
-
-        if (Option.isSome(now) && now.value.text === label) {
-          yield* fs.remove(lock, { force: true });
-        }
+        yield* removeIfOurs(lock);
       }).pipe(Effect.catch((e) => Console.error(`typecheck: the lock ${lock} was not let go cleanly: ${e.message}`)));
 
     /** Names a holder for the waiting line: its pid, and its command line where ps can read it. */
@@ -163,18 +169,22 @@ export const layer: Layer.Layer<Locks, never, FileSystem.FileSystem | Processes>
           break;
         }
 
-        const seen: Seen = yield* look(lock, true);
+        yield* Seen.match(yield* look(lock, true), {
+          held: ({ pid }) =>
+            Effect.gen(function* () {
+              if (!said) {
+                said = true;
+                yield* Console.error(`typecheck: waiting for ${yield* named(pid)}, which holds ${lock}`);
+              }
 
-        if (seen._tag === "held") {
-          if (!said) {
-            said = true;
-            yield* Console.error(`typecheck: waiting for ${yield* named(seen.pid)}, which holds ${lock}`);
-          }
-
-          yield* Effect.sleep(POLL);
-        } else if (seen._tag === "stale" && (yield* breakStale(lock)) === "busy") {
-          yield* Effect.sleep(POLL);
-        }
+              yield* Effect.sleep(POLL);
+            }),
+          stale: () =>
+            breakStale(lock, true).pipe(
+              Effect.flatMap((answer) => (answer === "busy" ? Effect.sleep(POLL) : Effect.void)),
+            ),
+          free: () => Effect.void,
+        });
       }
 
       const child = `${lock}.child`;

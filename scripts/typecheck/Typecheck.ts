@@ -14,7 +14,7 @@ import { Locks } from "./Locks.ts";
 import * as LocksFile from "./LocksFile.ts";
 import { NodeModules } from "./NodeModules.ts";
 import * as NodeModulesFs from "./NodeModulesFs.ts";
-import { Processes } from "./Processes.ts";
+import { Listing, Processes } from "./Processes.ts";
 import * as ProcessesPs from "./ProcessesPs.ts";
 
 /** A variable from the environment, or `fallback` where it is unset or empty, as the shell's `${name:-fallback}`. */
@@ -66,7 +66,7 @@ const waitForCompiler = Effect.fnUntraced(function* (compiler: string) {
   for (;;) {
     const listing = yield* processes.named(compiler);
 
-    if (listing._tag === "refused") {
+    if (Listing.guards.refused(listing)) {
       return yield* Console.error(
         `typecheck: pgrep cannot list processes here, so the wait for a running ${compiler} is skipped`,
       );
