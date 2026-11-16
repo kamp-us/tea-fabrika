@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0563, 0558, 0561, 0562, 0524; body 7e90a9158af2
+Approved by the lead agent, builds 0563, 0558, 0561, 0562, 0524, 0567; body 8b4b73b90ad6
 Plancheck-Version: 3
 
 # Plan: the anti-slop lint plugin comes in as it ships, pinned, and each rule the owner took goes on as an error folder by folder
@@ -467,6 +467,12 @@ The lint rules are the exam, so each taken rule is seen to fail through the real
   the `vendor/**` row. New files: `oxlint-plugins/anti-slop.ts` and `oxlint-plugins/vendored.ts`
   with their tests.
 
+- **The review's round (2026-11-15).** Decision 0567, merged after this plan was approved, took the two
+  Match rules (`anti-slop-effect/no-manual-tag-comparison`, `anti-slop-effect/prefer-effect-match`),
+  so pull request 1 takes ten rules: each gets its own block, with its 0/0 folders (5 and 13 today),
+  and L2, L3 and the zero lock cover them. **Law L7, test:** the config loads `anti-slop` and
+  `anti-slop-effect` only from their vendored paths. Plant: point one entry at an edited copy under
+  another folder. Where: `oxlint-plugins/anti-slop.test.ts`.
 ## Files
 
 Pull request 1 only. The lint rules, their config and everything under `oxlint-plugins/` are exam
