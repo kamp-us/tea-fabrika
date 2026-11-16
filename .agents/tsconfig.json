@@ -1,8 +1,10 @@
 {
-  // The quest scripts (0031, ticket 486): `scripts/typecheck.sh` checks them after the packages, so
+  // The quest scripts (0031, ticket 486): `scripts/typecheck.ts` checks them after the packages, so
   // a change to the Agent interface or to tea fails `pnpm typecheck` here first. `.agents/` is no
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
+  // `scripts/typecheck.ts` itself is lead tooling (0113, ticket 766), and no other tsconfig covers
+  // `scripts/`, so it and its laws are checked here too.
   "extends": "../tsconfig.base.json",
   "include": [
     "raw.d.ts",
@@ -34,6 +36,10 @@
     "skills/lead/scripts/records.test.ts",
     "skills/mutation/scripts/scope.ts",
     "skills/mutation/scripts/scope.test.ts",
-    "skills/sev/scripts/*.ts"
+    "skills/sev/scripts/*.ts",
+    "../scripts/typecheck.ts",
+    "../scripts/typecheck/*.ts",
+    "../scripts/typecheck.test.ts",
+    "../scripts/typecheck-lock.test.ts"
   ]
 }

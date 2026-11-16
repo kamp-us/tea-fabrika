@@ -54,12 +54,12 @@ file in `field/findings/`.
 
 ## Go easy on the machine
 
-The test config and typecheck.sh hold worker, home and typecheck limits.
+The test config and typecheck.ts hold worker, home and typecheck limits.
 
 - **Run tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`,
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned
   one, and its refusal prints the command to use instead.
-- **One `pnpm typecheck`, at the very end,** after the laws are green. `typecheck.sh` takes the one
+- **One `pnpm typecheck`, at the very end,** after the laws are green. `typecheck.ts` takes the one
   lock every shell shares, so a second one waits; start it in the background when another agent's
   `tsgo` runs (`pgrep -x tsgo`). It must pass whole, type laws included.
 - **Never run a test here that sends a real signal** (`kill`, `process.kill`, SIGTERM or SIGKILL),

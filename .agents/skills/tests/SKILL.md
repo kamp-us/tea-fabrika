@@ -127,7 +127,7 @@ date and a short slug. The lead saves it unchanged as its own file in `field/fin
 
 ## Go easy on the machine
 
-The test config and typecheck.sh hold worker, home and typecheck limits.
+The test config and typecheck.ts hold worker, home and typecheck limits.
 
 - **Run tests one file at a time:** `nice -n 19 pnpm exec vitest run --maxWorkers=1 <one file>`,
   with `TYPESAFE_API_KEY` unset. The config refuses a broad run and a Node other than the pinned
