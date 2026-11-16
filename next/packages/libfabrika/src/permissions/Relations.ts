@@ -24,7 +24,7 @@ import type { Change, Tuples } from "./Relation.ts";
  */
 export class RelationsError extends Schema.TaggedError<RelationsError>()("RelationsError", {
   reason: Schema.Literals(["bad_row", "storage"]),
-  cause: Schema.optionalKey(Schema.Defect()),
+  cause: Schema.Defect(),
 }) {}
 
 /**

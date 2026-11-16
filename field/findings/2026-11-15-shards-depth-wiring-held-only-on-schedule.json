@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-shards-depth-wiring-held-only-on-schedule",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "vitest.shards.ts",
+    "line": 156
+  },
+  "says": "In today's CI, the line that makes the config's sequencer read the rows of the run's depth (readonly rows = rowsAt(depth)) is held by no law at fast depth, which is what pull requests and the merge queue run. F2 builds its own sequencer over rowsAt('full'), F1 tests rowsAt alone, and only L18 at full depth (the schedule's tooling legs) notices the break.",
+  "proof": "In a scratch copy at 1250d8a8d, with that line changed to `= measured`, vitest.shards.test.ts gave 34 passed at FABRIKA_TEST_DEPTH unset, and at FABRIKA_TEST_DEPTH=full 1 failed (scenario: L18 each next vitest leg starts its heaviest file first) and 33 passed.",
+  "cost": "A change that drops the depth from Shards merges green, and the next scheduled run goes red: a sev1 found 3 hours late, not a red check on the pull request.",
+  "head": "1250d8a8d35a63828630fb48f777e90385043048",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1374"
+}

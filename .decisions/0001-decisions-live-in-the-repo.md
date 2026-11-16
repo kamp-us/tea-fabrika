@@ -1,7 +1,7 @@
 ---
 id: 0001
 title: Every owner decision lands in `.decisions/` the turn it is made, one file per decision
-status: accepted
+status: amended-in-part by [0585](0585-kalfa-is-six-domain-packages.md)
 date: 2026-11-09
 tags: [decisions, governance, docs, lead]
 ---
