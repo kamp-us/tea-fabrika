@@ -15,6 +15,7 @@ import {
   Tracer,
   type Scope,
 } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import type { Sql } from "../Sql.ts";
@@ -131,12 +132,12 @@ export const suite = (rig: Rig) =>
 
                     return recording.record(usage).pipe(Effect.annotateSpans({ "fab.process": pid(live[index] ?? 1) }));
                   });
-                  expected[index]?.push(...events.map(() => sample(called.process, cpu)));
+                  expected[index]?.push(...Arr.map(events, () => sample(called.process, cpu)));
                 });
               const check = () => {
                 for (const [i, store] of stores.entries()) {
                   expect(
-                    rig.rows(store.sql).map((row) => ({
+                    Arr.map(rig.rows(store.sql), (row) => ({
                       process: row.attributes["fab.process"],
                       method: row.attributes["fab.isolate.method"],
                       outcome: row.attributes["fab.isolate.outcome"],
@@ -144,9 +145,9 @@ export const suite = (rig: Rig) =>
                       wallMs: row.attributes["fab.isolate.wall_ms"],
                     })),
                   ).toEqual(expected[i]);
-                  expect(rig.rows(store.sql).every((row) => row.resource.attributes["fab.object"] === names[i])).toBe(
-                    true,
-                  );
+                  expect(
+                    Arr.every(rig.rows(store.sql), (row) => row.resource.attributes["fab.object"] === names[i]),
+                  ).toBe(true);
                   expect(rig.health(store.sql)).toHaveLength(expected[i]?.length ?? 0);
                 }
               };
@@ -324,7 +325,8 @@ export const suite = (rig: Rig) =>
                   Logger.make((options: Logger.Options<unknown>) => {
                     logs.push({
                       level: options.logLevel,
-                      message: (Array.isArray(options.message) ? options.message : [options.message]).map(
+                      message: Arr.map(
+                        Arr.isArray(options.message) ? options.message : [options.message],
                         (value: unknown) =>
                           value instanceof Error
                             ? { name: value.name, message: value.message, stack: value.stack }
@@ -380,7 +382,7 @@ export const suite = (rig: Rig) =>
                 if (behavior !== "hang") {
                   yield* Fiber.join(pending);
                   // A3: an unreachable Process leaves one error log at the entrypoint, which has no sink.
-                  expect(spans.filter((span) => span.name === "isolate.tail")).toHaveLength(0);
+                  expect(Arr.filter(spans, (span) => span.name === "isolate.tail")).toHaveLength(0);
                   expect(logs).toHaveLength(behavior === "fail" ? 1 : 0);
 
                   if (behavior === "fail") {
@@ -389,7 +391,7 @@ export const suite = (rig: Rig) =>
                   }
 
                   expect(
-                    JSON.stringify([logs, spans.map((span) => Object.fromEntries(span.attributes))]),
+                    JSON.stringify([logs, Arr.map(spans, (span) => Object.fromEntries(span.attributes))]),
                   ).not.toContain(JSON.stringify(`PRIVATE_DELIVERY_${cell.error}_END`).slice(1, -1));
                 }
 

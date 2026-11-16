@@ -7,6 +7,8 @@ import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Cause, type Context, Effect, Exit, type Layer as LayerType, Layer, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Archive, Mailbox, ProcessStore, RecordManager, SessionManager, Writer } from "../coordination/index.ts";
@@ -116,7 +118,7 @@ const world = (
   const ledger = storage(),
     state = storage(),
     authority = storage();
-  const next = ids(initialProcess, ...PIDS.filter((process) => process !== initialProcess));
+  const next = ids(initialProcess, ...Arr.filter(PIDS, (process) => process !== initialProcess));
   const controls = {
     throws: true,
     savedThrows: false,
@@ -218,7 +220,7 @@ const world = (
           }
 
           if (controls.throws) {
-            const n = controls.steps.filter((key) => key === m.key).length;
+            const n = Arr.filter(controls.steps, (key) => key === m.key).length;
 
             if (n === 2) {
               throw new RangeError("private second failure");
@@ -495,13 +497,13 @@ describe("T337 down event identity, next/", () => {
                 yield* p.down(process, policy, from());
               }),
             ).pipe(Effect.provide(w.manager()));
-            const first = w.ledger.rows().filter((row) => row._tag === "down");
+            const first = Arr.filter(w.ledger.rows(), (row) => row._tag === "down");
             expect(first).toHaveLength(1);
             yield* ProcessManager.use((p) => p.down(process, policy, from())).pipe(Effect.provide(w.manager()));
-            expect(w.ledger.rows().filter((row) => row._tag === "down")).toEqual(first);
+            expect(Arr.filter(w.ledger.rows(), (row) => row._tag === "down")).toEqual(first);
             w.reopen();
             yield* ProcessManager.use((p) => p.down(process, policy, from())).pipe(Effect.provide(w.manager()));
-            const rows = w.ledger.rows().filter((row) => row._tag === "down");
+            const rows = Arr.filter(w.ledger.rows(), (row) => row._tag === "down");
             expect(rows).toEqual(first);
             return rows[0]!.id;
           });
@@ -557,14 +559,14 @@ describe("T337 down event identity, next/", () => {
         w.controls.cut = "after_down";
         yield* ProgramRunner.use((r) => Effect.exit(r.open("first"))).pipe(Effect.provide(w.layer()));
         expect(w.controls.hits).toEqual(["after_down"]);
-        const first = w.ledger.rows().filter((row) => row._tag === "down");
+        const first = Arr.filter(w.ledger.rows(), (row) => row._tag === "down");
         expect(first).toHaveLength(1);
         w.reopen();
         yield* ProgramRunner.use((r) => Effect.exit(r.open("retry"))).pipe(Effect.provide(w.layer()));
-        expect(w.ledger.rows().filter((row) => row._tag === "down")).toEqual(first);
+        expect(Arr.filter(w.ledger.rows(), (row) => row._tag === "down")).toEqual(first);
         w.reopen();
         yield* ProgramRunner.use((r) => Effect.exit(r.open("reopen"))).pipe(Effect.provide(w.layer()));
-        const retried = w.ledger.rows().filter((row) => row._tag === "down");
+        const retried = Arr.filter(w.ledger.rows(), (row) => row._tag === "down");
         expect(retried).toEqual(first);
       }),
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 4, full: 40 }) } },
@@ -597,8 +599,8 @@ describe("P34 runner supervision", () => {
                 );
                 const held = () => sink.sql.exec("SELECT spanId, row FROM unsent ORDER BY spanId");
                 const shipped = () =>
-                  [...parts.values()].flatMap((part) =>
-                    part.sql.exec("SELECT spanId FROM spans").map((row) => row.spanId),
+                  Arr.flatMap([...parts.values()], (part) =>
+                    Arr.map(part.sql.exec("SELECT spanId FROM spans"), (row) => row.spanId),
                   );
                 const process = path === "restart" ? B : A;
                 const request = { id: `restart-${id}`, build: BUILD };
@@ -667,14 +669,14 @@ describe("P34 runner supervision", () => {
 
                   expect(w.controls.writes, "the call dispatches each pending write once").toEqual([...before, job]);
                   expect(w.controls.flushes.at(-1), "flush follows dispatch").toEqual([...before, job]);
-                  expect((yield* inbox).filter((row) => row.id === `${job}/answer`)).toMatchObject([
+                  expect(Arr.filter(yield* inbox, (row) => row.id === `${job}/answer`)).toMatchObject([
                     { body: { m: { type: "write_ok" } } },
                   ]);
                   expect(yield* checkpoint).toMatchObject({ cmds: [] });
                   const spans = held();
                   const call =
                     pending === "fresh" || path === "msg" ? "step" : path === "restart" ? "restart.request" : path;
-                  expect(spans.map((row) => JSON.parse(String(row.row)))).toEqual(
+                  expect(Arr.map(spans, (row) => JSON.parse(String(row.row)))).toEqual(
                     expect.arrayContaining([
                       expect.objectContaining({ name: `runner.${call}` }),
                       expect.objectContaining({ name: "runner.cmd" }),
@@ -682,21 +684,21 @@ describe("P34 runner supervision", () => {
                     ]),
                   );
                   const sent = shipped();
-                  expect(spans.map((row) => row.spanId)).toEqual(
-                    sink.sql
-                      .exec("SELECT spanId FROM measurements ORDER BY spanId")
-                      .map((row) => row.spanId)
-                      .filter((id) => !sent.includes(id)),
+                  expect(Arr.map(spans, (row) => row.spanId)).toEqual(
+                    Arr.filter(
+                      Arr.map(sink.sql.exec("SELECT spanId FROM measurements ORDER BY spanId"), (row) => row.spanId),
+                      (id) => !sent.includes(id),
+                    ),
                   );
                   const lifecycle = yield* lives;
                   yield* wake;
                   expect(w.controls.flushes).toHaveLength(flushes + 2);
                   expect(held(), "the next call ships every retained span").toEqual([]);
-                  expect(shipped()).toEqual(expect.arrayContaining(spans.map((row) => row.spanId)));
+                  expect(shipped()).toEqual(expect.arrayContaining(Arr.map(spans, (row) => row.spanId)));
                   yield* wake;
                   expect(w.controls.writes, "an answered write must not dispatch again").toEqual([...before, job]);
                   expect(yield* read("facts")).toMatchObject([{ _tag: "saved", body: { token: id } }]);
-                  expect((yield* inbox).filter((row) => row.id === `${job}/answer`)).toHaveLength(1);
+                  expect(Arr.filter(yield* inbox, (row) => row.id === `${job}/answer`)).toHaveLength(1);
                   expect(yield* lives).toEqual(lifecycle);
                   expect(w.controls.flushFailures).toBe(1);
                 }).pipe(Effect.provide(w.layer(recording)));
@@ -770,7 +772,7 @@ describe("P34 runner supervision", () => {
                   });
                   yield* wake;
                   expect(w.controls.writes, "the wake must retry the original write ID").toEqual([writeId, writeId]);
-                  const answers = (yield* inbox).filter((row) => row.id === `${writeId}/answer`);
+                  const answers = Arr.filter(yield* inbox, (row) => row.id === `${writeId}/answer`);
                   expect(answers).toMatchObject([{ body: { m: { type: "write_ok" } } }]);
                   expect(yield* checkpoint).toMatchObject({ cmds: [] });
                   yield* wake;
@@ -779,7 +781,7 @@ describe("P34 runner supervision", () => {
                     writeId,
                   ]);
                   expect(yield* read("facts")).toHaveLength(1);
-                  expect((yield* inbox).filter((row) => row.id === `${writeId}/answer`)).toHaveLength(1);
+                  expect(Arr.filter(yield* inbox, (row) => row.id === `${writeId}/answer`)).toHaveLength(1);
                   expect(yield* lives).toEqual(before);
                   expect(yield* ProcessManager.use((p) => p.isLive(process))).toBe(true);
                 }).pipe(Effect.provide(w.layer()));
@@ -854,9 +856,10 @@ describe("P34 runner supervision", () => {
                     );
                     // The restart span names the build being started, not the replaced process's build.
                     expect(
-                      (yield* trace.rows(A))
-                        .filter((row) => row.name === "runner.restart")
-                        .map((row) => row.attributes),
+                      Arr.map(
+                        Arr.filter(yield* trace.rows(A), (row) => row.name === "runner.restart"),
+                        (row) => row.attributes,
+                      ),
                     ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                   } else {
                     const earlyCut = ["after_observation", "after_exit", "after_down"].includes(path);
@@ -883,7 +886,8 @@ describe("P34 runner supervision", () => {
                     }
 
                     // The tripped brake's deadline is the down event's own `until`.
-                    const tripped = (yield* lives.pipe(Effect.provide(w.manager()))).filter(
+                    const tripped = Arr.filter(
+                      yield* lives.pipe(Effect.provide(w.manager())),
                       (row) => row._tag === "down",
                     );
                     const deadline =
@@ -913,9 +917,10 @@ describe("P34 runner supervision", () => {
                       );
                       // The restart span names the build being started, not the replaced process's build.
                       expect(
-                        (yield* trace.rows(A))
-                          .filter((row) => row.name === "runner.restart")
-                          .map((row) => row.attributes),
+                        Arr.map(
+                          Arr.filter(yield* trace.rows(A), (row) => row.name === "runner.restart"),
+                          (row) => row.attributes,
+                        ),
                       ).toMatchObject([{ "fab.process": A, "fab.runner.build": w.controls.build }]);
                     } else if (path === "external adoption") {
                       yield* ProcessManager.use((p) => p.start(again(A, `external-${id}`), from())).pipe(
@@ -1012,7 +1017,7 @@ describe("P34 runner supervision", () => {
               });
               expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toBeNull();
               // P34 amendment: one crash inside the restart budget writes no down event.
-              expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
+              expect(Arr.filter(yield* lives, (row) => row._tag === "down")).toEqual([]);
               expect((yield* lives).at(-1)).toMatchObject({
                 _tag: "exited",
                 body: { process: A, reason: SAVED_RANGE },
@@ -1136,7 +1141,7 @@ describe("P34 runner supervision", () => {
               });
               expect(yield* ProcessStore.use((s) => s.placedByAny(id))).toBeNull();
               // P34 amendment: one crash inside the restart budget writes no down event.
-              expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
+              expect(Arr.filter(yield* lives, (row) => row._tag === "down")).toEqual([]);
               expect((yield* lives).at(-1)).toMatchObject({
                 _tag: "exited",
                 body: { process: A, reason: SAVED_RANGE },
@@ -1282,8 +1287,8 @@ describe("P34 runner supervision", () => {
               yield* failed(runner.msg(letter));
               expect(w.controls.adds).toBe(2);
               // P34 amendment: both crashes are inside the restart budget, so no down event.
-              expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
-              expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
+              expect(Arr.filter(yield* lives, (row) => row._tag === "down")).toEqual([]);
+              expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toMatchObject([
                 { body: { process: A } },
                 { body: { process: B, reason: SAVED_RANGE } },
               ]);
@@ -1346,7 +1351,7 @@ describe("P34 runner supervision", () => {
             }
 
             yield* ProcessManager.use((p) => p.exit(B, reason, from())).pipe(Effect.provide(w.manager()));
-            const expected = refs.map((ref) =>
+            const expected = Arr.map(refs, (ref) =>
               Down.make({
                 ref,
                 process: B,
@@ -1356,7 +1361,9 @@ describe("P34 runner supervision", () => {
             );
             // Inspect the manager's actual untyped letters. The test does no translation.
             const before = yield* inbox.pipe(Effect.provide(w.manager()));
-            expect(before.map((row) => row.body)).toEqual(expected.map((m) => expect.objectContaining({ m })));
+            expect(Arr.map(before, (row) => row.body)).toEqual(
+              Arr.map(expected, (m) => expect.objectContaining({ m })),
+            );
             w.reopen();
 
             for (let wake = 0; wake < 2; wake++) {
@@ -1398,7 +1405,7 @@ describe("P34 runner supervision", () => {
             yield* ProcessStore.use((s) => s.load).pipe(Effect.provide(w.layer()));
             const tables = () =>
               w.state.sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
-            const processTables = new Set(tables().map((row) => String(row.name)));
+            const processTables = new Set(Arr.map(tables(), (row) => String(row.name)));
             const poison = w.input(value);
             yield* ProgramRunner.use((r) => failed(r.msg(poison))).pipe(Effect.provide(w.layer()));
             w.reopen();
@@ -1410,7 +1417,7 @@ describe("P34 runner supervision", () => {
                 Effect.provide(w.layer()),
               );
             yield* good(1);
-            const recoveryTables = tables().filter((row) => !processTables.has(String(row.name)));
+            const recoveryTables = Arr.filter(tables(), (row) => !processTables.has(String(row.name)));
             expect(recoveryTables.length, "audit must cover real supervision storage").toBeGreaterThan(0);
             const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
             w.state.sql.exec("CREATE TEMP TABLE p34_supervision_writes (bytes INTEGER NOT NULL)");
@@ -1421,9 +1428,10 @@ describe("P34 runner supervision", () => {
 
               for (const event of ["INSERT", "UPDATE", "DELETE"]) {
                 const record = event === "DELETE" ? "OLD" : "NEW";
-                const bytes = columns
-                  .map(({ name }) => `coalesce(length(CAST(${record}.${quote(String(name))} AS BLOB)),0)`)
-                  .join(" + ");
+                const bytes = Arr.join(
+                  Arr.map(columns, ({ name }) => `coalesce(length(CAST(${record}.${quote(String(name))} AS BLOB)),0)`),
+                  " + ",
+                );
                 w.state.sql.exec(
                   `CREATE TEMP TRIGGER ${quote(`p34_write_${index}_${event}`)} AFTER ${event} ON ${table}
 							BEGIN INSERT INTO p34_supervision_writes (bytes) VALUES (${bytes}); END`,
@@ -1496,8 +1504,10 @@ describe("P34 runner supervision", () => {
                 }),
               ).toMatchObject({ _tag: "refused", reason: "id_reused" });
               expect(w.controls.steps).toEqual([value, value, value]);
-              expect((yield* inbox).map((row) => row.id)).toEqual(Array.from({ length: 51 }, (_, n) => goodId(n + 1)));
-              expect((yield* dead).map((row) => row.body)).toMatchObject([{ m: poison.id, tries: 3 }]);
+              expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(
+                Array.from({ length: 51 }, (_, n) => goodId(n + 1)),
+              );
+              expect(Arr.map(yield* dead, (row) => row.body)).toMatchObject([{ m: poison.id, tries: 3 }]);
             }).pipe(Effect.provide(w.layer()));
             // Fixed-width IDs and identical good bodies. Allow 256 bytes for decimal
             // metadata gaining digits across all writes; never an allowance per old letter.
@@ -1540,7 +1550,7 @@ describe("P34 runner supervision", () => {
             _tag: "accepted",
           });
           expect(w.controls.steps).toEqual(["poison", "poison"]);
-          expect((yield* inbox).map((row) => row.id)).toEqual(["poison"]);
+          expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(["poison"]);
         }).pipe(Effect.provide(w.layer()));
       }),
   );
@@ -1556,7 +1566,7 @@ describe("P34 runner supervision", () => {
           expect(yield* inbox).toEqual([]);
           expect(yield* ProcessStore.use((s) => s.load)).toBeNull();
           expect(w.controls.cmds).toBe(0);
-          expect((yield* lives).filter((row) => row._tag === "exited")).toHaveLength(n + 1);
+          expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toHaveLength(n + 1);
         }).pipe(Effect.provide(w.layer()));
         w.reopen();
         yield* recover(w);
@@ -1671,8 +1681,8 @@ describe("P34 runner supervision", () => {
                 _tag: "refused",
                 reason: "dead",
               });
-              expect((yield* dead).map((row) => row.body)).toMatchObject([{ m: value, tries: 3 }]);
-              expect(w.controls.steps.filter((id) => id === "b")).toHaveLength(1);
+              expect(Arr.map(yield* dead, (row) => row.body)).toMatchObject([{ m: value, tries: 3 }]);
+              expect(Arr.filter(w.controls.steps, (id) => id === "b")).toHaveLength(1);
             }).pipe(Effect.provide(w.layer()));
           }),
         { concurrency: 1, discard: true },
@@ -1692,11 +1702,11 @@ describe("P34 runner supervision", () => {
         yield* TestClock.setTime(99);
         yield* r.due(99);
         expect(w.controls.loads).toBe(loads);
-        expect((yield* lives).filter((row) => row._tag === "restarted")).toEqual([]);
+        expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toEqual([]);
         yield* TestClock.setTime(100);
         yield* r.due(100);
         yield* r.due(100);
-        expect((yield* lives).filter((row) => row._tag === "restarted")).toMatchObject([
+        expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toMatchObject([
           { body: { after: A, process: B } },
         ]);
       }).pipe(Effect.provide(w.layer()));
@@ -1764,7 +1774,7 @@ describe("P34 runner supervision", () => {
 
               yield* r.msg(w.input("work", { type: "work" }));
               expect(yield* dead).toEqual([]);
-              expect((yield* lives).filter((row) => row._tag === "exited")).toEqual([]);
+              expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toEqual([]);
               expect(w.controls.cmds).toBe(1);
             }).pipe(Effect.provide(w.layer()));
           }),
@@ -1797,12 +1807,12 @@ describe("P34 runner supervision", () => {
             yield* Effect.gen(function* () {
               yield* failed(ProgramRunner.use((r) => r.open("wake")));
               // P34 amendment: inside the restart budget the wake exits, waits and writes no down.
-              expect((yield* lives).filter((row) => row._tag === "down")).toEqual([]);
-              expect((yield* lives).filter((row) => row._tag === "exited")).toMatchObject([
+              expect(Arr.filter(yield* lives, (row) => row._tag === "down")).toEqual([]);
+              expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toMatchObject([
                 { body: { process: A, reason: SAVED_RANGE } },
               ]);
               expect(w.alarms.at(-1)).toBe(policy.backoff.minMs);
-              expect((yield* inbox).map((row) => row.id)).toEqual(["good", "saved-bad"]);
+              expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(["good", "saved-bad"]);
               expect(yield* ProcessStore.use((s) => s.load)).toEqual(before);
               expect(yield* dead).toEqual([]);
             }).pipe(Effect.provide(w.layer()));
@@ -1826,7 +1836,7 @@ describe("P34 runner supervision", () => {
       const rows = yield* lives.pipe(Effect.provide(w.manager()));
       // P34 amendment: one saved failure is inside the restart budget, so it writes no down;
       // the saved wait is the backoff's.
-      expect(rows.filter((row) => row._tag === "down")).toEqual([]);
+      expect(Arr.filter(rows, (row) => row._tag === "down")).toEqual([]);
       const until = w.alarms.at(-1);
       expect(until).toBe(policy.backoff.minMs);
       w.reopen();
@@ -1861,7 +1871,7 @@ describe("P34 runner supervision", () => {
         yield* Effect.gen(function* () {
           yield* ProgramRunner.use((r) => r.open("wake"));
           expect(yield* ProcessManager.use((p) => p.info)).toMatchObject([{ process: A }]);
-          expect((yield* lives).filter((row) => ["exited", "restarted"].includes(row._tag))).toEqual([]);
+          expect(Arr.filter(yield* lives, (row) => ["exited", "restarted"].includes(row._tag))).toEqual([]);
         }).pipe(Effect.provide(w.layer()));
       }
     }),
@@ -1875,7 +1885,7 @@ describe("P34 runner supervision", () => {
         const r = yield* ProgramRunner;
         yield* failed(r.msg(w.input()));
         expect(yield* ProcessManager.use((p) => p.isLive(A))).toBe(false);
-        expect((yield* lives).filter((row) => row._tag === "exited")).toHaveLength(1);
+        expect(Arr.filter(yield* lives, (row) => row._tag === "exited")).toHaveLength(1);
         expect(w.alarms.at(-1)).toBe(100);
       }).pipe(Effect.provide(w.layer()));
     }),
@@ -1915,8 +1925,8 @@ describe("P34 runner supervision", () => {
           expect(w.controls.init).toContainEqual({ build: "build-b", loaded: null });
           expect((yield* r.open("new")).view).toEqual({ count: 7, replies: 0 });
           expect(w.controls.cmds).toBe(0);
-          expect((yield* inbox).map((row) => row.id)).toEqual(["accepted"]);
-          expect((yield* lives).filter((row) => row._tag === "restarted")).toMatchObject([
+          expect(Arr.map(yield* inbox, (row) => row.id)).toEqual(["accepted"]);
+          expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toMatchObject([
             { body: { after: A, build: "build-b" } },
           ]);
         }).pipe(Effect.provide(w.layer()));
@@ -1926,7 +1936,7 @@ describe("P34 runner supervision", () => {
 
 describe("P34 amendment, 2026-11-08: down only at the brake; a program's own maxDeliveries", () => {
   const decodeUntil = Schema.decodeUnknownSync(Schema.Struct({ until: Schema.Int }));
-  const restartedRows = lives.pipe(Effect.map((rows) => rows.filter((row) => row._tag === "restarted").length));
+  const restartedRows = lives.pipe(Effect.map((rows) => Arr.filter(rows, (row) => row._tag === "restarted").length));
 
   it("p80 plant, down after one crash: the runner writes down only on the crash that trips the brake, and no successor starts before its wait", async () => {
     await fc.assert(
@@ -1943,7 +1953,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
                 Effect.provide(w.layer()),
               );
               const rows = yield* lives.pipe(Effect.provide(w.manager()));
-              const downs = rows.filter((row) => row._tag === "down");
+              const downs = Arr.filter(rows, (row) => row._tag === "down");
               const deadline = w.alarms.at(-1);
               expect(deadline, `crash ${n} schedules its successor`).toBeTypeOf("number");
 
@@ -1972,7 +1982,7 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
               now = deadline!;
             }
 
-            const downs = (yield* lives.pipe(Effect.provide(w.manager()))).filter((row) => row._tag === "down");
+            const downs = Arr.filter(yield* lives.pipe(Effect.provide(w.manager())), (row) => row._tag === "down");
             expect(downs).toHaveLength(crashes > policy.intensity ? 1 : 0);
           }).pipe(Effect.provide(TestClock.layer())),
         ),
@@ -2024,12 +2034,19 @@ describe("P34 amendment, 2026-11-08: down only at the brake; a program's own max
               expect(w.controls.steps).toEqual(Array.from({ length: expected }, () => id));
               const errors = Array.from({ length: expected }, (_, n) => (n === 1 ? "RangeError" : "TypeError"));
               const rows = yield* dead;
-              expect(rows.map((row) => row.body)).toMatchObject([{ m: id, tries: expected, limit: expected, errors }]);
+              expect(Arr.map(rows, (row) => row.body)).toMatchObject([
+                { m: id, tries: expected, limit: expected, errors },
+              ]);
               const process = PIDS[expected - 1]!;
-              const started = (yield* lives)
-                .filter((row) => row._tag === "started" && row.by === brain().by)
-                .map((row) => Schema.decodeUnknownSync(ProcessEvent.cases.started)(valueFor(row)))
-                .find((event) => event.process === process);
+              const started = Option.getOrUndefined(
+                Arr.findFirst(
+                  Arr.map(
+                    Arr.filter(yield* lives, (row) => row._tag === "started" && row.by === brain().by),
+                    (row) => Schema.decodeUnknownSync(ProcessEvent.cases.started)(valueFor(row)),
+                  ),
+                  (event) => event.process === process,
+                ),
+              );
               expect(started).toBeDefined();
               expect(rows[0]!.stream).toBe(`${process}/dead`);
               expect(rows[0]!.body).toMatchObject({
@@ -2103,7 +2120,8 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
           const checkpoint = yield* ProcessStore.use((store) =>
             Effect.flatMap(store.select(process), (own) => own.load),
           ).pipe(Effect.provide(w.layer()));
-          const options = moves.filter(
+          const options = Arr.filter(
+            moves,
             (move) =>
               (move !== "restart_again" || expected.restarts.length > 0) && (move !== "saved" || checkpoint !== null),
           );
@@ -2186,23 +2204,33 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
 
           done.add(move);
           const rows = yield* lives.pipe(Effect.provide(w.manager()));
-          const exits = rows
-            .filter((row) => row._tag === "exited")
-            .map((row) => valueFor(row) as { process: string; reason: unknown })
-            .map(({ process, reason }) => ({ process, reason }));
-          expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
-          const restarted = rows.filter((row) => row._tag === "restarted").map((row) => valueFor(row));
-          expect(restarted, "a person's restart keeps its request's reason for starting again").toHaveLength(
-            expected.restarts.length + expected.exits.filter((e) => e.reason._tag === "crashed").length,
+          const exits = Arr.map(
+            Arr.map(
+              Arr.filter(rows, (row) => row._tag === "exited"),
+              (row) => valueFor(row) as { process: string; reason: unknown },
+            ),
+            ({ process, reason }) => ({ process, reason }),
           );
-          const signals = (yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())))
-            .map((row) => valueFor(row) as { m: typeof Down.Type })
-            .map(({ m }) => [m.process, m.reason] as const);
+          expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
+          const restarted = Arr.map(
+            Arr.filter(rows, (row) => row._tag === "restarted"),
+            (row) => valueFor(row),
+          );
+          expect(restarted, "a person's restart keeps its request's reason for starting again").toHaveLength(
+            expected.restarts.length + Arr.filter(expected.exits, (e) => e.reason._tag === "crashed").length,
+          );
+          const signals = Arr.map(
+            Arr.map(
+              yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())),
+              (row) => valueFor(row) as { m: typeof Down.Type },
+            ),
+            ({ m }) => [m.process, m.reason] as const,
+          );
           expect(signals, "each DOWN carries its exit's reason unchanged").toEqual(
-            expected.exits.map(({ process, reason }) => [process, reason] as const),
+            Arr.map(expected.exits, ({ process, reason }) => [process, reason] as const),
           );
           // L8: the message stays in deletable trace content, never in a lifecycle fact or signal.
-          const serialized = JSON.stringify([rows, signals, w.ledger.rows().filter((row) => row._tag === "send")]);
+          const serialized = JSON.stringify([rows, signals, Arr.filter(w.ledger.rows(), (row) => row._tag === "send")]);
           expect(serialized.includes(SENTINEL), "no exception message in exit facts or monitor payloads").toBe(false);
         }
       }).pipe(Effect.provide(TestClock.layer()));

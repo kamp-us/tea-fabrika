@@ -5,6 +5,7 @@ import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -245,15 +246,16 @@ describe("T285, ledger tracing keep-laws", () => {
                         : { "fab.ledger.rev": head, "fab.ledger.pos": head }),
                       ...(accepted
                         ? {
-                            "fab.ledger.rings": c.spans.slice(before).filter((s) => s.name === "ledger.ring").length,
+                            "fab.ledger.rings": Arr.filter(c.spans.slice(before), (s) => s.name === "ledger.ring")
+                              .length,
                           }
                         : {}),
                     };
-                    const first = c.spans.slice(before).filter((s) => s.name === name);
+                    const first = Arr.filter(c.spans.slice(before), (s) => s.name === name);
                     expect(first).toHaveLength(twice ? 2 : 1);
                   }
 
-                  const spans = c.spans.slice(before).filter((s) => s.name === name);
+                  const spans = Arr.filter(c.spans.slice(before), (s) => s.name === name);
                   const span = spans.at(-1)!;
                   ended(span, true);
                   child(span, parent);
@@ -319,7 +321,7 @@ describe("T285, ledger tracing keep-laws", () => {
                   const before = c.spans.length;
                   expect((yield* ledger.append(stream, a.id, line(a, ctx.traceId)))._tag).toBe("placed");
                   const spans = c.spans.slice(before);
-                  expect(spans.map((s) => s.name)).toEqual(["ledger.append", "ledger.ring"]);
+                  expect(Arr.map(spans, (s) => s.name)).toEqual(["ledger.append", "ledger.ring"]);
                   const [append, ring] = spans;
                   ended(append!, true);
                   ended(ring!, failure === "ok");
@@ -377,7 +379,7 @@ describe("T285, ledger tracing keep-laws", () => {
                   const exit = yield* Effect.exit(work);
                   expect(Exit.isFailure(exit)).toBe(true);
                   const spans = c.spans.slice(before);
-                  expect(spans.map((s) => s.name)).toEqual([`ledger.${op}`]);
+                  expect(Arr.map(spans, (s) => s.name)).toEqual([`ledger.${op}`]);
                   ended(spans[0]!, false);
                   child(spans[0]!, parent);
                   expect(tags(spans[0]!)).toMatchObject({
@@ -435,7 +437,7 @@ describe("T285, coordination tracing keep-laws", () => {
                   const exit = yield* Effect.exit(request(clients.members));
                   expect(Exit.isSuccess(exit)).toBe(!fails);
                   const spans = c.spans.slice(before);
-                  const reads = spans.filter((s) => s.name === "access.read");
+                  const reads = Arr.filter(spans, (s) => s.name === "access.read");
                   expect(reads).toHaveLength(1);
                   const read = reads[0]!;
                   ended(read, !fails);
@@ -451,7 +453,7 @@ describe("T285, coordination tracing keep-laws", () => {
                         },
                   );
 
-                  for (const append of spans.filter((s) => s.name === "ledger.append")) {
+                  for (const append of Arr.filter(spans, (s) => s.name === "ledger.append")) {
                     child(append, read);
                   }
                 }
@@ -518,14 +520,14 @@ describe("T285, coordination tracing keep-laws", () => {
                   const ok = call.op === "next" || !call.fails;
                   expect(Exit.isSuccess(exit)).toBe(ok);
                   const spans = c.spans.slice(before);
-                  const selected = spans.filter((s) => s.name === `process.${call.op}`);
+                  const selected = Arr.filter(spans, (s) => s.name === `process.${call.op}`);
                   expect(selected).toHaveLength(1);
                   ended(selected[0]!, ok);
                   child(selected[0]!, spans[0]!);
                   expect(tags(selected[0]!)).toEqual({});
 
                   if (call.op === "next" && Exit.isSuccess(exit)) {
-                    expect(spans.map((s) => s.name)).toEqual(["test.request", "process.next", "id.next"]);
+                    expect(Arr.map(spans, (s) => s.name)).toEqual(["test.request", "process.next", "id.next"]);
                     ended(spans[2]!, true);
                     child(spans[2]!, selected[0]!);
                     const id = String(exit.value);
@@ -546,7 +548,7 @@ describe("T285, coordination tracing keep-laws", () => {
                 );
                 expect(Exit.isFailure(exit)).toBe(true);
                 const spans = c.spans.slice(before);
-                expect(spans.map((s) => s.name)).toEqual(["test.request", "process.next", "id.next"]);
+                expect(Arr.map(spans, (s) => s.name)).toEqual(["test.request", "process.next", "id.next"]);
                 ended(spans[1]!, false);
                 child(spans[1]!, spans[0]!);
                 ended(spans[2]!, false);
@@ -602,7 +604,7 @@ describe("T285, caller context keep-laws", () => {
               ),
             ),
           );
-          expect(c.spans.map((s) => s.name)).toEqual(["test.request"]);
+          expect(Arr.map(c.spans, (s) => s.name)).toEqual(["test.request"]);
         },
       ),
       CHECK,
@@ -693,7 +695,7 @@ describe("T285, sink keep-law", () => {
                 expect((yield* sink.flush).sent).toBe(samples.length);
                 expect(d.db.prepare("SELECT count(*) AS n FROM measurements").get()?.n).toBe(samples.length);
                 const original = yield* Stream.runCollect(records.read(chain));
-                expect(original.map((s) => s.name)).toEqual(samples.map((_, i) => `sample.${i}`));
+                expect(Arr.map(original, (s) => s.name)).toEqual(Arr.map(samples, (_, i) => `sample.${i}`));
 
                 for (const [index, row] of original.entries()) {
                   const sample = samples[index]!;
@@ -1007,13 +1009,13 @@ const runnerWorld = (
       Recording,
       Effect.map(Recording, (actual) => ({
         flush: Effect.sync(() => {
-          const runner = spans.filter((s) => s.name.startsWith("runner."));
+          const runner = Arr.filter(spans, (s) => s.name.startsWith("runner."));
 
           for (const span of runner) {
             expect(span.status._tag, `${span.name} must end before flush`).toBe("Ended");
           }
 
-          flushes.push(runner.map((s) => s.spanId));
+          flushes.push(Arr.map(runner, (s) => s.spanId));
         }).pipe(Effect.andThen(actual.flush)),
       })),
     ),
@@ -1084,8 +1086,10 @@ describe("T285, runner tracing keep-laws", () => {
               });
               expect((yield* store.load)?.cmds).toHaveLength(1);
               const entries = yield* Stream.runCollect(ledger.read("refused-reply/inbox", 0));
-              expect(entries.filter((entry) => entry.id === id)).toHaveLength(1);
-              expect(entries.find((entry) => entry.id === id)?.body).toEqual({ value: a.value });
+              expect(Arr.filter(entries, (entry) => entry.id === id)).toHaveLength(1);
+              expect(Option.getOrUndefined(Arr.findFirst(entries, (entry) => entry.id === id))?.body).toEqual({
+                value: a.value,
+              });
             }).pipe(Effect.withParentSpan(Tracer.externalSpan(ctx)), Effect.provide(w.layer)),
           );
         } finally {
@@ -1121,7 +1125,7 @@ describe("T285, runner tracing keep-laws", () => {
                   now = call.at;
                   yield* runner.msg(w.input(index + 1, { type: "work", value: call.value }));
                   const entries = yield* Stream.runCollect(ledger.read("reply-test/inbox", 0));
-                  const answers = entries.filter((entry) => entry.id.endsWith("/answer"));
+                  const answers = Arr.filter(entries, (entry) => entry.id.endsWith("/answer"));
                   expect(answers).toHaveLength(index + 1);
                   expect(answers.at(-1)?.body).toEqual({
                     m: {
@@ -1275,30 +1279,35 @@ describe("T285, runner tracing keep-laws", () => {
                   const spans = w.spans.slice(before);
                   // The first op after the wait starts the successor under it; its spans are checked
                   // below, the op's own spans stay as before.
-                  const recovering = spans.filter((s) => s.name === "runner.recover" || s.name === "runner.restart");
+                  const recovering = Arr.filter(
+                    spans,
+                    (s) => s.name === "runner.recover" || s.name === "runner.restart",
+                  );
                   const expected = [
                     `runner.${op}`,
                     ...(waiting ? [] : writing || handling ? ["runner.cmd"] : []),
                     ...(waiting ? [] : writing ? ["runner.write"] : []),
                     ...(!waiting && call.op === "step_throw" ? ["runner.throw"] : []),
                   ];
-                  const selected = spans.filter((s) => s.name.startsWith("runner.") && !recovering.includes(s));
+                  const selected = Arr.filter(spans, (s) => s.name.startsWith("runner.") && !recovering.includes(s));
                   expect(
-                    selected.map((s) => s.name),
+                    Arr.map(selected, (s) => s.name),
                     call.op,
                   ).toEqual(expected);
-                  const root = spans.find((s) => s.name === "test.request")!;
+                  const root = Option.getOrThrow(Arr.findFirst(spans, (s) => s.name === "test.request"));
                   const operation = selected[0]!;
                   ended(operation, ok);
                   child(operation, root);
-                  const live = (yield* manager.info).find((row) => row.name === a.name)?.process;
+                  const live = Option.getOrUndefined(
+                    Arr.findFirst(yield* manager.info, (row) => row.name === a.name),
+                  )?.process;
                   // The op's own span opens on the ID the call reached, before any successor starts.
                   const reached = pid;
 
                   if (starting) {
                     // A new live process ID, started once, after the process that threw.
                     expect(
-                      recovering.map((s) => s.name),
+                      Arr.map(recovering, (s) => s.name),
                       call.op,
                     ).toEqual(["runner.recover", "runner.restart"]);
                     child(recovering[0]!, operation);
@@ -1353,9 +1362,12 @@ describe("T285, runner tracing keep-laws", () => {
 
                   if (!waiting && (writing || handling)) {
                     const cmd = selected[1]!;
-                    const letter = (yield* Stream.runCollect((yield* Ledger).read(`${a.name}/inbox`, 0))).find(
-                      (entry) => entry.id === input.id,
-                    )!;
+                    const letter = Option.getOrThrow(
+                      Arr.findFirst(
+                        yield* Stream.runCollect((yield* Ledger).read(`${a.name}/inbox`, 0)),
+                        (entry) => entry.id === input.id,
+                      ),
+                    );
                     ended(cmd, !["handler_fail", "handler_die", "write_storage"].includes(call.op));
                     child(cmd, operation);
                     expect(tags(cmd)).toEqual({
@@ -1373,7 +1385,7 @@ describe("T285, runner tracing keep-laws", () => {
                         expect(write.links).toEqual([]);
                       } else {
                         expect(
-                          write.links.map(({ span, attributes }) => ({
+                          Arr.map(write.links, ({ span, attributes }) => ({
                             traceId: span.traceId,
                             spanId: span.spanId,
                             attributes,
@@ -1394,17 +1406,18 @@ describe("T285, runner tracing keep-laws", () => {
 
                   for (const id of pids) {
                     rows.push(
-                      ...(yield* Stream.runCollect(records.read(Chain.cases.job.make({ process: id })))).filter((s) =>
-                        s.name.startsWith("runner."),
+                      ...Arr.filter(
+                        yield* Stream.runCollect(records.read(Chain.cases.job.make({ process: id }))),
+                        (s) => s.name.startsWith("runner."),
                       ),
                     );
                   }
 
-                  const all = w.spans.filter((s) => s.name.startsWith("runner."));
-                  expect(rows.map((s) => s.spanId).sort()).toEqual(all.map((s) => s.spanId).sort());
+                  const all = Arr.filter(w.spans, (s) => s.name.startsWith("runner."));
+                  expect(Arr.map(rows, (s) => s.spanId).sort()).toEqual(Arr.map(all, (s) => s.spanId).sort());
 
                   for (const span of [...selected, ...recovering]) {
-                    const row = rows.find((s) => s.spanId === span.spanId)!;
+                    const row = Option.getOrThrow(Arr.findFirst(rows, (s) => s.spanId === span.spanId));
                     expect(row).toMatchObject({
                       name: span.name,
                       traceId: ctx.traceId,

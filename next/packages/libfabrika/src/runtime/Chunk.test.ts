@@ -9,6 +9,7 @@
 // A chunk's size is the bytes of its encoded JSON, the letter the reader's inbox saves.
 import { describe, expect, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as Chunk from "./Chunk.ts";
 
@@ -62,7 +63,10 @@ describe("T1041: a large output is cut into chunk letters", () => {
       fc.property(Send, Size, (send, size) => {
         const answer = Chunk.cut(send, size);
         // Too big even with the least a part can add: seq 0 and the shorter `last` word.
-        const tooBig = send.items.findIndex((item) => alone(send, item, 0, true) > size);
+        const tooBig = Option.getOrElse(
+          Arr.findFirstIndex(send.items, (item) => alone(send, item, 0, true) > size),
+          () => -1,
+        );
 
         if (Result.isFailure(answer)) {
           reached.add("too_big");
@@ -104,7 +108,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
         }
 
         expect(
-          chunks.flatMap((chunk) => chunk.items),
+          Arr.flatMap(chunks, (chunk) => chunk.items),
           "the chunks' items, in order, are the send's items",
         ).toEqual(send.items);
 
@@ -154,7 +158,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
 
             // A gap leaves the last chunk in place: dropping the last is a prefix.
             const drop = a % (n - 1);
-            list = chunks.filter((_, k) => k !== drop);
+            list = Arr.filter(chunks, (_, k) => k !== drop);
             break;
           }
           case "repeat": {
@@ -197,7 +201,7 @@ describe("T1041: a large output is cut into chunk letters", () => {
                 stranger.part.last === own.part.last,
               "the twin's chunk differs from this send's in its id alone",
             ).toBe(true);
-            list = chunks.map((chunk, j) => (j === k ? (stranger ?? chunk) : chunk));
+            list = Arr.map(chunks, (chunk, j) => (j === k ? (stranger ?? chunk) : chunk));
             break;
           }
         }

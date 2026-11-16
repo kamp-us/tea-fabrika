@@ -24,6 +24,9 @@ import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
 import { Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -63,8 +66,13 @@ const roundTrip = (model: Model): unknown =>
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
-    v !== null && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
+    v !== null && typeof v === "object" && !Arr.isArray(v)
+      ? Object.fromEntries(
+          Arr.sort(
+            Object.entries(v),
+            Order.mapInput(Order.String, ([key]: readonly [string, unknown]) => key),
+          ),
+        )
       : v,
   );
 
@@ -153,7 +161,7 @@ type Move = {
 
 /** Each move once per unit of its weight, so a tape value picks among them. */
 const weighted = (options: ReadonlyArray<Move>): ReadonlyArray<Move> =>
-  options.flatMap((option) => Array.from({ length: option.weight ?? 1 }, () => option));
+  Arr.flatMap(options, (option) => Array.from({ length: option.weight ?? 1 }, () => option));
 
 const reasonFor = (phase: "fresh" | "saved", error: string) =>
   ExitReason.cases.crashed.make({ phase: phase === "fresh" ? "step" : "saved_letter", error });
@@ -170,8 +178,15 @@ const receiptFor = (letter: string, process: string) => ({
 
 /** The smallest time at or after `t` with room in the window, by the fold's own search. */
 const roomAt = (restarts: ReadonlyArray<number>, t: number, p: typeof Policy.Type): number => {
-  const candidates = [t, ...restarts.map((r) => r + p.periodMs + 1)].filter((c) => c >= t).toSorted((a, b) => a - b);
-  return candidates.find((c) => restarts.filter((r) => r >= c - p.periodMs).length + 1 <= p.intensity) ?? t;
+  const candidates = Arr.sort(
+    Arr.filter([t, ...Arr.map(restarts, (r) => r + p.periodMs + 1)], (c) => c >= t),
+    Order.Number,
+  );
+  return (
+    Option.getOrUndefined(
+      Arr.findFirst(candidates, (c) => Arr.filter(restarts, (r) => r >= c - p.periodMs).length + 1 <= p.intensity),
+    ) ?? t
+  );
 };
 
 /** The moves possible from the current journal and the fold's world, with P15's `swapped` when asked. */
@@ -184,8 +199,9 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 
   // The runner begins a fresh step only for a letter not yet accepted; a compacted receipt was
   // (finding 2026-11-11-supervisor-walk-begins-compacted-letter), so this walk does not offer it.
-  const base = all.filter(
-    (m) => m.name !== "begin_fresh" || w.model.receipts.some((r) => r.letter === m.msg.letter && r.input !== null),
+  const base = Arr.filter(
+    all,
+    (m) => m.name !== "begin_fresh" || Arr.some(w.model.receipts, (r) => r.letter === m.msg.letter && r.input !== null),
   );
 
   // A swap names the process the journal holds, or one it does not, with a build the fold makes.
@@ -209,20 +225,22 @@ const moves = (w: World, cell: Cell, swaps = false): ReadonlyArray<Move> => {
 const journalMoves = (w: World, cell: Cell): ReadonlyArray<Move> => {
   const j = w.model.journal;
   const meta = from();
-  const old = w.sent.filter((m) => COMPLETIONS.has(m.type) && !sameWork(j, m));
+  const old = Arr.filter(w.sent, (m) => COMPLETIONS.has(m.type) && !sameWork(j, m));
   const stale = old.length === 0 ? [] : [{ name: "stale", msg: old[cell.pick % old.length]!, stale: true }];
   const later = { name: "advance", msg: { type: "healthy", at: w.at + cell.gap }, apply: () => (w.at += cell.gap) };
 
   switch (j._tag) {
     case "idle": {
       const letter = LETTERS[cell.pick % LETTERS.length]!;
-      const receipt = w.model.receipts.find((r) => r.letter === letter);
+      const receipt = Option.getOrUndefined(Arr.findFirst(w.model.receipts, (r) => r.letter === letter));
       const fresh: Array<Move> =
         receipt === undefined
           ? [{ name: "received", weight: 4, msg: { type: "received", receipt: receiptFor(letter, j.process) } }]
           : [];
       const request = `restart-${cell.pick % 3}`;
-      const compactable = w.model.receipts.find((r) => r.tries === 0 && r.input !== null);
+      const compactable = Option.getOrUndefined(
+        Arr.findFirst(w.model.receipts, (r) => r.tries === 0 && r.input !== null),
+      );
       return [
         ...fresh,
         ...(receipt !== undefined && receipt.result === null
@@ -602,7 +620,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
           expect(after.observations, "observations match the captured attempts").toHaveLength(w.observations);
 
           for (const [letter, errors] of w.errors) {
-            const receipt = after.receipts.find((r) => r.letter === letter);
+            const receipt = Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === letter));
             expect(receipt?.errors, `letter ${letter}'s classes`).toEqual(errors);
             expect(receipt?.tries).toBe(errors.length);
           }
@@ -616,7 +634,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             const attempt = before.journal.attempt;
             const tries = w.errors.get(attempt.letter)?.length ?? 0;
             const terminal = tries >= (w.limit ?? p.maxDeliveries);
-            const receipt = after.receipts.find((r) => r.letter === attempt.letter);
+            const receipt = Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === attempt.letter));
             expect(receipt?.result ?? null).toEqual(terminal ? { _tag: "refused", reason: "dead" } : null);
             expect(receipt?.process).toBe(attempt.process);
             expect(after.journal).toMatchObject(
@@ -662,7 +680,7 @@ describe("P34c slice 2: one saved recovery journal", () => {
             });
             expect(again).toEqual(after);
             expect(threw).toEqual(after);
-            const observation = after.observations.find((o) => o.seq === seq);
+            const observation = Option.getOrUndefined(Arr.findFirst(after.observations, (o) => o.seq === seq));
             expect(observation, "the journal's identity wins over the marker's").toMatchObject({
               letter: before.journal.attempt.letter,
               process: before.journal.attempt.process,
@@ -748,23 +766,26 @@ describe("P34c slice 2: one saved recovery journal", () => {
               backoff: { ...policy.backoff, resetAfterMs: 1_000_000 },
             }),
             // received, begin fresh, threw (dead at limit 1), dead written, exit written.
-            [0, 0, 1, 0, 0].map((move) => ({ move, pick: 0, gap: 0, error: "TypeError" })),
+            Arr.map([0, 0, 1, 0, 0], (move) => ({ move, pick: 0, gap: 0, error: "TypeError" })),
           ],
           // pinned: healthy for exactly resetAfterMs resets the crash count (P34 compares with >=).
           // begin saved, threw, exit written, wait out the backoff, started, checkpointed, then
           // two idle advances that end exactly resetAfterMs after the checkpoint.
           [
             Schema.decodeUnknownSync(Policy)(policy),
-            [
-              { move: 4, gap: 0 },
-              { move: 1, gap: 0 },
-              { move: 0, gap: 0 },
-              { move: 0, gap: policy.backoff.minMs },
-              { move: 1, gap: 0 },
-              { move: 0, gap: 0 },
-              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
-              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
-            ].map((cell) => ({ ...cell, pick: 0, error: "TypeError" })),
+            Arr.map(
+              [
+                { move: 4, gap: 0 },
+                { move: 1, gap: 0 },
+                { move: 0, gap: 0 },
+                { move: 0, gap: policy.backoff.minMs },
+                { move: 1, gap: 0 },
+                { move: 0, gap: 0 },
+                { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+                { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+              ],
+              (cell) => ({ ...cell, pick: 0, error: "TypeError" }),
+            ),
           ],
         ],
       },
@@ -837,7 +858,10 @@ describe("P34c slice 2: one saved recovery journal", () => {
 
         for (const cycle of cycles) {
           // From idle: a letter the fold still holds open, or a new one.
-          const open = [...tries].filter(([, n]) => n < p.maxDeliveries).map(([letter]) => letter);
+          const open = Arr.map(
+            Arr.filter([...tries], ([, n]) => n < p.maxDeliveries),
+            ([letter]) => letter,
+          );
           const letter = cycle.reuse && open.length > 0 ? open[cycle.pick % open.length]! : `letter-${tries.size + 1}`;
           expect(model.journal._tag).toBe("idle");
           const process = model.journal._tag === "idle" ? model.journal.process : A;
@@ -902,8 +926,14 @@ describe("P34c slice 2: one saved recovery journal", () => {
       { seed: SEED, numRuns: RUNS },
     );
 
-    const brakes = [...seen].filter((s) => s.startsWith("brake:")).map((s) => Number(s.slice(6)));
-    const deads = [...seen].filter((s) => s.startsWith("dead:")).map((s) => Number(s.slice(5)));
+    const brakes = Arr.map(
+      Arr.filter([...seen], (s) => s.startsWith("brake:")),
+      (s) => Number(s.slice(6)),
+    );
+    const deads = Arr.map(
+      Arr.filter([...seen], (s) => s.startsWith("dead:")),
+      (s) => Number(s.slice(5)),
+    );
     expect(Math.max(...brakes), "intensity coverage reaches past 32").toBeGreaterThan(32);
     expect(Math.max(...deads), "delivery limits past 16 go dead").toBeGreaterThan(16);
   });
@@ -1017,30 +1047,33 @@ describe("P34c slice 2: one saved recovery journal", () => {
 const mutations = (saved: unknown, pick: number): ReadonlyArray<unknown> => {
   const raw = saved as { journal: Record<string, unknown>; receipts: Array<Record<string, unknown>> };
   const journal = raw.journal;
-  const fields = Object.keys(journal).filter((key) => key !== "_tag");
+  const fields = Arr.filter(Object.keys(journal), (key) => key !== "_tag");
   const dropped = fields[pick % Math.max(fields.length, 1)];
   const broken: Array<unknown> = [
     { ...raw, journal: { ...journal, _tag: "starting" } },
-    { ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== dropped)) },
+    { ...raw, journal: Object.fromEntries(Arr.filter(Object.entries(journal), ([key]) => key !== dropped)) },
     { ...raw, v: 1 },
   ];
 
   if (journal._tag === "writing_dead") {
     const failure = journal.failure as { letter: string };
     // The exact fresh failure's receipt must be there, terminal and its own.
-    broken.push({ ...raw, receipts: raw.receipts.filter((r) => r.letter !== failure.letter) });
+    broken.push({ ...raw, receipts: Arr.filter(raw.receipts, (r) => r.letter !== failure.letter) });
     broken.push({
       ...raw,
-      receipts: raw.receipts.map((r) => (r.letter === failure.letter ? { ...r, result: null } : r)),
+      receipts: Arr.map(raw.receipts, (r) => (r.letter === failure.letter ? { ...r, result: null } : r)),
     });
     broken.push({
       ...raw,
-      receipts: raw.receipts.map((r) => (r.letter === failure.letter ? { ...r, process: pid(39) } : r)),
+      receipts: Arr.map(raw.receipts, (r) => (r.letter === failure.letter ? { ...r, process: pid(39) } : r)),
     });
   }
 
   if (journal._tag === "checkpointing") {
-    broken.push({ ...raw, journal: Object.fromEntries(Object.entries(journal).filter(([key]) => key !== "after")) });
+    broken.push({
+      ...raw,
+      journal: Object.fromEntries(Arr.filter(Object.entries(journal), ([key]) => key !== "after")),
+    });
   }
 
   if (journal._tag === "stepping") {
@@ -1194,9 +1227,9 @@ describe("P13 A11 saved admission work", () => {
 
           if (message.type === "admitted") {
             expect(after.journal).toMatchObject({ _tag: "stepping", attempt: { seq: message.seq } });
-            expect(after.receipts.find((r) => r.letter === message.receipt.letter)?.input).toEqual(
-              message.receipt.input,
-            );
+            expect(
+              Option.getOrUndefined(Arr.findFirst(after.receipts, (r) => r.letter === message.receipt.letter))?.input,
+            ).toEqual(message.receipt.input);
             expect(
               decodes({ ...(roundTrip(after) as object), receipts: [] }),
               "fresh stepping without the admitted input cannot load",
@@ -1249,7 +1282,7 @@ describe("P13 A11 saved admission work", () => {
         }
 
         syncTest(supervisor, ctx(), {
-          msgs: steps.map((s) => s.msg),
+          msgs: Arr.map(steps, (s) => s.msg),
           encode: Schema.encodeSync(Supervision),
           decode: Schema.decodeUnknownSync(Supervision),
           equals: (a, b) => canon(a) === canon(b),

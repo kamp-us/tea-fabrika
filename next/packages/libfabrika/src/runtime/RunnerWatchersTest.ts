@@ -3,6 +3,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Context, Effect, Exit, Layer, Schema, Scope } from "effect";
+import * as Arr from "effect/Array";
 import { Writer } from "../access/SessionManager.ts";
 import { InputId } from "../Id.ts";
 import { Mailbox } from "../processes/Mailbox.ts";
@@ -163,8 +164,8 @@ const walk = Effect.fnUntraced(function* (harness: Harness, steps: ReadonlyArray
     const answer = yield* live.runner.msg(incoming);
     pos++;
     expect(answer).toEqual(Sent.cases.accepted.make({ rev: answer._tag === "accepted" ? answer.rev : -1, pos }));
-    const recipients = [...expected.keys()].filter((c) => routes.has(c) && !unknown.has(c));
-    expect(frames.map((f) => f.client).sort()).toEqual(recipients.sort());
+    const recipients = Arr.filter([...expected.keys()], (c) => routes.has(c) && !unknown.has(c));
+    expect(Arr.map(frames, (f) => f.client).sort()).toEqual(recipients.sort());
 
     for (const { client, update } of frames) {
       expect(update.type).toBe("patch");

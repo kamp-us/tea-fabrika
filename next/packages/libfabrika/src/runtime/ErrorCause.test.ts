@@ -10,6 +10,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { BuildError, decodeBuilt } from "./Built.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -36,7 +37,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 
 /** A cause that is, or holds, a decoder's failure: one value, or the list a check met. */
 const holdsSchemaError = (cause: unknown): boolean =>
-  Schema.isSchemaError(cause) || (Array.isArray(cause) && cause.some(holdsSchemaError));
+  Schema.isSchemaError(cause) || (Arr.isArray(cause) && Arr.some(cause, holdsSchemaError));
 
 const Model = Schema.Struct({ count: Schema.Int });
 const Msg = Schema.Struct({ type: Schema.Literal("inc") });

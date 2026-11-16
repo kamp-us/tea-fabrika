@@ -9,6 +9,7 @@
 // bytes no longer hash to its key fails `bad_row`; it never reads as absent or as the wrong bytes.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit, Option, Schema, Scope } from "effect";
+import * as Arr from "effect/Array";
 import { expectTypeOf } from "vitest";
 import type { Sql } from "../Sql.ts";
 import { BuiltProgram, hash } from "./Built.ts";
@@ -47,7 +48,7 @@ const source = Arbitrary.array(
     Schema.Literals(["export ", "default ", "{", "}", '"', "'", "\\", "\n", "雪", "🫖", "a", "1", "</script>"]),
   ),
   { minLength: 1, maxLength: 40 },
-).pipe(Arbitrary.map((parts) => parts.join("")));
+).pipe(Arbitrary.map((parts) => Arr.join(parts, "")));
 
 const pick = Arbitrary.schema(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1_000_000 })));
 const Cell = Arbitrary.all({ move: pick, pick, text: source, junk: source });

@@ -1,6 +1,7 @@
 // next/, U2 and U10. U4/U5's unknown platform words are exercised at the tail entrypoint.
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import * as IsolateUsage from "./IsolateUsage.ts";
@@ -92,7 +93,9 @@ it("U10 schemas reject unknown words, negative and nonfinite times", () =>
       fc.record({
         word: fc
           .string()
-          .filter((word) => !methods.some((known) => known === word) && !outcomes.some((known) => known === word)),
+          .filter(
+            (word) => !Arr.some(methods, (known) => known === word) && !Arr.some(outcomes, (known) => known === word),
+          ),
         invalid: fc.oneof(
           fc.double({ max: -Number.MIN_VALUE, noNaN: true }),
           fc.constantFrom(Number.NaN, Infinity, -Infinity),

@@ -8,6 +8,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -176,28 +177,36 @@ const faulty = (sql: Sql, control: Control): Sql => ({
 
 /** The cells of tables main never had that hold this letter's reply as a JSON object. */
 const replyRows = (sql: Sql, id: string) =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-    .map(({ name }) => String(name))
-    .filter((table) => !KNOWN.has(table))
-    .flatMap((table) =>
-      sql
-        .exec(`SELECT * FROM "${table}"`)
-        .flatMap((row) =>
-          Object.entries(row).flatMap(([column, value]) =>
-            typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
-          ),
+  Arr.flatMap(
+    Arr.filter(
+      Arr.map(sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"), ({ name }) =>
+        String(name),
+      ),
+      (table) => !KNOWN.has(table),
+    ),
+    (table) =>
+      Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) =>
+        Arr.flatMap(Object.entries(row), ([column, value]) =>
+          typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
         ),
-    );
+      ),
+  );
 
 /** The rows of every table main never had, as text. */
 const replyCells = (sql: Sql): ReadonlyArray<string> =>
-  sql
-    .exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-    .map(({ name }) => String(name))
-    .filter((table) => !KNOWN.has(table))
-    .flatMap((table) => sql.exec(`SELECT * FROM "${table}"`).flatMap((row) => Object.values(row)))
-    .filter((cell): cell is string => typeof cell === "string");
+  Arr.filter(
+    Arr.flatMap(
+      Arr.filter(
+        Arr.map(
+          sql.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"),
+          ({ name }) => String(name),
+        ),
+        (table) => !KNOWN.has(table),
+      ),
+      (table) => Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) => Object.values(row)),
+    ),
+    (cell): cell is string => typeof cell === "string",
+  );
 
 let counter = 0;
 
@@ -323,7 +332,7 @@ const walk = (
       live = yield* connect();
     });
 
-    const patches = () => published.filter((u) => u.type === "patch").length;
+    const patches = () => Arr.filter(published, (u) => u.type === "patch").length;
     const inboxCount = Effect.suspend(() =>
       mailbox === undefined ? Effect.die("no connection") : Stream.runCount(mailbox.read(NAME, 0)).pipe(Effect.orDie),
     );
@@ -420,12 +429,12 @@ const walk = (
     });
 
     for (const [n, step] of steps.entries()) {
-      const intact = answered.filter((a) => !damaged.has(a.letter.id));
-      const stored = intact.filter((a) => a.first._tag === "refused");
-      const futures = answered.filter((a) => a.first._tag === "refused" && a.base > current(a.note));
-      const moves = enabled.filter((move) =>
+      const intact = Arr.filter(answered, (a) => !damaged.has(a.letter.id));
+      const stored = Arr.filter(intact, (a) => a.first._tag === "refused");
+      const futures = Arr.filter(answered, (a) => a.first._tag === "refused" && a.base > current(a.note));
+      const moves = Arr.filter(enabled, (move) =>
         move === "older"
-          ? NOTES.some((note) => current(note) > 0)
+          ? Arr.some(NOTES, (note) => current(note) > 0)
           : move === "advance"
             ? futures.length > 0
             : move === "retry" || move === "reuse"
@@ -442,7 +451,7 @@ const walk = (
       } else if (move === "future") {
         yield* fresh(note, current(note) + step.ahead, step.secret);
       } else if (move === "older") {
-        const older = NOTES.filter((x) => current(x) > 0);
+        const older = Arr.filter(NOTES, (x) => current(x) > 0);
         const chosen = nth(older, step.kind);
         yield* fresh(chosen, step.kind % current(chosen), step.secret);
       } else if (move === "advance") {
@@ -545,7 +554,7 @@ const walk = (
             ? `${value.slice(0, -1)}${step.secret}`
             : kind === "missing"
               ? JSON.stringify(
-                  Object.fromEntries(Object.entries(json).filter(([f]) => f !== fields[n % fields.length])),
+                  Object.fromEntries(Arr.filter(Object.entries(json), ([f]) => f !== fields[n % fields.length])),
                 )
               : kind === "key"
                 ? JSON.stringify({ ...json, id: `${prior.letter.id}-other` })
@@ -570,7 +579,7 @@ const walk = (
       expect({ ...seen, view: sorted(seen.view) }, `after ${move}`).toEqual(expected(seen.patches));
       // No reply row, failure or span holds a refused body (R11).
       const kept = new Set(damaged.values());
-      unleaked([...replyCells(live.inbox).filter((cell) => !kept.has(cell)), ...errors, ...spans.text()], secrets);
+      unleaked([...Arr.filter(replyCells(live.inbox), (cell) => !kept.has(cell)), ...errors, ...spans.text()], secrets);
     }
 
     // Every first answer survives a last reopen and a successor.

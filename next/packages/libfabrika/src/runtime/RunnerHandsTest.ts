@@ -41,6 +41,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
 import { type From, Mailbox } from "../processes/Mailbox.ts";
@@ -210,7 +211,7 @@ type World = {
   gate?: { readonly entered: Deferred.Deferred<void>; readonly release: Deferred.Deferred<void> } | undefined;
 };
 
-const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
+const strings = (params: ReadonlyArray<SqlValue>) => Arr.filter(params, (p): p is string => typeof p === "string");
 const WRITE = /^\s*(INSERT|UPDATE|REPLACE|DELETE)\b/i;
 
 /** The ledger's Sql with the letter cut: the statement after a saved hands answer letter fails. */
@@ -234,8 +235,8 @@ const letterCut = (sql: Sql, world: World): Sql => {
       if (
         world.fault.letter &&
         /^\s*INSERT\b/i.test(query) &&
-        text.some((p) => p.endsWith("/answer")) &&
-        text.some((p) => /"hands_(ok|err)"/.test(p))
+        Arr.some(text, (p) => p.endsWith("/answer")) &&
+        Arr.some(text, (p) => /"hands_(ok|err)"/.test(p))
       ) {
         world.fault.letter = false;
         placed = true;
@@ -511,7 +512,7 @@ const walk = (
     const model = (name: string) =>
       Effect.map(checkpoint(name), (saved) => Option.getOrNull(decodeModel(saved?.saved.model ?? null)));
     const dispatched = (name: string) =>
-      Effect.map(checkpoint(name), (saved) => (saved?.cmds ?? []).flatMap((c) => (isHandsCmd(c) ? [c.id] : [])));
+      Effect.map(checkpoint(name), (saved) => Arr.flatMap(saved?.cmds ?? [], (c) => (isHandsCmd(c) ? [c.id] : [])));
     const letters = (name: string) => inContext(Mailbox.use((m) => Stream.runCollect(m.read(name, 0))));
     const task = (id: string) => inContext(Tasks.use((j) => j.read(id)).pipe(Effect.result));
     /** What the hands say about each of their calls. */
@@ -532,12 +533,12 @@ const walk = (
     const register = Effect.fnUntraced(function* () {
       for (const name of names) {
         const inbox = yield* letters(name);
-        const answered = inbox.flatMap((l) => (l.id.endsWith("/answer") ? [l.id.slice(0, -7)] : []));
+        const answered = Arr.flatMap(inbox, (l) => (l.id.endsWith("/answer") ? [l.id.slice(0, -7)] : []));
 
         for (const id of [...(yield* dispatched(name)), ...answered]) {
           if (!world.seen.has(id)) {
             const [process = "", pos = ""] = id.split("/");
-            const made = inbox.find((l) => l.pos === Number(pos));
+            const made = Option.getOrUndefined(Arr.findFirst(inbox, (l) => l.pos === Number(pos)));
             const replay = made !== undefined && world.sentBy.has(made.id) && world.sentBy.get(made.id) !== process;
             world.seen.set(id, { id, process, name, orphan: false, collectedAtEnd: false, letterAtEnd: false, replay });
           }
@@ -566,12 +567,12 @@ const walk = (
         const saved = yield* checkpoint(name);
         const owed = new Set(yield* dispatched(name));
         const all = yield* letters(name);
-        const folded = all.filter((l) => l.rev <= (saved?.saved.after ?? 0));
-        const mine = [...world.seen.values()].filter((d) => d.name === name);
+        const folded = Arr.filter(all, (l) => l.rev <= (saved?.saved.after ?? 0));
+        const mine = Arr.filter([...world.seen.values()], (d) => d.name === name);
         const m = yield* model(name);
 
         for (const d of mine) {
-          const placed = all.filter((l) => l.id === `${d.id}/answer`);
+          const placed = Arr.filter(all, (l) => l.id === `${d.id}/answer`);
           // L13: one answer letter per Cmd, however often it was asked, woken or finished.
           expect(placed.length, `${label}: L13 one answer letter for ${d.id}`).toBeLessThanOrEqual(1);
           const found = yield* task(d.id);
@@ -580,7 +581,7 @@ const walk = (
             const j: Task = found.success;
             // L12: one task under the Cmd's own id, its request saved once, with its first bytes.
             expect(
-              j.events.filter((e) => e.event === "requested"),
+              Arr.filter(j.events, (e) => e.event === "requested"),
               `${label}: L12 one request for ${d.id}`,
             ).toHaveLength(1);
             const request = j.state._tag === "absent" ? expect.fail("a read task has a state") : j.state.request;
@@ -589,9 +590,10 @@ const walk = (
             expect(request.target, `${label}: S1 the task targets the person's hands key`).toBe(world.target);
             d.first ??= JSON.stringify(request);
             expect(JSON.stringify(request), `${label}: L12 the request keeps its first bytes`).toBe(d.first);
-            expect(j.events.filter((e) => e.event === "collected").length, `${label}: one collect`).toBeLessThanOrEqual(
-              1,
-            );
+            expect(
+              Arr.filter(j.events, (e) => e.event === "collected").length,
+              `${label}: one collect`,
+            ).toBeLessThanOrEqual(1);
 
             if (j.state._tag === "collected") {
               // L14: only the process that asked ever takes the result.
@@ -616,7 +618,7 @@ const walk = (
             continue;
           }
 
-          const answered = folded.some((l) => l.id === `${d.id}/answer`);
+          const answered = Arr.some(folded, (l) => l.id === `${d.id}/answer`);
 
           if (owed.has(d.id)) {
             // R1: until its answer letter folds, the task keeps its result and the Cmd stays dispatched.
@@ -640,12 +642,12 @@ const walk = (
         // L13 and L14: the program folded one answer per folded answer letter of its own life, in order,
         // each the task's result. A Cmd's id names its process, so a letter for another life's Cmd,
         // placed before or after this life started, never reaches this model.
-        const delivered = folded.flatMap((l) =>
+        const delivered = Arr.flatMap(folded, (l) =>
           l.id.startsWith(`${current}/`) && l.id.endsWith("/answer")
             ? Option.toArray(Option.map(decodeLetter(l.m), (body) => ({ id: l.id, body })))
             : [],
         );
-        const expected = delivered.map(({ body }) =>
+        const expected = Arr.map(delivered, ({ body }) =>
           body.type === "hands_ok" ? { ok: body.value } : { err: body.reason },
         );
         expect(m?.answers ?? [], `${label}: L13/L14 ${name} folded exactly its own answers, once each`).toEqual(
@@ -679,7 +681,7 @@ const walk = (
     for (const cell of tape.cells) {
       const name = choose(names, cell.pick);
       const current = yield* liveProcess(name);
-      const out = [...world.seen.values()].filter((d) => d.process === current && d.name === name);
+      const out = Arr.filter([...world.seen.values()], (d) => d.process === current && d.name === name);
       const phases = new Map<string, string>();
 
       for (const d of out) {
@@ -693,8 +695,8 @@ const walk = (
       }
 
       // A task really waiting on the hands, whoever asked for it: an ended process's task too.
-      const waiting = [...world.seen.values()].filter((d) => phases.get(d.id) === "requested");
-      const finished = [...world.seen.values()].filter((d) => d.result !== undefined);
+      const waiting = Arr.filter([...world.seen.values()], (d) => phases.get(d.id) === "requested");
+      const finished = Arr.filter([...world.seen.values()], (d) => d.result !== undefined);
       const can: Record<Move, boolean> = {
         ask: true,
         poke: true,
@@ -709,10 +711,10 @@ const walk = (
         cut_letter: !world.fault.letter,
         reopen: true,
         restart: out.length > 0,
-        steal: [...world.seen.values()].some((d) => d.orphan && d.result !== undefined),
+        steal: Arr.some([...world.seen.values()], (d) => d.orphan && d.result !== undefined),
         forge: true,
       };
-      const options = moves.filter((move) => can[move]);
+      const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
         continue;
@@ -828,7 +830,7 @@ const walk = (
           for (const d of out) {
             d.orphan = true;
             d.collectedAtEnd = (yield* phase(d.id)) === "collected";
-            d.letterAtEnd = inbox.some((l) => l.id === `${d.id}/answer`);
+            d.letterAtEnd = Arr.some(inbox, (l) => l.id === `${d.id}/answer`);
           }
 
           yield* answers(runner(name).restart({ id: `restart-${++world.n}`, build: BUILD }), `${name}'s restart`);
@@ -838,7 +840,7 @@ const walk = (
         case "steal": {
           // L14: the successor of an ended process may never collect that process's result.
           const d = choose(
-            [...world.seen.values()].filter((x) => x.orphan && x.result !== undefined),
+            Arr.filter([...world.seen.values()], (x) => x.orphan && x.result !== undefined),
             cell.pick,
           );
           const successor = yield* liveProcess(d.name);
@@ -900,7 +902,10 @@ const walk = (
       const current = yield* liveProcess(name);
       const owed = new Set(yield* dispatched(name));
 
-      for (const d of [...world.seen.values()].filter((x) => x.name === name && x.process === current && !x.replay)) {
+      for (const d of Arr.filter(
+        [...world.seen.values()],
+        (x) => x.name === name && x.process === current && !x.replay,
+      )) {
         const state = yield* phase(d.id);
 
         if (world.target === null) {
@@ -999,17 +1004,20 @@ const refusedForGood = (open: Effect.Effect<Store, never, Scope.Scope>, done: Se
     const checkpoint = yield* saved();
     const m = Option.getOrNull(decodeModel(checkpoint?.saved.model ?? null));
     expect(m?.answers, "L21: the program folds one hands_err id_reused").toEqual([{ err: "id_reused" }]);
-    expect(m?.pokes, "L21: every later input steps").toBe(tape.after.filter((a) => a === "poke").length);
+    expect(m?.pokes, "L21: every later input steps").toBe(Arr.filter(tape.after, (a) => a === "poke").length);
     expect(
-      (checkpoint?.cmds ?? []).filter((c) => isHandsCmd(c)),
+      Arr.filter(checkpoint?.cmds ?? [], (c) => isHandsCmd(c)),
       "L21: the refused Cmd is no longer dispatched",
     ).toEqual([]);
     expect(world.alarms.has(CHECK), "L21: nothing keeps an alarm for a refused Cmd").toBe(false);
     expect(world.asked, "L21: the refused Cmd is never asked again").toEqual([id]);
     const inbox = yield* inContext(Mailbox.use((mb) => Stream.runCollect(mb.read(CHECK, 0))));
-    const placed = inbox.filter((l) => l.id === `${id}/answer`).map((l) => Option.getOrNull(decodeLetter(l.m)));
+    const placed = Arr.map(
+      Arr.filter(inbox, (l) => l.id === `${id}/answer`),
+      (l) => Option.getOrNull(decodeLetter(l.m)),
+    );
     expect(
-      placed.map((l) => [l?.type, l?.reason]),
+      Arr.map(placed, (l) => [l?.type, l?.reason]),
       "L21: one answer letter, hands_err id_reused",
     ).toEqual([["hands_err", "id_reused"]]);
     expect(yield* inContext(Tasks.use((j) => j.read(id))), "L21: the other process's task is left as it was").toEqual(
@@ -1147,7 +1155,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         const law = Effect.fnUntraced(function* (names: ReadonlyArray<string>) {
           // A handler offered under each name, `hands` among them: a built-in Cmd's is never given.
           const offered = Object.fromEntries(
-            [...names, "hands"].map((cmd) => [cmd, () => Effect.die(`B1: the ${cmd} handler ran`)]),
+            Arr.map([...names, "hands"], (cmd) => [cmd, () => Effect.die(`B1: the ${cmd} handler ran`)]),
           );
           const loaded = yield* ProgramLoader.use((l) => l.load(checkProgram.name)).pipe(
             Effect.provide(ProgramLoader.layer(PROGRAMS, offered)),
@@ -1158,7 +1166,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
           reached.add("hands");
 
           // The loader still gives an ordinary Cmd its handler: the refusal is for built-in Cmds only.
-          for (const cmd of names.filter((c) => c !== "hands" && c !== "send" && c !== "fire")) {
+          for (const cmd of Arr.filter(names, (c) => c !== "hands" && c !== "send" && c !== "fire")) {
             expect(Option.isSome(loaded.handler(cmd)), `an ordinary Cmd, ${cmd}, keeps its handler`).toBe(true);
             reached.add("ordinary");
           }

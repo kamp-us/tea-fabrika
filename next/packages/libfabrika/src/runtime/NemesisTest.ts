@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import type { Scope } from "effect";
 import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { expectTypeOf } from "vitest";
 import { inbox } from "../processes/Mailbox.ts";
 import type { Sql } from "../Sql.ts";
@@ -250,7 +251,7 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             const nemesis = yield* service(sql, () => Effect.die("check must never fire"), { tails });
             const report = yield* readReport(nemesis);
             expect(report).toMatchObject({ ...expected, letters: count, doubled: 0, gaps: 0 });
-            expect(report.restarts.map((row) => row.ref)).toEqual(["restart-1"]);
+            expect(Arr.map(report.restarts, (row) => row.ref)).toEqual(["restart-1"]);
             expect(yield* head(sql, inbox(target.name))).toBeGreaterThan(expected.boundary);
             expect(yield* head(sql, `processes/${target.name}`)).toBeGreaterThan(expected.processBoundary);
           }),
@@ -380,24 +381,26 @@ export const suite = ({ database, service, seed, head, page: PAGE, damage: corru
             }).pipe(recording.trace);
             // The operation spans have ended before flush. These are stored JobRecord rows, not a spy.
             const { rows, health } = yield* recording.read;
-            const own = rows.filter((row) => /nemesis/i.test(row.name));
-            expect(own.filter((row) => /fire/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
-            expect(own.filter((row) => /check/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
+            const own = Arr.filter(rows, (row) => /nemesis/i.test(row.name));
+            expect(Arr.filter(own, (row) => /fire/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
+            expect(Arr.filter(own, (row) => /check/i.test(row.name)).length).toBeGreaterThanOrEqual(2);
             expect(health.length).toBeGreaterThanOrEqual(4);
 
             // Each named output is visited separately; an empty list cannot stand in for stored spans.
             // Failed fire keeps its private cause in memory; it produces no public outcome.
             // Its real stored span and health row are inspected below, including the failure branch.
-            const returned = outputs.answers.flatMap((answer) => (answer._tag === "Success" ? [answer.success] : []));
+            const returned = Arr.flatMap(outputs.answers, (answer) =>
+              answer._tag === "Success" ? [answer.success] : [],
+            );
             const publicOutputs = {
               report: outputs.report,
               returned,
               offFire: outputs.offFire,
               offCheck: outputs.offCheck,
               health,
-              attributes: own.map((row) => row.attributes),
-              events: own.flatMap((row) => row.events),
-              links: own.flatMap((row) => row.links),
+              attributes: Arr.map(own, (row) => row.attributes),
+              events: Arr.flatMap(own, (row) => row.events),
+              links: Arr.flatMap(own, (row) => row.links),
               records: own,
             };
 

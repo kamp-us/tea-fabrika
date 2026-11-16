@@ -3,6 +3,7 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Option, Predicate, Result, Schema, SchemaIssue } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { ParentText } from "../coordination/index.ts";
 import { ProgramLoader } from "./Entry.ts";
@@ -1132,7 +1133,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
           oldCode(callables[fns.select]()) &&
           oldCode(callables[fns.refuse]()) &&
           oldCode(callables[fns.wake]()) &&
-          upgrades.every((u) => oldCode(u.run));
+          Arr.every(upgrades, (u) => oldCode(u.run));
         const ok = oldIsSteps(m) && codeOk;
         const decoded = Schema.decodeUnknownResult(Program.schema)(raw);
         expect(Result.isSuccess(decoded)).toBe(ok);
@@ -1249,7 +1250,7 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
       const target: object = b.target === "array" ? [] : b.target === "function" ? () => 0 : {};
 
       if (b.kind === "getters") {
-        for (const key of Object.keys(fields).filter((k) => fields[k]!.present)) {
+        for (const key of Arr.filter(Object.keys(fields), (k) => fields[k]!.present)) {
           Object.defineProperty(target, key, {
             get: () => {
               trace.push(`get:${key}`);
@@ -1605,9 +1606,9 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
     Cmd.make(name, { input: Schema.Struct({ name: Schema.String }), ok: Schema.Json, err: ["refused"] });
   const CMDS = ["monitor", "demonitor", "send", "save"] as const;
   const watcher = (cmds: ReadonlyArray<string>, port: "DOWN" | "other" | "both") => {
-    const defs = cmds.map(named);
+    const defs = Arr.map(cmds, named);
     const answers = Object.fromEntries(
-      defs.flatMap((d) => [
+      Arr.flatMap(defs, (d) => [
         [d.okType, (s: typeof watchModel.Type) => [s, []]],
         [d.errType, (s: typeof watchModel.Type) => [s, []]],
       ]),

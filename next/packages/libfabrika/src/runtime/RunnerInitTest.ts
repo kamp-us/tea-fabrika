@@ -6,6 +6,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Mailbox, ProcessStore, SessionManager, Writer } from "../coordination/index.ts";
@@ -238,7 +239,7 @@ export const suite = (
             const started = yield* Effect.exit(r.init());
             expect(w.controls.loaded.length, "the program's init ran").toBeGreaterThan(0);
             expect(
-              w.controls.loaded.every((m) => (m !== null) === restored),
+              Arr.every(w.controls.loaded, (m) => (m !== null) === restored),
               restored ? "init was given the saved model" : "init was given no model",
             ).toBe(true);
             expect(Exit.isSuccess(started), "a start answers although its program's init threw").toBe(true);
@@ -248,7 +249,7 @@ export const suite = (
             w.controls.throws = false;
             yield* TestClock.setTime(at);
             yield* r.due(at);
-            expect((yield* lives).filter((row) => row._tag === "restarted")).toMatchObject([{ body: { after: A } }]);
+            expect(Arr.filter(yield* lives, (row) => row._tag === "restarted")).toMatchObject([{ body: { after: A } }]);
           }).pipe(Effect.provide(w.layer()));
         }).pipe(Effect.scoped),
       { arbitrary: { seed: SEED, runs: 50 } },

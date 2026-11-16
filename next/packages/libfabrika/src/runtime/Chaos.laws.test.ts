@@ -6,6 +6,7 @@
 // Identity pins: widen ExperimentId to string; CI runs this type-only plant.
 import { expect, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { expectTypeOf } from "vitest";
 import * as Id from "../Id.ts";
 import type { History } from "../processes/Mailbox.ts";
@@ -139,8 +140,8 @@ const history = (letter: { id: string; pos: number; rev: number; m: unknown }): 
 
 // Set enumeration is independent of the implementation's count/min/max formula.
 const oracle = (input: ReadonlyArray<{ id: string; pos: number }>) => {
-  const positions = new Set(input.map((letter) => letter.pos));
-  const ids = new Set(input.map((letter) => letter.id));
+  const positions = new Set(Arr.map(input, (letter) => letter.pos));
+  const ids = new Set(Arr.map(input, (letter) => letter.id));
   const sorted = [...positions].sort((a, b) => a - b);
   const first = sorted[0];
   const last = sorted.at(-1);
@@ -161,9 +162,9 @@ it.prop(
   "ID duplicates and observed position gaps match an independent set oracle",
   [letters],
   ([input]) => {
-    expect(Chaos.checkHistory(input.map(history))).toEqual(oracle(input));
-    expect(Chaos.checkHistory(input.toReversed().map(history))).toEqual(oracle(input));
-    const changed = input.map((letter, i) => history({ ...letter, m: { different: i }, rev: 100000 + i * 100 }));
+    expect(Chaos.checkHistory(Arr.map(input, history))).toEqual(oracle(input));
+    expect(Chaos.checkHistory(Arr.map(Arr.reverse(input), history))).toEqual(oracle(input));
+    const changed = Arr.map(input, (letter, i) => history({ ...letter, m: { different: i }, rev: 100000 + i * 100 }));
     expect(Chaos.checkHistory(changed)).toEqual(oracle(input));
   },
   { arbitrary },
@@ -185,7 +186,7 @@ it("vector: empty, singleton, shifted and repeated positions define the count fo
   ];
 
   for (const { input, want } of cases) {
-    expect(Chaos.checkHistory(input.map(history))).toEqual(want);
+    expect(Chaos.checkHistory(Arr.map(input, history))).toEqual(want);
   }
 });
 
@@ -240,7 +241,7 @@ it.prop(
       { ...restart("wrong-stream", target.name, process, next, after + 1, at), stream: "processes/other:1" },
       ...(matching ? [first, restart("later", target.name, process, other, after + 3, sameClock ? at : at + 1)] : []),
     ];
-    const input = reverse ? rows.toReversed() : rows;
+    const input = reverse ? Arr.reverse(rows) : rows;
     expect(Chaos.recovery(hit, input)).toEqual(
       matching ? { ref: first.id, rev: first.rev, arrivedAt: first.arrivedAt, process: next } : null,
     );
