@@ -6,7 +6,7 @@ import * as StartsTest from "../settings/StartsTest.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
 
 class Consumer extends Context.Service<Consumer, { readonly build: number }>()(
-  "@kampus/libfabrika/cloudflare/SettingsRuntime.test.Consumer",
+  "@kampus/libfabrika/cloudflare/SettingsRuntime.test/Consumer",
 ) {}
 
 describe("L16 shared settings context, next/", () => {

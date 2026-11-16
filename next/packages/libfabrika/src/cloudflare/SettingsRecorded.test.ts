@@ -11,7 +11,7 @@ import type { BrainOptions, recordingLayer } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 
 class Consumer extends Context.Service<Consumer, { readonly port: number }>()(
-  "@kampus/libfabrika/cloudflare/SettingsRecorded.test.Consumer",
+  "@kampus/libfabrika/cloudflare/SettingsRecorded.test/Consumer",
 ) {}
 
 describe("recorded settings dependency, next/", () => {

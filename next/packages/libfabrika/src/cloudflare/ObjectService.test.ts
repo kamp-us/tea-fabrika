@@ -63,7 +63,7 @@ vi.mock("./objects.ts", async (original) => {
 });
 
 class Probe extends Context.Service<Probe, { readonly port: number }>()(
-  "@kampus/libfabrika/cloudflare/ObjectService.test.Probe",
+  "@kampus/libfabrika/cloudflare/ObjectService.test/Probe",
 ) {}
 
 /** A platform value built from plain parts: the layers read only the parts each law gives. */

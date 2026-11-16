@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e93-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:18:11-08:00",
+  "ended": "2026-11-15T23:36:45-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for Effect sweep slice E93, a judgment slice, in next/: the checker's deterministicKeys over next/packages/libfabrika/src/{cloudflare, runtime, telemetry}. Counted on origin/main b510ed2e8 with effect-tsgo diagnostics on next/packages/libfabrika/tsconfig.json and only deterministicKeys at error through --lspconfig: 28 hits in libfabrika, 21 in this row's folders (cloudflare 13, runtime 6, telemetry 2), matching the plan. Four of the 21 are in exam paths and are fixed here, by hand with the Edit tool, to the checker's own form (decision 0575: the package, the folder, the file name, then a slash and the class name): cloudflare/ObjectService.test.ts:66 Probe, cloudflare/SettingsRecorded.test.ts:14 Consumer, cloudflare/SettingsRuntime.test.ts:9 Consumer, runtime/Runner.integration.test.ts:276 ViewedRunner. Each ID was searched for across the repo first and is spelled only in its own file, so nothing stores, sends or reads it (0575's check before a rename). Recount after: 24 hits in libfabrika, 17 in this row's folders, all in product files, left for the build: cloudflare/SettingsRuntime.ts:57, cloudflare/connection.ts:330, cloudflare/platform.ts:106, 266, 303, 335, 363, 405, cloudflare/runtime.ts:2157, 2525, runtime/Entry.ts:129, 218, 238, 251, runtime/Runner.ts:500, telemetry/Records.ts:467, telemetry/Sink.ts:365. None waits on 1366, which is merged. Other folders with hits belong to E55 and were left untouched: lib:top Id.ts:152, lib:access access/SessionManager.ts:164, lib:ci ci/CiTest.ts:38 (an exam path by next/**/*Test.ts), lib:codehost codehost/CodeHostTest.ts:53 (an exam path by next/**/*Test.ts), lib:ledger ledger/Ledger.ts:55 and ledger/WritePolicy.ts:52, lib:processes processes/Mailbox.ts:30. No new law: the law for this check is the checker at error, whose lock lands later in one PR, and no fix changed a value a law reads. No lock line, no tsconfig override, no LOCKED row was added.",
+  "plants": [
+    {
+      "law": "the checker's deterministicKeys at error over next/packages/libfabrika/tsconfig.json (the lock comes later)",
+      "plant": "the four exam-path IDs in their old dot form, as on origin/main b510ed2e8, counted before the fix",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 19,
+  "note": "PAIRING, for the integrator: the service-id lint rule (oxlint-plugins/service-id.ts, set at .oxlintrc.json:1753) holds the old dot form, so each deterministicKeys fix turns it red. By decisions 0573 and 0575 and the merge session's ruling Q7, service-id is deleted with its test, and deterministicKeys locked as an error, in the same pull request as this slice's fixes and E55's, never with a gap between them. This step did not touch the rule and added no lock line. Until that swap lands, pnpm lint is red on exactly four fabrika(service-id) lines, the four fixed IDs, and oxlint-plugins/service-id.test.ts is red on one law, 'scenario: replayed over libfabrika's own source, the rule finds nothing', which names exactly the four fixed files; its other two laws pass. After the build fixes its 17 product hits, that law and lint will name those files too. oxlint-plugins/service-id.test.ts also spells the product IDs in its mapping vector; it goes with the rule. Tests run at head b510ed2e8 plus this step's four edits, one file at a time under nice -n 15 with maxWorkers 3 and TYPESAFE_API_KEY unset: cloudflare/ObjectService.test.ts 3 passed, cloudflare/SettingsRecorded.test.ts 3 passed, cloudflare/SettingsRuntime.test.ts 2 passed, runtime/Runner.integration.test.ts 117 passed (the 0178 guard did not refuse it). pnpm format applied nothing; the list ratchet exited 0. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) failed in two parts: node oxlint-plugins/lint.ts, run again alone, blocks on only the four paired fabrika(service-id) lines above; pnpm -s lint:dead died when the kernel killed a process for lack of memory while other agents' code-graph runs shared the box, and run again alone it passed (unreachable ledger: PASS, none new). Every other lint part passed. No pnpm typecheck in this step: the brief asked for none, and the build or the integrator proves zero with it.",
+  "step": "tests"
+}
