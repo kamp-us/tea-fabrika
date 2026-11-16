@@ -32,9 +32,35 @@ const fixture = Effect.gen(function* () {
   return { jobs, log };
 }).pipe(Effect.provide(NodeServices.layer));
 
-/** The same jobs as a branch run that went green: every job a success, and the report skipped. */
+/** The same jobs as a branch run that went green: every job a success, the report too. */
 const allGreen = (jobs: ReadonlyArray<Job>): ReadonlyArray<Job> =>
-  jobs.map((job) => ({ ...job, conclusion: job.name === "report" ? "skipped" : "success" }));
+  jobs.map((job) => ({ ...job, conclusion: "success" }));
+
+/** A job of a run in today's shape (0590), with no step: only its name and how it ended are read. */
+const job = (id: number, name: string, conclusion: string): Job => ({
+  id,
+  name,
+  status: "completed",
+  conclusion,
+  steps: [],
+});
+
+/**
+ * A green proof run's jobs, by what `select` chose: the full set on `tests`, a changed set on
+ * `changed`, or a changed set of zero files, with no leg. The matrix it did not start is one skipped
+ * job with no leg in its name, as GitHub lists it.
+ */
+const shaped = (kind: "full" | "changed" | "zero", report = "success"): ReadonlyArray<Job> => [
+  job(1, "gate", "success"),
+  job(2, "select", "success"),
+  ...(kind === "full"
+    ? [job(3, "tests (1)", "success"), job(4, "tests (tooling-1)", "success")]
+    : [job(3, "tests", "skipped")]),
+  ...(kind === "changed"
+    ? [job(5, "changed (1)", "success"), job(6, "changed (2)", "success")]
+    : [job(5, "changed", "skipped")]),
+  job(7, "report", report),
+];
 
 /** How the branch's full runs stand, as a law sets them: at the head, or only at an older head. */
 const Stands = Schema.Literals([
@@ -204,7 +230,7 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
 
   // scenario: the green path, as the lead runs it on a reviewed draft.
   it.effect(
-    "scenario: a draft whose full run is green on every job, the report skipped as on every branch, is marked ready, then armed pinned to its head",
+    "scenario: a draft whose full run is green on every job is marked ready, then armed pinned to its head",
     () =>
       Effect.gen(function* () {
         const red = yield* fixture;
@@ -234,9 +260,9 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
     ({ stands, state, base, plan, docsOnly, skipped }) =>
       Effect.gen(function* () {
         const red = yield* fixture;
-        // The report skipped as on every branch, or a success, or another job skipped in its place.
-        const skips = (job: Job) => job.name === skipped || (job.name === "report" && skipped === "report");
-        const withSkip = red.jobs.map((job) => ({ ...job, conclusion: skips(job) ? "skipped" : "success" }));
+        // Every job a success, or one skipped that no run skips by design: the report, which runs on
+        // every branch run since pull request 1404, or a leg.
+        const withSkip = red.jobs.map((job) => ({ ...job, conclusion: job.name === skipped ? "skipped" : "success" }));
         const isRed = stands === "red" || stands === "older_red";
         const m = memory(
           {
@@ -251,12 +277,74 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         );
         const answer = yield* Effect.result(arm(m));
         const open = state === "OPEN" && base === "main" && !plan;
-        const green = (stands === "green" || stands === "older") && skipped !== "tooling (1)";
+        const green = (stands === "green" || stands === "older") && skipped === "none";
         const arms = open && (green || stands === "none");
         expect(m.github.calls).toEqual(arms ? armedAt : []);
         expect(answer._tag).toBe(arms ? "Success" : "Failure");
       }),
   );
+
+  // 0590: a branch's proof run tests the full set or the changed set. Plants, each run once on
+  // Arm.ts and restored: `kind` reads every run as full (red: the changed-set run at the older head
+  // arms); a changed-set run at an older head arms with the note as a full one does (red: the same);
+  // the report skips by design, as before pull request 1404 (red: the runs with a skipped report arm).
+  it.effect(
+    "scenario: a changed-set run green at the head arms, and one at an older head refuses, a zero-file set included; a full run of today's shape at an older head still arms with 0544's note",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const head = oid.slice(0, 12);
+        const url = `https://github.com/${repo}/actions/runs/${RED}`;
+
+        for (const kind of ["changed", "zero"] as const) {
+          const at = memory({ stands: "green", jobs: shaped(kind) }, red);
+          expect(Arm.line(yield* arm(at)), kind).toBe(
+            `pr 1092: changed-set run ${RED} green on every job at ${head}, the tests this change reaches (0590); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+          );
+          expect(at.github.calls, kind).toEqual(armedAt);
+
+          const stale = memory({ stands: "older", jobs: shaped(kind) }, red);
+          const refused = yield* Effect.flip(arm(stale));
+          expect(refused.reason, kind).toBe(
+            `pr 1092: no full run at this head, and at the older head ${older.slice(0, 12)}: the changed-set run ${url} tested that head's change, not this one (0590); start one at this head: gh workflow run scheduled.yaml --ref ${branch}`,
+          );
+          expect(stale.github.calls, kind).toEqual([]);
+        }
+
+        const full = memory({ stands: "older", jobs: shaped("full") }, red);
+        expect(Arm.line(yield* arm(full))).toBe(
+          `pr 1092: no full run at ${head}, and the newest one, ${RED} at the older head ${older.slice(0, 12)}, was green; arming as 0544 allows (to start one: gh workflow run scheduled.yaml --ref ${branch}); merge when ready on at ${oid}, a squash: GitHub queues it once ci-required is green there`,
+        );
+        const fullAt = memory({ stands: "green", jobs: shaped("full") }, red);
+        expect(Arm.line(yield* arm(fullAt))).toContain(`full run ${RED} green on every job at ${head}`);
+      }),
+  );
+
+  it.effect(
+    "scenario: a run whose report failed, was canceled or never ran refuses at the head, whatever its matrices did",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+
+        for (const report of ["failure", "skipped", "cancelled"]) {
+          for (const kind of ["full", "changed", "zero"] as const) {
+            const m = memory({ stands: "green", jobs: shaped(kind, report) }, red);
+            const refused = yield* Effect.flip(arm(m));
+            expect(refused.reason, `${kind} ${report}`).toContain("is not green on every job:");
+            expect(refused.reason, `${kind} ${report}`).toContain(`  report: ${report}`);
+            expect(m.github.calls).toEqual([]);
+          }
+        }
+      }),
+  );
+
+  it("vector: a run's kind is full when a leg of the full set ran, of today's shape or the older two-job one, and changed otherwise", () => {
+    expect(Arm.kind(shaped("full"))).toBe("full");
+    expect(Arm.kind(shaped("changed"))).toBe("changed");
+    expect(Arm.kind(shaped("zero"))).toBe("changed");
+    expect(Arm.kind([job(1, "next (2)", "success"), job(2, "tooling (1)", "success")])).toBe("full");
+    expect(Arm.kind([job(1, "tests", "skipped"), job(2, "changed (1)", "success")])).toBe("changed");
+  });
 
   // vector: a plan's pull request, and a merged one.
   it.effect(

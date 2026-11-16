@@ -214,7 +214,7 @@ Phoenix's `no-node-sqlite-test-backing.grit` is not here. It bans a fake of Clou
 
 `no-bare-disable` was not a plugin before either. Biome failed on an ignore comment with no reason, and oxlint does not: its bare `// oxlint-disable-next-line` silences every rule, the secret rules too. This rule refuses an ignore comment that names no rule, gives no `-- <why>`, or says `eslint-disable`. It reports at offset 0 of the file, so the comment it refuses cannot silence it. It fired 0 times on the tree when it was added.
 
-`padding-line-between-statements` stands in for ESLint's rule of that name and `lines-between-class-members`, which oxlint 1.90.0 lacks ([0021](../.decisions/0021-a-blank-line-between-top-level-statements.md)). It asks for a blank line between top-level statements and between class members, unless both are one line, both are imports or re-exports, or the pair is one declaration (overloads, or a value then its same-name type). Its whitespace fix runs in `pnpm format`. Count on 2026-11-09, ticket 437: the first draft, with only the import and overload exceptions, fired 6,156 times in 847 files. 2,544 of those were two one-line statements and 424 a schema then its `typeof` type, both read as one group, so both became exceptions. The rule as merged fired 3,072 times in 583 files (2,920 once the `.claude/skills` link is counted once). A hand read of 40 fires at random found 0 false alarms; the earlier 30-fire read is what found the schema-type pairs. The sweep added only blank lines. `padding-line-between-statements.test.ts` generates files of imports, one-line and multi-line consts, schema-type pairs and overloads, and checks where it fires and that its fix adds only those lines.
+`padding-line-between-statements` stands in for ESLint's rule of that name and `lines-between-class-members`, which oxlint 1.90.0 lacks ([0021](../.decisions/0021-a-blank-line-between-top-level-statements.md)). It asks for a blank line between top-level statements and between class members, unless both are one line, both are imports or re-exports, or the pair is one declaration (overloads, or a value then its same-name type). Its whitespace fix runs in `pnpm format`. Count on 2026-11-09, ticket 437: the first draft, with only the import and overload exceptions, fired 6,156 times in 847 files. 2,544 of those were two one-line statements and 424 a schema then its `typeof` type, both read as one group, so both became exceptions. The rule as merged fired 3,072 times in 583 files (2,920 once the `.claude/skills` link is counted once). A hand read of 40 fires at random found 0 false alarms; the earlier 30-fire read is what found the schema-type pairs. The sweep added only blank lines. `padding-line-between-statements.test.ts` generates files of imports, one-line and multi-line consts, schema-type pairs and overloads, and checks where it fires and that its fix adds only those lines. It stays while `anti-slop/require-readable-spacing` misses lines it flags: 0573's check, run on 2026-11-16 over that test's generated files and scenarios and every 15th non-test source file of `next/packages/` with their blank lines removed, found theirs missing both of ours in the class-members scenario (a method after a field, a method after a method), and nothing else.
 
 On the same day (ticket 439) the rule took a second job: a blank line before and after every `if`, loop, `switch` and `try` in any block, unless it is first or last there, an `if` with its `else` chain and a labeled loop each counting as one statement. With `eslint/curly` set to `"all"` beside it, the tree had 14,959 padding fires and 8,378 curly fires (`.claude/skills` counted once) in 928 files. A hand read of 40 padding fires and 8 curly fires at random found 0 false alarms: each was a control statement with a neighbor and no blank line, or a body with no braces, which is what the owner asked to refuse. Many are runs of guard clauses, which now stand apart. The sweep took 8 `pnpm format` runs, since oxlint applies one fix per overlapping range a pass; every swept file parses to the same tree with a one-statement block read as its statement.
 
@@ -350,11 +350,6 @@ The hand-written part, and the generated case that tests each edge in
 fast-check 4.10.2 counts `examples` inside `numRuns`, so `withExamples` adds the generated runs on
 top. Before 2026-11-10 the layout law ran its 7 examples and 1 generated input.
 
-`one-id-module` keeps `next/`'s Id code in `libfabrika/src/id.ts`. It refuses the retired
-`libfabrika/src/data/id.ts`, even empty or forwarding, so a second module cannot stay behind.
-T518 A8's count on 2026-11-08 was one fire, the second module from P17a, with no false alarm.
-Its property test generates file contents and checks nearby paths stay allowed.
-
 ### libfabrika's modules
 
 Ticket 477, decision [0043](../.decisions/0043-rooms-on-floors.md), with the words of [0091](../.decisions/0091-modules-and-layers.md) (ticket 688): a folder of libfabrika is a module and its rank is a layer. One rule of ours and two of oxlint's own hold a module's shape in `next/packages/libfabrika/src`. `.oxlintrc.json` gives all three their paths and lists, and `modules.test.ts` plants each law at its real path with that config.
@@ -385,7 +380,7 @@ Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`
 
 React's own `react/refs`, `react/immutability`, `react/display-name` and `react/purity` block in `next/**/*.tsx`, tests left out (`docs/direction/react-compiler.md`). `react/purity` refuses a clock or random read in render and lets a handler pass, as React means it; `no-clock-in-view` refuses the same reads anywhere in a `next/` `.tsx` file, handlers included, since the time comes through a Cmd (C1; owner, 2026-11-05). oxc-transform-react 0.157.0 stopped refusing a clock read in a handler a view passes down, which 0.156.0 did, so this rule holds that case now. `pnpm lint:compiler` runs the Compiler's compile step, `next/apps/fabrika/src/exam/compiler.ts`, over every `.tsx` file in `next/`, against `compiler-ledger.json`, which starts empty.
 
-**`.agents/` is held to the same rules** (owner, 2026-11-09; [0033](../.decisions/0033-agents-code-follows-next-rules.md)). A second override names `.agents/**/*.ts` and `.agents/**/*.mjs` and repeats the `next/**` rule block, and `edge-comment.test.ts` checks the two blocks are equal. `.agents/` tests keep the edge rules on, since only `next/`'s tests may turn one off; their own override leaves out `effect-functions`, `no-hand-tag` and `one-store-hook`. `no-node-imports`, `no-node-filesystem` and `no-ledger-sql` check their path with `heldToNext` in `match.ts`. On the day it joined, 154 findings fired in 9 files: `no-promises` 51 (42 of them in two tests that drive real processes, `box.test.ts` 15 and `run.test.ts` 27), `no-hand-tag` 48, `no-node-imports` 23, `no-of` 21, `no-node-filesystem` 9, `no-effect-run-outside-edge` 2. Each is named in `agents-ledger.json` by file, rule and its line of code with spaces collapsed (`ledger.ts`), never a line number. `lint.ts` waives a finding only an entry names, refuses an entry outside `.agents/`, and on a whole-repo run writes back only the entries a finding still matched; CI fails until that pruned file is committed. Nothing adds an entry; that is the owner's call. `ledger.test.ts` holds the laws and plants a `.agents/` script.
+**`.agents/` is held to the same rules** (owner, 2026-11-09; [0033](../.decisions/0033-agents-code-follows-next-rules.md)). A second override names `.agents/**/*.ts` and `.agents/**/*.mjs` and repeats the `next/**` rule block, and `edge-comment.test.ts` checks the two blocks are equal. `.agents/` tests keep the edge rules on, since only `next/`'s tests may turn one off; their own override leaves out `effect-functions`, `no-hand-tag` and `one-store-hook`. `no-node-imports` and `no-ledger-sql` check their path with `heldToNext` in `match.ts`. On the day it joined, 154 findings fired in 9 files: `no-promises` 51 (42 of them in two tests that drive real processes, `box.test.ts` 15 and `run.test.ts` 27), `no-hand-tag` 48, `no-node-imports` 23, `no-of` 21, `no-node-filesystem` 9, `no-effect-run-outside-edge` 2. Each is named in `agents-ledger.json` by file, rule and its line of code with spaces collapsed (`ledger.ts`), never a line number. `lint.ts` waives a finding only an entry names, refuses an entry outside `.agents/`, and on a whole-repo run writes back only the entries a finding still matched; CI fails until that pruned file is committed. Nothing adds an entry; that is the owner's call. `ledger.test.ts` holds the laws and plants a `.agents/` script.
 
 **Edges are comments, not files** (owner, 2026-11-05; Tier 1, P35). The one line a platform demands, such as a Durable Object method that must answer a Promise, passes either rule only under `// oxlint-disable-next-line fabrika/no-promises -- edge: <why>`, or the same for `fabrika/no-effect-run-outside-edge`, or one comment naming both. Until P35 the run rule held a list of 18 whole paths, which let a whole file wrap Promises; the list is gone. `edge-comment` keeps every such comment to one shape, reported at the top of the file as `no-bare-disable` is, so a comment cannot silence it. An edge comment over a line where nothing fires fails through `reportUnusedDisableDirectives`. CI's `edges` step (`next/apps/fabrika/src/exam/edges.ts`) lists each edge comment a pull request adds, with its reason, in the step summary and as a note on the diff, for the owner to read; it never blocks. Its industry match is clippy's `undocumented_unsafe_blocks`, with `edge:` for `SAFETY:`, and eslint-comments' `require-description` and `no-restricted-disable`.
 
@@ -528,17 +523,6 @@ step, the exam files show 0 fires; 37 remain in the 9 build-owned files the plan
 those are Alchemy keys that keep their word under an exception; the other 35 are renames.
 
 ### P12 checks in lint
-
-`no-node-filesystem` refuses `fs`, `fs/promises` and `path`, with or without `node:`,
-in `next/` product files. It covers imports, re-exports, dynamic imports, `require`
-and TypeScript import assignments. Tests, test support files, declarations, the
-exam and browser test drivers are left out. Its generated plants use the real
-config at these paths. The P12 review-6 sweep found one filesystem import in
-`node/dev/dev-recording.ts`, plus six path imports: that file, `node/build.ts`,
-and the app's `build.ts`, `dev.ts`, `src/local-instance.ts` and `src/instance.ts`.
-These are seven findings in six files, all read by hand, with no false alarm.
-All can use Effect's existing FileSystem or Path service. This rule deliberately
-stays red until the builder removes those imports.
 
 `pnpm lint:twin` runs `next/apps/fabrika/src/exam/twin.ts` on the real Alchemy stack.
 It reads the installed providers, prints the finding count and exits nonzero for any
@@ -1199,3 +1183,42 @@ direct files of `apps/fabrika/src` and `apps/fabrika/e2e`, and libfabrika's `cli
 every folder they list. `advice.test.ts` holds the runner's side: a `Reflect` fire at `warn`
 blocks, it never keeps a `JSON.parse` warn line alive, and each block keeps what the rule held
 before.
+
+## Rules that gave way to trusted ones, decision 0573
+
+[0573](../.decisions/0573-trusted-lint-rule-replaces-ours.md): where a trusted rule holds every line
+ours did, ours goes in the same pull request, so no file is ever unguarded. Two went on 2026-11-16.
+Each count is at the swap: ours fired 0 times, since `pnpm lint` was green.
+
+| Ours | Taken over by | Where ours ran | Hits at the swap |
+|---|---|---|---|
+| `no-node-filesystem` | our `no-node-imports`, which checks every builtin, more import forms, and also `exam/` paths and `.d.ts` files | `next/**` and its `.agents/` copy | 0; its 8 `agents-ledger.json` lines were already held by `no-node-imports` entries |
+| `one-id-module` | our `modules`, rule 2: `data` is no folder its list names | the root rules, one path | 0 |
+
+- **`no-data-taggederror` stays,** beside two trusted rules that each hold part of it, until a
+  trusted rule refuses `Data.TaggedError` in a type position. Ours matches with `banNames`
+  (`match.ts`), which visits `TSQualifiedName`, so it refuses `type Made = typeof Data.TaggedError`
+  and `InstanceType<ReturnType<typeof Data.TaggedError<"X">>>`. No trusted rule does: oxlint's
+  `no-restricted-properties` reads only value members, `typescript/no-restricted-types` names
+  types, and the Effect checker's `preferSchemaTaggedError` reads only a class's `extends`
+  (the plan's amendment of 2026-11-15, `docs/plan/quests/trusted-rules-0573-PLAN.md`).
+- **The two beside it.** The checker's `preferSchemaTaggedError` (`error` in `tsconfig.base.json`)
+  catches `class X extends Data.TaggedError(...)`, an aliased import included, in every type-checked
+  file. oxlint's `no-restricted-properties` refuses the value forms (a bare reference, a call,
+  `const { TaggedError } = Data`, `Data["TaggedError"]`) in every file oxlint lints, the 73 tracked
+  files in no type-checked project included: 66 under `.agents/`, 5 under `scripts/`, and the root
+  `vitest.shards.test.ts` and `vitest.changed.test.ts`. The entry is in the root rules and in every
+  block that sets the rule, since an override replaces a rule's options.
+- **Its laws.** `plants.test.ts` plants `TAGGED_ERROR` (`builtin-plants.ts`) and ours'
+  `DATA_TAGGEDERROR`, type lines included, in every folder of every such block and under none (L1),
+  and fails when a block lacks the entry (L2). `effect-checks-held.test.ts` (L3) fails when a
+  tracked tsconfig turns the checker's level down, sets its `diagnostics` to `false` or sets
+  `ignoreEffectErrorsInTscExitCode`.
+- **Documented misses.** An alias of `Data` (`const D = Data; D.TaggedError`) passes oxlint's rule
+  and ours. In a type-checked file the checker still catches the class; in an untyped script nothing
+  does.
+- **`no-node-filesystem`'s and `one-id-module`'s laws moved** to `no-node-imports.test.ts` (L4),
+  which checks all 8 module names in every run, and `modules.test.ts` (L5), with the same
+  generators.
+- **`no-context-tag` stays** until ticket 486 brings the 73 untyped files into a type-checked
+  project: `interface I extends Context.Tag<A, B> {}` is caught by ours and by no trusted rule.

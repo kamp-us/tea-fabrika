@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-trusted-rules-0573-build",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1498",
+  "started": "2026-11-15T22:32:46-08:00",
+  "ended": "2026-11-15T22:44:10-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Build step for decision 0573's first pull request, in next/ and our tooling (docs/plan/quests/trusted-rules-0573-PLAN.md). Made the plan's three build edits: .agents/skills/lead/scripts/chain.ts's disable comment above the node:fs import names only fabrika/no-node-imports, which made pnpm lint green; next/AGENTS.md's rules table row names only fabrika/no-node-imports; .patterns/effect-errors-keep-their-cause.md's Holds it list names no-restricted-properties on Data.TaggedError and the checker's preferSchemaTaggedError in place of the deleted rule, with today's .oxlintrc.json and tsconfig.base.json line numbers. A search for the three deleted rule names finds only history (experiments, an older plan, a direction note the plan keeps as written) and the tests step's own files.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Run in a cloud box with no step keys, so the commit is unsigned (stepcommit --commit-only). Tests at 33f2b646e plus this step's edits, one file at a time under nice -n 15 --maxWorkers=3: oxlint-plugins plants, no-node-imports, modules, ledger and effect-checks-held; .agents chain, quests, movecheck, plancheck, plancheck.draft and stepcommit; all green. padding-superset.test.ts does not exist, since the tests step stopped L7 as the plan says. vitest --changed origin/main not run: the branch changes vitest.shards.json, which makes it the full suite. pnpm format, NODE_OPTIONS=--max-old-space-size=6144 pnpm lint, the list ratchet and one pnpm typecheck all exit 0. No 0178-guarded law is reached.",
+  "step": "build"
+}

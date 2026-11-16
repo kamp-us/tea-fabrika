@@ -21,7 +21,6 @@ import { noExpectInIf } from "./no-expect-in-if.ts";
 import { noHandTag } from "./no-hand-tag.ts";
 import { noImplicitEffectConcurrency } from "./no-implicit-effect-concurrency.ts";
 import { noLedgerSql } from "./no-ledger-sql.ts";
-import { noNodeFilesystem } from "./no-node-filesystem.ts";
 import { noNodeImports } from "./no-node-imports.ts";
 import { noNumericDuration } from "./no-numeric-duration.ts";
 import { noOf } from "./no-of.ts";
@@ -36,7 +35,6 @@ import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
 import { noTypeAssertions } from "./no-type-assertions.ts";
 import { noWallClock } from "./no-wall-clock.ts";
-import { oneIdModule } from "./one-id-module.ts";
 import { oneMachinePerFile } from "./one-machine-per-file.ts";
 import { oneStoreHook } from "./one-store-hook.ts";
 import { outsideInputConstructor } from "./outside-input-constructor.ts";
@@ -74,7 +72,6 @@ const plugin: Plugin = {
     "no-hand-tag": noHandTag,
     "no-implicit-effect-concurrency": noImplicitEffectConcurrency,
     "no-ledger-sql": noLedgerSql,
-    "no-node-filesystem": noNodeFilesystem,
     "no-node-imports": noNodeImports,
     "no-numeric-duration": noNumericDuration,
     "no-of": noOf,
@@ -92,7 +89,6 @@ const plugin: Plugin = {
     "one-store-hook": oneStoreHook,
     "one-machine-per-file": oneMachinePerFile,
     "program-package-layout": programPackageLayout,
-    "one-id-module": oneIdModule,
     "outside-input-constructor": outsideInputConstructor,
     "package-imports": packageImports,
     "padding-line-between-statements": paddingLineBetweenStatements,

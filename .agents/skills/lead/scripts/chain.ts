@@ -110,7 +110,7 @@
 
 // The chain's record, logs and brief are sync file calls: a debt agents-ledger.json named for this
 // import until three names left it and its line changed. The ledger only shrinks, so it is marked here.
-// oxlint-disable-next-line fabrika/no-node-imports, fabrika/no-node-filesystem -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
+// oxlint-disable-next-line fabrika/no-node-imports -- edge: sync file calls not yet moved to Effect's FileSystem (0033)
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
