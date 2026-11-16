@@ -84,6 +84,8 @@ List `.decisions/` (or run `records.ts list .decisions`, which reads `origin/mai
 [0522](./.decisions/0522-no-folder-keeps-an-index-table.md)): filenames identify records, and each record's frontmatter gives its `id`,
 `title` and `status`. Read applicable records when changing the choice they govern or resolving
 conflicting guidance. Record new decisions with `/adr` ([skill](./.agents/skills/adr/SKILL.md)).
+`records.ts resolve <id>...` says whether a decision you cite is in force, and names the live one a
+superseded decision lands on.
 
 There is no committed decision index and no startup hook. Filenames plus frontmatter are the
 discovery contract ([0008](./.decisions/0008-decision-discovery-is-the-agents-md-contract.md), after
@@ -92,7 +94,9 @@ Repo tooling adds no Claude Code hooks, SessionStart or any other: a tool runs w
 
 **Check what is settled first.** Before any question to the owner, design question, recommendation
 or plan, search `.decisions/`, `.glossary/`, `docs/direction/`, `experiments/` and the plan for the
-topic. That holds for a question an agent's plan raises and for a pull request you walk: compare its
+topic. Start with `node .agents/skills/lead/scripts/records.ts find "<words>"`, which ranks those
+records (and `.patterns/`, `.runbooks/`) on `origin/main` by the rare words they share with yours,
+then `rg` for what its shortlist cannot see: the plan, long note bodies, and other wordings. That holds for a question an agent's plan raises and for a pull request you walk: compare its
 shape with the note it says it builds, and name any place it walks a decision back. A claim about
 how a piece runs comes from reading that piece's note now, never from a summary. A settled note is
 evidence, not a tiebreaker: nothing from before experiment 107 (the first run on a repo other than
