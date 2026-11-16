@@ -132,6 +132,7 @@ describe("signedText", () => {
       fc.property(anyNote, fc.string(), fc.string(), (n, key, sig) => {
         const expected = `fabrika-step attested v2\nstep ${n.step}\nticket ${n.ticket}\nversion ${n.version}\nfrom ${n.from}\nto ${n.to}\n`;
         expect(signedText(n)).toBe(expected);
+        // SAFETY: a Note with the extra `key` and `sig` fields is what a signed note holds; the law checks they are left out.
         expect(signedText({ ...n, key, sig } as Note)).toBe(expected);
         expect(signedText(n)).not.toContain("commit");
       }),

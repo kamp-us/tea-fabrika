@@ -88,6 +88,7 @@ const databases = Effect.gen(function* () {
               stream,
               id: e.id,
               tag: e._tag,
+              // SAFETY: a monitor row's body is the object the monitor wrote, and a row with none reads as `{}`.
               body: (e.body ?? {}) as MonitorTest.Row["body"],
             })),
           ),

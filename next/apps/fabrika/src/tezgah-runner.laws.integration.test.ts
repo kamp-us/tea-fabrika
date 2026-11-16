@@ -223,6 +223,7 @@ const calls = (instance: Instance) => {
   return {
     info: async (): Promise<Array<any>> => project().info(),
     facts: async (stream: string): Promise<Array<any>> =>
+      // SAFETY: the audit read answers the stream's rows as an array.
       ((await project().read(stream, 0, "audit")) as Array<any>).map((row) => ({ ...row.body, _tag: row._tag })),
   };
 };

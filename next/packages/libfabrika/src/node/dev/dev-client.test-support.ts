@@ -13,4 +13,5 @@ export const fetchClient = FetchHttpClient.layer.pipe(
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
 export const bodyText = (options: RequestInit | undefined): string =>
+  // SAFETY: the dev client sends a body as a string or as encoded bytes, and the string case is handled first.
   typeof options?.body === "string" ? options.body : new TextDecoder().decode(options?.body as Uint8Array);

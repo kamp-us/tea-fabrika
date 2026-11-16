@@ -37,6 +37,7 @@ const Metadata = Schema.Struct({
 
 const invoke = (target: object, method: string, args: ReadonlyArray<unknown>) =>
   Effect.tryPromise({
+    // SAFETY: each method the law invokes on the target is an async one, which returns a promise.
     try: () => Reflect.apply(Reflect.get(target, method), target, args) as PromiseLike<unknown>,
     catch: (cause) => new Error("local instance call failed", { cause }),
   });

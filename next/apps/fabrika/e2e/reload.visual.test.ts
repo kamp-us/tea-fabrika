@@ -217,11 +217,16 @@ const objects = (value: unknown): ReadonlyArray<Record<string, unknown>> =>
     ? []
     : Array.isArray(value)
       ? value.flatMap(objects)
-      : [value as Record<string, unknown>, ...Object.values(value).flatMap(objects)];
+      : [
+          // SAFETY: the two branches above ruled out a non-object, null and an array.
+          value as Record<string, unknown>,
+          ...Object.values(value).flatMap(objects),
+        ];
 
 /** The outcome an answer gives for `counter:1`, or its failure's reason. */
 const outcome = (answer: unknown) => {
   const loaded = objects(answer).find((o) => Array.isArray(o.processes));
+  // SAFETY: the instance's info answer lists each process with its name and its outcome, a tagged value.
   const row = (loaded?.processes as ReadonlyArray<{ name: string; outcome: { _tag: string; reason?: string } }>)?.find(
     (p) => p.name === "counter:1",
   );
@@ -251,6 +256,7 @@ const session = (url: string, key: string) =>
         }),
       view: () => Effect.map(rpc(p, "view.open", { pid }), (r) => r.result.view),
       read: (stream: string) =>
+        // SAFETY: ledger.read answers `{ entries }`, an array of ledger rows, and the laws read them by field.
         Effect.map(rpc(p, "ledger.read", { stream, after: 0 }), (r) => (r.result?.entries ?? []) as ReadonlyArray<any>),
     };
   });

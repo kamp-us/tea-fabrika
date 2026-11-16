@@ -51,6 +51,7 @@ const CODE = {
   tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
 };
 
+// SAFETY: the table starts with no program; the hoisted mock adds only `{ hash, source }` rows.
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
@@ -183,6 +184,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     call: (method: string, args: ReadonlyArray<unknown>) =>
+      // SAFETY: each method the law calls on the Process is one of its RPC methods, and each returns an Effect.
       run((p) => Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>),
   };
 };
@@ -215,7 +217,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
       const key = identity(),
         db = new DatabaseSync(":memory:");
       const loopbacks = { IsolateTail: () => ({ fetch: async () => new Response() }) };
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies only the platform handles the real Project reads
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies only the platform handles the real Project reads
       const ctx = {
         id: { name: "project-test" },
         storage: storage(db),
@@ -244,7 +246,9 @@ const world = (options: { readonly lacks?: string } = {}) =>
         }
 
         return project.run((p) => {
+          // SAFETY: the Project's RPC methods the law calls each return an Effect.
           const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
+          // SAFETY: `sign` and `commit` return the Effects signingReply and commitReply take, and the method name was just checked.
           return method === "sign"
             ? signingReply(work as never)
             : method === "commit"
@@ -252,7 +256,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
               : work;
         });
       };
-      // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
+      // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node namespaces call the real services but lack workerd's nominal brands
       const env = {
         INSTANCE: JSON.stringify(
           RecordWireTest.settingsFixture({
@@ -301,7 +305,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
                   );
                 }
               });
-              // oxlint-disable-next-line fabrika/no-type-assertions -- Node supplies the handles the real Process reads
+              // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node supplies the handles the real Process reads
               const processCtx = {
                 id: { name },
                 storage: handles,

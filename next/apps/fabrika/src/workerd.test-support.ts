@@ -89,6 +89,7 @@ const objectRows = (db: Effect.Success<ReturnType<typeof instanceDatabase>>, nam
   const kv = table("_cf_KV") ? db.prepare("SELECT value FROM _cf_KV WHERE key='activity'").get() : undefined;
   return {
     journal: Schema.decodeUnknownSync(Saved)(saved.value).journal,
+    // SAFETY: _cf_KV's value column is a BLOB, which node:sqlite reads as a Uint8Array.
     marker: kv === undefined ? undefined : Schema.decodeUnknownSync(Activity)(deserialize(kv.value as Uint8Array)),
   };
 };

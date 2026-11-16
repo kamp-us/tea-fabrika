@@ -488,6 +488,7 @@ const wire = async (
 };
 
 const facts = async (instance: Instance, stream: string) =>
+  // SAFETY: the audit read answers the stream's rows as an array.
   ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
     ...row.body,
     _tag: row._tag,
@@ -1000,6 +1001,7 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         const lifecycle = () => facts(instance, "processes/reader:1");
         const letters = async () =>
           (await facts(instance, "reader:1/inbox")).filter((r) => r.m?.type === "letter").map((r) => r.m.n);
+        // SAFETY: localInstance started this instance, and its audit read answers an array of rows.
         const last = async (stream: string) =>
           Math.max(
             0,

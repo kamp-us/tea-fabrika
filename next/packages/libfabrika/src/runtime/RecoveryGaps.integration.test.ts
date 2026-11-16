@@ -74,7 +74,7 @@ const world = Effect.fnUntraced(function* () {
   const entered = yield* Deferred.make<void>();
   const controls = {
     cut: "",
-    hits: [] as string[],
+    hits: Array.of<string>(),
     steps: 0,
     commands: 0,
     owns: 0,

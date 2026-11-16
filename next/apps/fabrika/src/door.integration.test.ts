@@ -383,6 +383,7 @@ const world = Effect.fnUntraced(function* (
     notify: (_client: string, _news: unknown): Effect.Effect<void, LedgerError> => Effect.void,
     next: () => ProcessIdGenerator.use((g) => g.next),
     // What the injected program answers a delivered letter with, as the runner's Sent does.
+    // SAFETY: the answer starts unset; a law sets it only to a refused Sent value.
     answer: undefined as typeof Sent.cases.refused.Type | undefined,
   };
   const deliver = (process: string, envelope: Envelope, trace: { traceId: string; spanId: string }) =>

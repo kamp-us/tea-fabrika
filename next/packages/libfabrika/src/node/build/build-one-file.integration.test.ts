@@ -868,6 +868,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               tracer,
             );
             expect(result._tag, `${chosen} builds`).toBe("Success");
+            // SAFETY: the expect above failed the law unless the result is a Success, which holds the Built.
             const built = (result as { readonly success: Built }).success;
             checkCarried(built, { tab, entry: f.entry, styles }, calls.slice(start), spans, f.options.out);
 
@@ -1120,6 +1121,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               continue;
             }
 
+            // SAFETY: the Failure branch above ended with `continue`, so this result is a Success.
             const built = (result as { readonly success: Built }).success;
             const page = built.assets[PAGE]?.body ?? "";
 
@@ -1143,7 +1145,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
               (algorithm, data) => createHash(algorithm.name.replaceAll("-", "").toLowerCase()).update(data).digest(),
             );
             const binding = { getByName: () => ({ settingsStart: async () => StartsTest.reply(config) }) };
-            // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
+            // oxlint-disable-next-line fabrika/no-type-assertions -- SAFETY: Node doubles implement only what file routes touch
             const env = {
               INSTANCE: JSON.stringify(config),
               PROJECT: binding,

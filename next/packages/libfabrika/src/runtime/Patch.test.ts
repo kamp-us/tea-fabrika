@@ -130,6 +130,7 @@ const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => un
     return copy;
   }
 
+  // SAFETY: change is called only on a path that read() found, so value here is a non-array object.
   return { ...(value as Record<string, unknown>), [key]: change(Reflect.get(Object(value), key), rest, f) };
 };
 
@@ -183,6 +184,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
         // A view key that names a prototype is refused by the next law, so these pairs hold none.
         fc.pre(
           ![...paths(before), ...paths(after)].some((p) =>
+            // SAFETY: the wider element type only lets `includes` take any key; the list is read, never written.
             p.some((k) => (UNSAFE as ReadonlyArray<string>).includes(k)),
           ),
         );

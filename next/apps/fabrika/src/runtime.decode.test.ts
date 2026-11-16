@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
 
-const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
+const held = vi.hoisted(() => ({ project: Array.of<unknown>(), door: Array.of<unknown>() }));
 
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
 vi.mock("@kampus/libfabrika/workers/gateway", () => ({ connectionLayer: () => Layer.empty }));

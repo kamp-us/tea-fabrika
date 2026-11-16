@@ -162,6 +162,7 @@ type Fact = { readonly _tag: string; readonly body: Record<string, unknown> };
 /** The brain's facts on `gateway/brain`, or null while the call cannot be answered. */
 const brain = async (instance: Instance): Promise<ReadonlyArray<Fact> | null> => {
   try {
+    // SAFETY: the audit read answers the stream's rows as an array.
     return ((await instance.project(PROJECT).read("gateway/brain", 0, "audit")) as Array<any>).map((row) => ({
       _tag: row._tag,
       body: row.body,

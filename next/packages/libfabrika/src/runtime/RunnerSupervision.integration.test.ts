@@ -123,22 +123,23 @@ const world = (
     invalid: false,
     build: BUILD,
     loads: 0,
-    init: [] as Array<{ build: string; loaded: unknown }>,
-    steps: [] as string[],
+    init: Array.of<{ build: string; loaded: unknown }>(),
+    steps: Array.of<string>(),
     cmds: 0,
-    writes: [] as string[],
+    writes: Array.of<string>(),
     loseWriteReply: false,
     flushOnce: false,
     flushFailures: 0,
-    flushes: [] as string[][],
+    flushes: Array.of<string[]>(),
     adds: 0,
     crashAdd: 0,
     cut: "",
     wakeAt,
-    hits: [] as string[],
-    downs: [] as Array<typeof Down.Type>,
-    timers: [] as number[],
+    hits: Array.of<string>(),
+    downs: Array.of<typeof Down.Type>(),
+    timers: Array.of<number>(),
     /** P34c: when set, the poison step and the saved fold throw this instead of their fixed errors. */
+    // SAFETY: error starts unset; P34c sets it to the name and message to throw.
     error: null as { readonly name: string; readonly message: string } | null,
   };
 
@@ -2188,7 +2189,10 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
           const rows = yield* lives.pipe(Effect.provide(w.manager()));
           const exits = rows
             .filter((row) => row._tag === "exited")
-            .map((row) => valueFor(row) as { process: string; reason: unknown })
+            .map(
+              // SAFETY: an `exited` row's value names the process and its reason.
+              (row) => valueFor(row) as { process: string; reason: unknown },
+            )
             .map(({ process, reason }) => ({ process, reason }));
           expect(exits, "each exit holds its producer's phase and captured class").toEqual(expected.exits);
           const restarted = rows.filter((row) => row._tag === "restarted").map((row) => valueFor(row));
@@ -2196,7 +2200,10 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
             expected.restarts.length + expected.exits.filter((e) => e.reason._tag === "crashed").length,
           );
           const signals = (yield* read(`client:${brain().recipient.client}/inbox`).pipe(Effect.provide(w.manager())))
-            .map((row) => valueFor(row) as { m: typeof Down.Type })
+            .map(
+              // SAFETY: each row of a client's inbox here is a DOWN letter, its value `{ m }`.
+              (row) => valueFor(row) as { m: typeof Down.Type },
+            )
             .map(({ m }) => [m.process, m.reason] as const);
           expect(signals, "each DOWN carries its exit's reason unchanged").toEqual(
             expected.exits.map(({ process, reason }) => [process, reason] as const),

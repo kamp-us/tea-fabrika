@@ -191,7 +191,9 @@ const key = (name: string, id: string) => JSON.stringify([name, id]);
 
 /** A stored cell read as a JSON object, or undefined when it is not one. */
 export const parsed = (cell: string): Record<string, unknown> | undefined => {
+  // SAFETY: JSON.parse answers any JSON value, and unknown says only that.
   const value = Result.try(() => JSON.parse(cell) as unknown);
+  // SAFETY: the cast runs only after Predicate.isObject checked that the value is an object.
   return Result.isSuccess(value) && Predicate.isObject(value.success)
     ? (value.success as Record<string, unknown>)
     : undefined;
@@ -203,6 +205,7 @@ type Proposed = Reply & { readonly body: string };
 const propose = (n: number, step: Step, name: string, id: string): Proposed => ({
   name,
   id,
+  // SAFETY: a reply's parent is an input id: `input_`, then 26 characters, as this one is built.
   parent: `input_0000000000e0080000000000${step.parent[0]}${step.parent[1]}` as Reply["parent"],
   by: `SHA256:${step.by}`,
   for: step.for,
@@ -232,6 +235,7 @@ const refusedWith = Effect.fnUntraced(function* <A>(
 
   // A throw or defect is not a typed failure: the plant of R5.
   expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+  // SAFETY: the expect above failed the law unless the cause holds a typed failure, and the replies store fails only with RepliesError.
   const error = Cause.squash(exit.cause) as Module.RepliesError;
   expect(error._tag).toBe("RepliesError");
   expect(error.reason).toBe(reason);
@@ -342,7 +346,9 @@ const walk = (
           }),
         );
         expect(located, "one stored JSON value holds the reply").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+        // SAFETY: the located value is a stored JSON object, the reply.
         const json = JSON.parse(value) as Record<string, unknown>;
         const secret = step.body;
         secrets.push(secret);

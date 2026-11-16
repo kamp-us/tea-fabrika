@@ -376,6 +376,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const reader = await fixture.start("reader:1");
     const writer = await fixture.start("writer:1");
     const client = await fixture.connect("watch");
+    // SAFETY: the reader's view keeps its `log` as an array, and is empty before it has one.
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
     const send = async (pid: string, id: string, m: unknown) =>
       expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });

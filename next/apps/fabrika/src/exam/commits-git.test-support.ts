@@ -177,7 +177,10 @@ class Repo {
     const answers = ran.stdout
       .split("\n")
       .filter((l) => l.startsWith("{"))
-      .map((l) => JSON.parse(l) as Record<string, unknown>);
+      .map(
+        // SAFETY: the program prints each answer as one JSON object per line, and only lines that start with `{` are kept.
+        (l) => JSON.parse(l) as Record<string, unknown>,
+      );
     return { code: ran.status, answers, out: ran.stdout, err: ran.stderr };
   }
 

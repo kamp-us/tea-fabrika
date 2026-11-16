@@ -270,6 +270,7 @@ const wire = async (instance: Instance, key: Key, tab: string) => {
 };
 
 const facts = async (instance: Instance, stream: string) =>
+  // SAFETY: the audit read answers the stream's rows as an array.
   ((await instance.project(PROJECT).read(stream, 0, "audit")) as Array<any>).map((row) => ({
     ...row.body,
     _tag: row._tag,
@@ -279,6 +280,7 @@ const restarts = async (instance: Instance, name: string) =>
   (await facts(instance, `processes/${name}`)).filter((fact) => fact._tag === "restarted");
 
 const livePid = async (instance: Instance, name: string): Promise<string | undefined> =>
+  // SAFETY: info answers the project's process rows as an array.
   ((await instance.project(PROJECT).info()) as Array<any>).find((row) => row.name === name)?.process;
 
 const send = (pid: string, letter: string, type: "throw" | "inc") => ({
@@ -389,6 +391,7 @@ const reconnected = (instance: Instance, key: Key, tab: string) =>
 
 /** The raw rows of a stream, as the audit reader gives them: id, tag and body. */
 const rows = async (instance: Instance, stream: string) =>
+  // SAFETY: the audit read answers each row with its id, tag and body.
   (await instance.project(PROJECT).read(stream, 0, "audit")) as Array<{ id: string; _tag: string; body: any }>;
 
 /** Waits with `ledger.wait` after the last rev seen for `restarted {after}` on a process name. No such
@@ -402,11 +405,13 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
     while (Date.now() < end) {
       const read = await c.call("ledger.read", { stream: `processes/${name}`, after: seen });
       expect(read.error, `reading processes/${name}`).toBeUndefined();
+      // SAFETY: the read had no error, and ledger.read answers `{ entries }`, an array of rows.
       const found = (read.result.entries as Array<any>).find(
         (entry) => entry._tag === "restarted" && entry.body.after === after,
       );
 
       if (found !== undefined) {
+        // SAFETY: found is a row of processes/<name>, a ledger row with a tag, a rev and the process body.
         return found as { _tag: string; rev: number; body: { process: string; after: string; name: string } };
       }
 

@@ -104,6 +104,7 @@ describe("P16 checked built tables", () => {
         fc.constantFrom("text/html", "application/json", "text/javascript"),
         fc.oneof(fc.integer(), fc.boolean(), fc.constant(null)),
         async (rows, assets, junk, route, type, other) => {
+          // SAFETY: the rows generator above draws at least two rows.
           const [a, b] = rows as [(typeof rows)[0], (typeof rows)[0]];
           const asset = assets[0]!;
           const good = {

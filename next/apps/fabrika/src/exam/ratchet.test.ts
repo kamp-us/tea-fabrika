@@ -12,6 +12,7 @@ import { added, judge, LISTS } from "./ratchet.ts";
 const lintKey = (r: { file: string; rule: string; code: string }) => JSON.stringify([r.file, r.rule, r.code]);
 
 const runs = { seed: 119120, numRuns: 100 };
+// SAFETY: LISTS names the three lists in this order: next, agents and dead.
 const [NEXT, AGENTS, DEAD] = LISTS as [(typeof LISTS)[0], (typeof LISTS)[0], (typeof LISTS)[0]];
 
 const answer = (list: (typeof LISTS)[0], base: string | null, head: string | null) =>
@@ -117,6 +118,7 @@ describe("row identity follows each reader (L2)", () => {
 describe("a file that comes, goes or does not read (L3)", () => {
   it("L3 scenario: per list, a new file is all added, a deleted file is done, an unreadable head is not a list", () => {
     for (const list of LISTS) {
+      // SAFETY: ROWS has one key for each list's `file`, written from LISTS in ratchet.test-support.ts.
       const rows = ROWS[list.file as keyof typeof ROWS];
       const keys = rows.map((r) => ("scope" in r ? deadKey(r) : lintKey(r)));
       expect(answer(list, null, text(rows))).toEqual({

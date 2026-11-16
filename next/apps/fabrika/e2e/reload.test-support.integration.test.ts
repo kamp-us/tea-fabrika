@@ -109,6 +109,7 @@ describe("spanOutputs", () => {
               yield* deliver(home, RECORDS[1], rebuild(late));
 
               const outputs = yield* spanOutputs(home);
+              // SAFETY: spanOutputs reads the span tables, and every row of them has a text `spanId` column.
               const order = outputs.map((output) => (output as { readonly spanId: string }).spanId);
 
               expect(order[0], "the queue is read first").toBe(waiting);

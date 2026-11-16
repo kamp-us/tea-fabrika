@@ -1037,6 +1037,7 @@ const callables = {
   array: () => [() => 0],
 } as const;
 
+// SAFETY: callables is a const object literal, so its own keys are exactly its declared keys.
 const Callable = fc.constantFrom(...(Object.keys(callables) as Array<keyof typeof callables>));
 
 /** Where a machine's fields live and what they hold. */
@@ -1619,6 +1620,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
         msg: watchMsg,
         cmds: defs,
         init: (loaded) => [loaded ?? { downs: 0 }, []],
+        // SAFETY: the answer handlers' messages come from the declared Cmds, and tea's update type lists only the Msg schema's cases.
         update: {
           ...answers,
           watch: (s: typeof watchModel.Type) => [s, []],

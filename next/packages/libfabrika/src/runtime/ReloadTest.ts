@@ -148,6 +148,7 @@ const Msg = Schema.Union([
 const programFor = (spec: Spec) => {
   const model = schemaFor(spec);
   const machine = Machine.make({
+    // SAFETY: schemaFor builds a codec whose type is CounterModel for every variant.
     model: model as Schema.Codec<CounterModel>,
     msg: Msg,
     cmds: [ping, write, send],
@@ -652,6 +653,7 @@ const history = Effect.fnUntraced(function* (w: World, name: string) {
         .map((e): Fact => ({
           tag: e.event,
           id: e.id,
+          // SAFETY: a process row's body is the object the runtime wrote for it.
           body: e.body as Readonly<Record<string, unknown>>,
           build: e.build,
         }));
@@ -702,8 +704,10 @@ const replay = (
         continue;
       }
 
+      // SAFETY: an inbox letter's `m` is a message the counter takes, with its `type`.
       model = updateFor(code.variants.get(String(body.build)) ?? spec, model, letter.m as { type: string });
     } else if (fact.tag === "state.upgraded") {
+      // SAFETY: a state.upgraded body names the upgrades it ran as a list of their names.
       upgraded = { ran: (body.ran as ReadonlyArray<string>) ?? [] };
     } else if (fact.tag === "code.swapped") {
       const next = code.variants.get(String(body.hash));
@@ -1347,6 +1351,7 @@ export const suite = (rig: Rig): void => {
 
                     if (late) {
                       const { checkpoint } = yield* history(w, NAME);
+                      // SAFETY: a checkpoint's cmds are the saved Cmds, each a record that may name its build.
                       const pending = (checkpoint?.cmds ?? []) as ReadonlyArray<{ readonly build?: string }>;
                       expect(
                         pending.map((c) => c.build),

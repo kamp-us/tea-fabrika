@@ -503,6 +503,7 @@ const routed = (p: any, client: string, method: string, params: unknown) => p.ro
 const read = async (p: any, client: string, stream: string) => {
   const r = await routed(p, client, "ledger.read", { stream, after: 0 });
   expect(r._tag).toBe("ok");
+  // SAFETY: the routed call was ok, and ledger.read answers `{ entries }`, an array of rows.
   return r.result.entries as Array<any>;
 };
 

@@ -104,6 +104,7 @@ const merge = <A>(a: ReadonlyArray<A>, b: ReadonlyArray<A>, picks: ReadonlyArray
 
   while (i < a.length || j < b.length) {
     const takeA = j >= b.length || (i < a.length && (picks[k++ % Math.max(picks.length, 1)] ?? true));
+    // SAFETY: the loop guard keeps i below a.length when it takes from a, and j below b.length otherwise.
     out.push(takeA ? (a[i++] as A) : (b[j++] as A));
   }
 

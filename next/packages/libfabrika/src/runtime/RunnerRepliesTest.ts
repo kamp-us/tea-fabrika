@@ -347,6 +347,7 @@ const walk = (
       rev: accepted,
     });
     const sorted = (view: unknown) => {
+      // SAFETY: the view compared here is this program's own model, which holds `notes`.
       const notes = (view as Model).notes;
       return { notes: Object.fromEntries(Object.entries(notes).sort(([a], [b]) => a.localeCompare(b))) };
     };
@@ -410,6 +411,7 @@ const walk = (
         errors.push(Cause.pretty(exit.cause));
         // A throw or defect is not a typed failure.
         expect(Cause.hasFails(exit.cause), Cause.pretty(exit.cause)).toBe(true);
+        // SAFETY: the expect above failed the law unless the cause holds a typed failure, and the runner's replies fail only with RepliesError.
         const error = Cause.squash(exit.cause) as RepliesError;
         expect(error._tag).toBe("RepliesError");
         expect(error.reason).toBe("bad_row");
@@ -457,6 +459,7 @@ const walk = (
       } else if (move === "reuse") {
         // The same letter with one bound part changed: its payload, or for a refusal its caller.
         const prior = nth(intact, step.kind);
+        // SAFETY: this letter was a Save the walk sent, so its input is a Save.
         const input = prior.letter.envelope.input as typeof Save.Type;
         const parts = prior.first._tag === "refused" ? 3 : 1;
         const part = step.pick % parts;
@@ -536,7 +539,9 @@ const walk = (
         const prior = nth(stored, step.kind);
         const located = replyRows(live.inbox, prior.letter.id);
         expect(located, "one stored JSON value holds the refusal").toHaveLength(1);
+        // SAFETY: the expect above failed the law unless exactly one location was found.
         const [{ table, column, value }] = located as [{ table: string; column: string; value: string }];
+        // SAFETY: the located value is a stored JSON object, the refusal.
         const json = JSON.parse(value) as Record<string, unknown>;
         const kind = nth(DAMAGE, step.kind);
         const fields = ["parent", "by", "for", "digest", "answer"] as const;

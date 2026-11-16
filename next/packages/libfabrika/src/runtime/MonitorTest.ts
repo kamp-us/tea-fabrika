@@ -229,6 +229,7 @@ const generated = <S extends Schema.Top>(schema: S): fc.Arbitrary<S["Type"]> =>
   fc.nat().map((seed) => {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's map takes a plain value, so one sample is drawn here
     const [value] = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(schema), { seed, count: 1 }));
+    // SAFETY: sampleEffect was asked for one value, so the first element is there.
     return value as S["Type"];
   });
 
@@ -309,6 +310,7 @@ const savedLog = Effect.fnUntraced(function* (
     Effect.provide(context),
   );
   const model = Option.getOrUndefined(decodeModel(saved?.saved.model ?? null));
+  // SAFETY: the decoded model keeps its log as Logged rows, and an empty list stands for none.
   return (model?.log ?? []) as ReadonlyArray<Logged>;
 });
 

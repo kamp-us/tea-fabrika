@@ -273,8 +273,8 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           const wire = {
             hide: true,
             /** Per socket, the tezgah streams the tab read on it, in order. */
-            reads: [] as Array<Array<string>>,
-            sockets: [] as Array<{ close: () => Promise<void> }>,
+            reads: Array.of<Array<string>>(),
+            sockets: Array.of<{ close: () => Promise<void> }>(),
           };
           yield* promised(() =>
             profiled.routeWebSocket(/.*/, (ws) => {

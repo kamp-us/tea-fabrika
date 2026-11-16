@@ -307,6 +307,7 @@ const walk = Effect.fnUntraced(function* (
     traceId: TRACE.traceId,
     build: "test",
   };
+  // SAFETY: expected starts unset; a law sets it to the Incoming it waits for.
   const control = { cut: "", hits: 0, checks: 0, updates: 0, mode: "", expected: null as Incoming | null };
   let serial = 0;
   let booted = false;
