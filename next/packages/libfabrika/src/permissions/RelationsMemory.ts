@@ -1,7 +1,5 @@
 /**
  * The relation store in memory, for tests: the same fold as the ledger's, over the changes it holds.
- *
- * @stability unstable
  */
 import { Effect, Equal, Layer, Result } from "effect";
 import { fold } from "./internal/relationsTable.ts";
@@ -18,7 +16,6 @@ import { Relations, RelationsError } from "./Relations.ts";
  * with nothing kept. `within` ignores the turn it is given and folds what it holds. Every change it
  * holds counts: there is no other writer to skip.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (changes: ReadonlyArray<Change>): Layer.Layer<Relations> =>

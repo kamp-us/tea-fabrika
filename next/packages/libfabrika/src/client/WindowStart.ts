@@ -3,8 +3,6 @@
  * input and output. Each Cmd becomes a write on its dial's socket or a call to a service, and each
  * socket event becomes a Msg. It decides nothing: the parent's Model says which dial is current.
  * The same start runs in a browser tab and in a program with no DOM.
- *
- * @stability unstable
  */
 import { run } from "@demlik/tea/effect";
 import { Clock, DateTime, Deferred, Effect, Schema, type Stream } from "effect";
@@ -23,7 +21,6 @@ import type { WindowMsg, windowMachineFor, write } from "./WindowMachine.ts";
  * Schema for the facts a client states about itself: the hello's `platform`, `os` and `has`, and
  * the `label` its knock shows the person who grants it.
  *
- * @stability unstable
  * @category models
  */
 export const ClientInfo = Schema.Struct({
@@ -37,7 +34,6 @@ export const ClientInfo = Schema.Struct({
  * What a start is given: the tiles to show or a tezgah workspace, the window parent, the brain's origin, the build that
  * runs and the client's own facts. Plain data and the machine, so any client can pass it.
  *
- * @stability unstable
  * @category models
  */
 export type StartOptions = {
@@ -102,7 +98,6 @@ const wire = (call: Write["call"], label: string) => {
  * dials again by itself: reconnects are the Link machine's. A write, a ping or a hello for a dial
  * with no open socket fails at once.
  *
- * @stability unstable
  * @category constructors
  */
 export const start = Effect.fn("WindowStart.start")(function* (options: StartOptions) {

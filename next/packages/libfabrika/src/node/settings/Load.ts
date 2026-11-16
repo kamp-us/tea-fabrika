@@ -2,8 +2,6 @@
  * One load of fabrika's settings at a process start: read both files, check them whole, resolve
  * the four sources and make the snapshot the process keeps. It returns all of that or one
  * `SettingsError`, so nothing starts on settings that were not checked.
- *
- * @stability unstable
  */
 import { Effect, FileSystem, Predicate } from "effect";
 import * as Declarations from "../../settings/Declarations.ts";
@@ -33,7 +31,6 @@ interface Place {
  * selected it counts as empty. A repo that needs a newer fabrika is refused before the person's
  * file is read.
  *
- * @stability unstable
  * @category constructors
  */
 export const load = Effect.fnUntraced(function* (options: {

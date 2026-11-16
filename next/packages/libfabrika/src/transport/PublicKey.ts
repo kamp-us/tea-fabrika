@@ -1,8 +1,6 @@
 /**
  * The public names of a raw Ed25519 key: its OpenSSH fingerprint and its SSH key line, the same
  * math the door's hello check does.
- *
- * @stability unstable
  */
 import { Effect, Schema } from "effect";
 import { Base64 } from "effect/encoding";
@@ -13,7 +11,6 @@ import { KeyLine } from "./Sshsig.ts";
  * Computes the OpenSSH `SHA256:` fingerprint of a raw public key: the SHA-256 of its bytes in
  * base64 with no padding.
  *
- * @stability unstable
  * @category constructors
  */
 export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
@@ -29,7 +26,6 @@ export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
  *
  * It fails with a `SchemaError` when `raw` is not 32 bytes, since then it is no Ed25519 key.
  *
- * @stability unstable
  * @category constructors
  */
 export const line = (raw: Uint8Array) =>

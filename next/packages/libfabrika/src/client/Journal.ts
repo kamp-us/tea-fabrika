@@ -2,8 +2,6 @@
  * The hands client's journal: one saved entry per task, written before each step that follows it,
  * so a crash never runs a command twice. This file is the contract only (0095); `JournalStore.layer`
  * keeps it on Effect's own `KeyValueStore`.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect } from "effect";
@@ -27,7 +25,6 @@ const Started = { startedAt: Schema.optionalKey(Schema.String) };
  * result, saved before it is sent. `acknowledged`: the brain answered ok to the finish, at `rev`.
  * `held`: the brain refused the finish for good, for `reason`; the result is never sent again.
  *
- * @stability unstable
  * @category models
  */
 export const Entry = Schema.TaggedUnion({
@@ -41,7 +38,6 @@ export const Entry = Schema.TaggedUnion({
 /**
  * The type of one journal entry.
  *
- * @stability unstable
  * @category models
  */
 export type Entry = typeof Entry.Type;
@@ -50,7 +46,6 @@ export type Entry = typeof Entry.Type;
  * A journal call failed. `storage`: the store could not read or write. `bad_entry`: a saved value
  * that is no entry. `cause` keeps the store's error underneath, when there is one.
  *
- * @stability unstable
  * @category errors
  */
 export class JournalError extends Schema.TaggedError<JournalError>()("JournalError", {
@@ -67,7 +62,6 @@ export class JournalError extends Schema.TaggedError<JournalError>()("JournalErr
  * It needs no list of its keys: the brain is the index, and the client reads the entry of the task
  * the brain just assigned it.
  *
- * @stability unstable
  * @category services
  */
 export class Journal extends Context.Service<

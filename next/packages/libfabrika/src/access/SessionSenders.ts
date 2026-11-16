@@ -1,8 +1,6 @@
 /**
  * The `Senders` port, answered by the gateway's one signing service (0262): who sent an input
  * delivered to a process, as a right's check takes it.
- *
- * @stability unstable
  */
 import { Effect, Result, Schema } from "effect";
 import { Sender, type Senders, SendersError } from "../permissions/Senders.ts";
@@ -46,7 +44,6 @@ const decoded = (writer: Writer) =>
  * that process is behind the write. `NotGranted` is `removed`, `ended` is `ended`, and any other
  * failure, a ledger or session store failure included, is `storage` with its cause kept.
  *
- * @stability unstable
  * @category constructors
  */
 export const make = (

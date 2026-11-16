@@ -1,8 +1,6 @@
 /**
  * What the hands client can run: the contract only (0095). A layer that runs real commands comes
  * with the hands launcher; until then only tests give one.
- *
- * @stability unstable
  */
 import { Context } from "effect";
 import type { Effect } from "effect";
@@ -17,7 +15,6 @@ import type { Command, Result } from "../tasks/Task.ts";
  * setting. `execute` runs one command once and answers its result. A command that cannot start is a
  * `failed` result, never an error.
  *
- * @stability unstable
  * @category services
  */
 export class Commands extends Context.Service<

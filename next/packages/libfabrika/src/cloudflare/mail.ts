@@ -60,7 +60,6 @@ export const mailLayer = (env: Env, project: string): Layer.Layer<MailDelivery> 
  * `wake(name)` asks nothing of its caller. The gateway wakes a finished task's requester inside its
  * `gateway.route` span, so the wake joins the finish's trace.
  *
- * @stability unstable
  * @category layers
  */
 export const wakeups = (env: Pick<Env, "PROCESS">, project: string): Layer.Layer<MailWakeups> =>

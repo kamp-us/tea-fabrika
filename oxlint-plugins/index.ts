@@ -31,6 +31,7 @@ import { noQuestionWordKey } from "./no-question-word-key.ts";
 import { noRawTryCatch } from "./no-raw-try-catch.ts";
 import { noRedactedValue } from "./no-redacted-value.ts";
 import { noSecretEnv } from "./no-secret-env.ts";
+import { noStabilityTag } from "./no-stability-tag.ts";
 import { noStageWord } from "./no-stage-word.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
 import { noThrowInEffectGen } from "./no-throw-in-effect-gen.ts";
@@ -83,6 +84,7 @@ const plugin: Plugin = {
     "no-raw-try-catch": noRawTryCatch,
     "no-redacted-value": noRedactedValue,
     "no-secret-env": noSecretEnv,
+    "no-stability-tag": noStabilityTag,
     "no-stage-word": noStageWord,
     "no-static-layer": noStaticLayer,
     "no-throw-in-effect-gen": noThrowInEffectGen,

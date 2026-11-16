@@ -1,8 +1,6 @@
 /**
  * The hands' real `Commands` on a laptop: each closed command is one child process with a pinned
  * environment and an output cap, run through Effect's `ChildProcessSpawner`.
- *
- * @stability unstable
  */
 import { Config, Effect, FileSystem, Layer, Path } from "effect";
 import { ChildProcessSpawner } from "effect/process";
@@ -42,7 +40,6 @@ const onPath = Effect.fnUntraced(function* (name: string, PATH: string) {
  * runs the command's child with only `PATH` in its environment, in a scope of its own, and stops
  * it once it prints more than the command's cap.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.effect(

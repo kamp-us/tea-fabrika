@@ -7,8 +7,6 @@
  * The key type is `sk-ecdsa-sha2-nistp256@openssh.com`, a P-256 key tied to a relying party (rp).
  * The signature type is `webauthn-sk-ecdsa-sha2-nistp256@openssh.com`. Only WebCrypto is used, so
  * a browser tab runs it as Node does.
- *
- * @stability unstable
  */
 import { Effect, Option, Schema } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
@@ -38,7 +36,6 @@ const keyParts = (blob: Uint8Array) =>
  * `nistp256`, hold a 65-byte uncompressed point, a non-empty rp and nothing after. Any other line
  * gives `none`.
  *
- * @stability unstable
  * @category getters
  */
 export const passkeyBlob = (line: string): Option.Option<Bytes> => {
@@ -61,7 +58,6 @@ export const passkeyBlob = (line: string): Option.Option<Bytes> => {
  *
  * Gives `none` when the line is not a well-formed passkey line, or when its rp is not valid UTF-8.
  *
- * @stability unstable
  * @category getters
  */
 export const passkeyRp = (line: string): Option.Option<string> =>
@@ -78,7 +74,6 @@ export const passkeyRp = (line: string): Option.Option<string> =>
  * Use to check a line once, where it comes in. A line that `passkeyBlob` cannot read fails with
  * "an OpenSSH P-256 passkey line".
  *
- * @stability unstable
  * @category models
  */
 export const PasskeyLine = Schema.String.check(
@@ -140,7 +135,6 @@ const Client = Schema.fromJsonString(
  * - The ECDSA P-256 signature verifies over the authenticator data and the SHA-256 of the client
  *   data.
  *
- * @stability unstable
  * @category combinators
  */
 export const checkPasskey = Effect.fn("transport.checkPasskey")(function* (
@@ -222,7 +216,6 @@ class BadAssertion extends Schema.TaggedError<BadAssertion>()("BadAssertion", {
  * match the key's rp, or the built signature does not pass `checkPasskey`. A WebCrypto error also
  * fails the effect.
  *
- * @stability unstable
  * @category constructors
  */
 export const writeWebauthnSshsig = Effect.fn("transport.writeWebauthnSshsig")(function* (a: {

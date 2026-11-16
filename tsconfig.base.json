@@ -214,6 +214,72 @@
                 "unsafeEffectTypeAssertion": "error"
               }
             }
+          },
+          // Effect's unstable parts are used on purpose, to stay on its leading edge, and each one
+          // we use is named once here (0574, E1 of the Effect-check sweep). `unstableApiUsage` blocks
+          // in the folders that reach zero once our own `@stability` tags are gone; a part not named
+          // here fails there until someone adds it on purpose, with the reason in the pull request.
+          // The setting replaces the base list for the files an entry matches, so each slice that
+          // locks another folder adds its glob to this entry and keeps one list.
+          // `oxlint-plugins/effect-checks.test.ts` keeps the folders.
+          {
+            "include": [
+              ".agents/**/*.ts",
+              ".github/ci/**/*.ts",
+              ".github/ci/**/*.mjs",
+              "next/apps/fabrika/src/entry/**/*.ts",
+              "next/apps/fabrika/src/entry/**/*.tsx",
+              "next/packages/libfabrika/src/*.ts",
+              "next/packages/libfabrika/src/ci/**/*.ts",
+              "next/packages/libfabrika/src/codehost/**/*.ts",
+              "next/packages/libfabrika/src/presence/**/*.ts",
+              "next/packages/libfabrika/src/repositories/**/*.ts",
+              "next/packages/libfabrika/src/schedules/**/*.ts",
+              "next/packages/libfabrika/src/tezgah/**/*.ts",
+              "next/packages/libfabrika/src/transport/**/*.ts",
+              "next/packages/tuval/**/*.ts",
+              "next/packages/tuval/**/*.tsx",
+              "next/packages/vitest/**/*.ts",
+              "next/programs/tezgah/**/*.ts",
+              "oxlint-plugins/**/*.ts",
+              "oxlint-plugins/**/*.mjs"
+            ],
+            "options": {
+              "allowedUnstableApis": [
+                "@effect/platform-browser/BrowserRuntime",
+                "@effect/platform-node/NodeFileSystem",
+                "@effect/platform-node/NodePath",
+                "@effect/platform-node/NodeRuntime",
+                "@effect/platform-node/NodeServices",
+                "@effect/vitest",
+                "effect/Arbitrary",
+                "effect/ByteSize",
+                "effect/FileSystem",
+                "effect/Path",
+                "effect/PlatformError",
+                "effect/Schema#ByteSize",
+                "effect/Stdio",
+                "effect/cli/Argument",
+                "effect/cli/Command",
+                "effect/cli/Flag",
+                "effect/cli/Prompt",
+                "effect/crypto/Digest",
+                "effect/crypto/SecureRandom",
+                "effect/http/FetchHttpClient",
+                "effect/http/HttpClient",
+                "effect/http/HttpClientRequest",
+                "effect/http/HttpClientResponse",
+                "effect/http/HttpServerRequest",
+                "effect/http/HttpServerResponse",
+                "effect/persistence/KeyValueStore",
+                "effect/persistence/RateLimiter",
+                "effect/process/ChildProcess",
+                "effect/process/ChildProcessSpawner",
+                "effect/socket/Socket",
+                "effect/testing/TestConsole"
+              ],
+              "diagnosticSeverity": { "unstableApiUsage": "error" }
+            }
           }
         ]
       }

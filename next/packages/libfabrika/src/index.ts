@@ -2,34 +2,15 @@
 // patches and the runner that steps a process. Browser-safe: it reaches no platform.
 export * as Id from "./Id.ts";
 export { IdError, type IdSchema, type IdValue } from "./Id.ts";
-/**
- * @stability unstable
- */
 export * as Chaos from "./runtime/Chaos.ts";
 /**
  * Saved bounded experiments and their command definitions.
- * @stability unstable
  */
 export * as ChaosMachine from "./runtime/ChaosMachine.ts";
-/**
- * @stability unstable
- */
 export * as Nemesis from "./runtime/Nemesis.ts";
-/**
- * @stability unstable
- */
 export * as NemesisLedger from "./runtime/NemesisLedger.ts";
-/**
- * @stability unstable
- */
 export * as NemesisNone from "./runtime/NemesisNone.ts";
-/**
- * @stability unstable
- */
 export * as ProcessHistory from "./processes/ProcessHistory.ts";
-/**
- * @stability unstable
- */
 export * as ProcessHistoryLedger from "./processes/ProcessHistoryLedger.ts";
 export {
   Alarm,
@@ -69,14 +50,8 @@ export {
   workerExecution,
 } from "./runtime/Execution.ts";
 export { Gateway, type ConnectionId } from "./gateway/Gateway.ts";
-/**
- * @stability unstable
- */
 export * as SettingsStart from "./settings/Start.ts";
 export { RecordedStart } from "./settings/RecordedStart.ts";
-/**
- * @stability unstable
- */
 export * as SettingsStarts from "./settings/Starts.ts";
 // A program window's typed contract, and the rows a client records (P14).
 export {
@@ -90,48 +65,22 @@ export {
   type WindowRegistration,
 } from "./runtime/Window.ts";
 export { ClientRecord, ClientRow } from "./transport/ClientRows.ts";
-/**
- * @stability unstable
- */
 export * as Ci from "./ci/Ci.ts";
-/**
- * @stability unstable
- */
 export * as CodeHost from "./codehost/CodeHost.ts";
-/**
- * @stability unstable
- */
 export * as Send from "./runtime/Send.ts";
-/**
- * @stability unstable
- */
 export * as Chunk from "./runtime/Chunk.ts";
-/**
- * @stability unstable
- */
 export * as StartChild from "./runtime/StartChild.ts";
 export { Started } from "./processes/Children.ts";
-/**
- * @stability unstable
- */
 export * as Monitor from "./runtime/Monitor.ts";
-/**
- * @stability unstable
- */
 export * as Monitors from "./processes/Monitors.ts";
-/**
- * @stability unstable
- */
 export * as Setting from "./settings/Setting.ts";
 // tezgah's wire contract: its view's shapes and the layout's geometry, pure and browser-safe. A
 // program's box reaches them here; a window may also take each by its own subpath.
 /**
  * tezgah's view: workspaces, tiles and their ids, and the names of tezgah's processes.
- * @stability unstable
  */
 export * as Workspace from "./tezgah/Workspace.ts";
 /**
  * The layout's pure functions: its tile order, a split, a remove, the rects and the check.
- * @stability unstable
  */
 export * as Layout from "./tezgah/Layout.ts";

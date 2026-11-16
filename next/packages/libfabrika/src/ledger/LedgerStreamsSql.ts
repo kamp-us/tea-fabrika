@@ -1,7 +1,5 @@
 /**
  * Paged stream discovery on the ledger's SQL tables.
- *
- * @stability unstable
  */
 import { Effect, Layer, Option, Stream } from "effect";
 import type { Sql } from "../Sql.ts";
@@ -12,7 +10,6 @@ import { PAGE } from "./Log.ts";
 /**
  * Supplies discovery using the ledger's table setup and page size.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (sql: Sql): Layer.Layer<LedgerStreams> =>

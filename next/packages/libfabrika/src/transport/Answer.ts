@@ -1,7 +1,5 @@
 /**
  * Turns one incoming JSON-RPC text frame into the text to send back and the attachment to keep.
- *
- * @stability unstable
  */
 import { Effect, Exit, Option, Result, Schema } from "effect";
 import { REFUSED } from "../SpanTag.ts";
@@ -60,7 +58,6 @@ const isOnline = <E, R, E2, R2>(frame: Incoming<E, R, E2, R2>): frame is Frame<O
  * A `reserved` or `rate_limited` refusal, and a failure that is a `RateCountFailure`, are also
  * recorded on the current span as the refused tag. The tag is `rate_limited` for that failure.
  *
- * @stability unstable
  * @category combinators
  */
 export const answerFrame = Effect.fn("transport.answerFrame")(function* <E, R, E2, R2, A extends typeof Attached.Type>(

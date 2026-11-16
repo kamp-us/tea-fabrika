@@ -1,7 +1,5 @@
 /**
  * Native brain lifecycle with the durable recording queue.
- *
- * @stability unstable
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -18,7 +16,6 @@ import * as Control from "./BrainControlLaunchd.ts";
 /**
  * Selects launchd and an isolated durable queue, leaving readiness to the caller.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = <E, R>(

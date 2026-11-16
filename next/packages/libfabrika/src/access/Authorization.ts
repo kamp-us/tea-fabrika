@@ -1,7 +1,5 @@
 /**
  * Checks that a key belongs, then writes, in one synchronous ledger transaction.
- *
- * @stability unstable
  */
 import { Effect, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -32,7 +30,6 @@ const decodeEvent = Schema.decodeUnknownResult(MemberEvent);
  * A membership row that does not decode fails the write with a `LedgerError` of reason `bad_row`.
  * A key that is not admitted fails with `NotGranted` and nothing is written.
  *
- * @stability unstable
  * @category combinators
  */
 export const appendAdmitted = Effect.fn("authorization.appendAdmitted")(

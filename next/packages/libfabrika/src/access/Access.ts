@@ -11,8 +11,6 @@
  *
  * It never checks a signature: the door does, then hands the event here. The Model is never
  * stored and `Access` is a projection of it, so a later rule re-judges old events.
- *
- * @stability unstable
  */
 import { Machine } from "@demlik/tea/effect";
 import { Result, Schema } from "effect";
@@ -27,7 +25,6 @@ import { Result, Schema } from "effect";
  * strings in `has`. It is recorded in a grant's signed text and in a denial, and nothing decides
  * on it.
  *
- * @stability unstable
  * @category models
  */
 export const Saw = Schema.Struct({
@@ -49,7 +46,6 @@ export const Saw = Schema.Struct({
  * The whole struct is part of the signed text, and `sentAt` is the signer's own clock, never
  * trusted.
  *
- * @stability unstable
  * @category models
  */
 export const Grant = Schema.Struct({
@@ -72,7 +68,6 @@ export const Grant = Schema.Struct({
  *
  * Like a grant's `saw`, it sits inside the signed text. Its `method` is `panel` or `command`.
  *
- * @stability unstable
  * @category models
  */
 export const Took = Schema.Struct({
@@ -91,7 +86,6 @@ export const Took = Schema.Struct({
  * `passkey` is present when the signature came from a passkey, and holds its origin, relying
  * party, flags and counter.
  *
- * @stability unstable
  * @category models
  */
 export const Signed = Schema.Struct({
@@ -117,7 +111,6 @@ export const Signed = Schema.Struct({
  * `key` is the key to stop, `for` the person, and `to` the ledger, so a removal cannot be replayed
  * on another. `saw` records what the person saw, and `sentAt` is the signer's own clock.
  *
- * @stability unstable
  * @category models
  */
 export const Revoke = Schema.Struct({
@@ -140,7 +133,6 @@ export const Revoke = Schema.Struct({
  * fields that do not apply; nothing checks that they match `method`. It sits inside the signed
  * text.
  *
- * @stability unstable
  * @category models
  */
 export const AddSaw = Schema.Struct({
@@ -165,7 +157,6 @@ export const AddSaw = Schema.Struct({
  * enrollment proof. A `recovery` case carries the sheet's key. The case tag is the rank the key
  * joins with.
  *
- * @stability unstable
  * @category models
  */
 export const Adds = Schema.TaggedUnion({
@@ -197,7 +188,6 @@ export const Adds = Schema.TaggedUnion({
  * dropped by its own addition. A new sheet also ends every other live sheet, whatever `drops`
  * says. The struct is part of the signed text.
  *
- * @stability unstable
  * @category models
  */
 export const Add = Schema.Struct({
@@ -220,7 +210,6 @@ export const Add = Schema.Struct({
  * key that wrote it in `by`. A `founded` event is kept under the fixed id `founded`, so a second
  * founding changes nothing.
  *
- * @stability unstable
  * @category models
  */
 export const MemberEvent = Schema.TaggedUnion({
@@ -238,7 +227,6 @@ export const MemberEvent = Schema.TaggedUnion({
 /**
  * The decoded type of `MemberEvent`.
  *
- * @stability unstable
  * @category models
  */
 export type MemberEvent = typeof MemberEvent.Type;
@@ -273,7 +261,6 @@ type Member = { readonly rank: Rank; readonly live: boolean; readonly under: str
  * `under` is the key that let a key in, or null for a root. A key that stopped stays in the map
  * with `live` false.
  *
- * @stability unstable
  * @category models
  */
 export type Access = {
@@ -296,14 +283,12 @@ export type Access = {
  * device in. `replaced` is a sheet a newer one ended. `revoked`
  * is a stopped key, as signer or as the key an event is about.
  *
- * @stability unstable
  * @category models
  */
 export const Reason = Schema.Literals(["not_member", "not_allowed", "used", "replaced", "revoked"]);
 /**
  * The decoded type of `Reason`.
  *
- * @stability unstable
  * @category models
  */
 export type Reason = typeof Reason.Type;
@@ -340,7 +325,6 @@ const Model = Schema.TaggedUnion({
  * The reply says how the last event went and never decides what is legal next. Read who belongs
  * through `members`, not through this type.
  *
- * @stability unstable
  * @category models
  */
 export type Folded = typeof Model.Type;
@@ -355,7 +339,6 @@ const Msg = Schema.Struct({ type: Schema.Literal("fold"), event: MemberEvent });
  *
  * The machine remembers every id it took, so the same event twice changes nothing.
  *
- * @stability unstable
  * @category getters
  */
 export const eventId = (event: MemberEvent): string =>
@@ -371,7 +354,6 @@ export const eventId = (event: MemberEvent): string =>
  * Returns the key that signed an event, or null for `founded` and `denied`, which carry no
  * signature.
  *
- * @stability unstable
  * @category getters
  */
 export const signedBy = (event: MemberEvent): string | null =>
@@ -391,7 +373,6 @@ export const signedBy = (event: MemberEvent): string | null =>
  * For a grant, a removal and a denial it is the key named in the event. For an addition it is the
  * new key of `adds`, not its window.
  *
- * @stability unstable
  * @category getters
  */
 export const subject = (event: MemberEvent): string | null =>
@@ -637,7 +618,6 @@ const fold = (model: Folded, event: MemberEvent): Folded => {
  *
  * It never checks a signature, and a refused event leaves the keys as they were.
  *
- * @stability unstable
  * @category machines
  */
 export const access = Machine.make({
@@ -657,7 +637,6 @@ export const access = Machine.make({
  *
  * Before the founding the person and the name are empty strings and there are no keys.
  *
- * @stability unstable
  * @category combinators
  */
 export const members = (model: Folded): Access => {
@@ -710,7 +689,6 @@ const chainLive = (members: Access, key: string): boolean => {
  *
  * A loop in the `under` chain counts as not live.
  *
- * @stability unstable
  * @category combinators
  */
 export const admitted = (

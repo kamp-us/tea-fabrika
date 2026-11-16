@@ -3,8 +3,6 @@
  * folder of mode 0700, and reused on every start. A file that others can read, or that does not
  * decode, is a typed error and is never used or replaced; only the key the door removed is
  * replaced.
- *
- * @stability unstable
  */
 import { Effect, FileSystem, Layer, Option, Path, PlatformError, Schema } from "effect";
 import { Base64Url } from "effect/encoding";
@@ -119,7 +117,6 @@ const tempName = (file: string) => `${file}.${Base64Url.encode(crypto.getRandomV
  * the stored key's fingerprint, writes a new pair the same way and renames it over `file`:
  * `replaced`. `claimPersist` answers `false` and `persist` `true`: a file is already kept.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (options: { readonly file: string }) =>

@@ -1,6 +1,5 @@
 /**
  * The trusted hook before a supervised program step.
- * @stability unstable
  */
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
@@ -8,7 +7,6 @@ import type * as Effect from "effect/Effect";
 /**
  * Identifies the letter and whether this attempt folds saved history.
  *
- * @stability unstable
  * @category models
  */
 export type Before = {
@@ -21,7 +19,6 @@ export type Before = {
 /**
  * Allows trusted wiring to fail a step with its original defect.
  *
- * @stability unstable
  * @category services
  */
 export class StepFault extends Context.Service<

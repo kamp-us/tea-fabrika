@@ -6,7 +6,6 @@ import { Answer, PersonCheck, PersonCheckError, Unavailable } from "./PersonChec
  * Creates a `PersonCheck` layer that gives one scripted answer per ask, in order. An `unavailable` entry, or an
  * ask past the end of the list, fails with `PersonCheckError`.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = (

@@ -2,8 +2,6 @@
  * The relation store's contract (0095): the live tuples inside a ledger turn, and the writes that
  * change them. `RelationsLedger.layer(...)` keeps it on the ledger, `RelationsMemory.layer(...)` in
  * memory for tests.
- *
- * @stability unstable
  */
 import { Context, Schema } from "effect";
 import type { Effect, Result } from "effect";
@@ -19,7 +17,6 @@ import type { Change, Tuples } from "./Relation.ts";
  * `bad_row`: a row the store trusts does not decode. `storage`: the ledger failed or refused a
  * write, such as a change id used before for another row. The cause is kept.
  *
- * @stability unstable
  * @category errors
  */
 export class RelationsError extends Schema.TaggedError<RelationsError>()("RelationsError", {
@@ -40,7 +37,6 @@ export class RelationsError extends Schema.TaggedError<RelationsError>()("Relati
  *
  * The memory layer ignores the turn: it answers from its own changes.
  *
- * @stability unstable
  * @category services
  */
 export class Relations extends Context.Service<
