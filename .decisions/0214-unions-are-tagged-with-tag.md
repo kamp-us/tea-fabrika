@@ -1,7 +1,7 @@
 ---
 id: 0214
 title: Every union we define tags its members with _tag, written by Effect Schema and never by hand, while tea's Msgs and Cmds keep type and third-party shapes keep theirs
-status: accepted
+status: amended-in-part by [0569](0569-tea-msgs-are-keyed-on-tag.md)
 date: 2026-11-01
 tags: [schema, tag, union, effect-schema, tea, names]
 ---
@@ -32,10 +32,14 @@ says the same.
 
 - A union member is a `Schema.TaggedStruct`, wrapped in `Schema.Opaque` where it has helpers
   ([0213](0213-data-is-a-schema-opaque.md)).
-- tea's Msgs and Cmds keep `type`. Third-party shapes keep their own key.
+- tea's Msgs and Cmds keep `type`. Third-party shapes keep their own key. Since [0569](0569-tea-msgs-are-keyed-on-tag.md), a tea Msg, Cmd and Sub and the state table are keyed on `_tag`.
 - In `next/`, `kind` on ledger entries is `_tag` too (ticket 32). Today's code keeps `kind` until
   that code goes.
 
 ## Consequences
 
 - In `next/`, the lint rule `fabrika/no-hand-tag` fails a hand-written `_tag` key.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-hand-tag`, the rule named here, with the anti-slop rules `no-manual-tagged-construction` and `no-manual-tagged-type`, in the cleanup of [0562](0562-nothing-teaches-the-wrong-shape.md). The rule that holds the ban changes; the ban does not.

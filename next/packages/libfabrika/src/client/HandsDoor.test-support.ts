@@ -4,9 +4,15 @@
 // `tasks.finish`, with the shapes `gateway/Tasks.ts` answers them. It is the laws' oracle of what the
 // brain holds, never the product's: it imports no gateway, and from the tasks module only its
 // schemas. A law may make it refuse a finish on purpose, to walk the client's recovery.
-import { Schema } from "effect";
+//
+// `door` is the door in front of it, one in-memory socket per dial: it challenges each socket,
+// answers the hello and the knock as its gate says, and keeps every socket, so a law can read every
+// frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
+import { Layer, Option, Schema } from "effect";
+import { Socket } from "effect/socket";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
+import { MemorySocket } from "./WindowStart.test-support.ts";
 
 /**
  * A finish refused before the brain saved anything, as the door or the Worker may answer it: over
@@ -261,3 +267,153 @@ export const admitted = (key: string) => ({
 /** The result the fake `Commands` gives for the `n`th command it runs. */
 export const fakeResult = (n: number): Result =>
   Result.cases.exited.make({ code: n % 3 === 0 ? 1 : 0, version: `git version 2.${40 + (n % 9)}.0` });
+
+/** One JSON-RPC call the client wrote. */
+const Call = Schema.fromJsonString(
+  Schema.Struct({
+    id: Schema.Union([Schema.Number, Schema.String]),
+    method: Schema.String,
+    params: Schema.optionalKey(Schema.Unknown),
+  }),
+);
+
+const decodeCall = Schema.decodeUnknownOption(Call);
+
+/** How the door cuts the next tasks call: drop the socket before it reads the call, or after it acted. */
+type CallCut = "before" | "after" | null;
+
+/** How the door answers a hello: it admits the key, says `not_granted` (the client then knocks), or refuses it for `reason`. */
+export const HelloAnswer = Schema.TaggedUnion({
+  admit: {},
+  not_granted: {},
+  refuse: { reason: Schema.String },
+});
+
+/** How the door answers a hello and a knock: a knock gets the waiting code, or a refusal for `reason`. */
+export type Gate = {
+  readonly hello: () => typeof HelloAnswer.Type;
+  readonly knock: () => { readonly code: string; readonly until: number } | { readonly reason: string };
+};
+
+/** The door every 4a law meets: it admits every hello. */
+const admitsAll: Gate = { hello: () => HelloAnswer.cases.admit.make({}), knock: () => ({ reason: "not_allowed" }) };
+
+/** What the door holds: the socket open now, the cut armed, the waits it parked, and what it heard. */
+type DoorState = {
+  open: MemorySocket | null;
+  cut: CallCut;
+  parked: Array<{ readonly id: string | number; readonly after: number; readonly on: MemorySocket }>;
+  readonly hellos: Array<unknown>;
+  readonly calls: Array<{ readonly method: string; readonly params: unknown }>;
+  /** Every socket the client dialed, in order: its `url` and every text it `sent`. */
+  readonly sockets: Array<MemorySocket>;
+  dials: number;
+};
+
+const failed = (id: string | number, reason: string) =>
+  JSON.stringify({ jsonrpc: "2.0", id, error: { code: -32000, message: reason, data: { reason } } });
+
+/** The door as a script over the brain `b`, for the hands key `key`: one socket per dial, the challenge waiting in it. */
+export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
+  const state: DoorState = { open: null, cut: null, parked: [], hellos: [], calls: [], sockets: [], dials: 0 };
+  const answer = (text: string, on: MemorySocket) => {
+    if (text === "ping") {
+      on.receive("pong");
+      return;
+    }
+
+    const decoded = decodeCall(text);
+
+    if (Option.isNone(decoded)) {
+      return;
+    }
+
+    const call = decoded.value;
+
+    if (call.method === "initialize") {
+      state.hellos.push(call.params);
+      const said = gate.hello();
+      on.receive(
+        said._tag === "refuse"
+          ? failed(call.id, said.reason)
+          : said._tag === "not_granted"
+            ? failed(call.id, "not_granted")
+            : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+      );
+      return;
+    }
+
+    if (call.method === "gateway.knock") {
+      const said = gate.knock();
+      on.receive(
+        "reason" in said ? failed(call.id, said.reason) : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: said }),
+      );
+      return;
+    }
+
+    if (!call.method.startsWith("tasks.")) {
+      return;
+    }
+
+    const cut = state.cut;
+
+    if (cut === "before") {
+      state.cut = null;
+      on.drop(1006);
+      return;
+    }
+
+    state.calls.push({ method: call.method, params: call.params });
+    const outcome = b.call(key, call.method, call.params);
+
+    if (cut === "after") {
+      state.cut = null;
+      on.drop(1006);
+      return;
+    }
+
+    if (outcome._tag === "parked") {
+      state.parked.push({ id: call.id, after: outcome.after, on });
+      return;
+    }
+
+    const body = answerText(call.id, outcome);
+
+    if (body !== null) {
+      on.receive(body);
+    }
+  };
+  const socket = Layer.succeed(Socket.WebSocketConstructor, (url: string) => {
+    state.dials++;
+    const made: MemorySocket = new MemorySocket(url, { send: (text, from) => answer(text, from) });
+    state.open = made;
+    state.sockets.push(made);
+    made.open();
+    made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce: `nonce_${state.dials}` } }));
+    return made;
+  });
+  return {
+    state,
+    socket,
+    /** A program asks the client's key: the brain saves it, and each parked wait past its rev is rung. */
+    request: (process: string, n: number) => {
+      const id = b.request(key, process, n);
+      const ringing = state.parked.filter((p) => b.rev(key) > p.after);
+      state.parked = state.parked.filter((p) => !ringing.includes(p));
+
+      for (const p of ringing) {
+        p.on.receive(JSON.stringify({ jsonrpc: "2.0", id: p.id, result: { rev: b.rev(key) } }));
+      }
+
+      return id;
+    },
+    drop: () => state.open?.drop(1006),
+    /** A person grants the key: the door sends `client.granted` with a fresh nonce on the open socket. */
+    grant: () =>
+      state.open?.receive(
+        JSON.stringify({ jsonrpc: "2.0", method: "client.granted", params: { nonce: `grant_${state.dials}` } }),
+      ),
+    /** A person removes the key: the door closes the open socket with 4003. */
+    remove: () => state.open?.drop(4003),
+  };
+};

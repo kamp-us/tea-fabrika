@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-oxlint-readme-says-effectfnopportunity-off",
+  "date": "2026-11-15",
+  "by": "lead",
+  "model": "claude-sonnet-5-5",
+  "rule": "doc_drift",
+  "location": {
+    "path": "oxlint-plugins/README.md",
+    "line": 618
+  },
+  "says": "oxlint-plugins/README.md says the Effect checker's effectFnOpportunity check remains off, and tsconfig.base.json turns it on as an error for all of next/.",
+  "proof": "On origin/main at e4404464d91114e66c326272e7fba9c6313db19f, oxlint-plugins/README.md line 618 reads `effectFnOpportunity` remains off. Its earlier 11 false alarms among 17 findings. tsconfig.base.json line 80 reads \"effectFnOpportunity\": \"error\", inside the block at line 73 whose include is [\"next/**/*.ts\", \"next/**/*.tsx\"].",
+  "cost": "A reader who trusts the README thinks the check is off and keeps our own effect-functions rule for a gap that is already covered in part, and may weigh the swap against a wrong picture of what blocks.",
+  "head": "e4404464d91114e66c326272e7fba9c6313db19f",
+  "ticket": null,
+  "pr": null
+}

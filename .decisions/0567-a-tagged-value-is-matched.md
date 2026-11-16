@@ -136,6 +136,8 @@ lint rules hold it, and that the form is the same inside a tea machine's `update
    narrowed to some of its cases: `Match.valueTags(value, {...})`. For a tea Msg, which is keyed
    by `type`: `Match.discriminators("type")({...})`, closed with `Match.exhaustive` or
    `Match.orElse`.
+   Since [0569](0569-tea-msgs-are-keyed-on-tag.md), a tea Msg is keyed on `_tag` once its patch
+   lands, and then point 1 reads it; this line holds only until then.
 3. **Each inner answer is matched by its own union,** inside the case that holds it, such as
    `CodeHost.Updated.match(m.value, {...})` inside the `updating` state's case.
 4. **Never `Predicate.isTagged` on a value whose type is known.** It is for `unknown`. The first
@@ -263,3 +265,8 @@ already narrowed there: `Model.match` wants a key for every case of the Model, `
   one-line pointer each, where they name the two rules as not taken or not decided. Their status
   does not change.
 - `.glossary/TERMS.md`: no word is coined.
+
+## Amendments
+
+- 2026-11-15: [0578](0578-tea-cell-answers-a-step.md) says a cell answers a `Step`, not the
+  `[model, cmds]` tuple that this file's examples show. The examples change with the sweep.

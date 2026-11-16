@@ -39,6 +39,8 @@ Decided by the owner in
   saved model carries its shape's number and a chain of named upgrades
   ([saved state, S3](../docs/direction/saved-state.md)). The schema is still the last check.
 
+> Until the first release the named-upgrade chain is set aside: [0572](0572-pre-release-shape-change-wipes-data.md) wipes the data on a shape change.
+
 ## Consequences
 
 - A state schema for every machine the host keeps; 12 had none and got one.
