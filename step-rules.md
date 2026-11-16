@@ -101,7 +101,9 @@ pause, one fresh retry of the same command is allowed; if it errors again, stop 
 inside your worktree (seen twice on 2026-11-16: git in a `for` loop with `$(...)` after
 `cd ... ||`, and `git -C .`). Run every git command as its own plain call from the worktree root:
 no `cd`, no `-C`, no loop, no `$(...)`, no `&&` chain of git commands. Look at files with the Read
-and Grep tools, not with shell loops over `git show`. This is the check's own instruction, not a
+and Grep tools, not with shell loops over `git show`. Edit and create files only with the Edit and
+Write tools: never a heredoc, `python`, `node -e`, `sed -i` or a shell redirect (refused a third
+time the same day, for `python3 <<EOF || node -e`). This is the check's own instruction, not a
 work-around; a refusal after it is still a stop.
 
 **PR 1366 is merged to main (2026-11-16).** Its files are no longer off limits. Merge `origin/main` into your branch first (`git merge --no-edit origin/main`, never rebase), and every hit your slice once listed as "waiting on 1366" is now part of your slice: fix it like any other. Do not add a `LOCKED` row to
