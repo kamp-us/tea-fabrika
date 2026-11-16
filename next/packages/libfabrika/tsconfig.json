@@ -22,7 +22,30 @@
           },
           // These folders: effectSucceedWithVoid (E20).
           {
-            "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/cloudflare/**/*.ts", "src/codehost/**/*.ts", "src/coordination/**/*.ts", "src/desktop/**/*.ts", "src/gateway/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/presence/**/*.ts", "src/processes/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/settings/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/tezgah/**/*.ts", "src/transport/**/*.ts"],
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/gateway/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "effectSucceedWithVoid": "error"
@@ -31,7 +54,28 @@
           },
           // These folders: schemaNumber (E4).
           {
-            "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/codehost/**/*.ts", "src/coordination/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/presence/**/*.ts", "src/processes/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/settings/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/tezgah/**/*.ts", "src/transport/**/*.ts"],
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "schemaNumber": "error"
@@ -40,7 +84,25 @@
           },
           // These folders: schemaClassMissingBrand (E6).
           {
-            "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/cloudflare/**/*.ts", "src/codehost/**/*.ts", "src/desktop/**/*.ts", "src/gateway/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/settings/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/transport/**/*.ts"],
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/gateway/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/settings/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "schemaClassMissingBrand": "error"
@@ -49,7 +111,26 @@
           },
           // These folders: preferTypedSchemaDecoder (E5).
           {
-            "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/codehost/**/*.ts", "src/coordination/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/presence/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/tezgah/**/*.ts", "src/transport/**/*.ts"],
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "preferTypedSchemaDecoder": "error"
@@ -58,7 +139,18 @@
           },
           // These folders: unnecessaryTypeofType (E7).
           {
-            "include": ["src/*.ts", "src/client/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/processes/**/*.ts", "src/runtime/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts"],
+            "include": [
+              "src/*.ts",
+              "src/client/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/processes/**/*.ts",
+              "src/runtime/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts"
+            ],
             "exclude": ["src/runtime/ProcessStore.integration.test.ts", "src/runtime/RuntimeCauseTest.ts"],
             "options": {
               "diagnosticSeverity": {
@@ -68,7 +160,13 @@
           },
           // These folders: mapMapErrorToMapBoth (E14).
           {
-            "include": ["src/client/**/*.ts", "src/cloudflare/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts"],
+            "include": [
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts"
+            ],
             "options": {
               "diagnosticSeverity": {
                 "mapMapErrorToMapBoth": "error"

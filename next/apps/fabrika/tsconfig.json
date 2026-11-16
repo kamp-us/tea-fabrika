@@ -6,7 +6,7 @@
         "name": "@effect/language-service",
         "namespaceImportPackages": [],
         "barrelImportPackages": ["effect"],
-        "diagnosticSeverity": {"preferBarrelImport": "error"},
+        "diagnosticSeverity": { "preferBarrelImport": "error" },
         // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
@@ -14,7 +14,7 @@
           // (E8), preferUnsafeConstructor (E16), effectSucceedWithVoid (E20),
           // catchConditionalRefailToCatchIf (E22), runOfExitToRunExit (E25).
           {
-            "include": ["**/*.ts", "**/*.tsx"],
+            "include": ["**/*.ts", "**/*.tsx", "../../../fixtures/next/p19-launchd/brain.ts"],
             "options": {
               "diagnosticSeverity": {
                 "schemaNumber": "error",

@@ -5,50 +5,35 @@
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-  "plugins": [
-    {
-      "name": "@effect/language-service",
-      // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
-      // The globs read from this folder. One entry per set of folders; its comment names its checks.
-      "overrides": [
-        // Whole package: unnecessaryArrowBlock (E8), catchToOrElseSucceed (E9),
-        // unnecessaryFailYieldableError (E19).
-        {
-          "include": ["**/*.ts", "**/*.mjs"],
-          "options": {
-            "diagnosticSeverity": {
-              "unnecessaryArrowBlock": "error",
-              "catchToOrElseSucceed": "error",
-              "unnecessaryFailYieldableError": "error"
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
+        // The globs read from this folder. One entry per set of folders; its comment names its checks.
+        "overrides": [
+          // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5),
+          // schemaClassMissingBrand (E6), unnecessaryArrowBlock (E8), catchToOrElseSucceed (E9),
+          // instanceOfSchema (E10), unnecessaryFailYieldableError (E19), multipleCatchTag (E21),
+          // runOfExitToRunExit (E25).
+          {
+            "include": ["**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "schemaNumber": "error",
+                "preferTypedSchemaDecoder": "error",
+                "schemaClassMissingBrand": "error",
+                "unnecessaryArrowBlock": "error",
+                "catchToOrElseSucceed": "error",
+                "instanceOfSchema": "error",
+                "unnecessaryFailYieldableError": "error",
+                "multipleCatchTag": "error",
+                "runOfExitToRunExit": "error"
+              }
             }
           }
-        },
-        // These folders: schemaNumber (E4), preferTypedSchemaDecoder (E5), instanceOfSchema
-        // (E10), multipleCatchTag (E21), runOfExitToRunExit (E25).
-        {
-          "include": ["**/*.ts"],
-          "options": {
-            "diagnosticSeverity": {
-              "schemaNumber": "error",
-              "preferTypedSchemaDecoder": "error",
-              "instanceOfSchema": "error",
-              "multipleCatchTag": "error",
-              "runOfExitToRunExit": "error"
-            }
-          }
-        },
-        // These folders: schemaClassMissingBrand (E6).
-        {
-          "include": ["raw.d.ts", "skills/**/*.ts"],
-          "options": {
-            "diagnosticSeverity": {
-              "schemaClassMissingBrand": "error"
-            }
-          }
-        }
-      ]
-    }
-  ]
+        ]
+      }
+    ]
   },
   "include": [
     "raw.d.ts",
