@@ -64,7 +64,7 @@ export const load = Effect.fnUntraced(function* (options: {
   // A repo that needs a newer fabrika is refused before the person's file is read.
   yield* Files.supported(Fabrika, repo, options.version);
   const person = yield* Load.file(options.person);
-  const checked = yield* Load.settle(Declarations.all, {
+  const checked = yield* Load.resolve(Declarations.all, {
     repo,
     person,
     flags: options.flags,

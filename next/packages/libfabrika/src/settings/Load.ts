@@ -62,7 +62,7 @@ export const file = Effect.fnUntraced(function* (place: Place) {
 });
 
 /**
- * Checks two read files whole, resolves the four sources over them and makes the snapshot, checked as it would be read back.
+ * Resolves an app's settings from two read files: checks the files whole, resolves the four sources over them by precedence, and makes the snapshot, checked as it would be read back.
  *
  * **Details**
  *
@@ -71,7 +71,7 @@ export const file = Effect.fnUntraced(function* (place: Place) {
  * @stability unstable
  * @category combinators
  */
-export const settle = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
+export const resolve = Effect.fnUntraced(function* <A, R extends Record<string, Setting.Setting<any>>>(
   group: Setting.Group<A, R>,
   options: {
     readonly repo: { readonly file: string; readonly document: TomlDocument };
@@ -133,5 +133,5 @@ export const load = Effect.fnUntraced(function* <A, R extends Record<string, Set
       ? { path: path.join(options.home, `.${app.name}`, `${app.name}.toml`), name: app.person }
       : { path: path.join(moved, `${app.name}.toml`), name: `$${app.home}/${app.name}.toml` },
   );
-  return yield* settle(group, { repo, person, flags: options.flags, env: options.env, version: options.version });
+  return yield* resolve(group, { repo, person, flags: options.flags, env: options.env, version: options.version });
 });
