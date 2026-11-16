@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0554, 0562, 0524, 0523, 0168; body 85b32e4d5f35
+
 Plancheck-Version: 3
 
 # Plan: no `Reflect.get`, `Reflect.set` or `Reflect.has` is left in `next/` and our tooling, and a lint rule holds it
@@ -36,10 +36,17 @@ The owner is away, so each lean below is taken. Two are at or under 80%.
   `pnpm lint` and CI fail on it. What would settle it: the `JSON.parse` cleanup of
   [0523](../../../.decisions/0523-advice-rules-block-where-clean.md) reaching zero, which deletes
   that block. See "The hold".
-- **Where the dev client's method types come from (70%).** Slice 9 gives the local dev client real
-  types. Its file is in `node/`, and the types that name the methods are in `cloudflare/`. The lean
-  is one type-only contract both may import. Three open pull requests change `node/` now, so this
-  is settled by an amendment when slice 9 starts.
+- **Where the dev client's method types come from: settled for the process half, a lean for the
+  project half (75%).** The merge session ruled choice (A): the method types move type-only to a
+  layer both `node/` and `cloudflare/` already import, with no `layer-rules.json` edit. Read
+  against `layer-rules.json` on main at `9ca24b1`, that holds for the Process object's calls: they
+  move to `next/packages/libfabrika/src/runtime/ObjectCalls.ts`. It cannot hold for the Project
+  object's calls: they name `transport/` and seven reply schemas that are values in
+  `cloudflare/bindings.ts`, and no layer both may import is allowed to import `transport/` and
+  `runtime/` together. The lean for that half is the tests step's choice (C): `dev.ts` names its
+  Project calls from modules `node/` may import, and L7 holds them equal to the binding's. The
+  merge session's signature is the yes; a send-back picks (B) instead. See the amendment of
+  2026-11-15.
 
 ## What changes, in one paragraph
 
@@ -196,7 +203,7 @@ const started = await Reflect.get(instance.project(PROJECT), "start")(request, f
 const started = await instance.project(PROJECT).start(request, from);
 ```
 
-15 fires in 7 files are this kind. All wait for slice 9.
+17 fires in 8 files are this kind on main at `9ca24b1` (amendment of 2026-11-15). All wait for slice 9.
 
 **7. A value on `globalThis`: declare it once with its type.**
 
@@ -424,8 +431,8 @@ const project = Stub.make<ProjectBinding>(unexpected, { settingsStart: async () 
 
 `next/packages/libfabrika/src/node/dev/dev.ts:52` types the client as a bare record of functions.
 Slice 9 types `project(p)` and `process(pid)` by the methods their objects have, each answering a
-Promise. The 15 calls made through `Reflect.get` then become plain calls. See the second doubt at
-the top for where the method types come from.
+Promise. The 17 calls made through `Reflect.get` then become plain calls. Where the method types
+come from is the amendment of 2026-11-15, with its code.
 
 ## One value traced: a new `Reflect.get` in a folder that only advises for `JSON.parse`
 
@@ -518,13 +525,18 @@ step owns most of this quest. A slice with no build row has two steps: tests, th
 
 | File | Owner | Product lines expected | Change |
 |---|---|---|---|
-| next/packages/libfabrika/src/node/dev/dev.ts | build | 40 | slice 9: the typed client |
-| next/packages/libfabrika/src/node/dev/dev.types.test.ts | tests | tests | slice 9: L7 |
-| next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts | tests | tests | slice 9: kinds 6 and 9, 3 fires |
-| next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts | tests | tests | slice 9: kind 6, 1 fire |
-| next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | slice 9: kind 9, a wrapper becomes a plain object |
-| next/packages/libfabrika/src/node/launchd/Launchd.test-support.ts | tests | tests | slice 9: kind 9, the handle wrapper becomes a plain object |
-| next/packages/libfabrika/src/cloudflare/control.ts | build | 60 | slice 10: kind 5, the typed table |
+| next/packages/libfabrika/src/runtime/ObjectCalls.ts | build | 30 | slice 9: new; `RemoteCall`, `Remote` and `ProcessObjectCalls`, moved type-only from `cloudflare/bindings.ts` (amendment of 2026-11-15) |
+| next/packages/libfabrika/src/cloudflare/bindings.ts | build | 15 | slice 9: imports the three types back; `ProcessBinding` becomes `Rpc.DurableObjectBranded & ProcessObjectCalls`; 0 fires |
+| next/packages/libfabrika/src/node/dev/dev.ts | build | 70 | slice 9: the typed client, `DevProject` and `DevProcess`; 0 fires |
+| next/packages/libfabrika/src/node/dev/dev.types.test.ts | tests | tests | slice 9: L7, new; it imports `cloudflare/bindings.ts` types, as `node/IsolateUsage.integration.test.ts:12` does today |
+| layer-rules.json | tests | 0 | slice 9: no change, by the merge session's ruling; read to place the moved types |
+| next/apps/fabrika/src/exam/layers.integration.test.ts | tests | tests | slice 9: no change; its plant at :289 shows the layer check reads `import type` |
+| next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts | tests | tests | slice 9: no change; the model for a `node/` test that imports `cloudflare/bindings.ts` |
+| next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts | tests | tests | slice 9: 3 fires; kind 9 at :241 and :279, two wrappers become plain objects; :470, the `ping` call, is the fake member of the amendment of 2026-11-15 |
+| next/packages/libfabrika/src/node/dev/dev-secrets.laws.integration.test.ts | tests | tests | slice 9: kind 6, 1 fire, at :380 |
+| next/packages/libfabrika/src/node/dev/watch.laws.integration.test.ts | tests | tests | slice 9: kind 9, 1 fire, at :69; a wrapper becomes a plain object |
+| next/packages/libfabrika/src/node/launchd/Launchd.test-support.ts | tests | tests | slice 9: kind 9, 1 fire, at :319; the handle wrapper becomes a plain object |
+| next/packages/libfabrika/src/cloudflare/control.ts | build | 60 | slice 10: kind 5, the typed table, 1 fire |
 | next/packages/libfabrika/src/cloudflare/control.laws.test.ts | tests | tests | slice 10: L8 |
 | next/packages/libfabrika/src/cloudflare/platform.test.ts | tests | tests | slice 10: kinds 3, 5 and 9, 19 fires; `rejecting` and `answeringProcess` become `Stub.make` |
 | next/packages/libfabrika/src/cloudflare/readers.laws.test.ts | tests | tests | slice 10: kind 9, 5 fires |
@@ -552,11 +564,13 @@ step owns most of this quest. A slice with no build row has two steps: tests, th
 | next/apps/fabrika/e2e/tezgah-focus.visual.test.ts | tests | tests | slice 13: kind 7, 2 fires |
 | next/apps/fabrika/e2e/one-file.visual.test.ts | tests | tests | no change: the model for kind 7 |
 | next/apps/fabrika/src/checklist-instance.laws.integration.test.ts | tests | tests | slice 14: kinds 2 and 5, 3 fires; its 2 stubs become `Stub.make` |
-| next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 14: kind 1, 2 fires |
+| next/apps/fabrika/src/door.integration.test.ts | tests | tests | slice 14: kind 1, 2 fires, now at :5812 and :5835 |
+| next/apps/fabrika/src/hands-launcher.integration.test.ts | tests | tests | slice 14: new on main since the count; kind 6, 2 fires (:114, a method picked by a name the type names, becomes `project[name]`; :233, a `start`) |
+| next/apps/fabrika/src/worker-monitor.integration.test.ts | tests | tests | slice 14: new on main since the count; kind 6 at :335 and kind 2 at :362, 2 fires |
 | next/apps/fabrika/src/input-recording.integration.test.ts | tests | tests | slice 14: kind 5, 1 fire |
 | next/apps/fabrika/src/instance-records.integration.test.ts | tests | tests | slice 14: kind 6, 1 fire; kind 11, the generated text |
 | next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts | tests | tests | slice 14: kinds 1 and 5, 9 fires; its 2 stubs become `Stub.make` |
-| next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 14: kind 2, 3 fires; kind 9, 2 lines stay in the hostile input |
+| next/apps/fabrika/src/runtime.decode.test.ts | tests | tests | slice 14: 5 fires; kind 2, 3 fires; kind 9, 2 lines stay in the hostile input |
 | next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts | tests | tests | slice 14: kind 6, 6 fires |
 | next/apps/fabrika/src/tasks-wire.integration.test.ts | tests | tests | slice 14: kind 6, 1 fire |
 | next/apps/fabrika/src/worker-mail.integration.test.ts | tests | tests | slice 14: kind 6, 3 fires |
@@ -578,7 +592,8 @@ makes the hold real.
 - `.oxlintrc.json` is edited by every slice and by four open pull requests. Each slice adds one
   line to one list, so a clash is one line.
 
-**Waiting, each named with what it waits on:**
+**Waiting, each named with what it waits on.** The list below is the order as signed on
+2026-11-15. The amendment of 2026-11-15 replaces it for slices 9 to 15; see "Amendments".
 
 - Slice 9, `node`: https://github.com/kamp-us/tea-fabrika/pull/1331,
   https://github.com/kamp-us/tea-fabrika/pull/1341 and the quotas slice (branch
@@ -648,21 +663,22 @@ moved.
 6. `programs/pipeline`: about 8 test lines. 0 product lines.
 7. `programs/counter`: about 10 test lines. 0 product lines.
 8. The shared stub: 31 product lines, about 60 test lines.
-9. `node`, with the typed dev client: 40 product lines, about 60 test lines.
+9. `node`, with the typed dev client: 115 product lines, about 80 test lines (amendment of
+   2026-11-15: the new `runtime/ObjectCalls.ts` and the edit of `cloudflare/bindings.ts`).
 10. `cloudflare`, with the control table: 60 product lines, about 250 test lines.
 11. `runtime`: about 80 test lines. 0 product lines.
 12. `client`: about 300 test lines. 0 product lines.
 13. The app's `e2e`: about 60 test lines. 0 product lines.
-14. The app's `src`: about 150 test lines. 0 product lines.
+14. The app's `src`: about 170 test lines. 0 product lines (two more files since the count).
 15. The fold: about 40 lines of configuration. 0 product lines.
 
 Priced from the rows in `field/runs/` for 2026-11-10 to 2026-11-15, at list price: a tests step
 averages $5.78, a build $4.78, a review $2.71 and a fix round $4.18. The six small cold slices are
-priced at $4 each for tests and review. The others: slice 1 $9, slice 8 $13, slice 9 $14, slice 10
+priced at $4 each for tests and review. The others: slice 1 $9, slice 8 $13, slice 9 $16, slice 10
 $16, slice 11 $10, slice 12 $14, slice 13 $8, slice 14 $14, slice 15 $5, and four send-backs at $7.
 That is 33 steps and 4 send-backs.
 
-Estimate: 37 steps, $155
+Estimate: 37 steps, $157
 
 ## Records
 
@@ -694,6 +710,228 @@ Estimate: 37 steps, $155
 - **`Reflect.apply`, `Reflect.construct` and `Reflect.deleteProperty`.** 104 uses stay. 0554 does
   not decide them, and after this quest many `Reflect.apply` calls lose the `Reflect.get` beside
   them and need their own answer.
+
+## Amendments
+
+### 2026-11-15, before slices 9 to 14 start (lead)
+
+Read on `origin/main` at `9ca24b1`. The merge session made two rulings: choice (A) for slice 9, and
+the `ping` call. This amendment writes them down, recounts the waiting slices and records the new
+order. Nothing else in the signed plan changes.
+
+#### 1. Slice 9: where the dev client's method types live
+
+**The answer first.** The Process object's calls move type-only to
+`next/packages/libfabrika/src/runtime/ObjectCalls.ts`, a new file in the `next-runtime` row of
+`layer-rules.json`. Both `next-node` and `next-workers` list `next-runtime` in their `imports`, and
+`next-runtime` may import `next-processes`, which is all the moved types need. No
+`layer-rules.json` edit.
+
+The Project object's calls cannot move the same way, and this is a finding against the ruling's
+premise, not a choice:
+
+- Its methods name `transport/` (`checkHello` for `initialize`, `Answer` for `route` and `knock`),
+  `ledger/` (`LedgerCalls`, `Appended`), `settings/` and `runtime/` at once.
+- The layers both `node/` and `cloudflare/` may import are `next-runtime`, `next-runtime-coordination`
+  and the layers below them. `next-runtime` may not import `next-transport` or `next-ledger`.
+  `next-runtime-coordination` may not import `next-runtime` or `next-transport`. `next-transport`
+  imports only `next-shared`. No `runtime/` file on main imports `transport/`.
+- The `grant`, `sign` and `commit` answers are typed by schemas that are values in
+  `cloudflare/bindings.ts` (`GrantReply`, `SigningReply`, `CommitReply`), so even a move that is not
+  type-only would have to carry them.
+- The layer check reads `import type` too: the planted `import type` in
+  `next/apps/fabrika/src/exam/layers.integration.test.ts:289` is refused as `outside-imports`.
+
+So the lean for the Project half (75%) is the tests step's choice (C): `dev.ts` names the Project
+calls its control door allows, from modules `next-node` may import, and the type law L7 holds each
+one equal to `ProjectBinding`'s. L7's file is a test, and a test keeps only the upward and sideways
+rules (`testFiles` in `layer-rules.json`), so it may import `cloudflare/bindings.ts`, as
+`next/packages/libfabrika/src/node/IsolateUsage.integration.test.ts:12` does today. The doubt: the
+merge session may prefer (B), one `layer-rules.json` line that lets `next-node` import
+`next-workers`, over a copy held by a law. Its signature on this plan is the yes to (C); a send-back
+picks (B), and then `dev.ts` imports `ProjectBinding` and `ProcessBinding` and the new file is not
+made.
+
+**A name, decided here.** The tests step called the moved types `ProjectCalls` and `ProcessCalls`.
+`ProcessCalls` is taken: `next/packages/libfabrika/src/processes/ProcessManager.ts:601` exports it
+as the process manager's calls, and `cloudflare/bindings.ts:16` imports it under that meaning. A
+short word keeps one meaning, so the Process object's calls are `ProcessObjectCalls`. The dev
+client's two types are `DevProject` and `DevProcess`; `ProjectCalls` is not used, since two app tests
+already name a local `ProjectCalls` for the Effect service
+(`next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts:49`).
+
+The moved types, a sketch, not compiled:
+
+```ts
+// next/packages/libfabrika/src/runtime/ObjectCalls.ts (new, row next-runtime)
+/**
+ * The calls a Durable Object answers over RPC, as Promises, named once for both platforms.
+ *
+ * @stability unstable
+ */
+import type { Effect } from "effect";
+import type { Activity } from "../processes/Process.ts";
+import type * as IsolateUsage from "./IsolateUsage.ts";
+import type { Descriptor, ProgramRunner } from "./Runner.ts";
+
+/** One Effect call as the Promise call RPC answers. */
+export type RemoteCall<F> = F extends (...args: infer A) => infer B ? (...args: A) => Promise<Effect.Success<B>> : never;
+
+/** Every call of `S` over RPC. */
+export type Remote<S> = { [K in keyof S]: RemoteCall<S[K]> };
+
+type Runner = (typeof ProgramRunner)["Service"];
+
+/** A Process object's calls: the runner's msg, open, due, restart and swap, plus configuration, usage, alarm and abort. */
+export type ProcessObjectCalls = Remote<Pick<Runner, "msg" | "open" | "due" | "restart" | "swap">> & {
+  mailed: RemoteCall<(trace?: { traceId: string; spanId: string }) => Runner["mailed"]>;
+  configure: RemoteCall<(descriptor: Descriptor, drain?: boolean) => Effect.Effect<void>>;
+  usage: RemoteCall<typeof IsolateUsage.record>;
+  descriptor: RemoteCall<(process?: string) => Effect.Effect<Descriptor>>;
+  activity: RemoteCall<(value: typeof Activity.Type) => Effect.Effect<void>>;
+  recover: RemoteCall<() => Effect.Effect<unknown>>;
+  savedAlarm: RemoteCall<() => Effect.Effect<number | null>>;
+  abort: RemoteCall<() => Effect.Effect<void>>;
+};
+```
+
+```ts
+// next/packages/libfabrika/src/cloudflare/bindings.ts, the file the types leave
+import type { ProcessObjectCalls, Remote, RemoteCall } from "../runtime/ObjectCalls.ts";
+// `RemoteCall` and `Remote` are deleted here; `ProjectBinding`, `ConnectionBinding` and
+// `RecordBinding` keep using them through this import.
+export type ProcessBinding = Rpc.DurableObjectBranded & ProcessObjectCalls;
+```
+
+The new client type, a sketch:
+
+```ts
+// next/packages/libfabrika/src/node/dev/dev.ts
+import type { ProcessObjectCalls, RemoteCall } from "../../runtime/ObjectCalls.ts";
+// and, for the Project half, types from ledger/, processes/, presence/, runtime/ and transport/
+
+/** The dev client's Process: the calls its control door allows, and `alarm` for `savedAlarm`. */
+export type DevProcess = Pick<
+  ProcessObjectCalls,
+  "msg" | "open" | "due" | "restart" | "abort" | "activity" | "recover" | "savedAlarm"
+> & { readonly alarm: ProcessObjectCalls["savedAlarm"] };
+
+/** The dev client's Project: the calls its control door allows, and `connect` for `clientConnect`. */
+export type DevProject = Pick<LedgerCalls, "read" | "append" | "wait"> & {
+  readonly connect: () => Promise<string>;
+  readonly start: RemoteCall<(request: Start, from: From) => ReturnType<ProcessCalls["start"]>>;
+  readonly info: RemoteCall<() => ProcessCalls["info"]>;
+  // one line per name of the door's `methods.project` set, typed as `ProjectBinding` types it;
+  // `grant`, `sign` and `commit` answer `Promise<unknown>`, since their reply schemas are values in
+  // cloudflare/ and the dev door's answer has crossed JSON undecoded
+  readonly gateways: Pick<DevProject, "join" | "leave" | "online">;
+  readonly forProcess: (pid: string) => {
+    readonly append: (input: {
+      readonly id: string;
+      readonly parent: string;
+      readonly kind: string;
+      readonly stream: string;
+      readonly event: unknown;
+    }) => Promise<unknown>;
+  };
+};
+
+// the client the driver answers: `Binding`, the bare record at dev.ts:52, goes
+project: (project: string): DevProject => ...,
+process: (pid: string): DevProcess => ...,
+```
+
+`DevProject` lists exactly the door's names, so a name the door refuses is a type error at the call.
+Slice 10's typed table replaces the door's `methods` sets; L7 then compares `DevProject`'s keys with
+that table's keys, and until slice 10 with the set in `cloudflare/control.ts:31`, read as a type in
+the test.
+
+One call, before and after:
+
+```ts
+// next/apps/fabrika/src/worker-mail.integration.test.ts:355, before
+const started = await Reflect.get(instance.project(PROJECT), "start")(request, from);
+// after
+const started = await instance.project(PROJECT).start(request, from);
+
+// next/apps/fabrika/src/scheduled-job-alarm.integration.test.ts:184, before
+const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
+// after
+const alarm = yield* Effect.promise(() => instance.process(pid).savedAlarm());
+```
+
+L7 grows by one plant: drop `restart` from `DevProcess`'s `Pick`, and the law that names it goes red
+in a typecheck. Its existing plant (type the client as a bare record again) stays.
+
+#### 2. The `ping` call
+
+`next/packages/libfabrika/src/node/dev/dev-control.laws.integration.test.ts:470` calls
+`dev.process(name).ping()`. No real caller of a `ping` method on a Process exists:
+`nice -n 19 rg -n '\bping\b' next` finds only the wire's text ping (`instance-wire.integration.test.ts:406`
+sends the string `"ping"`) and the door's `ping` timing option in the app's tests. `ProcessBinding`
+has no `ping`, and the control door's `methods.process` set (`cloudflare/control.ts:52`) refuses it.
+The law fakes `fetch`, so the name only has to reach the wire. So `ping` is a fake member, typed
+only in the test, by kind 10:
+
+```ts
+// before
+const answered = (Reflect.get(dev.process(name), "ping")() as Promise<unknown>).then(/* ... */);
+// after, a sketch
+// @ts-expect-error ping is no method of a Process; this law fakes fetch, so any name reaches the wire
+const ping: () => Promise<unknown> = dev.process(name).ping;
+const answered = ping().then(/* ... */);
+```
+
+`DevProcess` does not grow a `ping`, and no index signature is added for it.
+
+#### 3. The recount
+
+Taken with the rule itself: oxlint 1.90.0, a throwaway config with the four entries of "The hold",
+over each slice's folder, on `9ca24b1`. Only `eslint(no-restricted-properties)` fires are counted.
+Slices 11 and 12 are a check only: their tests steps are done on `fabrikalfa/reflect-s11`
+(`6e27f66`) and `fabrikalfa/reflect-s12` (`fed14b15`) and are not run again.
+
+| Slice | Folder | Was | Now | Per file now |
+|---|---|---|---|---|
+| 9 | `libfabrika/src/node` | 6 in 4 | 6 in 4 | `dev-control.laws.integration.test.ts` 3, `dev-secrets.laws.integration.test.ts` 1, `watch.laws.integration.test.ts` 1, `launchd/Launchd.test-support.ts` 1 |
+| 10 | `libfabrika/src/cloudflare` | 28 in 5 | 28 in 5 | `platform.test.ts` 19, `readers.laws.test.ts` 5, `ObjectService.test.ts` 2, `error-cause.test.ts` 1, `control.ts` 1 |
+| 11 | `libfabrika/src/runtime` | 18 in 3 | 18 in 3 | `Program.test.ts` 10, `Patch.test.ts` 5, `Client.laws.test.ts` 3 |
+| 12 | `libfabrika/src/client` | 50 in 3 | 50 in 3 | `WindowMachine.laws.test.ts` 33, `WindowStart.laws.test.ts` 9, `Tezgah.laws.test.ts` 8 |
+| 13 | `apps/fabrika/e2e` | 15 in 5 | 15 in 5 | `client-protocol.test-support.ts` 5, `first-window.visual.test.ts` 3, `page-runtime.laws.visual.test.ts` 3, `p14.test-support.ts` 2, `tezgah-focus.visual.test.ts` 2 |
+| 14 | `apps/fabrika/src` | 33 in 10 | 37 in 12 | `runtime-recovery.laws.integration.test.ts` 9, `scheduled-job-alarm.integration.test.ts` 6, `runtime.decode.test.ts` 5, `checklist-instance.laws.integration.test.ts` 3, `worker-mail.integration.test.ts` 3, `door.integration.test.ts` 2, `hands-launcher.integration.test.ts` 2, `worker-monitor.integration.test.ts` 2, `worker-supervision.integration.test.ts` 2, `input-recording.integration.test.ts` 1, `instance-records.integration.test.ts` 1, `tasks-wire.integration.test.ts` 1 |
+
+- Slices 9 to 14 hold 154 fires in 32 files: 147 `get`, 4 `set`, 3 `has`. Over the whole scope, main
+  has 169 at `9ca24b1`; the other 15 are slices 2 to 7's, on their own branches.
+- Slice 14 grew by two files that merged after the first count:
+  `hands-launcher.integration.test.ts` and `worker-monitor.integration.test.ts`, two fires each.
+  Both are rows in slice 14's table now. Three of the four are kind 6, so they wait for slice 9's
+  types too.
+- Kind 6 is now 17 fires in 8 files. The `ping` call leaves it (point 2).
+- `cloudflare/bindings.ts` has 0 fires; slice 9 edits it only to take the moved types.
+- The text matches lint cannot see are unchanged: `twin.integration.test.ts:93-95` and the generated
+  text in `instance-records.integration.test.ts:288` stay with slice 14, at the same lines.
+
+#### 4. The order
+
+- **One sweep pull request for slices 9, 11 and 12,** on `fabrikalfa/reflect-rest` (the owner's
+  ruling: one pull request per sweep, never one per slice). Each slice keeps its own steps and its
+  own branch; the integrator folds the reviewed branches in. Pull requests 1331 and 1341, which slice
+  9 waited on, have merged. Slice 9's tests step runs after this amendment is signed. Slices 11 and
+  12 have their tests done and go on to build and review.
+- **Slices 10 and 14 wait for slice 8's `Stub.make` on main.** Pull request 1433 (slice 8) was
+  closed unmerged, and `next/packages/vitest/src/Stub.ts` is not on main. Slice 14 also needs slice
+  9's types for its kind 6 calls.
+- **Slice 13 waits for https://github.com/kamp-us/tea-fabrika/pull/1099 and
+  https://github.com/kamp-us/tea-fabrika/pull/1312,** both still open.
+- **Slice 15 folds the blocks and comes last,** after every other slice.
+
+#### What this amendment cannot tell us
+
+- Whether `ObjectCalls.ts` and `DevProject` compile as sketched. Nothing was compiled; slice 9's
+  typecheck tells.
+- Whether the merge session takes (C) for the Project half. Its signature or its send-back tells.
+- The counts move again if a branch lands in these folders before a slice's tests step. Pull
+  requests 1099, 1232 and 1312 edit files of slices 11, 12 and 13.
 
 ## Open questions
 
