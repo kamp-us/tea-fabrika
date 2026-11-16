@@ -90,15 +90,16 @@ describe("T246, fromHere", () => {
       );
 
       return Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         expect(fromHere, "fromHere reads the span already in scope").toBeTypeOf("function");
         yield* TestClock.setTime(Date.parse(SENT));
         const referee = yield* Referee;
 
         // The test's object-call bridge runs the real referee; it invents no answer or stored row.
         const calls: LedgerCalls = {
-          append: (stream, id, line) => Effect.runPromise(referee.append(stream, id, line)),
-          read: (stream, after, reader) => Effect.runPromise(referee.read(stream, after, reader)),
-          wait: (stream, after, reader) => Effect.runPromise(referee.wait(stream, after, reader)),
+          append: (stream, id, line) => Effect.runPromiseWith(context)(referee.append(stream, id, line)),
+          read: (stream, after, reader) => Effect.runPromiseWith(context)(referee.read(stream, after, reader)),
+          wait: (stream, after, reader) => Effect.runPromiseWith(context)(referee.wait(stream, after, reader)),
         };
 
         const writer = { ...from, parent };

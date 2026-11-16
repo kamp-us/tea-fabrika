@@ -339,10 +339,11 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "S1: an unset hands.target writes no task and answers refused no_hands; a set one is the request's target, and the snapshot hash its settings",
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           const done = new Set<string>();
           const law = walk(open, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
           const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 100 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, options));
@@ -370,10 +371,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "S2: an ask under a saved task's id from another process is refused id_reused in every state of the task, writes nothing, and reveals no receipt or result",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const done = new Set<string>();
           const law = foreign(open, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(Foreign, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const property = fc.asyncProperty(Foreign, (tape) => runPromise(Effect.scoped(law(tape))));
           const options = { seed: 119120, numRuns: runsFor({ fast: 20, full: 60 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, options));

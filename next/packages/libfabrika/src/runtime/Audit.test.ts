@@ -107,6 +107,7 @@ describe("P13 safe audit", () => {
         Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const bodies: Array<string> = [];
               const outputs: Array<string> = [];
               const spans = capture();
@@ -146,13 +147,13 @@ describe("P13 safe audit", () => {
                 }
 
                 const execution = workerExecution({
-                  init: async (saved) => Effect.runPromise(node.init(saved)),
-                  step: async (model, msg) => Effect.runPromise(node.step(model, msg)),
-                  fresh: async (model, msg) => Effect.runPromise(node.fresh(model, msg)),
-                  update: async (model, msg) => Effect.runPromise(node.update(model, msg)),
-                  fold: async (model, msg) => Effect.runPromise(node.fold(model, msg)),
-                  upgrade: async (saved) => Effect.runPromise(node.upgrade(saved)),
-                  reply: async (cmd, result) => Effect.runPromise(node.reply(cmd, result)),
+                  init: async (saved) => Effect.runPromiseWith(context)(node.init(saved)),
+                  step: async (model, msg) => Effect.runPromiseWith(context)(node.step(model, msg)),
+                  fresh: async (model, msg) => Effect.runPromiseWith(context)(node.fresh(model, msg)),
+                  update: async (model, msg) => Effect.runPromiseWith(context)(node.update(model, msg)),
+                  fold: async (model, msg) => Effect.runPromiseWith(context)(node.fold(model, msg)),
+                  upgrade: async (saved) => Effect.runPromiseWith(context)(node.upgrade(saved)),
+                  reply: async (cmd, result) => Effect.runPromiseWith(context)(node.reply(cmd, result)),
                   audit: async (msg) => {
                     if (mode === "rpc") {
                       return raised(body);
@@ -162,7 +163,7 @@ describe("P13 safe audit", () => {
                       return { private: body, url: `https://audit.test/?body=${encodeURIComponent(body)}` };
                     }
 
-                    const answer = await Effect.runPromise(
+                    const answer = await Effect.runPromiseWith(context)(
                       node.audit(msg).pipe(
                         Effect.match({
                           onSuccess: (value) => Audit.Answer.cases.ok.make({ value }),

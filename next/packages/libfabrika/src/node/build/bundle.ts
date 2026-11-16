@@ -92,6 +92,8 @@ export const bundle = Effect.fn("build.bundle")(function* (
   options: Options = {},
 ) {
   const path = yield* Path.Path.pipe(Effect.provide(Path.layer));
+  // The services Rolldown's synchronous onLog callback runs on.
+  const context = yield* Effect.context<never>();
   const root = options.cwd ?? path.resolve();
 
   const relative = (file: string) => {
@@ -100,7 +102,7 @@ export const bundle = Effect.fn("build.bundle")(function* (
 
     if (url?.protocol === "file:") {
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown's onLog callback is synchronous
-      local = Effect.runSync(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
+      local = Effect.runSyncWith(context)(path.fromFileUrl(url).pipe(Effect.orElseSucceed(() => url.pathname)));
     }
 
     return path.isAbsolute(local) ? path.relative(root, local) : local;

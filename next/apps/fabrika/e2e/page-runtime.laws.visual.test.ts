@@ -236,11 +236,12 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
     () =>
       Effect.scoped(
         Effect.gen(function* () {
+          const services = yield* Effect.context<never>();
           const b = yield* browser();
           yield* property(() =>
             fc.assert(
               fc.asyncProperty(fc.array(fc.boolean(), { minLength: 1, maxLength: 4 }), (flags) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(services)(
                   Effect.scoped(
                     Effect.gen(function* () {
                       const { context, seen } = yield* profile(b);
@@ -338,11 +339,12 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
     () =>
       Effect.scoped(
         Effect.gen(function* () {
+          const services = yield* Effect.context<never>();
           const b = yield* browser();
           yield* property(() =>
             fc.assert(
               fc.asyncProperty(fc.stringMatching(/^[a-z]{6,16}$/), (word) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(services)(
                   Effect.scoped(
                     Effect.gen(function* () {
                       const { context, seen } = yield* profile(b, { script: failQuery, arg: word });

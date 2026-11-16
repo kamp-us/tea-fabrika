@@ -104,6 +104,7 @@ export const suite = (rig: Rig) =>
     // fast-check shrinks the decision tape; each replay picks only moves legal in its current state.
     it.effect("U1 names own their rows; replacements and late batches keep the process from the load", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const once = (tape: ReadonlyArray<Cell>) =>
           Effect.scoped(
             Effect.gen(function* () {
@@ -203,7 +204,7 @@ export const suite = (rig: Rig) =>
           );
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(once(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(once(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40 }));
       }),
@@ -211,6 +212,7 @@ export const suite = (rig: Rig) =>
 
     it.effect("U3 fresh and warm sinks commit batches once, recover failed writes and survive reopen", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const once = (tape: ReadonlyArray<Cell>, warm: boolean) =>
           Effect.scoped(
             Effect.gen(function* () {
@@ -308,7 +310,7 @@ export const suite = (rig: Rig) =>
           Effect.forEach([true, false], (warm) => once(tape, warm), { concurrency: 1, discard: true });
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(replay(tape)));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(replay(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40 }));
       }),
@@ -316,6 +318,7 @@ export const suite = (rig: Rig) =>
 
     it.effect("U7 failed, hung and successful usage deliveries leave program answers, receipts and journal alone", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const once = (tape: ReadonlyArray<DeliveryCell>) =>
           Effect.scoped(
             Effect.gen(function* () {
@@ -421,7 +424,7 @@ export const suite = (rig: Rig) =>
           ).pipe(Effect.provide(TestClock.layer()));
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each scoped SQLite replay with its own test clock
-        const property = fc.asyncProperty(DeliveryTape, (tape) => Effect.runPromise(once(tape)));
+        const property = fc.asyncProperty(DeliveryTape, (tape) => Effect.runPromiseWith(context)(once(tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async assertion returns a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 40 }));
       }),

@@ -232,6 +232,7 @@ describe("P12 Effect execution adapter", () => {
         (n, saved) =>
           Effect.runPromise(
             Effect.gen(function* () {
+              const context = yield* Effect.context<never>();
               const pure = yield* Effect.fromResult(stepper(declared));
               const node: Execution = nodeExecution(declared);
 
@@ -243,7 +244,7 @@ describe("P12 Effect execution adapter", () => {
                 update: async (model: unknown, msg: unknown) => Result.getOrThrow(pure.update(model, msg)),
                 audit: async (msg: unknown) => ({
                   _tag: "ok",
-                  value: await Effect.runPromise(nodeExecution(declared).audit(msg)),
+                  value: await Effect.runPromiseWith(context)(nodeExecution(declared).audit(msg)),
                 }),
                 fold: async (model: unknown, msg: unknown) => pure.fold(model, msg),
                 upgrade: async (saved: unknown) => Saved.upgrade(saved, declared.state, "build-a"),

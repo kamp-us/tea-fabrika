@@ -1592,15 +1592,18 @@ const prop = (
   runs: Runs,
   people: fc.Arbitrary<ReadonlyArray<Drawn>> = NOBODY,
 ) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<Move>();
         const seen = new Set<string>();
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(fc.tuple(people, Tape), (run) => Effect.runPromise(Effect.scoped(law(run))));
+        const property = fc.asyncProperty(fc.tuple(people, Tape), (run) => runPromise(Effect.scoped(law(run))));
         const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1865,14 +1868,17 @@ const secrets = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<strin
   });
 
 const secretsLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     "L11: a secret in a Cmd's operands or a storage cause stays out of Cmd answers, spans and logs",
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const seen = new Set<string>();
         const law = secrets(open, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
+        const property = fc.asyncProperty(Secret, Tape, (x, tape) => runPromise(Effect.scoped(law(x, tape))));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 100 }),

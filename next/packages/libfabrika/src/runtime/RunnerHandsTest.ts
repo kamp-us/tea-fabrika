@@ -1103,13 +1103,15 @@ const prop = (
     readonly target?: fc.Arbitrary<string | null>;
   },
 ) =>
-  it.effect(name, () =>
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(name, () =>
     Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
       const done = new Set<string>();
       const law = walk(open, options.names, options.moves, done);
       const tapes = Tape(options.target ?? fcFingerprint);
       // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-      const property = fc.asyncProperty(tapes, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+      const property = fc.asyncProperty(tapes, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
       const check = { seed: SEED, numRuns: runsFor(options.runs), includeErrorInReport: true };
       // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
       yield* Effect.promise(() => fc.assert(property, check));
@@ -1187,15 +1189,17 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         runs: { fast: 30, full: 100 },
       },
     );
-    it.effect(
+    // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+    it.live(
       "L21: a hands Cmd whose id holds another process's task is answered hands_err id_reused once, and is never asked or retried again",
       () =>
         Effect.gen(function* () {
+          const context = yield* Effect.context<never>();
           const done = new Set<string>();
           const law = refusedForGood(open, done);
           const tapes = fc.record({ target: fcFingerprint, after: After });
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(tapes, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+          const property = fc.asyncProperty(tapes, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
           const check = { seed: SEED, numRuns: runsFor({ fast: 15, full: 40 }), includeErrorInReport: true };
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
           yield* Effect.promise(() => fc.assert(property, check));
@@ -1210,8 +1214,10 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       required: ["forge:hands_ok", "forge:hands_err", "delivered"],
       runs: { fast: 30, full: 60 },
     });
-    it.effect("B1: ProgramLoader gives no handler for hands, whatever handlers a host offers", () =>
+    // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+    it.live("B1: ProgramLoader gives no handler for hands, whatever handlers a host offers", () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const reached = new Set<string>();
 
         const law = Effect.fnUntraced(function* (names: ReadonlyArray<string>) {
@@ -1241,7 +1247,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
         });
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-        const property = fc.asyncProperty(offers, (names) => Effect.runPromise(law(names)));
+        const property = fc.asyncProperty(offers, (names) => Effect.runPromiseWith(context)(law(names)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 60 }));
         expect([...reached].sort()).toEqual(["hands", "ordinary"]);

@@ -151,6 +151,7 @@ expectTypeOf<Omit<Pushed, "name">>().toEqualTypeOf<Parameters<ProcessBinding["sw
 
 /** One booted Project over one SQLite file, with every platform handle recorded. */
 const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: ReadonlyArray<Fixture> = []) {
+  const services = yield* Effect.context<never>();
   const parent = yield* Scope.Scope;
 
   const db = yield* Effect.acquireRelease(
@@ -226,11 +227,11 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     PROJECT: {
       getByName: () => ({
         codeInstall: (install: unknown) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.codeInstall(install)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.codeInstall(install)))),
         codeFailed: (fact: unknown) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.codeFailed(fact)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.codeFailed(fact)))),
         processObject: (pid: string) =>
-          Effect.runPromise(run(Effect.flatMap(ProjectService, (p) => p.processObject(pid)))),
+          Effect.runPromiseWith(services)(run(Effect.flatMap(ProjectService, (p) => p.processObject(pid)))),
       }),
     },
     PROCESS: {
@@ -246,7 +247,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const gate = configureGates.get(name);
 
             if (gate !== undefined) {
-              await Effect.runPromise(gate);
+              await Effect.runPromiseWith(services)(gate);
             }
 
             descriptors.set(name, d);
@@ -276,7 +277,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const gate = swapGates.get(request.hash);
 
             if (gate !== undefined) {
-              await Effect.runPromise(gate);
+              await Effect.runPromiseWith(services)(gate);
             }
 
             const pid = descriptors.get(name)!.id;
@@ -295,7 +296,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
             const reply = swapReplies.get(request.hash);
 
             if (reply !== undefined) {
-              await Effect.runPromise(reply);
+              await Effect.runPromiseWith(services)(reply);
             }
 
             return { _tag: "swapped", was };
@@ -330,7 +331,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
                 throw new Error("a module that throws as it loads");
               }
 
-              return Effect.runPromise(declaration(fixture));
+              return Effect.runPromiseWith(services)(declaration(fixture));
             },
             init: record("init"),
             step: record("step"),
@@ -505,8 +506,9 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope>, runs: number) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope.
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(Effect.scoped(body(g))));
+    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromiseWith(context)(Effect.scoped(body(g))));
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // edge: fast-check answers its assertion through a Promise.
     yield* Effect.tryPromise({ try: () => fc.assert(property, options), catch: rejected });

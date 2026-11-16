@@ -898,8 +898,9 @@ const agrees = Effect.fnUntraced(function* (w: World, a: Account, start: string,
 /** Runs one generated walk in a fresh world, every resource given back with its scope. */
 const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, never>, runs = 100) =>
   Effect.gen(function* () {
+    const context = yield* Effect.context<never>();
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check requires a Promise callback
-    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(body(g)));
+    const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromiseWith(context)(body(g)));
     // A walk of real runners is slow to shrink: report the first counterexample as found.
     const options = { seed: SEED, numRuns: runs, endOnFailure: true };
     // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check runs an async property as a Promise

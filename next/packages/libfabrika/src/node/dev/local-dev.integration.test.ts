@@ -187,6 +187,7 @@ describe("P12 durable brain outbox", () => {
       fc.asyncProperty(fc.uniqueArray(brainEvent, { minLength: 1, maxLength: 4, selector: (row) => row.id }), (rows) =>
         runNode(
           Effect.gen(function* () {
+            const context = yield* Effect.context<never>();
             const folder = yield* home("p12-m-");
             const files = new Map<string, string>();
             const calls: Array<unknown> = [];
@@ -232,9 +233,7 @@ describe("P12 durable brain outbox", () => {
                   files.delete(from);
                 }),
             });
-
-            const path = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)));
-
+            const path = Effect.runSyncWith(context)(Path.Path.pipe(Effect.provide(Path.layer)));
             const paths = Layer.succeed(Path.Path, {
               ...path,
               join: (...parts) => {

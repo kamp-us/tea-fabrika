@@ -148,16 +148,20 @@ export const suite = (open: Open) =>
   describe("P12 single record part", () => {
     it.effect("P37 wiring plant: reopen, page past 500, and retry without duplicating a span", () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated case
-        const property = fc.asyncProperty(...Page, (...input) => Effect.runPromise(reopen(open, ...input)));
+        const property = fc.asyncProperty(...Page, (...input) => runPromise(reopen(open, ...input)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: 20, examples: [pageBoundary] }));
       }),
     );
     it.effect("P37 wiring plant: check held IDs before cap, return had, keep each part separate", () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each generated case
-        const property = fc.asyncProperty(...Roll, (...input) => Effect.runPromise(separate(open, ...input)));
+        const property = fc.asyncProperty(...Roll, (...input) => runPromise(separate(open, ...input)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, examples: [rollAtCap] }));
       }),

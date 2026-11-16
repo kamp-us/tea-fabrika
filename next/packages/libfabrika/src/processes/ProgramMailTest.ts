@@ -594,11 +594,11 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const law = walk(open, moves, done);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 40 }),
@@ -1262,12 +1262,13 @@ const capLaw = (
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<string>();
         const law = capWalk(open, moves, done);
         const scoped = (cap: number, tape: Iterable<fc.AsyncCommand<object, CapWalk>>) => Effect.scoped(law(cap, tape));
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each walk
-        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => Effect.runPromise(scoped(cap, tape)));
-
+        const property = fc.asyncProperty(Caps, CapTape, (cap, tape) => runPromise(scoped(cap, tape)));
         const checks = {
           seed: SEED,
           numRuns: runsFor({ fast: 10, full: 50 }),
@@ -1337,12 +1338,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L14: a child and the program that started it mail each other with no grant, across restarts; nobody else gains a right",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen = new Set<string>();
           const done = new Set<FamilyMove>();
           const law = family(open, seen, done);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-          const property = fc.asyncProperty(FamilyTape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
-
+          const property = fc.asyncProperty(FamilyTape, (tape) => runPromise(Effect.scoped(law(tape))));
           const checks = {
             seed: SEED,
             // Every relation the law names must be mailed across: 60 walks miss some at this seed.

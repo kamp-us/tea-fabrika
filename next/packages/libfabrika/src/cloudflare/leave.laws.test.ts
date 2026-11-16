@@ -116,6 +116,7 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
 
 /** One booted Project over one SQLite database, with the door's `monitor` kept for the law. */
 const instance = Effect.fnUntraced(function* () {
+  const services = yield* Effect.context<never>();
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
@@ -169,7 +170,7 @@ const instance = Effect.fnUntraced(function* () {
     LOADER: {
       get: () => ({
         getEntrypoint: () => ({
-          describe: () => Effect.runPromise(declaration()),
+          describe: () => Effect.runPromiseWith(services)(declaration()),
         }),
       }),
     },

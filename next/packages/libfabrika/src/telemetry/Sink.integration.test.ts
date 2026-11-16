@@ -290,10 +290,11 @@ describe("T246, P37 decodes TypeID process ids", () => {
 describe("p98, a span that ends is never dropped", () => {
   it.live("its rows are in the object's own SQLite before end returns, and a later process's flush sends them", () =>
     Effect.gen(function* () {
+      const context = yield* Effect.context<never>();
       const { db, open } = yield* home;
 
       // Effect.runSync: nothing may wait on a fiber or a timer for the rows to land.
-      const exit = Effect.runSyncExit(
+      const exit = Effect.runSyncExitWith(context)(
         traced("runner.step", { "fab.process": P1 }, step("ledger.call")).pipe(
           Effect.provide(SpanSink.layer(nodeSql(db), { object: OBJECT })),
         ),
@@ -1541,13 +1542,13 @@ describe("T705, the sink's public calls keep their order through one machine", (
         const { db, sql: real } = yield* walkHome;
         const { sql, arm } = filling(real);
         yield* Effect.gen(function* () {
+          const ambient = yield* Effect.context<never>();
           const services = yield* Effect.context<SpanSink>();
 
           /** Ends one span outside any fiber: its rows are there the moment `runSync` returns. */
           const end = (n: number, word: string, fails: boolean) => {
             arm(fails ? 1 : 0);
-
-            const exit = Effect.runSyncExit(
+            const exit = Effect.runSyncExitWith(ambient)(
               step("runner.step", { "fab.n": n, "fab.word": word }).pipe(Effect.provideContext(services)),
             );
 

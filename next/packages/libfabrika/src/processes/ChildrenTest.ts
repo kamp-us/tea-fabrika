@@ -1019,11 +1019,12 @@ const prop = (
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<Move>();
         const seen: Tally = new Set();
         const law = walk(open, moves, done, seen);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const checks = { seed: SEED, numRuns: runsFor(runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, checks));
@@ -1452,15 +1453,19 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       { fast: 60, full: 200 },
     );
 
-    it.effect(
+    // Live services: each racer's turn sleeps on the real clock, as it did when the race ran apart
+    // from the test's TestClock.
+    it.live(
       "L2: racing starts of one free name make at most one process, and every racer answers by its own last turn",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen: Tally = new Set();
           const law = race(open, seen);
           const turns = fc.scheduler();
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each race
-          const property = fc.asyncProperty(turns, Race, (s, p) => Effect.runPromise(Effect.scoped(law(s, p))));
+          const property = fc.asyncProperty(turns, Race, (s, p) => runPromise(Effect.scoped(law(s, p))));
           const checks = {
             seed: SEED,
             // 20 races never answer already_present at this seed.
@@ -1536,10 +1541,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       "L11: a secret in the input, a storage cause or a defect stays out of answers, error messages, spans and logs",
       () =>
         Effect.gen(function* () {
+          // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+          const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
           const seen: Tally = new Set();
           const law = secrets(open, seen);
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each case
-          const property = fc.asyncProperty(Secret, Tape, (x, tape) => Effect.runPromise(Effect.scoped(law(x, tape))));
+          const property = fc.asyncProperty(Secret, Tape, (x, tape) => runPromise(Effect.scoped(law(x, tape))));
           const checks = {
             seed: SEED,
             numRuns: runsFor({ fast: 20, full: 100 }),

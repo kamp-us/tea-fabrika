@@ -1085,14 +1085,16 @@ const prop = (
     readonly program?: Reading;
   },
 ) =>
-  it.effect(
+  // Live services: the walk runs on the real clock, as it did before it ran under this test's services.
+  it.live(
     name,
     () =>
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const done = new Set<string>();
         const law = walk(open, options.moves, done, options.program ?? readerProgram);
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromise(Effect.scoped(law(tape))));
+        const property = fc.asyncProperty(Tape, (tape) => Effect.runPromiseWith(context)(Effect.scoped(law(tape))));
         const check = { seed: SEED, numRuns: runsFor(options.runs), includeErrorInReport: true, endOnFailure: true };
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, check));

@@ -458,13 +458,15 @@ const law = (
     name,
     () =>
       Effect.gen(function* () {
+        // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check's async property runs each case under the test's own services
+        const runPromise = Effect.runPromiseWith(yield* Effect.context<never>());
         const done = new Set<string>();
 
         const law = (limits: Limits, tape: ReadonlyArray<Cell>) =>
           Effect.scoped(walk(rig, limits, tape, moves, done)).pipe(Effect.provide(TestClock.layer()));
 
         // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check awaits each tape
-        const property = fc.asyncProperty(Limits, Tape, (limits, tape) => Effect.runPromise(law(limits, tape)));
+        const property = fc.asyncProperty(Limits, Tape, (limits, tape) => runPromise(law(limits, tape)));
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's async property answers a Promise
         yield* Effect.promise(() => fc.assert(property, { seed: SEED, numRuns: RUNS, includeErrorInReport: true }));
         // An empty flow cannot pass: each move and cut this law is about ran.

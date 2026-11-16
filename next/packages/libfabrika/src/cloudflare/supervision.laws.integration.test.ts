@@ -118,6 +118,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
     const loader = Layer.effect(
       ProgramLoader,
       Effect.gen(function* () {
+        const context = yield* Effect.context<never>();
         const real = yield* ProgramLoader;
         const loaded = yield* real.load("counter", BUILD);
         const Box = programBox(declared, BUILD);
@@ -140,7 +141,7 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 init: (s) => box.init(s),
                 fresh: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before checking")));
+                    return Effect.runPromiseWith(context)(Effect.fail(new Error("transport failed before checking")));
                   }
 
                   if (move === "decode") {
@@ -153,7 +154,9 @@ const world = (adapter: "node" | "worker", limit: number | undefined, failure: u
                 audit: (m) => box.audit(m),
                 step: async (s, m) => {
                   if (move === "rpc") {
-                    return Effect.runPromise(Effect.fail(new Error("transport failed before the program")));
+                    return Effect.runPromiseWith(context)(
+                      Effect.fail(new Error("transport failed before the program")),
+                    );
                   }
 
                   if (move === "decode") {
@@ -519,7 +522,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
 
             const real = {
               run: (action: string, m: Model, edge: number) =>
-                Effect.runPromise(
+                Effect.runPromiseWith(context)(
                   Effect.gen(function* () {
                     const invoke = <A, E>(f: (r: ProgramRunner["Service"]) => Effect.Effect<A, E>) =>
                       ProgramRunner.use(f).pipe(Effect.provide(w.layer()));

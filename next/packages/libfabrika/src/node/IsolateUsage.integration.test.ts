@@ -179,6 +179,7 @@ const invoke = (process: string) =>
 
 const runner = (usage: Effect.Effect<void, unknown>) =>
   Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
     const ledger = yield* open;
     const state = yield* open;
     let executions = 0;
@@ -199,12 +200,12 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
           inputs: { add: { write: true, personOnly: false } },
           cmds: [],
         }),
-      init: (saved: unknown) => Effect.runPromise(execution.init(saved)),
-      step: (model: unknown, msg: unknown) => Effect.runPromise(execution.step(model, msg)),
-      fresh: (model: unknown, msg: unknown) => Effect.runPromise(execution.fresh(model, msg)),
-      update: (model: unknown, msg: unknown) => Effect.runPromise(execution.update(model, msg)),
+      init: (saved: unknown) => Effect.runPromiseWith(services)(execution.init(saved)),
+      step: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.step(model, msg)),
+      fresh: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.fresh(model, msg)),
+      update: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.update(model, msg)),
       audit: (msg: unknown) =>
-        Effect.runPromise(
+        Effect.runPromiseWith(services)(
           execution.audit(msg).pipe(
             Effect.match({
               onSuccess: (value: Schema.Json) => Audit.Answer.cases.ok.make({ value }),
@@ -212,11 +213,11 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
             }),
           ),
         ),
-      fold: (model: unknown, msg: unknown) => Effect.runPromise(execution.fold(model, msg)),
-      upgrade: (saved: unknown) => Effect.runPromise(execution.upgrade(saved)),
-      reply: (cmd: unknown, outcome: unknown) => Effect.runPromise(execution.reply(cmd, outcome)),
-      check: (kind: string, event: unknown) => Effect.runPromise(execution.check(kind, event)),
-      admit: (msg: unknown) => Effect.runPromise(execution.admit(msg)),
+      fold: (model: unknown, msg: unknown) => Effect.runPromiseWith(services)(execution.fold(model, msg)),
+      upgrade: (saved: unknown) => Effect.runPromiseWith(services)(execution.upgrade(saved)),
+      reply: (cmd: unknown, outcome: unknown) => Effect.runPromiseWith(services)(execution.reply(cmd, outcome)),
+      check: (kind: string, event: unknown) => Effect.runPromiseWith(services)(execution.check(kind, event)),
+      admit: (msg: unknown) => Effect.runPromiseWith(services)(execution.admit(msg)),
     };
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- only the platform loader and opaque tail fetcher are doubled
@@ -230,7 +231,8 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
 
     // oxlint-disable-next-line fabrika/no-type-assertions -- an opaque platform tail represents this runner's independent usage invocation
     const bound = {
-      fetch: () => Effect.runPromise(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
+      fetch: () =>
+        Effect.runPromiseWith(services)(usage.pipe(Effect.as(new Response())), { signal: controller.signal }),
     } as unknown as NonNullable<Parameters<typeof loader.load>[2]>;
 
     const data = Layer.mergeAll(
@@ -416,6 +418,7 @@ for (const accepted of [true, false]) {
 
 it.effect("U3 batched refused spans keep only hourly counts, including batches with no accepted span", () =>
   Effect.gen(function* () {
+    const services = yield* Effect.context<never>();
     const once = (batches: ReadonlyArray<{ refused: ReadonlyArray<string>; accepted: number }>) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -476,8 +479,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
       }),
       { minLength: 1, maxLength: 12 },
     );
-
-    const property = fc.asyncProperty(batches, (tape) => Effect.runPromise(once(tape)));
+    const property = fc.asyncProperty(batches, (tape) => Effect.runPromiseWith(services)(once(tape)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) }));
   }),
 );
@@ -490,6 +492,7 @@ it.effect(
   "U8 Process and rebuilt Project runtimes bind every load to its own process",
   () =>
     Effect.gen(function* () {
+      const services = yield* Effect.context<never>();
       const once = (tape: ReadonlyArray<boolean>) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -525,10 +528,7 @@ it.effect(
                 FROM,
               )
               .pipe(Effect.provideContext(context));
-
-            const rpc = <A, E>(work: Effect.Effect<A, E>) =>
-              Effect.runPromise(work.pipe(Effect.provideContext(context)));
-
+            const rpc = <A, E>(work: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(work);
             const ok = <A, E>(work: Effect.Effect<A, E>) =>
               rpc(Effect.map(work, (value) => ProcessReplies.cases.ok.make({ value })));
 
@@ -811,7 +811,7 @@ it.effect(
 
       // Every tape exercises a successor; later moves reload the live process or replace it.
       const tape = fc.array(fc.boolean(), { minLength: 1, maxLength: 8 }).map((moves) => [true, ...moves]);
-      const property = fc.asyncProperty(tape, (moves) => Effect.runPromise(once(moves)));
+      const property = fc.asyncProperty(tape, (moves) => Effect.runPromiseWith(services)(once(moves)));
       yield* Effect.promise(() => fc.assert(property, u8Runs));
     }),
   { timeout: u8Runs.numRuns * 2_000 },

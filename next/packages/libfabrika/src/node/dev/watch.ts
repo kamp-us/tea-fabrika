@@ -102,6 +102,8 @@ export const watchPrograms = (options: {
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fs = yield* FileSystem.FileSystem;
+      // The services Rolldown's listener runs each event on.
+      const context = yield* Effect.context<never>();
       const generated = path.join(path.dirname(options.entry), "program.watch.generated.ts");
       const events = yield* Queue.unbounded<RolldownWatcherEvent>();
       // Results are owned as soon as the callback receives them, including during interruption.
@@ -164,8 +166,7 @@ export const watchPrograms = (options: {
           });
 
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown awaits its listener before END
-          watcher.on("event", (event) => Effect.runPromise(received(event)));
-
+          watcher.on("event", (event) => Effect.runPromiseWith(context)(received(event)));
           return watcher;
         }),
         (watcher) =>
