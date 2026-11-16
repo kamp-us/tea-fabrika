@@ -13,6 +13,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 import fc from "fast-check";
@@ -291,7 +292,7 @@ it.effect(
               yield* fs.makeDirectory(dir, { recursive: true });
               yield* fs.writeFileString(
                 path.join(dir, "tsconfig.json"),
-                JSON.stringify({ compilerOptions: { strict: true, types: [] }, include: ["src"] }),
+                Formatter.formatJson({ compilerOptions: { strict: true, types: [] }, include: ["src"] }),
               );
 
               for (const file of files) {

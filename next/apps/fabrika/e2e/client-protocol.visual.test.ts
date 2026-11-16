@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import type { BrowserContext } from "playwright";
 import { describe, expect, it } from "vitest";
@@ -162,7 +163,7 @@ describe("P18 E1: a tile monitors its process and follows the restart, on both b
             if (walk.endedBody !== null) {
               expect(
                 /^\S+$/.test(walk.endedBody.words),
-                `${name}'s ended tile shows one word where its view was, not ${JSON.stringify(walk.endedBody.words)}`,
+                `${name}'s ended tile shows one word where its view was, not ${Formatter.format(walk.endedBody.words)}`,
               ).toBe(true);
               expect(walk.endedBody.ink, `${name}'s ended tile's word is in the tile's text token`).toBe(true);
             }

@@ -17,7 +17,20 @@
 // The test plays the gateway: its `Senders` answers from the inputs the test delivered, as the
 // gateway's one signing service does (0262). The rows the oracle reads are the store's own.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Layer,
+  Option,
+  Schema,
+  type Scope,
+  Stream,
+  Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -428,7 +441,7 @@ const senderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const child = w.fresh(c.program, requester.process, c.input);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `${c.as} for ${c.holder}, requester's member ${c.recorded}, roles ${JSON.stringify(c.roles)}, ${requester.program} -> ${c.program}`;
+    const label = `${c.as} for ${c.holder}, requester's member ${c.recorded}, roles ${Formatter.format(c.roles)}, ${requester.program} -> ${c.program}`;
 
     if (holds(c.roles, c.holder)) {
       startedFresh(answer, `L10: ${label} starts, whatever StartGrant says`);
@@ -471,7 +484,7 @@ const noSenderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const child = w.fresh(c.program, requester.process, false);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `L11: ${c.cause} cause, ${requester.program} -> ${c.program}, grants ${JSON.stringify(c.grants)}`;
+    const label = `L11: ${c.cause} cause, ${requester.program} -> ${c.program}, grants ${Formatter.format(c.grants)}`;
 
     if (granted(c.grants, requester.program, c.program)) {
       startedFresh(answer, label);
@@ -588,7 +601,7 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const child = w.fresh(c.program, requester.process, false);
     const before = snapshot(w.sql);
     const answer = yield* w.start(child, from(parent));
-    const label = `L20: member ${c.member}${c.removed ? " (removed)" : ""}, ${requester.program} -> ${c.program}, grants ${JSON.stringify(c.grants)}`;
+    const label = `L20: member ${c.member}${c.removed ? " (removed)" : ""}, ${requester.program} -> ${c.program}, grants ${Formatter.format(c.grants)}`;
     const allowed = c.member === "none" ? granted(c.grants, requester.program, c.program) : !c.removed;
 
     if (allowed) {

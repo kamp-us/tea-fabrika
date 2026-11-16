@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { grantText } from "@kampus/libfabrika/access/Text";
-import { Console, DateTime, Effect, Schema, Stream } from "effect";
+import { Console, DateTime, Effect, Formatter, Schema, Stream } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
@@ -108,7 +108,7 @@ const grant = Command.make(
     );
 
     const result = yield* HttpClientRequest.post(`${origin}/grant`).pipe(
-      HttpClientRequest.bodyText(JSON.stringify({ text, armored }), "application/json"),
+      HttpClientRequest.bodyText(Formatter.formatJson({ text, armored }), "application/json"),
       client.execute,
       Effect.mapError(unreachable),
     );

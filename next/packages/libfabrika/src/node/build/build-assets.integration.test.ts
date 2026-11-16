@@ -20,6 +20,7 @@ import * as Tracer from "effect/Tracer";
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -1196,14 +1197,17 @@ const windowModule = Effect.fn("p40.windowModule")(function* (home: string, id: 
   yield* fs.symlink(pkg, path.join(home, "node_modules/@p40", id));
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
+    Formatter.formatJson({ type: "module", exports: { ".": "./program.ts", "./window": "./window.ts" } }),
   );
   yield* fs.writeFileString(path.join(pkg, "program.ts"), 'export {counter as program} from "@kampus/counter";');
   yield* fs.writeFileString(
     path.join(pkg, "window.ts"),
-    `export const view = () => ${JSON.stringify(marker)}; export const more = import("./chunk.ts");`,
+    `export const view = () => ${Formatter.formatJson(marker)}; export const more = import("./chunk.ts");`,
   );
-  yield* fs.writeFileString(path.join(pkg, "chunk.ts"), `export const text = ${JSON.stringify(`${marker}-chunk`)};`);
+  yield* fs.writeFileString(
+    path.join(pkg, "chunk.ts"),
+    `export const text = ${Formatter.formatJson(`${marker}-chunk`)};`,
+  );
 });
 
 const windowWalk = Effect.fn("p40.windowWalk")(function* (tape: ReadonlyArray<number>) {

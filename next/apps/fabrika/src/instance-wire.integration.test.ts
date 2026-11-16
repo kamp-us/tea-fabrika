@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
-import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
+import { Clock, Deferred, Effect, Fiber, Formatter, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -609,7 +609,7 @@ it.live.each(["flags", "env", "file"] as const)(
           const second = yield* client(s, "budget-two");
           const again = yield* timed(second, pid, letter);
           rounds.push(
-            JSON.stringify({
+            Formatter.formatJson({
               previous: times(previous),
               allowed: allowed.map(times),
               refused: times(refused),
@@ -736,7 +736,7 @@ const restartedAfter = (c: Client, stream: string, after: string) =>
       }
     }
 
-    throw new Error(`no restarted after ${after} on ${stream} in ${WAIT} ms; saw ${JSON.stringify(tags)}`);
+    throw new Error(`no restarted after ${after} on ${stream} in ${WAIT} ms; saw ${Formatter.format(tags)}`);
   });
 
 const restartedRows = (rows: ReadonlyArray<Entry>) => rows.filter((row) => row._tag === "restarted");

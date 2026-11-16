@@ -15,6 +15,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import { String as Str } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
@@ -327,7 +328,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
       return;
     }
 
-    yield* durableWrite(lastFile, JSON.stringify(start));
+    yield* durableWrite(lastFile, Formatter.formatJson(start));
   });
 
   return {
@@ -343,7 +344,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         const old = Arr.findFirst(rows, (row) => row.id === event.id);
 
         if (Option.isSome(old)) {
-          if (JSON.stringify(old.value) !== JSON.stringify(event)) {
+          if (Formatter.formatJson(old.value) !== Formatter.formatJson(event)) {
             return yield* BrainError.make({ reason: "id_reused" });
           }
 

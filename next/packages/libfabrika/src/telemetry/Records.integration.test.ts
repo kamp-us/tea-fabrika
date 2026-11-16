@@ -26,8 +26,13 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { RpcCallError } from "alchemy/Rpc";
-import type { Layer } from "effect";
-import { Effect, Option, Schema, Scope, Stream } from "effect";
+import type * as Layer from "effect/Layer";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -428,7 +433,7 @@ describe.each(backends)("p100, content is the one deletable part, on RecordManag
 
               if (parts !== undefined) {
                 expect(parts.rows(part(0), "spans")).toEqual(rawBefore);
-                const content = JSON.stringify(parts.rows(part(0), "content"));
+                const content = Formatter.formatJson(parts.rows(part(0), "content"));
                 expect(content).not.toContain("note-body-p100");
                 expect(content).toContain("owner");
               }
@@ -648,7 +653,7 @@ describe("RecordManager.remote, the record object's stub", () => {
 
             for (const broken of [{}, { ...event, name: 7 }, { ...event, attributes: { "fab.n": {} } }]) {
               const bad = yield* Effect.flip(read(job).pipe(Effect.provide(RecordManager.remote(page([broken]).make))));
-              expect(bad.reason, JSON.stringify(broken)).toBe("bad_row");
+              expect(bad.reason, Formatter.format(broken)).toBe("bad_row");
             }
           }),
         { concurrency: 1, discard: true },

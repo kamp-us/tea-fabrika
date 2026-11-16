@@ -14,7 +14,7 @@ import { Id } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Formatter, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -941,7 +941,7 @@ describe("P16 copied-file real instance, serial", () => {
                             }
 
                             a.ws.send(
-                              JSON.stringify({
+                              Formatter.formatJson({
                                 jsonrpc: "2.0",
                                 id: 999999,
                                 method: "process.send",

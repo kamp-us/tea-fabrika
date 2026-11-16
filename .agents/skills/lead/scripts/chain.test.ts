@@ -7,6 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -1252,8 +1253,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
     ran(
       Effect.gen(function* () {
         const plants = [{ law: "a.test.ts:3", plant: "a.ts:9 drops the row", result: "red" }];
-        const said = `The laws are green.\n${JSON.stringify({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
-
+        const said = `The laws are green.\n${Formatter.formatJson({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
         const { turned, fake, events, report } = yield* turn({
           raws: [
             { _tag: "tool", id: "t1", title: "pnpm test", status: "in_progress" },

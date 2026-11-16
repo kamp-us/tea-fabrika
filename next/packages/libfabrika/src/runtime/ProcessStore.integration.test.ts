@@ -7,7 +7,12 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -176,7 +181,7 @@ describe("P11 process storage", () => {
           disk
             .db()
             .prepare("UPDATE process_state SET checkpoint=? WHERE process=?")
-            .run(JSON.stringify({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
+            .run(Formatter.formatJson({ ...checkpoint, saved: { ...checkpoint.saved, v: "bad" } }), PROCESS);
           expect(yield* Effect.flip(store.load)).toMatchObject({
             _tag: "LedgerError",
             reason: "bad_row",

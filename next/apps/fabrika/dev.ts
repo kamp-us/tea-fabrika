@@ -16,6 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr, Record as Rec } from "effect";
 import { Command, Flag, Prompt } from "effect/cli";
 import { Digest, SecureRandom } from "effect/crypto";
@@ -166,7 +167,7 @@ const command = Command.make("dev", flags, (options) => {
         }).pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
 
         yield* fs
-          .writeFileString(file, JSON.stringify(state), { mode: 0o600 })
+          .writeFileString(file, Formatter.formatJson(state), { mode: 0o600 })
           .pipe(Effect.mapError((cause) => InstanceError.make({ reason: "settings", cause })));
         const built = yield* build({ out: path.join(home, "build") });
 
@@ -208,8 +209,7 @@ const command = Command.make("dev", flags, (options) => {
               ),
             ),
           );
-
-          process.stdout.write(`${JSON.stringify(selected)}\n`);
+          process.stdout.write(`${Formatter.formatJson(selected)}\n`);
 
           if (selected._tag === "refused") {
             return yield* InstanceError.make({ reason: "repository_refused" });
@@ -252,7 +252,7 @@ const command = Command.make("dev", flags, (options) => {
         );
 
         process.stdout.write(
-          `${JSON.stringify({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
+          `${Formatter.formatJson({ ready: `http://127.0.0.1:${loaded.values.port}`, build: built.build })}\n`,
         );
 
         return yield* Effect.never;

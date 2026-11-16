@@ -24,6 +24,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -115,7 +116,7 @@ export const suite = <A>(body: Effect.Effect<A, unknown, import("effect").Scope.
 const note = (row: Readonly<Record<string, unknown>>) =>
   Effect.sync(() => {
     if (trace !== undefined) {
-      appendFileSync(trace, `${JSON.stringify(row)}\n`);
+      appendFileSync(trace, `${Formatter.formatJson(row)}\n`);
     }
 
     if (fault?.kind === "trace" && row.acquired === fault.at) {
@@ -508,9 +509,7 @@ export const remove = (h: Home, dev: Dev, t: typeof Target.Type) =>
     const armored = execFileSync("ssh-keygen", ["-Y", "sign", "-n", "fabrika-client", "-f", h.key], {
       input: text,
     }).toString();
-
-    const body = JSON.stringify({ text, armored });
-
+    const body = Formatter.formatJson({ text, armored });
     const r = yield* HttpClientRequest.post(`${dev.url}/grant`).pipe(
       HttpClientRequest.bodyText(body, "application/json"),
       HttpClient.execute,
@@ -754,8 +753,7 @@ export const reader = (h: Home, dev: Dev) =>
         }
 
         const id = ++serial;
-        ws.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-
+        ws.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
         return yield* next((f) => f.id === id);
       });
 

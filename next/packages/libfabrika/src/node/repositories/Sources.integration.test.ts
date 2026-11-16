@@ -13,6 +13,7 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
@@ -100,13 +101,13 @@ const personBases = Effect.fnUntraced(function* (root: string) {
         const result = yield* resolve(from, "person").pipe(
           Effect.flatMap((source) =>
             Effect.gen(function* () {
-              expect(JSON.stringify(source)).not.toContain(root);
+              expect(Formatter.formatJson(source)).not.toContain(root);
               const values = [];
 
               for (const [file] of reads) {
                 const value = yield* source.read(file);
                 const read = Schema.decodeSync(Schema.NullOr(SourceRead))(value);
-                expect(JSON.stringify(value)).not.toContain(root);
+                expect(Formatter.formatJson(value)).not.toContain(root);
                 values.push(read === null ? null : { tag: read._tag, text: new TextDecoder().decode(read.bytes) });
               }
 
@@ -202,7 +203,7 @@ const regularFileLinks = Effect.fnUntraced(function* (root: string) {
         expect(string(yield* source.read("entry.txt"))).toBe("regular file");
       }
 
-      expect(actual, JSON.stringify(actual)).toEqual(expected);
+      expect(actual, Formatter.format(actual)).toEqual(expected);
     }),
   };
 });
@@ -327,7 +328,7 @@ it.effect.prop(
             expect(source.value._tag).toBe(pick < 3 ? "committed" : "disk");
             expect(string(yield* source.value.read("entry.txt"))).toBe(pick < 3 ? "committed" : disk);
             checkRead(yield* source.value.read("entry.txt"), pick < 3, commit, pick < 3 ? "committed" : disk, root);
-            expect(JSON.stringify(source.value)).not.toContain(root);
+            expect(Formatter.formatJson(source.value)).not.toContain(root);
           } else {
             const fail = Option.getOrUndefined(Arr.findFirst(source.cause.reasons, (reason) => reason._tag === "Fail"));
             expect(fail?._tag === "Fail" && fail.error.reason._tag).toBe("MissingPath");
@@ -510,7 +511,7 @@ it.each(GitLaws.gits)(
                         expect(resolved.value.commit).toBe(pinned);
                       }
 
-                      expect(JSON.stringify(resolved.value)).not.toContain(root);
+                      expect(Formatter.formatJson(resolved.value)).not.toContain(root);
                     } else {
                       const reason = Option.getOrUndefined(
                         Arr.findFirst(resolved.cause.reasons, (r) => r._tag === "Fail"),

@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 // Desk S2b, next/ (the desk program fabrika/tezgah, ticket named by its title): law L21 of the approved
 // plan, and the slice's shots. Written before the tab draws tezgah's workspace and before it reads a
@@ -335,7 +336,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
             const now = yield* says;
 
             if ((words.test(now.status) && words.test(now.polite)) || tries >= 120) {
-              const seen = `the page says ${JSON.stringify(now)}, the tab read ${JSON.stringify(wire.reads)}`;
+              const seen = `the page says ${Formatter.format(now)}, the tab read ${Formatter.format(wire.reads)}`;
               expect(now.status, `R2: the status bar says tezgah is not running for this person; ${seen}`).toMatch(
                 words,
               );

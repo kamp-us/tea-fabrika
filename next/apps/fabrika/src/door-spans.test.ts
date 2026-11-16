@@ -20,7 +20,16 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
+import * as Formatter from "effect/Formatter";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -435,7 +444,7 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     expect(Cause.hasDies(exit.cause)).toBe(false);
                     const error = Cause.squash(exit.cause);
                     expect(error).toBeInstanceOf(Audit.AuditError);
-                    errors.push(String(error), JSON.stringify(error), Cause.pretty(exit.cause));
+                    errors.push(String(error), Formatter.formatJson(error), Cause.pretty(exit.cause));
                   }
 
                   expect(w.controls.deliveries).toBe(beforeDeliveries);
@@ -464,21 +473,20 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     .all()
                     .flatMap(({ name }) => db.prepare(`SELECT * FROM "${String(name)}"`).all()),
                 );
-
-                const shown = JSON.stringify(
-                  {
+                const shown = yield* Schema.encodeEffect(
+                  Schema.fromJsonString(Schema.Unknown, {
+                    replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                  }),
+                )({
                     spans: tracer.spans.map((s) => ({ name: s.name, tags: [...s.attributes] })),
                     events: tracer.events,
-                  },
-                  (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
-                );
-
-                const outputs = [...w.writes, ...w.archived, JSON.stringify(cells), shown, ...errors].flatMap(
+                });
+                const outputs = [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors].flatMap(
                   (output) => texts(output, decoded),
                 );
 
                 for (const body of bodies) {
-                  for (const form of [body, JSON.stringify(body).slice(1, -1), encodeURIComponent(body)]) {
+                  for (const form of [body, Formatter.formatJson(body).slice(1, -1), encodeURIComponent(body)]) {
                     expect(outputs.filter((output) => output.includes(form))).toEqual([]);
                   }
                 }
@@ -487,7 +495,9 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                 if (move === "send") {
                   const rows = cells.filter((r) => r.stream === "gateway/inputs" && r._tag === "received");
                   expect(rows.length).toBeGreaterThan(0);
-                  expect(JSON.parse(String(rows.at(-1)!.body))).toMatchObject({ input: { type: "comment" } });
+                  expect(
+                    yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(String(rows.at(-1)!.body)),
+                  ).toMatchObject({ input: { type: "comment" } });
                 }
               }
             }).pipe(Effect.provide(w.layer));

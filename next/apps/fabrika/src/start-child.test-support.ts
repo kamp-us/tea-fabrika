@@ -16,7 +16,7 @@ import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Effect, FileSystem, Formatter, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
@@ -335,7 +335,7 @@ export const childProject = Effect.fnUntraced(function* () {
 
   // oxlint-disable-next-line fabrika/no-type-assertions -- only platform transports are supplied; authority, ledger and start logic are real
   const env = {
-    INSTANCE: JSON.stringify(
+    INSTANCE: Formatter.formatJson(
       RecordWireTest.settingsFixture({
         name: PROJECT,
         person: PERSON,

@@ -22,6 +22,7 @@ import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -93,7 +94,7 @@ const settle = <A>(read: Effect.Effect<A>, check: (a: A) => boolean, label: stri
       last = yield* read;
     }
 
-    expect(check(last), `${label}: ${JSON.stringify(last)}`).toBe(true);
+    expect(check(last), `${label}: ${Formatter.format(last)}`).toBe(true);
   });
 
 const online = (h: Home, page: import("playwright").Page) =>
@@ -691,7 +692,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                     ["grant urls", Arr.join(g.urls, "\n")],
                   ]),
                   ["server console", dev.output()],
-                  ["spans", JSON.stringify(spans)],
+                  ["spans", Formatter.formatJson(spans)],
                   ...records,
                   ...disk.outputs,
                 ];
@@ -731,7 +732,7 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const copies = new Set<string>();
 
                 for (const s of [...credentials, ...signatures]) {
-                  for (const form of [s, encodeURIComponent(s), btoa(s), pipe(JSON.stringify(s), Str.slice(1, -1))]) {
+                  for (const form of [s, encodeURIComponent(s), btoa(s), pipe(Formatter.formatJson(s), Str.slice(1, -1))]) {
                     const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {
@@ -780,8 +781,8 @@ const look = (page: import("playwright").Page, seen: Seen) =>
     const stored = yield* rows(page);
 
     return [
-      ["page", html + JSON.stringify(values)],
-      ["rows", JSON.stringify(stored)],
+      ["page", html + Formatter.formatJson(values)],
+      ["rows", Formatter.formatJson(stored)],
       ["console", Arr.join(seen.console, "\n")],
       ["errors", Arr.join(seen.errors, "\n")],
       ["urls", Arr.join(seen.urls, "\n")],

@@ -1,7 +1,7 @@
 // P33 extends p97/p99 through P37's real SQLite sink and JobRecords.
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Effect, Formatter, Layer, Redacted, Schema, Stream, Tracer } from "effect";
 import { TestClock } from "effect/testing";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -283,7 +283,7 @@ describe("p99, process content stays out of span tags and measurements", () => {
         expect(rows.some((row) => row.name === "process.receive")).toBe(true);
         expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
         leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);
-        const measurements = JSON.stringify(world.sink.db().prepare("SELECT * FROM measurements").all());
+        const measurements = Formatter.formatJson(world.sink.db().prepare("SELECT * FROM measurements").all());
 
         for (const mark of [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]) {
           expect(measurements).not.toContain(mark);

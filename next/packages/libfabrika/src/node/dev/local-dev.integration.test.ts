@@ -13,6 +13,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -158,7 +159,7 @@ describe("P12 durable brain outbox", () => {
                 const folder = yield* home("p12-m-");
                 writeFileSync(
                   join(folder, reader === "pending" ? "brain.pending.jsonl" : "brain.last.json"),
-                  JSON.stringify(raw),
+                  Formatter.formatJson(raw),
                 );
                 const outbox = yield* brainOutbox(folder);
 
@@ -272,7 +273,7 @@ describe("P12 durable brain outbox", () => {
                   expected.push(...durable(file, encoded(rows.slice(0, index + 1))));
 
                   if (row._tag === "started") {
-                    expected.push(...durable(last, JSON.stringify(row.start)));
+                    expected.push(...durable(last, Formatter.formatJson(row.start)));
                   }
 
                   expect(calls).toEqual(expected);
@@ -287,7 +288,7 @@ describe("P12 durable brain outbox", () => {
                 );
 
                 if (latest !== undefined) {
-                  expected.push(...durable(last, JSON.stringify(latest.start)));
+                  expected.push(...durable(last, Formatter.formatJson(latest.start)));
                 }
 
                 for (let n = 1; n <= rows.length; n++) {
@@ -328,7 +329,7 @@ describe("P12 durable brain outbox", () => {
               reason: "bad_row",
             });
             expect(yield* outbox.pending).toEqual([]);
-            writeFileSync(join(folder, "brain.pending.jsonl"), `${JSON.stringify(excess)}\n`);
+            writeFileSync(join(folder, "brain.pending.jsonl"), `${Formatter.formatJson(excess)}\n`);
             expect(yield* Effect.flip(outbox.pending)).toMatchObject({
               _tag: "BrainError",
               reason: "bad_row",

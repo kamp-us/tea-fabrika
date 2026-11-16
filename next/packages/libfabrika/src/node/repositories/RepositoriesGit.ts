@@ -14,6 +14,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import {
   Branch,
@@ -214,7 +215,7 @@ export const layer = (options: { readonly person: string }) =>
               Str.replace(/^(ssh:\/\/)[^/@]*@/i, "$1"),
               Str.replace(/^[^/@:]+@(?=[^/:]+:)/, ""),
             );
-            const key = yield* hash(JSON.stringify([common, identity])).pipe(
+            const key = yield* hash(Formatter.formatJson([common, identity])).pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
             );

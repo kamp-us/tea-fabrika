@@ -17,6 +17,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -470,7 +471,7 @@ describe("P17a, appendAdmitted", () => {
                   });
                   expect(row.ok).toBe(outcome === "placed");
                   expect(row.endTimeUnixNano).toBeDefined();
-                  const tags = JSON.stringify(row.attributes);
+                  const tags = Formatter.formatJson(row.attributes);
                   expect(tags).not.toContain(marker);
                   expect(tags).not.toContain("planted storage error");
                 }

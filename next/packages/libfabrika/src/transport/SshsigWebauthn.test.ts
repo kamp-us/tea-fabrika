@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -123,7 +124,7 @@ const passkey = Effect.fn("test.passkey")(function* () {
         space = over.space ?? SPACE;
 
       const clientDataJSON = utf8(
-        JSON.stringify({
+        Formatter.formatJson({
           type: over.type ?? "webauthn.get",
           challenge: Buffer.from(over.challenge ?? signedBytes(text, space)).toString("base64url"),
           origin: over.origin ?? origin,
@@ -379,7 +380,7 @@ describe("P10 WebAuthn SSHSIG", () => {
       fc.asyncProperty(fc.record({ authenticatorData: bodyArb, clientDataJSON: bodyArb, signature: bodyArb }), (raw) =>
         Effect.runPromise(
           Effect.gen(function* () {
-            expect(yield* check(JSON.stringify(raw))).toEqual(refused);
+            expect(yield* check(Formatter.formatJson(raw))).toEqual(refused);
           }),
         ),
       ),

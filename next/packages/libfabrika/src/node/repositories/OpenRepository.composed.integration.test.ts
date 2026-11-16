@@ -25,6 +25,7 @@ import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -280,7 +281,7 @@ it.effect.prop(
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-open-code-" });
         const marker = path.join(root, "executed");
         const touches: Array<string> = [];
-        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'executed');`;
+        const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${Formatter.formatJson(marker)}, 'executed');`;
 
         for (const name of ["settings.mjs", "program.mjs", "build.mjs", "start.mjs"]) {
           yield* fs.writeFileString(path.join(root, name), tripwire);
@@ -288,7 +289,7 @@ it.effect.prop(
 
         yield* fs.writeFileString(
           path.join(root, "package.json"),
-          JSON.stringify({
+          Formatter.formatJson({
             type: "module",
             scripts: { build: "node build.mjs", start: "node start.mjs" },
           }),
@@ -414,13 +415,13 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
                 const body =
                   source === 0
-                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
+                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${Formatter.formatJson(secret)}\n`
                     : source === 3
-                      ? `fabrika-version = ${JSON.stringify(secret)}\n`
+                      ? `fabrika-version = ${Formatter.formatJson(secret)}\n`
                       : source === 4
-                        ? `[${JSON.stringify(secret)}]\nvalue = true\n`
+                        ? `[${Formatter.formatJson(secret)}]\nvalue = true\n`
                         : source === 5
-                          ? `fabrika-version = ${JSON.stringify(secret)} [\n`
+                          ? `fabrika-version = ${Formatter.formatJson(secret)} [\n`
                           : 'fabrika-version = "0.0.0"\n';
 
                 const fs = FileSystem.layerNoop({
@@ -503,7 +504,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
 
                 if (Exit.isFailure(checked)) {
                   outputs.error.push(String(checked.cause), checked.cause);
-                  outputs.errorJson.push(JSON.stringify(checked.cause));
+                  outputs.errorJson.push(Formatter.formatJson(checked.cause));
                 } else {
                   outputs.settings.push(checked.value.settings);
 
@@ -550,10 +551,10 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                       outputs.pending.push(opened.value);
                     }
 
-                    outputs.report.push(JSON.stringify(opened.value));
+                    outputs.report.push(Formatter.formatJson(opened.value));
                   } else {
                     outputs.error.push(String(opened.cause), opened.cause);
-                    outputs.errorJson.push(JSON.stringify(opened.cause));
+                    outputs.errorJson.push(Formatter.formatJson(opened.cause));
                   }
                 }
               }

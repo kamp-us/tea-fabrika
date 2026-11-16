@@ -15,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import { Commands } from "../../client/Commands.ts";
 import { Command } from "../../tasks/Task.ts";
@@ -31,14 +32,14 @@ describe("P39 slice 4b: the real command on a real host", () => {
         const commands = yield* Commands;
         expect(commands.has, "C4: the runner has git on its PATH").toEqual(["git"]);
         const answer = yield* commands.execute(Command.cases.git_version.make({}));
-        expect(answer._tag, `C4: real git exits: ${JSON.stringify(answer)}`).toBe("exited");
+        expect(answer._tag, `C4: real git exits: ${Formatter.format(answer)}`).toBe("exited");
 
         if (answer._tag !== "exited") {
           return;
         }
 
         expect(answer.code).toBe(0);
-        expect(pipe(answer.version, Str.startsWith("git version ")), `C4: ${JSON.stringify(answer.version)}`).toBe(
+        expect(pipe(answer.version, Str.startsWith("git version ")), `C4: ${Formatter.format(answer.version)}`).toBe(
           true,
         );
         expect(pipe(answer.version, Str.endsWith("\n")), "C4: the trailing newline is dropped").toBe(false);

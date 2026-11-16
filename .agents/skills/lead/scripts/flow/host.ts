@@ -36,6 +36,7 @@ import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr, pipe, String as Str } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
@@ -486,7 +487,7 @@ export const recordInQuest = Effect.fn("host.recordInQuest")(function* (
   };
 
   const quest = { ...saved, head: done ? hosted.head : saved.head, steps: [...saved.steps, entry] };
-  yield* fs.writeFileString(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
+  yield* fs.writeFileString(`${state}.tmp`, `${Formatter.formatJson(quest, { space: "\t" })}\n`);
   yield* fs.rename(`${state}.tmp`, state);
 });
 

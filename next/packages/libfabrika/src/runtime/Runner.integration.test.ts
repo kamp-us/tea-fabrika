@@ -21,6 +21,7 @@ import {
   Effect,
   Exit,
   Fiber,
+  Formatter,
   Layer,
   Option,
   Result,
@@ -612,7 +613,7 @@ const worldOn = async (
           process: to,
           name,
           personOnly,
-          digest: JSON.stringify(i.envelope.input),
+          digest: Formatter.formatJson(i.envelope.input),
           traceId: i.span.traceId,
           span: i.span,
           arrivedAt: i.envelope.arrivedAt,
@@ -1879,8 +1880,8 @@ describe("p35 Cmd order, replay and recorded failures", () => {
               .prepare(`SELECT * FROM "${String(name)}"`)
               .all(),
           );
-          expect(JSON.stringify(saved)).toContain("dispatched");
-          expect(JSON.stringify(saved)).toContain("31");
+          expect(Formatter.formatJson(saved)).toContain("dispatched");
+          expect(Formatter.formatJson(saved)).toContain("31");
         }).pipe(Effect.provide(w.layer())),
       );
     }),
@@ -3370,14 +3371,14 @@ describe("P11 monitoring, content and storage failures", () => {
                 const r: Runner = yield* w.ProgramRunner;
                 yield* r.msg(w.input(1, { type: "work", n: 59, signature, body: "private model body P11" }));
                 const rows: ReadonlyArray<SpanRow> = yield* recorded();
-                const tags = JSON.stringify(
+                const tags = Formatter.formatJson(
                   rows.map((row) => ({
                     attributes: row.attributes,
                     events: row.events,
                     links: row.links,
                   })),
                 );
-                const measurements = JSON.stringify(w.sink.db().prepare("SELECT * FROM measurements").all());
+                const measurements = Formatter.formatJson(w.sink.db().prepare("SELECT * FROM measurements").all());
 
                 for (const secret of [marker, signature, "private model body P11"]) {
                   expect(tags).not.toContain(secret);
@@ -3393,7 +3394,7 @@ describe("P11 monitoring, content and storage failures", () => {
                   (row) => records.content({ _tag: "job", process: PROCESS }, row.spanId),
                   { concurrency: 1 },
                 );
-                expect(JSON.stringify(content)).toContain(marker);
+                expect(Formatter.formatJson(content)).toContain(marker);
                 const contentSpan = failed[content.findIndex((value) => JSON.stringify(value).includes(marker))]!;
                 yield* records.deleteContent({ _tag: "job", process: PROCESS }, contentSpan.spanId, {
                   by: "SHA256:person",
@@ -3403,7 +3404,7 @@ describe("P11 monitoring, content and storage failures", () => {
                   Option.getOrNull(yield* records.content({ _tag: "job", process: PROCESS }, contentSpan.spanId)),
                 ).toMatchObject({ _tag: "deleted", reason: value });
                 expect((yield* recorded()).some((row) => row.spanId === contentSpan.spanId)).toBe(true);
-                expect(JSON.stringify(yield* resultLetters)).not.toContain(marker);
+                expect(Formatter.formatJson(yield* resultLetters)).not.toContain(marker);
               }).pipe(Effect.provide(w.layer())),
             );
           }),

@@ -16,6 +16,7 @@ import { connect } from "node:net";
 import { join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { String as Str, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, type TestContext } from "vitest";
@@ -89,7 +90,7 @@ const suite = (trace: string, fault: Fault | undefined, target: Target) =>
           env: {
             ...process.env,
             P14_E2E_TRACE: trace,
-            ...(fault === undefined ? {} : { P14_E2E_FAULT: JSON.stringify(fault) }),
+            ...(fault === undefined ? {} : { P14_E2E_FAULT: Formatter.formatJson(fault) }),
           },
           stdio: ["ignore", "ignore", "ignore"],
           detached: true,
@@ -218,7 +219,7 @@ const run = (fault: Fault | undefined, signal: NodeJS.Signals, target: Target = 
       const seen = rows(trace);
       const acquired = Arr.flatMap(seen, (r) => (r.acquired === undefined ? [] : [r.acquired]));
       const released = Arr.flatMap(seen, (r) => (r.released === undefined ? [] : [r.released]));
-      const label = JSON.stringify(fault ?? "plain");
+      const label = Formatter.format(fault ?? "plain");
       expect(acquired.length, `${label}: the child reached its first acquisition`).toBeGreaterThan(0);
 
       if (fault !== undefined) {

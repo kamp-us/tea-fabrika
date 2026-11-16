@@ -10,7 +10,7 @@
 // Every other request goes to the real `Control` untouched. The product's list gains nothing.
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
-import { Cause, Effect, Option, Schema } from "effect";
+import { Cause, Effect, Formatter, Option, Schema } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -160,7 +160,7 @@ export class Control extends RealControl {
                   Effect.tryPromise(() =>
                     this.env.PROJECT.getByName(call.project).fetch("http://project/", {
                       method: "POST",
-                      body: JSON.stringify({ method: call.method, args: call.args }),
+                      body: Formatter.formatJson({ method: call.method, args: call.args }),
                     }),
                   )
                 : Effect.succeed(new Response(null, { status: 403 })),

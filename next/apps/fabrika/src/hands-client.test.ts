@@ -58,7 +58,7 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // S1 [secrets]: the hands key's private bytes, in every encoding a leak could take, never appear in
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
-import { Effect, Exit, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
+import { Effect, Exit, Formatter, Layer, Queue, Schema, Scope, Semaphore, Tracer } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
@@ -389,7 +389,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         const nonce = yield* b.d.challenge(id);
         attached = Attached.cases.new.make({ client: id, nonce });
         drivers.add(c);
-        made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
+        made.receive(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       }).pipe(Effect.ignore),
     );
 
@@ -602,7 +602,11 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     };
 
     for (const [name, value] of focus === "S1" ? Object.entries(outputs) : []) {
-      const encoded = JSON.stringify(value, (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item));
+      const encoded = yield* Schema.encodeEffect(
+        Schema.fromJsonString(Schema.Unknown, {
+          replacer: (_key, item: unknown) => (typeof item === "bigint" ? String(item) : item),
+        }),
+      )(value);
 
       for (const secret of hands.secrets) {
         for (const form of [secret, encodeURIComponent(secret), Base64.encode(text(secret))]) {

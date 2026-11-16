@@ -15,7 +15,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Formatter, Layer, Schema, Stream } from "effect";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -125,8 +125,8 @@ describe("P33, only the owning runner writes its answers", () => {
       Effect.gen(function* () {
         // JSON whitespace changes the spelling, never ownership of the id space.
         for (const id of [
-          JSON.stringify(["notice", key]),
-          `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+          Formatter.formatJson(["notice", key]),
+          `${space}[${space}"notice",${Formatter.formatJson(key)}]${space}`,
           '["notice"',
         ]) {
           expect(brainOnly({ stream: "notes:1/inbox", id, tag: "send" })).toBe(true);
@@ -437,7 +437,7 @@ describe("p21, receive", () => {
               const answer = yield* send(to, id, m);
               const box = want.get(to) ?? [];
               const known = box.find((l) => l.id === id);
-              const same = known !== undefined && JSON.stringify(known.m) === JSON.stringify(m);
+              const same = known !== undefined && Formatter.formatJson(known.m) === Formatter.formatJson(m);
               expect(answer._tag, `${to} ${id}`).toBe(known === undefined || same ? "placed" : "refused");
 
               if (known === undefined) {

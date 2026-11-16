@@ -15,6 +15,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
 import * as Order from "effect/Order";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -58,7 +59,7 @@ describe("stored", () => {
                 const last = (name: string) => JSON.stringify(`stopped_${secret}_${name}`);
 
                 for (const name of files) {
-                  yield* write(name, JSON.stringify("start"));
+                  yield* write(name, Formatter.formatJson("start"));
                 }
 
                 const fs: FileSystem.FileSystem = {
@@ -70,7 +71,7 @@ describe("stored", () => {
                       }
 
                       for (const name of renamed) {
-                        yield* real.writeFileString(path.join(dir, `${name}.tmp`), JSON.stringify("listed"));
+                        yield* real.writeFileString(path.join(dir, `${name}.tmp`), Formatter.formatJson("listed"));
                       }
 
                       const names = yield* real.readDirectory(folder, options);
@@ -176,7 +177,7 @@ describe("stored", () => {
                 yield* fs.makeDirectory(path.join(dir, "records"));
 
                 for (const name of files) {
-                  yield* fs.writeFileString(path.join(dir, name), JSON.stringify(`${name}_${secret}`));
+                  yield* fs.writeFileString(path.join(dir, name), Formatter.formatJson(`${name}_${secret}`));
                 }
 
                 const db = yield* spanQueue(path.join(dir, "brain.records.sqlite"));
@@ -239,7 +240,7 @@ describe("stored", () => {
                 yield* real.makeDirectory(path.join(dir, "records"));
 
                 for (const name of files) {
-                  yield* real.writeFileString(path.join(dir, name), JSON.stringify(name));
+                  yield* real.writeFileString(path.join(dir, name), Formatter.formatJson(name));
                 }
 
                 const target = path.join(dir, failing);

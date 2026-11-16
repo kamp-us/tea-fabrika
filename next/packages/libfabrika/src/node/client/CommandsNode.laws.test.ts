@@ -27,6 +27,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
@@ -305,10 +306,11 @@ describe("P39 slice 4b: the real command layer", () => {
 
             // Every named output of the spawn: the executable, the argv and every option, in each form a
             // value could be written.
-            const text = JSON.stringify(
-              { c: command.command, a: Arr.map(command.args, String), o: command.options },
-              (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
-            );
+            const text = yield* Schema.encodeEffect(
+              Schema.fromJsonString(Schema.Unknown, {
+                replacer: (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
+              }),
+            )({ c: command.command, a: Arr.map(command.args, String), o: command.options });
 
             const forms = [
               planted,

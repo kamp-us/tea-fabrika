@@ -9,6 +9,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -358,7 +359,7 @@ for (const adapter of ["node", "worker"] as const) {
 
               expect(
                 Arr.some(lost, (none) => none.length === 0),
-                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${JSON.stringify(lost)}`,
+                `original message and every stack frame (name, file, line, column) must reach P37; lost: ${Formatter.format(lost)}`,
               ).toBe(true);
 
               for (const stored of Arr.flatMap(kept, (c) => frames(c.message))) {
@@ -400,7 +401,7 @@ for (const adapter of ["node", "worker"] as const) {
                   measurements,
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
-                  expect(JSON.stringify(permanent)).not.toContain(pipe(JSON.stringify(text), Str.slice(1, -1)));
+                  expect(Formatter.formatJson(permanent)).not.toContain(pipe(Formatter.formatJson(text), Str.slice(1, -1)));
                 }
               }
 
@@ -419,7 +420,7 @@ for (const adapter of ["node", "worker"] as const) {
               });
 
               for (const text of sample.private) {
-                expect(JSON.stringify(after)).not.toContain(pipe(JSON.stringify(text), Str.slice(1, -1)));
+                expect(Formatter.formatJson(after)).not.toContain(pipe(Formatter.formatJson(text), Str.slice(1, -1)));
               }
 
               expect(yield* recorded(A)).toEqual(rows);
@@ -501,13 +502,14 @@ describe("P34 supervision recording", () => {
                   onSome: (c) => c._tag === "kept" && pipe(c.message, Str.includes(secret)),
                 }),
               );
-              expect(Option.isSome(at), "the original throw must reach deletable content before guards erase it").toBe(
+              expect(Option.isSome(at),
+                "the original throw must reach deletable content before guards erase it").toBe(
                 true,
               );
-              expect(JSON.stringify(rows)).not.toContain(secret);
-              expect(JSON.stringify(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
-              expect(JSON.stringify(yield* read(`processes/${NAME}`))).not.toContain(secret);
-              expect(JSON.stringify(yield* read(`${A}/dead`))).not.toContain(secret);
+              expect(Formatter.formatJson(rows)).not.toContain(secret);
+              expect(Formatter.formatJson(w.sink.sql.exec("SELECT * FROM measurements"))).not.toContain(secret);
+              expect(Formatter.formatJson(yield* read(`processes/${NAME}`))).not.toContain(secret);
+              expect(Formatter.formatJson(yield* read(`${A}/dead`))).not.toContain(secret);
 
               for (const output of [
                 rows,
@@ -515,7 +517,7 @@ describe("P34 supervision recording", () => {
                 yield* read(`processes/${NAME}`),
                 yield* read(`${A}/dead`),
               ]) {
-                expect(JSON.stringify(output)).not.toContain(pipe(JSON.stringify(secret), Str.slice(1, -1)));
+                expect(Formatter.formatJson(output)).not.toContain(pipe(Formatter.formatJson(secret), Str.slice(1, -1)));
               }
 
               const span = rows[Option.getOrThrow(at)]!;

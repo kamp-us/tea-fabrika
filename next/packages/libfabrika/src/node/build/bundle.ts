@@ -5,6 +5,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
@@ -195,8 +196,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
   const programs: Record<string, ProgramSource> = {};
 
   for (const [name, entry] of Rec.toEntries(options.programs)) {
-    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${JSON.stringify(entry.module)}; export default programBox(program, ${JSON.stringify(name)});`;
-
+    const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${Formatter.formatJson(entry.module)}; export default programBox(program, ${Formatter.formatJson(name)});`;
     const output = yield* bundle(
       "fabrika:program",
       [

@@ -5,7 +5,20 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Context, Duration, Effect, Exit, Layer, Option, Result, Schema, Semaphore, Stream, Tracer } from "effect";
+import {
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Option,
+  Result,
+  Schema,
+  Semaphore,
+  Stream,
+  Tracer,
+} from "effect";
 import * as Cause from "effect/Cause";
 import { Base64, Base64Url } from "effect/encoding";
 import { RateLimiter } from "effect/persistence/RateLimiter";
@@ -933,8 +946,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
           issued === null ||
           issued.used ||
           pass.nonce !== issued.nonce ||
-          JSON.stringify(issued.binding) !==
-            JSON.stringify(
+          Formatter.formatJson(issued.binding) !==
+            Formatter.formatJson(
               Enrollment.make({
                 id: c.add.id,
                 to: c.add.to,
@@ -1341,8 +1354,8 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       }
     }
 
-    const digest = yield* hash(JSON.stringify(params));
-    const bodyHash = yield* hash(JSON.stringify(message));
+    const digest = yield* hash(Formatter.formatJson(params));
+    const bodyHash = yield* hash(Formatter.formatJson(message));
     const process = yield* allocateStart();
     const inputId = yield* ids
       .next(InputId)
@@ -1780,7 +1793,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
       return yield* new LedgerError({ reason: "bad_row" });
     }
 
-    if (binding.hash !== (yield* hash(JSON.stringify(message)))) {
+    if (binding.hash !== (yield* hash(Formatter.formatJson(message)))) {
       return yield* new NotGranted({});
     }
 
@@ -1856,7 +1869,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         return yield* new SigningRefused({ reason: "not_delivered" });
       }
 
-      const digest = yield* hash(JSON.stringify(decoded.success));
+      const digest = yield* hash(Formatter.formatJson(decoded.success));
       const at = yield* clock;
       const meta = yield* store.atomic(() => {
         const prior = store.get(`append/${a.id}`, AppendMeta);
@@ -1949,15 +1962,15 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
 
       if (
         !["delivered", "retryable", "settled"].includes(binding.state._tag) ||
-        JSON.stringify(by) !== JSON.stringify(binding.by) ||
-        JSON.stringify(by) !== JSON.stringify(input.envelope.by) ||
+        Formatter.formatJson(by) !== Formatter.formatJson(binding.by) ||
+        Formatter.formatJson(by) !== Formatter.formatJson(input.envelope.by) ||
         binding.arrivedAt !== input.envelope.arrivedAt ||
         binding.sentAt !== input.sentAt ||
         (binding.seen ?? 0) !== input.seen ||
         binding.span.traceId !== input.span.traceId ||
         binding.span.spanId !== input.span.spanId ||
         binding.hash === undefined ||
-        binding.hash !== (yield* hash(JSON.stringify(input.envelope.input)))
+        binding.hash !== (yield* hash(Formatter.formatJson(input.envelope.input)))
       ) {
         return yield* new SigningRefused({ reason: "not_delivered" });
       }

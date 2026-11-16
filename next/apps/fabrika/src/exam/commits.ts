@@ -27,6 +27,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -699,7 +700,7 @@ export const plain = (a: Answer, show: (path: string) => string = quote) => {
  */
 const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArray<Answer>, extra: string) {
   for (const a of answers) {
-    yield* Console.log(JSON.stringify(a));
+    yield* Console.log(Formatter.formatJson(a));
     yield* Console.error(`${title}: ${plain(a)}`);
   }
 
@@ -753,7 +754,7 @@ const checkMain = Effect.gen(function* () {
   const changed = nul(yield* git(["diff", "--name-only", "-z", "--no-renames", `${main}...${head}`]));
 
   if (!inScope(changed, isExam)) {
-    yield* Console.log(JSON.stringify(done));
+    yield* Console.log(Formatter.formatJson(done));
     yield* Console.error("commits: not in scope: touches no next/** and no exam path");
 
     return 0;
@@ -831,10 +832,9 @@ const loggedAt = Effect.fnUntraced(function* (rev: string) {
       continue;
     }
 
-    const row: unknown = yield* Effect.try({
-      try: () => JSON.parse(line),
-      catch: () => Failed.make({ message: `field/runs.jsonl line ${i + 1} is not JSON` }),
-    });
+    const row: unknown = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(line).pipe(
+      Effect.mapError(() => Failed.make({ message: `field/runs.jsonl line ${i + 1} is not JSON` })),
+    );
 
     if (row === null || typeof row !== "object") {
       continue;
@@ -1077,9 +1077,8 @@ const signMain = Effect.gen(function* () {
     });
   }
 
-  yield* git(["notes", "--ref=fabrika", "add", "-F", "-", head], JSON.stringify(note));
-  yield* Console.log(JSON.stringify({ ...note, commit: head }));
-
+  yield* git(["notes", "--ref=fabrika", "add", "-F", "-", head], Formatter.formatJson(note));
+  yield* Console.log(Formatter.formatJson({ ...note, commit: head }));
   return 0;
 });
 

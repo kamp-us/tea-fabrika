@@ -25,6 +25,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { Journal } from "../../client/Journal.ts";
@@ -46,7 +47,7 @@ const everyKeyWhole = (label: string) =>
 
     for (const [place, task] of TASKS.entries()) {
       const read = yield* journal.read(task).pipe(Effect.result);
-      const shown = pipe(JSON.stringify(read), Str.slice(0, 200));
+      const shown = pipe(Formatter.format(read), Str.slice(0, 200));
       expect(read._tag, `J2: ${task} ${label} reads without an error: ${shown}`).toBe("Success");
       const entry = read._tag === "Success" ? read.success : null;
       expect(entry, `J2: ${task} ${label} still holds the entry saved before ready`).not.toBeNull();

@@ -1,4 +1,7 @@
-import { Array as Arr, Effect, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
+import { Array as Arr } from "effect";
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L33 of the approved
 // plan (docs/plan/quests/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
 // real `dev.ts` in its own temp home on its own port and drives headless Chromium: a 1440x900 tab
@@ -307,7 +310,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
               band,
               (x) => x !== undefined && x !== null && Math.abs(x.height - 20) <= 1 && Math.abs(x.y - band[0]!.y) <= 1,
             ),
-            `the lower row is one 20px band, its strips side by side: ${JSON.stringify(band)}`,
+            `the lower row is one 20px band, its strips side by side: ${Formatter.format(band)}`,
           ).toBe(true);
 
           for (const id of [a, bb, d, f]) {

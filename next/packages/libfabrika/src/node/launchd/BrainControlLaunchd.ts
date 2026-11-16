@@ -5,6 +5,7 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
@@ -201,8 +202,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     const json = path.join(dir, "job.json"),
       xml = path.join(dir, "job.plist");
-
-    yield* fs.writeFileString(json, JSON.stringify(job), { mode: 0o600 }).pipe(Effect.mapError(storage));
+    yield* fs.writeFileString(json, Formatter.formatJson(job), { mode: 0o600 }).pipe(Effect.mapError(storage));
     yield* success("/usr/bin/plutil", ["-convert", "xml1", "-o", xml, json]);
     yield* fs.chmod(xml, 0o600).pipe(Effect.mapError(storage));
     const file = yield* fs.open(xml, { flag: "r+", noFollow: true }).pipe(Effect.mapError(storage));

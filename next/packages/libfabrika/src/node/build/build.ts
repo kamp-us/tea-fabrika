@@ -16,6 +16,7 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
@@ -342,7 +343,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
   const output = yield* bundle(tab.entry, [...plugins, browserOnly, tabPage(styles)], {
     phase: "tab",
     cwd,
-    define: { "process.env.NODE_ENV": JSON.stringify("production") },
+    define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
     minify: true,
   });
   const html = Arr.findFirst(output.output, (o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
@@ -628,7 +629,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
           phase: "window",
           cwd: root,
           split: true,
-          define: { "process.env.NODE_ENV": JSON.stringify("production") },
+          define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
         },
       ).pipe(Effect.flatMap((o) => collect(o.output)))
     : {};

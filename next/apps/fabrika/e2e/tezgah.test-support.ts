@@ -15,6 +15,7 @@ import {
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import type { Page } from "playwright";
 import { expect } from "vitest";
@@ -277,8 +278,7 @@ export const settle = (
       const wrong = check(view, yield* drawn(page));
 
       if (wrong.length === 0 || tries >= 120) {
-        expect(wrong, `${label}: ${JSON.stringify(view)}`).toEqual([]);
-
+        expect(wrong, `${label}: ${Formatter.format(view)}`).toEqual([]);
         return view;
       }
 
@@ -368,8 +368,7 @@ export const domSettles = (page: Page, check: (f: DomFocus) => boolean, label: s
       const f = yield* domFocus(page);
 
       if (check(f) || tries >= 120) {
-        expect(check(f), `${label}: DOM focus is ${JSON.stringify(f)}`).toBe(true);
-
+        expect(check(f), `${label}: DOM focus is ${Formatter.format(f)}`).toBe(true);
         return f;
       }
 
@@ -725,8 +724,7 @@ export const foldSettle = (
       const wrong = check(view, d);
 
       if (wrong.length === 0 || tries >= 120) {
-        expect(wrong, `${label}: ${JSON.stringify(view)} ${JSON.stringify(d)}`).toEqual([]);
-
+        expect(wrong, `${label}: ${Formatter.format(view)} ${Formatter.format(d)}`).toEqual([]);
         return { view, d };
       }
 

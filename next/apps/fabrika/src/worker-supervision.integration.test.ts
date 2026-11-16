@@ -8,7 +8,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Formatter, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -459,7 +459,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
       }
     }
 
-    throw new Error(`no restarted after ${after} on ${name} in ${WAIT} ms; saw ${JSON.stringify(seenRows)}`);
+    throw new Error(`no restarted after ${after} on ${name} in ${WAIT} ms; saw ${Formatter.format(seenRows)}`);
   });
 
 /** Live means it also accepts a healthy input: an info row alone is not enough. */

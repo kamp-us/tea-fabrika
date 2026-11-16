@@ -37,7 +37,7 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Schema } from "effect";
+import { Cause, Effect, Exit, Formatter, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -284,7 +284,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
       // oxlint-disable-next-line fabrika/no-type-assertions -- Node namespaces call the real services but lack workerd's nominal brands
       const env = {
-        INSTANCE: JSON.stringify(
+        INSTANCE: Formatter.formatJson(
           RecordWireTest.settingsFixture({
             name: "project-test",
             person: PERSON,
@@ -722,8 +722,7 @@ describe("L13: notices name their process", () => {
                         seen: 0,
                       }),
                     );
-
-                    const refused = JSON.stringify(answer).includes('"refused"');
+                    const refused = Formatter.formatJson(answer).includes('"refused"');
                     seen.refused += refused ? 1 : 0;
 
                     if (!refused) {
@@ -753,7 +752,7 @@ describe("L13: notices name their process", () => {
                     without(Object(theirs[i]!.news)),
                   );
                   seen[news.method === "view.whole" ? "whole" : "patch"]++;
-                  seen.arrays += JSON.stringify(news.params).includes('"/items/') ? 1 : 0;
+                  seen.arrays += Formatter.formatJson(news.params).includes('"/items/') ? 1 : 0;
                 }
               }),
             ),

@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type * as Tracer from "effect/Tracer";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -468,10 +469,10 @@ export const suite = (driver: Driver) =>
                 const s = yield* h.snapshot;
                 driver.unleaked(
                   [
-                    JSON.stringify(s.letters),
-                    JSON.stringify(s.saved),
-                    JSON.stringify(s.model),
-                    JSON.stringify(s.view),
+                    Formatter.formatJson(s.letters),
+                    Formatter.formatJson(s.saved),
+                    Formatter.formatJson(s.model),
+                    Formatter.formatJson(s.view),
                     ...capture.text(),
                     ...logs,
                   ],

@@ -8,6 +8,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import type * as Scope from "effect/Scope";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
 import { Array as Arr, String as Str, pipe } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -40,6 +42,22 @@ const temp = Effect.gen(function* () {
 
 const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === Str.trim(c));
 const sha = pipe("a", Str.repeat(40));
+
+/** The quest's state file read back: each step's name and outcome typed, and every other key kept. */
+const readState = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(
+    Schema.StructWithRest(
+      Schema.Struct({
+        steps: Schema.Array(
+          Schema.StructWithRest(Schema.Struct({ step: Schema.String, outcome: Schema.String }), [
+            Schema.Record(Schema.String, Schema.Unknown),
+          ]),
+        ),
+      }),
+      [Schema.Record(Schema.String, Schema.Unknown)],
+    ),
+  ),
+);
 
 const args = (commands: ReadonlyArray<string>) => ({
   main: "/nowhere/main",
@@ -105,8 +123,7 @@ describe("the quest brief's host commands", () => {
         const node = (pkg: unknown) =>
           Effect.gen(function* () {
             const dir = yield* temp;
-            yield* fs.writeFileString(`${dir}/package.json`, JSON.stringify(pkg));
-
+            yield* fs.writeFileString(`${dir}/package.json`, Formatter.formatJson(pkg));
             return yield* repoNode(dir);
           });
 
@@ -271,14 +288,13 @@ describe("the quest's state file", () => {
           head: sha,
           steps: [{ step: "build", outcome: "done", head: sha }],
         };
-
-        yield* fs.writeFileString(state, JSON.stringify(before));
+        yield* fs.writeFileString(state, Formatter.formatJson(before));
         const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
         yield* recordInQuest(at, { outcome: sent, head: sha, log: "x.log" }, "t1");
         const done = { _tag: "done", reason: "ok" } as const;
         yield* recordInQuest(at, { outcome: done, head: pipe("b", Str.repeat(40)), log: "y.log" }, "t2");
-        const after = JSON.parse(yield* fs.readFileString(state));
+        const after = yield* readState(yield* fs.readFileString(state));
         expect(after.ticket).toBe("7");
         expect(after.head).toBe(pipe("b", Str.repeat(40)));
         expect(after.steps.map((e: { step: string; outcome: string }) => `${e.step} ${e.outcome}`)).toEqual([
@@ -311,15 +327,14 @@ describe("the quest's state file", () => {
           head: sha,
           steps: [{ step: "build", box: "t9-build1", outcome: "done", head: sha }],
         };
-
-        yield* fs.writeFileString(state, `${JSON.stringify(before, null, "\t")}\n`);
+        yield* fs.writeFileString(state, `${Formatter.formatJson(before, { space: "\t" })}\n`);
         const done = { _tag: "done", reason: "ok" } as const;
         yield* recordInQuest(
           { boxes, quest: "t9", name: "t9-host1", head: sha },
           { outcome: done, head: sha, log: null },
           "t1",
         );
-        const after = JSON.parse(yield* fs.readFileString(state));
+        const after = yield* readState(yield* fs.readFileString(state));
         expect(after).toMatchObject({
           quest: "t9",
           ticket: "9",

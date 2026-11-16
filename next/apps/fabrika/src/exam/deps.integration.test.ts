@@ -21,6 +21,7 @@ import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin, type RolldownBuild } from "rolldown";
@@ -216,7 +217,7 @@ const plant = (files: Readonly<Record<string, string | object>>) =>
 
       for (const [path, body] of Rec.toEntries(files)) {
         mkdirSync(dirname(join(root, path)), { recursive: true });
-        writeFileSync(join(root, path), typeof body === "string" ? body : JSON.stringify(body));
+        writeFileSync(join(root, path), typeof body === "string" ? body : Formatter.formatJson(body));
       }
 
       return root;

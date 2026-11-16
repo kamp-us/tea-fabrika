@@ -2,7 +2,7 @@
 // plan declares the brain's memory limit and grace, so the values gain `brainMemory` and `brainGrace`.
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Formatter, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
@@ -28,7 +28,7 @@ describe("shared Worker settings reader, next/", () => {
           ? input
           : { ...input, settings: { ...input.settings, values: { ...input.settings.values, "instance.port": port } } };
         const exit = yield* Effect.exit(
-          SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: JSON.stringify(raw) })),
+          SettingsInput.read.pipe(Effect.provideService(WorkerEnvironment, { INSTANCE: Formatter.formatJson(raw) })),
         );
         expect(Exit.isSuccess(exit)).toBe(valid);
 
@@ -65,7 +65,7 @@ describe("shared Worker settings reader, next/", () => {
           const exit = yield* Effect.exit(
             SettingsInput.read.pipe(
               Effect.provideService(WorkerEnvironment, {
-                INSTANCE: JSON.stringify(raw),
+                INSTANCE: Formatter.formatJson(raw),
                 UNRELATED_PASSWORD: secret,
               }),
             ),

@@ -12,6 +12,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
@@ -227,7 +228,7 @@ export const watchPrograms = (options: {
             const built = yield* Effect.result(
               buildPrograms({ root, entry: options.entry, programs: [selected] }, undefined, inputs),
             );
-            const digest = yield* hash(JSON.stringify([...inputs].sort(([a], [b]) => pipe(a, Str.localeCompare(b)))));
+            const digest = yield* hash(Formatter.formatJson([...inputs].sort(([a], [b]) => pipe(a, Str.localeCompare(b)))));
 
             if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
               return yield* finish(Option.none());

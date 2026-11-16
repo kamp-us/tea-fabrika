@@ -19,7 +19,7 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import { Cause, Deferred, Effect, Exit, Formatter, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -493,15 +493,15 @@ StartsTest.law(
         for (const row of rows) {
           const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(row.body);
           expect(body).not.toHaveProperty("starts");
-          expect(JSON.stringify(row)).not.toContain(`unused-${word}`);
-          expect(JSON.stringify(row)).not.toContain(`unused-target-${word}`);
+          expect(Formatter.formatJson(row)).not.toContain(`unused-${word}`);
+          expect(Formatter.formatJson(row)).not.toContain(`unused-target-${word}`);
         }
 
         const input = yield* Schema.decodeEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
         const receipt = yield* w.settingsRead(input.start);
         expect(receipt).toMatchObject({ _tag: "ok" });
         expect(receipt).not.toHaveProperty("value.starts");
-        expect(JSON.stringify(receipt)).not.toContain(`unused-${word}`);
+        expect(Formatter.formatJson(receipt)).not.toContain(`unused-${word}`);
       });
 
       for (const [index, choice] of choices.entries()) {

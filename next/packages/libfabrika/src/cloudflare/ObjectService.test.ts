@@ -26,7 +26,7 @@ import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import { Context, Effect, Formatter, Layer, Option, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -212,7 +212,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         }
 
         // The same shell on the good setting: one build, kept, and the setting's own value.
-        const kept = yield* Effect.sync(() => shell(bindings(JSON.stringify(good), good), route));
+        const kept = yield* Effect.sync(() => shell(bindings(Formatter.formatJson(good), good), route));
         const first = yield* kept.service;
         expect(first.port).toBe(port);
 
@@ -336,7 +336,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         const constructor = fake<ProcessConstructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
         const state = fromDurableObjectState(
           fake<Parameters<typeof fromDurableObjectState>[0]>({
-            id: { name: JSON.stringify([good.name, descriptor.name]) },
+            id: { name: Formatter.formatJson([good.name, descriptor.name]) },
             storage,
             abort: unexpected,
           }),
@@ -373,7 +373,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
 
         // The read turns good. The next call reads it, builds and reaches the service; later calls
         // reuse that build and read nothing more.
-        text = JSON.stringify(good);
+        text = Formatter.formatJson(good);
 
         for (const _call of calls) {
           expect(yield* object.open("law-3")).toStrictEqual({ rev: 0, view: {} });

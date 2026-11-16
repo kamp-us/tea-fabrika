@@ -19,7 +19,7 @@
 // builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
-import { Effect, Layer, Result, Schema } from "effect";
+import { Effect, Formatter, Layer, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";
@@ -294,7 +294,7 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           sql.exec(
             "INSERT INTO process_recovery (name, value) VALUES (?, ?)",
             "counter:1",
-            JSON.stringify({ v: 1, name, policy: bad }),
+            Formatter.formatJson({ v: 1, name, policy: bad }),
           );
           const error = yield* Effect.flip(Effect.provide(callRecovery("load"), recoveryStore(sql)));
           expect(error._tag).toBe("RecoveryStoreError");

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Formatter, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
@@ -751,7 +751,7 @@ const checklistWorld = async (
       const wrapper = join(home, "checklist.ts");
       yield* fs.writeFileString(
         wrapper,
-        `export { checklist as program } from ${JSON.stringify(resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
+        `export { checklist as program } from ${Formatter.formatJson(resolve(import.meta.dirname, "../../../programs/checklist/src/program.ts"))};\n`,
       );
       const built = yield* build({ out: join(home, "dist"), programs: { "fabrika/checklist": wrapper } });
       const key = identity();

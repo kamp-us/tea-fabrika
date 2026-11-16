@@ -9,7 +9,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Duration, Effect, Result, Schedule, Schema } from "effect";
+import { type Duration, Effect, Formatter, Result, Schedule, Schema } from "effect";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -239,7 +239,11 @@ const stepsOf = (id: string | undefined, io: Io, pause: Duration.Input): Effect.
 const filesOf = (path: string | undefined, root: string, io: Io): Effect.Effect<Section<TestFile>> =>
   path
     ? io.read(path).pipe(
-        Effect.flatMap((text) => Effect.try({ try: () => JSON.parse(text), catch: (cause) => Unread.make({ cause }) })),
+        Effect.flatMap((text) =>
+          Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+            Effect.mapError((cause) => Unread.make({ cause })),
+          ),
+        ),
         Effect.map((report) => readFiles(report, root)),
         Effect.catch((error) =>
           Effect.succeed(unavailable<TestFile>(`the report could not be read: ${reasonOf(error.cause)}`)),
@@ -293,7 +297,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     Effect.try({
       try: () => {
         const text = markdown(timings);
-        writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${JSON.stringify(timings)}\n`);
+        writeFileSync(join(env["RUNNER_TEMP"] ?? ".", fileName(timings)), `${Formatter.formatJson(timings)}\n`);
         console.log(text);
 
         if (env["GITHUB_STEP_SUMMARY"]) {

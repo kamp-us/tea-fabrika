@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
@@ -154,7 +155,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       const out = ratchet(start);
       expect(out.status).toBe(1);
       expect(out.stdout).toContain(
-        pipe(JSON.stringify(lintKey({ ...extra, file: "a.integration.ts" })), Str.slice(1, -1)),
+        pipe(Formatter.formatJson(lintKey({ ...extra, file: "a.integration.ts" })), Str.slice(1, -1)),
       );
     }),
   );

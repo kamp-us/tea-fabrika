@@ -8,7 +8,12 @@ import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
+import * as ByteSize from "effect/ByteSize";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
@@ -144,7 +149,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
   let serial = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     const id = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
     return yield* next((frame) => frame.id === id);
   });
   const challenge = yield* next((frame) => frame.method === "challenge");

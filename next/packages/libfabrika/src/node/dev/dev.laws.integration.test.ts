@@ -21,6 +21,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -444,7 +445,7 @@ const until = Effect.fnUntraced(function* <A>(label: string, look: Effect.Effect
     yield* TestClock.withLive(Effect.sleep("10 millis"));
   }
 
-  return yield* Effect.die(new Error(`${label}: not seen; last ${JSON.stringify(yield* look)}`));
+  return yield* Effect.die(new Error(`${label}: not seen; last ${Formatter.format(yield* look)}`));
 });
 
 const replaceWorld = Effect.fnUntraced(function* (c: {

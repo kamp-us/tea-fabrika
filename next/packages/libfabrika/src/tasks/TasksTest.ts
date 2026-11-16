@@ -23,6 +23,7 @@ import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
@@ -760,8 +761,8 @@ const walk = (
           const saved = on(["finished", "collected"]);
 
           const other =
-            JSON.stringify(cell.other) === JSON.stringify(saved.result)
-              ? Result.cases.exited.make({ code: 1, version: `${JSON.stringify(cell.other)}-other` })
+            Formatter.formatJson(cell.other) === Formatter.formatJson(saved.result)
+              ? Result.cases.exited.make({ code: 1, version: `${Formatter.formatJson(cell.other)}-other` })
               : cell.other;
 
           refused(

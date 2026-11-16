@@ -1,4 +1,4 @@
-import { Cause, Clock, Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Cause, Clock, Context, Effect, Formatter, Layer, Option, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Waited } from "../ledger/Log.ts";
 import { ProcessIdGenerator } from "../processes/ProcessIdGenerator.ts";
@@ -294,7 +294,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
               ws.close(news.close, "permission changed");
             } else {
               ws.send(
-                JSON.stringify({
+                Formatter.formatJson({
                   jsonrpc: "2.0",
                   ...(typeof news === "object" && news !== null ? news : {}),
                 }),
@@ -337,7 +337,7 @@ const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: 
       server.serializeAttachment(Attached.cases.new.make({ client, nonce }));
       yield* rpc(p.register(client, gateway, session));
       yield* make(server);
-      server.send(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
+      server.send(Formatter.formatJson({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       return new Response(null, { status: 101, webSocket: pair[0] });
     }),
     message: Effect.fnUntraced(function* (ws: WebSocket, text: string | ArrayBuffer) {

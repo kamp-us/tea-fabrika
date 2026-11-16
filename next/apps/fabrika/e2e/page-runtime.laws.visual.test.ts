@@ -20,6 +20,7 @@ import { it, beforeAll } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
@@ -199,8 +200,7 @@ const up = (context: BrowserContext, seen: Seen) =>
   Effect.gen(function* () {
     const page = yield* tab(context, seen);
     yield* playwright("goto /", () => page.goto(`${ORIGIN}/`));
-    expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${JSON.stringify(seen)}`).toBe(true);
-
+    expect(yield* until(isUp(page, seen), 30_000), `the tab came up: ${Formatter.format(seen)}`).toBe(true);
     return page;
   });
 
@@ -260,14 +260,14 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                           yield* Effect.sleep(`${QUIET} millis`);
                           expect(
                             yield* isUp(page, seen),
-                            `event ${i}, persisted: still up ${JSON.stringify(seen)}`,
+                            `event ${i}, persisted: still up ${Formatter.format(seen)}`,
                           ).toBe(true);
                           continue;
                         }
 
                         expect(
                           yield* until(isStopped(page, seen), WITHIN),
-                          `event ${i}, not persisted: stopped within ${WITHIN} ms ${JSON.stringify(seen)}`,
+                          `event ${i}, not persisted: stopped within ${WITHIN} ms ${Formatter.format(seen)}`,
                         ).toBe(true);
                         stoppedAt = Date.now();
                       }
@@ -353,7 +353,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
                           Effect.sync(() => Arr.some(reported(seen), (line) => pipe(line, Str.includes(word)))),
                           WITHIN,
                         ),
-                        `a console line with ERROR and "${word}" within ${WITHIN} ms: ${JSON.stringify(seen.lines)}`,
+                        `a console line with ERROR and "${word}" within ${WITHIN} ms: ${Formatter.format(seen.lines)}`,
                       ).toBe(true);
                     }),
                   ),

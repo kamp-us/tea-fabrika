@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import type * as Scope from "effect/Scope";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr, String as Str, pipe } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import fc from "fast-check";
@@ -289,7 +290,7 @@ const law = Effect.fnUntraced(function* (world: World, plan: Plan) {
 
   const verdict = expected(plan);
   const removed = verdict._tag === "removed";
-  expect(removal.verdict, JSON.stringify(plan)).toEqual(verdict);
+  expect(removal.verdict, Formatter.formatJson(plan)).toEqual(verdict);
   expect(Remove.exitCode(removal.verdict)).toBe(verdict._tag === "kept" ? verdict.code : 0);
   expect(removal.runs).toBe(removed && plan.runs === "moved" ? `kept runs of ${plan.name} at runs/${plan.name}` : "");
   expect([yield* present(fs, work), yield* present(fs, data)]).toEqual(removed ? [false, false] : before);

@@ -14,6 +14,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Formatter from "effect/Formatter";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
@@ -564,8 +565,8 @@ const signalLaws = (open: Open) => {
           const before = snapshot(sql);
 
           for (const id of [
-            JSON.stringify(["notice", key]),
-            `${space}[${space}"notice",${JSON.stringify(key)}]${space}`,
+            Formatter.formatJson(["notice", key]),
+            `${space}[${space}"notice",${Formatter.formatJson(key)}]${space}`,
             '["notice"',
           ]) {
             refusedFor(yield* Effect.flip(signer(id, "saved")), "signal");

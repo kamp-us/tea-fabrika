@@ -5,7 +5,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
-import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Formatter, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
@@ -145,8 +145,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
 
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {
     const id = ++serial;
-    socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
-
+    socket.send(Formatter.formatJson({ jsonrpc: "2.0", id, method, params }));
     return yield* next((frame) => frame.id === id);
   });
 

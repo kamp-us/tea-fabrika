@@ -26,7 +26,18 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Scope, Stream, Tracer } from "effect";
+import * as Arbitrary from "effect/Arbitrary";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import * as Stream from "effect/Stream";
+import * as Tracer from "effect/Tracer";
+import * as Formatter from "effect/Formatter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -948,7 +959,7 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Formatter.formatJson(sample.root).slice(1, -1),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
@@ -1091,7 +1102,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 
         for (const root of [
           sample.root,
-          JSON.stringify(sample.root).slice(1, -1),
+          Formatter.formatJson(sample.root).slice(1, -1),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
@@ -1104,7 +1115,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           const named = sample.slashed.find((name) => frame === `at ${name}` || frame.startsWith(`at ${name} (`));
           const location = named === undefined ? frame : frame.slice(`at ${named}`.length);
           const withoutNode = location.replace(/node:[^)]*/g, "");
-          expect(withoutNode, `a stored frame names a folder: ${JSON.stringify(line)}`).not.toMatch(/[/\\]/);
+          expect(withoutNode, `a stored frame names a folder: ${Formatter.format(line)}`).not.toMatch(/[/\\]/);
         }
       }),
     { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
@@ -1135,7 +1146,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           } else {
             // Effect.fn contributes its own real frame, beside the generated Error stacks.
             const own = /^(\s*at sink\.frames(?: \(definition\))? \().*[/\\]([^/\\]+:\d+:\d+\)(?: \{)?)$/s.exec(piece);
-            expect(own, `unexpected Effect.fn frame: ${JSON.stringify(piece)}`).not.toBeNull();
+            expect(own, `unexpected Effect.fn frame: ${Formatter.format(piece)}`).not.toBeNull();
             expect(after[index]).toBe(`${own?.[1]}${own?.[2]}`);
           }
         }

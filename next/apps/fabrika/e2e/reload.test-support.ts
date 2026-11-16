@@ -15,6 +15,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 import { localInstance } from "../src/local-instance.ts";
@@ -54,7 +55,7 @@ export const fixture = Effect.gen(function* () {
 
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ name: "@p15e/counter", type: "module", exports: { ".": "./src/program.ts" } }),
+    Formatter.formatJson({ name: "@p15e/counter", type: "module", exports: { ".": "./src/program.ts" } }),
   );
   const file = path.join(pkg, "src/program.ts");
   const write = (text: string) => fs.writeFileString(file, `${text}\nexport { counter as program };\n`);
@@ -155,8 +156,8 @@ export const cli = Effect.fnUntraced(function* (
   const wrapper = `${copy.home}/build.ts`;
   yield* fs.writeFileString(
     wrapper,
-    `import { fixtureBuild } from ${JSON.stringify(import.meta.url)};
-export const build = (options) => fixtureBuild(${JSON.stringify({ home: copy.home, file: copy.file })}, options.out);
+    `import { fixtureBuild } from ${Formatter.formatJson(import.meta.url)};
+export const build = (options) => fixtureBuild(${Formatter.formatJson({ home: copy.home, file: copy.file })}, options.out);
 `,
   );
   const original = yield* fs.readFileString(`${APP}/dev.ts`);
@@ -168,7 +169,7 @@ export const build = (options) => fixtureBuild(${JSON.stringify({ home: copy.hom
 import { Layer } from "effect";
 import { SecureRandom as Real } from "effect/crypto";
 export { Digest } from "effect/crypto";
-const bytes = ${JSON.stringify(fakeBytes)};
+const bytes = ${Formatter.formatJson(fakeBytes)};
 export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
   Real.make(size => size === 32 ? Uint8Array.from(bytes) : crypto.getRandomValues(new Uint8Array(size)))) };
 `,
@@ -178,10 +179,10 @@ export const SecureRandom = { layerWebCrypto: Layer.succeed(Real.SecureRandom,
     entry,
     pipe(
       original,
-      Str.replace('"effect/crypto"', JSON.stringify(random)),
-      Str.replace('"./src/build.ts"', JSON.stringify(wrapper)),
-      Str.replace('"./src/local-instance.ts"', JSON.stringify(`${APP}/src/local-instance.ts`)),
-      Str.replace('"./src/settings.ts"', JSON.stringify(`${APP}/src/settings.ts`)),
+      Str.replace('"effect/crypto"', Formatter.formatJson(random)),
+      Str.replace('"./src/build.ts"', Formatter.formatJson(wrapper)),
+      Str.replace('"./src/local-instance.ts"', Formatter.formatJson(`${APP}/src/local-instance.ts`)),
+      Str.replace('"./src/settings.ts"', Formatter.formatJson(`${APP}/src/settings.ts`)),
     ),
   );
   const env = { ...process.env };

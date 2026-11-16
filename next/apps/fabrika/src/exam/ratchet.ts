@@ -20,6 +20,7 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr } from "effect";
 import { ChildProcess } from "effect/process";
 
@@ -245,7 +246,7 @@ const main = Effect.gen(function* () {
   for (const list of LISTS) {
     const answer = yield* judge(list, yield* fileAt(sha, list.file), yield* fileAt("HEAD", list.file), renames);
     grew = grew || answer._tag === "stuck";
-    yield* Console.log(JSON.stringify(answer));
+    yield* Console.log(Formatter.formatJson(answer));
 
     for (const line of annotation(answer, sha)) {
       yield* Console.log(line);

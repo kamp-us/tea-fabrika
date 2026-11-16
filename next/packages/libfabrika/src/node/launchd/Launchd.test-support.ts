@@ -16,6 +16,7 @@ import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Arr from "effect/Array";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as BrainFilesTest from "../../desktop/BrainFilesTest.ts";
@@ -128,7 +129,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
           );
 
           jobs.push(data);
-          const body = JSON.stringify(data);
+          const body = Formatter.formatJson(data);
           const output = args[args.indexOf("-o") + 1];
 
           if (output !== undefined && output !== "-") {

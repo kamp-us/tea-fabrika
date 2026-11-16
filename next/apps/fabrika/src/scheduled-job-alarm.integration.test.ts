@@ -3,7 +3,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
-import { Clock, Effect, FileSystem, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Formatter, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -43,7 +43,7 @@ const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: 
       yield* Effect.sleep("50 millis");
     }
 
-    return yield* Effect.die(new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`));
+    return yield* Effect.die(new Error(`${label}: timed out; last observed ${Formatter.format(last)}`));
   });
 
 const Beat = Schema.TaggedStruct("beat", {

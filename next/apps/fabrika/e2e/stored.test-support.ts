@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { instanceDatabase } from "../src/instance-database.test-support.ts";
 
@@ -137,7 +138,7 @@ const scan = (
               ["granted", "revoked"].includes(String(row._tag))
             ) {
               const entry = Schema.decodeUnknownSync(LedgerRow)(row);
-              const body = JSON.stringify(entry.body);
+              const body = Formatter.formatJson(entry.body);
               const replacement = Schema.decodeUnknownSync(Schema.String)(accessBodies.get(body));
               allowed.set(body, replacement);
               cells = { ...row, body: replacement };
@@ -159,7 +160,7 @@ const scan = (
               )(value);
 
               if (typeof armored === "string" && proofs.includes(armored)) {
-                const replacement = JSON.stringify(rest);
+                const replacement = Formatter.formatJson(rest);
                 allowed.set(value, replacement);
                 cells = { ...row, value: replacement };
               }

@@ -29,6 +29,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr, String as Str, pipe } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
@@ -271,7 +272,7 @@ const appendTo = (events: string, line: object) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     yield* fs
-      .writeFileString(events, `${JSON.stringify({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
+      .writeFileString(events, `${Formatter.formatJson({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
       .pipe(Effect.ignore);
   });
 

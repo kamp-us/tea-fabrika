@@ -30,6 +30,7 @@ import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -812,8 +813,8 @@ describe("p96, write tells the truth over any history", () => {
               const after = yield* entries;
 
               const changes =
-                JSON.stringify(view(foldAccess([...kept, next]))) !== JSON.stringify(view(foldAccess(kept)));
-
+                Formatter.formatJson(view(foldAccess([...kept, next]))) !==
+                Formatter.formatJson(view(foldAccess(kept)));
               expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
               if (changes) {

@@ -17,6 +17,7 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import type * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import { String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Id from "../../Id.ts";
@@ -91,7 +92,7 @@ it(
             yield* git(root, ["clone", origin, repo]);
             yield* fs.makeDirectory(path.join(repo, ".fabrika/packs/trap"), { recursive: true });
             yield* fs.writeFileString(path.join(repo, document), 'fabrika-version = "0.0.0"\n');
-            const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'executed'); throw new Error('outside code ran');`;
+            const tripwire = `import { writeFileSync } from 'node:fs'; writeFileSync(${Formatter.formatJson(marker)}, 'executed'); throw new Error('outside code ran');`;
 
             for (const file of ["settings.mjs", ".fabrika/packs/trap/index.mjs", ".fabrika/packs/trap/program.mjs"]) {
               yield* fs.writeFileString(path.join(repo, file), tripwire);
@@ -99,7 +100,10 @@ it(
 
             yield* fs.writeFileString(
               path.join(repo, "package.json"),
-              JSON.stringify({ type: "module", scripts: { build: "node settings.mjs", start: "node settings.mjs" } }),
+              Formatter.formatJson({
+                type: "module",
+                scripts: { build: "node settings.mjs", start: "node settings.mjs" },
+              }),
             );
             yield* git(repo, ["add", "."]);
             yield* git(repo, ["commit", "-m", "fixture"]);

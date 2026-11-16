@@ -20,6 +20,7 @@ import * as Stream from "effect/Stream";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
 import * as Option from "effect/Option";
+import * as Formatter from "effect/Formatter";
 import { Array as Arr, pipe, String as Str } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -1215,8 +1216,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
       const out = args[args.indexOf("--out") + 1] ?? "";
       mkdirSync(out, { recursive: true });
       writeFileSync(join(out, "mutbox.json"), "{}\n");
-
-      return { code: 0, out: JSON.stringify({ outcome: "done", reason: "", detail: "" }) };
+      return { code: 0, out: Formatter.formatJson({ outcome: "done", reason: "", detail: "" }) };
     });
 
   const steps = fc.constantFrom("plan", "tests", "build", "mutation", "review") as fc.Arbitrary<

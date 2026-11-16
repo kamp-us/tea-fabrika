@@ -12,6 +12,7 @@ import {
   Effect,
   Exit,
   FileSystem,
+  Formatter,
   Layer,
   Logger,
   Path,
@@ -877,7 +878,7 @@ it.effect.prop(
             const rejected = [secret, [secret], { value: secret }, invalid];
             w.files.set(
               file,
-              JSON.stringify({
+              Formatter.formatJson({
                 ...founding,
                 port: move === "valid" ? port : rejected[Math.floor(choice / moves.length) % rejected.length],
               }),
@@ -912,7 +913,7 @@ it.effect.prop(
           );
 
           for (const entry of entries) {
-            for (const form of [secret, JSON.stringify(secret).slice(1, -1), encodeURIComponent(secret)]) {
+            for (const form of [secret, Formatter.formatJson(secret).slice(1, -1), encodeURIComponent(secret)]) {
               expect(entry.text).not.toContain(form);
             }
           }

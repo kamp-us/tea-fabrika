@@ -8,7 +8,7 @@
 // never appear whole in the file's bytes. The folder it reads is never changed: a read-only open
 // may still write a `-shm` file, so it opens the copy, with `TestDatabase.open`, which sets nothing in it.
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Formatter, Path, Schema } from "effect";
 
 /** Where in a file a machine path was found: a byte offset in a file's raw bytes, or one SQLite cell. */
 export const Place = Schema.TaggedUnion({
@@ -51,8 +51,7 @@ const startsWith = (bytes: Uint8Array, head: Uint8Array) =>
 const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
-
-  return [...new Set([root, JSON.stringify(root).slice(1, -1), url.href])].map((text) => ({
+  return [...new Set([root, Formatter.formatJson(root).slice(1, -1), url.href])].map((text) => ({
     text,
     bytes: encoder.encode(text),
   }));

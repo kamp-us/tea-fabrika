@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
+import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -208,7 +209,7 @@ it.effect.prop(
         expect(now._tag).toBe("online");
         const method = now._tag === "online" && !now.busy && pick ? "ledger.wait" : "process.send";
         yield* h
-          .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
+          .run(h.c.frame(Formatter.formatJson({ jsonrpc: "2.0", id, method, params: { stream: "events", after: 0 } })))
           .pipe(Effect.withTracer(tracer));
 
         if (method === "ledger.wait") {
@@ -257,7 +258,7 @@ it.effect.prop(
 
       const h = harness(online());
       yield* h
-        .run(h.c.frame(JSON.stringify({ jsonrpc: "2.0", id, method: "process.send", params })))
+        .run(h.c.frame(Formatter.formatJson({ jsonrpc: "2.0", id, method: "process.send", params })))
         .pipe(Effect.withTracer(tracer));
       expect(h.calls).toHaveLength(1);
 
@@ -541,7 +542,7 @@ describe("T703 connection driver laws", () => {
                 seen.add(`wait:${now._tag}:${bad}`);
               } else {
                 // Frames that are not requests are dropped without a reply.
-                yield* h.run(h.c.frame(move % 2 === 0 ? "{" : JSON.stringify({ id, method: 7 })));
+                yield* h.run(h.c.frame(move % 2 === 0 ? "{" : Formatter.formatJson({ id, method: 7 })));
                 expect(h.log.slice(from)).toEqual([]);
                 seen.add("junk");
               }

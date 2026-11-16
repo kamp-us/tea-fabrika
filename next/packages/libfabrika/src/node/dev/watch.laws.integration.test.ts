@@ -29,6 +29,7 @@ import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, vi } from "vitest";
@@ -181,7 +182,7 @@ const fixture = Effect.gen(function* () {
     yield* fs.symlink(pkg, path.join(home, "node_modules/@p15", short));
     yield* fs.writeFileString(
       path.join(pkg, "package.json"),
-      JSON.stringify({ name: `@p15/${short}`, type: "module", exports: { ".": "./program.ts" } }),
+      Formatter.formatJson({ name: `@p15/${short}`, type: "module", exports: { ".": "./program.ts" } }),
     );
     yield* fs.writeFileString(path.join(pkg, "own.ts"), "export const own = 0;\n");
     yield* fs.writeFileString(
@@ -290,10 +291,10 @@ describe("P15 slice 1: the watcher", () => {
 
               const move = save.move;
               // A duplicate key makes Rolldown warn with a source excerpt while the program still builds.
-              let text = `${original}\nglobalThis.__p15Secret = {${JSON.stringify(sentinel)}: 1, ${JSON.stringify(sentinel)}: 2};\n`;
+              let text = `${original}\nglobalThis.__p15Secret = {${Formatter.formatJson(sentinel)}: 1, ${Formatter.formatJson(sentinel)}: 2};\n`;
 
               if (move === "syntax") {
-                text += `export const broken = ${JSON.stringify(sentinel)} +;\n`;
+                text += `export const broken = ${Formatter.formatJson(sentinel)} +;\n`;
               } else if (move === "compiler") {
                 yield* fs.writeFileString(
                   path.join(home, "programs", short, "view.tsx"),
@@ -364,15 +365,15 @@ describe("P15 slice 1: the watcher", () => {
               expect(Number(span.attributes.get("ms"))).toBeGreaterThanOrEqual(0);
 
               for (const output of [
-                JSON.stringify([...span.attributes]),
-                JSON.stringify(answer),
-                JSON.stringify(failures),
-                JSON.stringify(warnings.mock.calls),
+                Formatter.formatJson([...span.attributes]),
+                Formatter.formatJson(answer),
+                Formatter.formatJson(failures),
+                Formatter.formatJson(warnings.mock.calls),
               ]) {
                 for (const forbidden of [sentinel, home]) {
                   for (const form of [
                     forbidden,
-                    pipe(JSON.stringify(forbidden), Str.slice(1, -1)),
+                    pipe(Formatter.formatJson(forbidden), Str.slice(1, -1)),
                     encodeURIComponent(forbidden),
                   ]) {
                     expect(pipe(output, Str.includes(form)), "a rebuild output copied private input").toBe(false);
@@ -494,7 +495,7 @@ describe("P15 slice 1: the watcher", () => {
                 yield* fs.writeFileString(
                   file,
                   broken
-                    ? `export const own = ${JSON.stringify(sentinel)} +; // ${value}\n`
+                    ? `export const own = ${Formatter.formatJson(sentinel)} +; // ${value}\n`
                     : `export const own = ${value};\n`,
                 );
 
@@ -550,10 +551,10 @@ describe("P15 slice 1: the watcher", () => {
                 expect(failures, "one failed save writes one code.failed fact").toHaveLength(broken ? 1 : 0);
 
                 for (const output of [
-                  JSON.stringify([...span.attributes]),
-                  JSON.stringify(answer),
-                  JSON.stringify(late),
-                  JSON.stringify(failures),
+                  Formatter.formatJson([...span.attributes]),
+                  Formatter.formatJson(answer),
+                  Formatter.formatJson(late),
+                  Formatter.formatJson(failures),
                 ]) {
                   for (const forbidden of [sentinel, home]) {
                     expect(pipe(output, Str.includes(forbidden))).toBe(false);

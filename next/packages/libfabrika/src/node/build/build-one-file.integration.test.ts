@@ -35,6 +35,7 @@ import * as Tracer from "effect/Tracer";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
+import * as Formatter from "effect/Formatter";
 import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -117,7 +118,7 @@ for(const n of JSON.parse(process.argv[2])){const type=model.count===0?"inc":n%2
 process.stdout.write(JSON.stringify({model,records,updates}));
 `,
                   file,
-                  JSON.stringify(tape),
+                  Formatter.formatJson(tape),
                 ],
                 { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
               ),
@@ -1363,11 +1364,11 @@ const p40Module = Effect.fn("p40.module")(function* (home: string, id: string, m
 
   yield* fs.writeFileString(
     path.join(pkg, "package.json"),
-    JSON.stringify({ name: `@p40/${id}`, type: "module", exports: { ".": "./program.ts" } }),
+    Formatter.formatJson({ name: `@p40/${id}`, type: "module", exports: { ".": "./program.ts" } }),
   );
   yield* fs.writeFileString(
     path.join(pkg, "program.ts"),
-    `import {counter} from "@kampus/counter"; globalThis.__p40 = ${JSON.stringify(marker)}; export const program = counter;`,
+    `import {counter} from "@kampus/counter"; globalThis.__p40 = ${Formatter.formatJson(marker)}; export const program = counter;`,
   );
 });
 

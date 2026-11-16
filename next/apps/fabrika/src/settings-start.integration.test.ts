@@ -17,7 +17,7 @@ import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import * as TomlParser from "@kampus/libfabrika/settings/TomlParser";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, FileSystem, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
+import { Effect, Exit, FileSystem, Formatter, Layer, Path, Ref, Schedule, Schema, Stream } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
@@ -161,7 +161,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   processes.push({
                     port,
                     held: loaded.snapshot,
-                    saved: JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot)),
+                    saved: yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot),
                   });
                 });
 
@@ -175,7 +175,7 @@ describe("L13, each process start keeps the exact settings and hash it began wit
                   yield* begin(a.env);
                 } else if (processes.length > 0) {
                   const p = processes[a.which % processes.length]!;
-                  const replayed = Schema.decodeUnknownSync(Snapshot.Snapshot)(JSON.parse(p.saved));
+                  const replayed = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Snapshot.Snapshot))(p.saved);
                   expect(replayed.values["instance.port"]).toBe(p.port);
                   // The process's own value never moves, though files changed since it began.
                   expect(p.held.values["instance.port"]).toBe(p.port);
@@ -244,8 +244,7 @@ describe("L14 [secrets], a start saves and says only declared settings", () => {
                   env: { [field]: word },
                   version: "0.0.0",
                 });
-
-                return JSON.stringify(Schema.encodeSync(Snapshot.Snapshot)(loaded.snapshot));
+                return yield* Schema.encodeEffect(Schema.fromJsonString(Snapshot.Snapshot))(loaded.snapshot);
               }),
             ).pipe(Effect.provide(services)),
           );
@@ -560,7 +559,7 @@ describe("L12, startup uses the selected port, and a taken port stops naming ins
       const { port } = yield* held;
       const word = "sk-T664unrelated/+&secret";
       const first = yield* dev(port, { UNRELATED_TOKEN: word });
-      const ready = `{"ready":${JSON.stringify(`http://127.0.0.1:${port}`)},"build":`;
+      const ready = `{"ready":${Formatter.formatJson(`http://127.0.0.1:${port}`)},"build":`;
 
       for (let n = 0; !(yield* first.output).includes(ready); n++) {
         expect(yield* first.child.isRunning, `dev.ts stopped: ${yield* first.output}`).toBe(true);
