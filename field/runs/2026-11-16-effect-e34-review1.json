@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e34-review1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:03:52-08:00",
+  "ended": "2026-11-16T01:11:37-08:00",
+  "parent": "2026-11-15-effect-e34-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Review of E34 (preferEffectArray in .github/ci) at a72da39, code at 19b4d36: sent back on one class. Every effect import the slice adds uses the barrel, import { Array as Arr, ... } from \"effect\", on 52 lines in 52 files (48 new lines, 4 widened), where the merge session's ruling E47 (judgment-rulings-0026.md on fabrikalfa/twin-tools) says tooling uses subpath imports, as E31 and E33 do (import * as Arr from \"effect/Array\", import { pipe } from \"effect/Function\", and Option, Order and Result from their own paths). The fix: change each added name to its subpath import, and the four widened lines (field-schema.ts, field-check.test.ts, time-table.ts, time-table.test.ts) at least for the names this slice adds. The rewrites themselves are correct: each find turned into findFirst is followed to its use, each toSorted comparator is the same Order, reduce takes its start value second, findIndex and findLastIndex keep their -1 meaning, and the 11 try/catch blocks turned into Result.try keep their answers. No .ts hit is left; the 61 left are all in changes.mjs (21), required.mjs (5) and scheduled.mjs (35), which run before install, so they are ruling Q4's exact-path exclude, not a skipped fix.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "Read-only apart from this row, on Node 26.13.0. Count with only preferEffectArray at error through --lspconfig on the CI tsconfig, at 19b4d36's code: 61 hits, all in the three .mjs files above; every .ts file in the folder is in that tsconfig's include, so the count does not miss a file reached only by import. loosening.sh on f7169af..HEAD: 89 hits, 52 the new import lines and 37 removed expect; a token count over the test diff finds the same number of expect(, it(, fc.assert(, numRuns and each matcher removed as added in all 27 test files, so no law is loosened. Ran at a72da39, one file at a time under nice 19 and maxWorkers 1: legs, time-table, program, field-check, workflow-lint/caches, shard-times, workflow-lint/ci-speed, workflow-lint, scheduled and changes tests, 183 tests green; the CI package's tsc typecheck green; pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) green. Plants by reading, not run: time-table.ts slowest without Order.flip breaks TT2's slowest-first law; program.ts refusal answering a string on None breaks samePaths' property; legs.ts seconds with a wrong start value breaks the fewest-legs laws. For the integrator: git merge-tree with origin/main conflicts in workflow-lint/check-job.ts, check-job.test.ts, scheduled.ts and scheduled.test.ts; with fabrikalfa/effect-e33 it conflicts in 40 files, mostly the import lines and the same try/catch blocks; main adds copies.ts, gate.mjs, proof.ts and their tests and changes changes.mjs and scheduled.mjs, whose hits the fold meets; gate.mjs is the fourth exact-path exclude and is not on this branch. No @effect-diagnostics line was added or is owed. Not run: any .integration. or .visual. file (the diff reaches none).",
+  "plants": [],
+  "step": "review"
+}
