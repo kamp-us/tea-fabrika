@@ -1,7 +1,7 @@
 ---
 id: 0573
 title: In next/ and our tooling, a trusted lint rule replaces ours wherever it catches the same or more, and ours stays wherever it catches more
-status: accepted
+status: amended-in-part by [0575](0575-deterministic-keys-is-the-service-id-form.md)
 date: 2026-11-15
 tags: [lint, oxlint, oxlint-plugins, anti-slop, tsgo, existing-tools, sev0, next, tooling]
 ---
@@ -115,3 +115,7 @@ catches more (owner, 2026-11-15).** Scope: `next/` and our tooling. Today's app 
 - Findings from the audit, written as rows in `field/findings/`: the stale `effectFnOpportunity`
   line in `oxlint-plugins/README.md`, and the two files `outside-input-constructor` names that no
   longer exist.
+
+## Amendments
+
+- 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) overrides "`service-id` stays for now". The checker's `deterministicKeys` is an error and `service-id` is deleted.

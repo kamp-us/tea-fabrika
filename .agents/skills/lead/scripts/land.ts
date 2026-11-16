@@ -38,6 +38,15 @@
 //     It prints `queued`, never `merged`: GitHub tests it on newest main and merges it later. No
 //     --admin, no --auto, no other merge method.
 //
+//   land.ts arm <pr>
+//     the lead session, the one way merge when ready is turned on (0530, 0544; pr/Arm.ts): refuses
+//     one that is not open, not into main, or titled `Plan:`; reads the full run (scheduled.yaml) on
+//     its branch at its head, and refuses one that is red or not ended, printing each job that is
+//     not green, its failed steps and its failing test lines. With no full run at the head it arms,
+//     as 0544 allows, and says so in one line, unless the branch's newest run at an older head is
+//     not green. Then marks a draft ready and turns on merge when ready, a squash pinned to the head
+//     that was read.
+//
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
 //     each ticket its description names on a line of its own, `fabrika close ticket <N>`, with a
@@ -61,13 +70,27 @@ import { Console, DateTime, Effect, FileSystem, Layer, Option, Path, Schema, Str
 import { Argument, Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as ChecksGh from "./ci/ChecksGh.ts";
+import * as RunsGh from "./ci/RunsGh.ts";
+import * as Arm from "./pr/Arm.ts";
 import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
 import * as SweepsProcess from "./pr/SweepsProcess.ts";
 import * as TicketsCli from "./pr/TicketsCli.ts";
 
-const Check = Schema.Literals(["env", "ready", "check", "leak", "fetch", "merge", "sign", "push", "pr", "queue"]);
+const Check = Schema.Literals([
+  "env",
+  "ready",
+  "check",
+  "leak",
+  "fetch",
+  "merge",
+  "sign",
+  "push",
+  "pr",
+  "queue",
+  "arm",
+]);
 
 class Refused extends Schema.TaggedError<Refused>()("Refused", {
   check: Check,
@@ -633,6 +656,25 @@ const queueCommand = Command.make(
   }),
 );
 
+const armCommand = Command.make(
+  "arm",
+  { pr: PrNumber },
+  Effect.fn("land.armCommand")(function* ({ pr }) {
+    const env = yield* loadEnv;
+    const armed = yield* Arm.arm({ repo: env.GH_REPO, pr }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          PullRequestsGh.layer(env.GH_REPO, env.MAIN),
+          RunsGh.layer(env.GH_REPO, env.MAIN),
+          ChecksGh.layer(env.GH_REPO),
+        ),
+      ),
+      Effect.mapError((e) => new Refused({ check: "arm", reason: e.reason, output: "" })),
+    );
+    yield* Console.log(Arm.line(armed));
+  }),
+);
+
 const merged = Command.make(
   "merged",
   { prs: PrNumber.pipe(Argument.atLeast(1)) },
@@ -665,7 +707,9 @@ const closeNamed = Command.make(
   }),
 );
 
-const land = Command.make("land").pipe(Command.withSubcommands([ready, run, queueCommand, merged, closeNamed]));
+const land = Command.make("land").pipe(
+  Command.withSubcommands([ready, run, queueCommand, armCommand, merged, closeNamed]),
+);
 
 if (import.meta.main) {
   NodeRuntime.runMain(

@@ -30,3 +30,7 @@ From [skills keep judgment, K20](../docs/direction/skills-hold-only-judgment.md#
 ## Consequences
 
 - A reason beside a declaration keeps an edge-case or unsupported generator.
+
+## Amendments
+
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) makes the form concrete: a property law is `it.prop` or `it.effect.prop` with Schemas as inputs, and the seed is set once in the package setup, never per law.

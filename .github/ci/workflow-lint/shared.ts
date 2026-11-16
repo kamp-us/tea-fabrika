@@ -43,6 +43,14 @@ export const isStop = (step: Record<string, unknown>) =>
   step["run"] === STOP.run &&
   Object.keys(step).length === Object.keys(STOP).length;
 
+// The CLI's `gh run cancel`, and the REST API's `cancel` and `force-cancel` calls on a run.
+const CANCEL = /\brun\s+cancel\b|\/(?:force-)?cancel\b/;
+
+/** A step that cancels a workflow run: by the CLI, by the REST API, or with an action named for it. */
+export const cancels = (step: Record<string, unknown>) =>
+  (typeof step["run"] === "string" && CANCEL.test(step["run"])) ||
+  (typeof step["uses"] === "string" && /cancel/i.test(step["uses"]));
+
 /** A job's own work: its steps less the stop step, which the fail-fast law judges alone. */
 export const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
   allSteps(job).filter((step) => !isStop(step));
