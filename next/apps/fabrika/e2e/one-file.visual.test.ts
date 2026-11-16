@@ -269,16 +269,37 @@ const note = (row: Readonly<Record<string, unknown>>) =>
     }
   });
 
-/** One owned resource: acquired, noted with its facts, released by the scope within 10 s, noted again. */
+/** One owned resource: acquired, noted with its facts, released by the scope within 10 s, noted again.
+ *  `undo`, if given, is the same release done synchronously on the worker's `exit` until the scope's
+ *  release has run: Vitest's fork worker exits at its first send once its parent is gone, which can
+ *  land in the middle of the releases (as p14.test-support.ts's `owned`). */
 const owned = <A, E, R>(
   at: Resource,
   acquire: Effect.Effect<A, E, R>,
   release: (a: A) => Effect.Effect<unknown, unknown>,
   facts: (a: A) => Readonly<Record<string, unknown>> = () => ({}),
+  undo?: (a: A) => void,
 ) =>
-  Effect.acquireRelease(acquire.pipe(Effect.tap((a) => note({ acquired: at, ...facts(a) }))), (a) =>
-    release(a).pipe(Effect.timeout("10 seconds"), Effect.ignore, Effect.andThen(note({ released: at }))),
+  Effect.acquireRelease(
+    acquire.pipe(
+      Effect.tap((a) => note({ acquired: at, ...facts(a) })),
+      Effect.flatMap((a) =>
+        Effect.sync(() => {
+          const last = () => undo?.(a);
+          process.on("exit", last);
+          return { a, off: () => process.off("exit", last) };
+        }),
+      ),
+    ),
+    ({ a, off }) =>
+      release(a).pipe(
+        Effect.timeout("10 seconds"),
+        Effect.ignore,
+        Effect.andThen(Effect.sync(off)),
+        Effect.andThen(note({ released: at })),
+      ),
   ).pipe(
+    Effect.map(({ a }) => a),
     Effect.tap(() =>
       fault?.at !== at
         ? Effect.void
@@ -321,6 +342,7 @@ const servedCounter = Effect.gen(function* () {
     Effect.sync(() => mkdtempSync("/tmp/fh.")),
     (h) => Effect.sync(() => rmSync(h, { recursive: true, force: true })),
     (h) => ({ home: h }),
+    (h) => rmSync(h, { recursive: true, force: true }),
   );
   mkdirSync(join(home, "node_modules"), { recursive: true });
 

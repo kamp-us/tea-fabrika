@@ -98,6 +98,24 @@ export type Changes = {
 };
 
 /**
+ * @internal The journal states in which the runner does a program's own work: waiting for a message,
+ * checking a fresh one, or stepping it. Every other state is the brain keeping or restoring the
+ * process, so its writes are recovery writes (0147). Extra fields are ignored, so any journal in
+ * one of these states decodes, and the runner reads its own journal by the same schema.
+ */
+export const Work = Schema.TaggedUnion({ idle: {}, checking: {}, stepping: {} });
+
+/**
+ * @internal A saved journal read by its shape alone, so a store below the supervisor can tell
+ * recovery from work without the supervisor's whole schema.
+ */
+export const JournalState = Schema.Struct({
+  v: Schema.Literal(2),
+  name: Text,
+  journal: Schema.Record(Schema.String, Schema.Unknown),
+});
+
+/**
  * @internal Compares each receipt's text with the text its row holds in `rows`, keyed by letter. A
  * receipt equal to its row is skipped. A changed one adds the difference in bytes, and a new one
  * also adds its key, `name` and letter, as the row's own bytes.

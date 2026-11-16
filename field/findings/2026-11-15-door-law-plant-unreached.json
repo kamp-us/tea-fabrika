@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-door-law-plant-unreached",
+  "date": "2026-11-15",
+  "by": "tests",
+  "model": "claude-opus-5-5",
+  "rule": "missing_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+    "line": 1883
+  },
+  "says": "In next/, the plant comment in law Q9/Q12 says a refused send that lands its span as a row goes red there, but plants that land refused spans as rows on both span sink paths, key sums per millisecond, or write a size row on every commit all left the law green; sums stayed at 0 rows through every refusal in a debug run, so refused sends seem never to reach the span sink in this law's world.",
+  "proof": "Plants in next/packages/libfabrika/src/telemetry/Sink.ts and internal/measurements.ts, each run once at 1328ca9050880c38c4d1b3ba91df8746febeb200 with -t 'Q9/Q12' and restored: 'Tests 1 passed | 12 skipped (13)' for each; recorded in field/runs/2026-11-15-flaky-door-law-hour-tests1.json. The review could not repeat the plant in its box.",
+  "cost": "The span-row half of what Q9/Q12 claims to guard may be unguarded, so a change that saves refused spans as rows could land green.",
+  "head": "1328ca9050880c38c4d1b3ba91df8746febeb200",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1488"
+}
