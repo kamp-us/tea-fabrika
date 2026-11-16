@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -18,6 +19,7 @@ import {
   BrainControlError,
   Command,
   Conflict,
+  Status,
   Storage,
   Unsupported,
 } from "../../desktop/BrainControl.ts";
@@ -102,11 +104,13 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
             // platform-node 4.1.2 exposes signal termination only through this exact exitCode cause.
             const native = Schema.decodeUnknownResult(Schema.Struct({ message: Schema.String }))(cause.reason.cause);
 
+            const exitCodeReason = Match.value(cause.reason).pipe(
+              Match.tag("Unknown", ({ module, method }) => module === "ChildProcess" && method === "exitCode"),
+              Match.orElse(() => false),
+            );
+
             const signal = Schema.decodeUnknownResult(Command.fields.signal.schema)(
-              cause.reason._tag === "Unknown" &&
-                cause.reason.module === "ChildProcess" &&
-                cause.reason.method === "exitCode" &&
-                Result.isSuccess(native)
+              exitCodeReason && Result.isSuccess(native)
                 ? /^Process interrupted due to receipt of signal: '(SIG[A-Z0-9]+)'$/u.exec(native.success.message)?.[1]
                 : undefined,
             );
@@ -126,7 +130,14 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
         return { code: Number(code), stdout, stderr };
       }),
-    ).pipe(Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : commandError(cause))));
+    ).pipe(
+      Effect.mapError((cause) =>
+        Match.value(cause).pipe(
+          Match.tag("BrainControlError", (error) => error),
+          Match.orElse((error) => commandError(error)),
+        ),
+      ),
+    );
   });
 
   const success = Effect.fnUntraced(function* (executable: string, args: ReadonlyArray<string>) {
@@ -159,7 +170,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   const owned = Effect.gen(function* () {
     const status = yield* inspect;
 
-    if (status._tag === "loaded" && !BrainSpec.matches(spec, status)) {
+    if (Status.isAnyOf(["loaded"])(status) && !BrainSpec.matches(spec, status)) {
       return yield* conflict("job ownership");
     }
 
@@ -242,7 +253,12 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
             }
           }),
         ),
-        Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : storage(cause))),
+        Effect.mapError((cause) =>
+          Match.value(cause).pipe(
+            Match.tag("BrainControlError", (error) => error),
+            Match.orElse((error) => storage(error)),
+          ),
+        ),
       );
       yield* syncHome;
     }),
@@ -262,7 +278,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   ).pipe(Effect.asVoid);
 
   const stop = Effect.gen(function* () {
-    if ((yield* owned)._tag === "absent") {
+    if (Status.isAnyOf(["absent"])(yield* owned)) {
       return;
     }
 
@@ -359,7 +375,12 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       }
     }).pipe(
       Effect.catchReason("PlatformError", "AlreadyExists", () => discard),
-      Effect.mapError((cause) => (cause._tag === "BrainControlError" ? cause : storage(cause))),
+      Effect.mapError((cause) =>
+        Match.value(cause).pipe(
+          Match.tag("BrainControlError", (error) => error),
+          Match.orElse((error) => storage(error)),
+        ),
+      ),
     );
 
     // Rename captures the actual directory entry; checking before unlink would race a replacement.

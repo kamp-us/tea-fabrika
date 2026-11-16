@@ -4,6 +4,7 @@
  */
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Id from "../../Id.ts";
@@ -166,7 +167,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     .history(prepared.snapshot.key, options.actor)
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
 
-  const first = history.find((event) => event._tag === "selected");
+  const first = history.find(Event.isAnyOf(["selected"]));
 
   const repository =
     first?.repository ??
@@ -191,7 +192,12 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
   yield* session.send({ type: "checked", selection, snapshot });
   let state = yield* session.send({ type: "history", selection, events: history });
 
-  if (state._tag === "awaiting_trust") {
+  const awaiting = Match.value(state).pipe(
+    Match.tag("awaiting_trust", () => true),
+    Match.orElse(() => false),
+  );
+
+  if (awaiting) {
     if (!options.interactive) {
       return state;
     }
@@ -217,11 +223,18 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     state = yield* session.send({ type: "answer", selection, request: options.request, decision });
   }
 
-  if (state._tag !== "saving" && !(state._tag === "refused" && state.reason === "denied")) {
+  // Only a save, or the person's own denial, records the opening.
+  const opening = Match.value(state).pipe(
+    Match.tag("saving", (saving) => ({ saving, accepted: TrustDecision.isAnyOf(["accepted"])(saving.decision) })),
+    Match.tag("refused", ({ reason }) => (reason === "denied" ? { saving: null, accepted: false } : null)),
+    Match.orElse(() => null),
+  );
+
+  if (opening === null) {
     return state;
   }
 
-  const accepted = state._tag === "saving" && state.decision._tag === "accepted";
+  const { saving, accepted } = opening;
 
   const receipt = yield* trust
     .write(
@@ -240,7 +253,5 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     )
     .pipe(Effect.mapError((cause) => failed("storage", cause)));
 
-  return state._tag === "saving"
-    ? yield* session.send({ type: "saved", selection, request: state.request, receipt })
-    : state;
+  return saving === null ? state : yield* session.send({ type: "saved", selection, request: saving.request, receipt });
 });

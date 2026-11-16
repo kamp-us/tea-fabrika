@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -122,7 +123,12 @@ export const layer = (options: { readonly person: string }) =>
             return output;
           }),
         ).pipe(
-          Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure(args[0] ?? "read", cause))),
+          Effect.mapError((cause) =>
+            Match.value(cause).pipe(
+              Match.tag("RepositoriesError", (error) => error),
+              Match.orElse((error) => failure(args[0] ?? "read", error)),
+            ),
+          ),
         );
       });
 
@@ -193,7 +199,12 @@ export const layer = (options: { readonly person: string }) =>
                   return yield* run(directory, args, path.join(common, "objects"));
                 }),
               ).pipe(
-                Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure("Git read", cause))),
+                Effect.mapError((cause) =>
+                  Match.value(cause).pipe(
+                    Match.tag("RepositoriesError", (error) => error),
+                    Match.orElse((error) => failure("Git read", error)),
+                  ),
+                ),
               );
             });
 
@@ -350,7 +361,12 @@ export const layer = (options: { readonly person: string }) =>
               ),
             };
           },
-          Effect.mapError((cause) => (cause._tag === "RepositoriesError" ? cause : failure("open", cause))),
+          Effect.mapError((cause) =>
+            Match.value(cause).pipe(
+              Match.tag("RepositoriesError", (error) => error),
+              Match.orElse((error) => failure("open", error)),
+            ),
+          ),
         ),
       });
     }),

@@ -132,58 +132,60 @@ const heard = (port: number | null): Listener => {
   return Listener.cases.known.make({ port });
 };
 
+const knownPort = (l: Listener): number | null => Listener.match(l, { absent: () => null, known: ({ port }) => port });
+
+// Before the first start, while a process runs, and once the runtime braked or is on its way out.
+const fresh = DevState.isAnyOf(["starting", "listening"]);
+
+const running = DevState.isAnyOf(["spawned", "online"]);
+
+const ended = DevState.isAnyOf(["braked", "stopping", "stopped"]);
+
+const listens = DevState.isAnyOf(["listening", "online"]);
+
 /**
  * Returns the control socket's port, or null when none is known. The port is kept after an exit.
  *
  * @category getters
  */
-export const address = (s: DevState): number | null => {
-  if (s._tag === "listening" || s._tag === "online") {
-    return s.port;
-  }
-
-  if (s._tag === "starting" || s._tag === "spawned") {
-    return null;
-  }
-
-  return s.listener._tag === "known" ? s.listener.port : null;
-};
+export const address = (s: DevState): number | null =>
+  DevState.matchOrElse(
+    s,
+    {
+      listening: ({ port }) => port,
+      online: ({ port }) => port,
+      starting: () => null,
+      spawned: () => null,
+    },
+    ({ listener }) => knownPort(listener),
+  );
 
 /**
  * Returns the pid of the live process the memory sampler may read, or null when none runs.
  *
  * @category getters
  */
-export const target = (s: DevState): number | null => {
-  if (s._tag === "spawned" || s._tag === "online") {
-    return s.pid;
-  }
+export const target = (s: DevState): number | null => (running(s) ? s.pid : null);
 
-  return null;
-};
-
-const replacement = (s: DevState): Replacement => {
-  if (s._tag === "starting" || s._tag === "listening") {
-    return none;
-  }
-
-  if (s._tag === "braked" || s._tag === "stopped") {
-    return none;
-  }
-
-  return s.replacement;
-};
+const replacement = (s: DevState): Replacement =>
+  DevState.matchOrElse(
+    s,
+    {
+      starting: () => none,
+      listening: () => none,
+      braked: () => none,
+      stopped: () => none,
+    },
+    (rest): Replacement => rest.replacement,
+  );
 
 /**
  * Returns the id of the replacement still waiting for its listener, or null when none waits.
  *
  * @category getters
  */
-export const pending = (s: DevState): string | null => {
-  const r = replacement(s);
-
-  return r._tag === "pending" ? r.id : null;
-};
+export const pending = (s: DevState): string | null =>
+  Replacement.match(replacement(s), { none: () => null, pending: ({ id }) => id });
 
 /**
  * Returns the port a control call may dial: the listener of a live process with no replacement
@@ -197,8 +199,7 @@ export const pending = (s: DevState): string | null => {
  *
  * @category getters
  */
-export const reachable = (s: DevState): number | null =>
-  pending(s) === null && (s._tag === "listening" || s._tag === "online") ? s.port : null;
+export const reachable = (s: DevState): number | null => (pending(s) === null && listens(s) ? s.port : null);
 
 /**
  * Returns true while a replacement is pending and may still come up: from a replace or an exit
@@ -206,7 +207,7 @@ export const reachable = (s: DevState): number | null =>
  *
  * @category getters
  */
-export const recovering = (s: DevState): boolean => pending(s) !== null && s._tag !== "stopping";
+export const recovering = (s: DevState): boolean => pending(s) !== null && !DevState.isAnyOf(["stopping"])(s);
 
 /**
  * Returns the latest start of this runtime, the one its exit, restart, brake and stop events name.
@@ -214,23 +215,18 @@ export const recovering = (s: DevState): boolean => pending(s) !== null && s._ta
  *
  * @category getters
  */
-export const latest = (s: DevState): string | null => {
-  if (s._tag === "starting" || s._tag === "listening" || s._tag === "stopped") {
-    return null;
-  }
-
-  if (s._tag === "braked" || s._tag === "stopping") {
-    return s.start;
-  }
-
-  return s.session.start;
-};
-
-const active = (s: DevState) => {
-  const tag = s._tag;
-
-  return tag !== "braked" && tag !== "stopping" && tag !== "stopped";
-};
+export const latest = (s: DevState): string | null =>
+  DevState.matchOrElse(
+    s,
+    {
+      starting: () => null,
+      listening: () => null,
+      stopped: () => null,
+      braked: ({ start }) => start,
+      stopping: ({ start }) => start,
+    },
+    ({ session }) => session.start,
+  );
 
 /**
  * The local runtime's life as a tea machine with no Cmds: the driver does the work and sends what
@@ -257,32 +253,36 @@ export const devLife = Machine.make({
     listened: (s, m) => {
       const listener = heard(m.port);
 
-      if (s._tag === "starting" || s._tag === "listening") {
+      if (fresh(s)) {
+        const { last } = s;
+
         return [
-          listener._tag === "known"
-            ? DevState.cases.listening.make({ last: s.last, port: listener.port })
-            : DevState.cases.starting.make({ last: s.last }),
+          Listener.match(listener, {
+            known: ({ port }): DevState => DevState.cases.listening.make({ last, port }),
+            absent: (): DevState => DevState.cases.starting.make({ last }),
+          }),
           [],
         ];
       }
 
       // The listener, not the start, completes a replacement.
-      if (s._tag === "spawned" || s._tag === "online") {
+      if (running(s)) {
         const { session, pid } = s;
 
         return [
-          listener._tag === "known"
-            ? DevState.cases.online.make({ session, pid, port: listener.port, replacement: none })
-            : DevState.cases.spawned.make({ session, pid, replacement: none }),
+          Listener.match(listener, {
+            known: ({ port }): DevState => DevState.cases.online.make({ session, pid, port, replacement: none }),
+            absent: (): DevState => DevState.cases.spawned.make({ session, pid, replacement: none }),
+          }),
           [],
         ];
       }
 
-      if (s._tag === "exited" || s._tag === "waiting" || s._tag === "stopping") {
+      if (DevState.isAnyOf(["exited", "waiting", "stopping"])(s)) {
         return [{ ...s, listener, replacement: none }, []];
       }
 
-      if (s._tag === "braked") {
+      if (DevState.isAnyOf(["braked"])(s)) {
         return [{ ...s, listener }, []];
       }
 
@@ -291,11 +291,11 @@ export const devLife = Machine.make({
       return [s, []];
     },
     started: (s, m) => {
-      if (!active(s) || !isPid(m.pid)) {
+      if (ended(s) || !isPid(m.pid)) {
         return [s, []];
       }
 
-      const after = s._tag === "starting" || s._tag === "listening" ? s.last : latest(s);
+      const after = fresh(s) ? s.last : latest(s);
       const session = { start: m.start, after, build: m.build };
       const port = address(s);
       const kept = replacement(s);
@@ -308,7 +308,7 @@ export const devLife = Machine.make({
       ];
     },
     exited: (s, m) => {
-      if (s._tag !== "spawned" && s._tag !== "online" && s._tag !== "replacing") {
+      if (!DevState.isAnyOf(["spawned", "online", "replacing"])(s)) {
         return [s, []];
       }
 
@@ -322,7 +322,7 @@ export const devLife = Machine.make({
       ];
     },
     waiting: (s, m) => {
-      if (s._tag !== "exited") {
+      if (!DevState.isAnyOf(["exited"])(s)) {
         return [s, []];
       }
 
@@ -340,7 +340,7 @@ export const devLife = Machine.make({
       ];
     },
     braked: (s, m) => {
-      if (!active(s)) {
+      if (ended(s)) {
         return [s, []];
       }
 
@@ -354,7 +354,7 @@ export const devLife = Machine.make({
       ];
     },
     stop: (s) => {
-      if (s._tag === "stopping" || s._tag === "stopped") {
+      if (DevState.isAnyOf(["stopping", "stopped"])(s)) {
         return [s, []];
       }
 
@@ -368,7 +368,7 @@ export const devLife = Machine.make({
       ];
     },
     stopped: (s) => {
-      if (s._tag !== "stopping") {
+      if (!DevState.isAnyOf(["stopping"])(s)) {
         return [s, []];
       }
 
@@ -377,7 +377,7 @@ export const devLife = Machine.make({
     replacing: (s, m) => {
       // Only the running process the sample read is replaced, and only once per start: `target` is
       // null from here on.
-      if ((s._tag !== "spawned" && s._tag !== "online") || s.pid !== m.pid) {
+      if (!running(s) || s.pid !== m.pid) {
         return [s, []];
       }
 
@@ -396,7 +396,7 @@ export const devLife = Machine.make({
     },
     killed: (s, m) => {
       // Only a SIGTERM of this very pid moves on to its SIGKILL.
-      if (s._tag !== "replacing" || s.pid !== m.pid || s.signal !== "SIGTERM") {
+      if (!DevState.isAnyOf(["replacing"])(s) || s.pid !== m.pid || s.signal !== "SIGTERM") {
         return [s, []];
       }
 

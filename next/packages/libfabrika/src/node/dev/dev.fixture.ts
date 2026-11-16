@@ -4,6 +4,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -20,7 +21,7 @@ export const rssLayer = (sample: () => number, onSpawn?: (command: string, args:
     ChildProcessSpawner.ChildProcessSpawner,
     ChildProcessSpawner.make((command) =>
       Effect.sync(() => {
-        if (command._tag === "StandardCommand") {
+        if (ChildProcess.isStandardCommand(command)) {
           onSpawn?.(command.command, command.args);
         }
 

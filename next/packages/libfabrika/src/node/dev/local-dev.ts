@@ -15,7 +15,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
-import { devLife, type DevState } from "./DevLife.ts";
+import { devLife, DevState } from "./DevLife.ts";
 
 type Life = typeof devLife.model.Type;
 
@@ -24,6 +24,10 @@ type LifeMsg = typeof devLife.msg.Type;
 type Replacing = typeof DevState.cases.replacing.Type;
 
 type Signal = Replacing["signal"];
+
+const replacing = DevState.isAnyOf(["replacing"]);
+
+const started = BrainEvent.isAnyOf(["started"]);
 
 /**
  * Creates the local runtime's life: its state, which a waiter can follow, and the two ways to
@@ -199,7 +203,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
 
   const terming = yield* life.step(
     { type: "replacing", ...sample },
-    (prev, next): next is Replacing => prev._tag !== "replacing" && next._tag === "replacing",
+    (prev, next): next is Replacing => !replacing(prev) && replacing(next),
     send,
   );
 
@@ -208,7 +212,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
   }
 
   const gone = SubscriptionRef.changes(life.state).pipe(
-    Stream.filter((s) => s._tag !== "replacing" || s.pid !== pid),
+    Stream.filter((s) => !replacing(s) || s.pid !== pid),
     Stream.runHead,
   );
 
@@ -221,7 +225,7 @@ export const terminate = Effect.fn("brain.terminate")(function* <E, R>(options: 
   const killing = yield* life.step(
     { type: "killed", pid },
     (prev, next): next is Replacing =>
-      prev._tag === "replacing" && prev.signal === "SIGTERM" && next._tag === "replacing" && next.signal === "SIGKILL",
+      replacing(prev) && prev.signal === "SIGTERM" && replacing(next) && next.signal === "SIGKILL",
     send,
   );
 
@@ -296,7 +300,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
     durableWrite(file, rows.map((row) => JSON.stringify(row)).join("\n") + (rows.length ? "\n" : ""));
 
   const last = Effect.fnUntraced(function* () {
-    const pending = (yield* read).filter((event) => event._tag === "started").at(-1);
+    const pending = (yield* read).filter(started).at(-1);
 
     if (pending !== undefined) {
       return pending.start;
@@ -345,7 +349,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
 
         yield* write([...rows, event]);
 
-        if (event._tag === "started") {
+        if (started(event)) {
           yield* saveLast();
         }
       }).pipe(turn.withPermit);

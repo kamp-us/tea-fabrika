@@ -29,7 +29,7 @@ import type { CodeEvent } from "../../runtime/Code.ts";
 import { SpanSink } from "../../telemetry/Sink.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
 import { devRecording } from "./dev-recording.ts";
-import { type devLife, type DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
+import { type devLife, DevState, latest, pending, Pid, reachable, recovering, target } from "./DevLife.ts";
 import { brainOutbox, checkMemory, lifeCell, signal, terminate } from "./local-dev.ts";
 
 /**
@@ -380,7 +380,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
 
       const now = yield* SubscriptionRef.get(life);
 
-      if (now._tag === "stopping" || now._tag === "stopped") {
+      if (DevState.isAnyOf(["stopping", "stopped"])(now)) {
         return;
       }
 
@@ -432,7 +432,7 @@ export const startDev = Effect.fn("brain.instance")(function* <E, R>(
         const [, up] = yield* send({ type: "started", start: next, pid, build: config.build, at });
 
         // Braked and stopping refuse a start.
-        if (up._tag !== "spawned" && up._tag !== "online") {
+        if (!DevState.isAnyOf(["spawned", "online"])(up)) {
           return;
         }
 

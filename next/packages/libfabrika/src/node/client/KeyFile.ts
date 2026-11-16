@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
@@ -64,7 +65,7 @@ const damaged = (op: Op) => () => ClientKeyError.make({ op, error: "DataError" }
 const load = Effect.fnUntraced(function* (stored: Stored, op: Op) {
   const bytes = Base64Url.decode(stored.jwk.x);
 
-  if (bytes._tag === "Failure") {
+  if (Result.isFailure(bytes)) {
     return yield* damaged(op)();
   }
 
@@ -143,8 +144,11 @@ export const layer = (options: { readonly file: string }) =>
       const read = Effect.gen(function* () {
         const info = yield* fs.stat(file).pipe(
           Effect.asSome,
-          Effect.catchTag("PlatformError", (cause) =>
-            cause.reason._tag === "NotFound" ? Effect.succeedNone : Effect.fail(failure("read")(cause)),
+          Effect.catchReason(
+            "PlatformError",
+            "NotFound",
+            () => Effect.succeedNone,
+            (_reason, cause) => Effect.fail(failure("read")(cause)),
           ),
         );
 
@@ -207,8 +211,11 @@ export const layer = (options: { readonly file: string }) =>
         const linked = yield* written(made.stored, (temp) =>
           fs.link(temp, file).pipe(
             Effect.as(true),
-            Effect.catchTag("PlatformError", (cause) =>
-              cause.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(failure("write")(cause)),
+            Effect.catchReason(
+              "PlatformError",
+              "AlreadyExists",
+              () => Effect.succeed(false),
+              (_reason, cause) => Effect.fail(failure("write")(cause)),
             ),
           ),
         );

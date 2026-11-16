@@ -5,6 +5,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Predicate from "effect/Predicate";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Files from "../../settings/Files.ts";
@@ -50,27 +51,32 @@ export const load = Effect.fnUntraced(function* (options: {
   // A missing file is an empty one; any other read failure stops the start.
   const read = (place: Place) =>
     fs.readFileString(place.path).pipe(
-      Effect.catchTag("PlatformError", (cause) =>
-        cause.reason._tag === "NotFound"
-          ? Effect.succeed("")
-          : Effect.fail(
-              Files.SettingsError.make({
-                reason: "read",
-                message: `${place.name} could not be read.\n  ${Files.STOP}`,
-                cause,
-              }),
-            ),
+      Effect.catchReason(
+        "PlatformError",
+        "NotFound",
+        () => Effect.succeed(""),
+        (_reason, cause) =>
+          Effect.fail(
+            Files.SettingsError.make({
+              reason: "read",
+              message: `${place.name} could not be read.\n  ${Files.STOP}`,
+              cause,
+            }),
+          ),
       ),
       Effect.flatMap(toml.parse),
       Effect.mapBoth({
         onFailure: (cause) =>
-          cause._tag === "TomlError"
-            ? Files.SettingsError.make({
+          Match.value(cause).pipe(
+            Match.tag("TomlError", (error) =>
+              Files.SettingsError.make({
                 reason: "syntax",
-                message: `${place.name}, line ${cause.line}: ${cause.message}\n  ${Files.STOP}`,
-                cause,
-              })
-            : cause,
+                message: `${place.name}, line ${error.line}: ${error.message}\n  ${Files.STOP}`,
+                cause: error,
+              }),
+            ),
+            Match.orElse((error) => error),
+          ),
         onSuccess: (document) => ({ file: place.name, document }),
       }),
     );

@@ -6,14 +6,15 @@
  * Explicitly set keys show, and `all` adds the keys their defaults supply. Which rows show depends on each origin's `_tag`, never on a value, so a key set to its own default still shows, and `all` never changes what a row says.
  */
 import type { Row, Warning } from "./Reference.ts";
-import type { Origin } from "./Sources.ts";
+import { Origin } from "./Sources.ts";
 
 const from = (origin: Origin) =>
-  origin._tag === "file"
-    ? `${origin.file}, line ${origin.line}`
-    : origin._tag === "default"
-      ? "the default"
-      : origin.name;
+  Origin.match(origin, {
+    file: ({ file, line }) => `${file}, line ${line}`,
+    default: () => "the default",
+    flag: ({ name }) => name,
+    env: ({ name }) => name,
+  });
 
 const indent = (text: string) => text.replace(/\n/g, "\n  ");
 
@@ -27,7 +28,7 @@ const indent = (text: string) => text.replace(/\n/g, "\n  ");
  * @category combinators
  */
 export const report = (rows: ReadonlyArray<Row>, options: { readonly all: boolean }) => {
-  const shown = rows.filter((row) => options.all || row.origin._tag !== "default");
+  const shown = rows.filter((row) => options.all || !Origin.isAnyOf(["default"])(row.origin));
 
   const blocks = shown.map((row) =>
     [

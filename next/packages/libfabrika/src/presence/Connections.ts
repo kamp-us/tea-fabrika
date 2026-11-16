@@ -4,6 +4,7 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProcessId } from "../ProcessId.ts";
@@ -142,12 +143,11 @@ export class Connections extends Context.Service<
 
                   return Online.make({
                     ...connection,
-                    state:
-                      ping._tag === "Failure"
-                        ? "unknown"
-                        : now - (ping.success ?? connection.at) >= AWAY
-                          ? "away"
-                          : "online",
+                    state: Result.isFailure(ping)
+                      ? "unknown"
+                      : now - (ping.success ?? connection.at) >= AWAY
+                        ? "away"
+                        : "online",
                   });
                 }),
               { concurrency: "unbounded" },

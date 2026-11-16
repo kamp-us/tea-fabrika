@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -19,7 +20,7 @@ import { CodeEvent, Installed, type Install } from "../../runtime/Code.ts";
 import { buildPrograms, type Selection } from "../build/build.ts";
 import { compile } from "../build/compiler.ts";
 import { ControlError } from "./dev.ts";
-import { watcher } from "./internal/watcher.ts";
+import { Model, watcher } from "./internal/watcher.ts";
 
 type Failed = (typeof CodeEvent.cases)["code.failed"]["Type"];
 
@@ -229,15 +230,15 @@ export const watchPrograms = (options: {
 
             const digest = yield* hash(JSON.stringify([...inputs].sort(([a], [b]) => a.localeCompare(b))));
 
-            if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
+            if (Result.isFailure(built) && phase.getState().failedInputs === digest) {
               return yield* finish(Option.none());
             }
 
             yield* phase
-              .dispatch({ type: "rebuilt", failedInputs: built._tag === "Failure" ? digest : null })
+              .dispatch({ type: "rebuilt", failedInputs: Result.isFailure(built) ? digest : null })
               .pipe(Effect.orDie);
 
-            if (built._tag === "Failure") {
+            if (Result.isFailure(built)) {
               return yield* finish(
                 Option.some(
                   yield* failure(built.failure.reason === "compiler" ? "compiler" : "bundle", built.failure.cause),
@@ -256,7 +257,7 @@ export const watchPrograms = (options: {
                 id: yield* ids.next(InstallId).pipe(Effect.orDie),
                 program: selected.name,
                 ...code,
-                from: phase.getState()._tag === "booting" ? "boot" : "watch",
+                from: Model.isAnyOf(["booting"])(phase.getState()) ? "boot" : "watch",
               })
               .pipe(Effect.orElseSucceed(() => Installed.cases.failed.make({ reason: "load" })));
 

@@ -40,6 +40,10 @@ const State = Schema.TaggedUnion({
   refused: { selection: Id.InputId, reason: Refusal },
 });
 
+type State = typeof State.Type;
+
+const decided = Event.isAnyOf(["decision"]);
+
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("select"), selection: Id.InputId }),
   Schema.Struct({ type: Schema.Literal("checked"), ...selected }),
@@ -69,11 +73,11 @@ export const machine = Machine.make({
   update: {
     select: (_s, m) => [State.cases.checking.make({ selection: m.selection, snapshot: null }), []],
     checked: (s, m) =>
-      s._tag === "checking" && s.snapshot === null && s.selection === m.selection
+      State.isAnyOf(["checking"])(s) && s.snapshot === null && s.selection === m.selection
         ? [State.cases.checking.make({ selection: s.selection, snapshot: m.snapshot }), []]
         : [s, []],
     history: (s, m) => {
-      if (s._tag !== "checking" || s.selection !== m.selection || s.snapshot === null) {
+      if (!State.isAnyOf(["checking"])(s) || s.selection !== m.selection || s.snapshot === null) {
         return [s, []];
       }
 
@@ -86,7 +90,7 @@ export const machine = Machine.make({
           return [State.cases.refused.make({ selection: s.selection, reason: "invalid_history" }), []];
         }
 
-        if (event._tag === "selected") {
+        if (Event.isAnyOf(["selected"])(event)) {
           selections.set(event.request, event);
         } else {
           const selected = selections.get(event.selection);
@@ -95,29 +99,34 @@ export const machine = Machine.make({
             selected === undefined ||
             selected.commit !== event.commit ||
             selected.hash !== event.hash ||
-            (event._tag === "decision" && event.actor !== snapshot.person)
+            (decided(event) && event.actor !== snapshot.person)
           ) {
             return [State.cases.refused.make({ selection: s.selection, reason: "invalid_history" }), []];
           }
 
-          if (event._tag === "decision") {
+          if (decided(event)) {
             decision = event.decision;
           }
         }
       }
 
-      if (decision?._tag === "accepted") {
-        return [State.cases.saving.make({ selection: s.selection, snapshot, request: s.selection, decision }), []];
+      if (decision === undefined) {
+        return [State.cases.awaiting_trust.make({ selection: s.selection, snapshot }), []];
       }
 
-      if (decision?._tag === "denied") {
-        return [State.cases.refused.make({ selection: s.selection, reason: "denied" }), []];
-      }
-
-      return [State.cases.awaiting_trust.make({ selection: s.selection, snapshot }), []];
+      return TrustDecision.match(decision, {
+        accepted: (accepted): readonly [State, []] => [
+          State.cases.saving.make({ selection: s.selection, snapshot, request: s.selection, decision: accepted }),
+          [],
+        ],
+        denied: (): readonly [State, []] => [
+          State.cases.refused.make({ selection: s.selection, reason: "denied" }),
+          [],
+        ],
+      });
     },
     answer: (s, m) =>
-      s._tag === "awaiting_trust" && s.selection === m.selection
+      State.isAnyOf(["awaiting_trust"])(s) && s.selection === m.selection
         ? [
             State.cases.saving.make({
               selection: s.selection,
@@ -129,24 +138,24 @@ export const machine = Machine.make({
           ]
         : [s, []],
     saved: (s, m) => {
-      if (s._tag !== "saving" || s.selection !== m.selection || s.request !== m.request) {
+      if (!State.isAnyOf(["saving"])(s) || s.selection !== m.selection || s.request !== m.request) {
         return [s, []];
       }
 
       return [
-        s.decision._tag === "accepted"
-          ? State.cases.ready.make({ selection: s.selection, snapshot: s.snapshot, receipt: m.receipt })
-          : State.cases.refused.make({ selection: s.selection, reason: "denied" }),
+        TrustDecision.match(s.decision, {
+          accepted: (): State =>
+            State.cases.ready.make({ selection: s.selection, snapshot: s.snapshot, receipt: m.receipt }),
+          denied: (): State => State.cases.refused.make({ selection: s.selection, reason: "denied" }),
+        }),
         [],
       ];
     },
     failed: (s, m) => {
       if (
-        s._tag === "closed" ||
-        s._tag === "ready" ||
-        s._tag === "refused" ||
+        State.isAnyOf(["closed", "ready", "refused"])(s) ||
         s.selection !== m.selection ||
-        (s._tag === "saving" && m.request !== s.request)
+        (State.isAnyOf(["saving"])(s) && m.request !== s.request)
       ) {
         return [s, []];
       }

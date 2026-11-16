@@ -20,12 +20,15 @@ const loose = (node: unknown, seen: Set<unknown>): boolean => {
   seen.add(node);
 
   // An opaque declaration becomes `{}`; a check with no exact JSON Schema is left out or widened.
-  if (!Array.isArray(node) && node._tag === "Declaration") {
+  // The walk reads values of unknown type, so a node's case is checked with `Predicate.isTagged`.
+  if (!Array.isArray(node) && Predicate.isTagged(node, "Declaration")) {
     return true;
   }
 
-  if (!Array.isArray(node) && (node._tag === "Filter" || node._tag === "FilterGroup")) {
-    const write = Predicate.isObject(node.annotations) ? node.annotations.toJsonSchema : undefined;
+  const annotations = Array.isArray(node) ? undefined : node.annotations;
+
+  if (!Array.isArray(node) && (Predicate.isTagged(node, "Filter") || Predicate.isTagged(node, "FilterGroup"))) {
+    const write = Predicate.isObject(annotations) ? annotations.toJsonSchema : undefined;
 
     if (!Predicate.isFunction(write) || Array.isArray(write({ type: undefined, schemas: [] }))) {
       return true;

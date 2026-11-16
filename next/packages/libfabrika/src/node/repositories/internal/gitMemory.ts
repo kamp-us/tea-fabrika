@@ -1,10 +1,11 @@
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
-import type * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -125,7 +126,7 @@ export const make = Effect.fnUntraced(function* () {
   const canonical: (location: string) => Effect.Effect<string> = Effect.fnUntraced(function* (location: string) {
     const real = yield* fs.realPath(location).pipe(Effect.option);
 
-    if (real._tag === "Some") {
+    if (Option.isSome(real)) {
       return real.value;
     }
 
@@ -363,7 +364,7 @@ export const make = Effect.fnUntraced(function* () {
     const location = path.join(worktree.root, file);
     const stat = yield* fs.lstat(location).pipe(Effect.option);
 
-    if (stat._tag === "None" || stat.value.type === "Directory") {
+    if (Option.isNone(stat) || stat.value.type === "Directory") {
       return null;
     }
 
@@ -1221,7 +1222,7 @@ export const make = Effect.fnUntraced(function* () {
   });
 
   return ChildProcessSpawner.make((command) => {
-    if (command._tag !== "StandardCommand" || command.command !== "git") {
+    if (!ChildProcess.isStandardCommand(command) || command.command !== "git") {
       return below.spawn(command);
     }
 

@@ -4,6 +4,7 @@
  */
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import type { ObjectId } from "../../repositories/Repositories.ts";
@@ -114,9 +115,14 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
       let link: string;
 
       if (!committed || !contains(options.root, next)) {
-        const stat = yield* fs
-          .lstat(next)
-          .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
+        const stat = yield* fs.lstat(next).pipe(
+          Effect.mapError((cause) =>
+            Match.value(cause.reason).pipe(
+              Match.tag("NotFound", () => missing(cause)),
+              Match.orElse(() => failed(cause)),
+            ),
+          ),
+        );
 
         if (stat.type !== "SymbolicLink") {
           directory = stat.type === "Directory";
@@ -194,9 +200,14 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     const base =
       file === "repo"
         ? path.join(options.root, ".fabrika")
-        : yield* fs
-            .realPath(options.person)
-            .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
+        : yield* fs.realPath(options.person).pipe(
+            Effect.mapError((cause) =>
+              Match.value(cause.reason).pipe(
+                Match.tag("NotFound", () => missing(cause)),
+                Match.orElse(() => failed(cause)),
+              ),
+            ),
+          );
 
     const located = yield* target(base, from, file === "repo");
 
@@ -218,9 +229,14 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
       };
     }
 
-    const stat = yield* fs
-      .stat(located.location)
-      .pipe(Effect.mapError((cause) => (cause.reason._tag === "NotFound" ? missing(cause) : failed(cause))));
+    const stat = yield* fs.stat(located.location).pipe(
+      Effect.mapError((cause) =>
+        Match.value(cause.reason).pipe(
+          Match.tag("NotFound", () => missing(cause)),
+          Match.orElse(() => failed(cause)),
+        ),
+      ),
+    );
 
     if (stat.type !== "Directory") {
       return yield* failed("source is not a folder");

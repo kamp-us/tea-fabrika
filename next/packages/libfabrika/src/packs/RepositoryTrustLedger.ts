@@ -10,7 +10,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Ledger } from "../ledger/Ledger.ts";
-import { lineFor, valueFor } from "../ledger/Log.ts";
+import { Appended, lineFor, valueFor } from "../ledger/Log.ts";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Snapshot from "../settings/Snapshot.ts";
 import {
@@ -24,6 +24,8 @@ import {
 
 // A bounded read fails closed instead of trusting a truncated history. Never discard old decisions.
 const LIMIT = 4096;
+
+const decided = Event.isAnyOf(["decision"]);
 
 const stream = (key: string, person: string) => `repository/${person}/${key}`;
 
@@ -94,7 +96,7 @@ export const layer = Layer.effect(
 
           repository = event.repository;
 
-          if (event._tag === "selected") {
+          if (Event.isAnyOf(["selected"])(event)) {
             if (row.parent !== null || row.id !== event.request) {
               return yield* invalid("invalid selection");
             }
@@ -116,11 +118,11 @@ export const layer = Layer.effect(
               return yield* invalid("invalid parent");
             }
 
-            if (event._tag === "decision" && event.actor !== person) {
+            if (decided(event) && event.actor !== person) {
               return yield* invalid("invalid actor");
             }
 
-            if (event._tag === "opened") {
+            if (Event.isAnyOf(["opened"])(event)) {
               yield* checkSettings(event.settings);
             }
           }
@@ -132,10 +134,10 @@ export const layer = Layer.effect(
       }),
       write: Effect.fn("repositoryTrust.write")(function* (event: Event, recorded: Recorded) {
         const encoded = yield* Schema.encodeEffect(Event)(event).pipe(Effect.mapError(invalid));
-        const id = event._tag === "selected" ? event.request : `repository/${event._tag}/${event.request}`;
+        const id = Event.isAnyOf(["selected"])(event) ? event.request : `repository/${event._tag}/${event.request}`;
         let from = recorded;
 
-        if (event._tag === "selected") {
+        if (Event.isAnyOf(["selected"])(event)) {
           if (recorded.parent !== null) {
             return yield* invalid("selection must be an own write");
           }
@@ -164,7 +166,7 @@ export const layer = Layer.effect(
             selected.key !== event.key ||
             selected.commit !== event.commit ||
             selected.hash !== event.hash ||
-            (event._tag === "decision" && event.actor !== recorded.for)
+            (decided(event) && event.actor !== recorded.for)
           ) {
             return yield* invalid("selection does not match");
           }
@@ -176,7 +178,7 @@ export const layer = Layer.effect(
           .append(stream(event.key, recorded.for), id, lineFor(from, encoded))
           .pipe(Effect.mapError(storage));
 
-        if (answer._tag === "refused") {
+        if (Appended.isAnyOf(["refused"])(answer)) {
           return yield* storage(answer.reason);
         }
 

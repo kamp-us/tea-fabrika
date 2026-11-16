@@ -91,7 +91,7 @@ export const rows = <A>(group: Setting.Group<A>, snapshot: Snapshot): Array<Row>
  */
 export const warnings = (rows: ReadonlyArray<Row>, minimum: string): Array<Warning> =>
   rows
-    .filter((row) => row.origin._tag !== "default" && newer(row.since, minimum))
+    .filter((row) => !Origin.isAnyOf(["default"])(row.origin) && newer(row.since, minimum))
     .map((row) => ({ path: row.path, since: row.since, minimum }));
 
 /** Words as Markdown shows them as written: every character Markdown reads is escaped. */

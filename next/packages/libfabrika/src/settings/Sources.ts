@@ -118,7 +118,12 @@ export const file = (name: string, document: TomlDocument): Source => ({
 });
 
 const location = (origin: Origin) =>
-  origin._tag === "file" ? `${origin.file}, line ${origin.line}` : origin._tag === "default" ? "default" : origin.name;
+  Origin.match(origin, {
+    file: ({ file, line }) => `${file}, line ${line}`,
+    default: () => "default",
+    flag: ({ name }) => name,
+    env: ({ name }) => name,
+  });
 
 /**
  * Reads every declaration in the group from the four sources and records where each value came from.

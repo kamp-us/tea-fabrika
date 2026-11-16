@@ -60,28 +60,18 @@ const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
 
 const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
   Origin.check(
-    Schema.makeFilter((origin: Origin) => {
-      if (origin._tag === "flag") {
-        return origin.name === `--${declaration.path}`;
-      }
-
-      if (origin._tag === "env") {
-        return origin.name === declaration.env;
-      }
-
-      if (origin._tag === "file") {
-        const file = origin.file;
-
-        return (
+    Schema.makeFilter((origin: Origin) =>
+      Origin.match(origin, {
+        flag: ({ name }) => name === `--${declaration.path}`,
+        env: ({ name }) => name === declaration.env,
+        file: ({ file }) =>
           file.length > 0 &&
           !/^(?:[\\/]|[A-Za-z]:)/.test(file) &&
           (!file.startsWith("~") || file === "~" || file.startsWith("~/")) &&
-          (!file.startsWith("$") || file === "$FABRIKA_HOME" || file.startsWith("$FABRIKA_HOME/"))
-        );
-      }
-
-      return true;
-    }),
+          (!file.startsWith("$") || file === "$FABRIKA_HOME" || file.startsWith("$FABRIKA_HOME/")),
+        default: () => true,
+      }),
+    ),
   );
 
 /**

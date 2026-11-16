@@ -3,7 +3,8 @@ import * as Schema from "effect/Schema";
 
 const Inputs = { failedInputs: Schema.optionalKey(Schema.NullOr(Schema.String)) };
 
-const Model = Schema.TaggedUnion({ booting: Inputs, watching: Inputs });
+/** The watcher's two states: before the first install attempt, and after it. @internal */
+export const Model = Schema.TaggedUnion({ booting: Inputs, watching: Inputs });
 
 const Msg = Schema.Union([
   Schema.Struct({ type: Schema.Literal("attempted") }),
@@ -19,7 +20,7 @@ export const watcher = Machine.make({
   init: (loaded) => [loaded ?? Model.cases.booting.make({}), []],
   update: {
     attempted: (model) => {
-      if (model._tag === "booting") {
+      if (Model.isAnyOf(["booting"])(model)) {
         return [Model.cases.watching.make({ failedInputs: model.failedInputs ?? null }), []];
       }
 

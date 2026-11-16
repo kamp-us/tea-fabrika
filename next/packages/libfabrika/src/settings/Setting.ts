@@ -5,7 +5,7 @@
  *
  * The Config keeps Effect's own prototype, so `yield*` and `parse(provider)` behave as Effect's do. The declaration's fields are added to that same object, never copied beside it. `group` joins declarations into one Config and refuses a set that cannot be read together.
  */
-import { Config, Schema, String as Str } from "effect";
+import { Config, Match, Schema, String as Str } from "effect";
 
 /**
  * The two settings files: the person's own, and the repo's.
@@ -95,7 +95,14 @@ export const make = <C extends Schema.Codec<any, unknown>, const S extends Scope
 
   const config = Config.schema(options.schema, segments).pipe(
     Config.orElse((error) => {
-      if (error.cause._tag === "SourceError") {
+      // A Config is also an Effect, so Match would unify the two branches as an Effect: it answers
+      // only which branch to take.
+      const sourceFailed = Match.value(error.cause).pipe(
+        Match.tag("SourceError", () => true),
+        Match.orElse(() => false),
+      );
+
+      if (sourceFailed) {
         return Config.fail(error.cause);
       }
 

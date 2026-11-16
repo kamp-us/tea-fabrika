@@ -1,5 +1,6 @@
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -93,7 +94,7 @@ export const capped = Effect.fnUntraced(function* (
 
   const ended = yield* Clock.currentTimeMillis;
   yield* Effect.annotateCurrentSpan({
-    exit: ran.result._tag === "exited" ? ran.result.code : ran.result.reason,
+    exit: Match.valueTags(ran.result, { exited: ({ code }) => code, failed: ({ reason }) => reason }),
     stdout_bytes: ran.printed.outBytes,
     stderr_bytes: ran.printed.errBytes,
     capped: over(ran.printed),
