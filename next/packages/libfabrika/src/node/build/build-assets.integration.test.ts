@@ -18,6 +18,7 @@ import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Tracer from "effect/Tracer";
 import * as Predicate from "effect/Predicate";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -525,14 +526,19 @@ describe("P16 assets and Compiler", () => {
 
             previous(f, good);
 
-            const source =
-              kind === "ref"
-                ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
-                : kind === "clock"
-                  ? `export const ${name}=()=> <b>{Date.now()}</b>`
-                  : kind === "directive"
-                    ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
-                    : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
+            const source = Match.value(kind).pipe(
+              Match.when(
+                "ref",
+                () =>
+                  `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`,
+              ),
+              Match.when("clock", () => `export const ${name}=()=> <b>{Date.now()}</b>`),
+              Match.when(
+                "directive",
+                () => `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`,
+              ),
+              Match.orElse(() => `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`),
+            );
 
             const path = "programs/compiler/window.tsx",
               ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
@@ -1021,7 +1027,11 @@ describe("P16 cleanup and recording", () => {
 
             if (fail) {
               writeFileSync(
-                phase === "brain" ? f.options.entry : phase === "window" ? f.file : join(dirname(f.file), "program.ts"),
+                Match.value(phase).pipe(
+                  Match.when("brain", () => f.options.entry),
+                  Match.when("window", () => f.file),
+                  Match.orElse(() => join(dirname(f.file), "program.ts")),
+                ),
                 "import './missing.ts';",
               );
             }

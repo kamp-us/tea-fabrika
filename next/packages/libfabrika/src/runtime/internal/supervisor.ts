@@ -209,7 +209,7 @@ const DEAD = Schema.TaggedStruct("refused", { reason: Schema.Literal("dead") }).
 const unchanged = (s: Supervision) => [s, []] as const;
 
 const crashReason = (failure: Failure) =>
-  failure._tag === "saved" ? "saved_letter" : failure._tag === "fresh" ? "step" : "interrupted";
+  Failure.match(failure, { saved: () => "saved_letter", fresh: () => "step", interrupted: () => "interrupted" });
 
 /** The successor's start request, after the process that ended. */
 const again = (s: Supervision, id: string, after: string, reason: string, code: { program: string; hash: string }) =>

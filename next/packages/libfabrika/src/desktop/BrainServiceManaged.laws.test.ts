@@ -11,6 +11,7 @@ import * as Logger from "effect/Logger";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
+import * as Match from "effect/Match";
 import * as Outside from "./BrainControl.test-support.ts";
 import { BrainService } from "./BrainService.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
@@ -88,15 +89,14 @@ it.effect.prop(
   [schedule],
   ([v]) =>
     Effect.gen(function* () {
-      const job =
-        v.initial === "absent"
-          ? Outside.absent
-          : v.initial === "foreign"
-            ? {
-                ...Outside.foreign,
-                args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
-              }
-            : Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81);
+      const job = Match.value(v.initial).pipe(
+        Match.when("absent", () => Outside.absent),
+        Match.when("foreign", () => ({
+          ...Outside.foreign,
+          args: v.sameArity ? Outside.spec.args.map((arg) => `${arg}.foreign`) : Outside.foreign.args,
+        })),
+        Match.orElse(() => Outside.loaded(Outside.spec, v.initial === "starting" ? null : 81)),
+      );
 
       const outside = yield* Outside.make({
         job,

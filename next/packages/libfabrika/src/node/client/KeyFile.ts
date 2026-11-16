@@ -12,6 +12,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
+import * as Match from "effect/Match";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
 import * as PublicKey from "../../transport/PublicKey.ts";
@@ -48,9 +49,11 @@ const isErrorClass = Schema.is(ErrorClass);
 /** A failure's class from a fixed list: a file system reason, or a WebCrypto error's name. Never a message. */
 const errorClass = (cause: unknown): ErrorClass => {
   if (PlatformError.isPlatformError(cause)) {
-    const reason = cause.reason._tag;
-
-    return reason === "NotFound" ? "NotFoundError" : reason === "PermissionDenied" ? "NotAllowedError" : "other";
+    return Match.value(cause.reason).pipe(
+      Match.tag("NotFound", (): ErrorClass => "NotFoundError"),
+      Match.tag("PermissionDenied", (): ErrorClass => "NotAllowedError"),
+      Match.orElse((): ErrorClass => "other"),
+    );
   }
 
   return cause instanceof Error && isErrorClass(cause.name) ? cause.name : "other";

@@ -12,7 +12,7 @@ import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Predicate, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Match, Predicate, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -360,13 +360,12 @@ const projectSecrets = Effect.fnUntraced(function* (
   });
 
   const remaining = new Set<ChildFailure>(
-    path === "descriptor"
-      ? ["owner", "descriptor"]
-      : path === "recovery"
-        ? ["exists", "owner", "descriptor"]
-        : path === "configuration"
-          ? ["pending", "configure", "ack"]
-          : ["exit_write", "down", "watch_cleanup", "retire"],
+    Match.value(path).pipe(
+      Match.when("descriptor", (): ReadonlyArray<ChildFailure> => ["owner", "descriptor"]),
+      Match.when("recovery", (): ReadonlyArray<ChildFailure> => ["exists", "owner", "descriptor"]),
+      Match.when("configuration", (): ReadonlyArray<ChildFailure> => ["pending", "configure", "ack"]),
+      Match.orElse((): ReadonlyArray<ChildFailure> => ["exit_write", "down", "watch_cleanup", "retire"]),
+    ),
   );
 
   const expected = remaining.size;

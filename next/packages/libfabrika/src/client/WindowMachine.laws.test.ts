@@ -51,6 +51,7 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -417,15 +418,18 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     const f = w.old[c.pick % w.old.length]!;
     const on = { id: f.id, dial: f.dial };
     out.push(() =>
-      f.call._tag === "open"
-        ? { type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms }
-        : f.call._tag === "send"
-          ? { type: "send_ok", ...on, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-          : f.call._tag === "wait"
-            ? answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })
-            : f.call._tag === "monitor"
-              ? answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })
-              : { type: "read_ok", ...on, value: [], ms: c.ms },
+      Match.value(f.call).pipe(
+        Match.tag("open", (): WindowMsg => ({ type: "open_ok", ...on, value: { rev: 0, view: EMPTY }, ms: c.ms })),
+        Match.tag("send", (): WindowMsg => ({
+          type: "send_ok",
+          ...on,
+          value: { _tag: "accepted", rev: 1, pos: 1 },
+          ms: c.ms,
+        })),
+        Match.tag("wait", (): WindowMsg => answerMsg({ type: "wait_ok", ...on, value: { rev: c.ms }, ms: c.ms })),
+        Match.tag("monitor", (): WindowMsg => answerMsg({ type: "monitor_ok", ...on, value: null, ms: c.ms })),
+        Match.orElse((): WindowMsg => ({ type: "read_ok", ...on, value: [], ms: c.ms })),
+      ),
     );
     const current = w.flights[c.aux % Math.max(1, w.flights.length)];
     const oldDial = w.old.find((old) => old.dial !== current?.dial)?.dial;
@@ -433,11 +437,23 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     if (current !== undefined && oldDial !== undefined) {
       // A current id on an ended dial must not match. Ids alone are insufficient.
       out.push(() =>
-        current.call._tag === "open"
-          ? { type: "open_ok", id: current.id, dial: oldDial, value: { rev: 0, view: EMPTY }, ms: c.ms }
-          : current.call._tag === "send"
-            ? { type: "send_ok", id: current.id, dial: oldDial, value: { _tag: "accepted", rev: 1, pos: 1 }, ms: c.ms }
-            : { type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms },
+        Match.value(current.call).pipe(
+          Match.tag("open", (): WindowMsg => ({
+            type: "open_ok",
+            id: current.id,
+            dial: oldDial,
+            value: { rev: 0, view: EMPTY },
+            ms: c.ms,
+          })),
+          Match.tag("send", (): WindowMsg => ({
+            type: "send_ok",
+            id: current.id,
+            dial: oldDial,
+            value: { _tag: "accepted", rev: 1, pos: 1 },
+            ms: c.ms,
+          })),
+          Match.orElse((): WindowMsg => ({ type: "read_ok", id: current.id, dial: oldDial, value: [], ms: c.ms })),
+        ),
       );
     }
   }
@@ -582,7 +598,14 @@ const walk = <W extends World, C extends Choice>(
 
     // A new letter is from the tile that pressed it, by a button or through its own machine's press.
     for (const p of next.client.pending.filter((p) => p.n >= prev.client.written)) {
-      w.from.set(p.n, m.type === "press" ? m.tile : m.type === "tile" ? m.id : "?");
+      w.from.set(
+        p.n,
+        Match.value(m).pipe(
+          Match.discriminator("type")("press", (press) => press.tile),
+          Match.discriminator("type")("tile", (tile) => tile.id),
+          Match.orElse(() => "?"),
+        ),
+      );
 
       if (m.type === "tile") {
         const sent: unknown = Reflect.get(Object(p.m), "name");
@@ -855,7 +878,13 @@ describe("L8: the window parent's connection", () => {
                   { ...(shown.view as ListView), left: c.word },
                   { items: [{ name: c.word, state: "invalid" }], left: 1 },
                 ] satisfies readonly [Schema.Json, Schema.Json, Schema.Json]
-              )[index === 0 ? 0 : index === 1 ? 1 : 2];
+              )[
+                Match.value(index).pipe(
+                  Match.when(0, (): 0 => 0),
+                  Match.when(1, (): 1 => 1),
+                  Match.orElse((): 2 => 2),
+                )
+              ];
 
               const value = { rev: shown.rev + 1, view };
 
@@ -1034,7 +1063,11 @@ describe("L8: the window parent's connection", () => {
 
           const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
           const made = next.client.pending.filter((p) => p.n >= prev.client.written);
-          const aimed = m.type === "press" ? m.tile : m.type === "tile" ? m.id : null;
+          const aimed = Match.value(m).pipe(
+            Match.discriminator("type")("press", (press) => press.tile),
+            Match.discriminator("type")("tile", (tile) => tile.id),
+            Match.orElse(() => null),
+          );
 
           for (const t of next.tiles) {
             const was = prev.tiles.find((x) => x.id === t.id)!.refusal;
@@ -1484,13 +1517,14 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     ];
 
     out.push(
-      cmd.type === "key"
-        ? ok({ found: cmd["rejected"] === null ? "created" : "replaced", fingerprint: `SHA256:${c.word}` })
-        : cmd.type === "now"
-          ? ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })
-          : cmd.type === "persist"
-            ? ok(c.aux % 2 === 0)
-            : ok(null),
+      Match.value(cmd.type).pipe(
+        Match.when("key", () =>
+          ok({ found: cmd["rejected"] === null ? "created" : "replaced", fingerprint: `SHA256:${c.word}` }),
+        ),
+        Match.when("now", () => ok({ letter: `letter_${c.word}_${c.ms}`, sentAt: "2026-11-13T00:00:00.000Z" })),
+        Match.when("persist", () => ok(c.aux % 2 === 0)),
+        Match.orElse(() => ok(null)),
+      ),
     );
   }
 
@@ -1543,16 +1577,15 @@ const frameMoves = (w: FrameWorld, c: Pick): ReadonlyArray<() => readonly [Windo
     // a dial not challenged yet, an admission of the live hello (or now and then `not_granted`, so
     // walks also wait for a grant), a code for the live knock, and a grant to a waiting dial.
     if (hs.dial === d) {
-      const next =
-        hs._tag === "opened"
-          ? rpc({ method: "challenge", params: { nonce } })
-          : hs._tag === "initializing"
-            ? rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED })
-            : hs._tag === "knocking"
-              ? rpc({ id: hs.id, result: { code: c.word, until: c.ms } })
-              : hs._tag === "waiting"
-                ? rpc({ method: "client.granted", params: { nonce } })
-                : null;
+      const next = Match.value(hs).pipe(
+        Match.tag("opened", () => rpc({ method: "challenge", params: { nonce } })),
+        Match.tag("initializing", () =>
+          rpc(c.aux % 3 === 0 ? { id: hs.id, error: NOT_GRANTED } : { id: hs.id, result: ADMITTED }),
+        ),
+        Match.tag("knocking", () => rpc({ id: hs.id, result: { code: c.word, until: c.ms } })),
+        Match.tag("waiting", () => rpc({ method: "client.granted", params: { nonce } })),
+        Match.orElse(() => null),
+      );
 
       if (next !== null) {
         const move = (): readonly [WindowMsg, Expect] => [frame(w, d, next), { _tag: "handshake" }];
@@ -2441,21 +2474,26 @@ const brainStep = (w: Follow, c: FollowChoice) => {
     append(
       w,
       lifeFacts(w, name),
-      kind === 0
-        ? { _tag: "exited", by: PERSON_BY, id: `forged:${w.rev}`, body: { process: pid, reason: EXITS[0]! } }
-        : kind === 1
-          ? {
-              _tag: "started",
-              by: PERSON_BY,
-              id: `forged:${w.rev}`,
-              body: { process: processAt(w.next++), name, program: "fabrika/checklist", hash: "h" },
-            }
-          : {
-              _tag: "down",
-              by: BRAIN_BY,
-              id: JSON.stringify(["down", pid, w.rev]),
-              body: { process: pid, reason: "too_many", crashes: 1, until: 0 },
-            },
+      Match.value(kind).pipe(
+        Match.when(0, () => ({
+          _tag: "exited",
+          by: PERSON_BY,
+          id: `forged:${w.rev}`,
+          body: { process: pid, reason: EXITS[0]! },
+        })),
+        Match.when(1, () => ({
+          _tag: "started",
+          by: PERSON_BY,
+          id: `forged:${w.rev}`,
+          body: { process: processAt(w.next++), name, program: "fabrika/checklist", hash: "h" },
+        })),
+        Match.orElse(() => ({
+          _tag: "down",
+          by: BRAIN_BY,
+          id: JSON.stringify(["down", pid, w.rev]),
+          body: { process: pid, reason: "too_many", crashes: 1, until: 0 },
+        })),
+      ),
     );
   } else if (k <= 7) {
     forge(w, c);
@@ -3591,12 +3629,11 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
         ({
           type: `${cmd.type}_ok`,
           cmd,
-          value:
-            cmd.type === "now"
-              ? { letter: `letter_${c.pick}`, sentAt: "2026-11-14T00:00:00.000Z" }
-              : cmd.type === "persist"
-                ? true
-                : null,
+          value: Match.value(cmd.type).pipe(
+            Match.when("now", () => ({ letter: `letter_${c.pick}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+            Match.when("persist", () => true),
+            Match.orElse(() => null),
+          ),
         }) as WindowMsg,
     );
   }
@@ -3917,14 +3954,12 @@ const resolved = (s: WindowModel, to: FocusTo): string | null => {
   const tiles = Layout.order(space.layout);
   const i = tiles.indexOf(space.focus);
 
-  const found =
-    to === "next"
-      ? tiles[(i + 1) % tiles.length]
-      : to === "previous"
-        ? tiles[(i - 1 + tiles.length) % tiles.length]
-        : to === "last"
-          ? space.recent[1]
-          : (Layout.neighbor(space.layout, space.focus, to) ?? undefined);
+  const found = Match.value(to).pipe(
+    Match.when("next", () => tiles[(i + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(i - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((side) => Layout.neighbor(space.layout, space.focus, side) ?? undefined),
+  );
 
   return found === undefined || found === space.focus ? null : found;
 };
@@ -4039,12 +4074,11 @@ const focusMoves = (
       send({
         type: `${cmd.type}_ok`,
         cmd,
-        value:
-          cmd.type === "now"
-            ? { letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
-            : cmd.type === "persist"
-              ? true
-              : null,
+        value: Match.value(cmd.type).pipe(
+          Match.when("now", () => ({ letter: `letter_${++w.letters}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+          Match.when("persist", () => true),
+          Match.orElse(() => null),
+        ),
       } as WindowMsg),
     );
   }
@@ -4498,7 +4532,11 @@ const stripsNow = (s: WindowModel): ReadonlyArray<string> | null => {
 
 /** The record and Msg fields a law reads by their schema: every object case of a union. */
 const objectsIn = (ast: SchemaAST.AST): ReadonlyArray<SchemaAST.Objects> =>
-  ast._tag === "Union" ? ast.types.flatMap(objectsIn) : ast._tag === "Objects" ? [ast] : [];
+  Match.value(ast).pipe(
+    Match.tag("Union", (ast) => ast.types.flatMap(objectsIn)),
+    Match.tag("Objects", (ast) => [ast]),
+    Match.orElse(() => []),
+  );
 
 const fieldIn = (o: SchemaAST.Objects | undefined, name: string) =>
   o?.propertySignatures.find((p) => p.name === name)?.type;

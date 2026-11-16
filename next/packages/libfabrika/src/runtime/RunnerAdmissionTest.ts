@@ -3,7 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Cause, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream, Predicate } from "effect";
+import { Cause, Context, Effect, Exit, Layer, Match, Predicate, Result, Schema, Scope, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { Writer, SinkError } from "../coordination/index.ts";
@@ -166,16 +166,13 @@ const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: Readonl
   for (const [n, cell] of tape.entries()) {
     const j = model.journal;
 
-    const options =
-      j._tag === "idle"
-        ? ["begin", "crash"]
-        : j._tag === "checking"
-          ? ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]
-          : j._tag === "stepping"
-            ? ["finished", "crash"]
-            : j._tag === "writing_reply"
-              ? ["reply_written", "crash"]
-              : ["attempt_cleared", "crash"];
+    const options = Match.value(j).pipe(
+      Match.tag("idle", () => ["begin", "crash"]),
+      Match.tag("checking", () => ["admit", "refuse", "abandon", "fail_receipt", "fail_journal", "crash"]),
+      Match.tag("stepping", () => ["finished", "crash"]),
+      Match.tag("writing_reply", () => ["reply_written", "crash"]),
+      Match.orElse(() => ["attempt_cleared", "crash"]),
+    );
 
     const move = nth(options, cell.move);
     reached.add(`${move}:${j._tag}`);
@@ -732,29 +729,27 @@ const walk = Effect.fnUntraced(function* (
       const prior = nth(answers, cell.pick);
       const component = Math.floor(cell.pick / answers.length) % 4;
 
-      const changed =
-        component === 0
-          ? { ...prior.input, seen: prior.input.seen + 1 }
-          : component === 1
-            ? { ...prior.input, sentAt: "2026-11-11T00:00:01Z" }
-            : component === 2
-              ? {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    input: {
-                      ...Schema.decodeUnknownSync(Save)(prior.input.envelope.input),
-                      body: `changed-${cell.pick}`,
-                    },
-                  },
-                }
-              : {
-                  ...prior.input,
-                  envelope: {
-                    ...prior.input.envelope,
-                    by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
-                  },
-                };
+      const changed = Match.value(component).pipe(
+        Match.when(0, () => ({ ...prior.input, seen: prior.input.seen + 1 })),
+        Match.when(1, () => ({ ...prior.input, sentAt: "2026-11-11T00:00:01Z" })),
+        Match.when(2, () => ({
+          ...prior.input,
+          envelope: {
+            ...prior.input.envelope,
+            input: {
+              ...Schema.decodeUnknownSync(Save)(prior.input.envelope.input),
+              body: `changed-${cell.pick}`,
+            },
+          },
+        })),
+        Match.orElse(() => ({
+          ...prior.input,
+          envelope: {
+            ...prior.input.envelope,
+            by: Writer.cases.person.make({ key: owner.key, for: "different-fixture-writer" }),
+          },
+        })),
+      );
 
       const retried = move === "retry" ? prior.input : changed;
       // Accepted placement permits new clocks on a resend; its body stays bound.

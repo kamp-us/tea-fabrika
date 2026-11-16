@@ -677,7 +677,7 @@ const report = Effect.fnUntraced(function* (title: string, answers: ReadonlyArra
 
   if (Option.isSome(summary)) {
     for (const a of answers) {
-      const level = a._tag === "stuck" ? "error" : a._tag === "ask" ? "warning" : "notice";
+      const level = Answer.match(a, { stuck: () => "error", ask: () => "warning", done: () => "notice" });
       yield* Console.log(`::${level} title=${title}::${annotate(plain(a, (p) => p))}`);
     }
 

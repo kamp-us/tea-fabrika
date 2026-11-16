@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
+import * as Match from "effect/Match";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -218,11 +219,11 @@ export const brain = () => {
     // A failed wake answers `unavailable` after the finish was saved (slice 3's W1), and a garbled
     // answer comes after it was saved too.
     const answer = (): Outcome =>
-      finish === "unavailable"
-        ? refused("unavailable")
-        : finish === "garbled"
-          ? Outcome.cases.result.make({ result: { saved: "maybe" } })
-          : receipt();
+      Match.value(finish).pipe(
+        Match.when("unavailable", () => refused("unavailable")),
+        Match.when("garbled", () => Outcome.cases.result.make({ result: { saved: "maybe" } })),
+        Match.orElse(() => receipt()),
+      );
 
     if (s.phase === "finished") {
       // A repeat with the same result answers the first receipt, or as the mode says.
@@ -354,11 +355,11 @@ export const door = (b: Brain, key: string, gate: Gate = admitsAll) => {
       state.hellos.push(call.params);
       const said = gate.hello();
       on.receive(
-        said._tag === "refuse"
-          ? failed(call.id, said.reason)
-          : said._tag === "not_granted"
-            ? failed(call.id, "not_granted")
-            : JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+        HelloAnswer.match(said, {
+          refuse: ({ reason }) => failed(call.id, reason),
+          not_granted: () => failed(call.id, "not_granted"),
+          admit: () => JSON.stringify({ jsonrpc: "2.0", id: call.id, result: admitted(key) }),
+        }),
       );
 
       return;

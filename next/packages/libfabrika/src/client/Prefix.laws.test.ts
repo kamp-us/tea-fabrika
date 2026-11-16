@@ -36,6 +36,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -234,14 +235,12 @@ const drain = (world: World, i: number) => {
     const cmd = w.waiting.find((c) => ["now", "record", "write", "persist", "ping", "mint"].includes(c.type));
 
     if (cmd !== undefined) {
-      const value =
-        cmd.type === "now"
-          ? { letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" }
-          : cmd.type === "mint"
-            ? { tile: typeId("tile", 5_000 + ++world.minted) }
-            : cmd.type === "persist"
-              ? true
-              : null;
+      const value = Match.value(cmd.type).pipe(
+        Match.when("now", () => ({ letter: `letter_${++world.letters}`, sentAt: "2026-11-14T00:00:00.000Z" })),
+        Match.when("mint", () => ({ tile: typeId("tile", 5_000 + ++world.minted) })),
+        Match.when("persist", () => true),
+        Match.orElse(() => null),
+      );
 
       step(world, i, { type: `${cmd.type}_ok`, cmd, value } as WindowMsg);
       continue;

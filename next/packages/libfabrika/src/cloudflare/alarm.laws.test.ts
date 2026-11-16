@@ -6,7 +6,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Layer, Option, type Scope, Match } from "effect";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
@@ -385,11 +385,13 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
                       Effect.suspend(() => {
                         dues.push(at);
 
-                        return now.outcome === "fails"
-                          ? Effect.fail(new LedgerError({ reason: "storage", message: now.text }))
-                          : now.outcome === "dies"
-                            ? Effect.die(new Error(now.text))
-                            : Effect.void;
+                        return Match.value(now.outcome).pipe(
+                          Match.when("fails", () =>
+                            Effect.fail(new LedgerError({ reason: "storage", message: now.text })),
+                          ),
+                          Match.when("dies", () => Effect.die(new Error(now.text))),
+                          Match.orElse(() => Effect.void),
+                        );
                       }),
                     mailed: Effect.void,
                     restart: () => Effect.void,

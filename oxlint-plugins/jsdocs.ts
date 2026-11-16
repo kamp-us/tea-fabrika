@@ -46,7 +46,7 @@
 // whether an example compiles, and a name sent on under a new binding (`const b = a; export { b }`),
 // which is asked for its block at `b`.
 import type { Context, CreateRule, ESTree } from "@oxlint/plugins";
-import { Predicate } from "effect";
+import { Match, Predicate } from "effect";
 import {
   buildTags,
   type DocScope,
@@ -144,7 +144,11 @@ const bindingName = (id: Node, source: Context["sourceCode"]): string =>
   id.type === "Identifier" ? id.name : source.getText(id);
 
 const exportedName = (name: Node): string =>
-  name.type === "Identifier" ? name.name : name.type === "Literal" ? String(name.value) : "";
+  Match.value(name).pipe(
+    Match.discriminator("type")("Identifier", (id) => id.name),
+    Match.discriminator("type")("Literal", (literal) => String(literal.value)),
+    Match.orElse(() => ""),
+  );
 
 /** The type literals a type reaches, as Effect's `parseMembersFromTsType` walks them. */
 const literalsIn = (type: Node | null | undefined): ReadonlyArray<ReadonlyArray<Node>> => {

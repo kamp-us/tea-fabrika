@@ -14,6 +14,7 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Match from "effect/Match";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";
@@ -612,11 +613,11 @@ const signalLaws = (open: Open) => {
     ]),
   ).pipe(
     Arbitrary.map(([kind, space, rest, tail]) =>
-      kind === 0
-        ? JSON.stringify(["DOWN", ...rest])
-        : kind === 1
-          ? `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`
-          : `["DOWN"${tail}`,
+      Match.value(kind).pipe(
+        Match.when(0, () => JSON.stringify(["DOWN", ...rest])),
+        Match.when(1, () => `[${space}${JSON.stringify(["DOWN", ...rest]).slice(1)}`),
+        Match.orElse(() => `["DOWN"${tail}`),
+      ),
     ),
     Arbitrary.filter(inSignalSpace),
   );

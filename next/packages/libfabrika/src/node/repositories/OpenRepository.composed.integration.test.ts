@@ -23,6 +23,7 @@ import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Predicate from "effect/Predicate";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -412,16 +413,13 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
                 const request = requests[index * 2 + 1]!;
                 const source = c.pick % 9;
 
-                const body =
-                  source === 0
-                    ? `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`
-                    : source === 3
-                      ? `fabrika-version = ${JSON.stringify(secret)}\n`
-                      : source === 4
-                        ? `[${JSON.stringify(secret)}]\nvalue = true\n`
-                        : source === 5
-                          ? `fabrika-version = ${JSON.stringify(secret)} [\n`
-                          : 'fabrika-version = "0.0.0"\n';
+                const body = Match.value(source).pipe(
+                  Match.when(0, () => `fabrika-version = "0.0.0"\n[unknown]\nvalue = ${JSON.stringify(secret)}\n`),
+                  Match.when(3, () => `fabrika-version = ${JSON.stringify(secret)}\n`),
+                  Match.when(4, () => `[${JSON.stringify(secret)}]\nvalue = true\n`),
+                  Match.when(5, () => `fabrika-version = ${JSON.stringify(secret)} [\n`),
+                  Match.orElse(() => 'fabrika-version = "0.0.0"\n'),
+                );
 
                 const fs = FileSystem.layerNoop({
                   realPath: (location) => Effect.succeed(location),

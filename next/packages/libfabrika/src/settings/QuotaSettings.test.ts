@@ -1,6 +1,6 @@
 // P34c slice 4, next/. Calibration is copied from A-Numbers, never read from product defaults.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Option, Predicate, Schema } from "effect";
+import { ByteSize, Effect, Match, Option, Predicate, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -126,7 +126,11 @@ describe("P34c Q11 settings", () => {
           for (const cell of tape) {
             const paths = [...selected.keys()];
             const key = paths[cell.pick % paths.length]!;
-            const cap = key === "writes" ? 13_760 : key === "storage" ? 1_000_000_000 : 1_000_000;
+            const cap = Match.value(key).pipe(
+              Match.when("writes", () => 13_760),
+              Match.when("storage", () => 1_000_000_000),
+              Match.orElse(() => 1_000_000),
+            );
             selected.set(key, cell.remove ? defaults.get(key)! : 1 + (cell.value % cap));
             const tables = new Map<string, string[]>();
 

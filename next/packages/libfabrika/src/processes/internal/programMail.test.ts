@@ -7,7 +7,7 @@
 //   internal/programMail.ts: `mailId(command)` and `granted(grants, source, to)`.
 //   ProgramMail.ts: `Grants`, `MailRefusal` (the closed refusal reasons) and `ProgramMailError`.
 import { describe, expect, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { PIDS } from "../Process.test-support.ts";
@@ -88,12 +88,11 @@ describe("P41 slice 1: program mail rules", () => {
         fc.constantFrom(...MailRefusal.literals, "storage" as const, "full" as const),
         fc.nat({ max: 16_384 }),
         (reason, unread) => {
-          const error =
-            reason === "full"
-              ? ProgramMailError.full(unread)
-              : reason === "storage"
-                ? ProgramMailError.storage()
-                : ProgramMailError.refused(reason);
+          const error = Match.value(reason).pipe(
+            Match.when("full", () => ProgramMailError.full(unread)),
+            Match.when("storage", () => ProgramMailError.storage()),
+            Match.orElse((refused) => ProgramMailError.refused(refused)),
+          );
 
           const encoded = Schema.encodeUnknownSync(ProgramMailError)(error);
           expect(encoded).toMatchObject({

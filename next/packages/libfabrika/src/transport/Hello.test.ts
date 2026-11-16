@@ -7,6 +7,7 @@ import { assert, describe, expect, it, vi } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
@@ -301,13 +302,12 @@ describe("P10 hello", () => {
 
               const hello = {
                 ...x.hello,
-                ...(kind === "signature"
-                  ? { signed: "broken" }
-                  : kind === "key"
-                    ? { key: `${x.hello.key}=` }
-                    : kind === "version"
-                      ? { versions: [8] }
-                      : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("signature", () => ({ signed: "broken" })),
+                  Match.when("key", () => ({ key: `${x.hello.key}=` })),
+                  Match.when("version", () => ({ versions: [8] })),
+                  Match.orElse(() => ({})),
+                ),
               };
 
               const admit = kind === "unknown" ? vi.fn(() => Effect.succeed(value)) : x.admit;
@@ -315,7 +315,11 @@ describe("P10 hello", () => {
               const result = yield* checked;
               expect(result).toMatchObject({
                 _tag: "refused",
-                ...(kind === "version" ? { reason: "no_version" } : kind === "unknown" ? { reason: value.reason } : {}),
+                ...Match.value(kind).pipe(
+                  Match.when("version", () => ({ reason: "no_version" })),
+                  Match.when("unknown", () => ({ reason: value.reason })),
+                  Match.orElse(() => ({})),
+                ),
               });
               expect(x.consume).not.toHaveBeenCalled();
               expect(admit.mock.calls.length).toBe(kind === "unknown" ? 1 : 0);

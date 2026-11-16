@@ -1,6 +1,6 @@
 // next/, ticket 887, P21 L10. The declaration, Config, files and generated editors agree.
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Result, Schema } from "effect";
+import { ConfigProvider, Effect, Result, Schema, Match } from "effect";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
 import * as Sources from "./Sources.ts";
@@ -36,7 +36,12 @@ it.effect.prop(
       });
 
       expect(resolved.values.desktopLinkTtl).toBe(
-        source === "flag" ? flag : source === "env" ? env : source === "file" ? file : setting.default,
+        Match.value(source).pipe(
+          Match.when("flag", () => flag),
+          Match.when("env", () => env),
+          Match.when("file", () => file),
+          Match.orElse(() => setting.default),
+        ),
       );
       expect(resolved.origins[setting.path]?._tag).toBe(source);
       expect(

@@ -9,7 +9,7 @@
 // `Schema.optional(Schema.Unknown)`, and that error's encoded Error cause stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Exit, Schema } from "effect";
+import { Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import { SettingsError } from "./Files.ts";
 import { SnapshotError } from "./Snapshot.ts";
@@ -60,7 +60,15 @@ const encodedError = fc
 
 /** The cause in each form, or no key at all. */
 const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
-  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
+  form === "absent"
+    ? {}
+    : {
+        cause: Match.value(form).pipe(
+          Match.when("undefined", () => undefined),
+          Match.when("json", () => json),
+          Match.orElse(() => error),
+        ),
+      };
 
 /** One encoded value of a drawn error, its cause in a drawn form. */
 const encoded = fc

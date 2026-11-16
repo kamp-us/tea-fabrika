@@ -6,7 +6,7 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Predicate, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Match, Path, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -439,7 +439,12 @@ type BundleGraph = typeof BundleGraphs extends Arbitrary.Arbitrary<infer G> ? G 
 // A module tree that has exactly g.modules modules and up to 2 imports per module. Its depth is g.depth when that
 // many modules can reach it, else the nearest depth they can: one module has depth 0, 8 need depth 3 at 2 imports.
 const graphShape = (g: BundleGraph) => {
-  const capacity = (depth: number, fan: number) => (fan === 0 ? 1 : fan === 1 ? depth + 1 : 2 ** (depth + 1) - 1);
+  const capacity = (depth: number, fan: number) =>
+    Match.value(fan).pipe(
+      Match.when(0, () => 1),
+      Match.when(1, () => depth + 1),
+      Match.orElse(() => 2 ** (depth + 1) - 1),
+    );
   let least = 0;
 
   while (capacity(least, 2) < g.modules) {

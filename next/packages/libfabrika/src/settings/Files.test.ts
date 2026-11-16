@@ -17,7 +17,7 @@
 //   it refuses an unknown key and a key of the other file. A file whose scope holds no
 //   declaration refuses every key: Effect's empty `Schema.Struct({})` would accept any object.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema, Match } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
@@ -341,11 +341,11 @@ describe("L10, the three S5 messages, word for word", () => {
       .map(([at, letter, edit]) => {
         const word = "port";
 
-        return edit === "swap"
-          ? word.slice(0, at) + letter + word.slice(at + 1)
-          : edit === "add"
-            ? word.slice(0, at) + letter + word.slice(at)
-            : word.slice(0, at) + word.slice(at + 1);
+        return Match.value(edit).pipe(
+          Match.when("swap", () => word.slice(0, at) + letter + word.slice(at + 1)),
+          Match.when("add", () => word.slice(0, at) + letter + word.slice(at)),
+          Match.orElse(() => word.slice(0, at) + word.slice(at + 1)),
+        );
       })
       .filter((w) => w !== "port" && w.length > 0);
 

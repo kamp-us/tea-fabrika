@@ -24,6 +24,7 @@ import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { assert, describe, expect, it, vi } from "vitest";
 import { expectTypeOf } from "vitest";
@@ -593,7 +594,13 @@ describe("P15 slice 1: the watcher", () => {
                   hashes.set(i.program, i.hash);
                 }
 
-                seen.add(reaches[file]!.length === 2 ? "shared" : reaches[file]!.length === 1 ? "own" : "outside");
+                seen.add(
+                  Match.value(reaches[file]!.length).pipe(
+                    Match.when(2, () => "shared"),
+                    Match.when(1, () => "own"),
+                    Match.orElse(() => "outside"),
+                  ),
+                );
               }
             }),
           ).pipe(Effect.provide(NodeServices.layer)),

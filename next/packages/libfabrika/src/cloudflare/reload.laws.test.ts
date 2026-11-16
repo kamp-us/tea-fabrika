@@ -37,6 +37,7 @@ import {
   Schema,
   Scope,
   Predicate,
+  Match,
 } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
@@ -614,8 +615,11 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       // A new process starts on the selected code, never on a failed one.
       expect(i.descriptors.get(name)?.build).toBe(selected);
     } else {
-      const bad: Fixture =
-        move === "load" ? { ...next, throws: true } : move === "name" ? { ...next, name: "fabrika/other" } : next;
+      const bad: Fixture = Match.value(move).pipe(
+        Match.when("load", () => ({ ...next, throws: true })),
+        Match.when("name", () => ({ ...next, name: "fabrika/other" })),
+        Match.orElse(() => next),
+      );
 
       const pad = move === "too_large" ? MOST + 1 : 0;
       const { digest, answer } = yield* install(i, `install_${n}`, bad, pad);

@@ -39,6 +39,7 @@ import {
   Semaphore,
   Tracer,
   Predicate,
+  Match,
 } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import { grantText, revokeText } from "../access/Text.ts";
@@ -770,15 +771,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       const p = phase(s);
 
       const available = moves[focus].filter((move) =>
-        move === "race"
-          ? current.live && current.build !== undefined && current.has.includes("git") && p !== "requested"
-          : move === "revoke"
-            ? current.live && p !== "requested"
-            : move === "retry"
-              ? p === "started" || p === "finished"
-              : move === "wrong"
-                ? p !== "requested"
-                : true,
+        Match.value(move).pipe(
+          Match.when(
+            "race",
+            () => current.live && current.build !== undefined && current.has.includes("git") && p !== "requested",
+          ),
+          Match.when("revoke", () => current.live && p !== "requested"),
+          Match.when("retry", () => p === "started" || p === "finished"),
+          Match.when("wrong", () => p !== "requested"),
+          Match.orElse(() => true),
+        ),
       );
 
       const move = pick(available, cell.move);
@@ -890,17 +892,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         );
 
         for (const method of ["tasks.take", "tasks.read", "tasks.started", "tasks.finish"]) {
-          const params =
-            method === "tasks.take"
-              ? { process: s.request.process, ...said(cell) }
-              : method === "tasks.read"
-                ? snapshot(s)
-                : {
-                    ...snapshot(s),
-                    execution: p === "requested" ? "unknown" : assignment(s).execution,
-                    ...said(cell),
-                    ...(method === "tasks.finish" ? { result: cell.result } : {}),
-                  };
+          const params = Match.value(method).pipe(
+            Match.when("tasks.take", () => ({ process: s.request.process, ...said(cell) })),
+            Match.when("tasks.read", () => snapshot(s)),
+            Match.orElse(() => ({
+              ...snapshot(s),
+              execution: p === "requested" ? "unknown" : assignment(s).execution,
+              ...said(cell),
+              ...(method === "tasks.finish" ? { result: cell.result } : {}),
+            })),
+          );
 
           refused(yield* w.route(c, method, params));
         }
@@ -1014,19 +1015,18 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
           cell.variant,
         );
 
-        const params =
-          method === "tasks.take"
-            ? { process: s.request.process, ...said(cell) }
-            : method === "tasks.read"
-              ? snapshot(s)
-              : {
-                  ...snapshot(s),
-                  execution: assignment(s).execution,
-                  ...said(cell),
-                  ...(method === "tasks.finish"
-                    ? { result: s.task.state._tag === "finished" ? s.task.state.result : cell.result }
-                    : {}),
-                };
+        const params = Match.value(method).pipe(
+          Match.when("tasks.take", () => ({ process: s.request.process, ...said(cell) })),
+          Match.when("tasks.read", () => snapshot(s)),
+          Match.orElse(() => ({
+            ...snapshot(s),
+            execution: assignment(s).execution,
+            ...said(cell),
+            ...(method === "tasks.finish"
+              ? { result: s.task.state._tag === "finished" ? s.task.state.result : cell.result }
+              : {}),
+          })),
+        );
 
         const pending = yield* Effect.forkScoped(w.route(current, method, params));
         yield* Effect.raceFirst(
@@ -1083,17 +1083,16 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
       } else if (move === "malformed" || move === "reserved") {
         const method = pick(["tasks.take", "tasks.read", "tasks.started", "tasks.finish"], cell.pick);
 
-        const base =
-          method === "tasks.take"
-            ? { process: s.request.process, ...said(cell) }
-            : method === "tasks.read"
-              ? snapshot(s)
-              : {
-                  ...snapshot(s),
-                  execution: p === "requested" ? "unknown" : assignment(s).execution,
-                  ...said(cell),
-                  ...(method === "tasks.finish" ? { result: cell.result } : {}),
-                };
+        const base = Match.value(method).pipe(
+          Match.when("tasks.take", () => ({ process: s.request.process, ...said(cell) })),
+          Match.when("tasks.read", () => snapshot(s)),
+          Match.orElse(() => ({
+            ...snapshot(s),
+            execution: p === "requested" ? "unknown" : assignment(s).execution,
+            ...said(cell),
+            ...(method === "tasks.finish" ? { result: cell.result } : {}),
+          })),
+        );
 
         const field = pick(
           move === "reserved"

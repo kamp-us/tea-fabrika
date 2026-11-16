@@ -9,6 +9,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 
@@ -65,11 +66,11 @@ const run = (call: Call) =>
   Effect.gen(function* () {
     const outbox = yield* brainOutbox(HOME);
 
-    return call === "pending"
-      ? yield* outbox.pending
-      : call === "last"
-        ? yield* outbox.last
-        : yield* outbox.add(started("e-1"));
+    return yield* Match.value(call).pipe(
+      Match.when("pending", () => outbox.pending),
+      Match.when("last", () => outbox.last),
+      Match.orElse(() => outbox.add(started("e-1"))),
+    );
   });
 
 describe("T695, the brain's outbox keeps what the disk did", () => {

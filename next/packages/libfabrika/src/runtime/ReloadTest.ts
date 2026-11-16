@@ -18,6 +18,7 @@ import {
   Scope,
   Stream,
   Predicate,
+  Match,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -99,13 +100,14 @@ const BASE: Spec = { k: 1, shape: "same", min: 0, max: 0, v: 1, gaps: [], cmd: f
 type CounterModel = { readonly count: number; readonly step?: number };
 
 const schemaFor = (spec: Spec) =>
-  spec.shape === "widened"
-    ? Schema.Struct({ count: Schema.Number })
-    : spec.shape === "narrowed"
-      ? Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) })
-      : spec.shape === "field"
-        ? Schema.Struct({ count: Schema.Int, step: Schema.Int })
-        : Schema.Struct({ count: Schema.Int });
+  Match.value(spec.shape).pipe(
+    Match.when("widened", () => Schema.Struct({ count: Schema.Number })),
+    Match.when("narrowed", () =>
+      Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) }),
+    ),
+    Match.when("field", () => Schema.Struct({ count: Schema.Int, step: Schema.Int })),
+    Match.orElse(() => Schema.Struct({ count: Schema.Int })),
+  );
 
 /** A narrowed counter never leaves its bounds, so its own steps keep its model readable. */
 const clamp = (spec: Spec, n: number) => (spec.shape === "narrowed" ? Math.min(spec.max, Math.max(spec.min, n)) : n);
@@ -1665,11 +1667,11 @@ export const suite = (rig: Rig): void => {
         const answer = yield* swap(yield* session(w, name), load, hash);
 
         expect(answer, `${name}: ${expected}`).toEqual(
-          expected === "same"
-            ? SwapAnswer.cases.same.make({})
-            : expected === "fits"
-              ? SwapAnswer.cases.swapped.make({ was: a.build })
-              : SwapAnswer.cases.refused.make({ was: a.build, reason: expected }),
+          Match.value(expected).pipe(
+            Match.when("same", () => SwapAnswer.cases.same.make({})),
+            Match.when("fits", () => SwapAnswer.cases.swapped.make({ was: a.build })),
+            Match.orElse((reason) => SwapAnswer.cases.refused.make({ was: a.build, reason })),
+          ),
         );
 
         if (expected === "same") {

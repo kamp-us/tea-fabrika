@@ -11,6 +11,7 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
+import * as Match from "effect/Match";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -992,14 +993,12 @@ const aimed = (space: Workspace, aim: Aim): TileId | null => {
   const tiles = order(space.layout);
   const at = tiles.indexOf(space.focus);
 
-  const found =
-    aim === "next"
-      ? tiles[(at + 1) % tiles.length]
-      : aim === "previous"
-        ? tiles[(at - 1 + tiles.length) % tiles.length]
-        : aim === "last"
-          ? space.recent[1]
-          : neighbor(space.layout, space.focus, aim);
+  const found = Match.value(aim).pipe(
+    Match.when("next", () => tiles[(at + 1) % tiles.length]),
+    Match.when("previous", () => tiles[(at - 1 + tiles.length) % tiles.length]),
+    Match.when("last", () => space.recent[1]),
+    Match.orElse((aim) => neighbor(space.layout, space.focus, aim)),
+  );
 
   return found === undefined || found === null || found === space.focus ? null : found;
 };
@@ -2012,12 +2011,15 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         s,
         [
           record({
-            record:
-              m.error._tag === "unsupported"
-                ? ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" })
-                : m.error._tag === "ClientKeyError"
-                  ? ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(m.error) })
-                  : ClientRecord.cases.persist.make({ result: "failed" }),
+            record: Match.value(m.error).pipe(
+              Match.tag("unsupported", () =>
+                ClientRecord.cases.failure.make({ op: "persist", error: "NotSupportedError" }),
+              ),
+              Match.tag("ClientKeyError", (error) =>
+                ClientRecord.cases.failure.make({ op: "persist", error: platformFailure(error) }),
+              ),
+              Match.orElse(() => ClientRecord.cases.persist.make({ result: "failed" })),
+            ),
           }),
         ],
       ],

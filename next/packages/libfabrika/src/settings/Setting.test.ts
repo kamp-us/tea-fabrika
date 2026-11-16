@@ -12,7 +12,7 @@
 // - T730, P38 slice 2, L10: `since`, the release that introduced the key, is a required string
 //   option of `Setting.make` and a field of `Setting`. It is a release fact, not a setting.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
-import { Config, ConfigProvider, Effect, Exit, Schema } from "effect";
+import { Config, ConfigProvider, Effect, Exit, Schema, Match } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "./Declarations.ts";
 import * as Setting from "./Setting.ts";
@@ -209,7 +209,11 @@ describe("L3, absence gives the default, and an invalid present value never does
         // An explicit empty string is supplied, not absent: it must fail, never become the default.
         const exit = await run(setting.parse(ConfigProvider.fromUnknown(root, { preserveEmptyStrings: true })));
 
-        const want = value._tag === "absent" ? DEFAULT : value._tag === "valid" ? value.expected : "a failure";
+        const want = Match.value(value).pipe(
+          Match.tag("absent", () => DEFAULT),
+          Match.tag("valid", (value) => value.expected),
+          Match.orElse(() => "a failure"),
+        );
         expect(Exit.isSuccess(exit) ? exit.value : "a failure").toBe(want);
       }),
       check,

@@ -105,7 +105,7 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
-import { Cause, Effect, FileSystem, Layer, Option, Predicate, Result, Schema, Stream } from "effect";
+import { Cause, Effect, FileSystem, Layer, Match, Option, Predicate, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import {
   type Agents,
@@ -312,7 +312,11 @@ const exitOf = (o: End): number => {
     case "done":
       return 0;
     case "send":
-      return o.to === "tests" ? 10 : o.to === "build" ? 11 : 12;
+      return Match.value(o.to).pipe(
+        Match.when("tests", () => 10),
+        Match.when("build", () => 11),
+        Match.orElse(() => 12),
+      );
     case "ask":
       return 20;
     case "skip":
@@ -670,7 +674,10 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
 
       return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
     case "send": {
-      const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
+      const to = Match.value(said.to).pipe(
+        Match.when(Match.is("tests", "plan"), (to) => to),
+        Match.orElse((): "build" => "build"),
+      );
 
       return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
     }
@@ -1566,12 +1573,18 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
   const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts in a box. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
 
-  const commit =
-    ask.step === "plan"
-      ? "Change no file. Your final message is the plan.\n"
-      : ask.step === "review"
-        ? "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n"
-        : "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n";
+  const commit = Match.value(ask.step).pipe(
+    Match.when("plan", () => "Change no file. Your final message is the plan.\n"),
+    Match.when(
+      "review",
+      () =>
+        "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n",
+    ),
+    Match.orElse(
+      () =>
+        "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n",
+    ),
+  );
 
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"

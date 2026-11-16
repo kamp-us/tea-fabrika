@@ -34,7 +34,7 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { ByteSize, Clock, Effect, Option, Predicate, Schema } from "effect";
+import { ByteSize, Clock, Effect, Match, Option, Predicate, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
@@ -357,11 +357,11 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                             const member = Reflect.get(p, method);
                             const work = Predicate.isFunction(member) ? Reflect.apply(member, p, args) : member;
 
-                            return method === "sign"
-                              ? signingReply(work)
-                              : method === "commit"
-                                ? commitReply(work)
-                                : work;
+                            return Match.value(method).pipe(
+                              Match.when("sign", () => signingReply(work)),
+                              Match.when("commit", () => commitReply(work)),
+                              Match.orElse(() => work),
+                            );
                           }),
                         ),
           },
@@ -400,20 +400,24 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                 ? undefined
                 : (...args: ReadonlyArray<unknown>) =>
                     Effect.runPromise(
-                      method === "configure"
-                        ? configureProcess(
+                      Match.value(method).pipe(
+                        Match.when("configure", () =>
+                          configureProcess(
                             current.ctx,
                             args[0] as Descriptor,
                             required(runtimes.get(current)),
                             args[1] === true,
-                          )
-                        : method === "descriptor"
-                          ? processDescriptor(current.ctx)
-                          : process(current, (p): Effect.Effect<unknown, unknown> => {
-                              const member = Reflect.get(p, method);
+                          ),
+                        ),
+                        Match.when("descriptor", () => processDescriptor(current.ctx)),
+                        Match.orElse(() =>
+                          process(current, (p): Effect.Effect<unknown, unknown> => {
+                            const member = Reflect.get(p, method);
 
-                              return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
-                            }),
+                            return Predicate.isFunction(member) ? Reflect.apply(member, p, args) : Effect.void;
+                          }),
+                        ),
+                      ),
                     ),
           },
         );
@@ -807,12 +811,11 @@ describe("P34c live wiring, both object stores", () => {
               const peer = required(NAMES.filter((registered) => registered !== name)[c.amount % 2]);
               const stepped = move === "tell" ? [name, peer] : [name];
 
-              const m =
-                move === "tell"
-                  ? { type: "tell", to: peer }
-                  : move === "ask"
-                    ? { type: "ask" }
-                    : { type: "inc", text: "é😀".repeat(c.amount % 64) };
+              const m = Match.value(move).pipe(
+                Match.when("tell", () => ({ type: "tell", to: peer })),
+                Match.when("ask", () => ({ type: "ask" })),
+                Match.orElse(() => ({ type: "inc", text: "é😀".repeat(c.amount % 64) })),
+              );
 
               expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
 

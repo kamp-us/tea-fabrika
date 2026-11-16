@@ -3,7 +3,7 @@
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 // `storage()` reopens real SQLite files (Process.test-support.ts), so it is `.integration.` (0584).
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer, Predicate } from "effect";
+import { Cause, Effect, Exit, Layer, Match, Predicate } from "effect";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -99,12 +99,11 @@ const aim = (step: Call, state: World): Aimed => {
   const registered = NAMES.filter((name) => !free.includes(name));
   const n = "n" in step ? step.n : 0;
 
-  const name =
-    step.call === "first"
-      ? among(free, n, NAMES[n % NAMES.length]!)
-      : step.call === "again"
-        ? among(restartable, n, among(registered, n, NAMES[n % NAMES.length]!))
-        : among(registered, n, NAMES[n % NAMES.length]!);
+  const name = Match.value(step.call).pipe(
+    Match.when("first", () => among(free, n, NAMES[n % NAMES.length]!)),
+    Match.when("again", () => among(restartable, n, among(registered, n, NAMES[n % NAMES.length]!))),
+    Match.orElse(() => among(registered, n, NAMES[n % NAMES.length]!)),
+  );
 
   const process =
     step.call === "again"

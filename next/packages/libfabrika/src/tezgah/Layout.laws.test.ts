@@ -22,6 +22,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
 import { TileId, Workspace } from "./Workspace.ts";
@@ -436,14 +437,12 @@ const EPS = 1e-9;
 
 /** How much of `from`'s `side` edge `other` shares, or 0 when it does not touch that edge. */
 const overlap = (from: Box, other: Box, side: Side): number => {
-  const touches =
-    side === "left"
-      ? Math.abs(other.x + other.width - from.x) < EPS
-      : side === "right"
-        ? Math.abs(from.x + from.width - other.x) < EPS
-        : side === "up"
-          ? Math.abs(other.y + other.height - from.y) < EPS
-          : Math.abs(from.y + from.height - other.y) < EPS;
+  const touches = Match.value(side).pipe(
+    Match.when("left", () => Math.abs(other.x + other.width - from.x) < EPS),
+    Match.when("right", () => Math.abs(from.x + from.width - other.x) < EPS),
+    Match.when("up", () => Math.abs(other.y + other.height - from.y) < EPS),
+    Match.orElse(() => Math.abs(from.y + from.height - other.y) < EPS),
+  );
 
   const across =
     side === "left" || side === "right"

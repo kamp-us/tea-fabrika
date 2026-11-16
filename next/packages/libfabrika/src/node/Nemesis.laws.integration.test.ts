@@ -13,6 +13,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import * as Predicate from "effect/Predicate";
+import * as Match from "effect/Match";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -300,7 +301,11 @@ NemesisTest.suite({
     } else {
       sql.exec(
         "UPDATE entries SET pos=? WHERE stream=? AND id=?",
-        kind === "zero" ? 0 : kind === "negative" ? -1 : 1.5,
+        Match.value(kind).pipe(
+          Match.when("zero", () => 0),
+          Match.when("negative", () => -1),
+          Match.orElse(() => 1.5),
+        ),
         inbox("checklist:1"),
         key,
       );

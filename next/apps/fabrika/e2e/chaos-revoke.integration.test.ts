@@ -5,7 +5,7 @@ import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream, Match } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -192,14 +192,21 @@ const connect = Effect.fn("RevokeTest.connect")(function* (
 
       const opcode = (buffered[0] ?? 0) & 15;
       const short = (buffered[1] ?? 0) & 127;
-      const header = short === 126 ? 4 : short === 127 ? 10 : 2;
+      const header = Match.value(short).pipe(
+        Match.when(126, () => 4),
+        Match.when(127, () => 10),
+        Match.orElse(() => 2),
+      );
 
       while (buffered.length < header) {
         yield* more;
       }
 
-      const size =
-        short === 126 ? buffered.readUInt16BE(2) : short === 127 ? Number(buffered.readBigUInt64BE(2)) : short;
+      const size = Match.value(short).pipe(
+        Match.when(126, () => buffered.readUInt16BE(2)),
+        Match.when(127, () => Number(buffered.readBigUInt64BE(2))),
+        Match.orElse(() => short),
+      );
 
       if (!Number.isSafeInteger(size) || size > 1024 * 1024) {
         return yield* WireFailure.make({ cause: "oversized test frame" });

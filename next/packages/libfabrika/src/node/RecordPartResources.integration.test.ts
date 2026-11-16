@@ -9,6 +9,7 @@ import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Match from "effect/Match";
 import type { Sql } from "../Sql.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 import * as RecordPartSupport from "./RecordPart.test-support.ts";
@@ -140,11 +141,11 @@ describe("T641 record-part stores on node:sqlite", () => {
                   store.use((sql) =>
                     body(sql).pipe(
                       Effect.andThen(
-                        move.exit === "fail"
-                          ? Effect.fail("planted failure")
-                          : move.exit === "throw"
-                            ? Effect.sync(() => expect(move.row).toBe(`${move.row}!`))
-                            : Effect.void,
+                        Match.value(move.exit).pipe(
+                          Match.when("fail", () => Effect.fail("planted failure")),
+                          Match.when("throw", () => Effect.sync(() => expect(move.row).toBe(`${move.row}!`))),
+                          Match.orElse(() => Effect.void),
+                        ),
                       ),
                     ),
                   ),

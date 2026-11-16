@@ -12,6 +12,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
+import * as Match from "effect/Match";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
@@ -629,25 +630,21 @@ it.effect.prop(
   ],
   ([word, corruption, field]) =>
     Effect.gen(function* () {
-      const value =
-        corruption === "quote"
-          ? `${word}"tail`
-          : corruption === "backslash"
-            ? `${word}\\tail`
-            : corruption === "brace"
-              ? `${word}{tail}`
-              : corruption === "leading"
-                ? ` ${word}`
-                : `${word} `;
-
-      const input =
-        field === "args"
-          ? { args: [value] }
-          : field === "executable"
-            ? { executable: corruption === "leading" ? `/test/${word} ` : `/test/${value}` }
-            : field === "build"
-              ? { build: value }
-              : {};
+      const value = Match.value(corruption).pipe(
+        Match.when("quote", () => `${word}"tail`),
+        Match.when("backslash", () => `${word}\\tail`),
+        Match.when("brace", () => `${word}{tail}`),
+        Match.when("leading", () => ` ${word}`),
+        Match.orElse(() => `${word} `),
+      );
+      const input = Match.value(field).pipe(
+        Match.when("args", () => ({ args: [value] })),
+        Match.when("executable", () => ({
+          executable: corruption === "leading" ? `/test/${word} ` : `/test/${value}`,
+        })),
+        Match.when("build", () => ({ build: value })),
+        Match.orElse(() => ({})),
+      );
 
       const opened: Array<Effect.Success<ReturnType<typeof LaunchdTest.open>>> = [];
 

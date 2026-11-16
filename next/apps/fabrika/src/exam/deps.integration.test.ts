@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Predicate, Schema } from "effect";
+import { Effect, Match, Predicate, Schema } from "effect";
 import fc from "fast-check";
 import { rolldown, type Plugin } from "rolldown";
 
@@ -834,11 +834,11 @@ describe("a module's front files and its internal/ in the exports map", () => {
             const faults = importFaults(tree).map((fault) => fault.replace(/^.*: /, ""));
 
             expect(faults).toEqual(
-              kind === "front"
-                ? []
-                : kind === "internal"
-                  ? [`./${subpath} is refused by ${LIBRARY}'s exports`]
-                  : [`./${subpath} names no file in ${LIBRARY}`],
+              Match.value(kind).pipe(
+                Match.when("front", () => []),
+                Match.when("internal", () => [`./${subpath} is refused by ${LIBRARY}'s exports`]),
+                Match.orElse(() => [`./${subpath} names no file in ${LIBRARY}`]),
+              ),
             );
           }),
         { discard: true, concurrency: 1 },

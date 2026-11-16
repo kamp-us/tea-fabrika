@@ -4,6 +4,7 @@
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 
 const SEED = 119120;
@@ -171,12 +172,11 @@ describe("p69 senderTest catches its plants", () => {
     it(`plant, ${fault} write: every expected write matches exactly once`, async () => {
       const { senderTest } = await import("./Testing.ts");
 
-      const wrong =
-        fault === "missing"
-          ? writes.slice(1)
-          : fault === "duplicate"
-            ? [...writes, writes[0]!]
-            : [...writes, { ...writes[0]!, id: "unexpected" }];
+      const wrong = Match.value(fault).pipe(
+        Match.when("missing", () => writes.slice(1)),
+        Match.when("duplicate", () => [...writes, writes[0]!]),
+        Match.orElse(() => [...writes, { ...writes[0]!, id: "unexpected" }]),
+      );
 
       expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
     });

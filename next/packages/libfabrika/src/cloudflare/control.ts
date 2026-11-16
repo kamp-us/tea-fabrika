@@ -2,7 +2,7 @@
  * The local runtime's control entrypoint: a private, token-guarded way to call a fixed set of
  * methods on the Project, a Process, the Record, the Worker Loader or the bucket.
  */
-import { Effect, Equal, Predicate, Redacted, Result, Schema } from "effect";
+import { Effect, Equal, Match, Predicate, Redacted, Result, Schema } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { httpContext } from "./fetch.ts";
 import { workerLoader, type ProgramSource } from "./index.ts";
@@ -106,14 +106,15 @@ const dispatch = Effect.fnUntraced(function* (
   }
 
   // A process ID reaches the object its registered name owns; the Project refuses an unknown ID.
-  const client =
-    target === "project"
-      ? ProjectClient.make(projectStub(env, project))
-      : target === "process"
-        ? ProcessClient.make(
-            processStub(env, project, yield* rpc(ProjectClient.make(projectStub(env, project)).processObject(name))),
-          )
-        : RecordClient.make(recordStub(env, project, name));
+  const client = yield* Match.value(target).pipe(
+    Match.when("project", () => Effect.succeed(ProjectClient.make(projectStub(env, project)))),
+    Match.when("process", () =>
+      rpc(ProjectClient.make(projectStub(env, project)).processObject(name)).pipe(
+        Effect.map((object) => ProcessClient.make(processStub(env, project, object))),
+      ),
+    ),
+    Match.orElse(() => Effect.succeed(RecordClient.make(recordStub(env, project, name)))),
+  );
 
   // Only the fixed internal method set above is callable. Public fetch never reaches this entrypoint.
   const answer: Effect.Effect<unknown, unknown> = Reflect.apply(Reflect.get(client, method), client, args);

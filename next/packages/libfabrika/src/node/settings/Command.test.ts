@@ -32,6 +32,7 @@ import * as Sink from "effect/Sink";
 import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
 import * as Predicate from "effect/Predicate";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
@@ -101,18 +102,20 @@ const files = (at: string, person: Person, sunk: Array<string>) =>
     FileSystem.makeNoop({
       readFileString: (path) => {
         if (path === at) {
-          return person._tag === "text"
-            ? Effect.succeed(person.text)
-            : person._tag === "unreadable"
-              ? Effect.fail(
-                  PlatformError.systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "readFileString",
-                    pathOrDescriptor: path,
-                  }),
-                )
-              : Effect.fail(missing("readFileString", path));
+          return Match.value(person).pipe(
+            Match.tag("text", (person) => Effect.succeed(person.text)),
+            Match.tag("unreadable", () =>
+              Effect.fail(
+                PlatformError.systemError({
+                  _tag: "PermissionDenied",
+                  module: "FileSystem",
+                  method: "readFileString",
+                  pathOrDescriptor: path,
+                }),
+              ),
+            ),
+            Match.orElse(() => Effect.fail(missing("readFileString", path))),
+          );
         }
 
         return path.endsWith(".fabrika/fabrika.toml")

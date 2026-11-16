@@ -8,6 +8,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
+import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { programBox } from "../../cloudflare/box.ts";
@@ -239,22 +240,16 @@ const failure = fc
 
     class ProgramError extends Error {}
 
-    const value =
-      kind === "TypeError"
-        ? new TypeError(message)
-        : kind === "RangeError"
-          ? new RangeError(message)
-          : kind === "SyntaxError"
-            ? new SyntaxError(message)
-            : kind === "custom"
-              ? new ProgramError(message)
-              : kind === "eval"
-                ? evaluated(new Error(message), id)
-                : kind === "Error"
-                  ? new Error(message)
-                  : kind === "object"
-                    ? { message }
-                    : message;
+    const value = Match.value(kind).pipe(
+      Match.when("TypeError", () => new TypeError(message)),
+      Match.when("RangeError", () => new RangeError(message)),
+      Match.when("SyntaxError", () => new SyntaxError(message)),
+      Match.when("custom", () => new ProgramError(message)),
+      Match.when("eval", () => evaluated(new Error(message), id)),
+      Match.when("Error", () => new Error(message)),
+      Match.when("object", () => ({ message })),
+      Match.orElse(() => message),
+    );
 
     return { value, message, private: [message, ...(value instanceof Error ? [value.stack!] : [])] };
   });

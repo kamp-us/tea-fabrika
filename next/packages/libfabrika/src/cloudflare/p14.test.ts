@@ -11,7 +11,7 @@
 // tables it carried before) and builds a move that state allows: a rebuild, or a request for a route
 // the current table holds, a fresh absent route or `/`, with the current validator or a stale one.
 import { createHash } from "node:crypto";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Match } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -159,7 +159,11 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
             const wrongHost = s.host % 5 === 0;
-            const originHeader = s.origin % 5 === 0 ? "http://evil.example" : s.origin % 5 === 1 ? origin : null;
+            const originHeader = Match.value(s.origin % 5).pipe(
+              Match.when(0, () => "http://evil.example"),
+              Match.when(1, () => origin),
+              Match.orElse(() => null),
+            );
             const target = path === "/" ? (current !== undefined && Object.hasOwn(current, PAGE) ? PAGE : null) : path;
 
             const asset =

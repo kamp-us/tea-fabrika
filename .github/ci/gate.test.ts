@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Predicate } from "effect";
+import { Match, Predicate } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -308,7 +308,11 @@ const runsOf = (
 ): Run[] => {
   const done = list.map((r, i): Run => {
     const created = i * 30;
-    const conclusion = r.kind === "skipped" ? "success" : r.kind === "gate failed" ? "failure" : r.conclusion;
+    const conclusion = Match.value(r.kind).pipe(
+      Match.when("skipped", () => "success"),
+      Match.when("gate failed", () => "failure"),
+      Match.orElse(() => r.conclusion),
+    );
 
     return {
       id: 100 + i,

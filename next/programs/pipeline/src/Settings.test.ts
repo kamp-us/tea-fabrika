@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Predicate, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, Match, Predicate, SchemaIssue } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -119,7 +119,13 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           broken.queue.most = bad;
         } else if (path === "queue.kinds") {
           broken.queue.kinds = {
-            rows: [pick % 3 === 0 ? "" : pick % 3 === 1 ? "!docs/**" : "x".repeat(65_537)],
+            rows: [
+              Match.value(pick % 3).pipe(
+                Match.when(0, () => ""),
+                Match.when(1, () => "!docs/**"),
+                Match.orElse(() => "x".repeat(65_537)),
+              ),
+            ],
             docs: [],
           };
         } else {

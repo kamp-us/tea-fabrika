@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "@kampus/fabrika-old";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Match } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -1497,7 +1497,13 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
         const l = line(o, "h", reason);
         const mark = markFrom(l);
         const [verb] = o.split(":");
-        expect(mark).toBe(verb === "send" ? "send" : verb === "stuck" ? l.fault : "pass");
+        expect(mark).toBe(
+          Match.value(verb).pipe(
+            Match.when("send", () => "send"),
+            Match.when("stuck", () => l.fault),
+            Match.orElse(() => "pass"),
+          ),
+        );
       }),
       options,
     );

@@ -1,6 +1,6 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
-import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import { Cause, Effect, Exit, Option, Stream, Tracer, Match } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -204,12 +204,11 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               Effect.gen(function* () {
                 const ledger = yield* Ledger;
 
-                const operation: Effect.Effect<unknown, LedgerError> =
-                  c.method === "read"
-                    ? Stream.runCollect(ledger.read(stream, 0))
-                    : c.method === "wait"
-                      ? ledger.wait(stream, 0)
-                      : ledger.append(stream, "id", line(parent.traceId, "body"));
+                const operation: Effect.Effect<unknown, LedgerError> = Match.value(c.method).pipe(
+                  Match.when("read", () => Stream.runCollect(ledger.read(stream, 0))),
+                  Match.when("wait", () => ledger.wait(stream, 0)),
+                  Match.orElse(() => ledger.append(stream, "id", line(parent.traceId, "body"))),
+                );
 
                 return yield* Effect.exit(operation);
               }).pipe(

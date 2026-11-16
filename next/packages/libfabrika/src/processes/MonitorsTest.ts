@@ -17,7 +17,7 @@
 // oracle reads the store's own rows through `Ledger.read`, never the product's fold.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Schema, type Scope, Stream } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Layer, Match, Option, Predicate, Schema, type Scope, Stream } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -544,12 +544,13 @@ const m6 = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       ...(recorded === undefined ? {} : { member: recorded }),
     });
 
-    const target =
-      c.pair === "child"
-        ? { name: "child:1", life: yield* w.start("child:1", { requester: watcher }) }
-        : c.pair === "starter"
-          ? { name: "parent:1", life: starter as string }
-          : { name: "other:1", life: yield* w.start("other:1") };
+    const target = yield* Match.value(c.pair).pipe(
+      Match.when("child", () =>
+        w.start("child:1", { requester: watcher }).pipe(Effect.map((life) => ({ name: "child:1", life }))),
+      ),
+      Match.when("starter", () => Effect.succeed({ name: "parent:1", life: starter as string })),
+      Match.orElse(() => w.start("other:1").pipe(Effect.map((life) => ({ name: "other:1", life })))),
+    );
 
     const sender = c.sender === "none" ? undefined : senderFrom(c.sender, c.as);
     const parent = sender === undefined ? null : w.deliver(watcher, sender);

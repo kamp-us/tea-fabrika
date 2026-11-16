@@ -31,6 +31,7 @@ import {
   Stream,
   Tracer,
   Predicate,
+  Match,
 } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -156,6 +157,9 @@ const ROW_LIMIT = 2_000_000;
 type Answer = Result.Result<Started, ChildrenError>;
 
 type Reason = ChildrenError["reason"];
+
+/** A start off its schema, and the reason its refusal must name. */
+type Bad = { readonly child: unknown; readonly reason: Reason };
 
 /** The first letter's entry id in `<name>/inbox`. */
 const letterId = (id: string) => JSON.stringify(["start", id]);
@@ -376,7 +380,14 @@ const inputFor = (cell: Cell): { readonly input?: Schema.Json } => {
 
   return kind === 0
     ? {}
-    : { input: kind === 1 ? null : kind === 2 ? {} : kind === 3 ? [] : (copied({ v: cell.m }).v as Schema.Json) };
+    : {
+        input: Match.value(kind).pipe(
+          Match.when(1, () => null),
+          Match.when(2, () => ({})),
+          Match.when(3, () => []),
+          Match.orElse(() => copied({ v: cell.m }).v as Schema.Json),
+        ),
+      };
 };
 
 /** The writer's own facts for one call: its clock, build and trace vary; its person and parent do not. */
@@ -876,36 +887,34 @@ const walk = (
           const names = ["", "m".repeat(257), "processes", "gateway", "Merger:1", "merger/1", "client:x", "-merger"];
           const kind = cell.alt % 7;
 
-          const bad: { child: unknown; reason: Reason } =
-            kind === 0
-              ? { child: { ...base, name: choose(names, cell.name) }, reason: "bad_name" }
-              : kind === 1
-                ? // A bad name and a bad input at once: the name is judged first.
-                  { child: { ...base, name: choose(names, cell.name), input: () => 1 }, reason: "bad_name" }
-                : kind === 2
-                  ? { child: { ...base, id: cell.name % 2 === 0 ? "" : "i".repeat(257) }, reason: "bad_input" }
-                  : kind === 3
-                    ? {
-                        child: {
-                          ...base,
-                          code:
-                            cell.name % 2 === 0
-                              ? { program: "", hash: HASH }
-                              : { program: base.code.program, hash: "" },
-                        },
-                        reason: "bad_input",
-                      }
-                    : kind === 4
-                      ? {
-                          child: { ...base, requester: raw("process", { process: "process_bad" }) },
-                          reason: "bad_input",
-                        }
-                      : kind === 5
-                        ? {
-                            child: { ...base, input: choose([() => 1, 1n, Symbol("x"), { f: () => 1 }], cell.name) },
-                            reason: "bad_input",
-                          }
-                        : { child: { ...base, input: { type: "land", deep: [1n] } }, reason: "bad_input" };
+          const bad = Match.value(kind).pipe(
+            Match.when(0, (): Bad => ({ child: { ...base, name: choose(names, cell.name) }, reason: "bad_name" })),
+            // A bad name and a bad input at once: the name is judged first.
+            Match.when(1, (): Bad => ({
+              child: { ...base, name: choose(names, cell.name), input: () => 1 },
+              reason: "bad_name",
+            })),
+            Match.when(2, (): Bad => ({
+              child: { ...base, id: cell.name % 2 === 0 ? "" : "i".repeat(257) },
+              reason: "bad_input",
+            })),
+            Match.when(3, (): Bad => ({
+              child: {
+                ...base,
+                code: cell.name % 2 === 0 ? { program: "", hash: HASH } : { program: base.code.program, hash: "" },
+              },
+              reason: "bad_input",
+            })),
+            Match.when(4, (): Bad => ({
+              child: { ...base, requester: raw("process", { process: "process_bad" }) },
+              reason: "bad_input",
+            })),
+            Match.when(5, (): Bad => ({
+              child: { ...base, input: choose([() => 1, 1n, Symbol("x"), { f: () => 1 }], cell.name) },
+              reason: "bad_input",
+            })),
+            Match.orElse((): Bad => ({ child: { ...base, input: { type: "land", deep: [1n] } }, reason: "bad_input" })),
+          );
 
           const answer = yield* startChild(bad.child as Child, said(cell, parentFor()));
           refused(answer, bad.reason, `L6: ${bad.reason}`);

@@ -1,7 +1,7 @@
 import type { Settled } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { Ci, CodeHost, Program, Send, StartChild } from "@kampus/libfabrika";
-import { Array as Arr, Schema } from "effect";
+import { Array as Arr, Match, Schema } from "effect";
 import * as Change from "./Change.ts";
 import { Abandon, Land, Reply } from "./Mail.ts";
 import type { Values } from "./Settings.ts";
@@ -85,11 +85,11 @@ const rounds = {
   run: (raw: unknown) => {
     const s = Schema.decodeUnknownSync(Previous)(raw);
 
-    return s._tag === "updating"
-      ? { ...s, head: s.job.head, round: 0, checked: null }
-      : s._tag === "checking"
-        ? { ...s, round: 0 }
-        : s;
+    return Previous.matchOrElse(
+      s,
+      { updating: (s) => ({ ...s, head: s.job.head, round: 0, checked: null }), checking: (s) => ({ ...s, round: 0 }) },
+      (s) => s,
+    );
   },
 };
 
@@ -137,7 +137,12 @@ const Msg = Schema.Union([
 const clamp = (at: number) => Math.min(at, 8.64e15);
 
 const commandFor = (s: Working) =>
-  s._tag === "reading" ? "change" : s._tag === "updating" ? "update" : s._tag === "checking" ? "checks" : "merge";
+  Match.valueTags(s, {
+    reading: () => "change",
+    updating: () => "update",
+    checking: () => "checks",
+    merging: () => "merge",
+  });
 
 const progress = (s: Working) => ({ attempt: s.attempt, late: s.late, job: s.job });
 
@@ -164,14 +169,12 @@ export const merger = (settings: Values) => {
     const attempt = s.attempt + 1;
     const next = { ...s, attempt, step: asking(at, tries) };
 
-    const cmd =
-      s._tag === "reading"
-        ? change({ attempt, change: s.job.change })
-        : s._tag === "updating"
-          ? update({ attempt, change: s.job.change, head: s.head })
-          : s._tag === "checking"
-            ? checks({ attempt, head: s.head, start })
-            : merge({ attempt, change: s.job.change, head: s.head });
+    const cmd = Match.valueTags(s, {
+      reading: (s) => change({ attempt, change: s.job.change }),
+      updating: (s) => update({ attempt, change: s.job.change, head: s.head }),
+      checking: (s) => checks({ attempt, head: s.head, start }),
+      merging: (s) => merge({ attempt, change: s.job.change, head: s.head }),
+    });
 
     return [next, [cmd]];
   };
@@ -414,7 +417,7 @@ export const merger = (settings: Values) => {
       state: s._tag,
       ref: s._tag === "idle" ? null : s.job.ref,
       change: s._tag === "idle" ? null : s.job.change,
-      head: s._tag === "idle" ? null : s._tag === "reading" ? s.job.head : s.head,
+      head: Model.matchOrElse(s, { idle: () => null, reading: (s) => s.job.head }, (s) => s.head),
       round: s._tag === "updating" || s._tag === "checking" ? s.round : null,
       attempt: s.attempt,
       tries: s._tag === "idle" ? null : s.step.tries,
