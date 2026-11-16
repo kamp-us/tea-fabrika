@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 // In next/, a resource is released by the scope that acquired it, never by an `afterEach` or
 // `afterAll` that a thrown error or a killed test can skip (0061). oxlint's own `vitest/no-hooks`
 // holds it, set in the repo's config to allow the two setup hooks. Each planted file sits at a

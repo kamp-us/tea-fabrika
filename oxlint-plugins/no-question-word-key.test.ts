@@ -1,5 +1,5 @@
 import type { Context, ESTree } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";

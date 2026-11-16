@@ -9,7 +9,9 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
 import { advises, stale, warnLines } from "./advice.ts";
 import { audit } from "./anti-slop.ts";
 import { checkTracked } from "./gitignore.mjs";
@@ -89,18 +91,16 @@ const ran = spawnSync(
 );
 
 /** What oxlint said, or `null` when it did not finish and report: that must never read as clean. */
-const read = (): readonly Diagnostic[] | null => {
-  // oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain JSON.parse of oxlint's output, no Effect here; effect is imported only for its Array helpers
-  try {
-    const report: {
-      readonly diagnostics?: readonly Diagnostic[];
-      readonly number_of_files?: number;
-    } = JSON.parse(ran.stdout);
-    return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
-  } catch {
-    return null;
-  }
-};
+const read = (): readonly Diagnostic[] | null =>
+  Result.getOrNull(
+    Result.try((): readonly Diagnostic[] | null => {
+      const report: {
+        readonly diagnostics?: readonly Diagnostic[];
+        readonly number_of_files?: number;
+      } = JSON.parse(ran.stdout);
+      return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
+    }),
+  );
 
 const diagnostics = read();
 

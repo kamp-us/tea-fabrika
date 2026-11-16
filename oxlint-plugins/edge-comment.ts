@@ -19,7 +19,8 @@
 // Where it reports, and why there: at the very start of the file, with the real line in the message,
 // as `no-bare-disable` does. A report on the comment's own line could be silenced by a comment.
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 
 const EDGE_RULES: ReadonlySet<string> = new Set(["fabrika/no-promises", "fabrika/no-effect-run-outside-edge"]);
 

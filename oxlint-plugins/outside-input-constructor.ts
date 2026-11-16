@@ -1,6 +1,6 @@
 // P17's decode paths. Follow local aliases, including aliases of curried Schema decoders.
 import type { CreateRule, Scope, Variable } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { ancestors, dotted, pathIn, type Node } from "./match.ts";
 
 const scoped =

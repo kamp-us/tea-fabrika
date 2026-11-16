@@ -25,7 +25,7 @@
 // It has a whitespace autofix, which `pnpm format` applies: a newline after the line where the first
 // statement ends.
 import type { Context, CreateRule } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import type { Node } from "./match.ts";
 
 type Source = Context["sourceCode"];

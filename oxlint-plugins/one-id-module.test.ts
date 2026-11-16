@@ -2,7 +2,7 @@
 // proves the repo's own .oxlintrc.json wires the rule. The retired path is one path, so each run
 // lints one body: one oxlint run for each of the four body kinds, as the first generated run drew them.
 import { join } from "node:path";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";

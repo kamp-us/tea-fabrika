@@ -10,7 +10,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -120,14 +122,10 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
   return { unreached, total: byName.size };
 };
 
-let result: ReturnType<typeof run> = { unreached: [], total: 0 };
-
-// oxlint-disable-next-line fabrika/no-raw-try-catch -- the script's top-level guard, no Effect here; effect is imported only for its Array helpers
-try {
-  result = run();
-} catch (error) {
-  fail(`could not read: ${String(error)}`);
-}
+const result: ReturnType<typeof run> = Result.match(Result.try(run), {
+  onSuccess: (ran) => ran,
+  onFailure: (error) => fail(`could not read: ${String(error)}`),
+});
 
 if (result.unreached.length > 0) {
   for (const line of result.unreached) {

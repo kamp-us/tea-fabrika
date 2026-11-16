@@ -4,6 +4,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -183,9 +185,13 @@ describe("a named catalog's pointer", () => {
 
   /** Each name a catalog holding `thing` at `version`, and one package naming each by its pointer. */
   const tree = (all: readonly string[], version: string) => ({
-    "pnpm-workspace.yaml": `catalogs:\n${all.map((name) => `  ${name}:\n    thing: ${version}\n`).join("")}`,
+    "pnpm-workspace.yaml": `catalogs:\n${pipe(
+      all,
+      Arr.map((name) => `  ${name}:\n    thing: ${version}\n`),
+      Arr.join(""),
+    )}`,
     "packages/one/package.json": JSON.stringify({
-      dependencies: Object.fromEntries(all.map((name, i) => [`thing${i}`, `catalog:${name}`])),
+      dependencies: Object.fromEntries(Arr.map(all, (name, i) => [`thing${i}`, `catalog:${name}`])),
     }),
   });
 
@@ -238,7 +244,7 @@ describe("a named catalog's pointer", () => {
         const { status, said } = run({
           "pnpm-workspace.yaml": `catalogs:\n  ${name}:\n    thing: 1.2.3\n`,
           "packages/one/package.json": JSON.stringify({
-            dependencies: Object.fromEntries(bad.map((version, i) => [`thing${i}`, version])),
+            dependencies: Object.fromEntries(Arr.map(bad, (version, i) => [`thing${i}`, version])),
           }),
         });
         expect(status).toBe(1);

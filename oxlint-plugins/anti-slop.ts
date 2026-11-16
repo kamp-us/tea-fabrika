@@ -15,7 +15,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
-import { Exit, Predicate, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { verify } from "./vendored.ts";
 
 /**
@@ -51,9 +56,11 @@ const LIBFABRIKA = "next/packages/libfabrika/src";
 
 /** Each folder right under `path`, as the glob a rule's list names it by. */
 const subfolders = (root: string, path: string): ReadonlyArray<string> =>
-  readdirSync(join(root, path), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name !== "node_modules")
-    .map((entry) => `${path}/${entry.name}/**`);
+  pipe(
+    readdirSync(join(root, path), { withFileTypes: true }),
+    Arr.filter((entry) => entry.isDirectory() && entry.name !== "node_modules"),
+    Arr.map((entry) => `${path}/${entry.name}/**`),
+  );
 
 /**
  * The folders of the scope, read from the disk, each as the glob a rule's list names it by: each
@@ -66,7 +73,7 @@ export const folders = (root: string): ReadonlyArray<string> => [
   "oxlint-plugins/**",
   `${LIBFABRIKA}/*`,
   ...subfolders(root, LIBFABRIKA),
-  ...subfolders(root, "next/packages").filter((glob) => glob !== "next/packages/libfabrika/**"),
+  ...Arr.filter(subfolders(root, "next/packages"), (glob) => glob !== "next/packages/libfabrika/**"),
   ...subfolders(root, "next/programs"),
   ...subfolders(root, "next/apps"),
 ];
@@ -89,8 +96,11 @@ export const lock = (
   listed: ReadonlyArray<string>,
   hits: ReadonlyMap<string, number>,
 ): Lock => ({
-  add: scope.filter((folder) => (hits.get(folder) ?? 0) === 0 && !listed.some((glob) => covers(glob, folder))),
-  refused: listed.filter((glob) => !scope.includes(glob) && !WHOLE.includes(glob)),
+  add: Arr.filter(
+    scope,
+    (folder) => (hits.get(folder) ?? 0) === 0 && !Arr.some(listed, (glob) => covers(glob, folder)),
+  ),
+  refused: Arr.filter(listed, (glob) => !scope.includes(glob) && !WHOLE.includes(glob)),
 });
 
 /** A rule's setting as `oxlint --print-config` prints it: a level, or a level and the list of its options. */
@@ -138,7 +148,7 @@ const count = (
 ): ReadonlyMap<string, ReadonlyMap<string, number>> | null => {
   const home = mkdtempSync(join(tmpdir(), "anti-slop-lock-"));
   const config = join(home, "oxlintrc.json");
-  const plugins = PLUGINS.map(({ name, specifier }) => ({ name, specifier: join(root, specifier) }));
+  const plugins = Arr.map(PLUGINS, ({ name, specifier }) => ({ name, specifier: join(root, specifier) }));
   writeFileSync(
     config,
     JSON.stringify({ categories: { correctness: "off" }, plugins: [], jsPlugins: plugins, rules: settings }),
@@ -156,18 +166,18 @@ const count = (
   }
 
   const scope = folders(root);
-  const codes = new Map(TAKEN.map((rule) => [codeOf(rule), rule]));
-  const hits = new Map(TAKEN.map((rule) => [rule, new Map<string, number>()]));
+  const codes = new Map(Arr.map(TAKEN, (rule) => [codeOf(rule), rule]));
+  const hits = new Map(Arr.map(TAKEN, (rule) => [rule, new Map<string, number>()]));
 
   // The config's ignore list is matched here, from the top of the repo, as lint.ts's run reads it.
   for (const { code, filename } of report.value.diagnostics) {
     const file = relative(root, resolve(root, filename ?? ""));
     const rule = codes.get(code ?? "");
-    const folder = scope.find((glob) => matchesGlob(file, glob));
+    const folder = Arr.findFirst(scope, (glob) => matchesGlob(file, glob));
     const counted = rule === undefined ? undefined : hits.get(rule);
 
-    if (counted !== undefined && folder !== undefined && !ignored.some((glob) => matchesGlob(file, glob))) {
-      counted.set(folder, (counted.get(folder) ?? 0) + 1);
+    if (counted !== undefined && Option.isSome(folder) && !Arr.some(ignored, (glob) => matchesGlob(file, glob))) {
+      counted.set(folder.value, (counted.get(folder.value) ?? 0) + 1);
     }
   }
 
@@ -188,13 +198,15 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
     return [UNREAD];
   }
 
-  return config.value.jsPlugins.flatMap((plugin) => {
-    const pinned = Predicate.isString(plugin) ? undefined : PLUGINS.find(({ name }) => name === plugin.name);
+  return Arr.flatMap(config.value.jsPlugins, (plugin) => {
+    const pinned = Predicate.isString(plugin)
+      ? Option.none()
+      : Arr.findFirst(PLUGINS, ({ name }) => name === plugin.name);
     const from = Predicate.isString(plugin) ? "" : relative(root, resolve(root, plugin.specifier));
-    return pinned === undefined || from === pinned.specifier
+    return Option.isNone(pinned) || from === pinned.value.specifier
       ? []
       : [
-          `.oxlintrc.json: ${pinned.name} is loaded from ${from}, and only ${pinned.specifier} is the pinned copy (0563)`,
+          `.oxlintrc.json: ${pinned.value.name} is loaded from ${from}, and only ${pinned.value.specifier} is the pinned copy (0563)`,
         ];
   });
 };
@@ -214,21 +226,21 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   }
 
   const { jsPlugins, overrides, ignorePatterns } = config.value;
-  const names = new Set(PLUGINS.map(({ name }) => name));
+  const names = new Set(Arr.map(PLUGINS, ({ name }) => name));
 
-  if (!jsPlugins.some((plugin) => !Predicate.isString(plugin) && names.has(plugin.name))) {
+  if (!Arr.some(jsPlugins, (plugin) => !Predicate.isString(plugin) && names.has(plugin.name))) {
     return [];
   }
 
   const pinned = [...strays(root, printed), ...verify(root)];
   /** The blocks that turn a rule on: each override that names it at error. */
   const blocks = (rule: string) =>
-    overrides.flatMap((block) => {
+    Arr.flatMap(overrides, (block) => {
       const setting = block.rules[rule];
       return setting !== undefined && levelOf(setting) === "deny" ? [{ files: block.files, setting }] : [];
     });
   // The lock's run uses each rule's options from its own block, so it counts what the config holds.
-  const settings = Object.fromEntries(TAKEN.map((rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
+  const settings = Object.fromEntries(Arr.map(TAKEN, (rule) => [rule, written(blocks(rule)[0]?.setting ?? "deny")]));
   const hits = count(root, settings, ignorePatterns);
 
   if (hits === null) {
@@ -236,17 +248,21 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   }
 
   const scope = folders(root);
-  const unlocked = TAKEN.flatMap((rule) => {
+  const unlocked = Arr.flatMap(TAKEN, (rule) => {
     const { add, refused } = lock(
       scope,
-      blocks(rule).flatMap((block) => block.files),
+      Arr.flatMap(blocks(rule), (block) => block.files),
       hits.get(rule) ?? new Map(),
     );
     return [
-      ...add.map(
+      ...Arr.map(
+        add,
         (folder) => `.oxlintrc.json: ${rule} has no hit left in ${folder}: add the folder to its block (0563)`,
       ),
-      ...refused.map((glob) => `.oxlintrc.json: ${rule}'s block names ${glob}, which is not a folder of its scope`),
+      ...Arr.map(
+        refused,
+        (glob) => `.oxlintrc.json: ${rule}'s block names ${glob}, which is not a folder of its scope`,
+      ),
     ];
   });
   return [...pinned, ...unlocked];

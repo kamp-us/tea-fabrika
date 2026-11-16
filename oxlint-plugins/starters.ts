@@ -23,6 +23,8 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -60,11 +62,11 @@ type Role =
   | { readonly _tag: "service"; readonly needs: Layer };
 
 const call = (tag: Tag, needs: Layer | null = null): Role => ({ _tag: "call", tag, needs });
-const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(names.map((name) => [name, role]));
+const each = (names: ReadonlyArray<string>, role: Role) => Object.fromEntries(Arr.map(names, (name) => [name, role]));
 
 const launchers = (browser: string) =>
   each(
-    ["launch", "launchPersistentContext", "launchServer"].map((method) => `${browser}.${method}`),
+    Arr.map(["launch", "launchPersistentContext", "launchServer"], (method) => `${browser}.${method}`),
     call("browser"),
   );
 
@@ -171,8 +173,10 @@ export const reader = <N>() => {
 
   return {
     imports: (source: string, names: ReadonlyArray<Bound>) => {
-      const paths = MODULES.filter((entry) => entry.module.test(source)).flatMap((entry) =>
-        Object.entries(entry.names),
+      const paths = pipe(
+        MODULES,
+        Arr.filter((entry) => entry.module.test(source)),
+        Arr.flatMap((entry) => Object.entries(entry.names)),
       );
 
       for (const { imported, local } of names) {
@@ -230,7 +234,7 @@ export const reader = <N>() => {
     },
     opens: (scope: "alone" | "any"): ReadonlyArray<Open<N>> => {
       const all = stubbed ? found : [...found, ...fetched];
-      return scope === "any" ? all : all.filter((one) => one.needs === null || provided.has(one.needs));
+      return scope === "any" ? all : Arr.filter(all, (one) => one.needs === null || provided.has(one.needs));
     },
   };
 };
@@ -269,7 +273,7 @@ export const visitor = (read: ReturnType<typeof reader<Node>>): Visitor => ({
 
     read.imports(
       node.source.value,
-      node.specifiers.flatMap((spec) =>
+      Arr.flatMap(node.specifiers, (spec) =>
         spec.type === "ImportSpecifier" && spec.importKind === "type"
           ? []
           : [

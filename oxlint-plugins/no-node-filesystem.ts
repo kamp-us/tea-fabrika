@@ -1,6 +1,6 @@
 // next/ product code uses Effect's replaceable FileSystem and Path services.
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { heldToNext, pathIn, type Node } from "./match.ts";
 
 const native = /^(?:node:)?(?:fs(?:\/promises)?|path(?:\/(?:posix|win32))?)$/;

@@ -20,7 +20,7 @@
 //
 // `.oxlintrc.json` turns it on in all of `next/**`, tests included: a test names its helpers too.
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import type { Node } from "./match.ts";
 
 const OF = /^of$|[A-Za-z0-9]Of$/;

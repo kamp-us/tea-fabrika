@@ -3,7 +3,10 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
-import { Array as Arr, Option, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
@@ -277,15 +280,14 @@ const graph = (entries: readonly string[], root: string, names: Names) => {
     }
 
     const at = relative(root, file);
-    let text: string;
+    const read = Result.try(() => readFileSync(file, "utf8"));
 
-    // oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain file read at the edge, no Effect here; effect is imported only for its Array helpers
-    try {
-      text = readFileSync(file, "utf8");
-    } catch {
+    if (Result.isFailure(read)) {
       unjudged.push(`'${at}' cannot be read`);
       return;
     }
+
+    const text = read.success;
 
     const parsed = parseSync(file, text);
 
@@ -520,18 +522,17 @@ export const programPackageLayout: CreateRule = {
     }
 
     const root = matched[1];
-    let manifest: unknown;
+    const read = Result.try((): unknown => JSON.parse(readFileSync(join(root, "package.json"), "utf8")));
 
-    // oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain file read at the edge, no Effect here; effect is imported only for its Array helpers
-    try {
-      manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-    } catch {
+    if (Result.isFailure(read)) {
       return {
         Program(node) {
           context.report({ node, message: "Cannot read the program package.json." });
         },
       };
     }
+
+    const manifest = read.success;
 
     // The resolver finds the package by its own name, as Node's self-reference does (11.24.2
     // matches any string name). With no name the package's exports cannot be asked, and every

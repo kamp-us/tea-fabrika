@@ -23,7 +23,7 @@
 // compiler checks it is an Effect. The rule sees no types, so any other place is flagged: write
 // the loop with `Effect.forEach`, or name the return type when a helper hands the Effect on.
 import type { Context, CreateRule } from "@oxlint/plugins";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { ancestors, grouped, type Node } from "./match.ts";
 
 const isTell = (node: Node): boolean => {

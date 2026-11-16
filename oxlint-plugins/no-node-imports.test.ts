@@ -1,7 +1,7 @@
 // Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
 // over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
 import { join } from "node:path";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";

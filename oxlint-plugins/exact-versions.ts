@@ -10,7 +10,9 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -107,14 +109,14 @@ const check = (file: string): readonly string[] => {
 };
 
 /** What one file refuses, or the line saying it could not be read. */
-const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } => {
-  // oxlint-disable-next-line fabrika/no-raw-try-catch -- a plain file read at the edge, no Effect here; effect is imported only for its Array helpers
-  try {
-    return { lines: check(file), broken: false };
-  } catch (error) {
-    return { lines: [`${file}: could not read: ${String(error)}`], broken: true };
-  }
-};
+const attempt = (file: string): { readonly lines: readonly string[]; readonly broken: boolean } =>
+  Result.match(
+    Result.try(() => check(file)),
+    {
+      onSuccess: (lines) => ({ lines, broken: false }),
+      onFailure: (error) => ({ lines: [`${file}: could not read: ${String(error)}`], broken: true }),
+    },
+  );
 
 const results = Arr.map(files, attempt);
 const lines = Arr.flatMap(results, (result) => result.lines);
