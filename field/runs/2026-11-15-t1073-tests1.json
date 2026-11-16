@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1073-tests1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1420",
+  "started": "2026-11-15T19:14:00-08:00",
+  "ended": "2026-11-15T20:20:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Tests step for ticket 1073 slice 1 (decision 0584), in next/ and our lint tooling; send: plan, for two of the three splits only. Written: starters.ts, one reader of what starts a real thing, fed facts by an adapter per syntax tree (oxlint's and oxc-parser's types do not assign to each other); integration-test-name.ts on it, with 0584's list (process.kill, killWorkerd, a remote fetch literal, ChildProcess.make or .spawn and makeTemp* with Node's layer, mkdtemp, tmpdir; Rolldown out) and a messageId; test-kind.ts, in pnpm lint as lint:kind, on code-graph next --graph --edges (tried first, per 0040: it lists test files and node: imports and resolves relative and workspace exports, * patterns included, but only with the edge pass, 26 s under nice beside lint:dead's 72 s). Laws: K1 and K2 in integration-test-name.test.ts were red on today's rule (K1: a disk starter gave 0 errors; K2: in-memory Rolldown fired) and are green; K3 (in memory and through the real command) and K4 in test-kind.test.ts are new code, proved by their plants; K5 is lint:kind and the rule's zero scenario, at zero; K11 is the .agents/ mirror law, moved by git mv into edge-config.test.ts after PR 1402 merged, and listed by vitest list --project next. Measured on next/ at main's 9ddc47e45 before any rename: the rule fired on 4 of 197 plain files, all real (0 false alarms); test-kind failed 1 of 148 .integration. files, client-manager-contract, real (0 false alarms); after the renames and a merge of main at 235a24582 both are at zero with 18 advice lines. Done: renames to plain (client-manager-contract, error-cause), the seven to .integration. (Git, Sources, RepositoriesGit, RepositoriesGit.identity, OpenRepository as OpenRepository.composed.integration.test.ts because OpenRepository.integration.test.ts exists, ProcessManagerMemo, settings-generated), node-kinds.test.ts reading the tree with readdirSync, Process.test-support.ts making its folder on the first storage() call, the edge-comment split. Sent back: the deps and laws-scan splits need a shared scanner both halves import, and this folder refuses each way tried: as *.test-support.ts lint:dead refuses exports only tests call in exam/ (no package exports map there), as *.fixture.ts no-node-imports refuses the Node reads; a copy per file would leave the planted laws testing a different copy than the one that scans next/. Left for the build: vitest.shards.json and vitest.shards.full.json rows for the renamed files (shard-rows.ts and six vitest.shards.test.ts laws are red until then).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 66,
+  "note": "Not run here, by the brief: every .integration. file, renamed or split (their laws moved unchanged). Run here, one file at a time: integration-test-name.test.ts (4 green), test-kind.test.ts (2 green), node-kinds.test.ts, client-manager-contract.test.ts, error-cause.test.ts, edge-config.test.ts (5 green), ExitReason.test.ts and mail.test.ts (importers of Process.test-support.ts), changes.test.ts's readers law, vitest.shards.test.ts (6 red: L5, F1, F2, L18 and the two rows-name-real-files laws; with this step's edits set aside, F2, L18 and the two rows laws are red from the renames alone). The deps and laws-scan split attempt is kept outside the repo, not committed.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "K1",
+      "plant": "starters.ts: the process.kill branch matches a name no call has; the planted kill in a plain file gave 0 errors",
+      "result": "red"
+    },
+    {
+      "law": "K2",
+      "plant": "starters.ts: rolldown and build from rolldown kept as openers; client-manager-contract's in-memory Rolldown case fired",
+      "result": "red"
+    },
+    {
+      "law": "K3",
+      "plant": "test-kind.ts: the walk queues only the test file's own imports; in memory a two-hop advice chain was missing, and through the command a two-hop relative integration chain failed",
+      "result": "red"
+    },
+    {
+      "law": "K4",
+      "plant": "test-kind.ts: exit 1 when there is any finding; a tree of only advice exited 1",
+      "result": "red"
+    },
+    {
+      "law": "K5",
+      "plant": "client-manager-contract.test.ts named .integration. again; lint:kind exited 1 naming it",
+      "result": "red"
+    },
+    {
+      "law": "K11",
+      "plant": "edge-config.test.ts named .integration.; vitest list --project next listed the mirror law 0 times, then 1 when restored",
+      "result": "red"
+    },
+    {
+      "law": "node-kinds L6",
+      "plant": "node-kinds.json given a made-up export MadeUp1073; the stand-in read the tree and named it twice",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
