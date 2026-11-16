@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-tea-s2-tests3",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1431",
+  "started": "2026-11-15T20:53:34-08:00",
+  "ended": "2026-11-15T21:08:14-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Third tests round for slice 2 of docs/plan/quests/tea-msg-tag-PLAN.md, after demlik pull 966 merged the same _tag change upstream. (a) One new law, K2c in next/packages/libfabrika/src/runtime/MsgKey.test.ts, after 966's packages/tea/src/effect/tagged-union-machine.test.ts: a door whose State and Msgs are both Schema.TaggedUnion, written as a state table with two Cmds that each answer ok or err, is walked by generated picks, run on tea's Promise engine and its Effect engine over a memoryStore, stopped and booted again from its saved State at a generated cut, and held to a plain reduce with no tea in it; every Msg either engine folds is keyed _tag with no type, and both engines' traces are equal. It is green against the current patch (patches/@demlik__tea@0.27.0.patch), because that patch already keys the state table, the Cmd routing and the Effect engine's settle on _tag; its two plants turn it red. 966's other half, the event-sourced store dropping a row keyed type, is left out: no code of ours imports @demlik/tea/do, and doEventSourcedStore takes Cloudflare's whole DurableObjectStorage, which no test can stand in for without a cast; our own old row, a saved answer keyed type, is K3's in Program.test.ts. (b) The first two tests rounds renamed no shape that copies another system's format: the slice's diff (428d41e^..58ad62a) holds no ContentPart, MediaSource, TraceBreadcrumb, MinimalEvent, Jev or typedoc value, and no package.json type module, content part or thinking block, the five values 966's commit 6b01244 put back. No code in next/ or .agents/ imports those tea shapes; they meet only today's version (packages/fabrika, packages/pipeline), which stays on tea 0.25.0 and slice 2 does not touch. The local patch also leaves them on type. No file went back to type.",
+  "plants": [
+    {
+      "law": "K2c (next/packages/libfabrika/src/runtime/MsgKey.test.ts)",
+      "plant": "installed tea chunk-5HWE6CAZ.js:196, the Effect engine's settle reads cmd.type for cmd._tag, so a declared error is taken as undeclared and the Effect engine parts from the Promise engine (K2 also went red)",
+      "result": "red"
+    },
+    {
+      "law": "K2c (next/packages/libfabrika/src/runtime/MsgKey.test.ts)",
+      "plant": "installed tea chunk-SKI5V64W.js:266 and :293, lookupCell reads state.type for state._tag, so the running state table finds no row (NoCellError on knock; K2b also went red)",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 15,
+  "note": "Each plant ran once on a copy of the installed tea file and was restored by copy (cmp clean, the file green again: 3 of 3). Ran: vitest on MsgKey.test.ts alone (green, fast depth, seed 119120), pnpm format, pnpm lint (0 blocking), the ratchet (exit 0), and one pnpm typecheck, red first in .agents on chain.ts and drive.ts product code as in the second round; tsc on next/packages/libfabrika alone then showed no error in MsgKey.test.ts (1183 errors left, in 56 product files and 38 test files, the build's). No integration, visual or workerd file ran.",
+  "step": "tests"
+}
