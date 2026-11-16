@@ -2959,6 +2959,128 @@
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop/require-readable-spacing": "error" }
+    },
+    {
+      // 0555: no test framework mock in next/. Each folder joins when its sweep slice reaches zero.
+      // One block for every folder, so a later slice adds its globs here: oxlint takes the last
+      // matching block's options, so a second block would have to list all five again.
+      "files": ["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"],
+      "rules": {
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+            "mock": "Give the code a service and provide a test layer (0555).",
+            "doMock": "Give the code a service and provide a test layer (0555).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
+    },
+    {
+      // The lock's other half (0555, the lock is a pair): the vitest rule above misses a call chained
+      // onto the vi call, such as `vi.fn().mockReturnValue(1)`
+      // (https://github.com/oxc-project/oxc/issues/29656), and this rule matches the member itself.
+      // It stays until oxc fixes that. The same files as the block above, each vi entry with its
+      // message there, in two blocks. An override replaces a rule's options, so every entry these
+      // files took before is written out again: the Reflect ban's warn block. This one is the `.ts`
+      // files, at warn, since Testing.ts's JSON.parse still advises; at warn, a vi fire still blocks:
+      // lint.ts lets only a JSON.parse fire of this rule advise (advice.ts). The next is the `.tsx`
+      // files, at error: there are none, and a warn line with no fire fails a whole run (0523).
+      "files": ["next/packages/libfabrika/src/*.ts"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "warn",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
+    },
+    {
+      // The lock's other half for the `.tsx` files: the block above, at error.
+      "files": ["next/packages/libfabrika/src/*.tsx"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "Data",
+            "property": "TaggedError",
+            "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)."
+          },
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          },
+          {
+            "object": "vi",
+            "property": "fn",
+            "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)."
+          },
+          { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
+          {
+            "object": "vi",
+            "property": "doMock",
+            "message": "Give the code a service and provide a test layer (0555)."
+          },
+          {
+            "object": "vi",
+            "property": "spyOn",
+            "message": "Put the call behind a service and record it with a Recorder (0555, 0579)."
+          },
+          {
+            "object": "vi",
+            "property": "stubEnv",
+            "message": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
     }
   ]
 }

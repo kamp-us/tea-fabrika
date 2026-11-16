@@ -24,7 +24,8 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR } from "./builtin-plants.ts";
+import { advises } from "./advice.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, TAGGED_ERROR, VI_METHODS, VI_PROPERTIES } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -541,6 +542,8 @@ type Printed = {
 /** One fire of an oxlint JSON report. */
 type Diagnostics = ReadonlyArray<{
   readonly code?: string;
+  readonly severity?: string;
+  readonly message?: string;
   readonly filename: string;
   readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
 }>;
@@ -569,7 +572,8 @@ const optionsOf = (setting: unknown): ReadonlyArray<unknown> =>
 /**
  * Where a law plants a file for one glob of the config, such as `next/programs/chaos/**`: a file of
  * that folder's own. A glob that names a file is answered with its `*` filled in, so
- * `apps/fabrika/*-e2e.ts` gets `apps/fabrika/planted-e2e.ts`.
+ * `apps/fabrika/*-e2e.ts` gets `apps/fabrika/planted-e2e.ts`, and a glob of one folder's files by
+ * extension, such as `next/packages/libfabrika/src/*.tsx`, gets `planted` with that extension.
  */
 const plantPath = (glob: string): string => {
   const folder = glob.replace(/(\/\*\*)?\/\*\*?$/, "");
@@ -588,6 +592,16 @@ const globsHolding = (
     return optionsOf(setting).some(holds)
       ? files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }))
       : [];
+  });
+
+/** The globs of every override that sets the vi ban (0555), each with the rule's level there. */
+const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+  printed.overrides.flatMap(({ files, rules }) => {
+    const setting = rules["vitest/no-restricted-vi-methods"];
+
+    return setting === undefined
+      ? []
+      : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));
   });
 
 /**
@@ -677,8 +691,9 @@ describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
       expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
 
       const { text, want } = textOf(REFLECT);
-      const files = globs.map(({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      // Two globs can name one file, such as `next/packages/libfabrika/src/*` and the vi lock's
+      // `next/packages/libfabrika/src/*.ts`: that file is checked once, with the options it really gets.
+      const files = [...new Set(globs.map(({ glob }) => plantPath(glob)))];
       const diagnostics = lint(text, files);
 
       for (const file of files) {
@@ -739,6 +754,63 @@ describe("the Data.TaggedError entry, which stands beside fabrika/no-data-tagged
           .filter(({ rules }) => !optionsOf(rules["no-restricted-properties"]).some(isTaggedError))
           .map(({ files }) => files),
       ).toEqual([]);
+    });
+  }, 120_000);
+});
+
+describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's mocks", () => {
+  // scenario: T1067 L1 (lib-top) and M1 (node), the repo's own config, read by oxlint's own
+  // --print-config, so every folder a `vitest/no-restricted-vi-methods` block lists today gets
+  // VI_METHODS' lines, each later slice's folder included.
+  // Plant: delete `fn` (or `spyOn`) from the block in `.oxlintrc.json`, and that line is not refused.
+  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi ban block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = viGlobs(printed);
+      // Coverage: libfabrika's top files, both extensions, and the ban blocks in every folder it names.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
+      );
+      expect(globs.every(({ level }) => level === "deny")).toBe(true);
+
+      const { text, want } = textOf(VI_METHODS);
+      const files = globs.map(({ glob }) => plantPath(glob));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, VI_METHODS.code), file).toEqual(want);
+      }
+    });
+  }, 120_000);
+
+  // scenario: T1067 L1 (lib-top), the lock as a pair (lead ruling 2026-11-16). The vitest rule
+  // misses a call chained onto the vi call (https://github.com/oxc-project/oxc/issues/29656), so
+  // every folder a vi ban block lists also takes `no-restricted-properties`' vi entries, and
+  // VI_PROPERTIES' lines are refused there. A vi fire blocks at any level of the rule: only a
+  // JSON.parse fire advises (advice.ts).
+  // Plant: drop the block's `vi` entries from `no-restricted-properties`, and the chained lines are
+  // not refused.
+  it("scenario: VI_PROPERTIES' lines are refused exactly, and block, in every folder of every vi ban block", () => {
+    inConfigCopy(({ printed, lint }) => {
+      const globs = viGlobs(printed);
+      // Coverage: libfabrika's top files, both extensions.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
+      );
+
+      const { text, want } = textOf(VI_PROPERTIES);
+      const files = globs.map(({ glob }) => plantPath(glob));
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+      const diagnostics = lint(text, files);
+
+      for (const file of files) {
+        expect(refusedIn(diagnostics, file, VI_PROPERTIES.code), file).toEqual(want);
+      }
+
+      const vi = diagnostics.filter((d) => files.includes(d.filename) && d.code === VI_PROPERTIES.code);
+      // Coverage: the rule is at warn in a locked folder, so the blocking check meets a warning.
+      expect(vi.some(({ severity }) => severity === "warning")).toBe(true);
+      expect(vi.filter((d) => advises(d))).toEqual([]);
     });
   }, 120_000);
 });

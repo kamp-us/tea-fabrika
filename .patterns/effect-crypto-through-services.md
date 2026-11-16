@@ -49,7 +49,13 @@ Rules:
   `Digest.layerWebCrypto`.
 - **Random bytes and ids come from `SecureRandom`.** `grant.ts:69` makes a grant id with
   `SecureRandom.SecureRandom.use((random) => random.uuidV4())`, and `grant.ts:132` provides
-  `SecureRandom.layerWebCrypto`. The service's `uuidV7` reads the `Clock`, so a test clock moves it
+  `SecureRandom.layerWebCrypto`. `Id.makeGenerator` (`next/packages/libfabrika/src/Id.ts:170-175`)
+  yields `SecureRandom.SecureRandom` and draws its 10 bytes with `randomBytes(10)`, and a law
+  provides `SecureRandom.make(fill)` with the bytes it wants (`Id.test-support.ts`, `generatorWith`).
+  One bundled layer stays on purpose: `Id.Generator.layer` (`Id.ts:226-228`) provides
+  `SecureRandom.layerWebCrypto` inside itself, so its about 50 callers need nothing. It stays until
+  a law needs an edge to pick (the mock sweep's lib-top plan, amendment 2026-11-16).
+  The service's `uuidV7` reads the `Clock`, so a test clock moves it
   (`SecureRandom.ts:90-107`); the module-level `uuidV7Unsafe` reads `Date.now()` and does not
   (`:358-375`).
 - **An HMAC is `Mac.sign` and `Mac.verify`,** never `crypto.subtle.sign("HMAC", ...)`.
@@ -59,9 +65,11 @@ Rules:
 
 ## Where it applies
 
-Every hash, HMAC, signature and random value in `next/` product code. Stops at `Id.ts`'s
-monotonic TypeID maker (`next/packages/libfabrika/src/Id.ts:129`), which reads raw random bytes for
-its own UUIDv7 layout; whether `SecureRandom.uuidV7` can replace it is not checked.
+Every hash, HMAC, signature and random value in `next/` product code, `Id.ts`'s monotonic TypeID
+maker included. `SecureRandom.uuidV7` cannot replace that maker without a format change: its
+layout is a 42-bit counter plus 32 fresh random bits per id, where `Id.ts` keeps a 74-bit random
+field that counts up, so every id's bits and the `exhausted` edge would change (checked against
+`effect` 4.1.3's `SecureRandom.ts`, the `uuidV7` doc).
 
 ## Not yet
 
