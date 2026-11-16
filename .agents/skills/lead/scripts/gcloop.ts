@@ -66,6 +66,7 @@ import {
 } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
+import { variable } from "./drive.ts";
 import { spoken } from "./flow/Beat.ts";
 
 // ---------------------------------------------------------------- the setting
@@ -550,7 +551,7 @@ const plistCommand = Command.make("plist", {}, () =>
       main: folders.main,
       minutes: String(minutes),
       seconds: String(minutes * 60),
-      path: process.env.PATH ?? "/usr/bin:/bin",
+      path: (yield* variable("PATH")) ?? "/usr/bin:/bin",
       log: path.join(folders.state, "gc-timer.log"),
     });
 
