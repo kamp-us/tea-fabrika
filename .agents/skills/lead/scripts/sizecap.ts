@@ -73,7 +73,7 @@
 //   - A plan with no "Product lines expected" column and no slices says so: it records no size.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, Exit, FileSystem, Predicate, Schema, Stream } from "effect";
+import { Console, Effect, Exit, FileSystem, type PlatformError, Predicate, Schema, Stream } from "effect";
 import { Argument, Command } from "effect/cli";
 import { ChildProcess } from "effect/process";
 
@@ -347,7 +347,8 @@ export class Failed extends Schema.TaggedError<Failed>()("Failed", {
 
 // The edge: git through effect/process, the plan through FileSystem, the arguments through effect/cli.
 
-const text = (bytes: Stream.Stream<Uint8Array, unknown>) => bytes.pipe(Stream.decodeText(), Stream.mkString);
+const text = (bytes: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  bytes.pipe(Stream.decodeText(), Stream.mkString);
 
 /** One git command's output and exit code. Nothing it prints is run. */
 const git = Effect.fn("sizecap.git")(function* (args: ReadonlyArray<string>) {

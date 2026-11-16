@@ -61,7 +61,7 @@
 // file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Console, Effect, FileSystem, Option, Path, Schema, Stream } from "effect";
+import { Console, Effect, FileSystem, Option, Path, type PlatformError, Schema, Stream } from "effect";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import { parseSync, Visitor } from "oxc-parser";
@@ -592,7 +592,8 @@ export const narrowingUnknown = (reason: string) =>
 
 export const exitCode = (outcome: Summary["outcome"]) => (outcome === "done" ? 0 : outcome === "skip" ? 40 : 30);
 
-const text = (stream: Stream.Stream<Uint8Array, unknown>) => stream.pipe(Stream.decodeText(), Stream.mkString);
+const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
+  stream.pipe(Stream.decodeText(), Stream.mkString);
 
 /**
  * Run one command to its end. A command that cannot start answers 127. The child lives in this

@@ -125,7 +125,7 @@ export const prepare = Effect.fn("repositoryOpen.prepare")(function* (
  * @stability unstable
  * @category constructors
  */
-export const open = Effect.fn("repositoryOpen.open")(function* <R>(
+export const open = Effect.fn("repositoryOpen.open")(function* <E, R>(
   prepared: Effect.Success<ReturnType<typeof prepare>>,
   options: {
     readonly selection: Id.InputId;
@@ -134,7 +134,7 @@ export const open = Effect.fn("repositoryOpen.open")(function* <R>(
     readonly by: string;
     readonly build: string;
     readonly interactive: boolean;
-    readonly confirm: (selection: Open.CheckedSelection) => Effect.Effect<boolean, unknown, R>;
+    readonly confirm: (selection: Open.CheckedSelection) => Effect.Effect<boolean, E, R>;
   },
 ) {
   const trust = yield* RepositoryTrust;
