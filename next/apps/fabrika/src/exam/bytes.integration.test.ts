@@ -2,10 +2,10 @@
 // brain, each program and each window script the brain carries as a text module.
 // Source: next/apps/fabrika/src/build.test.ts at 9b48d622b5d4. Existing p65 laws stay intact.
 import { NodeServices } from "@effect/platform-node";
-import { expect, it } from "@effect/vitest";
+import { expect } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
-import { runsFor } from "@kampus/vitest";
+import { it, runsFor } from "@kampus/vitest";
 import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
@@ -227,7 +227,7 @@ const checkBuild = (all: ReadonlyArray<Observed>, built: Built, tab?: string) =>
 };
 
 it.effect(
-  "scenario: the real one-file build's brain, programs and carried texts contain no MCP",
+  "the real one-file build's brain, programs and carried texts contain no MCP",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem,
@@ -283,7 +283,19 @@ it.effect(
         ),
       ).toThrow();
     }).pipe(Effect.provide(NodeServices.layer)),
-  60_000,
+  {
+    timeout: 60_000,
+    scenario: "the app's one real build: each sample would be a whole build, and the tree is the input",
+    plant: "libfabrika's workers entry re-exports a module under src/mcp/, so the brain's graph holds MCP",
+    // Rolldown reads the build's inputs as files, so a change to one is a change to what is checked.
+    reads: [
+      "next/apps/fabrika/src/**",
+      "next/programs/*/src/**",
+      "next/programs/*/package.json",
+      "next/packages/libfabrika/src/**",
+      "next/packages/tuval/src/**",
+    ],
+  },
 );
 
 // One selected program with a window, in a scoped folder: the real libfabrika build on the real app
@@ -346,7 +358,7 @@ const windowBuild = Effect.fnUntraced(function* (window: string, tab?: string) {
 });
 
 it.effect(
-  "scenario: a window script carried into the brain as text is checked by its own Rolldown call",
+  "a window script carried into the brain as text is checked by its own Rolldown call",
   () =>
     Effect.gen(function* () {
       const control = yield* windowBuild(`export const view = () => "p8-clean-window";`);
@@ -372,7 +384,19 @@ it.effect(
         ),
       ).toThrow();
     }).pipe(Effect.provide(NodeServices.layer)),
-  60_000,
+  {
+    timeout: 60_000,
+    scenario: "one clean window and one that imports the MCP SDK, each a real build beside the app's brain",
+    plant: "libfabrika's workers entry re-exports a module under src/mcp/, so the window build's brain holds MCP",
+    // The window build copies the app's source and links the workspace packages, read as files.
+    reads: [
+      "next/apps/fabrika/src/**",
+      "next/programs/*/src/**",
+      "next/programs/*/package.json",
+      "next/packages/libfabrika/src/**",
+      "next/packages/tuval/src/**",
+    ],
+  },
 );
 
 // P14 slice 1: a tab's script and page are observed bytes too. The tab's one Rolldown call compiles
@@ -394,7 +418,17 @@ it.effect.prop(
       expect(call.assets, "the page is one of the tab call's own emitted assets").toContain(page!.body);
       expect(tab.observed.filter(isWindow)).toHaveLength(1);
     }).pipe(Effect.provide(NodeServices.layer)),
-  { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 3 }) } },
+  {
+    arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 3 }) },
+    // The tab build copies the app's source and links the workspace packages, read as files.
+    reads: [
+      "next/apps/fabrika/src/**",
+      "next/programs/*/src/**",
+      "next/programs/*/package.json",
+      "next/packages/libfabrika/src/**",
+      "next/packages/tuval/src/**",
+    ],
+  },
 );
 
 const int = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));

@@ -1,20 +1,62 @@
-// Laws for ../Law.runner.test.ts to run in a vitest of its own, so it can see one fail, time out
-// or run twice. The case comes from that run's `provide`, as vitest's `inject` reads it. Nothing
+// Laws for ../Law.runner.test.ts to run in a vitest of its own, so it can see one fail, time out,
+// run twice, or register beside vitest's own `it.each`. The case comes from that run's `provide`, as vitest's `inject` reads it. Nothing
 // here runs in the repo's own test run: its name is no test file's.
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
-import { expect, inject } from "vitest";
-import { it } from "../Law.ts";
+import { describe, expect, inject, test, TestRunner } from "vitest";
+import { it, Label, type LawOptions } from "../Law.ts";
 import type { LawCase } from "./LawCase.ts";
 
 declare module "vitest" {
   interface ProvidedContext {
     lawCase: LawCase;
   }
+
+  interface TaskMeta {
+    /** What an `each` case's body was handed, for ../Law.runner.test.ts to compare. */
+    received?: ReadonlyArray<unknown>;
+  }
 }
 
 const lawCase = inject("lawCase");
 const Upto = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 }));
+
+/** Puts what a body was handed in its law's meta, which the outer run reads. */
+const record = (values: ReadonlyArray<unknown>): void => {
+  // An `each` body is handed its case and no test context, so the running law comes from the runner.
+  const current = TestRunner.getCurrentTest();
+
+  if (current !== undefined) {
+    current.meta.received = values;
+  }
+};
+
+/** A label as a law's options write it. */
+const labelled: (label: Label) => LawOptions = Label.match({
+  vector: ({ reason }) => ({ vector: reason }),
+  format: ({ reason }) => ({ format: reason }),
+  scenario: ({ reason }) => ({ scenario: reason }),
+  type: ({ reason }) => ({ type: reason }),
+  pinned: ({ reason }) => ({ pinned: reason }),
+});
+
+if (lawCase._tag === "each") {
+  // Each pair registers the same cases and template once through the package's `it.each` and once
+  // through vitest's own, so the outer run compares titles, bodies' arguments and meta side by side.
+  const options = { ...labelled(lawCase.label), plant: lawCase.plant, reads: lawCase.reads };
+  describe("law tuples", () => {
+    it.each(lawCase.tuples)(lawCase.template, options, (...values: ReadonlyArray<unknown>) => record(values));
+  });
+  describe("vitest tuples", () => {
+    test.each(lawCase.tuples)(lawCase.template, (...values: ReadonlyArray<unknown>) => record(values));
+  });
+  describe("law records", () => {
+    it.each(lawCase.records)(lawCase.template, {}, (...values: ReadonlyArray<unknown>) => record(values));
+  });
+  describe("vitest records", () => {
+    test.each(lawCase.records)(lawCase.template, (...values: ReadonlyArray<unknown>) => record(values));
+  });
+}
 
 if (lawCase._tag === "threshold") {
   // One law per threshold, failing on any value above it; and one whose threshold no value passes.

@@ -11,7 +11,9 @@
 // A law is a call rooted at `it` or `test`, through members (`it.effect.prop`) and the calls that make
 // a test (`it.each(rows)(...)`), as law-shape.ts and .github/ci/plant-check.ts read one. Its options
 // are its last argument when that is an object written at the call and the call has three arguments
-// or more, as plant-check takes them, so a property's inputs object is never read as options.
+// or more, as plant-check takes them, so a property's inputs object is never read as options. A table
+// law, `it.each(rows)(name, options, fn)` or `it.for`, has them in vitest's place, between the title
+// and the body, so there its second argument is read when the last is not an object.
 //
 // One form is read: an array of string literals, written at the call, under the key `reads` in any
 // spelling (`reads`, `"reads"`, `["reads"]`). Any other value (a name, a spread, a template, a call)
@@ -21,7 +23,14 @@
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { join, relative } from "node:path";
-import { type Expression, parseSync, type PropertyKey, Visitor } from "oxc-parser";
+import {
+  type CallExpression,
+  type Expression,
+  type ObjectExpression,
+  parseSync,
+  type PropertyKey,
+  Visitor,
+} from "oxc-parser";
 import type { Plugin } from "vitest/config";
 
 /** Calls that make a test from their own call: `it.each(rows)` is not a test, `it.each(rows)(...)` is. */
@@ -48,6 +57,33 @@ const isLaw = (callee: Expression): boolean => {
     MAKERS.has(callee.callee.property.name) &&
     isLaw(callee.callee.object)
   );
+};
+
+/** Calls whose returned law takes its options between the title and the body, as vitest's do. */
+const TABLES = new Set(["each", "for"]);
+
+/** Whether `callee` is a table's call, `it.each(rows)` or `it.for(rows)`. */
+const isTable = (callee: Expression): boolean =>
+  callee.type === "CallExpression" &&
+  callee.callee.type === "MemberExpression" &&
+  !callee.callee.computed &&
+  callee.callee.property.type === "Identifier" &&
+  TABLES.has(callee.callee.property.name);
+
+/** A law call's options object, if one is written at the call. */
+const optionsOf = (node: CallExpression): ObjectExpression | undefined => {
+  if (node.arguments.length < 3 || !isLaw(node.callee)) {
+    return undefined;
+  }
+
+  const last = node.arguments.at(-1);
+
+  if (last?.type === "ObjectExpression") {
+    return last;
+  }
+
+  const middle = node.arguments[1];
+  return isTable(node.callee) && middle?.type === "ObjectExpression" ? middle : undefined;
 };
 
 /** A value without the parentheses and the `as const` or `satisfies` around it. */
@@ -82,13 +118,13 @@ export const readsOf = (path: string, code: string): ReadonlyArray<string> => {
   const globs: Array<string> = [];
   new Visitor({
     CallExpression(node) {
-      const last = node.arguments.at(-1);
+      const options = optionsOf(node);
 
-      if (node.arguments.length < 3 || last?.type !== "ObjectExpression" || !isLaw(node.callee)) {
+      if (options === undefined) {
         return;
       }
 
-      for (const property of last.properties) {
+      for (const property of options.properties) {
         if (property.type !== "Property" || !keyIsReads(property.key, property.computed)) {
           continue;
         }

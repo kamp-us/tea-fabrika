@@ -22,11 +22,17 @@ const key = fc.constantFrom("reads", '"reads"', "'reads'", '["reads"]', "[`reads
 /** A string literal in either quote. */
 const quoted = (text: string, quote: string) => `${quote}${text}${quote}`;
 
-/** One law call, by its member: each takes its options last, after the body or the inputs and the body. */
+/**
+ * One law call, by its member: a table law, vitest's `it.each(cases)(name, options, fn)`, takes its
+ * options between the title and the body; every other member takes them last, after the body or the
+ * inputs and the body.
+ */
 const callOf = (member: string, options: string) =>
-  member.endsWith("prop")
-    ? `${member}("a property", { reads: fc.string() }, ({ reads }) => {}, ${options});`
-    : `${member}("a law", () => {}, ${options});`;
+  member.startsWith("it.each(")
+    ? `${member}("a law %s", ${options}, (value) => {});`
+    : member.endsWith("prop")
+      ? `${member}("a property", { reads: fc.string() }, ({ reads }) => {}, ${options});`
+      : `${member}("a law", () => {}, ${options});`;
 
 const member = fc.constantFrom(
   "it",
@@ -37,6 +43,7 @@ const member = fc.constantFrom(
   "it.effect.prop",
   "it.live.prop",
   "it.each([1, 2])",
+  'it.each([[1, "a"], [2, "b"]])',
   "it.skipIf(false)",
 );
 
@@ -57,10 +64,14 @@ const written = (one: typeof law extends fc.Arbitrary<infer L> ? L : never) => {
   return { line: callOf(one.member, `{ ${one.before}${reads} }`), globs: one.reads ?? [] };
 };
 
-/** What is not a law's options, and so never read: a helper's call, a property's inputs, two arguments. */
+/**
+ * What is not a law's options, and so never read: a helper's call, a property's inputs, a table's
+ * cases, two arguments.
+ */
 const noise = [
   'helper("not a law", () => {}, { reads: ["not/a/law"] });',
   'it.prop("inputs only", { reads: fc.array(fc.string()) }, ({ reads }) => {});',
+  'it.each([{ reads: ["a/case"] }])("a case $reads", (row) => {});',
   'it("two arguments", { reads: ["vitest/style"] });',
   'const options = { reads: ["by/name"] };',
 ];
@@ -82,6 +93,7 @@ const refused = fc.constantFrom(
 );
 
 // Plant: read only the first `reads` in a file (return from the visitor after one declaration). Red.
+// Plant: read a table law's options only as its last argument, as round 1's readsOf did. Red.
 it("R1 readsOf answers exactly the literal globs of every reads key in a law's options, in any spelling of the declaration, and throws on any other value", () => {
   // What the runs reached: files with two declarations or more, and each member and key spelling.
   let many = 0;
@@ -109,7 +121,7 @@ it("R1 readsOf answers exactly the literal globs of every reads key in a law's o
     { seed: SEED, numRuns: 100 },
   );
   expect(many).toBeGreaterThan(10);
-  expect(members.size).toBe(9);
+  expect(members.size).toBe(10);
   expect(keys.size).toBe(5);
   fc.assert(
     fc.property(member, refused, fc.array(law, { maxLength: 3 }), (one, bad, before) => {
