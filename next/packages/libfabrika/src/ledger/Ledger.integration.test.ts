@@ -21,6 +21,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Duration, Effect, Layer, ManagedRuntime, References, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
@@ -169,7 +170,7 @@ const capture = () => {
     },
   });
 
-  const ended = (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended");
+  const ended = (name: string) => Arr.filter(spans, (span) => span.name === name && span.status._tag === "Ended");
 
   return { tracer, ended };
 };
@@ -183,7 +184,9 @@ describe("p18, the ledger suite on Ledger.sql", () => {
       expect(first).toEqual(placed(1, 1));
       expect(again).toEqual(first);
       const entries = yield* readAll("notes:1");
-      expect(entries.map((e) => [e.id, e.rev, e.sentAt, e.seen, e.build])).toEqual([["w-9", 1, "first", 0, "b-1"]]);
+      expect(Arr.map(entries, (e) => [e.id, e.rev, e.sentAt, e.seen, e.build])).toEqual([
+        ["w-9", 1, "first", 0, "b-1"],
+      ]);
       expect(yield* ledger.append("notes:1", "w-10", line())).toEqual(placed(2, 2));
     }).pipe(Effect.provide(onSql(fresh()))),
   );
@@ -196,7 +199,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
       expect(yield* ledger.append("notes:1", "w-2", line())).toEqual(placed(2, 2));
       expect(yield* ledger.append("notes:1", "w-1", line({ traceId: OTHER_TRACE }))).toEqual(placed(1, 1));
       const entries = yield* readAll("notes:1");
-      expect(entries.map((entry) => [entry.id, entry.rev, entry.pos, entry.traceId])).toEqual([
+      expect(Arr.map(entries, (entry) => [entry.id, entry.rev, entry.pos, entry.traceId])).toEqual([
         ["w-1", 1, 1, TRACE],
         ["w-2", 2, 2, TRACE],
       ]);
@@ -244,13 +247,13 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 
       expect(answers).toEqual([placed(1, 1), placed(2, 1), placed(3, 2), placed(4, 2), placed(5, 3), placed(6, 3)]);
       const a = yield* readAll("a");
-      expect(a.map((e) => [e.id, e.rev, e.pos, e.body])).toEqual([
+      expect(Arr.map(a, (e) => [e.id, e.rev, e.pos, e.body])).toEqual([
         ["a-1", 1, 1, 1],
         ["a-2", 3, 2, 2],
         ["a-3", 5, 3, 3],
       ]);
-      expect((yield* readAll("a", 3)).map((e) => e.id)).toEqual(["a-3"]);
-      expect((yield* readAll("b", 2)).map((e) => e.id)).toEqual(["b-2", "b-3"]);
+      expect(Arr.map(yield* readAll("a", 3), (e) => e.id)).toEqual(["a-3"]);
+      expect(Arr.map(yield* readAll("b", 2), (e) => e.id)).toEqual(["b-2", "b-3"]);
       expect(yield* readAll("b", 6)).toEqual([]);
       expect(yield* readAll("c")).toEqual([]);
     }).pipe(Effect.provide(onSql(fresh()))),
@@ -271,7 +274,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
       const streams = new Map<string, Array<{ id: string; body: number; rev: number; pos: number }>>();
       let head = 0;
 
-      const answers = commands.map(({ stream, id, body, ahead }) => {
+      const answers = Arr.map(commands, ({ stream, id, body, ahead }) => {
         const first = kept.get(`${stream} ${id}`);
 
         if (first !== undefined) {
@@ -321,7 +324,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
 
             for (const stream of ["a", "b", "c"]) {
               const entries = yield* readAll(stream);
-              expect(entries.map((e) => ({ id: e.id, body: e.body, rev: e.rev, pos: e.pos }))).toEqual(
+              expect(Arr.map(entries, (e) => ({ id: e.id, body: e.body, rev: e.rev, pos: e.pos }))).toEqual(
                 expected.streams.get(stream) ?? [],
               );
             }
@@ -369,7 +372,7 @@ describe("p18, the ledger suite on Ledger.sql", () => {
         yield* Effect.gen(function* () {
           const ledger = yield* Ledger;
           const entries = yield* readAll("a");
-          expect(entries.map((e) => [e.id, e.rev, e.pos])).toEqual([
+          expect(Arr.map(entries, (e) => [e.id, e.rev, e.pos])).toEqual([
             ["w-1", 1, 1],
             ["w-2", 2, 2],
             ["w-3", 3, 3],
@@ -396,13 +399,13 @@ describe("p18, the ledger suite on Ledger.sql", () => {
         concurrency: "unbounded",
       }).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
 
-      const revs = answers.map((answer) => (answer._tag === "placed" ? answer.rev : -1));
-      expect([...revs].sort((x, y) => x - y)).toEqual(writes.map((i) => i + 1));
+      const revs = Arr.map(answers, (answer) => (answer._tag === "placed" ? answer.rev : -1));
+      expect([...revs].sort((x, y) => x - y)).toEqual(Arr.map(writes, (i) => i + 1));
 
       for (const stream of ["s0", "s1", "s2"]) {
         const entries = yield* readAll(stream);
-        expect(entries.map((e) => e.pos)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
-        expect(entries.map((e) => e.rev)).toEqual([...entries.map((e) => e.rev)].sort((x, y) => x - y));
+        expect(Arr.map(entries, (e) => e.pos)).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+        expect(Arr.map(entries, (e) => e.rev)).toEqual([...Arr.map(entries, (e) => e.rev)].sort((x, y) => x - y));
       }
     }).pipe(Effect.provide(onSql(fresh()))),
   );
@@ -417,7 +420,7 @@ describe("p93, seen is bounded by the log's head", () => {
       expect(yield* ledger.append("a", "w-3", line({ seen: 1 }))).toEqual(placed(2, 2));
       expect(yield* ledger.append("a", "w-4", line({ seen: 3 }))).toEqual(refused("seen_ahead"));
       expect(yield* ledger.append("a", "w-5", line({ seen: 50 }))).toEqual(refused("seen_ahead"));
-      expect((yield* readAll("a")).map((e) => e.id)).toEqual(["w-2", "w-3"]);
+      expect(Arr.map(yield* readAll("a"), (e) => e.id)).toEqual(["w-2", "w-3"]);
       expect(yield* ledger.append("a", "w-6", line({ seen: 2 }))).toEqual(placed(3, 3));
     }).pipe(Effect.provide(onSql(fresh()))),
   );
@@ -459,7 +462,7 @@ describe("p93, seen is bounded by the log's head", () => {
 
             const entries = [...(yield* readAll("a")), ...(yield* readAll("b"))];
             expect(entries).toHaveLength(head);
-            expect(entries.filter((e) => e.seen >= e.rev)).toEqual([]);
+            expect(Arr.filter(entries, (e) => e.seen >= e.rev)).toEqual([]);
           }).pipe(Effect.provide(onSql(fresh()))),
         ),
       ),
@@ -485,10 +488,10 @@ describe("p19, read is a lazy Stream, and arrivedAt is the referee's Clock", () 
         expect(calls()).toBe(before);
         expect(ended("ledger.read")).toHaveLength(0);
         const one = yield* Stream.runCollect(Stream.take(stream, 1));
-        expect(one.map((e) => e.rev)).toEqual([1]);
+        expect(Arr.map(one, (e) => e.rev)).toEqual([1]);
         expect(ended("ledger.read")).toHaveLength(1);
         const all = yield* Stream.runCollect(stream);
-        expect(all.map((e) => e.rev)).toEqual(Array.from({ length: 300 }, (_, i) => i + 1));
+        expect(Arr.map(all, (e) => e.rev)).toEqual(Array.from({ length: 300 }, (_, i) => i + 1));
       }).pipe(Effect.provide(onSql(Effect.succeed(sql))), Effect.withTracer(tracer));
     }),
   );
@@ -507,8 +510,8 @@ describe("p19, read is a lazy Stream, and arrivedAt is the referee's Clock", () 
       yield* ledger.append("a", "w-3", line());
       const a = yield* readAll("a");
       const b = yield* readAll("b");
-      expect(a.map((e) => e.arrivedAt)).toEqual([t, t + 37, t + 100]);
-      expect(b.map((e) => e.arrivedAt)).toEqual([t + 37]);
+      expect(Arr.map(a, (e) => e.arrivedAt)).toEqual([t, t + 37, t + 100]);
+      expect(Arr.map(b, (e) => e.arrivedAt)).toEqual([t + 37]);
     }).pipe(Effect.provide(onSql(fresh()))),
   );
 
@@ -521,7 +524,7 @@ describe("p19, read is a lazy Stream, and arrivedAt is the referee's Clock", () 
         yield* ledger.append("a", `w-${i}`, line({ sentAt }));
       }
 
-      expect((yield* readAll("a")).map((e) => e.sentAt)).toEqual(sent);
+      expect(Arr.map(yield* readAll("a"), (e) => e.sentAt)).toEqual(sent);
     }).pipe(Effect.provide(onSql(fresh()))),
   );
 });
@@ -561,7 +564,7 @@ describe("p20, failures are typed, and pass", () => {
               expect(error).toBeInstanceOf(LedgerError);
             }
 
-            expect(errors.map((error) => error.reason)).toEqual(["unreachable", "unreachable", "unreachable"]);
+            expect(Arr.map(errors, (error) => error.reason)).toEqual(["unreachable", "unreachable", "unreachable"]);
           }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })));
         },
         { concurrency: 1, discard: true },
@@ -595,7 +598,7 @@ describe("p20, failures are typed, and pass", () => {
               expect(error).toBeInstanceOf(LedgerError);
             }
 
-            expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row"]);
+            expect(Arr.map(errors, (error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row"]);
           }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })));
         },
         { concurrency: 1, discard: true },
@@ -611,7 +614,7 @@ describe("p20, failures are typed, and pass", () => {
       read: (stream, after, reader) => {
         asked.push(["read", stream, after, reader]);
 
-        return Promise.resolve(page.filter((entry) => entry.rev > after));
+        return Promise.resolve(Arr.filter(page, (entry) => entry.rev > after));
       },
       wait: (stream, after, reader) => {
         asked.push(["wait", stream, after, reader]);
@@ -627,7 +630,7 @@ describe("p20, failures are typed, and pass", () => {
       expect(yield* ledger.wait("a", 1)).toEqual({ _tag: "parked" });
       expect(asked[0]).toEqual(["read", "a", 0, READER]);
       expect(asked.at(-1)).toEqual(["wait", "a", 1, READER]);
-      expect(asked.every(([, , , reader]) => reader === READER)).toBe(true);
+      expect(Arr.every(asked, ([, , , reader]) => reader === READER)).toBe(true);
     }).pipe(Effect.provide(LedgerRemote.layer(stub, { reader: READER })));
   });
 
@@ -654,7 +657,7 @@ describe("p20, failures are typed, and pass", () => {
               arm();
               const waited = await runtime.runPromise(Effect.flip(Ledger.use((ledger) => ledger.wait(value, 9))));
               expect(waited.reason).toBe("storage");
-              expect((await runtime.runPromise(readAll(value))).map((e) => e.id)).toEqual(["w-1", "w-3"]);
+              expect(Arr.map(await runtime.runPromise(readAll(value)), (e) => e.id)).toEqual(["w-1", "w-3"]);
               await runtime.dispose();
             }),
           ),
@@ -690,7 +693,7 @@ describe("p20, failures are typed, and pass", () => {
                 expect(error).toBeInstanceOf(LedgerError);
               }
 
-              expect(errors.map((error) => error.reason)).toEqual(["storage", "storage", "storage"]);
+              expect(Arr.map(errors, (error) => error.reason)).toEqual(["storage", "storage", "storage"]);
             }).pipe(
               Effect.provide(
                 onSql(
@@ -758,9 +761,9 @@ describe("p20, failures are typed, and pass", () => {
                 expect(error).toBeInstanceOf(LedgerError);
               }
 
-              expect(errors.map((error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row", "bad_row"]);
+              expect(Arr.map(errors, (error) => error.reason)).toEqual(["bad_row", "bad_row", "bad_row", "bad_row"]);
               // The rows that do decode still read.
-              expect((yield* readAll("ok")).map((e) => e.id)).toEqual(["w-1"]);
+              expect(Arr.map(yield* readAll("ok"), (e) => e.id)).toEqual(["w-1"]);
             }).pipe(Effect.provide(onSql(Effect.succeed(nodeSql(db)))));
           }),
         { concurrency: 1, discard: true },

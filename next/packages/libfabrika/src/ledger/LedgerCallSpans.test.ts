@@ -1,6 +1,7 @@
 // T285, PR 1, next/. Keep remote calls traced once, including decoding failures.
 // Plants: duplicate forwarding spans, missing argument tags, or recovery inside ledger.call.
 import { Cause, Effect, Exit, Option, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Ledger, LedgerError, type LedgerCalls } from "./Ledger.ts";
@@ -79,11 +80,11 @@ describe("ledger.call, next/ tracing keep-laws", () => {
           let wait: Waited = Waited.cases.parked.make({});
 
           const sending = (method: string, stream: string) => {
-            const active = spans.filter((s) => s.status._tag === "Started");
+            const active = Arr.filter(spans, (s) => s.status._tag === "Started");
             sent.push({
               method,
               stream,
-              active: active.map((s) => ({
+              active: Arr.map(active, (s) => ({
                 name: s.name,
                 attributes: Object.fromEntries(s.attributes),
               })),
@@ -100,7 +101,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               sending("read", stream);
               expect(readerId).toBe(reader);
 
-              return rows.filter((r) => r.rev > after).slice(0, PAGE);
+              return Arr.filter(rows, (r) => r.rev > after).slice(0, PAGE);
             },
             async wait(stream, _after, readerId) {
               sending("wait", stream);
@@ -140,7 +141,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
               Effect.withTracer(tracer),
             ),
           );
-          expect(sent).toHaveLength(calls.reduce((n, c) => n + c.pages + 3, 0));
+          expect(sent).toHaveLength(Arr.reduce(calls, 0, (n, c) => n + c.pages + 3));
 
           for (const { method, stream, active } of sent) {
             expect(active).toEqual([
@@ -155,7 +156,7 @@ describe("ledger.call, next/ tracing keep-laws", () => {
             ]);
           }
 
-          expect(spans.map((s) => s.name)).toEqual(sent.map(() => "ledger.call"));
+          expect(Arr.map(spans, (s) => s.name)).toEqual(Arr.map(sent, () => "ledger.call"));
 
           for (const span of spans) {
             expect(span.traceId).toBe(parent.traceId);

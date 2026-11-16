@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e85-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T00:45:29-08:00",
+  "ended": "2026-11-16T00:55:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for judgment slice E85 of the Effect-check sweep (preferEffectArray in next/packages/libfabrika/src/ledger), in next/, on branch fabrikalfa/effect-e85 from fabrikalfa/test-sqlite-store at eeb8ecdbb, which holds PR 1366. By decision 0589's amendment (judgment slices add no lock lines; their locks land in one small pull request at the end), it opens no pull request and adds no lock line or LOCKED row, as E75 and E76 did. Recount with only preferEffectArray at error through an --lspconfig: 126 hits in the folder (the plan said 123; main moved), 118 in exam paths (exam-paths.json: *.test.ts, *Test.ts) and 8 in product files. All 118 fixed in 11 files: Log.integration.test.ts 33, Ledger.integration.test.ts 29, LedgerSpans.integration.test.ts 26, LedgerTurnEndTest.ts 7, LedgerCallSpans.test.ts 6, LedgerTransaction.test.ts 6, LedgerTurnReads.test.ts 6, WritePolicyTest.ts 2, LedgerStreamsTest.ts 1, Rings.integration.test.ts 1, TraceId.test.ts 1. After: 0 exam hits in the folder, and libfabrika's count fell by exactly 118 (3544 to 3426). Left for the build, 8 product hits: ledger/NodeSqlite.ts 54 (twice); ledger/internal/ledgerStore.ts 85, 274, 358, 419, 498, 536.",
+  "plants": [
+    {
+      "law": "L1 by hand: preferEffectArray at error in src/ledger fails libfabrika's type check on a new hit",
+      "plant": "a temporary overrides entry for next/packages/libfabrika/src/ledger/**/*.ts at preferEffectArray error in tsconfig.base.json, and export const planted = [1, 2].map((n) => n + 1) appended to ledger/TraceId.test.ts; libfabrika's tsc --noEmit -p . named TraceId.test.ts(151,31) effect(preferEffectArray) beside the 8 product hits; both files restored by copy",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 10,
+  "note": "A scratch codemod outside the repo (oxc-parser, driven by the checker's own spans, never committed; 0589 allows it) rewrote 115 calls as Arr.m(x, ...) for map, filter, some, every, flatMap, join, and reduce with its initial value moved to the second argument, nested calls inside out. The three find calls were hand edits: LedgerTurnReads.test.ts's Option.fromUndefinedOr(all.find(...)) became Arr.findFirst(all, ...), the same Option, and its now unused Option import went; LedgerSpans.integration.test.ts's two rings.find(...) became Option.getOrUndefined(Arr.findFirst(...)), so each later died?. and rung?. read the same value. Imports are import * as Arr from \"effect/Array\", the library form 0577 asks for, as E75 and E76 did. No assertion changed, no comment was lost, no cast, disable, lock line or ledger row was added; the whole diff was read. Checks: libfabrika's tsc --noEmit -p . exit 0; pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144, 18 parts passed; ratchet.ts exit 0. Tests under nice -n 19 with --maxWorkers=1 and the pinned Node, one file at a time, all green: ledger LedgerCallSpans (2), LedgerTransaction (11), LedgerTurnReads (3, which runs LedgerTurnEndTest), TraceId (3), and node/WritePolicy.test.ts (2, which runs WritePolicyTest). Not run, since the brief keeps .integration. files to a box: Ledger, LedgerSpans, Log and Rings .integration.test.ts, and node/ledger/LedgerStreams.integration.test.ts and ledger/LedgerTurnReads.integration.test.ts, which run LedgerStreamsTest and LedgerTurnEndTest. Not run: pnpm typecheck, the full suite.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "tests"
+}

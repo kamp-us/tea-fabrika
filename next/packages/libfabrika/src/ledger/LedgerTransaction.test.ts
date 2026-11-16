@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import type { Sql } from "../Sql.ts";
 import { Doorbell, Ledger, LedgerError } from "./Ledger.ts";
 import * as LedgerSql from "./LedgerSql.ts";
@@ -84,7 +85,7 @@ describe("p79, LedgerTransaction", () => {
             const a = turn.append("a", "two", line(2));
             const b = turn.append("b", "three", line(3));
 
-            return { a, b, read: [...turn.read("a", 1)].map((row) => row.id) };
+            return { a, b, read: Arr.map([...turn.read("a", 1)], (row) => row.id) };
           }),
         ).toEqual({ a: { rev: 2, pos: 2 }, b: { rev: 3, pos: 1 }, read: ["two"] });
         expect(yield* ledger.append("b", "four", line(4))).toEqual({
@@ -121,7 +122,7 @@ describe("p79, LedgerTransaction", () => {
               ).toBe("storage");
               expect(store.fault.passed - before).toBe(1);
               store.fault.after = null;
-              expect((yield* Stream.runCollect(ledger.read("a", 0))).map((row) => row.id)).toEqual(["one"]);
+              expect(Arr.map(yield* Stream.runCollect(ledger.read("a", 0)), (row) => row.id)).toEqual(["one"]);
               expect(yield* Stream.runCollect(ledger.read("b", 0))).toEqual([]);
               expect(yield* ledger.append("b", "after", line(4))).toEqual({
                 _tag: "placed",
@@ -159,8 +160,11 @@ describe("p79, LedgerTransaction", () => {
               const error = yield* Effect.flip(tx.transact(() => diskFailure(value)));
               expect(error.reason).toBe("storage");
 
-              const codes = spans.flatMap((span) =>
-                [...span.attributes].filter(([key]) => key.endsWith(".code")).map(([, value]) => value),
+              const codes = Arr.flatMap(spans, (span) =>
+                Arr.map(
+                  Arr.filter([...span.attributes], ([key]) => key.endsWith(".code")),
+                  ([, value]) => value,
+                ),
               );
 
               expect(codes).toEqual([value]);
@@ -315,7 +319,7 @@ describe("p79, LedgerTransaction", () => {
             turn.append("a", `m${n}`, line(n));
           }
         });
-        expect(yield* tx.transact((turn) => [...turn.read("a", 0)].map((row) => row.rev))).toEqual(
+        expect(yield* tx.transact((turn) => Arr.map([...turn.read("a", 0)], (row) => row.rev))).toEqual(
           Array.from({ length: 260 }, (_, i) => i + 1),
         );
       }).pipe(Effect.provide(store.layer));
