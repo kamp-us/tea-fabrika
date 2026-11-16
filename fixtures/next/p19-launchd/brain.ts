@@ -14,5 +14,4 @@ NodeRuntime.runMain(Effect.scoped(Effect.gen(function* () {
     }
     return false;
   }).pipe(Effect.repeat({ schedule: Schedule.spaced("50 millis"), until: (done) => done }));
-// @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
 })).pipe(Effect.provide(NodeServices.layer)));

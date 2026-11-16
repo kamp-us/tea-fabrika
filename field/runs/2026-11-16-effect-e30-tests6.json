@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e30-tests6",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:14:53-08:00",
+  "ended": "2026-11-16T01:19:48-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step, round 6, for judgment slice E30 (strictEffectProvide), in next/. Lead ruling after 0589 (no lock lines): a judgment slice adds no @effect-diagnostics ignore line, and takes one out where the check is off and pnpm typecheck reports TS377000 'directive has no effect' for it. No tsconfig turns strictEffectProvide on yet, so every ignore line for it does nothing. This step removed the 8 such lines that sit in exam paths (7 in next/apps/fabrika/src/exam/, 1 in fixtures/next/); the brief said 9 but named these 8, and a search of the branch finds no ninth in exam paths. Only the comment line went: each sat above a code line inside a larger expression, so no block was left empty. The 7 lines in app source (build.ts, dev.ts twice, hands.ts, settings-generate.ts, src/brain.ts, src/entry/browser.tsx) are left for the build step. No law changed, so no plant was run. Hits: met 8 ignore lines in exam paths, fixed by quick fix 0, hand edits 8 (Edit tool), left 0 in exam paths, waiting on 1366 0; 7 left in product files for the build.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4.9,
+  "note": "Lines to put back in the judgment sweep's final lock PR, together with the strictEffectProvide lock. Each is the same ignore line, re-added on the line it sat on before removal, directly above the code line given. Ignore line, with its reason: '// @effect-diagnostics-next-line strictEffectProvide:off -- entry point: \"If this is an entry point, you can safely disable this diagnostic.\"' (indent as the code line below it). (1) fixtures/next/p19-launchd/brain.ts:17, above '})).pipe(Effect.provide(NodeServices.layer)));'. (2) next/apps/fabrika/src/exam/commits.ts:1041, above 'Effect.provide(NodeServices.layer),' in the NodeRuntime.runMain pipe. (3) next/apps/fabrika/src/exam/compiler.ts:45, above 'NodeRuntime.runMain(lint.pipe(Effect.provide(NodeServices.layer)));'. (4) next/apps/fabrika/src/exam/edges.ts:181, above 'Effect.provide(NodeServices.layer),' in the NodeRuntime.runMain pipe. (5) next/apps/fabrika/src/exam/plant.ts:52, above 'Effect.provide(NodeServices.layer),'. (6) next/apps/fabrika/src/exam/promise-types.ts:331, above 'NodeRuntime.runMain(main.pipe(Effect.provide(NodeServices.layer)));'. (7) next/apps/fabrika/src/exam/ratchet.ts:242, above 'Effect.provide(NodeServices.layer),' in the NodeRuntime.runMain pipe. (8) next/apps/fabrika/src/exam/twin.ts:663, above '}).pipe(Effect.provide(NodeServices.layer)),'. Checks at branch head 16499f753 plus this change: pnpm format changed nothing beyond the 8 deletions; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 passed, 18 parts; the exam ratchet against merge base b510ed2e8 exited 0; next/apps/fabrika/src/exam/no-of.integration.test.ts passed 4 of 4 (nice -n 15, --maxWorkers=3, TYPESAFE_API_KEY unset). The app's tsc --noEmit -p next/apps/fabrika now shows 7 TS377000 warnings, down from 15 in round 5, all in the app-source files the build owns: build.ts:16, dev.ts:110, dev.ts:182, hands.ts:109, settings-generate.ts:29, src/brain.ts:343, src/entry/browser.tsx:26. No other diagnostic. What this cannot tell us: the line numbers hold only if nothing else in those files moves before the lock PR.",
+  "plants": [],
+  "step": "tests"
+}

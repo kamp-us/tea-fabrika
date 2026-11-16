@@ -1038,7 +1038,6 @@ if (import.meta.main) {
       Effect.tapError((e) =>
         Console.error(`commits: the run failed: ${annotate(e._tag === "Failed" ? e.message : String(e))}`),
       ),
-      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
       Effect.provide(NodeServices.layer),
     ),
     {

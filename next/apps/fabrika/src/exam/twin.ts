@@ -660,7 +660,6 @@ if (import.meta.main) {
     Effect.gen(function* () {
       const path = yield* Path.Path;
       process.exitCode = yield* lint(process.argv[2] ?? path.resolve(import.meta.dirname, "../../alchemy.run.ts"));
-      // @effect-diagnostics-next-line strictEffectProvide:off -- entry point: "If this is an entry point, you can safely disable this diagnostic."
     }).pipe(Effect.provide(NodeServices.layer)),
   );
 }
