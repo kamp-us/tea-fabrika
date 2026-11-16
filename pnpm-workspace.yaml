@@ -122,7 +122,7 @@ catalog:
 
 catalogs:
   # Today's version (packages/, programs/, apps/, docs/tutorials/), held at the tea it runs on, with
-  # no patch, while next/ moves to `_tag` (decision 0569). Goes when today's version goes.
+  # its patch, while next/ moves to `_tag` (decision 0569). Goes when today's version goes.
   old:
     '@demlik/tea': 0.25.0
 
@@ -153,6 +153,9 @@ patchedDependencies:
   # (https://github.com/alchemy-run/alchemy/pull/3203) after 2.0.0-beta.85. Drop this at the
   # release that carries it.
   '@alchemy.run/cloudflare-runtime@2.0.0-beta.85': patches/@alchemy.run__cloudflare-runtime@2.0.0-beta.85.patch
+  # demlik#897: expose the machine's existing schemas. Today's version only, on 0.25.0 (0217);
+  # 0.27.0 ships the fix. Goes when today's version goes.
+  '@demlik/tea@0.25.0': patches/@demlik__tea@0.25.0.patch
   # Effect-TS/effect#10539: A Schema string's shrink candidates are built on the
   # first shrink, not while generating (sampleFromValidatedShrink already is). Fixed upstream after
   # 4.1.4 (commit d021cee). Drop at the release that has it.
