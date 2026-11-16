@@ -33,6 +33,7 @@ import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
 import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
@@ -304,15 +305,11 @@ const flow = Effect.fnUntraced(
           },
         });
 
-        const reply = yield* call("grant failed", () =>
-          fetch(`${url}/grant`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: value, armored: root.sign(value) }),
-          }),
-        );
+        const reply = yield* HttpClient.post(`${url}/grant`, {
+          body: HttpBody.jsonUnsafe({ text: value, armored: root.sign(value) }),
+        });
 
-        expect(reply.ok, "E2: the person key's grant is accepted").toBe(true);
+        expect(reply.status >= 200 && reply.status < 300, "E2: the person key's grant is accepted").toBe(true);
         const online = yield* one.next("online");
         expect(online.fingerprint, "E2: online is the same key").toBe(waiting.fingerprint);
         yield* call("task request failed", () => method(project, "requestHandsTask")(waiting.fingerprint));
@@ -383,7 +380,7 @@ const flow = Effect.fnUntraced(
     } satisfies Seen;
   },
   Effect.scoped,
-  Effect.provide(SecureRandom.layerWebCrypto),
+  Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
   Effect.provide(NodeServices.layer),
 );
 

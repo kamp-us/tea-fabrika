@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
 import { Effect } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];
@@ -24,6 +25,15 @@ const home = () => {
 };
 
 const pause = () => new Promise<void>((done) => setTimeout(done, 25));
+
+// One GET's status through Effect's fetch client. The request has its own scope, so closing it
+// releases the unread body; it fails when nothing listens at the address.
+const status = (url: string) =>
+  Effect.gen(function* () {
+    const client = HttpClient.withScope(yield* HttpClient.HttpClient);
+
+    return (yield* client.get(url)).status;
+  }).pipe(Effect.scoped, Effect.provide(FetchHttpClient.layer));
 
 const living = (pid: number) => {
   try {
@@ -205,9 +215,8 @@ const workerd = async (instance: Awaited<ReturnType<typeof launch>>, excluding =
     // Alchemy retries SystemError spawns. A PID in ps may die before it ever listens.
     // Accept it only after HTTP answers and a fresh ps still shows that sole PID.
     try {
-      const response = await fetch(instance.url, { signal: AbortSignal.timeout(250) });
-      observation.ready = response.ok;
-      await response.body?.cancel();
+      const answer = await Effect.runPromise(status(instance.url).pipe(Effect.timeout("250 millis")));
+      observation.ready = answer >= 200 && answer < 300;
     } catch {
       /* Spawn attempt has not reached its listener. */
     }
@@ -229,7 +238,7 @@ describe("P12 local brain life", () => {
     const leader = Number(readFileSync(join(s.folder, "starting"), "utf8"));
     groups.push(leader);
     expect(living(leader)).toBe(true);
-    await expect(fetch(s.url)).rejects.toThrow();
+    await expect(Effect.runPromise(status(s.url))).rejects.toThrow();
     s.child.kill("SIGKILL");
     await new Promise<void>((done) => s.child.once("exit", () => done()));
     writeFileSync(join(s.folder, "startup-release"), "");
@@ -241,7 +250,7 @@ describe("P12 local brain life", () => {
 
     expect(living(leader), "the detached child must notice its original parent died during startup").toBe(false);
     expect(tree(leader).filter((row) => living(row.pid))).toEqual([]);
-    await expect(fetch(s.url)).rejects.toThrow();
+    await expect(Effect.runPromise(status(s.url))).rejects.toThrow();
   });
   // Outside only: cleanup must address the process group after its leader already exited.
   it("scenario: instance group cleanup still reaches descendants after the leader exits", async () => {
@@ -266,7 +275,7 @@ describe("P12 local brain life", () => {
     }
 
     expect(descendants.filter(living)).toEqual([]);
-    await expect(fetch(s.url)).rejects.toThrow();
+    await expect(Effect.runPromise(status(s.url))).rejects.toThrow();
   });
   it("scenario: p81 plant: an outer retry loop defeats Alchemy's three-replacement brake", async () => {
     const s = await launch();
@@ -347,7 +356,7 @@ describe("P12 local brain life", () => {
         await pause();
       }
 
-      await expect(fetch(s.url)).rejects.toThrow();
+      await expect(Effect.runPromise(status(s.url))).rejects.toThrow();
       await new Promise<void>((done) => setTimeout(done, 1100));
       expect(descendants.filter(living)).toEqual([]);
     },

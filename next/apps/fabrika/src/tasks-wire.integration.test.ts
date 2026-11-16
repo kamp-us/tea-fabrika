@@ -9,6 +9,7 @@ import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
 import { Effect, FileSystem, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
+import { FetchHttpClient, HttpBody, HttpClient } from "effect/http";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -282,17 +283,11 @@ it.live(
           saw: { label: "test", location: "test", code: "1234", method: "command", check: "touch", has: ["git"] },
         });
 
-        const reply = yield* Effect.tryPromise({
-          try: () =>
-            fetch(`${url}/grant`, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ text: value, armored: root.sign(value) }),
-            }),
-          catch: (cause: unknown) => new Error("grant failed", { cause }),
+        const reply = yield* HttpClient.post(`${url}/grant`, {
+          body: HttpBody.jsonUnsafe({ text: value, armored: root.sign(value) }),
         });
 
-        expect(reply.ok).toBe(true);
+        expect(reply.status >= 200 && reply.status < 300).toBe(true);
       });
 
       yield* grant(hands, "hands");
@@ -352,14 +347,8 @@ it.live(
         saw: { label: "test", location: "test", method: "command", check: "touch" },
       });
 
-      yield* Effect.tryPromise({
-        try: () =>
-          fetch(`${url}/grant`, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: revoke, armored: root.sign(revoke) }),
-          }),
-        catch: (cause: unknown) => new Error("revoke failed", { cause }),
+      yield* HttpClient.post(`${url}/grant`, {
+        body: HttpBody.jsonUnsafe({ text: revoke, armored: root.sign(revoke) }),
       });
 
       for (const [method, params] of [
@@ -377,6 +366,10 @@ it.live(
       }
 
       yield* socket(url, hands, "revoked", false);
-    }).pipe(Effect.scoped, Effect.provide(SecureRandom.layerWebCrypto), Effect.provide(NodeServices.layer)),
+    }).pipe(
+      Effect.scoped,
+      Effect.provide([SecureRandom.layerWebCrypto, FetchHttpClient.layer]),
+      Effect.provide(NodeServices.layer),
+    ),
   180_000,
 );

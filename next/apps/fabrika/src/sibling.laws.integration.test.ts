@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path, Schedule } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
 import { heldPort } from "./port.test-support.ts";
 
 // Sets one env value for the scope; the release puts the old value back, or deletes it when it was unset.
@@ -84,17 +85,17 @@ it.effect("scenario: Ping.hit -> Pong.back -> Ping.leaf; the bare per-call looku
             ),
           );
 
-          const reply = yield* Effect.tryPromise(() => fetch(`http://127.0.0.1:${port.port}`)).pipe(
+          const reply = yield* HttpClient.get(`http://127.0.0.1:${port.port}`).pipe(
             Effect.retry({ times: 100, schedule: Schedule.spaced("100 millis") }),
           );
 
-          const body = yield* Effect.promise(() => reply.text());
-          expect(reply.ok).toBe(!bare);
+          const body = yield* reply.text;
+          expect(reply.status >= 200 && reply.status < 300).toBe(!bare);
           expect(bare ? body : JSON.parse(body)).toEqual(
             bare ? expect.stringContaining("Pong") : { path: ["ping.hit", "pong.back", "ping.leaf"], n: 3 },
           );
         }),
       );
     }
-  }).pipe(Effect.provide(NodeServices.layer)),
+  }).pipe(Effect.provide([NodeServices.layer, FetchHttpClient.layer])),
 );
