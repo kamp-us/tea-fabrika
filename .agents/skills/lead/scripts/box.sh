@@ -264,7 +264,7 @@ def run_box():
         for key in ("run-end", "run-status", "fetched-head"): state.pop(key, None)
         state.update({"run": run, "run-step": step, "run-ticket": ticket, "run-start": start, "run-started": started})
         save(state)
-        command = ["sh", str(here / "redact.sh"), "--run", str(work), prompt, out, str(events), "nice", "-n", "15", "codex", "exec", "--ignore-user-config", "-m", os.environ["CODEX_MODEL"], "-c", "model_reasoning_effort=" + os.environ["CODEX_EFFORT"], "-s", "workspace-write", "-c", "sandbox_workspace_write.writable_roots=" + json.dumps([str(work), str(work / ".agents"), str(gitdata)]), "-C", str(work), "--json", "-o", out, "-"]
+        command = ["node", str(here / "redact.ts"), "--run", str(work), prompt, out, str(events), "--", "nice", "-n", "15", "codex", "exec", "--ignore-user-config", "-m", os.environ["CODEX_MODEL"], "-c", "model_reasoning_effort=" + os.environ["CODEX_EFFORT"], "-s", "workspace-write", "-c", "sandbox_workspace_write.writable_roots=" + json.dumps([str(work), str(work / ".agents"), str(gitdata)]), "-C", str(work), "--json", "-o", out, "-"]
         runner[0] = subprocess.Popen(command, cwd=main)
         code = runner[0].wait(); status = 128 - code if code < 0 else code
         if interrupted[0]: status = 128 + interrupted[0]
@@ -276,8 +276,8 @@ def run_box():
                 state["run-end"] = "unknown"
             state["run-status"] = str(status); save(state)
             if not pathlib.Path(str(events) + ".redacted").exists():
-                # redact.sh was killed before its own scrub: scrub here, or remove the outputs.
-                scrubbed = call(["sh", str(here / "redact.sh"), out, str(events)])
+                # redact.ts was killed before its own scrub: scrub here, or remove the outputs.
+                scrubbed = call(["node", str(here / "redact.ts"), out, str(events)])
                 if scrubbed.returncode:
                     for left in (pathlib.Path(out), events): left.unlink(missing_ok=True)
                     status = status or 1

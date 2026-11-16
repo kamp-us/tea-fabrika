@@ -492,7 +492,7 @@ export interface RowAsk {
   readonly started: Date;
   readonly ended: Date;
   readonly spent: Spent;
-  /** Lines `redact.sh` scrubbed from the saved files, when it ran. */
+  /** Spans `redact.ts` scrubbed from the saved files, when it ran; a number, never NaN. */
   readonly redacted: number | null;
   /** The plants the step's answer named (0093); left off the row when it named none. */
   readonly plants?: ReadonlyArray<Plant> | undefined;
@@ -568,7 +568,7 @@ export const stepRow = (r: RowAsk): string => {
       ? " Dollars are the Agent SDK's own total_cost_usd for the turn, at Anthropic's list price; the subscription bills no call."
       : usd === null
         ? ""
-        : ` Dollars are ${r.model}'s standard list price (fieldrow.py's table); the plan bills no call.`;
+        : ` Dollars are ${r.model}'s standard list price (agents.ts's CODEX_LIST table); the plan bills no call.`;
   const counted =
     r.spent.counted === "last"
       ? " Tokens are what ACP's PromptResponse.usage gave. The adapter labels them the last request's, but five measured turns grew 25,000 to 28,000 a request, so they read as the turn's total (ticket 485)."

@@ -141,6 +141,7 @@ import {
   wipOf,
   workspaceGlobs,
 } from "./quest.ts";
+import { readCount } from "./redact.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -1418,14 +1419,14 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const ended = new Date().toISOString();
         dropView(env, ask.box);
 
-        // The saved files are scrubbed first (redact.sh prints only a count), then the field row,
-        // held beside the boxes until a field PR lands it.
+        // The saved files are scrubbed first (redact.ts prints only `redacted N`), then the field
+        // row, held beside the boxes until a field PR lands it.
         if (existsSync(ask.events)) {
-          const scrubbed = sh("sh", [join(HERE, "redact.sh"), ask.report, ask.events]);
-          const redacted = scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null;
+          const scrubbed = sh("node", [join(HERE, "redact.ts"), ask.report, ask.events]);
+          const redacted = scrubbed.code === 0 ? readCount(scrubbed.out) : null;
 
           if (scrubbed.code !== 0) {
-            notes.push(`redact.sh failed: ${tail(scrubbed.err, 1)}`);
+            notes.push(`redact.ts failed: ${tail(scrubbed.err, 1)}`);
           }
 
           appendFileSync(
@@ -1442,7 +1443,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
               started: new Date(ask.started),
               ended: new Date(ended),
               spent: e.spent,
-              redacted: Number.isFinite(redacted) ? redacted : null,
+              redacted,
               plants: e.plants,
             }),
           );

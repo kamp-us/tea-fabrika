@@ -147,6 +147,7 @@ import * as PullRequestsGh from "./pr/PullRequestsGh.ts";
 import * as PushesProcess from "./pr/PushesProcess.ts";
 import * as Queue from "./pr/Queue.ts";
 import { pinFolder, stepOf, wipOf } from "./quest.ts";
+import { readCount } from "./redact.ts";
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
@@ -1377,7 +1378,7 @@ const handlers = (s: Setup) => {
         const text = turned._tag === "ended" ? turned.said : `${turned.reason}: ${turned.message}`;
         const move = turned._tag === "ended" && turned.answer !== null ? judgedMove(turned.answer) : judgedOf(text);
         // Its field row, beside the steps' rows (record wide).
-        const scrubbed = sh("sh", [join(HERE, "redact.sh"), at(".md"), at(".jsonl")]);
+        const scrubbed = sh("node", [join(HERE, "redact.ts"), at(".md"), at(".jsonl")]);
         appendFileSync(
           join(env.BOXES, `${s.quest}-rows.jsonl`),
           stepRow({
@@ -1392,7 +1393,7 @@ const handlers = (s: Setup) => {
             started,
             ended: new Date(),
             spent: turned.spent,
-            redacted: scrubbed.code === 0 ? Number(scrubbed.out.trim()) : null,
+            redacted: scrubbed.code === 0 ? readCount(scrubbed.out) : null,
           }),
         );
         const answer = move._tag === "step" ? `send ${move.step}: ${move.note}` : `park: ${move.reason}`;
