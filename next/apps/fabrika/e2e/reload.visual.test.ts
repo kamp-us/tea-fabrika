@@ -263,8 +263,9 @@ const edited = (source: string, k: number, more: (s: string) => string = (s) => 
 describe("P15 slice 1: hot reload on the real instance", () => {
   // L17: the real build's warning printer, including importers outside the project root. The build
   // prints through Effect's Console, so each case reads its own lines from its own TestConsole
-  // (ticket 1067, L2). Plant: print `log.message` before bundle.ts's relative replacement, or drop
-  // the case's `Effect.provide(TestConsole.layer)`: red.
+  // (ticket 1067, L2). Plants: drop the case's `Effect.provide(TestConsole.layer)`, or have bundle.ts
+  // print `log.loc.file` without making it relative: red. Printing `log.message` before the relative
+  // replacement leaves L2 green; L1 holds that plant.
   it("L17: build warnings keep unresolved imports visible without absolute paths for generated roots", async () => {
     await fc.assert(
       fc.asyncProperty(

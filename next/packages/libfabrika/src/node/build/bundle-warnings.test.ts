@@ -21,6 +21,11 @@ const WarningCase = {
   missing: Schema.String.check(Schema.isPattern(/^[a-z]{4,16}$/)),
   // Which of the two files says "use client"; the other does not, so every case drops one.
   directive: Schema.Literals(["entry", "imported"]),
+  // Blank lines above each file's code and spaces before each import, so the line and the column of
+  // every warning move from case to case. A line is at most 5 and a column at least 8, so the two
+  // never match and a printer that swaps them shows.
+  pad: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 })),
+  indent: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 6 })),
 };
 
 const PLUGIN = "l1-files";
@@ -31,10 +36,13 @@ const forms = (absolute: string) => [absolute, JSON.stringify(absolute).slice(1,
 describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
   // Plant 1: print `log.message` before the relative replacement: L1 red, a line holds the home.
   // Plant 2: print through the global `console.warn`: L1 red, no line is seen.
+  // Plant 3: keep `MODULE_LEVEL_DIRECTIVE`: red. Plant 4: print every level through `info`: red.
+  // Plant 5: drop the `(<plugin> plugin) ` prefix: red. Plant 6: print the place as
+  // `(<column>:<line>)`: red, the line no longer starts with Rolldown's own place.
   it.effect.prop(
     "L1 each warning is printed once through Console.warn, in Rolldown's format, with files relative to cwd",
     WarningCase,
-    ({ folder, missing, directive }) =>
+    ({ folder, missing, directive, pad, indent }) =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
         // A root that exists nowhere: the plugin serves every file, and an absolute path is easy to see.
@@ -45,12 +53,22 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
         const entrySpecifier = `l1-missing-${missing}`;
         const importedSpecifier = `l1-dependency-${missing}`;
         const use = (file: "entry" | "imported") => (directive === file ? '"use client";\n' : "");
+        const top = "\n".repeat(pad);
+        const space = " ".repeat(indent);
         const files: Readonly<Record<string, string>> = {
-          [entry]: `${use("entry")}import ${JSON.stringify(entrySpecifier)};\nimport "../dependency/imported.ts";\nexport const a = 1;\n`,
-          [imported]: `${use("imported")}import ${JSON.stringify(importedSpecifier)};\nexport const b = 2;\n`,
+          [entry]: `${top}${use("entry")}${space}import ${JSON.stringify(entrySpecifier)};\nimport "../dependency/imported.ts";\nexport const a = 1;\n`,
+          [imported]: `${top}${use("imported")}${space}import ${JSON.stringify(importedSpecifier)};\nexport const b = 2;\n`,
         };
-        // What Rolldown logged before bundle's onLog saw it: the law's own count, never the product's.
-        const raw: Array<{ readonly level: LogLevel; readonly code: string | undefined }> = [];
+        // Where the plugin's own warning points: the imported file's missing specifier.
+        const position = { line: 1 + pad + (directive === "imported" ? 1 : 0), column: indent + 7 };
+        // What Rolldown logged before bundle's onLog saw it: the law's own record, never the product's.
+        const raw: Array<{
+          readonly level: LogLevel;
+          readonly code: string | undefined;
+          readonly message: string;
+          readonly plugin: string | undefined;
+          readonly loc: RolldownLog["loc"];
+        }> = [];
         const served: Plugin = {
           name: PLUGIN,
           resolveId: (id, importer) =>
@@ -65,13 +83,13 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
               // A plugin's own warning, naming the module by its absolute id, as a plugin may. Rolldown
               // tags it with that id and prints it with the plugin's name first; it does not make the
               // message relative, so only bundle's own replacement keeps the home out.
-              this.warn(`served ${id}`);
+              this.warn(`served ${id}`, position);
             }
 
             return null;
           },
           onLog: (level: LogLevel, log: RolldownLog) => {
-            raw.push({ level, code: log.code });
+            raw.push({ level, code: log.code, message: log.message, plugin: log.plugin, loc: log.loc });
           },
         };
 
@@ -100,27 +118,45 @@ describe("T1067 L1: bundle prints Rolldown's warnings through Console", () => {
           ).toBe(false);
         }
 
-        // format: Rolldown's printed shape, which a person reads in the terminal and must not change.
+        // format: Rolldown's printed shape, which a person reads in the terminal and must not change:
+        // `(<plugin> plugin) `, where the log has a plugin, then `<file> (<line>:<column>) `, with
+        // that log's own numbers and its file relative to cwd, then the message.
+        const place = (log: (typeof raw)[number], importer: string) => {
+          expect(log.loc, `Rolldown gave the ${log.code} log a place`).toBeDefined();
+          expect(log.loc?.file, `the ${log.code} log's place names its importer`).toBe(importer);
+          // Coverage, loud: a case whose line equals its column could not catch a swap.
+          expect(log.loc?.line, `the ${log.code} log's line differs from its column`).not.toBe(log.loc?.column);
+          const plugin = log.plugin === undefined ? "" : `(${log.plugin} plugin) `;
+          return `${plugin}${path.relative(root, importer)} (${log.loc?.line}:${log.loc?.column}) `;
+        };
+
         for (const [specifier, importer] of [
           [entrySpecifier, entry],
           [importedSpecifier, imported],
         ] as const) {
           const named = lines.filter((line) => line.includes(specifier));
           expect(named, `one line names ${specifier}`).toHaveLength(1);
-          const relative = path.relative(root, importer);
-          expect(named[0]?.startsWith(`${relative} (`), "the line starts with its importer, relative to cwd").toBe(
-            true,
-          );
-          expect(named[0]?.includes(relative), "the warning names its importer relative to cwd").toBe(true);
+          const logs = raw.filter((log) => log.code === "UNRESOLVED_IMPORT" && log.message.includes(specifier));
+          expect(logs, `Rolldown logged ${specifier} once`).toHaveLength(1);
+          const [log] = logs;
+
+          if (log !== undefined) {
+            expect(named[0]?.startsWith(place(log, importer)), "the line starts with Rolldown's own place").toBe(true);
+          }
         }
 
-        expect(
-          lines.filter(
-            (line) =>
-              line.startsWith(`(${PLUGIN} plugin) `) && line.includes(`served ${path.relative(root, imported)}`),
-          ),
-          "a plugin's warning starts with its name",
-        ).toHaveLength(1);
+        const [warning] = raw.filter((log) => log.code === "PLUGIN_WARNING");
+
+        if (warning !== undefined) {
+          expect(warning.plugin, "the plugin's warning names its plugin").toBe(PLUGIN);
+          expect(
+            lines.filter(
+              (line) =>
+                line.startsWith(place(warning, imported)) && line.includes(`served ${path.relative(root, imported)}`),
+            ),
+            "a plugin's warning starts with its name, then Rolldown's own place",
+          ).toHaveLength(1);
+        }
       }).pipe(Effect.provide(Layer.mergeAll(TestConsole.layer, Path.layer))),
     { arbitrary: { seed: 119120, runs: runsFor({ fast: 20, full: 100 }) } },
   );
