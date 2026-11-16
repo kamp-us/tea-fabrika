@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0565, 0574, 0575, 0576, 0577, 0524, 0523, 0168; body ecf3e3834e3f
+Approved by the lead agent, builds 0565, 0574, 0575, 0576, 0577, 0524, 0523, 0168, 0573; body ee6019175e73
 Plancheck-Version: 3
 # Plan: every check of the Effect checker ends at error and zero hits in next/ and our tooling, one check and one folder set per pull request
 
@@ -323,9 +323,11 @@ is one `.agents/tsconfig.json` includes.
   in an existing rule. L2 is a test, as the law it replaces is: it reads config, not code shape.
 - Every rule of ours that a check replaces goes in the slice that turns the check on where ours
   ran, never before ([0573](../../../.decisions/0573-trusted-lint-rule-replaces-ours.md)):
-  `service-id` with the last `deterministicKeys` slice (E93, 0575), `no-secret-env` with the last
+  `service-id` with the last `deterministicKeys` slice (E93, 0575). ~~`no-secret-env` with the last
   `processEnv` slice (E86), `no-wall-clock` and `no-clock-in-view` with the last `globalDate` slice
-  (E89).
+  (E89).~~ Wrong: those three stay, since the checker misses forms ours refuse (0573's amendments of
+  2026-11-16, [1528](https://github.com/kamp-us/tea-fabrika/pull/1528) and
+  [1529](https://github.com/kamp-us/tea-fabrika/pull/1529)). E86 and E89 delete no rule of ours.
 - No host-only law, no window, no screenshots, no secrets.
 
 ## The slices
