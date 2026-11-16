@@ -1,6 +1,7 @@
 // T753, next/, L16. Exercise the scoped holder, including another entry on the same owner.
 import { describe, expect } from "@effect/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope, ScopedCache } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 import * as SettingsRuntime from "./SettingsRuntime.ts";
@@ -78,7 +79,7 @@ describe("L16 shared settings context, next/", () => {
           }
 
           if (refuse) {
-            expect(results.every(Exit.isFailure)).toBe(true);
+            expect(Arr.every(results, Exit.isFailure)).toBe(true);
             expect(consumers).toBe(expectedConsumers);
             expect(released).toBe(acquired);
           } else {

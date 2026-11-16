@@ -1,6 +1,8 @@
 // P33 / p79. The manager is rebuilt over the same SQLite file for each reopen check.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Ledger } from "../ledger/Ledger.ts";
@@ -44,7 +46,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
           seed: 119120,
           numRuns: 40,
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -186,7 +188,7 @@ describe("p79, process identity", () => {
             (i) => processes.start(first(`start:${i}`, `counter:${i}`), from()),
             { concurrency: 1 },
           );
-          expect(new Set(answers.map((answer) => answer.process)).size).toBe(count);
+          expect(new Set(Arr.map(answers, (answer) => answer.process)).size).toBe(count);
 
           for (const answer of answers) {
             expect(Schema.is(ProcessId)(answer.process)).toBe(true);
@@ -295,7 +297,7 @@ describe("p79, predecessors and live info", () => {
           );
           expect(error.reason).toBe("name_taken");
           expect(store.rows()).toEqual(before);
-          expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toEqual([]);
+          expect(Arr.filter(yield* events("counter:1"), (row) => row._tag === "restarted")).toEqual([]);
         }).pipe(Effect.provide(manager(store)));
       },
     );
@@ -316,14 +318,14 @@ describe("p79, predecessors and live info", () => {
           const answers = yield* Effect.forEach(requests, (id) => Effect.exit(processes.start(again(A, id), from())), {
             concurrency: 2,
           });
-          expect(answers.filter(Exit.isSuccess)).toHaveLength(1);
-          expect(answers.filter(Exit.isFailure)).toHaveLength(1);
+          expect(Arr.filter(answers, Exit.isSuccess)).toHaveLength(1);
+          expect(Arr.filter(answers, Exit.isFailure)).toHaveLength(1);
           const live = yield* processes.info;
           expect(live).toHaveLength(1);
           const current = live[0]!;
           yield* processes.exit(current.process, CRASHED, from());
           expect((yield* Effect.flip(processes.start(again(A, "restart:stale"), from()))).reason).toBe("stale");
-          expect((yield* events("counter:1")).filter((row) => row._tag === "restarted")).toHaveLength(1);
+          expect(Arr.filter(yield* events("counter:1"), (row) => row._tag === "restarted")).toHaveLength(1);
         }).pipe(Effect.provide(manager(store)));
       },
     ),
@@ -343,8 +345,8 @@ describe("p79, predecessors and live info", () => {
           yield* processes.exit(B, CRASHED, from());
           const x = yield* processes.start(again(B), from());
           expect(x.process).toBe(X);
-          const restarts = (yield* events("counter:1")).filter((row) => row._tag === "restarted");
-          expect(restarts.map((row) => row.body)).toEqual([
+          const restarts = Arr.filter(yield* events("counter:1"), (row) => row._tag === "restarted");
+          expect(Arr.map(restarts, (row) => row.body)).toEqual([
             {
               process: B,
               after: A,
@@ -362,21 +364,19 @@ describe("p79, predecessors and live info", () => {
               asked: BRAIN,
             },
           ]);
-          expect(restarts.every((row) => row.parent === from().parent && row.build === "writer-build")).toBe(true);
+          expect(Arr.every(restarts, (row) => row.parent === from().parent && row.build === "writer-build")).toBe(true);
         }).pipe(Effect.provide(manager(store, brain(), ids(A, W, B, X).next)));
         store.reopen();
         yield* Effect.gen(function* () {
           const processes = yield* ProcessManager;
           expect(
-            (yield* processes.info)
-              .map(({ process, name, program, build, restarts }) => ({
-                process,
-                name,
-                program,
-                build,
-                restarts,
-              }))
-              .sort((a, b) => a.name.localeCompare(b.name)),
+            Arr.map(yield* processes.info, ({ process, name, program, build, restarts }) => ({
+              process,
+              name,
+              program,
+              build,
+              restarts,
+            })).sort((a, b) => a.name.localeCompare(b.name)),
           ).toEqual([
             { process: X, name: "counter:1", program: "counter", build: "build-a", restarts: 2 },
             { process: W, name: "watcher:1", program: "watcher", build: "build-a", restarts: 0 },
@@ -398,8 +398,8 @@ describe("p79, predecessors and live info", () => {
         yield* processes.exit(A, reason, from());
         yield* processes.exit(A, reason, from());
         yield* Effect.exit(processes.exit(A, CRASHED, from()));
-        const exits = (yield* events("counter:1")).filter((row) => row._tag === "exited");
-        expect(exits.map((row) => row.body)).toEqual([{ process: A, reason, asked: BRAIN }]);
+        const exits = Arr.filter(yield* events("counter:1"), (row) => row._tag === "exited");
+        expect(Arr.map(exits, (row) => row.body)).toEqual([{ process: A, reason, asked: BRAIN }]);
         expect(yield* processes.info).toEqual([]);
       }).pipe(Effect.provide(manager(store)));
     }),
@@ -464,7 +464,7 @@ describe("p79, names, parents and replay", () => {
       return Effect.gen(function* () {
         yield* ProcessManager.use((p) => p.start(first(), from())).pipe(Effect.provide(manager(store)));
         const before = store.rows();
-        const stream = before.find((row) => row._tag === "registered")!.stream;
+        const stream = Option.getOrThrow(Arr.findFirst(before, (row) => row._tag === "registered")).stream;
         yield* Ledger.use((ledger) =>
           ledger.append(stream, "future", {
             ...from(),
@@ -477,7 +477,7 @@ describe("p79, names, parents and replay", () => {
           ProcessManager.use((p) => p.isLive(A)).pipe(Effect.provide(manager(store))),
         );
         expect(Exit.isSuccess(replayed) && replayed.value).toBe(true);
-        expect(store.rows().some((row) => row._tag === "future_process_fact")).toBe(true);
+        expect(Arr.some(store.rows(), (row) => row._tag === "future_process_fact")).toBe(true);
       });
     }),
   );
@@ -497,7 +497,7 @@ const forger = (store: Storage, by: string, streamForLife: string) => ({
       ),
     ).pipe(Effect.provide(manager(store))),
   live: (process: string) => ProcessManager.use((p) => p.isLive(process)).pipe(Effect.provide(manager(store))),
-  downs: () => store.rows().filter((row) => row._tag === "send"),
+  downs: () => Arr.filter(store.rows(), (row) => row._tag === "send"),
 });
 
 const lawsFor = (
@@ -539,7 +539,7 @@ const lawsFor = (
         build: CODE.hash,
       });
       const info = yield* ProcessManager.use((p) => p.info).pipe(Effect.provide(manager(store)));
-      expect(info.find((row) => row.process === A)?.restarts).toBe(0);
+      expect(Option.getOrUndefined(Arr.findFirst(info, (row) => row.process === A))?.restarts).toBe(0);
     }),
     down: Effect.gen(function* () {
       yield* forge("counter:1", {
@@ -664,12 +664,12 @@ describe("P33, the brain writes process events and `parent` keeps who asked", ()
           ),
         );
         yield* ProcessManager.use((p) => p.start(first(), from({ by: X_KEY, parent: asked })));
-        const written = store.rows().filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
-        expect(written.map((row) => row._tag)).toEqual(["registered", "started"]);
+        const written = Arr.filter(store.rows(), (row) => Object.hasOwn(ProcessEvent.cases, row._tag));
+        expect(Arr.map(written, (row) => row._tag)).toEqual(["registered", "started"]);
 
         for (const row of written) {
           expect(row.by).toBe(brain().by);
-          const cause = store.rows().find((entry) => entry.id === row.parent);
+          const cause = Option.getOrUndefined(Arr.findFirst(store.rows(), (entry) => entry.id === row.parent));
           expect(cause?.by).toBe(X_KEY);
         }
       }).pipe(Effect.provide(manager(store, watcher(W))));

@@ -2,6 +2,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -500,7 +501,7 @@ it("P2: runners select policy before init and retain policy, pending recovery an
                       m.streak++;
                       const wait = Math.min(expected.backoff.minMs * 2 ** (m.streak - 1), expected.backoff.maxMs);
                       const until = m.now + wait;
-                      const times = m.restarts.filter((at) => at >= until - expected.periodMs);
+                      const times = Arr.filter(m.restarts, (at) => at >= until - expected.periodMs);
                       const brake = times.length + 1 > expected.intensity;
                       m.pending = {
                         until: brake
@@ -742,7 +743,10 @@ it("the real Worker box records the same thrown class as Node under supervision"
             expect(exit).toMatchObject({ _tag: "Success", value: { _tag: "refused", reason: "dead" } });
             receipts.push(yield* w.receipt(letter));
             dead.push(
-              (yield* Effect.forEach([A, B], (p) => w.read(`${p}/dead`), { concurrency: 1 })).flat().map((r) => r.body),
+              Arr.map(
+                (yield* Effect.forEach([A, B], (p) => w.read(`${p}/dead`), { concurrency: 1 })).flat(),
+                (r) => r.body,
+              ),
             );
           }
 

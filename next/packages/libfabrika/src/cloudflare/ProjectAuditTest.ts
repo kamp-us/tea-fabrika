@@ -2,6 +2,7 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto"; // edge: Effect has no SSH Ed25519 key export or signing API
 import { Machine } from "@demlik/tea/effect";
 import { Effect, Layer, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { InputId } from "../Id.ts";
@@ -309,7 +310,8 @@ const projectWalk = Effect.fnUntraced(function* (
       const binding = Schema.decodeUnknownSync(Schema.Struct({ id: InputId }))(
         sql.exec("SELECT id FROM gateway_bindings WHERE letter=?", `${project.boot.process}/${letter}`)[0],
       );
-      const rows = (yield* Stream.runCollect(ledger.read("gateway/inputs", 0))).filter(
+      const rows = Arr.filter(
+        yield* Stream.runCollect(ledger.read("gateway/inputs", 0)),
         (entry: Entry) => entry.id === binding.id,
       );
       expect(rows).toHaveLength(1);

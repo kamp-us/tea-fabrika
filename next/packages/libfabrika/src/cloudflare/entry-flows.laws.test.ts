@@ -9,6 +9,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -49,7 +50,7 @@ const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), so
 const settingsExec =
   (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
   (query, ...args) => {
-    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
+    const settings = Arr.some(args, (arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
 
     if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");
@@ -188,7 +189,7 @@ SettingsTest.suite((recipe, secret) =>
             captured.stderr.push(String(chunk));
             return true;
           }),
-          ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
+          ...Arr.map(["log", "info", "warn", "error", "debug"] as const, (method) =>
             vi.spyOn(console, method).mockImplementation((...args) => {
               captured.logs.push(args);
             }),
@@ -455,7 +456,7 @@ SettingsTest.suite((recipe, secret) =>
         }
 
         for (const table of tables) {
-          const rows = databases.flatMap((db) =>
+          const rows = Arr.flatMap(databases, (db) =>
             db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(table) === undefined
               ? []
               : db.prepare(`SELECT * FROM ${table}`).all(),

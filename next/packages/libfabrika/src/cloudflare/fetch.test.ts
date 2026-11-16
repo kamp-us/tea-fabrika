@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 // P12, next/. The public Worker route is plain libfabrika code. No socket or workerd class.
 // Builder contract: workers/fetch.ts exports fetch(request, env, config), returning an Effect.
 import { Cause, Effect, Exit } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as StartsTest from "../settings/StartsTest.ts";
@@ -170,7 +171,7 @@ describe("P12 public Worker fetch", () => {
       // copy of it with every part kept, and gives the object's answer back as a Response of its own.
       expect(answer.status).toBe(w.response.status);
       expect(await answer.text()).toBe("gateway");
-      expect(w.calls.map(({ to, method }) => ({ to, method }))).toEqual([{ to: path, method: "fetch" }]);
+      expect(Arr.map(w.calls, ({ to, method }) => ({ to, method }))).toEqual([{ to: path, method: "fetch" }]);
       const sent: unknown = w.calls[0]?.args[0];
       expect(sent).toBeInstanceOf(Request);
       expect(sent instanceof Request ? [sent.method, sent.url, [...sent.headers]] : []).toEqual([
@@ -218,7 +219,7 @@ describe("P12 public Worker fetch", () => {
         const held: Array<() => void> = [];
         const w = world(port, name, (reply) => new Promise((answer) => held.push(() => answer(reply))));
         const answered: Array<number> = [];
-        const first = order.map(() =>
+        const first = Arr.map(order, () =>
           Effect.runPromise(fetch(w.request("/"), w.env, w.config)).then((response) => {
             answered.push(response.status);
             return response;
@@ -237,7 +238,7 @@ describe("P12 public Worker fetch", () => {
           expect(answered).toHaveLength(done + 1);
         }
 
-        expect(answered).toEqual(order.map(() => 200));
+        expect(answered).toEqual(Arr.map(order, () => 200));
         await Promise.all(first);
 
         // A read has finished, so a later request asks nothing.

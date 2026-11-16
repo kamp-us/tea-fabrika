@@ -14,6 +14,7 @@ import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer, Schedule, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -161,23 +162,26 @@ const instance = Effect.fnUntraced(function* () {
     },
   } as unknown as Env;
   const door = Object.fromEntries(
-    [
-      "connect",
-      "challenge",
-      "initialize",
-      "target",
-      "route",
-      "knock",
-      "grant",
-      "disconnect",
-      "sign",
-      "append",
-      "retire",
-      "checkDelivery",
-    ].map((method) => [
-      method,
-      () => (method === "retire" ? Effect.void : Effect.die(`the door is not under test: ${method}`)),
-    ]),
+    Arr.map(
+      [
+        "connect",
+        "challenge",
+        "initialize",
+        "target",
+        "route",
+        "knock",
+        "grant",
+        "disconnect",
+        "sign",
+        "append",
+        "retire",
+        "checkDelivery",
+      ],
+      (method) => [
+        method,
+        () => (method === "retire" ? Effect.void : Effect.die(`the door is not under test: ${method}`)),
+      ],
+    ),
   );
   let monitor: ProjectDoorOptions["monitor"] | undefined;
   const context = yield* Layer.build(
@@ -202,9 +206,9 @@ const instance = Effect.fnUntraced(function* () {
     monitor: monitor!,
     /** Every watch fact on the processes stream, in log order. */
     facts: (tag: "monitored" | "demonitored") =>
-      sql
-        .exec("SELECT body FROM entries WHERE stream='processes' AND _tag=? ORDER BY rev", tag)
-        .map((row) => Schema.decodeUnknownSync(Fact)(String(row.body))),
+      Arr.map(sql.exec("SELECT body FROM entries WHERE stream='processes' AND _tag=? ORDER BY rev", tag), (row) =>
+        Schema.decodeUnknownSync(Fact)(String(row.body)),
+      ),
   };
 });
 
@@ -269,33 +273,34 @@ describe("ticket 979: a closed socket's leave ends its session's watches", () =>
                       } else {
                         // A close: a session that holds watches, or one that never held any.
                         const session = move < 10 ? holders[g(fc.nat, { max: holders.length - 1 })]! : PIDS[NONE + n]!;
-                        const ending = [...(held.get(session) ?? [])]
-                          .filter(([, state]) => state === "live")
-                          .map(([key]) => Schema.decodeUnknownSync(Key)(key));
+                        const ending = Arr.map(
+                          Arr.filter([...(held.get(session) ?? [])], ([, state]) => state === "live"),
+                          ([key]) => Schema.decodeUnknownSync(Key)(key),
+                        );
                         const before = i.facts("demonitored").length;
                         const client = CLIENTS[g(fc.nat, { max: CLIENTS.length - 1 })]!;
                         const exit = yield* closed(i.project.leave(client, session));
                         expect(exit, "the leave succeeds with no caller's span").toStrictEqual(Exit.void);
                         const written = i.facts("demonitored").slice(before);
                         expect(
-                          written.map((f) => [f.to.client, f.ref, f.to.session, f.reason]).sort(),
+                          Arr.map(written, (f) => [f.to.client, f.ref, f.to.session, f.reason]).sort(),
                           "each live watch of the closed session ends once, as its watcher exited",
-                        ).toEqual(ending.map(([c, ref]) => [c, ref, session, "watcher_exited"]).sort());
+                        ).toEqual(Arr.map(ending, ([c, ref]) => [c, ref, session, "watcher_exited"]).sort());
                         held.delete(session);
                       }
                     }
 
                     // A watch no leave ended has no demonitored fact: another session's close left it alone.
                     const ended = new Set(
-                      i.facts("demonitored").map((f) => JSON.stringify([f.to.client, f.to.session, f.ref])),
+                      Arr.map(i.facts("demonitored"), (f) => JSON.stringify([f.to.client, f.to.session, f.ref])),
                     );
-                    const kept = [...held].flatMap(([session, watches]) =>
-                      [...watches.keys()].map((key) => {
+                    const kept = Arr.flatMap([...held], ([session, watches]) =>
+                      Arr.map([...watches.keys()], (key) => {
                         const [client, ref] = Schema.decodeUnknownSync(Key)(key);
                         return JSON.stringify([client, session, ref]);
                       }),
                     );
-                    expect(kept.filter((key) => ended.has(key))).toEqual([]);
+                    expect(Arr.filter(kept, (key) => ended.has(key))).toEqual([]);
                   }),
                 ),
               ),

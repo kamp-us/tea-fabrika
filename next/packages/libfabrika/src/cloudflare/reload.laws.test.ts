@@ -37,6 +37,8 @@ import {
   Schema,
   Scope,
 } from "effect";
+import * as Arr from "effect/Array";
+import * as Order from "effect/Order";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
 import { lineFor } from "../ledger/Log.ts";
@@ -55,6 +57,8 @@ import { type Env, type ProjectDoorOptions, ProjectService, projectLayer } from 
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {}, DurableObject: class {} }));
 
 const SEED = 119120;
+/** The order a plain `toSorted()` gives: each value compared by its text. */
+const byText = Order.mapInput(Order.String, (value: ReadonlyArray<string>) => String(value));
 
 /** A Promise the law awaited rejected: fast-check's failed assertion, or a Response body that did not read. */
 class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { cause: Schema.Defect() }) {}
@@ -243,14 +247,13 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
           swap: async (request: Omit<Pushed, "name">) => {
             pushed.push({ name, ...request });
             loadedAtPush.push(
-              sql
-                .exec("SELECT body FROM entries WHERE stream='gateway/code' AND _tag='code.loaded'")
-                .map(
-                  (row) =>
-                    Schema.decodeUnknownSync(
-                      Schema.fromJsonString(Schema.Struct({ hash: CodeEvent.cases["code.loaded"].fields.hash })),
-                    )(String(row.body)).hash,
-                ),
+              Arr.map(
+                sql.exec("SELECT body FROM entries WHERE stream='gateway/code' AND _tag='code.loaded'"),
+                (row) =>
+                  Schema.decodeUnknownSync(
+                    Schema.fromJsonString(Schema.Struct({ hash: CodeEvent.cases["code.loaded"].fields.hash })),
+                  )(String(row.body)).hash,
+              ),
             );
             const gate = swapGates.get(request.hash);
 
@@ -321,23 +324,26 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     },
   } as unknown as Env;
   const door = Object.fromEntries(
-    [
-      "connect",
-      "challenge",
-      "initialize",
-      "target",
-      "route",
-      "knock",
-      "grant",
-      "disconnect",
-      "sign",
-      "append",
-      "retire",
-      "checkDelivery",
-    ].map((method) => [
-      method,
-      () => (method === "retire" ? Effect.void : Effect.die(`the door is not under test: ${method}`)),
-    ]),
+    Arr.map(
+      [
+        "connect",
+        "challenge",
+        "initialize",
+        "target",
+        "route",
+        "knock",
+        "grant",
+        "disconnect",
+        "sign",
+        "append",
+        "retire",
+        "checkDelivery",
+      ],
+      (method) => [
+        method,
+        () => (method === "retire" ? Effect.void : Effect.die(`the door is not under test: ${method}`)),
+      ],
+    ),
   );
   const boot = Effect.fnUntraced(function* () {
     // The real composition, as the app's brain wires it; only the door is stubbed.
@@ -398,7 +404,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
     }),
     /** `gateway/code` and every other stream, as the ledger holds them, in log order. */
     entries: () =>
-      sql.exec("SELECT stream, id, rev, _tag, body, build FROM entries ORDER BY rev").map((row) => ({
+      Arr.map(sql.exec("SELECT stream, id, rev, _tag, body, build FROM entries ORDER BY rev"), (row) => ({
         stream: String(row.stream),
         id: String(row.id),
         rev: Number(row.rev),
@@ -411,7 +417,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
 
 type Instance = Effect.Success<ReturnType<typeof instance>>;
 
-const code = (i: Instance) => i.entries().filter((e) => e.stream === "gateway/code");
+const code = (i: Instance) => Arr.filter(i.entries(), (e) => e.stream === "gateway/code");
 
 const install = Effect.fnUntraced(function* (i: Instance, id: string, f: Fixture, pad = 0, from = "watch") {
   const source = sourceFor(f, pad);
@@ -432,7 +438,7 @@ const checkPolicies = Effect.fnUntraced(function* (i: Instance, n: number, phase
     expect(yield* i.policy(descriptor.id), `${name}'s running code decides its policy`).toEqual(expected);
     const id = `policy-own:${n}:${phase}:${name}`;
     yield* i.run(i.p.own(descriptor.id, id, `app/${name}`, { _tag: "changed" }));
-    expect(i.entries().find((e) => e.id === id)?.build).toBe(code);
+    expect(Option.getOrUndefined(Arr.findFirst(i.entries(), (e) => e.id === id))?.build).toBe(code);
   }
 });
 
@@ -518,12 +524,12 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
 
       expect(answer).toMatchObject({ _tag: "loaded" });
       const added = code(i).slice(before);
-      expect(added.map((e) => [e.tag, e.body.hash, e.body.was, e.body.from])).toEqual([
+      expect(Arr.map(added, (e) => [e.tag, e.body.hash, e.body.was, e.body.from])).toEqual([
         ["code.loaded", digest, selected, "watch"],
       ]);
       const live = [...i.descriptors.keys()];
-      expect(i.pushed.slice(pushes).map((p) => [p.name, p.hash, p.program])).toEqual(
-        live.map((name) => [name, digest, PROGRAM]),
+      expect(Arr.map(i.pushed.slice(pushes), (p) => [p.name, p.hash, p.program])).toEqual(
+        Arr.map(live, (name) => [name, digest, PROGRAM]),
       );
       selected = digest;
       current = next;
@@ -545,23 +551,21 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
         }),
       );
       const added = code(i).slice(before);
-      expect(added.map((e) => [e.tag, e.body.reason, e.body.hash])).toEqual([["code.failed", move, null]]);
+      expect(Arr.map(added, (e) => [e.tag, e.body.reason, e.body.hash])).toEqual([["code.failed", move, null]]);
     } else if (move === "restart") {
-      const expected = [...i.descriptors.values()]
-        .filter((d) => i.running.get(d.id) !== selected)
-        .map((d) => [d.name, selected, d.program]);
+      const expected = Arr.map(
+        Arr.filter([...i.descriptors.values()], (d) => i.running.get(d.id) !== selected),
+        (d) => [d.name, selected, d.program],
+      );
       yield* i.restart;
-      expect(
-        i.pushed
-          .slice(pushes)
-          .map((p) => [p.name, p.hash, p.program])
-          .sort(),
-      ).toEqual(expected.sort());
+      expect(Arr.map(i.pushed.slice(pushes), (p) => [p.name, p.hash, p.program]).sort()).toEqual(expected.sort());
     } else if (move === "own") {
       const live = [...i.descriptors.values()];
       const descriptor = live[g(fc.nat, { max: live.length - 1 })]!;
       yield* i.run(i.p.own(descriptor.id, `record_${n}`, `app/${descriptor.id}`, { _tag: "changed", count: n }));
-      expect(i.entries().find((e) => e.id === `record_${n}`)?.build).toBe(i.running.get(descriptor.id));
+      expect(Option.getOrUndefined(Arr.findFirst(i.entries(), (e) => e.id === `record_${n}`))?.build).toBe(
+        i.running.get(descriptor.id),
+      );
     } else if (move === "start") {
       const name = `counter:${++names}`;
       yield* i.run(
@@ -584,7 +588,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
       const { digest, answer } = yield* install(i, `install_${n}`, bad, pad);
       expect(answer).toEqual({ _tag: "failed", reason: move });
       const added = code(i).slice(before);
-      expect(added.map((e) => [e.tag, e.body.reason, e.body.hash])).toEqual([["code.failed", move, digest]]);
+      expect(Arr.map(added, (e) => [e.tag, e.body.reason, e.body.hash])).toEqual([["code.failed", move, digest]]);
       expect(i.pushed, "a failed hash reaches no process").toHaveLength(pushes);
       failed.add(digest);
 
@@ -606,7 +610,7 @@ const walk = Effect.fnUntraced(function* (g: fc.GeneratorValue, steps: number, p
     for (const [id, calls] of i.isolates) {
       if (id.endsWith("/check")) {
         expect(
-          calls.filter((c) => c !== "describe"),
+          Arr.filter(calls, (c) => c !== "describe"),
           `${id} ran more than describe`,
         ).toEqual([]);
       }
@@ -654,12 +658,14 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               expect(Option.isNone(early), "a later install cannot push while the boot push is held").toBe(true);
               yield* Deferred.succeed(release, undefined);
               const answer = yield* Fiber.join(installing);
-              yield* Effect.suspend(() => Effect.succeed(i.completed.slice(before).some((p) => p.hash === was))).pipe(
+              yield* Effect.suspend(() =>
+                Effect.succeed(Arr.some(i.completed.slice(before), (p) => p.hash === was)),
+              ).pipe(
                 Effect.repeat({ until: Boolean, schedule: Schedule.spaced("1 millis") }),
                 Effect.timeout("1 second"),
               );
               expect(answer.answer._tag).toBe("loaded");
-              expect(i.completed.slice(before).map((p) => p.hash)).toEqual([was, digest]);
+              expect(Arr.map(i.completed.slice(before), (p) => p.hash)).toEqual([was, digest]);
               expect(i.running.get(pid), "the last installed build keeps running after boot's delayed push").toBe(
                 digest,
               );
@@ -716,16 +722,13 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(code(i).at(-1)?.body.hash, "the last save is selected").toBe(selected);
             // Every process the Project holds, read from its own table: a pending start has no object yet.
             const held = () =>
-              i.db
-                .prepare("SELECT process, value FROM dev_descriptors")
-                .all()
-                .map((row) => ({
-                  pid: String(row["process"]),
-                  name: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ name: Schema.String })))(
-                    row["value"],
-                  ).name,
-                }));
-            const behind = () => held().filter(({ pid }) => i.running.get(pid) !== selected);
+              Arr.map(i.db.prepare("SELECT process, value FROM dev_descriptors").all(), (row) => ({
+                pid: String(row["process"]),
+                name: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ name: Schema.String })))(
+                  row["value"],
+                ).name,
+              }));
+            const behind = () => Arr.filter(held(), ({ pid }) => i.running.get(pid) !== selected);
             const settled = (done: () => boolean, label: string) =>
               Effect.suspend(() => (done() ? Effect.void : Effect.fail(label))).pipe(
                 Effect.retry(Schedule.spaced("5 millis")),
@@ -740,7 +743,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             i.unreachable.clear();
             const left = behind();
             expect(
-              left.map(({ name }) => name),
+              Arr.map(left, ({ name }) => name),
               "every pending start is behind the selection",
             ).toEqual(expect.arrayContaining(late));
             const down = g(fc.boolean);
@@ -772,10 +775,10 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             );
             yield* Effect.sleep("30 millis");
             expect(
-              i.pushed
-                .slice(pushes)
-                .filter((p) => late.includes(p.name))
-                .map((p) => p.name),
+              Arr.map(
+                Arr.filter(i.pushed.slice(pushes), (p) => late.includes(p.name)),
+                (p) => p.name,
+              ),
               "no swap reaches a start before its delivery",
             ).toEqual([]);
             yield* Deferred.succeed(release, undefined);
@@ -784,7 +787,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
             if (down) {
               yield* settled(
-                () => left.every(({ pid }) => lines.some((line) => line.includes(pid))),
+                () => Arr.every(left, ({ pid }) => Arr.some(lines, (line) => line.includes(pid))),
                 "a failed boot swap left no log line for its process",
               );
               expect(behind(), "a failed swap leaves each process on its old code").toEqual(left);
@@ -794,12 +797,17 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
             yield* settled(() => behind().length === 0, "a process stayed on its old code after the boot");
             expect(
-              i.completed
-                .slice(before)
-                .map((p) => [p.name, p.hash])
-                .toSorted(),
+              Arr.sort(
+                Arr.map(i.completed.slice(before), (p) => [p.name, p.hash]),
+                byText,
+              ),
               "each process behind the selection is swapped once, a start pending at boot after its delivery",
-            ).toEqual(left.map(({ name }) => [name, selected]).toSorted());
+            ).toEqual(
+              Arr.sort(
+                Arr.map(left, ({ name }) => [name, selected]),
+                byText,
+              ),
+            );
           }),
         50,
       ),
@@ -845,9 +853,9 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 const answer = yield* i.run(i.p.start(request, origin));
                 starts.set(name, { request, answer });
                 expect(i.descriptors.get(name)?.build).toBe(selected);
-                const entry = i.entries().find((e) => e.rev === answer.rev)!;
+                const entry = Option.getOrThrow(Arr.findFirst(i.entries(), (e) => e.rev === answer.rev));
                 expect(entry).toMatchObject({ tag: "started", body: { program: PROGRAM, hash: selected } });
-                expect(code(i).some((e) => e.body.hash === selected && e.rev < answer.rev)).toBe(true);
+                expect(Arr.some(code(i), (e) => e.body.hash === selected && e.rev < answer.rev)).toBe(true);
               } else if (move === "reopen") {
                 yield* i.restart;
               } else {
@@ -928,7 +936,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               facts.push({ id, line });
               yield* Deferred.succeed(reply, undefined);
               expect((yield* Fiber.join(pending)).answer._tag).toBe("loaded");
-              expect(i.entries().filter((e) => e.id === id)).toHaveLength(1);
+              expect(Arr.filter(i.entries(), (e) => e.id === id)).toHaveLength(1);
               i.swapReplies.delete(digest);
             }
           }),
@@ -1012,13 +1020,18 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 i.p.codeInstall({ id: `isolated_${n}`, program, hash: digest, source, from: "watch" }),
               );
               expect(answer._tag).toBe("loaded");
-              const matching = [...i.descriptors.values()].filter((d) => d.program === program);
+              const matching = Arr.filter([...i.descriptors.values()], (d) => d.program === program);
               expect(
-                i.pushed
-                  .slice(pushes)
-                  .map((p) => p.name)
-                  .toSorted(),
-              ).toEqual(matching.map((d) => d.name).toSorted());
+                Arr.sort(
+                  Arr.map(i.pushed.slice(pushes), (p) => p.name),
+                  Order.String,
+                ),
+              ).toEqual(
+                Arr.sort(
+                  Arr.map(matching, (d) => d.name),
+                  Order.String,
+                ),
+              );
 
               for (const d of i.descriptors.values()) {
                 expect(i.running.get(d.id)).toBe(d.program === program ? digest : before.get(d.id));
@@ -1078,8 +1091,8 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 _tag: "loaded",
                 processes: [{ name: "counter:1", outcome: { _tag: "swapped", was } }],
               });
-              expect(i.entries().filter((e) => e.id === id)).toHaveLength(1);
-              expect(code(i).filter((e) => e.id === `concurrent_${n}`)).toHaveLength(1);
+              expect(Arr.filter(i.entries(), (e) => e.id === id)).toHaveLength(1);
+              expect(Arr.filter(code(i), (e) => e.id === `concurrent_${n}`)).toHaveLength(1);
               expect(i.running.get(pid)).toBe(digest);
               i.swapGates.delete(digest);
             }
@@ -1115,7 +1128,12 @@ describe("P15 slice 1: the brain installs and selects code", () => {
               const pushes = i.pushed.length;
               const expected = i.running.get(i.descriptors.get("counter:1")!.id) === selected ? [] : [selected];
               // Check persistence before reopening too, so a missing bundle reports its cause.
-              const recorded = new Set(before.filter((e) => e.tag === "code.loaded").map((e) => String(e.body.hash)));
+              const recorded = new Set(
+                Arr.map(
+                  Arr.filter(before, (e) => e.tag === "code.loaded"),
+                  (e) => String(e.body.hash),
+                ),
+              );
 
               for (const digest of recorded) {
                 expect(
@@ -1129,7 +1147,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
 
               yield* i.reopen(replacement);
               expect(code(i)).toEqual(before);
-              expect(i.pushed.slice(pushes).map((p) => p.hash)).toEqual(expected);
+              expect(Arr.map(i.pushed.slice(pushes), (p) => p.hash)).toEqual(expected);
 
               for (const digest of recorded) {
                 expect(yield* i.run(i.p.code(digest))).toEqual({ hash: digest, source: i.sources.get(digest) });
@@ -1172,7 +1190,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             const kept = i.running.get(pid)!;
             expect(kept, "counter:1 stays on the code it started on").toBe(i.builtHash);
             expect(
-              code(i).some((e) => e.tag === "code.loaded"),
+              Arr.some(code(i), (e) => e.tag === "code.loaded"),
               "the home has its code store",
             ).toBe(true);
             // The broken home: the code counter:1 records is gone, and the next build's built-in differs.
@@ -1183,7 +1201,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(
               Exit.isFailure(exit)
                 ? Cause.squash(exit.cause)
-                : { opened: [...i.isolates.keys()].filter((id) => !before.has(id) && id.endsWith(`/${pid}`)) },
+                : { opened: Arr.filter([...i.isolates.keys()], (id) => !before.has(id) && id.endsWith(`/${pid}`)) },
               "the open fails loud, and counter:1 runs no other code",
             ).toMatchObject({ _tag: "ProgramDown", reason: "no_program" });
           }),
@@ -1227,13 +1245,14 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             const { i } = yield* walk(g, g(fc.integer, { min: 1, max: 10 }), true);
 
             const entries = i.entries();
-            const loaded = entries.filter((e) => e.stream === "gateway/code" && e.tag === "code.loaded");
+            const loaded = Arr.filter(entries, (e) => e.stream === "gateway/code" && e.tag === "code.loaded");
 
             for (const e of loaded) {
               expect(["boot", "watch"]).toContain(e.body.from);
             }
 
-            const earlier = (digest: string, rev: number) => loaded.some((l) => l.body.hash === digest && l.rev < rev);
+            const earlier = (digest: string, rev: number) =>
+              Arr.some(loaded, (l) => l.body.hash === digest && l.rev < rev);
 
             // The built-in program's first load is from the boot, with nothing before it.
             expect(loaded[0]?.body).toMatchObject({ program: PROGRAM, hash: i.builtHash, was: null, from: "boot" });
@@ -1399,7 +1418,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 }
 
                 // Whoever called, every entry on gateway/code is the brain's own.
-                expect(code(i).filter((e) => e.build !== BRAIN_BUILD)).toEqual([]);
+                expect(Arr.filter(code(i), (e) => e.build !== BRAIN_BUILD)).toEqual([]);
               }
             }),
           100,

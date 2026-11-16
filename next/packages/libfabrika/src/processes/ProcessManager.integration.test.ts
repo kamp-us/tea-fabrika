@@ -2,6 +2,7 @@
 // Mail, writer fields, ledger refusals and lazy layer failures stay covered.
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -39,7 +40,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
           seed: 119120,
           numRuns: 40,
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -61,7 +62,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         const processes = yield* ProcessManager;
         yield* processes.start(makeFirst(), from());
         yield* processes.exit(A, reason, from());
-        const exits = spans.filter((s) => s.name === "process.exit" && s.status._tag === "Ended");
+        const exits = Arr.filter(spans, (s) => s.name === "process.exit" && s.status._tag === "Ended");
         expect(exits).toHaveLength(1);
         expect(exits[0]?.attributes.get("fab.process")).toBe(A);
       }).pipe(Effect.provide(manager(store)), Effect.withTracer(tracer));
@@ -99,7 +100,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         const b = yield* processes.start(first("start:counter:2", "counter:2"), from());
         expect(a.process).toBe(A);
         expect(b.process).toBe(B);
-        const started = (yield* events("counter:1")).filter((row) => row._tag === "started");
+        const started = Arr.filter(yield* events("counter:1"), (row) => row._tag === "started");
         expect(started).toHaveLength(1);
         expect(started[0]).toMatchObject({
           _tag: "started",
@@ -108,7 +109,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
           ...from(),
         });
         expect(started[0]?.rev).toBe(a.rev);
-        expect((yield* events("counter:2")).filter((row) => row._tag === "started")).toHaveLength(1);
+        expect(Arr.filter(yield* events("counter:2"), (row) => row._tag === "started")).toHaveLength(1);
       }).pipe(Effect.provide(manager(store)));
     }),
   );
@@ -123,7 +124,7 @@ describe("p21 amended by p79, starts have request IDs and process IDs", () => {
         expect(yield* processes.start(first(), from({ sentAt: "later" }))).toEqual(a);
         expect((yield* Effect.flip(processes.start(first(), from({ parent: null })))).reason).toBe("id_reused");
         expect((yield* Effect.flip(processes.start(first(), from({ for: "other-person" })))).reason).toBe("id_reused");
-        expect((yield* events("counter:1")).filter((row) => row._tag === "started")).toHaveLength(1);
+        expect(Arr.filter(yield* events("counter:1"), (row) => row._tag === "started")).toHaveLength(1);
         expect(generated.calls()).toBe(1);
       }).pipe(Effect.provide(manager(store, brain(), generated.next)));
     }),
@@ -154,7 +155,7 @@ describe("p21, CoordinationLayer", () => {
           _tag: "placed",
           pos: 1,
         });
-        expect((yield* Stream.runCollect(mailbox.receive("counter:1", 0))).map((letter) => letter.id)).toEqual([
+        expect(Arr.map(yield* Stream.runCollect(mailbox.receive("counter:1", 0)), (letter) => letter.id)).toEqual([
           "letter-a",
         ]);
       }).pipe(Effect.provide(CoordinationLayer(brain(), ids(A).next).pipe(Layer.provide(data(store.sql)))));

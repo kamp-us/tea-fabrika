@@ -5,6 +5,7 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Option, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { LedgerError } from "../../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../../ledger/Log.ts";
@@ -163,7 +164,7 @@ const walk = (choices: ReadonlyArray<Choice>): ReadonlyArray<Step> => {
     clock += c.gap;
     const known = [...lives.keys()];
     const watching = [...watches.values()];
-    const unused = PIDS.filter((pid) => !lives.has(pid));
+    const unused = Arr.filter(PIDS, (pid) => !lives.has(pid));
     const absent = at(unused, c.pick) ?? X;
     // A known process, or, one time in five or when none exists, one the fold never started.
     const target = c.other % 5 === 0 || known.length === 0 ? absent : (at(known, c.pick) ?? absent);
@@ -311,7 +312,7 @@ const folded = (model: Model): Folded => ({
   current: model.current,
   restarts: model.restarts,
   watches: new Map(
-    [...model.watches].map(([key, w]) => [
+    Arr.map([...model.watches], ([key, w]) => [
       key,
       { tag: w._tag, ref: w.ref, process: w.process, to: w.to, round: w.round } satisfies Watch,
     ]),
@@ -348,31 +349,34 @@ const started = <A, E extends { readonly reason: string }>(result: Result.Result
   Result.isFailure(result) ? result.failure.reason : Option.getOrUndefined(result.success);
 
 /** The pids a query is asked about: every life the fold holds, and one it does not. */
-const pids = (s: Folded): ReadonlyArray<string> => [...s.lives.keys(), PIDS.find((pid) => !s.lives.has(pid)) ?? X];
+const pids = (s: Folded): ReadonlyArray<string> => [
+  ...s.lives.keys(),
+  Option.getOrUndefined(Arr.findFirst(PIDS, (pid) => !s.lives.has(pid))) ?? X,
+];
 
 /** Every query answer, for one reached state, through the public table. */
 const answers = (table: ProcessTable, s: Folded) => {
   const caller = (owner: Owned) => ({ owner, recipient: CLIENT_TO });
-  const lifecycle = pids(s).map((p) => ({
+  const lifecycle = Arr.map(pids(s), (p) => ({
     life: Option.getOrUndefined(table.life(p)),
     live: table.isLive(p),
     collision: table.collision(p),
-    parents: OWNERS.map((owner) => answer(table.parent(p, owner))),
-    exits: REASONS.map((reason) => answer(table.exit(p, EXITS[reason], BRAIN_OWNER))),
+    parents: Arr.map(OWNERS, (owner) => answer(table.parent(p, owner))),
+    exits: Arr.map(REASONS, (reason) => answer(table.exit(p, EXITS[reason], BRAIN_OWNER))),
     downs: answer(table.down(p, "crashed", BRAIN_OWNER)),
     inbound: table.inbound(p),
     outbound: table.outbound(p),
   }));
-  const statuses = NAMES.map((name) => OWNERS.map((owner) => answer(table.status(name, owner))));
-  const starts = [...s.lives.values()].flatMap((life) => [
+  const statuses = Arr.map(NAMES, (name) => Arr.map(OWNERS, (owner) => answer(table.status(name, owner))));
+  const starts = Arr.flatMap([...s.lives.values()], (life) => [
     started(table.start(life.request, caller(s.names.get(life.name)?.owner ?? BRAIN_OWNER), life.from)),
     started(table.start({ ...life.request, name: "renamed:1" }, caller(BRAIN_OWNER), life.from)),
   ]);
-  const fresh = NAMES.flatMap((name) => [
+  const fresh = Arr.flatMap(NAMES, (name) => [
     started(
       table.start(Start.cases.first.make({ id: `fresh:${name}`, name, code: CODE }), caller(BRAIN_OWNER), from()),
     ),
-    ...OWNERS.map((owner) =>
+    ...Arr.map(OWNERS, (owner) =>
       started(
         table.start(
           Start.cases.again.make({
@@ -388,29 +392,29 @@ const answers = (table: ProcessTable, s: Folded) => {
       ),
     ),
   ]);
-  const watches = [
-    ...s.watches.values(),
-    { tag: "live", ref: "watch-none", process: A, to: CLIENT_TO, round: 0 } as const,
-  ].map((w) => ({
-    demonitor: Option.getOrUndefined(table.demonitor(w.ref, w.to)),
-    monitor: [w.process, B].map((process) => {
-      const result = table.monitor(w.ref, process, w.to);
-      return Result.isFailure(result) ? result.failure.reason : Option.getOrUndefined(result.success);
+  const watches = Arr.map(
+    [...s.watches.values(), { tag: "live", ref: "watch-none", process: A, to: CLIENT_TO, round: 0 } as const],
+    (w) => ({
+      demonitor: Option.getOrUndefined(table.demonitor(w.ref, w.to)),
+      monitor: Arr.map([w.process, B], (process) => {
+        const result = table.monitor(w.ref, process, w.to);
+        return Result.isFailure(result) ? result.failure.reason : Option.getOrUndefined(result.success);
+      }),
+      deliver: Arr.map(deliveries(w), ({ entry, m, receiver }) => table.deliver(entry, m, receiver)),
     }),
-    deliver: deliveries(w).map(({ entry, m, receiver }) => table.deliver(entry, m, receiver)),
-  }));
-  const held = SESSIONS.map((session) => table.held(session));
+  );
+  const held = Arr.map(SESSIONS, (session) => table.held(session));
   return { lifecycle, statuses, starts, fresh, watches, held, info: table.info };
 };
 
 /** The signal letters a query asks about for one watch: rounds, targets, writers and receivers. */
 const deliveries = (w: Watch) =>
-  [...new Set([1, w.round - 1, w.round, w.round + 1])]
-    .filter((n) => n >= 1)
-    .flatMap((n) =>
-      [w.process, B].flatMap((process) =>
-        [BRAIN, CLIENT].flatMap((by) =>
-          [w.to._tag === "process" ? w.to.process : A, X].map((receiver) => ({
+  Arr.flatMap(
+    Arr.filter([...new Set([1, w.round - 1, w.round, w.round + 1])], (n) => n >= 1),
+    (n: number) =>
+      Arr.flatMap([w.process, B], (process) =>
+        Arr.flatMap([BRAIN, CLIENT], (by) =>
+          Arr.map([w.to._tag === "process" ? w.to.process : A, X], (receiver) => ({
             n,
             by,
             receiver,
@@ -427,20 +431,20 @@ const deliveries = (w: Watch) =>
           })),
         ),
       ),
-    );
+  );
 
 /** The same answers, read from the transition table alone. */
 const expected = (s: Folded) => {
   const live = (p: string) => s.lives.get(p)?.state._tag === "live";
-  const liveWatches = [...s.watches.values()].filter((w) => w.tag === "live");
-  const lifecycle = pids(s).map((p) => {
+  const liveWatches = Arr.filter([...s.watches.values()], (w) => w.tag === "live");
+  const lifecycle = Arr.map(pids(s), (p) => {
     const owned = parent(s, p, BRAIN_OWNER);
     return {
       life: s.lives.get(p),
       live: live(p),
       collision: s.lives.has(p),
-      parents: OWNERS.map((owner) => parent(s, p, owner)),
-      exits: REASONS.map((reason) =>
+      parents: Arr.map(OWNERS, (owner) => parent(s, p, owner)),
+      exits: Arr.map(REASONS, (reason) =>
         typeof owned === "string"
           ? owned
           : owned.state._tag !== "live" && (owned.exited === undefined || !sameExit(owned.exited, EXITS[reason]))
@@ -448,12 +452,18 @@ const expected = (s: Folded) => {
             : owned,
       ),
       downs: typeof owned === "string" ? owned : owned.state._tag === "live" ? "alive" : owned,
-      inbound: liveWatches.filter((w) => w.process === p).map(shown),
-      outbound: liveWatches.filter((w) => w.to._tag === "process" && w.to.process === p).map(shown),
+      inbound: Arr.map(
+        Arr.filter(liveWatches, (w) => w.process === p),
+        shown,
+      ),
+      outbound: Arr.map(
+        Arr.filter(liveWatches, (w) => w.to._tag === "process" && w.to.process === p),
+        shown,
+      ),
     };
   });
-  const statuses = NAMES.map((name) =>
-    OWNERS.map((owner) => {
+  const statuses = Arr.map(NAMES, (name) =>
+    Arr.map(OWNERS, (owner) => {
       const process = s.current.get(name);
       const owned = process === undefined ? "ended" : parent(s, process, owner);
       return typeof owned === "string" ? owned : { name, state: owned.state, restarts: s.restarts.get(name) ?? [] };
@@ -462,15 +472,15 @@ const expected = (s: Folded) => {
   const lives = [...s.lives.values()];
   // A retry of a saved request answers with its process once the caller owns its name; the same
   // id with another request is reused.
-  const starts = lives.flatMap((life) => {
+  const starts = Arr.flatMap(lives, (life) => {
     const retry = parent(s, life.state.process, s.names.get(life.name)?.owner ?? BRAIN_OWNER);
     return [typeof retry === "string" ? retry : { process: life.state.process, rev: life.rev }, "id_reused"];
   });
-  const fresh = NAMES.flatMap((name) => {
+  const fresh = Arr.flatMap(NAMES, (name) => {
     const reserved = s.names.get(name);
     return [
       reserved === undefined ? undefined : "name_taken",
-      ...OWNERS.map((owner) => {
+      ...Arr.map(OWNERS, (owner) => {
         const after = s.current.get(name) ?? A;
         return reserved === undefined || !sameOwner(reserved.owner, owner)
           ? "not_parent"
@@ -484,44 +494,48 @@ const expected = (s: Folded) => {
       }),
     ];
   });
-  const watches = [
-    ...s.watches.values(),
-    { tag: "live", ref: "watch-none", process: A, to: CLIENT_TO, round: 0 } as const,
-  ].map((w) => {
-    const held = s.watches.get(keyFor(w.to, w.ref));
-    return {
-      demonitor: held?.tag === "live" ? shown(held) : undefined,
-      monitor: [w.process, B].map((process) =>
-        held !== undefined && held.process !== process
-          ? "bad_ref"
-          : held?.tag === "live"
-            ? undefined
-            : w.to._tag === "process" && !live(w.to.process)
-              ? "ended"
-              : (held?.round ?? 0) + 1,
-      ),
-      deliver: deliveries(w).map(({ n, by, target, receiver }) =>
-        by !== BRAIN || held === undefined || held.process !== target || n > held.round
-          ? "mail"
-          : n === held.round && held.tag === "live" && held.to._tag === "process" && held.to.process === receiver
-            ? "signal"
-            : "drop",
-      ),
-    };
-  });
-  const info = lives
-    .filter((life) => life.state._tag === "live")
-    .map((life) => ({
+  const watches = Arr.map(
+    [...s.watches.values(), { tag: "live", ref: "watch-none", process: A, to: CLIENT_TO, round: 0 } as const],
+    (w) => {
+      const held = s.watches.get(keyFor(w.to, w.ref));
+      return {
+        demonitor: held?.tag === "live" ? shown(held) : undefined,
+        monitor: Arr.map([w.process, B], (process) =>
+          held !== undefined && held.process !== process
+            ? "bad_ref"
+            : held?.tag === "live"
+              ? undefined
+              : w.to._tag === "process" && !live(w.to.process)
+                ? "ended"
+                : (held?.round ?? 0) + 1,
+        ),
+        deliver: Arr.map(deliveries(w), ({ n, by, target, receiver }) =>
+          by !== BRAIN || held === undefined || held.process !== target || n > held.round
+            ? "mail"
+            : n === held.round && held.tag === "live" && held.to._tag === "process" && held.to.process === receiver
+              ? "signal"
+              : "drop",
+        ),
+      };
+    },
+  );
+  const info = Arr.map(
+    Arr.filter(lives, (life) => life.state._tag === "live"),
+    (life) => ({
       process: life.state.process,
       name: life.name,
       program: life.state.code.program,
       build: life.state.code.hash,
       restarts: s.restarts.get(life.name)?.length ?? 0,
-    }));
+    }),
+  );
   // A session holds its live watches on processes that still run. A watch on a process that exited,
   // or is down, already sent its DOWN, and as in OTP a monitor that fired is gone (ticket 979).
-  const held = SESSIONS.map((session) =>
-    liveWatches.filter((w) => w.to._tag === "client" && w.to.session === session && live(w.process)).map(shown),
+  const held = Arr.map(SESSIONS, (session) =>
+    Arr.map(
+      Arr.filter(liveWatches, (w) => w.to._tag === "client" && w.to.session === session && live(w.process)),
+      shown,
+    ),
   );
   return { lifecycle, statuses, starts, fresh, watches, held, info };
 };
@@ -614,7 +628,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           const table = new ProcessTable([...log, step.entry], BRAIN);
           const got = answers(table, step.after);
           const want = expected(step.after);
-          expect(got.lifecycle.map((p) => p.life)).toEqual(want.lifecycle.map((p) => p.life));
+          expect(Arr.map(got.lifecycle, (p) => p.life)).toEqual(Arr.map(want.lifecycle, (p) => p.life));
           expect(got.statuses).toEqual(want.statuses);
           expect(got.info).toEqual(want.info);
           return after;
@@ -668,7 +682,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           const table = new ProcessTable([...log, step.entry], BRAIN);
           const got = answers(table, step.after).watches;
           const want = expected(step.after).watches;
-          expect(got.map((w) => [w.demonitor, w.monitor])).toEqual(want.map((w) => [w.demonitor, w.monitor]));
+          expect(Arr.map(got, (w) => [w.demonitor, w.monitor])).toEqual(Arr.map(want, (w) => [w.demonitor, w.monitor]));
           return after;
         });
       }),
@@ -710,7 +724,7 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
           expect(model, "a Model already returned never changes").toEqual(copy);
         }
 
-        const log = steps.flatMap((step) =>
+        const log = Arr.flatMap(steps, (step) =>
           step.effect === "applied" || step.effect === "ignored" ? [step.entry] : [],
         );
         const last = models.at(-1);
@@ -718,15 +732,17 @@ describe("ticket 704: the process table's fold is one tea machine", () => {
 
         for (const cut of cuts) {
           const n = cut % (log.length + 1);
-          const resumed = log
-            .slice(n)
-            .reduce((model, entry) => record(machine, model, entry), models[n] ?? init(machine));
+          const resumed = Arr.reduce(log.slice(n), models[n] ?? init(machine), (model, entry) =>
+            record(machine, model, entry),
+          );
           expect(resumed, `resumed after ${n} entries`).toEqual(last);
         }
 
         const other = processTableFor(BRAIN);
-        expect(log.reduce((model, entry) => record(other, model, entry), init(other))).toEqual(last);
-        const end = steps.findLast((step) => step.effect === "applied" || step.effect === "ignored");
+        expect(Arr.reduce(log, init(other), (model, entry) => record(other, model, entry))).toEqual(last);
+        const end = Option.getOrUndefined(
+          Arr.findLast(steps, (step) => step.effect === "applied" || step.effect === "ignored"),
+        );
         const state = end !== undefined && "after" in end ? end.after : empty;
         expect(answers(new ProcessTable(log, BRAIN), state), "a rebuilt table gives the same answers").toEqual(
           expected(state),

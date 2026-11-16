@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -52,7 +53,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
           seed: 119120,
           numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -79,7 +80,7 @@ describe("P11 richer mailbox history", () => {
         }
 
         expect(yield* Stream.runCollect(mailbox.read("counter:1", 0))).toHaveLength(messages.length);
-        expect(spans.filter((s) => s.name === "mailbox.read" && s.status._tag === "Ended")).toHaveLength(1);
+        expect(Arr.filter(spans, (s) => s.name === "mailbox.read" && s.status._tag === "Ended")).toHaveLength(1);
       }).pipe(Effect.provide(world()), Effect.withTracer(tracer));
     }),
   );
@@ -96,7 +97,7 @@ describe("P11 richer mailbox history", () => {
         const rich = yield* Stream.runCollect(mailbox.read("counter:1", 0));
         const plain = yield* Stream.runCollect(mailbox.receive("counter:1", 0));
         expect(rich).toEqual(
-          entries.map((row) => ({
+          Arr.map(entries, (row) => ({
             id: row.id,
             m: Schema.decodeUnknownSync(Schema.Struct({ m: Schema.Json }))(row.body).m,
             by: row.by,
@@ -111,9 +112,11 @@ describe("P11 richer mailbox history", () => {
             arrivedAt: row.arrivedAt,
           })),
         );
-        expect(rich.map(({ build: _build, seen: _seen, arrivedAt: _arrivedAt, ...letter }) => letter)).toEqual(plain);
-        expect(rich.map((row) => row.pos)).toEqual([1, 2]);
-        expect(rich.map((row) => row.rev)).toEqual([1, 3]);
+        expect(Arr.map(rich, ({ build: _build, seen: _seen, arrivedAt: _arrivedAt, ...letter }) => letter)).toEqual(
+          plain,
+        );
+        expect(Arr.map(rich, (row) => row.pos)).toEqual([1, 2]);
+        expect(Arr.map(rich, (row) => row.rev)).toEqual([1, 3]);
         expect(yield* Stream.runCollect(mailbox.read("counter:1", 1))).toEqual(rich.slice(1));
       }).pipe(Effect.provide(world())),
     ),

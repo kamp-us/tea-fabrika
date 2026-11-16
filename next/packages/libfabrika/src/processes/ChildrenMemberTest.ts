@@ -18,6 +18,7 @@
 // gateway's one signing service does (0262). The rows the oracle reads are the store's own.
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schema, type Scope, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -170,10 +171,11 @@ const stack = (
 
 /** Every row of every table, so "nothing was written" covers whatever table a start might use. */
 const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValue>>> => {
-  const tables = sql
-    .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  const tables = Arr.map(
+    sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+    (row) => String(row.name),
+  );
+  return Object.fromEntries(Arr.map(tables, (table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const ids = (values: ReadonlyArray<string>) => {
@@ -229,7 +231,9 @@ const world = Effect.fnUntraced(function* (
   const startedLine = (name: string, id: string) =>
     run(Ledger.use((ledger) => Stream.runCollect(ledger.read(`processes/${name}`, 0)))).pipe(
       Effect.orDie,
-      Effect.map((rows) => [...rows].find((row) => row._tag === "started" && row.id === id)),
+      Effect.map((rows) =>
+        Option.getOrUndefined(Arr.findFirst([...rows], (row) => row._tag === "started" && row.id === id)),
+      ),
     );
   /** Delivers an input to `process` as the gateway would, and answers its id. */
   const deliver = (process: string, sender: typeof Sender.Type) => {
@@ -256,7 +260,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 type Answer = Exit.Exit<Started, ChildrenError>;
 
 const granted = (grants: ReadonlyArray<typeof StartGrant.Type>, source: string, to: string) =>
-  grants.some((g) => g.source === source && g.to === to);
+  Arr.some(grants, (g) => g.source === source && g.to === to);
 
 /** A refusal keeps its shape (L13): `ChildrenError`, the reason, no cause, and a span that says the reason. */
 const refused = (w: World, answer: Answer, before: ReturnType<typeof snapshot>, label: string) => {
@@ -268,7 +272,7 @@ const refused = (w: World, answer: Answer, before: ReturnType<typeof snapshot>, 
     `L13: ${label}: no cause`,
   ).toBeUndefined();
   expect(snapshot(w.sql), `L13: ${label}: a refusal writes nothing`).toEqual(before);
-  const span = w.spans.findLast((s) => s.name === "children.start");
+  const span = Option.getOrUndefined(Arr.findLast(w.spans, (s) => s.name === "children.start"));
   expect(span?.attributes.get("fab.children.reason"), `L13: ${label}: the span says the reason`).toBe("forbidden");
 };
 
@@ -430,7 +434,7 @@ const noSenderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const requester = pick(boots, c.requester);
     // An input delivered to another process, by a sender who holds `start`: it is not this start's cause.
     const elsewhere = pick(
-      boots.filter((b) => b.process !== requester.process),
+      Arr.filter(boots, (b) => b.process !== requester.process),
       c.requester,
     );
     const parent = c.cause === "null" ? null : w.deliver(elsewhere.process, senderFrom("founder", "person"));
@@ -542,7 +546,7 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     }
 
     const elsewhere = pick(
-      boots.filter((b) => b.process !== requester.process),
+      Arr.filter(boots, (b) => b.process !== requester.process),
       c.requester,
     );
     const parent = c.cause === "null" ? null : w.deliver(elsewhere.process, senderFrom("founder", "person"));

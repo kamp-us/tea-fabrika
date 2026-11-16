@@ -16,6 +16,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Option, Result, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -198,10 +199,11 @@ const cutting = (sql: Sql) => {
 
 /** Every row of every table, so "nothing was written" covers whatever table the receipt lives in. */
 const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValue>>> => {
-  const tables = sql
-    .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  const tables = Arr.map(
+    sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+    (row) => String(row.name),
+  );
+  return Object.fromEntries(Arr.map(tables, (table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const layer = (sql: Sql, next: Effect.Effect<string>) =>
@@ -238,33 +240,44 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 };
 
 const liveSources = (world: World) =>
-  SOURCES.flatMap((name) => {
+  Arr.flatMap(SOURCES, (name) => {
     const life = world.lives.get(name);
     return life?.live === true ? [{ name, process: life.process }] : [];
   });
 
 /** A target the source may reach and that is registered, live or not. */
-const reachable = (world: World, source: string) => NAMES.filter((to) => granted(source, to) && world.lives.has(to));
-const ended = (world: World) => [...world.lives].filter(([, life]) => !life.live).map(([name]) => name);
-const stoppable = (world: World) => [...world.lives].filter(([, life]) => life.live).map(([name]) => name);
+const reachable = (world: World, source: string) =>
+  Arr.filter(NAMES, (to) => granted(source, to) && world.lives.has(to));
+
+const ended = (world: World) =>
+  Arr.map(
+    Arr.filter([...world.lives], ([, life]) => !life.live),
+    ([name]) => name,
+  );
+
+const stoppable = (world: World) =>
+  Arr.map(
+    Arr.filter([...world.lives], ([, life]) => life.live),
+    ([name]) => name,
+  );
 
 /** The moves possible in this world, each only when the world can take it. */
 const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move> => {
   const sources = liveSources(world);
   const can: Record<Move, boolean> = {
     send: sources.length > 0,
-    bad: sources.some((s) => reachable(world, s.name).length > 0),
+    bad: Arr.some(sources, (s) => reachable(world, s.name).length > 0),
     retry_same: world.sent.size > 0,
     retry_other: world.sent.size > 0,
     stop: stoppable(world).length > 0,
     restart: ended(world).length > 0 && world.pids < PIDS.length - 1,
-    stale_send: world.stale.some((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
+    stale_send: Arr.some(world.stale, (s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
     register: !world.lives.has(HELPER) && world.pids < PIDS.length - 1,
-    cut: sources.some((s) => reachable(world, s.name).length > 0),
+    cut: Arr.some(sources, (s) => reachable(world, s.name).length > 0),
     retry_cut: world.cut.length > 0,
     reopen: true,
   };
-  return moves.filter((move) => can[move]);
+  return Arr.filter(moves, (move) => can[move]);
 };
 
 /** The oracle: every inbox holds exactly the world's letters, in order, with their first facts. */
@@ -273,7 +286,7 @@ const check = Effect.fnUntraced(function* (world: World) {
     const letters = yield* Mailbox.use((mail) => Stream.runCollect(mail.read(name, 0)));
     const expected = world.inbox.get(name) ?? [];
     expect(
-      letters.map((l) => ({
+      Arr.map(letters, (l) => ({
         id: l.id,
         m: l.m,
         by: l.by,
@@ -285,7 +298,7 @@ const check = Effect.fnUntraced(function* (world: World) {
       })),
       `${name}'s inbox holds each accepted delivery once, in order, with its first facts`,
     ).toEqual(
-      expected.map(({ id, m, from }) => ({
+      Arr.map(expected, ({ id, m, from }) => ({
         id,
         m,
         by: from.by,
@@ -408,7 +421,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "bad": {
           const source = choose(
-            liveSources(world).filter((s) => reachable(world, s.name).length > 0),
+            Arr.filter(liveSources(world), (s) => reachable(world, s.name).length > 0),
             cell.pick,
           );
           const to = choose(reachable(world, source.name), cell.alt);
@@ -436,7 +449,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "retry_other": {
           const [command, { delivery }] = choose([...world.sent], cell.pick);
-          const others = NAMES.filter((to) => to !== delivery.to && granted(delivery.source.name, to));
+          const others = Arr.filter(NAMES, (to) => to !== delivery.to && granted(delivery.source.name, to));
           const changed =
             cell.alt % 2 === 0 || others.length === 0
               ? { ...delivery, m: { type: "request", body: ["changed", delivery.m] } }
@@ -466,11 +479,11 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "stale_send": {
           const old = choose(
-            world.stale.filter((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
+            Arr.filter(world.stale, (s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
             cell.pick,
           );
           const to = choose(
-            NAMES.filter((n) => granted(old.name, n)),
+            Arr.filter(NAMES, (n) => granted(old.name, n)),
             cell.alt,
           );
           const answer = yield* deliver({
@@ -490,7 +503,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "cut": {
           const source = choose(
-            liveSources(world).filter((s) => reachable(world, s.name).length > 0),
+            Arr.filter(liveSources(world), (s) => reachable(world, s.name).length > 0),
             cell.pick,
           );
           const to = choose(reachable(world, source.name), cell.alt);
@@ -577,7 +590,11 @@ const STARTS = [
   { source: "merger", to: "worker" },
 ];
 
-const startsTo = (program: string) => STARTS.filter((g) => g.source === program).map((g) => g.to);
+const startsTo = (program: string) =>
+  Arr.map(
+    Arr.filter(STARTS, (g) => g.source === program),
+    (g) => g.to,
+  );
 
 /** Names the boot registers, with no requester: `merger:0` is a child nobody started. */
 const FAMILY_BOOT: ReadonlyArray<readonly [string, string]> = [
@@ -739,23 +756,28 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       world.names.set(name, { program, process: placed.process, live: true });
     }
 
-    const live = () => [...world.names].filter(([, n]) => n.live).map(([name]) => name);
-    const starters = () => live().filter((name) => startsTo(world.names.get(name)?.program ?? "").length > 0);
+    const live = () =>
+      Arr.map(
+        Arr.filter([...world.names], ([, n]) => n.live),
+        ([name]) => name,
+      );
+    const starters = () => Arr.filter(live(), (name) => startsTo(world.names.get(name)?.program ?? "").length > 0);
 
     const step = Effect.fnUntraced(function* (cell: FamilyCell) {
       const can: Record<FamilyMove, boolean> = {
         start_child: starters().length > 0 && next.calls() < PIDS.length - 2,
-        start_again: starters().some((s) =>
-          [...world.names.entries()].some(
+        start_again: Arr.some(starters(), (s) =>
+          Arr.some(
+            [...world.names.entries()],
             ([n, h]) => n !== s && startsTo(world.names.get(s)?.program ?? "").includes(h.program),
           ),
         ),
         start_forbidden: world.names.get("rogue:1")?.live === true,
         exit: live().length > 2,
-        restart: [...world.names.values()].some((n) => !n.live) && next.calls() < PIDS.length - 2,
+        restart: Arr.some([...world.names.values()], (n) => !n.live) && next.calls() < PIDS.length - 2,
         mail: live().length > 0,
       };
-      const options = FAMILY_MOVES.filter((m) => can[m]);
+      const options = Arr.filter(FAMILY_MOVES, (m) => can[m]);
 
       if (options.length === 0) {
         return;
@@ -794,8 +816,9 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         }
         case "start_again": {
           const starter = choose(
-            starters().filter((s) =>
-              [...world.names.entries()].some(
+            Arr.filter(starters(), (s) =>
+              Arr.some(
+                [...world.names.entries()],
                 ([n, h]) => n !== s && startsTo(world.names.get(s)?.program ?? "").includes(h.program),
               ),
             ),
@@ -803,7 +826,10 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
           );
           const self = world.names.get(starter) as { program: string; process: string };
           const [name, held] = choose(
-            [...world.names.entries()].filter(([n, h]) => n !== starter && startsTo(self.program).includes(h.program)),
+            Arr.filter(
+              [...world.names.entries()],
+              ([n, h]) => n !== starter && startsTo(self.program).includes(h.program),
+            ),
             cell.alt,
           );
           const answer = yield* run(
@@ -832,7 +858,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         case "start_forbidden": {
           const self = world.names.get("rogue:1") as { program: string; process: string };
           const name = choose(
-            [...world.names.keys()].filter((n) => n !== "rogue:1"),
+            Arr.filter([...world.names.keys()], (n) => n !== "rogue:1"),
             cell.pick,
           );
           const answer = yield* run(
@@ -868,7 +894,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         }
         case "restart": {
           const [name, held] = choose(
-            [...world.names.entries()].filter(([, h]) => !h.live),
+            Arr.filter([...world.names.entries()], ([, h]) => !h.live),
             cell.pick,
           );
           const placed = yield* must(
@@ -894,7 +920,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         case "mail": {
           const source = choose(live(), cell.pick);
           const to = choose(
-            [...world.names.keys()].filter((n) => n !== source),
+            Arr.filter([...world.names.keys()], (n) => n !== source),
             cell.alt,
           );
           const self = world.names.get(source) as { process: string };
@@ -975,10 +1001,10 @@ type CapMove = "send" | "resend" | "ack" | "ack_behind" | "ack_stale" | "restart
 const AckedPos = Schema.TaggedStruct("acked", { pos: Schema.Int });
 
 const ackedPos = (entries: ReadonlyArray<unknown>) =>
-  entries.reduce<number>((top, entry) => {
+  Arr.reduce(entries, 0, (top, entry) => {
     const pos = Schema.decodeUnknownOption(AckedPos)(entry);
     return Option.isSome(pos) ? Math.max(top, pos.value.pos) : top;
-  }, 0);
+  });
 
 /**
  * Folds one generated walk through the real ledger with a cap of 1 to 4. The fold keeps its own
@@ -1015,7 +1041,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
     const acks = () =>
       run(
         Ledger.use((ledger) =>
-          Stream.runCollect(ledger.read(acked(READER), 0)).pipe(Effect.map((all) => all.map(valueFor))),
+          Stream.runCollect(ledger.read(acked(READER), 0)).pipe(Effect.map((all) => Arr.map(all, valueFor))),
         ),
       ).pipe(Effect.map((answer) => (Result.isSuccess(answer) ? answer.success : [])));
 
@@ -1030,7 +1056,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
         restart: next.calls() < PIDS.length - 1,
         forge: true,
       };
-      const options = moves.filter((move) => can[move]);
+      const options = Arr.filter(moves, (move) => can[move]);
 
       if (options.length === 0) {
         return;

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { RpcCallError } from "alchemy/Rpc";
 import { Effect, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 // T695, next/. The Cloudflare adapters keep the failure they translate (decision 0043 rule 12).
 // Only the platform is fake: each stub, storage, bucket, loader and object state is a plain value
@@ -64,8 +65,8 @@ const clients = (failure: unknown): Record<string, Record<string, (...args: Arra
   bucket: BucketClient.make(rejecting(failure)),
 });
 
-const calls = Object.entries(clients(null)).flatMap(([client, made]) =>
-  Object.keys(made).map((method) => ({ client, method })),
+const calls = Arr.flatMap(Object.entries(clients(null)), ([client, made]) =>
+  Arr.map(Object.keys(made), (method) => ({ client, method })),
 );
 
 // Ticket 502 slices S1 and S2: a ProcessClient call and a Connection call other than `fetch` go

@@ -5,6 +5,8 @@
 import { it } from "@effect/vitest";
 import { encodeRpcError, ErrorTag, RpcCallError } from "alchemy/Rpc";
 import { Deferred, Effect, Fiber, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { expect } from "vitest";
 import { Writer } from "../coordination/index.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
@@ -42,21 +44,21 @@ const clients = (fault: Error) => ({
   Bucket: BucketClient.make(rejecting(fault)),
 });
 
-const methods = Object.entries(clients(new Error("probe"))).flatMap(([client, service]) =>
-  Object.keys(service).map((method) => `${client}.${method}`),
+const methods = Arr.flatMap(Object.entries(clients(new Error("probe"))), ([client, service]) =>
+  Arr.map(Object.keys(service), (method) => `${client}.${method}`),
 );
 
 it.effect.prop(
   "a rejected platform call fails with LedgerError unreachable, carrying the thrown error's name and text",
   {
     call: Schema.Literals(methods),
-    name: Schema.Literals(faults.map((fault) => fault.name)),
+    name: Schema.Literals(Arr.map(faults, (fault) => fault.name)),
     text: Schema.String.check(Schema.isMinLength(8), Schema.isMaxLength(64)),
   },
   ({ call, name, text }) =>
     Effect.gen(function* () {
       const [client = "", method = ""] = call.split(".");
-      const kind = faults.find((fault) => fault.name === name)!;
+      const kind = Option.getOrThrow(Arr.findFirst(faults, (fault) => fault.name === name));
       const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
         clients(kind.make(text)),
         client,
@@ -108,12 +110,12 @@ it.effect.prop(
   "a Process call that never got an answer is unreachable, and its cause is the RpcCallError that holds the thrown error",
   {
     method: Schema.Literals(processMethods),
-    name: Schema.Literals(faults.map((fault) => fault.name)),
+    name: Schema.Literals(Arr.map(faults, (fault) => fault.name)),
     text: Schema.String.check(Schema.isMinLength(8), Schema.isMaxLength(64)),
   },
   ({ method, name, text }) =>
     Effect.gen(function* () {
-      const fault = faults.find((kind) => kind.name === name)!.make(text);
+      const fault = Option.getOrThrow(Arr.findFirst(faults, (kind) => kind.name === name)).make(text);
       const call: () => Effect.Effect<unknown, unknown> = Reflect.get(ProcessClient.make(rejecting(fault)), method);
       const error = yield* Effect.flip(call());
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
@@ -132,7 +134,10 @@ it.effect.prop(
 // above and error-cause.test.ts hold it.
 // Plants: no `errors: [LedgerError]` on the stub; map every failure to `unreachable`; keep the
 // thrown value and drop the RpcCallError.
-const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).filter((method) => method !== "fetch");
+const calls = Arr.filter(
+  Object.keys(GatewayClient.make(rejecting(new Error("probe")))),
+  (method) => method !== "fetch",
+);
 
 /** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
 const answering = <A>(answer: unknown) =>
@@ -153,7 +158,7 @@ it.effect.prop(
   {
     call: Schema.Literals(calls),
     reason: LedgerError.fields.reason,
-    name: Schema.Literals(faults.map((fault) => fault.name)),
+    name: Schema.Literals(Arr.map(faults, (fault) => fault.name)),
     text: Schema.String.check(Schema.isMinLength(8), Schema.isMaxLength(64)),
   },
   ({ call, reason, name, text }) =>
@@ -169,7 +174,7 @@ it.effect.prop(
       expect(typed).toMatchObject({ reason });
       expect(Reflect.get(Object(typed), "cause"), "nothing was lost on the way, so no cause").toBeUndefined();
 
-      const fault = faults.find((kind) => kind.name === name)!.make(text);
+      const fault = Option.getOrThrow(Arr.findFirst(faults, (kind) => kind.name === name)).make(text);
       const lost = yield* Effect.flip(method(rejecting(fault)));
       expect(lost).toBeInstanceOf(LedgerError);
       expect(lost).toMatchObject({ reason: "unreachable" });
@@ -274,7 +279,10 @@ it.effect.prop(
 // rows). The calls are every Connection call and every Process call, from each client's own keys.
 // The thrown value is each fault class above, bare text, or an object holding the text. Plants:
 // `Effect.fn` back on `reach`, with Process's own tracer switch gone; a span named with the message.
-const reachedCalls = [...calls.map((call) => `Gateway.${call}`), ...processMethods.map((call) => `Process.${call}`)];
+const reachedCalls = [
+  ...Arr.map(calls, (call) => `Gateway.${call}`),
+  ...Arr.map(processMethods, (call) => `Process.${call}`),
+];
 
 const PID = "process_01m6v5270hetdrt4r8h9vvjwjs";
 
@@ -311,11 +319,11 @@ it.effect.prop(
   {
     call: Schema.Literals(reachedCalls),
     secret: RepliesTest.sentinel,
-    name: Schema.Literals([...faults.map((fault) => fault.name), "text", "object"]),
+    name: Schema.Literals([...Arr.map(faults, (fault) => fault.name), "text", "object"]),
   },
   ({ call, secret, name }) =>
     Effect.gen(function* () {
-      const fault = faults.find((kind) => kind.name === name);
+      const fault = Option.getOrUndefined(Arr.findFirst(faults, (kind) => kind.name === name));
       const thrown: unknown =
         fault !== undefined ? fault.make(secret) : name === "text" ? secret : { message: secret, news: secret };
       const captured = RepliesTest.capture();

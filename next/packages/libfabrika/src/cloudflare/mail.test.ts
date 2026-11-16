@@ -26,6 +26,7 @@ import {
   Schema,
   Tracer,
 } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import { NORMAL, PIDS } from "../processes/Process.test-support.ts";
@@ -268,7 +269,7 @@ for (const flow of [
           );
         }
 
-        const sends = spans.filter((span) => span.name === "mail_delivery.send");
+        const sends = Arr.filter(spans, (span) => span.name === "mail_delivery.send");
         expect(sends).toHaveLength(1);
         const sent = sends[0]!;
         expect(sent.status._tag).toBe("Ended");
@@ -515,23 +516,23 @@ const project = Effect.fnUntraced(function* () {
       door: () =>
         Effect.succeed(
           Object.fromEntries(
-            [
-              "connect",
-              "challenge",
-              "initialize",
-              "target",
-              "route",
-              "knock",
-              "grant",
-              "disconnect",
-              "sign",
-              "append",
-              "retire",
-              "checkDelivery",
-            ].map((method) => [
-              method,
-              () => (method === "retire" ? Effect.void : Effect.die(`not under test: ${method}`)),
-            ]),
+            Arr.map(
+              [
+                "connect",
+                "challenge",
+                "initialize",
+                "target",
+                "route",
+                "knock",
+                "grant",
+                "disconnect",
+                "sign",
+                "append",
+                "retire",
+                "checkDelivery",
+              ],
+              (method) => [method, () => (method === "retire" ? Effect.void : Effect.die(`not under test: ${method}`))],
+            ),
           ) as never,
         ),
     }),
@@ -546,9 +547,9 @@ const project = Effect.fnUntraced(function* () {
     project: Context.get(context, ProjectService),
     /** Every ack row the ledger holds for `name`, in log order. */
     acks: (name: string) =>
-      sql
-        .exec("SELECT body FROM entries WHERE stream=? ORDER BY rev", `processes/${name}/acked`)
-        .map((row) => Schema.decodeUnknownSync(AckRow)(String(row.body))),
+      Arr.map(sql.exec("SELECT body FROM entries WHERE stream=? ORDER BY rev", `processes/${name}/acked`), (row) =>
+        Schema.decodeUnknownSync(AckRow)(String(row.body)),
+      ),
   };
 });
 

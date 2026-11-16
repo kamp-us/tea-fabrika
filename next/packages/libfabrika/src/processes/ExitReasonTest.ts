@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Predicate, Result, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -75,7 +76,7 @@ const Tape = fc
     ),
     { minLength: 8, maxLength: 40, size: "max" },
   )
-  .map((cells) => cells.map(([cell, bad]) => ({ ...cell, bad })));
+  .map((cells) => Arr.map(cells, ([cell, bad]) => ({ ...cell, bad })));
 
 type Step = Omit<Cell, "bad"> & { readonly bad: unknown };
 
@@ -129,7 +130,7 @@ const facts = Effect.fnUntraced(function* (sql: Sql, world: World) {
   const streams = [
     "processes",
     clientInbox(CLIENT.client),
-    ...world.names.flatMap(({ name }) => [`processes/${name}`, `${name}/inbox`]),
+    ...Arr.flatMap(world.names, ({ name }) => [`processes/${name}`, `${name}/inbox`]),
   ];
   const rows: Array<Entry> = [];
 
@@ -152,8 +153,8 @@ const decodeDown = Schema.decodeUnknownResult(DownReason, { onExcessProperty: "e
 
 /** The oracle: what the rows must say, checked against the fold's own world after every prefix. */
 const check = (rows: ReadonlyArray<Entry>, world: World) => {
-  const exited = rows.filter((row) => row._tag === "exited" && row.by === BRAIN);
-  expect(exited.map((row) => (valueFor(row) as { process: string }).process).sort()).toEqual(
+  const exited = Arr.filter(rows, (row) => row._tag === "exited" && row.by === BRAIN);
+  expect(Arr.map(exited, (row) => (valueFor(row) as { process: string }).process).sort()).toEqual(
     [...world.exits.keys()].sort(),
   );
 
@@ -166,7 +167,7 @@ const check = (rows: ReadonlyArray<Entry>, world: World) => {
     expect(reason, "the reason read back equals the one the exit was given").toEqual(world.exits.get(process));
   }
 
-  const downs = rows.filter((row) => row._tag === "send" && row.by === BRAIN);
+  const downs = Arr.filter(rows, (row) => row._tag === "send" && row.by === BRAIN);
   const seen = new Map<string, unknown>();
 
   for (const row of downs) {
@@ -203,8 +204,8 @@ const startRequest = (world: World, slot: number) => {
   };
 };
 
-const live = (world: World) => world.names.filter((n) => n.live);
-const ended = (world: World) => world.names.filter((n) => !n.live);
+const live = (world: World) => Arr.filter(world.names, (n) => n.live);
+const ended = (world: World) => Arr.filter(world.names, (n) => !n.live);
 
 /** The item a tape cell's number picks; never called on an empty list. */
 const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
@@ -230,12 +231,12 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     exit_noproc: lives,
     cut: lives,
     watch_missing: true,
-    cancel: [...world.watches.values()].some((w) => w.live),
+    cancel: Arr.some([...world.watches.values()], (w) => w.live),
     retry_equal: world.exits.size > 0,
     retry_other: world.exits.size > 0,
     reopen: true,
   };
-  return moves.filter((move) => can[move]);
+  return Arr.filter(moves, (move) => can[move]);
 };
 
 /**
@@ -252,9 +253,9 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
       ProcessManager.use(call).pipe(Effect.provide(layer(sql, caller, next.next)), Effect.result);
     /** The writes one exit of `process` makes: its exit, a DOWN per live watch on it, a cancel per watch it holds. */
     const writes = (process: string) => {
-      const watches = [...world.watches.values()].filter((w) => w.live);
-      const inbound = watches.filter((w) => w.target === process).length;
-      const outbound = watches.filter((w) => w.to._tag === "process" && w.to.process === process).length;
+      const watches = Arr.filter([...world.watches.values()], (w) => w.live);
+      const inbound = Arr.filter(watches, (w) => w.target === process).length;
+      const outbound = Arr.filter(watches, (w) => w.to._tag === "process" && w.to.process === process).length;
       return 1 + inbound + outbound;
     };
 
@@ -294,7 +295,10 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
             move === "watch"
               ? choose(live(world), step.pick).process
               : choose([...world.exits.keys(), choose(PIDS, PIDS.length - 1)], step.pick);
-          const watchers = [CLIENT, ...live(world).map((n) => Recipient.cases.process.make({ process: n.process }))];
+          const watchers = [
+            CLIENT,
+            ...Arr.map(live(world), (n) => Recipient.cases.process.make({ process: n.process })),
+          ];
           const to = choose(watchers, step.cut);
           const ref = `watch:${++world.refs}`;
           const caller = to._tag === "client" ? brain() : watcher(to.process);
@@ -302,7 +306,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
           expect(Result.isSuccess(answer), "a monitor from a live recipient is placed").toBe(true);
           const key = `${toKey(to)}|${ref}`;
 
-          if (live(world).some((n) => n.process === target)) {
+          if (Arr.some(live(world), (n) => n.process === target)) {
             world.watches.set(key, { to, target, live: true });
           } else {
             // A missing target answers at once with the monitor result, never an exit reason.
@@ -314,7 +318,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "cancel": {
           const [key, watch] = choose(
-            [...world.watches.entries()].filter(([, w]) => w.live),
+            Arr.filter([...world.watches.entries()], ([, w]) => w.live),
             step.pick,
           );
           const ref = key.slice(key.lastIndexOf("|") + 1);
@@ -402,7 +406,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         const letters = yield* as(brain(), (p) => Stream.runCollect(p.receive(process, 0)));
         expect(Result.isSuccess(letters), "a live process can receive").toBe(true);
         const downs = Result.isSuccess(letters)
-          ? [...letters.success].flatMap(({ m }) =>
+          ? Arr.flatMap([...letters.success], ({ m }) =>
               Predicate.isObject(m) && Predicate.hasProperty(m, "_tag") && m._tag === "DOWN" ? [m] : [],
             )
           : [];

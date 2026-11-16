@@ -2,6 +2,8 @@
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -93,7 +95,7 @@ const plant = (store: Storage, stream: string, id: string, event: { readonly _ta
   );
 
 const downs = (letters: ReadonlyArray<{ readonly m: unknown; readonly by: string }>) =>
-  letters.flatMap((letter) => {
+  Arr.flatMap(letters, (letter) => {
     const down = Schema.decodeUnknownOption(Down)(letter.m);
     return letter.by === BRAIN && down._tag === "Some" ? [down.value] : [];
   });
@@ -123,12 +125,14 @@ describe("P33, every process event lives on a stream only the brain may write", 
           }),
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
         const rows = store.rows();
-        const events = rows.filter((row) => Object.hasOwn(ProcessEvent.cases, row._tag));
-        expect(new Set(events.map((row) => row._tag))).toEqual(new Set(Object.keys(ProcessEvent.cases)));
-        expect(events.filter((row) => !brainSide(row.stream))).toEqual([]);
+        const events = Arr.filter(rows, (row) => Object.hasOwn(ProcessEvent.cases, row._tag));
+        expect(new Set(Arr.map(events, (row) => row._tag))).toEqual(new Set(Object.keys(ProcessEvent.cases)));
+        expect(Arr.filter(events, (row) => !brainSide(row.stream))).toEqual([]);
         // The start request's own id is a lifecycle line too.
-        expect(rows.find((row) => row.id === "start:counter:1")?.stream).toSatisfy(brainSide);
-        expect(rows.filter((row) => row.stream === name || row.stream === "watcher:1")).toEqual([]);
+        expect(Option.getOrUndefined(Arr.findFirst(rows, (row) => row.id === "start:counter:1"))?.stream).toSatisfy(
+          brainSide,
+        );
+        expect(Arr.filter(rows, (row) => row.stream === name || row.stream === "watcher:1")).toEqual([]);
       });
     }),
     options,
@@ -137,12 +141,12 @@ describe("P33, every process event lives on a stream only the brain may write", 
     const pid = (...parts: ReadonlyArray<unknown>) => JSON.stringify(parts);
     const brainIds = [pid("exited", A), pid("down", A, POLICY), pid("restarted", B)];
     const writable = ["counter:1", "counter:1/inbox", "watcher:1", "watcher:1/inbox", "client:window-a/inbox", "notes"];
-    const spots = writable.flatMap((stream) => brainIds.map((id) => ({ stream, id })));
+    const spots = Arr.flatMap(writable, (stream) => Arr.map(brainIds, (id) => ({ stream, id })));
     // Boolean selection keeps every nonempty subset without replacement, like the old subarray.
     const planted = Arbitrary.schema(
       Schema.Array(Schema.Boolean).check(Schema.isMinLength(spots.length), Schema.isMaxLength(spots.length)),
     ).pipe(
-      Arbitrary.map((chosen) => spots.filter((_, n) => chosen[n])),
+      Arbitrary.map((chosen) => Arr.filter(spots, (_, n) => chosen[n] === true)),
       Arbitrary.filter((chosen) => chosen.length > 0),
     );
     it.effect.prop(
@@ -260,7 +264,7 @@ describe("P33, signal ids belong to the brain alone", () => {
       ),
     ],
     examples(
-      space.map((id): [string] => [id]),
+      Arr.map(space, (id): [string] => [id]),
       (id: string) => {
         const store = storage();
         return Effect.gen(function* () {
@@ -288,7 +292,7 @@ describe("P33, signal ids belong to the brain alone", () => {
         yield* seed(clean);
         yield* monitor(clean, ref);
         yield* exit(clean);
-        const signal = clean.rows().find((row) => row.stream === "watcher:1/inbox")!;
+        const signal = Option.getOrThrow(Arr.findFirst(clean.rows(), (row) => row.stream === "watcher:1/inbox"));
         expect(signal.by).toBe(BRAIN);
         // Another writer holds that id first. The exit may refuse, but never ends silently.
         const store = storage();
@@ -320,8 +324,8 @@ describe("P33, signal ids belong to the brain alone", () => {
         expect(downs(yield* fresh(store))).toEqual([]);
         yield* monitor(store, ref);
         expect(downs(yield* fresh(store))).toEqual([Down.make({ ref, process: A, reason: NOPROC, to: toW })]);
-        const inbox = store.rows().filter((row) => row.stream === "watcher:1/inbox");
-        expect(new Set(inbox.map((row) => row.id)).size).toBe(2);
+        const inbox = Arr.filter(store.rows(), (row) => row.stream === "watcher:1/inbox");
+        expect(new Set(Arr.map(inbox, (row) => row.id)).size).toBe(2);
       });
     }),
     options,
@@ -343,7 +347,7 @@ describe("P33, an inbox read is total", () => {
     Schema.Struct({ m: Schema.Struct({ _tag: Schema.Literal("DOWN"), ref: json(1) }) }),
   ]);
   const hasM = (body: unknown): body is { readonly m: unknown } =>
-    typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+    typeof body === "object" && body !== null && !Arr.isArray(body) && Object.hasOwn(body, "m");
   // Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
   it.effect.prop(
     "junk send bodies never fail a receive, and later receives on that inbox still work",
@@ -369,12 +373,12 @@ describe("P33, an inbox read is total", () => {
         }
 
         const letters = yield* fresh(store);
-        expect(letters.map((letter) => JSON.stringify(letter.m))).toEqual(want);
+        expect(Arr.map(letters, (letter) => JSON.stringify(letter.m))).toEqual(want);
         const last = store.rows().at(-1)!.rev;
         yield* Mailbox.use((mailbox) => mailbox.send("watcher:1", "later", { hello: 1 }, from())).pipe(
           Effect.provide(manager(store)),
         );
-        expect((yield* fresh(store, last)).map((letter) => letter.id)).toEqual(["later"]);
+        expect(Arr.map(yield* fresh(store, last), (letter) => letter.id)).toEqual(["later"]);
       }),
     { arbitrary: { seed: 119120, runs: 40, size: 110 } },
   );
@@ -382,7 +386,7 @@ describe("P33, an inbox read is total", () => {
 
 describe("P33, every brain-written line records who asked", () => {
   const added = (store: Storage, before: ReadonlyArray<Entry>) =>
-    store.rows().filter((row) => !before.some((old) => old.rev === row.rev));
+    Arr.filter(store.rows(), (row) => !Arr.some(before, (old) => old.rev === row.rev));
   const asks = (rows: ReadonlyArray<Entry>, key: string) => {
     expect(rows.length).toBeGreaterThan(0);
 
@@ -415,7 +419,7 @@ describe("P33, every brain-written line records who asked", () => {
         before = store.rows();
         yield* exit(store, A, clientKey);
         const exited = added(store, before);
-        expect(exited.map((row) => row._tag).sort()).toEqual(["exited", "send"]);
+        expect(Arr.map(exited, (row) => row._tag).sort()).toEqual(["exited", "send"]);
         asks(exited, clientKey);
       });
     }),

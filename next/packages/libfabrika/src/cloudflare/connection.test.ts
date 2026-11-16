@@ -22,6 +22,7 @@ import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
 
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { PAGE as DOOR_PAGE } from "../ledger/Log.ts";
@@ -144,7 +145,7 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
       getByName: () => ({
         write: (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
           stats.writes++;
-          saved.push(...rows.map((row) => row.span));
+          saved.push(...Arr.map(rows, (row) => row.span));
           // edge: the platform record RPC returns a Promise
           return Promise.resolve({ _tag: "written" });
         },
@@ -185,13 +186,10 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
 
 const tableCounts = (db: DatabaseSync) =>
   Object.fromEntries(
-    db
-      .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
-      .all()
-      .map(({ name }) => [
-        name,
-        db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
-      ]),
+    Arr.map(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(), ({ name }) => [
+      name,
+      db.prepare(`SELECT count(*) AS n FROM "${String(name).replaceAll('"', '""')}"`).get()?.n,
+    ]),
   );
 
 StartsTest.law(
@@ -267,10 +265,10 @@ StartsTest.law(
         const count = (totals.get(hour) ?? 0) + 1;
         totals.set(hour, count);
         expect(
-          db
-            .prepare("SELECT piece,count FROM sums WHERE hour=? AND refused='reserved' ORDER BY piece")
-            .all(hour)
-            .map((row) => ({ ...row })),
+          Arr.map(
+            db.prepare("SELECT piece,count FROM sums WHERE hour=? AND refused='reserved' ORDER BY piece").all(hour),
+            (row) => ({ ...row }),
+          ),
         ).toEqual([
           { piece: "connection.frame", count },
           { piece: "runtime.rpc", count },
@@ -319,10 +317,7 @@ it.effect.prop(
         }
 
         expect(
-          db
-            .prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece")
-            .all()
-            .map((r) => ({ ...r })),
+          Arr.map(db.prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece").all(), (r) => ({ ...r })),
         ).toEqual([
           { piece: "connection.frame", hour: H, refused: "rate_limited", count },
           { piece: "runtime.rpc", hour: H, refused: "rate_limited", count },
@@ -377,10 +372,9 @@ it.effect.prop(
           expect(w.saved).toHaveLength(saved);
           expect(w.stats.writes).toBe(writes);
           expect(
-            db
-              .prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece")
-              .all()
-              .map((row) => ({ ...row })),
+            Arr.map(db.prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece").all(), (row) => ({
+              ...row,
+            })),
           ).toEqual([
             { piece: "connection.frame", hour: H, refused: "reserved", count: i + 1 },
             { piece: "runtime.rpc", hour: H, refused: "reserved", count: i + 1 },
@@ -418,10 +412,7 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       expect(Number(db.prepare("SELECT count(*) AS n FROM measurements").get()?.n)).toBe(beforeMeasurements);
       expect(db.prepare("SELECT * FROM unsent").all()).toEqual([]);
       expect(
-        db
-          .prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece")
-          .all()
-          .map((row) => ({ ...row })),
+        Arr.map(db.prepare("SELECT piece,hour,refused,count FROM sums ORDER BY piece").all(), (row) => ({ ...row })),
       ).toEqual([
         { piece: "connection.frame", hour: H, refused: "reserved", count: 1 },
         { piece: "runtime.rpc", hour: H, refused: "reserved", count: 1 },
@@ -441,7 +432,7 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       });
       expect(calls).toHaveLength(3);
       expect(closes).toEqual([]);
-      expect(saved.slice(baseline).map((row) => row.name)).toEqual([
+      expect(Arr.map(saved.slice(baseline), (row) => row.name)).toEqual([
         "runtime.rpc",
         "connection.frame",
         "runtime.rpc",
@@ -450,16 +441,10 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       expect(db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='runtime.rpc'").get()?.n).toBe(2);
       expect(db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='connection.frame'").get()?.n).toBe(2);
       expect(
-        db
-          .prepare("SELECT count FROM sums WHERE piece='runtime.rpc'")
-          .all()
-          .map((row) => ({ ...row })),
+        Arr.map(db.prepare("SELECT count FROM sums WHERE piece='runtime.rpc'").all(), (row) => ({ ...row })),
       ).toEqual([{ count: 1 }]);
       expect(
-        db
-          .prepare("SELECT count FROM sums WHERE piece='connection.frame'")
-          .all()
-          .map((row) => ({ ...row })),
+        Arr.map(db.prepare("SELECT count FROM sums WHERE piece='connection.frame'").all(), (row) => ({ ...row })),
       ).toEqual([{ count: 1 }]);
       yield* TestClock.setTime(H + HOUR);
     }).pipe(Effect.provide(w.layer));
@@ -477,10 +462,7 @@ const t864Draws = Arbitrary.array(Arbitrary.schema(T864Draw), { minLength: 4, ma
 const T864Due = Schema.Array(Schema.Struct({ day: Schema.String, rows: Schema.Int, part: Schema.Int }));
 
 const t864Pending = (db: DatabaseSync) =>
-  db
-    .prepare("SELECT spanId FROM unsent ORDER BY rowid")
-    .all()
-    .map((row) => String(row.spanId));
+  Arr.map(db.prepare("SELECT spanId FROM unsent ORDER BY rowid").all(), (row) => String(row.spanId));
 
 const t864Due = (db: DatabaseSync, now: number) =>
   Schema.decodeUnknownSync(T864Due)(
@@ -494,13 +476,10 @@ const t864Due = (db: DatabaseSync, now: number) =>
 
 const t864Tables = (db: DatabaseSync) =>
   Object.fromEntries(
-    db
-      .prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name")
-      .all()
-      .map(({ name }) => [
-        name,
-        db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all(),
-      ]),
+    Arr.map(db.prepare("SELECT name FROM sqlite_schema WHERE type='table' ORDER BY name").all(), ({ name }) => [
+      name,
+      db.prepare(`SELECT * FROM "${String(name).replaceAll('"', '""')}" ORDER BY rowid`).all(),
+    ]),
   );
 
 const t864Delivered = Effect.gen(function* () {
@@ -588,7 +567,7 @@ it.effect.prop(
 
         for (const draw of draws) {
           const { pending, due } = yield* t864Prepare(db, draw);
-          const unvisited = (["success", "failure"] as const).filter((outcome) => counts[outcome] === 0);
+          const unvisited = Arr.filter(["success", "failure"] as const, (outcome) => counts[outcome] === 0);
           const choices = unvisited.length > 0 ? unvisited : (["success", "failure"] as const);
           const outcome = choices[draw.pick % choices.length]!;
           const answer = Answer.cases.ok.make({ result: draw.value });
@@ -748,7 +727,7 @@ it.effect.prop(
         for (let i = 0; i < walk.count; i++) {
           const state = readAttachment(w);
           expect(state._tag).toBe("online");
-          const remaining = answerCategories.filter((key) => !reached.has(key));
+          const remaining = Arr.filter(answerCategories, (key) => !reached.has(key));
           // Every category once, then a full wait until one has no room left.
           const category: keyof typeof answerCases =
             remaining.length === 0 && !reached.has("too_many_waits")
@@ -868,7 +847,7 @@ it.effect.prop(
                 id: request.id,
                 result: answer.result,
               });
-              expect(w.saved.slice(baseline.saved.length).map((span) => span.name)).toContain("runtime.rpc");
+              expect(Arr.map(w.saved.slice(baseline.saved.length), (span) => span.name)).toContain("runtime.rpc");
               expect(w.stats.writes).toBeGreaterThan(baseline.writes);
               expect(tableCounts(db)).not.toEqual(baseline.tables);
             }).pipe(Effect.provide(w.layer));
@@ -940,15 +919,15 @@ it.effect.prop(
           yield* service.ring(stream, Math.min(rev, after));
         }
 
-        const waits = w.readers.filter((r) => r.method === "tasks.wait");
+        const waits = Arr.filter(w.readers, (r) => r.method === "tasks.wait");
         // The frame is routed once, and its parked answer is registered once, then once per ring.
         expect(waits).toHaveLength(2 + rings.length);
         // The referee rings the object a wait names (runtime.ts, CONNECTION.getByName), and the
         // hands' socket lives on this one (fetch.ts, by its URL path).
         expect(
-          waits.map((r) => r.reader),
+          Arr.map(waits, (r) => r.reader),
           "every tasks.wait rings this object",
-        ).toEqual(waits.map(() => "test-connection"));
+        ).toEqual(Arr.map(waits, () => "test-connection"));
         expect(w.frames, "a parked wait answers nothing yet").toEqual([]);
 
         // A ring past `after` answers the parked call on this socket.

@@ -3,6 +3,7 @@
 // the lead's lean, 256 characters, counted as `string.length`, as Schema's max length counts.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Exit, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import {
   A,
@@ -65,7 +66,7 @@ const exit = (store: Storage, reason: ExitReason = CRASHED) =>
 const fresh = (store: Storage) => receive(W).pipe(Effect.provide(manager(store, watcher(W))));
 
 const downs = (letters: ReadonlyArray<{ readonly m: unknown }>) =>
-  letters.flatMap((letter) => {
+  Arr.flatMap(letters, (letter) => {
     const down = Schema.decodeUnknownOption(Down)(letter.m);
     return down._tag === "Some" ? [down.value] : [];
   });
@@ -272,7 +273,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
         yield* seed(store);
         yield* monitor(store, ref);
         yield* exit(store);
-        expect(downs(yield* fresh(store)).map((down) => down.ref)).toEqual([ref]);
+        expect(Arr.map(downs(yield* fresh(store)), (down) => down.ref)).toEqual([ref]);
       });
     }),
     options,

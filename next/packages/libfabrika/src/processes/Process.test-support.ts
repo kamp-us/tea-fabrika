@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll } from "@effect/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -215,10 +216,7 @@ export const storage = () => {
       return [];
     }
 
-    return db
-      .prepare("SELECT * FROM entries ORDER BY rev")
-      .all()
-      .map((row) => Schema.decodeUnknownSync(Row)(row));
+    return Arr.map(db.prepare("SELECT * FROM entries ORDER BY rev").all(), (row) => Schema.decodeUnknownSync(Row)(row));
   };
   return {
     sql,

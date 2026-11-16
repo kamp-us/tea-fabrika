@@ -1,6 +1,7 @@
 // T753, next/. A caller supplies real entry points, storage and output collectors (0062).
 import { describe, expect } from "@effect/vitest";
 import { Effect, Exit, Option, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import * as StartsTest from "../settings/StartsTest.ts";
 
@@ -103,7 +104,7 @@ export const suite = (open: Open) =>
               );
 
               if (failure) {
-                expect(exits.every(Exit.isFailure)).toBe(true);
+                expect(Arr.every(exits, Exit.isFailure)).toBe(true);
                 expect(driver.counts().consumers).toBe(before.consumers);
                 // The very next entry reuses this owner, which must not retain a failed build.
                 driver.fault("none");
@@ -116,7 +117,7 @@ export const suite = (open: Open) =>
                 ready = true;
                 placed = true;
               } else {
-                expect(exits.every(Exit.isSuccess)).toBe(true);
+                expect(Arr.every(exits, Exit.isSuccess)).toBe(true);
                 const after = driver.counts();
                 // A plain Worker shares only a finished read across requests, so each early request calls (0184).
                 const cold = path === "HTTP" ? total : 1;

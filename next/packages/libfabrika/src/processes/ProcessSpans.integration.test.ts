@@ -2,6 +2,8 @@
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Layer, Redacted, Schema, Stream, Tracer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { TestClock } from "effect/testing";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
@@ -64,7 +66,7 @@ const capture = () => {
   return {
     tracer,
     spans,
-    ended: (name: string) => spans.filter((span) => span.name === name && span.status._tag === "Ended"),
+    ended: (name: string) => Arr.filter(spans, (span) => span.name === name && span.status._tag === "Ended"),
   };
 };
 
@@ -147,11 +149,15 @@ describe("p97, process calls", () => {
         }
 
         const refusal = trace.ended("process.start")[2]!;
-        expect([...refusal.attributes].find(([key]) => key.endsWith(".reason"))?.[1]).toBe("id_reused");
+        expect(
+          Option.getOrUndefined(Arr.findFirst([...refusal.attributes], ([key]) => key.endsWith(".reason")))?.[1],
+        ).toBe("id_reused");
         expect(trace.ended("process.start")[0]!.attributes.get("fab.process")).toBe(A);
-        expect([...trace.ended("process.start")[0]!.attributes].find(([key]) => key.endsWith(".rev"))?.[1]).toBe(
-          placed.rev,
-        );
+        expect(
+          Option.getOrUndefined(
+            Arr.findFirst([...trace.ended("process.start")[0]!.attributes], ([key]) => key.endsWith(".rev")),
+          )?.[1],
+        ).toBe(placed.rev);
         expect(trace.ended("process.exit")[0]!.attributes.get("fab.process")).toBe(A);
       }).pipe(Effect.provide(manager(store, brain(), ids(A, W).next)), Effect.withTracer(trace.tracer));
     }),
@@ -179,16 +185,20 @@ describe("p97, process calls", () => {
         expect((yield* sink.flush).sent).toBeGreaterThanOrEqual(3);
         const old = yield* recorded(A);
         const replacement = yield* recorded(B);
-        expect(old.filter((row) => row.name === "process.start")).toHaveLength(1);
-        expect(old.filter((row) => row.name === "process.exit")).toHaveLength(1);
-        expect(replacement.filter((row) => row.name === "process.start")).toHaveLength(1);
+        expect(Arr.filter(old, (row) => row.name === "process.start")).toHaveLength(1);
+        expect(Arr.filter(old, (row) => row.name === "process.exit")).toHaveLength(1);
+        expect(Arr.filter(replacement, (row) => row.name === "process.start")).toHaveLength(1);
         expect(
-          old.filter((row) => row.name.startsWith("process.")).every((row) => row.attributes["fab.process"] === A),
+          Arr.every(
+            Arr.filter(old, (row) => row.name.startsWith("process.")),
+            (row) => row.attributes["fab.process"] === A,
+          ),
         ).toBe(true);
         expect(
-          replacement
-            .filter((row) => row.name.startsWith("process."))
-            .every((row) => row.attributes["fab.process"] === B),
+          Arr.every(
+            Arr.filter(replacement, (row) => row.name.startsWith("process.")),
+            (row) => row.attributes["fab.process"] === B,
+          ),
         ).toBe(true);
         expect(world.parts.has(`job/${A}/0`)).toBe(true);
         expect(world.parts.has(`job/${B}/0`)).toBe(true);
@@ -267,8 +277,8 @@ describe("p99, process content stays out of span tags and measurements", () => {
           ...(yield* recorded(A)),
           ...(yield* RecordManager.use((r) => Stream.runCollect(r.read(Chain.cases.spans.make({}))))),
         ];
-        expect(rows.some((row) => row.name === "process.receive")).toBe(true);
-        expect(rows.some((row) => row.name === "process.exit" && !row.ok)).toBe(true);
+        expect(Arr.some(rows, (row) => row.name === "process.receive")).toBe(true);
+        expect(Arr.some(rows, (row) => row.name === "process.exit" && !row.ok)).toBe(true);
         leakFree(rows, [MESSAGE, SECRET, "SQLITE_FULL planted after an earlier write"]);
         const measurements = JSON.stringify(world.sink.db().prepare("SELECT * FROM measurements").all());
 

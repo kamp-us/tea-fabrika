@@ -18,6 +18,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Schema, type Scope, Stream } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -149,10 +150,11 @@ const stack = (sql: Sql, changes: ReadonlyArray<Relation.Change>, inputs: Readon
 
 /** Every row of every table, so "nothing was written" covers whatever table a watch might use. */
 const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValue>>> => {
-  const tables = sql
-    .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-    .map((row) => String(row.name));
-  return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
+  const tables = Arr.map(
+    sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"),
+    (row) => String(row.name),
+  );
+  return Object.fromEntries(Arr.map(tables, (table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 /** One ledger row: its global rev, stream, id, tag and body. */
@@ -192,7 +194,7 @@ const world = Effect.fnUntraced(function* (
         (stream) =>
           Ledger.use((ledger) => Stream.runCollect(ledger.read(stream, 0))).pipe(
             Effect.map((read) =>
-              [...read].map((e): Row => ({
+              Arr.map([...read], (e): Row => ({
                 rev: e.rev,
                 stream,
                 id: e.id,
@@ -277,13 +279,16 @@ type World = Effect.Success<ReturnType<typeof world>>;
 
 /** The `monitored` rows the brain wrote for `ref`. */
 const monitoredRows = (w: World, ref: string) =>
-  Effect.map(w.rows(["processes"]), (rows) => rows.filter((row) => row.tag === "monitored" && names(row.body, ref)));
+  Effect.map(w.rows(["processes"]), (rows) =>
+    Arr.filter(rows, (row) => row.tag === "monitored" && names(row.body, ref)),
+  );
 
 /** The rows a watch put in the watcher's inbox: its answer message, and the `DOWN`s for its ref. */
 const inboxRows = (w: World, watcherName: string, ref: string) =>
   Effect.map(w.rows([`${watcherName}/inbox`]), (inbox) => ({
-    answers: inbox.filter((row) => row.id === `${ref}/answer`),
-    downs: inbox.filter(
+    answers: Arr.filter(inbox, (row) => row.id === `${ref}/answer`),
+    downs: Arr.filter(
+      inbox,
       (row) => row.tag === "send" && Option.exists(decodeDown(row.body), (sent) => sent.m.ref === ref),
     ),
   }));

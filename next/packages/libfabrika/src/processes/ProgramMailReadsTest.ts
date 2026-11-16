@@ -9,6 +9,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, type Scope } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -202,9 +203,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
               const first = counts[0]?.rows;
               expect(
-                counts.map(({ rows }) => rows),
-                `L1: rows SQL returned during one new delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
-              ).toEqual(counts.map(() => first));
+                Arr.map(counts, ({ rows }) => rows),
+                `L1: rows SQL returned during one new delivery, by earlier letters: ${Arr.join(
+                  Arr.map(counts, ({ h, rows }) => `h=${h}: ${rows}`),
+                  ", ",
+                )}`,
+              ).toEqual(Arr.map(counts, () => first));
             }),
           { numRuns: RUNS },
         ),
@@ -256,9 +260,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 
               const once = counts[0]?.rows;
               expect(
-                counts.map(({ rows }) => rows),
-                `L2: rows SQL returned during one repeat delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
-              ).toEqual(counts.map(() => once));
+                Arr.map(counts, ({ rows }) => rows),
+                `L2: rows SQL returned during one repeat delivery, by earlier letters: ${Arr.join(
+                  Arr.map(counts, ({ h, rows }) => `h=${h}: ${rows}`),
+                  ", ",
+                )}`,
+              ).toEqual(Arr.map(counts, () => once));
             }),
           { numRuns: RUNS },
         ),
@@ -312,9 +319,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
               }
 
               expect(
-                counts.map(({ rows }) => rows),
-                `L7: rows SQL returned during one new delivery, by inbox and acked stream: ${counts.map(({ inbox, acked, rows }) => `${inbox}/${acked}: ${rows}`).join(", ")}`,
-              ).toEqual(counts.map(() => counts[0]?.rows));
+                Arr.map(counts, ({ rows }) => rows),
+                `L7: rows SQL returned during one new delivery, by inbox and acked stream: ${Arr.join(
+                  Arr.map(counts, ({ inbox, acked, rows }) => `${inbox}/${acked}: ${rows}`),
+                  ", ",
+                )}`,
+              ).toEqual(Arr.map(counts, () => counts[0]?.rows));
             }),
           { numRuns: runsFor({ fast: 3, full: 20 }) },
         ),
@@ -350,13 +360,16 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
                 counts.push({ newest: size, bytes });
               }
 
-              const least = Math.min(...counts.map((c) => c.bytes));
+              const least = Math.min(...Arr.map(counts, (c) => c.bytes));
 
               for (const { newest, bytes } of counts) {
                 // Ids grow by a digit now and then; a read of the newest letter grows by its size.
                 expect(
                   bytes - least,
-                  `L7: bytes SQL returned during one new delivery after a ${newest}-byte newest letter: ${counts.map((c) => `${c.newest}: ${c.bytes}`).join(", ")}`,
+                  `L7: bytes SQL returned during one new delivery after a ${newest}-byte newest letter: ${Arr.join(
+                    Arr.map(counts, (c) => `${c.newest}: ${c.bytes}`),
+                    ", ",
+                  )}`,
                 ).toBeLessThan(1_024);
               }
             }),

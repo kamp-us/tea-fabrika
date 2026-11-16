@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 // The id format, clocks, rollback and exhaustion are Id.Generator's own laws, in Id.test.ts.
 import { Cause, Effect, Exit, Option, Schema, Tracer } from "effect";
+import * as Arr from "effect/Array";
 import { TestClock } from "effect/testing";
 import { processClocks } from "../Id.test-support.ts";
 import { ProcessIdGenerator } from "./ProcessIdGenerator.ts";
@@ -34,8 +35,8 @@ describe("P10 shared process ids", () => {
         yield* TestClock.setTime(at);
         const generator = yield* ProcessIdGenerator;
         yield* generator.next;
-        const process = spans.filter((span) => span.name === "process.next");
-        const id = spans.filter((span) => span.name === "id.next");
+        const process = Arr.filter(spans, (span) => span.name === "process.next");
+        const id = Arr.filter(spans, (span) => span.name === "id.next");
         expect(process).toHaveLength(1);
         expect(id).toHaveLength(1);
         expect(process[0]!.status._tag).toBe("Ended");
@@ -66,9 +67,9 @@ describe("P10 shared process ids", () => {
           yield* generator.next;
         }
 
-        const operations = spans.filter((span) => span.name === "process.next");
+        const operations = Arr.filter(spans, (span) => span.name === "process.next");
         expect(operations).toHaveLength(count);
-        expect(new Set(operations.map((span) => span.spanId)).size).toBe(count);
+        expect(new Set(Arr.map(operations, (span) => span.spanId)).size).toBe(count);
 
         for (const span of operations) {
           expect(span.status._tag).toBe("Ended");
@@ -166,8 +167,8 @@ describe("P10 shared process ids", () => {
               }
             }
 
-            const process = spans.filter((span) => span.name === "process.next").at(-1)!;
-            const id = spans.filter((span) => span.name === "id.next").at(-1)!;
+            const process = Arr.filter(spans, (span) => span.name === "process.next").at(-1)!;
+            const id = Arr.filter(spans, (span) => span.name === "id.next").at(-1)!;
             expect(id.parent).toEqual(Option.some(process));
 
             for (const span of [process, id]) {

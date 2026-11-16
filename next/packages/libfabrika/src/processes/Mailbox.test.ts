@@ -16,6 +16,8 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import { Effect, Layer, Schema, Stream } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -100,7 +102,7 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: NoInfer<A>[], law: (a: A
           seed: SEED,
           numRuns: runsFor({ fast: 4, full: 40 }),
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
@@ -244,7 +246,7 @@ describe("p21, send", () => {
           { _tag: "placed", rev: 5, pos: 2 },
         ]);
         const one = yield* inbox("notes:1");
-        expect(one.map((e) => [e.id, e.rev, e.pos])).toEqual([
+        expect(Arr.map(one, (e) => [e.id, e.rev, e.pos])).toEqual([
           ["letter_a", 1, 1],
           ["letter_c", 4, 2],
         ]);
@@ -336,13 +338,13 @@ describe("p21, receive", () => {
   it.effect("gives only the letters past after, a log rev", () =>
     check(fc.array(json, { minLength: 3, maxLength: 30 }), [[1, 2, 3]], (messages) =>
       Effect.gen(function* () {
-        const names = messages.map((_, i) => (i < 3 ? ["letter_a", "letter_b", "letter_c"][i]! : `letter_${i}`));
+        const names = Arr.map(messages, (_, i) => (i < 3 ? ["letter_a", "letter_b", "letter_c"][i]! : `letter_${i}`));
 
         for (const [i, m] of messages.entries()) {
           yield* send("notes:1", names[i]!, m);
         }
 
-        expect((yield* receive("notes:1", 1)).map((l) => l.id)).toEqual(names.slice(1));
+        expect(Arr.map(yield* receive("notes:1", 1), (l) => l.id)).toEqual(names.slice(1));
         expect(yield* receive("notes:1", messages.length)).toEqual([]);
       }).pipe(Effect.provide(mail())),
     ),
@@ -354,8 +356,8 @@ describe("p21, receive", () => {
         yield* send("notes:1", "letter_a", a);
         yield* send("notes:2", "letter_b", b);
         yield* raw("notes:1", "x-1", { _tag: "send" }); // the name's own stream, not its inbox
-        expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a"]);
-        expect((yield* receive("notes:2")).map((l) => l.id)).toEqual(["letter_b"]);
+        expect(Arr.map(yield* receive("notes:1"), (l) => l.id)).toEqual(["letter_a"]);
+        expect(Arr.map(yield* receive("notes:2"), (l) => l.id)).toEqual(["letter_b"]);
         expect(yield* receive("notes:3")).toEqual([]);
       }).pipe(Effect.provide(mail())),
     ),
@@ -370,8 +372,8 @@ describe("p21, receive", () => {
           yield* send("notes:1", "letter_a", 1);
           yield* raw("notes:1/inbox", "x-1", { _tag: tag, body: { reason: "normal" } });
           yield* send("notes:1", "letter_b", 2);
-          expect((yield* receive("notes:1")).map((l) => l.id)).toEqual(["letter_a", "letter_b"]);
-          expect((yield* inbox("notes:1")).map((e) => e._tag)).toEqual(["send", tag, "send"]);
+          expect(Arr.map(yield* receive("notes:1"), (l) => l.id)).toEqual(["letter_a", "letter_b"]);
+          expect(Arr.map(yield* inbox("notes:1"), (e) => e._tag)).toEqual(["send", tag, "send"]);
         }).pipe(Effect.provide(mail())),
     ),
   );
@@ -405,8 +407,8 @@ describe("p21, receive", () => {
         }
 
         const letters = yield* receive("notes:1");
-        expect(letters.map((l) => l.m)).toEqual(Array.from({ length: count }, (_, i) => i));
-        expect(letters.map((l) => l.pos)).toEqual(Array.from({ length: count }, (_, i) => i + 1));
+        expect(Arr.map(letters, (l) => l.m)).toEqual(Array.from({ length: count }, (_, i) => i));
+        expect(Arr.map(letters, (l) => l.pos)).toEqual(Array.from({ length: count }, (_, i) => i + 1));
       }).pipe(Effect.provide(mail())),
     ),
   );
@@ -426,7 +428,7 @@ describe("p21, receive", () => {
             for (const { to, id, m } of sends) {
               const answer = yield* send(to, id, m);
               const box = want.get(to) ?? [];
-              const known = box.find((l) => l.id === id);
+              const known = Option.getOrUndefined(Arr.findFirst(box, (l) => l.id === id));
               const same = known !== undefined && JSON.stringify(known.m) === JSON.stringify(m);
               expect(answer._tag, `${to} ${id}`).toBe(known === undefined || same ? "placed" : "refused");
 
@@ -437,8 +439,8 @@ describe("p21, receive", () => {
 
             for (const to of ["notes:1", "notes:2"]) {
               const letters = yield* receive(to);
-              expect(letters.map((l) => ({ id: l.id, m: l.m }))).toEqual(want.get(to) ?? []);
-              const revs = letters.map((l) => l.rev);
+              expect(Arr.map(letters, (l) => ({ id: l.id, m: l.m }))).toEqual(want.get(to) ?? []);
+              const revs = Arr.map(letters, (l) => l.rev);
               expect(revs).toEqual([...revs].sort((a, b) => a - b));
             }
           }).pipe(Effect.provide(mail())),

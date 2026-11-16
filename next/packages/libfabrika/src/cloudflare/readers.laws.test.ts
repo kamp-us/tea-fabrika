@@ -11,6 +11,7 @@ import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
 import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -451,7 +452,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
         );
         expect(attempts).toHaveLength(1);
         typed(attempts[0]!);
-        expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
+        expect(Arr.map(w.ws.send.mock.calls, ([text]) => JSON.parse(text))).toContainEqual(
           expect.objectContaining({
             id: "wait",
             error: expect.objectContaining({ data: { reason: "bad_row" } }),

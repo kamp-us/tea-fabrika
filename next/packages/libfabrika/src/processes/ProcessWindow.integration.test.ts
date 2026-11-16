@@ -1,6 +1,7 @@
 // P33 / p79 and p80, next/: real restart policy and recovery functions.
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Effect, Result, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import * as Id from "../Id.ts";
@@ -65,7 +66,7 @@ describe("p79, inclusive restart window", () => {
         [10_000, 1_000, [1_000, 500]],
         [now, period, offsets],
       ] as const) {
-        const times = os.map((offset) => n - Math.min(offset, p));
+        const times = Arr.map(os, (offset) => n - Math.min(offset, p));
         expect(canRestart([], n, p, 1)).toBe(true);
 
         if (times.length > 0) {
@@ -159,8 +160,8 @@ describe("T540, next/ process UUIDv7 refusals", () => {
     [
       Schema.Struct({
         process: Id.Process,
-        version: Schema.Literals([...alphabet].filter((char) => !"ef".includes(char))),
-        variant: Schema.Literals([...alphabet].filter((char) => !"89abrstv".includes(char))),
+        version: Schema.Literals(Arr.filter([...alphabet], (char) => !"ef".includes(char))),
+        variant: Schema.Literals(Arr.filter([...alphabet], (char) => !"89abrstv".includes(char))),
         first: Schema.Literals([...alphabet.slice(8)]),
         length: Schema.Union([nat(25), Schema.Int.check(Schema.isBetween({ minimum: 27, maximum: 52 }))]),
         char: Schema.String.check(Schema.isPattern(/^[^0-9a-hjkmnp-tv-z]$/u)),
@@ -228,12 +229,12 @@ describe("p80, supplied policy events", () => {
             yield* processes.exit(A, INTERRUPTED, from());
             yield* processes.down(A, supplied, from());
             expect(
-              store
-                .rows()
-                .filter((row) => row._tag === "down")
-                .map((row) => row.body),
+              Arr.map(
+                Arr.filter(store.rows(), (row) => row._tag === "down"),
+                (row) => row.body,
+              ),
             ).toEqual([{ process: A, ...supplied, asked: BRAIN }]);
-            expect(store.rows().filter((row) => row._tag === "restarted")).toEqual([]);
+            expect(Arr.filter(store.rows(), (row) => row._tag === "restarted")).toEqual([]);
           }).pipe(Effect.provide(manager(store)));
         },
         { concurrency: 1 },

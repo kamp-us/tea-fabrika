@@ -3,6 +3,8 @@
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 import { describe, expect, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Layer } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -78,16 +80,19 @@ const among = (choices: ReadonlyArray<string>, n: number, fallback: string): str
   n % 8 === 7 || choices.length === 0 ? fallback : choices[n % choices.length]!;
 
 const newest = (state: World, name: string): string =>
-  [...state.placed].findLast(([, placedName]) => placedName === name)?.[0] ?? NEVER;
+  Option.getOrUndefined(Arr.findLast([...state.placed], ([, placedName]) => placedName === name))?.[0] ?? NEVER;
 
 /** A concrete call: the target `aim` picked for a generated choice. */
 type Aimed = { readonly step: Call; readonly name: string; readonly process: string };
 
 const aim = (step: Call, state: World): Aimed => {
-  const ended = [...state.placed.keys()].filter((process) => !state.live.has(process));
-  const free = NAMES.filter((name) => ![...state.placed.values()].includes(name));
-  const restartable = NAMES.filter((name) => newest(state, name) !== NEVER && !state.live.has(newest(state, name)));
-  const registered = NAMES.filter((name) => !free.includes(name));
+  const ended = Arr.filter([...state.placed.keys()], (process) => !state.live.has(process));
+  const free = Arr.filter(NAMES, (name) => ![...state.placed.values()].includes(name));
+  const restartable = Arr.filter(
+    NAMES,
+    (name) => newest(state, name) !== NEVER && !state.live.has(newest(state, name)),
+  );
+  const registered = Arr.filter(NAMES, (name) => !free.includes(name));
   const n = "n" in step ? step.n : 0;
   const name =
     step.call === "first"
@@ -203,7 +208,7 @@ const sweep = (state: World) =>
 const fresh = (store: Storage, next = ids().next) => manager(store, brain(), next);
 
 /** The ledger as data, without the referee's wall clock, which differs between two stores. */
-const rows = (store: Storage) => store.rows().map(({ arrivedAt: _arrivedAt, ...row }: Entry) => row);
+const rows = (store: Storage) => Arr.map(store.rows(), ({ arrivedAt: _arrivedAt, ...row }: Entry) => row);
 
 /** A brain line, as the manager writes one. */
 const line = (event: Parameters<typeof lineFor>[1]) =>

@@ -1,6 +1,7 @@
 // T753, next/, L4 and L14. RecordedStart is granted only after the checked append succeeds.
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from "effect";
+import * as Arr from "effect/Array";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { RecordedStart } from "../settings/RecordedStart.ts";
@@ -62,7 +63,7 @@ describe("recorded settings dependency, next/", () => {
             () => Effect.scoped(Effect.exit(Layer.build(consumer))),
             { concurrency: "unbounded" },
           );
-          expect(exits.every(Exit.isFailure)).toBe(true);
+          expect(Arr.every(exits, Exit.isFailure)).toBe(true);
           expect(constructed).toBe(0);
           expect(called).toBeGreaterThan(0);
         }
@@ -108,7 +109,7 @@ describe("recorded settings dependency, next/", () => {
           new Starts.StartsError({ reason: new Starts.Refused({ cause: "append not placed" }) }),
         );
         const exits = yield* Effect.forEach(fibers, Fiber.await, { concurrency: "unbounded" });
-        expect(exits.every(Exit.isFailure)).toBe(true);
+        expect(Arr.every(exits, Exit.isFailure)).toBe(true);
         expect(constructed).toBe(0);
       }).pipe(Effect.provide(Digest.layerWebCrypto)),
   );

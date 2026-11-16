@@ -1,6 +1,7 @@
 // p79's OTP monitor rules, P33. Stored mail is read independently of fresh delivery.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer, Schema } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { fcProcessIds } from "../Id.test-support.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -43,22 +44,22 @@ const check = <A, E, R>(arb: fc.Arbitrary<A>, examples: A[], law: (a: A) => Effe
           seed: 119120,
           numRuns,
           includeErrorInReport: true,
-          examples: examples.map((a): [A] => [a]),
+          examples: Arr.map(examples, (a): [A] => [a]),
         },
       ),
     );
   });
 
 const signals = (store: Storage) =>
-  store
-    .rows()
-    .filter((row) => row._tag === "send")
-    .map((row) => ({
+  Arr.map(
+    Arr.filter(store.rows(), (row) => row._tag === "send"),
+    (row) => ({
       id: row.id,
       stream: row.stream,
       rev: row.rev,
       m: Schema.decodeUnknownSync(Schema.Struct({ m: Down }))(row.body).m,
-    }));
+    }),
+  );
 
 const seed = (store: Storage) =>
   Effect.gen(function* () {
@@ -119,7 +120,9 @@ describe("P33, signal ids, ownership and delivery", () => {
           expect(result._tag, "only the brain's existing signal counts").toBe(own ? "Success" : "Failure");
 
           if (own) {
-            expect(store.rows().filter((row) => row.id === id)).toEqual(before.filter((row) => row.id === id));
+            expect(Arr.filter(store.rows(), (row) => row.id === id)).toEqual(
+              Arr.filter(before, (row) => row.id === id),
+            );
           } else {
             expect(result).toMatchObject({ _tag: "Failure", failure: { reason: "refused" } });
             expect(store.rows()).toEqual(before);
@@ -206,8 +209,8 @@ describe("p79, addressed and independent monitors", () => {
           yield* monitor(store, one!);
           const mail = signals(store);
           expect(mail).toHaveLength(3);
-          expect(new Set(mail.map((row) => row.id)).size).toBe(3);
-          expect(mail.map((row) => row.m).sort((a, b) => a.ref.localeCompare(b.ref))).toEqual(
+          expect(new Set(Arr.map(mail, (row) => row.id)).size).toBe(3);
+          expect(Arr.map(mail, (row) => row.m).sort((a, b) => a.ref.localeCompare(b.ref))).toEqual(
             [
               Down.make({
                 ref: other!,
@@ -229,11 +232,11 @@ describe("p79, addressed and independent monitors", () => {
               }),
             ].sort((a, b) => a.ref.localeCompare(b.ref)),
           );
-          expect((yield* fresh(store)).map((letter) => letter.id).sort()).toEqual(
-            mail
-              .filter((row) => row.m.to._tag === "process" && row.m.to.process === W)
-              .map((row) => row.id)
-              .sort(),
+          expect(Arr.map(yield* fresh(store), (letter) => letter.id).sort()).toEqual(
+            Arr.map(
+              Arr.filter(mail, (row) => row.m.to._tag === "process" && row.m.to.process === W),
+              (row) => row.id,
+            ).sort(),
           );
         });
       },
@@ -397,13 +400,11 @@ describe("p79, cancellation, replay and stale delivery", () => {
             }
 
             const delivered = yield* fresh(store);
-            expect(delivered.map((letter) => Schema.decodeUnknownSync(Down)(letter.m).ref)).toEqual([kept]);
-            expect(
-              signals(store)
-                .map((row) => row.m.ref)
-                .sort(),
-            ).toEqual(queued ? [canceled!, kept!].sort() : [kept]);
-            expect(store.rows().filter((row) => row._tag === "demonitored").length).toBeGreaterThanOrEqual(1);
+            expect(Arr.map(delivered, (letter) => Schema.decodeUnknownSync(Down)(letter.m).ref)).toEqual([kept]);
+            expect(Arr.map(signals(store), (row) => row.m.ref).sort()).toEqual(
+              queued ? [canceled!, kept!].sort() : [kept],
+            );
+            expect(Arr.filter(store.rows(), (row) => row._tag === "demonitored").length).toBeGreaterThanOrEqual(1);
           });
         }),
     );
@@ -426,7 +427,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
         expect(Schema.decodeUnknownSync(Down)(old[0]!.m).process).toBe(A);
         yield* exit(store, B);
         const later = yield* fresh(store, W, old[0]!.rev);
-        expect(later.map((letter) => Schema.decodeUnknownSync(Down)(letter.m).process)).toEqual([B]);
+        expect(Arr.map(later, (letter) => Schema.decodeUnknownSync(Down)(letter.m).process)).toEqual([B]);
       });
     });
   });
@@ -462,7 +463,7 @@ describe("p79, cancellation, replay and stale delivery", () => {
           );
           // The delayed copy's id is not its signal id, so it is plain mail, never B's signal.
           const later = yield* fresh(store, B);
-          const owed = later.filter((letter) => letter.id !== "delayed-old");
+          const owed = Arr.filter(later, (letter) => letter.id !== "delayed-old");
           expect(owed).toHaveLength(1);
           expect(owed[0]!.id).not.toBe(old.id);
           expect(Schema.decodeUnknownSync(Down)(owed[0]!.m).to).toEqual(Recipient.cases.process.make({ process: B }));
@@ -480,10 +481,10 @@ const send = (store: Storage, id: string, m: unknown) =>
   Mailbox.use((mailbox) => mailbox.send("watcher:1", id, m, from())).pipe(Effect.provide(manager(store)));
 
 const demonitored = (store: Storage) =>
-  store
-    .rows()
-    .filter((row) => row._tag === "demonitored")
-    .map((row) => row.body as { readonly ref: string; readonly reason?: unknown });
+  Arr.map(
+    Arr.filter(store.rows(), (row) => row._tag === "demonitored"),
+    (row) => row.body as { readonly ref: string; readonly reason?: unknown },
+  );
 
 describe("P33, a DOWN is a signal only under its signal id and a matching watch", () => {
   it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () => {
@@ -494,7 +495,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
         yield* monitor(store, ref);
         yield* cancel(store, ref);
         yield* send(store, "forged", Down.make({ ref, process: A, reason: CRASHED, to: toW }));
-        expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["forged"]);
+        expect(Arr.map(yield* fresh(store), (letter) => letter.id)).toEqual(["forged"]);
       });
     });
   });
@@ -510,7 +511,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
           yield* monitor(store, "real", X);
           yield* cancel(store, ref);
           yield* exit(store, X);
-          const real = signals(store).map((row) => row.id);
+          const real = Arr.map(signals(store), (row) => row.id);
           expect(real).toHaveLength(1);
           // watch:1 targets A, so a DOWN for B under a signal id matches no watch. Mail cannot
           // take a signal id, so only another writer's raw row could, and it is plain mail.
@@ -519,7 +520,7 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
           yield* Ledger.use((ledger) =>
             ledger.append("watcher:1/inbox", id, lineFor(from({ by: CLIENT }), { _tag: "send", m })),
           ).pipe(Effect.provide(manager(store)));
-          expect((yield* fresh(store)).map((letter) => letter.id)).toEqual([...real, id]);
+          expect(Arr.map(yield* fresh(store), (letter) => letter.id)).toEqual([...real, id]);
         });
       },
     ),
@@ -531,10 +532,10 @@ describe("P33, a DOWN is a signal only under its signal id and a matching watch"
         yield* seed(store);
         yield* send(store, "bad", { _tag: "DOWN", ref: badRef });
         yield* send(store, "good", { hello: 1 });
-        expect((yield* fresh(store)).map((letter) => letter.id)).toEqual(["bad", "good"]);
+        expect(Arr.map(yield* fresh(store), (letter) => letter.id)).toEqual(["bad", "good"]);
         const last = (yield* fresh(store)).at(-1)!;
         yield* send(store, "later", { hello: 2 });
-        expect((yield* fresh(store, W, last.rev)).map((letter) => letter.id)).toEqual(["later"]);
+        expect(Arr.map(yield* fresh(store, W, last.rev), (letter) => letter.id)).toEqual(["later"]);
       });
     }),
   );
@@ -551,7 +552,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
         yield* cancel(store, ref, X);
         store.reopen();
         yield* exit(store);
-        expect((yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
+        expect(Arr.map(yield* fresh(store), (letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
           Down.make({ ref, process: A, reason: CRASHED, to: toW }),
         ]);
         expect(yield* fresh(store, X)).toEqual([]);
@@ -579,7 +580,7 @@ describe("P33, watches are keyed by (recipient, ref)", () => {
         ).pipe(Effect.provide(manager(store, brain(), ids(B).next)));
         yield* monitor(store, ref, A, B);
         yield* exit(store);
-        expect((yield* fresh(store, B)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
+        expect(Arr.map(yield* fresh(store, B), (letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
           Down.make({
             ref,
             process: A,
@@ -603,7 +604,7 @@ describe("P33, monitor again after demonitor", () => {
         yield* monitor(store, ref);
         store.reopen();
         yield* exit(store);
-        expect((yield* fresh(store)).map((letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
+        expect(Arr.map(yield* fresh(store), (letter) => Schema.decodeUnknownSync(Down)(letter.m))).toEqual([
           Down.make({ ref, process: A, reason: CRASHED, to: toW }),
         ]);
       });
@@ -621,7 +622,7 @@ describe("P33, demonitored records reason", () => {
         yield* monitor(store, byExit!, A, X);
         yield* cancel(store, byCancel!);
         yield* exit(store, X);
-        expect(Object.fromEntries(demonitored(store).map((body) => [body.ref, body.reason]))).toEqual({
+        expect(Object.fromEntries(Arr.map(demonitored(store), (body) => [body.ref, body.reason]))).toEqual({
           [byCancel!]: "canceled",
           [byExit!]: "watcher_exited",
         });
@@ -664,13 +665,13 @@ describe("P33, a client's inbox is not a process's inbox", () => {
       return Effect.gen(function* () {
         expect(yield* twin(store, name, name)).toBe(true);
         const downs = signals(store);
-        const forProcess = downs.filter((down) => down.m.to._tag === "process");
-        const forClient = downs.filter((down) => down.m.to._tag === "client");
-        expect(forProcess.map((down) => down.stream)).toEqual([`${name}/inbox`]);
-        expect(forClient.map((down) => down.m.to)).toEqual([notesClient(name)]);
-        expect(forClient.map((down) => down.stream)).toEqual([`client:${name}/inbox`]);
+        const forProcess = Arr.filter(downs, (down) => down.m.to._tag === "process");
+        const forClient = Arr.filter(downs, (down) => down.m.to._tag === "client");
+        expect(Arr.map(forProcess, (down) => down.stream)).toEqual([`${name}/inbox`]);
+        expect(Arr.map(forClient, (down) => down.m.to)).toEqual([notesClient(name)]);
+        expect(Arr.map(forClient, (down) => down.stream)).toEqual([`client:${name}/inbox`]);
         const letters = yield* fresh(store, B);
-        expect(letters.map((letter) => letter.m)).toEqual([forProcess[0]!.m]);
+        expect(Arr.map(letters, (letter) => letter.m)).toEqual([forProcess[0]!.m]);
       });
     });
   });
@@ -682,10 +683,10 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         yield* Mailbox.use((mail) => mail.send(name, "letter:1", { hello: name }, from())).pipe(
           Effect.provide(manager(store)),
         );
-        const rows = store.rows().filter((row) => row.id === "letter:1");
-        expect(rows.map((row) => row.stream)).toEqual([`${name}/inbox`]);
-        const clientInbox = store.rows().filter((row) => row.stream === `client:${name}/inbox`);
-        expect(clientInbox.map((row) => row.id)).not.toContain("letter:1");
+        const rows = Arr.filter(store.rows(), (row) => row.id === "letter:1");
+        expect(Arr.map(rows, (row) => row.stream)).toEqual([`${name}/inbox`]);
+        const clientInbox = Arr.filter(store.rows(), (row) => row.stream === `client:${name}/inbox`);
+        expect(Arr.map(clientInbox, (row) => row.id)).not.toContain("letter:1");
         expect(clientInbox).toHaveLength(1);
       });
     });
@@ -700,8 +701,8 @@ describe("P33, a client's inbox is not a process's inbox", () => {
         }
 
         const downs = signals(store);
-        const forProcess = downs.filter((down) => down.m.to._tag === "process");
-        const forClient = downs.filter((down) => down.m.to._tag === "client");
+        const forProcess = Arr.filter(downs, (down) => down.m.to._tag === "process");
+        const forClient = Arr.filter(downs, (down) => down.m.to._tag === "client");
         expect(forProcess).toHaveLength(1);
         expect(forClient).toHaveLength(1);
         expect(forClient[0]!.stream).not.toBe(forProcess[0]!.stream);
@@ -747,7 +748,7 @@ describe("P18 P1, a client session's leave ends its watches", () => {
           const store = storage();
           return Effect.gen(function* () {
             yield* seed(store);
-            const made = watches.map((w, i) => ({ ...w, to: recipientFor(w.to), ref: `watch:${i}` }));
+            const made = Arr.map(watches, (w, i) => ({ ...w, to: recipientFor(w.to), ref: `watch:${i}` }));
 
             for (const w of made) {
               yield* ProcessManager.use((p) => p.monitor(w.ref, w.target, from())).pipe(
@@ -761,45 +762,40 @@ describe("P18 P1, a client session's leave ends its watches", () => {
               }
             }
 
-            const ends = made.filter((w) => !w.cancel && w.to._tag === "client" && w.to.session === session);
-            const stays = made.filter((w) => !w.cancel && !ends.includes(w));
+            const ends = Arr.filter(made, (w) => !w.cancel && w.to._tag === "client" && w.to.session === session);
+            const stays = Arr.filter(made, (w) => !w.cancel && !ends.includes(w));
             seen.ended += ends.length;
-            seen.kept += stays.filter((w) => w.to._tag === "client").length;
-            seen.processes += stays.filter((w) => w.to._tag === "process").length;
-            seen.canceled += made.filter((w) => w.cancel).length;
+            seen.kept += Arr.filter(stays, (w) => w.to._tag === "client").length;
+            seen.processes += Arr.filter(stays, (w) => w.to._tag === "process").length;
+            seen.canceled += Arr.filter(made, (w) => w.cancel).length;
             const before = store.rows();
             yield* leave(store, session);
             const added = store.rows().slice(before.length);
             expect(store.rows().slice(0, before.length), "leave changed an earlier row").toEqual(before);
             expect(
-              added.map((row) => [row._tag, row.by]),
+              Arr.map(added, (row) => [row._tag, row.by]),
               "leave wrote something other than the brain's demonitored lines",
-            ).toEqual(added.map(() => ["demonitored", from().by]));
+            ).toEqual(Arr.map(added, () => ["demonitored", from().by]));
             expect(
-              added
-                .map((row) => {
-                  const body = row.body as {
-                    readonly ref: string;
-                    readonly to: typeof Recipient.Type;
-                    readonly reason: unknown;
-                  };
-                  return [key(body.to, body.ref), body.reason];
-                })
-                .sort(),
+              Arr.map(added, (row) => {
+                const body = row.body as {
+                  readonly ref: string;
+                  readonly to: typeof Recipient.Type;
+                  readonly reason: unknown;
+                };
+                return [key(body.to, body.ref), body.reason];
+              }).sort(),
               "the watches leave ended",
-            ).toEqual(ends.map((w) => [key(w.to, w.ref), "watcher_exited"]).sort());
+            ).toEqual(Arr.map(ends, (w) => [key(w.to, w.ref), "watcher_exited"]).sort());
             const after = store.rows();
             store.reopen();
             yield* leave(store, session);
             expect(store.rows(), "a second leave wrote something").toEqual(after);
             yield* exit(store, A);
             yield* exit(store, X);
-            expect(
-              signals(store)
-                .map((row) => key(row.m.to, row.m.ref))
-                .sort(),
-              "the DOWNs after leave",
-            ).toEqual(stays.map((w) => key(w.to, w.ref)).sort());
+            expect(Arr.map(signals(store), (row) => key(row.m.to, row.m.ref)).sort(), "the DOWNs after leave").toEqual(
+              Arr.map(stays, (w) => key(w.to, w.ref)).sort(),
+            );
           });
         },
         100,
