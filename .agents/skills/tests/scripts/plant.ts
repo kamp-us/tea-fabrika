@@ -20,7 +20,7 @@ import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Plants } from "@kampus/vitest";
 import { Console, Effect, Result, Schema } from "effect";
 import { Argument, Command } from "effect/cli";
-import { createVitest } from "vitest/node";
+import { type CliOptions, createVitest } from "vitest/node";
 import { testConfig } from "../../../../vitest.config.ts";
 
 /** Why no record was printed: the run broke, or the title or the law cannot give a true record. */
@@ -38,7 +38,7 @@ const broke = (step: string) => (cause: unknown) => new Refused({ message: `vite
 
 /** A vitest of its own that runs only `file`'s laws whose name ends with `title`, closed with its scope. */
 const vitest = (root: string, file: string, title: string) => {
-  const options = {
+  const options: CliOptions = {
     root,
     config: false,
     watch: false,
@@ -49,7 +49,7 @@ const vitest = (root: string, file: string, title: string) => {
     testNamePattern: pattern(title),
     maxWorkers: 1,
     reporters: [],
-  } as const;
+  };
   const open = () => createVitest("test", options);
   return Effect.acquireRelease(
     // oxlint-disable-next-line fabrika/no-promises -- edge: vitest's Node API answers a Promise

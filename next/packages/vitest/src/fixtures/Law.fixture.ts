@@ -1,4 +1,4 @@
-// Laws for ../Law.integration.test.ts to run in a vitest of its own, so it can see one fail, time out
+// Laws for ../Law.runner.test.ts to run in a vitest of its own, so it can see one fail, time out
 // or run twice. The case comes from that run's `provide`, as vitest's `inject` reads it. Nothing
 // here runs in the repo's own test run: its name is no test file's.
 import { Effect, Schema } from "effect";

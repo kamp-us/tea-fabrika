@@ -107,18 +107,25 @@ declare module "vitest" {
 }
 
 /** The label the options name, if any. */
-const labelIn = (options: LawOptions): Label | undefined =>
-  options.vector !== undefined
-    ? Label.cases.vector.make({ reason: options.vector })
-    : options.format !== undefined
-      ? Label.cases.format.make({ reason: options.format })
-      : options.scenario !== undefined
-        ? Label.cases.scenario.make({ reason: options.scenario })
-        : options.type !== undefined
-          ? Label.cases.type.make({ reason: options.type })
-          : options.pinned !== undefined
-            ? Label.cases.pinned.make({ reason: options.pinned })
-            : undefined;
+const labelIn = (options: LawOptions): Label | undefined => {
+  if (options.vector !== undefined) {
+    return Label.cases.vector.make({ reason: options.vector });
+  }
+
+  if (options.format !== undefined) {
+    return Label.cases.format.make({ reason: options.format });
+  }
+
+  if (options.scenario !== undefined) {
+    return Label.cases.scenario.make({ reason: options.scenario });
+  }
+
+  if (options.type !== undefined) {
+    return Label.cases.type.make({ reason: options.type });
+  }
+
+  return options.pinned === undefined ? undefined : Label.cases.pinned.make({ reason: options.pinned });
+};
 
 /**
  * A law's options as vitest takes them: the plant and the label go into `meta`, and every other

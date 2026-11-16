@@ -6,15 +6,14 @@
 // values and the test's context, as `@effect/vitest`'s is.
 //
 // The laws that must see a law fail, time out or run twice run it in a vitest of their own:
-// Law.integration.test.ts.
+// Law.runner.test.ts.
 import { describe, expect } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import * as fc from "fast-check";
 import type { TestContext } from "vitest";
-import { it, type LawOptions, toTestOptions } from "./Law.ts";
+import { it, Label, type LawOptions, toTestOptions } from "./Law.ts";
 
 const SEED = 119120;
-const LABELS = ["vector", "format", "scenario", "type", "pinned"] as const;
 
 /** One label with its reason, or none: the five keys of 0580, a pinned law naming a ticket. */
 const label = fc.option(
@@ -26,6 +25,14 @@ const label = fc.option(
   ),
   { nil: null },
 );
+
+/** The four labels whose reason is text, each made by its own case. */
+const TEXT: { readonly [K in "vector" | "format" | "scenario" | "type"]: (reason: string) => Label } = {
+  vector: (reason) => Label.cases.vector.make({ reason }),
+  format: (reason) => Label.cases.format.make({ reason }),
+  scenario: (reason) => Label.cases.scenario.make({ reason }),
+  type: (reason) => Label.cases.type.make({ reason }),
+};
 
 /** vitest's own options that the package passes through unchanged. */
 const passed = fc.record(
@@ -52,7 +59,14 @@ it("toTestOptions puts the plant and the label in meta, with its tag and reason,
       expect(vitest).toEqual(rest);
       expect(meta ?? {}).toEqual({
         ...(plant === null ? {} : { plant }),
-        ...(named === null ? {} : { label: { _tag: named.name, reason: named.reason } }),
+        ...(named === null
+          ? {}
+          : {
+              label:
+                named.name === "pinned"
+                  ? Label.cases.pinned.make({ reason: named.reason })
+                  : TEXT[named.name](named.reason),
+            }),
       });
     }),
     {
@@ -67,42 +81,74 @@ it("toTestOptions puts the plant and the label in meta, with its tag and reason,
 });
 
 /** What a law registered with `{ plant, [label]: reason }` must find in its own task's meta. */
-const reads = (ctx: TestContext, plant: string, tag: (typeof LABELS)[number], reason: string | number) => {
+const reads = (ctx: TestContext, plant: string, label: Label) => {
   expect(ctx.task.meta.plant).toBe(plant);
-  expect(ctx.task.meta.label).toEqual({ _tag: tag, reason });
+  expect(ctx.task.meta.label).toEqual(label);
 };
 
 // scenario: registration happens once per member at collection, so there is nothing to generate.
 // Each member registers one law with its own plant and label, and that law reads them back from its
 // own task. Plant: leave `meta` off in the `it.effect.prop` member.
 describe("scenario: a law registered through each member reads its own plant and label from ctx.task.meta", () => {
-  it("scenario: it carries its options", (ctx) => reads(ctx, "plant it", "vector", "the row on main"), {
-    plant: "plant it",
-    vector: "the row on main",
-  });
+  it(
+    "scenario: it carries its options",
+    (ctx) => reads(ctx, "plant it", Label.cases.vector.make({ reason: "the row on main" })),
+    {
+      plant: "plant it",
+      vector: "the row on main",
+    },
+  );
   it.effect(
     "scenario: it.effect carries its options",
-    (ctx) => Effect.sync(() => reads(ctx, "plant effect", "format", "the JSON line")),
+    (ctx) => Effect.sync(() => reads(ctx, "plant effect", Label.cases.format.make({ reason: "the JSON line" }))),
     { plant: "plant effect", format: "the JSON line" },
   );
   it.live(
     "scenario: it.live carries its options",
-    (ctx) => Effect.sync(() => reads(ctx, "plant live", "pinned", 1497)),
+    (ctx) => Effect.sync(() => reads(ctx, "plant live", Label.cases.pinned.make({ reason: 1497 }))),
     { plant: "plant live", pinned: 1497 },
   );
   it.prop(
     "it.prop carries its options, on Effect inputs",
     { n: Schema.Int },
     (_, ctx) => {
-      reads(ctx, "plant prop", "scenario", "one case per run");
+      reads(ctx, "plant prop", Label.cases.scenario.make({ reason: "one case per run" }));
     },
     { plant: "plant prop", scenario: "one case per run", arbitrary: { runs: 3 } },
+  );
+  it.prop(
+    "it.prop carries its options, on fast-check inputs",
+    { n: fc.nat() },
+    (_, ctx) => {
+      reads(ctx, "plant prop fc", Label.cases.vector.make({ reason: "the drawn nat" }));
+    },
+    { plant: "plant prop fc", vector: "the drawn nat", fastCheck: { numRuns: 3 } },
   );
   it.effect.prop(
     "it.effect.prop carries its options, on fast-check inputs",
     { n: fc.nat() },
-    (_, ctx) => Effect.sync(() => reads(ctx, "plant effect prop", "type", "the compiler")),
+    (_, ctx) => Effect.sync(() => reads(ctx, "plant effect prop", Label.cases.type.make({ reason: "the compiler" }))),
     { plant: "plant effect prop", type: "the compiler", fastCheck: { numRuns: 3 } },
+  );
+  it.effect.prop(
+    "it.effect.prop carries its options, on Effect inputs",
+    { n: Schema.Int },
+    (_, ctx) =>
+      Effect.sync(() => reads(ctx, "plant effect prop schema", Label.cases.format.make({ reason: "the int" }))),
+    { plant: "plant effect prop schema", format: "the int", arbitrary: { runs: 3 } },
+  );
+  it.live.prop(
+    "it.live.prop carries its options, on fast-check inputs",
+    { n: fc.nat() },
+    (_, ctx) => Effect.sync(() => reads(ctx, "plant live prop", Label.cases.pinned.make({ reason: 580 }))),
+    { plant: "plant live prop", pinned: 580, fastCheck: { numRuns: 3 } },
+  );
+  it.live.prop(
+    "it.live.prop carries its options, on Effect inputs",
+    { n: Schema.Int },
+    (_, ctx) =>
+      Effect.sync(() => reads(ctx, "plant live prop schema", Label.cases.scenario.make({ reason: "live services" }))),
+    { plant: "plant live prop schema", scenario: "live services", arbitrary: { runs: 3 } },
   );
 });
 

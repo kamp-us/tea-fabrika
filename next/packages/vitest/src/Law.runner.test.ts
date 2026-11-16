@@ -1,9 +1,9 @@
 // Decision 0579 and 0580: the package's `it.effect.prop` runs fast-check inputs as our old `property`
 // runner did, from the shared seed (119120), and stops on the law's abort. These laws must see a law
 // fail, time out or run twice, which no law can see of itself, so each runs fixtures/Law.fixture.ts in a vitest
-// of its own, through vitest's Node API, and reads its tasks. That vitest is a real instance with its
-// own worker, so this file is an integration file (0584); there is no in-memory stand-in for a test
-// runner's verdict on a law.
+// of its own, through vitest's Node API, and reads its tasks. That vitest runs in this process on a
+// worker thread and starts no process, port or temp folder, so the file is plain (0584) and runs on
+// every pull request, as .github/ci/shard-rows.test.ts and related.test.ts do.
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import type { RunnerTask, RunnerTestFile } from "vitest";
