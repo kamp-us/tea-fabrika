@@ -8,7 +8,7 @@ import { it, expect } from "@effect/vitest";
 import * as fc from "fast-check";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
-import { measured } from "../../vitest.shards.ts";
+import { full, measured } from "../../vitest.shards.ts";
 import { main, nextFiles, stale, visualFiles } from "./shard-rows.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
@@ -251,6 +251,10 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
               `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json`,
           ),
         );
+        // The full-depth table's rows are named with their own file.
+        const other: string[] = [];
+        expect(main(rows, (line) => other.push(line), "vitest.shards.full.json")).toBe(rows.length === 0 ? 0 : 1);
+        expect(other).toEqual(lines.map((line) => line.replace(/vitest\.shards\.json$/, "vitest.shards.full.json")));
         const silent: string[] = [];
         expect(main([], (line) => silent.push(line))).toBe(0);
         expect(silent).toEqual([]);
@@ -264,19 +268,21 @@ it("scenario: L4 the Node entry passes the real table and file set to the report
   // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
   // entry judges the vitest and end-to-end selections together, since one table holds both rows.
   // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
-  // e2eFiles out of the entry (red: the entry printed 8 stale rows).
-  const rows = stale(measured, [...(await nextFiles(root)), ...(await visualFiles(root))]);
+  // e2eFiles out of the entry (red: the entry printed 8 stale rows). The full-depth table,
+  // vitest.shards.full.json, is judged after it, against the same files.
+  const files = [...(await nextFiles(root)), ...(await visualFiles(root))];
+  const rows = stale(measured, files);
+  const fullRows = stale(full, files);
   const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
   expect(result.error).toBeUndefined();
-  expect(result.status).toBe(rows.length === 0 ? 0 : 1);
+  expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
   expect(result.stdout).toBe("");
+  const lines = (stale: readonly string[], table: string) =>
+    stale.map(
+      (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
+    );
   expect(result.stderr).toBe(
-    rows
-      .map(
-        (path) =>
-          `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in vitest.shards.json\n`,
-      )
-      .join(""),
+    [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
   );
 });
 

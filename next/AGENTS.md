@@ -106,10 +106,13 @@ has nothing, marked as an edge with its reason
   ([0037](../.decisions/0037-implicit-state-machines-made-explicit.md)).
 - **Every state machine is a tea machine.** No plain union with a transition function. The machine's
   Model, Msg and update live in its file, with no input or output code, and nothing outside it edits
-  the Model by hand: it sends a Msg. A small private helper machine may share its parent's file. An
-  `update` handler picks the next state with a plain conditional on `_tag`, not `Match` or `.match`.
-  A file may export one machine factory in place of the machine, never both
+  the Model by hand: it sends a Msg. A small private helper machine may share its parent's file. A
+  file may export one machine factory in place of the machine, never both
   ([0046](../.decisions/0046-one-tea-machine-per-file.md)).
+- **A tagged value is matched, never compared by hand,** in an `update` handler too: the union's
+  own `match`, `matchOrElse` or `isAnyOf` first, then Effect's `Match` module
+  ([0567](../.decisions/0567-a-tagged-value-is-matched.md),
+  [the pattern](../.patterns/effect-tagged-value-is-matched.md)).
 
 ## Words
 
