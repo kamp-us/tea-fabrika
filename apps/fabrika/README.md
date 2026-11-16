@@ -112,7 +112,9 @@ type FromWindow = {type: "msg"; msg: unknown /* one of its run's inputs */};
   (`ELECTRON_RUN_AS_NODE=1`, on `dist/host.mjs`), started detached by the first app that finds
   none, and let go. No second runtime ships, and Electron's Node is the one the app was built and
   tested on. It holds the tiles (tsh and the line editor, one of each per tile), the ledger, the
-  history and the desk.
+  history and the desk. Every helper it starts on that binary, such as a summoned agent's adapter,
+  runs as Node too (`runAsNode` in `packages/fabrika/src/agents/claude/env.ts`), so none shows in
+  the Dock, and each one ends when its agent is dismissed or goes down, or when the host stops.
 - **One host per project.** Apps that find no host at the same moment each start one. The hosts
   take turns under the project's start `lock`, from the look at the socket until they listen, as tmux's
   `<socket>.lock` does: one listens, the rest find it answering and step aside, and every app

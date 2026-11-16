@@ -33,6 +33,10 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
 // as `prompt <session> <n> <its first word>`, for a test to count. A system
 // prompt handed in `_meta.system` on new, load or resume is noted there too,
 // as `system <session> <its JSON>`, so a test sees exactly what came.
+//
+// Each start notes `pid <n>` in `<folder>/.fake-acp/pids`, its own process id, so a test can ask
+// whether the very process it started is still there, and never any other. A file of its own, so
+// a test that counts the log's lines counts only prompts and system prompts.
 
 type Update = acp.SessionUpdate;
 
@@ -47,6 +51,7 @@ const home = join(here, ".fake-acp");
 mkdirSync(home, { recursive: true });
 const historyOf = (id: string) => join(home, `${id}.jsonl`);
 const note = (line: string) => appendFileSync(join(home, "log"), `${line}\n`);
+appendFileSync(join(home, "pids"), `pid ${process.pid}\n`);
 
 interface Session {
   mode: string;

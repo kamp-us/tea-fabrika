@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-p39-s5-review2",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1331",
+  "started": "2026-11-15T16:00:00-08:00",
+  "ended": "2026-11-15T16:03:52-08:00",
+  "parent": "2026-11-15-p39-s5-fix2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Recheck of P39 slice 4b in next/, head 8e101db24, by a fresh reviewer after fix round 3. Closed: the host-only laws now pass. Full run 43775455200 on this head is green in every job; its logs show C5 (CommandsNode.integration, 2 tests), J2 (JournalSqlite.integration, 1 test, 19 s), E2 and E2's S2 (hands-launcher.integration, 2 tests, 45 s) and T2 (HandsNode.types) passing, none skipped. The E2 fix is a real fix of the test harness, not an easier law: the three test-only calls (requestHandsTask, readHandsTask, allRows) could never pass the control door's closed method list, so the fixture now adds its own Control that takes only those three, keeps the same token check, and hands every other request to the real Control; E2's and S2's checks are unchanged, the real Project has no fetch that the fixture's fetch could hide, and the product's method list gains nothing. S2's fast depth went from 1 run to 3, a tightening. Still open, so sent back to tests: no plant run is recorded for C5, J2, E2 or E2's S2, and fix round 3 left no run row, so T2's plant result is only in the lead's relay. loosening.sh on c9d0238e7..HEAD: three hits, none a loosening (the 'fewer numRuns' hit is S2's fast count going up from 1 to 3).",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Plants by reading, not run: C5's plant (answer output_limit without closing the child's scope) leaves the pid alive at the check, red; E2's plant (a fresh key file each start) leaves the second start without a grant, so it never prints online, red; J2's plant goes red only when a SIGKILL lands inside a non-atomic file write, which is likely over 20 runs but not certain, so it needs its run. Owed: plant branches cut from 8e101db24, never pushed to the PR branch, each run with the scheduled workflow. Branch A holds C5's plant in capped.ts, E2's plant in KeyFile.ts, and J2's swap to KeyValueStore.layerFileSystem in the J2 child and its reopen only, not in JournalSqlite.ts, since hands.ts uses that file and E2 would go red for the wrong reason. Branch B holds S2's plant alone, the stored JWK in the online line, because E2's plant would also stop S2's flow. Each run is read for red on the named test with that law's own message, recorded in a tests row with run ids, and the branches deleted. T2: a fix3 row records commit 8e101db24 and T2's plant as red at HandsNode.types.test.ts:28 and KeyFile.ts:217; those lines match the KeyFile layer's error check and its ClientKey.of call. No test, typecheck, integration or visual file was run by this reviewer. A merge of origin/main into the head is clean.",
+  "step": "review"
+}

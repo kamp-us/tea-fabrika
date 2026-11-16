@@ -54,7 +54,9 @@ migrate: (raw) => {
   - *Walked back 2026-11-01 for state carried forward:* this no longer holds
     there. A saved model carries its shape's number and a chain of named
     upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
-    The schema is still the last check.
+    The schema is still the last check. *Set aside 2026-11-15 until the first
+    release:* a saved-shape change wipes the stored data instead
+    ([0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md)).
 - **This is Elm's answer.** Elm reads saved data through a `Decoder`, and a
   failed decode is an error to handle, never a guess
   ([Json.Decode](https://package.elm-lang.org/packages/elm/json/latest/Json-Decode)).

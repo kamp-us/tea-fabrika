@@ -97,7 +97,7 @@ it("L2 shrinking reaches the failing length", () =>
   ));
 
 // Plant L3: replace the generated value with its first shrink (lead runs outside the box).
-// vector: stock and patched Effect 4.1.2 measured identically; re-pin only when dropping the patch.
+// vector: stock and patched Effect 4.1.3 measured identically; re-pin only when dropping the patch.
 it("vector: L3 generated cases and shrink paths stay unchanged", () =>
   Effect.runSync(
     Effect.gen(function* () {

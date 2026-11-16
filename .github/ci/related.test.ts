@@ -21,9 +21,18 @@ const files = readdirSync(join(root, ".agents/skills"), { recursive: true, withF
   .filter((entry) => entry.isFile())
   .map((entry) => relative(root, join(entry.parentPath, entry.name)));
 
+// A `fixtures/` folder under a skill's scripts holds data, not scripts. vitest.config.ts leaves it
+// out of the tests (`EXCLUDE`) and makes any change to it select every test (`**/fixtures/**` in
+// `forceRerunTriggers`), so its files are never held to "exactly their declaring tests". The
+// fixture law below holds them to that rule instead.
+const FIXTURE = /\/scripts\/(?:.+\/)?fixtures\//;
+const fixtures = files.filter((path) => FIXTURE.test(path));
+
 // Any depth under `scripts/`, as vitest.config.ts includes tests there (the flow runner's `flow/`).
 const tree = new Map(
-  files.filter((path) => /\/scripts\/.+$/.test(path)).map((path) => [path, readFileSync(join(root, path), "utf8")]),
+  files
+    .filter((path) => /\/scripts\/.+$/.test(path) && !FIXTURE.test(path))
+    .map((path) => [path, readFileSync(join(root, path), "utf8")]),
 );
 
 const scripts = [...tree.keys()].filter((path) => !path.endsWith(".test.ts"));
@@ -95,6 +104,14 @@ it.each(readScripts)("the real script %s alone selects exactly its declaring tes
   const expected = declaring([path]);
   expect(expected.length).toBeGreaterThan(0);
   expect(await affected([path])).toEqual(expected);
+});
+
+// scenario: the rule that takes fixtures out of the script laws. A fixture alone selects what a
+// lockfile change selects, every test, so a change to a fixture never runs too few.
+it.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockfile change does", async (path) => {
+  const every = await affected(["pnpm-lock.yaml"]);
+  expect(every.length).toBeGreaterThan(tests.length);
+  expect(await affected([path])).toEqual(every);
 });
 
 it("real skill Markdown subsets select no test", async () => {

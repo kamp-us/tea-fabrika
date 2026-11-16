@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-quota-restart-gate-only-in-the-law",
+  "date": "2026-11-15",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "dead_code",
+  "location": {
+    "path": "next/packages/libfabrika/src/runtime/QuotaRunner.ts",
+    "line": 109
+  },
+  "says": "In next/, QuotaRunner.restart, the version with the NotGranted person check, is now called only by the Node law fixture (node/QuotaRunner.test.ts:312). The Worker calls personRestart. So Q8's 'only an authorized person can resume' clause tests a gate that production never runs. Smallest fix: once the control door carries a checked requester (the row 2026-11-15-control-door-restart-has-no-checked-requester), route the Worker through restart; until then, say in Q8 that the gate is the control door.",
+  "proof": "rg 'QuotaRunner.(restart|personRestart)' finds only node/QuotaRunner.test.ts:312 for restart and cloudflare/runtime.ts:2397 for personRestart.",
+  "cost": "A green Q8 suggests a person check the live instance does not make.",
+  "head": "df1630d40",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1092"
+}

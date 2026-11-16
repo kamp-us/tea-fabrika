@@ -1,7 +1,7 @@
 ---
 id: 0527
 title: A law checked only by the compiler is titled type:, a fifth label beside 0093's four, and lint accepts it only on a body of type assertions
-status: accepted
+status: amended-in-part by [0580](0580-law-options-carry-plant-and-label.md)
 date: 2026-11-14
 tags: [tests, laws, labels, lint, types, next]
 ---
@@ -64,6 +64,10 @@ accepts `type:` only on a body made of type assertions.**
 - [0093](0093-laws-walk-plants-run-once.md)'s four labels become five. Its other rules hold.
 - Not decided here: whether `.test-d.ts` files or `vitest typecheck` mode would be the better home
   for type laws. Today they run as plain tests.
+
+## Amendments
+
+- 2026-11-15: [0580](0580-law-options-carry-plant-and-label.md) moves the plant out of a comment into a `plant` option of the law's declaration, and the label out of the title into an option with a required reason; a title prefix becomes an error, and a CI check holds each plant against the ticket's run row. The rules above on what a plant is and that it is run once and not kept hold.
 
 ## Records
 

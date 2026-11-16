@@ -98,7 +98,7 @@ const swap = (to: Hash) =>
 
 *Replaced 2026-11-01:* the shape-guess upcast in the sketch below gives way to a version number and
 a chain of named upgrades ([saved state, S3](./saved-state.md#s3-saved-state-carries-its-shapes-number-and-a-chain-of-named-upgrades)).
-The sketch stays as it was written.
+The sketch stays as it was written. *Set aside 2026-11-15 until the first release:* a saved-shape change wipes the stored data instead ([0572](../../.decisions/0572-pre-release-shape-change-wipes-data.md)).
 
 ```ts
 // A sketch, in the program: a version may carry an upcast from the shape before it.

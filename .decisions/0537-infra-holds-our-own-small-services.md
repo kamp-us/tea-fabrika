@@ -1,7 +1,7 @@
 ---
 id: 0537
 title: A top-level infra/ folder holds the small services we run to ship fabrika, in one Cloudflare Worker deployed with Alchemy, and our own merge queue comes first, its event log the first ledger
-status: accepted
+status: amended-in-part by [0556](0556-kalfa-holds-our-tooling-packages.md)
 date: 2026-11-14
 tags: [infra, merge-queue, cloudflare, alchemy, ledger, ci, github]
 ---
@@ -28,6 +28,8 @@ type Entry =
   | { _tag: "checked"; pr: number; commit: string; result: "pass" | "fail" | "infra"; at: string }
   | { _tag: "landed"; pr: number; commit: string; tree: string; at: string };
 ```
+
+*[0556](0556-kalfa-holds-our-tooling-packages.md) names the folder `kalfa/` and has it hold every `@kalfa` package; the rest of this file still holds, with `kalfa/` read where it says `infra/`.*
 
 ## Context
 
