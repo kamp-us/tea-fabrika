@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-runtime-typeof-1-tests3",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T23:13:25-08:00",
+  "ended": "2026-11-15T23:21:00-08:00",
+  "parent": "2026-11-15-antislop-no-runtime-typeof-1-review2",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Round three of slice AS-no-runtime-typeof-1, in next/ and our tooling, after pull request 1366 merged to main and origin/main was merged into the branch (head 69eb51c54). The rule anti-slop/no-runtime-typeof, forced to error in a scratch config outside the repo, was counted again over .github/ci, oxlint-plugins, next/apps/fabrika, next/packages/libfabrika/src/client and next/programs/tezgah: 30 hits, all in exam paths, none in product files. 13 were fixed by a scratch script of exact string swaps, each checked to match the expected number of times, then pnpm format. The 7 hits once waiting on 1366: next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts 298 (typeof object plus not null, now Predicate.isObjectOrArray), 507 (Predicate.isString), 617 and 693 (Predicate.isString on a Proxy get key), and next/apps/fabrika/src/local-instance.integration.test.ts 31 and 33 (Predicate.isObjectOrArray, which keeps arrays in and functions out as the old check did) and 108 (Predicate.isString). 6 hits the merge brought from main: next/apps/fabrika/src/runtime-quotas.laws.test.ts 309 and 357 (Predicate.isString on a Proxy get key), 321 and 372 (Predicate.isFunction), oxlint-plugins/starters.ts 242 and oxlint-plugins/test-kind.ts 90 (Predicate.isString). None of the 13 runs in a browser: all are Proxy handlers, a fake deploy, a fetch stub, a SQL stub or lint plugin code on Node. No try/catch was touched, since every changed file already imported effect except starters.ts, which has none. Left, as known: 11 in the install-free .github/ci scripts, which cannot import Effect (required.mjs 44 and 69, gate.mjs 90 and 192, scheduled.mjs 46, 229, 274, 280, 488 and 502, changes.mjs 620), and 6 page-side lines that run in Chromium where Effect is not loaded (next/apps/fabrika/e2e/first-window.visual.test.ts 135 and 167 inside context.addInitScript, instance.visual.test.ts 137 and 246 and reload.visual.test.ts 85 and 158 inside page.evaluate); the lock pull request owes the 0563 C ignore line above each of those six. Slice total: 333 met (320 before, plus 13 counted from main and 1366), 309 fixed (296 before, plus these 13 by script), 17 left, 0 waiting on 1366. No disable line was added.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 8,
+  "note": "No law was written, changed, deleted or narrowed, and no plant ran: this round swaps guards inside existing tests and lint plugin code, keeping what each answers. Checks before the commit: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 fails only on the zero lock's three asks for oxlint-plugins, next/packages/libfabrika/src/client and next/programs/tezgah, which the later lock pull request owes; ratchet.ts exits 0; tsc --noEmit -p . passes in oxlint-plugins and in next/apps/fabrika. Tests run at the fix on top of 69eb51c54: oxlint-plugins/test-kind.test.ts, oxlint-plugins/integration-test-name.test.ts and next/apps/fabrika/src/runtime-quotas.laws.test.ts, all green. Not run, as the brief asks: the two .integration. files touched (runtime-recovery.laws.integration.test.ts, local-instance.integration.test.ts) and the three .visual. files, which CI's full run covers.",
+  "step": "tests"
+}

@@ -23,6 +23,7 @@
 // that do not assign to each other, so each has a small adapter that reads the facts out. This file
 // holds oxlint's (`visitor`); test-kind.ts holds oxc-parser's.
 import type { ESTree, Visitor } from "@oxlint/plugins";
+import { Predicate } from "effect";
 import { dotted } from "./match.ts";
 
 /** The real things 0584 names, by what a call opens. */
@@ -239,7 +240,7 @@ type Node = ESTree.Node;
 
 /** A string literal, or a template's text before its first placeholder. */
 const literal = (node: Node | undefined): string | null =>
-  node?.type === "Literal" && typeof node.value === "string"
+  node?.type === "Literal" && Predicate.isString(node.value)
     ? node.value
     : node?.type === "TemplateLiteral"
       ? (node.quasis[0]?.value.cooked ?? null)
