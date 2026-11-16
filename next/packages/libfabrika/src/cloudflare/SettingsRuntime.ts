@@ -58,11 +58,7 @@ export const runtime = <ROut, E>(ready: Layer.Layer<ROut, E>) => {
   ) {}
   const owner = ManagedRuntime.make(
     Layer.effectContext(
-      make(ready).pipe(
-        Effect.map((holder) => {
-          return Holder.context({ get: ScopedCache.get(holder, undefined) });
-        }),
-      ),
+      make(ready).pipe(Effect.map((holder) => Holder.context({ get: ScopedCache.get(holder, undefined) }))),
     ),
   );
   const context = owner.contextEffect.pipe(Effect.flatMap((services) => Context.get(services, Holder).get));

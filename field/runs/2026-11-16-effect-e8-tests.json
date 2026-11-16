@@ -11,14 +11,22 @@
   "model": "claude-sonnet-5-5",
   "effort": null,
   "outcome": "done",
-  "why": "Slice E8 of the Effect-checker sweep, in next/: unnecessaryArrowBlock at error in the 13 tsconfigs the plan names (lock in each package's own tsconfig, none in tsconfig.base.json). 30 hits met on main at 15bc73386: 27 in exam paths, fixed by hand with the Edit tool, 3 in product files left for the build (AccessFold.ts:60, cloudflare/SettingsRuntime.ts:62, telemetry/Records.ts:325, all in libfabrika). None sits in a file of pull request 1366. The 4 RepositoryTrustTest.ts hits kept every oxlint-disable-next-line above its own line.",
+  "why": "Slice E8 of the Effect-checker sweep, in next/: unnecessaryArrowBlock at error in the 13 tsconfigs the plan names (lock in each package's own tsconfig, none in tsconfig.base.json). 30 hits met on main at 15bc73386: 27 in exam paths and 3 in product files, all 30 fixed by hand with the Edit tool (AccessFold.ts:60, cloudflare/SettingsRuntime.ts:62, telemetry/Records.ts:325, all in libfabrika). None sits in a file of pull request 1366. The 4 RepositoryTrustTest.ts hits kept every oxlint-disable-next-line above its own line.",
   "tokens": null,
   "tools": null,
   "minutes": null,
   "plants": [
-    "One new block-bodied arrow in next/programs/inbox/src (locked): effect-tsgo diagnostics on that tsconfig counts 1 unnecessaryArrowBlock error; removed again, 0.",
-    "Dropped the E8 entry from next/programs/inbox/tsconfig.json with the planted line in place: the hit vanishes from the count (0); entry and plant restored."
+    {
+      "law": "L1: a hit of unnecessaryArrowBlock in a locked folder fails the typecheck",
+      "plant": "next/programs/inbox/src/plant-e8.ts: a block-bodied arrow that only returns an expression",
+      "result": "red"
+    },
+    {
+      "law": "L2 by hand: the E8 entry in next/programs/inbox/tsconfig.json",
+      "plant": "entry dropped with the planted arrow in place; the hit leaves the count",
+      "result": "green"
+    }
   ],
-  "note": "No script edited files: checkerfix.mjs was never run, all 27 fixes are hand edits. Ran: nice -n 15 vitest on the 9 changed test files (140 passed); pnpm format; pnpm lint passed every part except lint:dead, which aborts with SIGABRT in this box (twice; no export changed). Not run: pnpm typecheck, full suite. next/apps/fabrika and the other 11 tsconfigs are at zero; libfabrika is red on the 3 product hits only. fixtures/next/p10 has its own tsconfig outside the 13 and is not locked.",
+  "note": "No script edited files: checkerfix.mjs was never run, all 27 fixes are hand edits. Ran: nice -n 15 vitest on the 9 changed test files (140 passed); pnpm format; pnpm lint passed every part except lint:dead, which aborts with SIGABRT in this box (twice; no export changed). Not run: pnpm typecheck, full suite. next/apps/fabrika and the other 11 tsconfigs are at zero; libfabrika was red on the 3 product hits only until the second commit, a hand edit with the Edit tool, 3 more hand edits. fixtures/next/p10 has its own tsconfig outside the 13 and is not locked.",
   "step": "tests"
 }

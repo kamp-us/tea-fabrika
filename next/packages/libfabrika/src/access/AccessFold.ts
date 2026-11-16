@@ -57,6 +57,4 @@ export const allows = (model: Folded, event: MemberEvent): Result.Result<Folded,
  * @stability unstable
  * @category combinators
  */
-export const foldAccess = (events: ReadonlyArray<MemberEvent>): Access => {
-  return members(events.reduce(step, EMPTY));
-};
+export const foldAccess = (events: ReadonlyArray<MemberEvent>): Access => members(events.reduce(step, EMPTY));

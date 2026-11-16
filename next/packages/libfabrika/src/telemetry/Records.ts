@@ -322,11 +322,11 @@ const sqlStore = (sql: Sql): Store => {
       };
     },
     content: (spanId) =>
-      Option.map(one(`SELECT * FROM content WHERE "spanId" = ?`, spanId), (row) => {
-        return decodeState(row).state === "kept"
+      Option.map(one(`SELECT * FROM content WHERE "spanId" = ?`, spanId), (row) =>
+        decodeState(row).state === "kept"
           ? Content.cases.kept.make(decodeKept(row))
-          : Content.cases.deleted.make(decodeDeleted(row));
-      }),
+          : Content.cases.deleted.make(decodeDeleted(row)),
+      ),
     erase: (spanId, { by, at, reason }) =>
       void sql.exec(
         `UPDATE content SET state = 'deleted', message = NULL, "by" = ?, at = ?, reason = ?
