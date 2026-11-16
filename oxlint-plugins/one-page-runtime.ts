@@ -9,8 +9,10 @@
 // `runFork`, `ManagedRuntime.runSync`) is a run the page does not own.
 //
 // Every import of `runMain`, from any module and under any local name, is counted: only the one from
-// `@kampus/tuval/browser` under its own name passes. A member read through a string key
-// (`Effect["runPromise"]`, a template with no expressions) counts as the same name written plainly.
+// `@kampus/tuval/browser` under its own name passes. Every string literal and every template with no
+// expressions, wherever it stands, counts as the name it spells: `Effect["runPromise"]`,
+// `const k = "runPromise"; Effect[k](page)` and `Reflect.get(Effect, "runFork")` are each a run the
+// page does not own, and a `"runMain"` is a second page runtime. An import's source never spells one.
 import type { CreateRule } from "@oxlint/plugins";
 import type { Node } from "./match.ts";
 
@@ -92,11 +94,20 @@ export const onePageRuntime: CreateRule = {
           read(node, node.name);
         }
       },
-      MemberExpression(node) {
-        const name = node.computed ? spelled(node.property) : null;
+      Literal(node) {
+        const { parent } = node as Node & { readonly parent: Node };
+        const name = spelled(node);
+
+        // A specifier's `"runMain"` is an import, counted in `Program:exit`.
+        if (name !== null && !(name === NAME && parent.type === "ImportSpecifier")) {
+          read(node, name);
+        }
+      },
+      TemplateLiteral(node) {
+        const name = spelled(node);
 
         if (name !== null) {
-          read(node.property, name);
+          read(node, name);
         }
       },
       "Program:exit"(program) {
