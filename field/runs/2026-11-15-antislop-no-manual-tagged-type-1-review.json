@@ -15,18 +15,18 @@
   "plants": [
     {
       "law": "next/packages/libfabrika/src/runtime/Client.laws.test.ts: Ready pinned to Pending's ready case",
-      "plant": "by reading: Data.TaggedEnum drops the `?` on traceId",
-      "result": "red: the homomorphic map keeps `?`, and making the product's traceId required makes the toEqualTypeOf pin differ"
+      "plant": "by reading: the product's ready case makes traceId required, so the exam's TaggedEnum copy (which keeps the `?` through its homomorphic map) differs from it",
+      "result": "red"
     },
     {
       "law": "next/packages/libfabrika/src/access/Access.types.test.ts: no service of access/ fails with an error tagged LedgerError",
-      "plant": "by reading: a SessionManager method gains an error tagged LedgerError",
-      "result": "red: Types.ExtractTag finds it, so the toBeNever check fails"
+      "plant": "by reading: a SessionManager method gains an error tagged LedgerError, which Types.ExtractTag finds, so the toBeNever check fails",
+      "result": "red"
     },
     {
       "law": "next/packages/libfabrika/src/runtime/Program.types.test.ts: boot extends the stepped or refused cases",
-      "plant": "by reading: the stepper's init answer gains a third tag",
-      "result": "red: the member with the new tag extends neither case of the TaggedEnum union"
+      "plant": "by reading: the stepper's init answer gains a third tag, whose member extends neither case of the TaggedEnum union",
+      "result": "red"
     }
   ],
   "tokens": null,
