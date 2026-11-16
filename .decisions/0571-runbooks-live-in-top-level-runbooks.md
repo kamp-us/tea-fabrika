@@ -3,17 +3,17 @@ id: 0571
 title: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
 status: accepted
 date: 2026-11-15
-tags: [runbook, operations, checklist, docs, sev, skills, migration]
+tags: [runbook, operations, checklist, docs, sev, skills, wipe, dev-home]
 ---
 
 # 0571: Runbooks live in a top-level .runbooks/ folder, one checklist file per operation, written the first time we do it for real, and docs/ holds only what fabrika is
 
-**What this decides:** an operation we run by hand, such as a migration or a sev, gets a runbook (a checklist for when that thing happens) in `.runbooks/`, and `docs/` stays for documentation of what fabrika is.
+**What this decides:** an operation we run by hand, such as a sev or wiping the dev and test homes after a saved shape changes, gets a runbook (a checklist for when that thing happens) in `.runbooks/`, and `docs/` stays for documentation of what fabrika is.
 
 ```text
 .runbooks/
-  migrate-stored-data.md    first: move stored data to a new saved shape
   sev.md                    first: a sev (CI is the emergency)
+  wipe-dev-test-homes.md    second: a saved shape changed, wipe the dev and test homes
 ```
 
 ```markdown
@@ -51,7 +51,7 @@ moment that operation happens.**
 - A runbook is written the first time we do the operation for real, from what we did. Nobody
   writes one in advance from a guess.
 - A runbook links the decision it follows. It adds no rule of its own: a rule goes in `.decisions/`.
-- The first two are migrating stored data to a new saved shape, and a sev.
+- The first two are a sev, and "a saved shape changed: wipe the dev and test homes".
 - Skills stay. A skill is a runbook for a general idea, as the
   [sev skill](../.agents/skills/sev/SKILL.md) is for how the lead acts when CI is the emergency. The
   runbook is the checklist for one operation; the skill is the judgment around the idea
