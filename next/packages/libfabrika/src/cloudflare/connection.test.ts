@@ -462,13 +462,19 @@ it.effect("scenario: reserved is counted, other refusals and ok keep rpc spans, 
       ]);
 
       w.answer(Answer.cases.refused.make({ reason: "bad_input" }));
-      yield* service.message(socket, Formatter.formatJson({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }));
+      yield* service.message(
+        socket,
+        Formatter.formatJson({ jsonrpc: "2.0", id: 2, method: "process.send", params: {} }),
+      );
       expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 2,
         error: { data: { reason: "bad_input" } },
       });
       w.answer(Answer.cases.ok.make({ result: { delivered: true } }));
-      yield* service.message(socket, Formatter.formatJson({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }));
+      yield* service.message(
+        socket,
+        Formatter.formatJson({ jsonrpc: "2.0", id: 3, method: "process.send", params: {} }),
+      );
       expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(frames.at(-1)!)).toMatchObject({
         id: 3,
         result: { delivered: true },

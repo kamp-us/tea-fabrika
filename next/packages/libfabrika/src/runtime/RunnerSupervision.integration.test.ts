@@ -2341,7 +2341,11 @@ describe("P34c slice 1: the runner records each exit's structured reason", () =>
             Arr.map(expected.exits, ({ process, reason }) => [process, reason] as const),
           );
           // L8: the message stays in deletable trace content, never in a lifecycle fact or signal.
-          const serialized = Formatter.formatJson([rows, signals, Arr.filter(w.ledger.rows(), (row) => row._tag === "send")]);
+          const serialized = Formatter.formatJson([
+            rows,
+            signals,
+            Arr.filter(w.ledger.rows(), (row) => row._tag === "send"),
+          ]);
           expect(Str.includes(SENTINEL)(serialized), "no exception message in exit facts or monitor payloads").toBe(
             false,
           );

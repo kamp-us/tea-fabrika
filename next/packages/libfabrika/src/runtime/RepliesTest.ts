@@ -3,7 +3,20 @@
 // chosen from what the walk has stored so far, and every answer is compared with an independent
 // record of the first reply under each registered name and letter.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Formatter, Layer, Predicate, Result, Schema, Scope, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Context,
+  Effect,
+  Exit,
+  Formatter,
+  Layer,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Str from "effect/String";

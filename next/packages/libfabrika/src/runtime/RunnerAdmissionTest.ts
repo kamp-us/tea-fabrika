@@ -635,7 +635,12 @@ const walk = Effect.fnUntraced(function* (
     const outputs = Arr.flatMap(written, (output) => texts(output, decoded));
 
     for (const body of refusedBodies) {
-      const forms = [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body), Str.slice(0, 14)(body)];
+      const forms = [
+        body,
+        Str.slice(1, -1)(Formatter.formatJson(body)),
+        encodeURIComponent(body),
+        Str.slice(0, 14)(body),
+      ];
       expect(
         Arr.filter(outputs, (output) => Arr.some(forms, (form) => Str.includes(form)(output))),
         "input text leaked",

@@ -14,6 +14,7 @@ import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@k
 import { runsFor } from "@kampus/vitest";
 import { Array as Arr, String as Str } from "effect";
 import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -23,7 +24,6 @@ import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import * as DateTime from "effect/DateTime";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {

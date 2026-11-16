@@ -711,9 +711,10 @@ const walk = (rig: Rig, limits: Limits, tape: ReadonlyArray<Cell>, allowed: Read
           yield* w.settle;
           recovered();
           const receipt = yield* w.recovery((s) => s.receipt(id));
-          expect(Str.includes(lost)(Formatter.formatJson([w.rows(), receipt])), "an uncaptured class survives nowhere").toBe(
-            false,
-          );
+          expect(
+            Str.includes(lost)(Formatter.formatJson([w.rows(), receipt])),
+            "an uncaptured class survives nowhere",
+          ).toBe(false);
           break;
         }
 

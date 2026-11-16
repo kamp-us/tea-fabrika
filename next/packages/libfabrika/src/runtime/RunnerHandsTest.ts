@@ -40,7 +40,21 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Exit, Fiber, Formatter, Layer, Option, Result, Schedule, Schema, Scope, Stream } from "effect";
+import {
+  Context,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Formatter,
+  Layer,
+  Option,
+  Result,
+  Schedule,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import * as Arr from "effect/Array";
 import * as Str from "effect/String";
 import * as fc from "fast-check";
