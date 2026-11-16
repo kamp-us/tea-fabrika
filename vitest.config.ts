@@ -7,6 +7,7 @@ import { parseCLI } from "vitest/node";
 import { isScript, isTest, load, reached } from "./oxlint-plugins/script-reads.mjs";
 import packageJson from "./package.json" with { type: "json" };
 import { changedFiles } from "./vitest.changed.ts";
+import { HOST_RUN, hostRun } from "./vitest.hostrun.ts";
 import { Shards } from "./vitest.shards.ts";
 
 // Today's version's tests. It is frozen, and no CI job runs them (0525, 0533); they run on the laptop.
@@ -17,6 +18,7 @@ const TOOLING = [
   "oxlint-plugins/*.test.ts",
   "vitest.shards.test.ts",
   "vitest.changed.test.ts",
+  "vitest.hostrun.test.ts",
   ".github/ci/*.test.ts",
   // workflow-lint's families of laws, each test file beside its module.
   ".github/ci/workflow-lint/*.test.ts",
@@ -167,23 +169,19 @@ const localLimits = () => {
 // globs, the path filters, then `--changed`'s import graph, so the files it returns are the files
 // the run would start.
 //
-// The one way in is HOST_RUN, set to `1` for one command, and only once 0178 has been met: the lead
-// has read every line the test can reach that signals a process or calls launchd, and the owner
-// has said yes to this run. Every other proof of such a law is a full run of scheduled.yaml on its
+// Where such a test may start is vitest.hostrun.ts's `hostRun`: in CI, in a cloud box, or with the
+// owner's yes for one command once 0178 has been met (the lead has read every line the test can
+// reach that signals a process or calls launchd, and the owner has said yes to this run). On the
+// laptop, every other proof of such a law is a cloud box or a full run of scheduled.yaml on its
 // branch: `gh workflow run scheduled.yaml --ref <branch>`.
-//
-// CI is read from `CI`, which GitHub's runners set and nothing on the laptop does. Nothing stops a
-// shell from setting `CI=1` or HOST_RUN itself: this guards against an accident, not against an
-// agent that means to get around it.
 const HOST_ONLY = /\.(?:integration|visual)\.test\.[cm]?[jt]sx?$/;
-const HOST_RUN = "FABRIKA_HOST_RUN_OWNER_APPROVED";
 const checked = new WeakSet<object>();
 
 const hostOnly: Plugin = {
   name: "fabrika-local-host-only",
   async configureVitest({ vitest }) {
     // Each project runs this hook; the files are the whole run's, so one look is enough.
-    if (!cliRun() || process.env.CI || process.env[HOST_RUN] === "1" || checked.has(vitest)) {
+    if (!cliRun() || hostRun(process.env, process.platform)._tag === "allow" || checked.has(vitest)) {
       return;
     }
 
@@ -199,7 +197,7 @@ const hostOnly: Plugin = {
           `Local host-only test run refused (decision 0178). This run reaches ${reached.length} real-resource file(s):`,
           ...reached.slice(0, 5).map((path) => `  ${path}`),
           ...(reached.length > 5 ? [`  and ${reached.length - 5} more`] : []),
-          "Prove the law with a full run on its branch instead: gh workflow run scheduled.yaml --ref <branch>.",
+          "Prove the law in a cloud box, or with a full run on its branch: gh workflow run scheduled.yaml --ref <branch>.",
           `Only after the lead's read and the owner's yes (0178), run it with ${HOST_RUN}=1.`,
         ].join("\n"),
       );

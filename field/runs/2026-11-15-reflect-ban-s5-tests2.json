@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s5-tests2",
+  "ticket": "kamp-us/tea-fabrika#1056",
+  "pr": "kamp-us/tea-fabrika#1411",
+  "started": "2026-11-15T19:00:35-08:00",
+  "ended": "2026-11-15T19:04:40-08:00",
+  "parent": "2026-11-15-reflect-ban-s5-review1",
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round 1 of slice 5 of the Reflect ban, in next/packages/libfabrika/src/settings, the law half (0177: one agent writes the law and the fix). The review found that put in TomlParser.ts no longer steps into an array, so a [[name]] header put its table on the parent under the key 0 and left the array empty. The new law in TomlParser.test.ts parses generated documents of arrays of tables, names drawn from __proto__, constructor, toString and plain keys, with a [name.sub] table and a [[name.items]] array inside an element, and compares the value with a model that keeps every key as an own key. Every run holds [[__proto__]], [[constructor]] and [[toString]], each with a table and an array inside its last element, and fails loudly if not. It is red on 892112e1f and green on origin/main's parser, which proves the model. 200 runs fast, 1000 full, seed 119120.",
+  "laws": [
+    {
+      "law": "T1056 an array of tables parses into its array, hostile names and tables inside an element included",
+      "red": "on 892112e1f: expected { '0': {}, …(5) } to deeply equal { __proto__: [ {}, { …(2) } ], …(3) }"
+    }
+  ],
+  "plants": [
+    {
+      "law": "T1056 array of tables",
+      "plant": "TomlParser.ts put steps into the next value only when Predicate.isObject holds (the 892112e1f guard)",
+      "result": "red"
+    },
+    {
+      "law": "T1056 array of tables",
+      "plant": "TomlParser.ts put steps into the array but writes the last segment onto the table above it",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "Each plant was run once after the build's fix was in the working tree, then restored by copy; git status showed only the two meant files. The law was also run once with origin/main 82296f5cf's TomlParser.ts copied in: green, so the model matches main. Also run at FABRIKA_TEST_DEPTH=full: green after the fix. The finding row 2026-11-15-reflect-plan-scalar-midpath-prose, from the review, is saved with this commit.",
+  "step": "tests",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null
+}
