@@ -96,7 +96,7 @@ type CounterModel = { readonly count: number; readonly step?: number };
 
 const schemaFor = (spec: Spec) =>
   spec.shape === "widened"
-    ? Schema.Struct({ count: Schema.Number })
+    ? Schema.Struct({ count: Schema.Finite })
     : spec.shape === "narrowed"
       ? Schema.Struct({ count: Schema.Int.check(Schema.isBetween({ minimum: spec.min, maximum: spec.max })) })
       : spec.shape === "field"
@@ -129,7 +129,7 @@ const upgradesFor = (spec: Spec) =>
         spec.shape === "field" && typeof m === "object" && m !== null && !("step" in m) ? { ...m, step: 1 } : m,
     }));
 
-const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Number }), ok: Schema.Number, err: [] });
+const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Finite }), ok: Schema.Finite, err: [] });
 const changed = Schema.TaggedStruct("changed", { count: Schema.Int });
 
 const write = Cmd.make("write", {

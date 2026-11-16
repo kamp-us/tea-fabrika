@@ -43,9 +43,9 @@ export const MailReplies = Schema.TaggedUnion({
       ref: Schema.NullOr(Schema.String),
       grant: Schema.Struct({ source: Schema.String, to: Schema.String }),
       from: Line.mapFields(({ _tag, body, ...fields }) => fields),
-      arrivedAt: Schema.Number,
-      rev: Schema.Number,
-      pos: Schema.Number,
+      arrivedAt: Schema.Finite,
+      rev: Schema.Finite,
+      pos: Schema.Finite,
     }),
   },
   refused: { reason: MailRefusal },
@@ -67,8 +67,8 @@ export type MailReply = typeof MailReplies.Type;
 export type ConnectionId = string & Brand.Brand<"ConnectionId">;
 
 const GrantReply = Schema.TaggedUnion({
-  applied: { rev: Schema.Number },
-  ignored: { rev: Schema.Number, reason: Schema.String },
+  applied: { rev: Schema.Finite },
+  ignored: { rev: Schema.Finite, reason: Schema.String },
   refused: { reason: Schema.String },
 });
 

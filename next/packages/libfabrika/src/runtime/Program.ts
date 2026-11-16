@@ -46,8 +46,8 @@ const Schemas = Schema.declare(isDeclared, { expected: "a schema" });
  */
 export const Refusal = Schema.Struct({
   reason: Schema.String,
-  now: Schema.optionalKey(Schema.Number),
-  most: Schema.optionalKey(Schema.Number),
+  now: Schema.optionalKey(Schema.Finite),
+  most: Schema.optionalKey(Schema.Finite),
 });
 /**
  * A program's own no to a fresh Msg, as `Refusal` decodes it.
@@ -489,7 +489,7 @@ export const Step = Schema.TaggedUnion({
     model: Schema.Json,
     view: Schema.Json,
     cmds: Schema.Array(Schema.Json),
-    wake: Schema.NullOr(Schema.Number),
+    wake: Schema.NullOr(Schema.Finite),
   },
   refused: Refusal.fields,
 });
@@ -585,7 +585,7 @@ const isTyped = (u: unknown): u is Typed =>
 
 const decodeTyped = (u: unknown): Option.Option<Typed> => (isTyped(u) ? Option.some(u) : Option.none());
 
-const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Number));
+const decodeWake = Schema.decodeUnknownResult(Schema.NullOr(Schema.Finite));
 
 /** What each failed result failed with, in order: a check that meets several keeps them all. */
 const failures = (results: ReadonlyArray<Result.Result<unknown, unknown>>): ReadonlyArray<unknown> =>

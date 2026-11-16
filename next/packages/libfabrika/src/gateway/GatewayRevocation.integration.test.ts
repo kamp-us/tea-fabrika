@@ -92,7 +92,7 @@ const LegacyReceived = Schema.TaggedStruct("received", {
   method: Schema.String,
   target: Schema.String,
   by: Writer,
-  arrivedAt: Schema.Number,
+  arrivedAt: Schema.Finite,
   traceId: Schema.String,
   spanId: Schema.String,
   input: Schema.Json,
@@ -573,7 +573,7 @@ describe("P17a, revoke stops writes at the final door", () => {
       fc.asyncProperty(fc.integer(), fc.uuid(), async (n, letter) => {
         await Effect.runPromise(
           Effect.gen(function* () {
-            const input = Schema.TaggedStruct("add", { n: Schema.NumberFromString });
+            const input = Schema.TaggedStruct("add", { n: Schema.FiniteFromString });
             const w = yield* world(input),
               d = yield* setup(w);
             w.controls.letter = letter;

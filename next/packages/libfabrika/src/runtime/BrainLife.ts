@@ -13,7 +13,7 @@ import { Schema } from "effect";
 export const BrainState = Schema.TaggedUnion({
   starting: {},
   online: { start: Schema.String, build: Schema.String },
-  waiting: { after: Schema.String, until: Schema.Number, reason: Schema.String },
+  waiting: { after: Schema.String, until: Schema.Finite, reason: Schema.String },
   braked: { after: Schema.String, reason: Schema.String },
   stopping: {},
   stopped: {},
@@ -31,7 +31,7 @@ const Msg = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("waiting"),
     after: Schema.String,
-    until: Schema.Number,
+    until: Schema.Finite,
     reason: Schema.String,
   }),
   Schema.Struct({ type: Schema.Literal("braked"), after: Schema.String, reason: Schema.String }),

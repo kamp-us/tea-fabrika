@@ -14,13 +14,13 @@ import { Saved } from "./State.ts";
 const Upgraded = Schema.Struct({ saved: Saved, ran: Schema.Array(Schema.String) });
 
 const Outcome = Schema.TaggedUnion({
-  Ok: { value: Schema.Unknown, at: Schema.Number },
+  Ok: { value: Schema.Unknown, at: Schema.Finite },
   Err: {
     error: Schema.declare<Tagged>(
       (value): value is Tagged =>
         typeof value === "object" && value !== null && "_tag" in value && typeof value._tag === "string",
     ),
-    at: Schema.Number,
+    at: Schema.Finite,
   },
 });
 

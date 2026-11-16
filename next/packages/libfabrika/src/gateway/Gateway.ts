@@ -125,7 +125,7 @@ const Binding = Schema.Struct({
   name: Schema.String,
   personOnly: Schema.Boolean,
   digest: Schema.String,
-  arrivedAt: Schema.Number,
+  arrivedAt: Schema.Finite,
   span: Link,
   sentAt: Schema.String,
   state: EnvelopeState,
@@ -146,7 +146,7 @@ const LegacyInputEvent = Schema.TaggedUnion({
     method: Schema.String,
     target: Schema.String,
     by: Writer,
-    arrivedAt: Schema.Number,
+    arrivedAt: Schema.Finite,
     traceId: Schema.String,
     spanId: Schema.String,
     input: Schema.optionalKey(Schema.Json),
@@ -155,7 +155,7 @@ const LegacyInputEvent = Schema.TaggedUnion({
     method: Schema.String,
     target: Schema.String,
     by: Writer,
-    arrivedAt: Schema.Number,
+    arrivedAt: Schema.Finite,
     traceId: Schema.String,
     spanId: Schema.String,
     reason: Schema.String,
@@ -176,8 +176,8 @@ const InputEvent = Schema.TaggedUnion({
 });
 
 const GrantReply = Schema.TaggedUnion({
-  applied: { rev: Schema.Number },
-  ignored: { rev: Schema.Number, reason: Schema.String },
+  applied: { rev: Schema.Finite },
+  ignored: { rev: Schema.Finite, reason: Schema.String },
   refused: { reason: Schema.String },
 });
 

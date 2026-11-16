@@ -61,7 +61,7 @@ export const Incoming = Schema.Struct({
   envelope: Schema.Struct({
     id: InputId,
     by: Writer,
-    arrivedAt: Schema.Number,
+    arrivedAt: Schema.Finite,
     input: Schema.Unknown,
   }),
   sentAt: Schema.String,

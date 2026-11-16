@@ -43,8 +43,8 @@ export const nth = <A>(items: ReadonlyArray<A>, i: number): A => {
 /** The answer the record expects, made by its own schema rather than the module's. */
 const Refused = Schema.TaggedStruct("refused", {
   reason: Schema.String,
-  now: Schema.optionalKey(Schema.Number),
-  most: Schema.optionalKey(Schema.Number),
+  now: Schema.optionalKey(Schema.Finite),
+  most: Schema.optionalKey(Schema.Finite),
 });
 
 /** What a corrupt row holds instead: an accepted placing, or a refusal with a malformed reason. */

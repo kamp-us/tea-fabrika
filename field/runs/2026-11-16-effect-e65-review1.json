@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e65-review1",
+  "ticket": 1075,
+  "pr": null,
+  "started": "2026-11-16T00:24:35-08:00",
+  "ended": "2026-11-16T00:51:37-08:00",
+  "parent": "2026-11-16-effect-e65-tests1",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of Effect sweep slice E65 (check schemaNumber, mechanical) in next/packages/libfabrika/src, range 891075e7a..e486edb48 (the stack base fabrikalfa/effect-mechanical, never main): merge-ready, one finding row. Recount at the base with only schemaNumber at error (effect-tsgo diagnostics, lspconfig, libfabrika tsconfig): 55 hits, runtime 35, gateway 12, cloudflare 8, as the plan's E65 row says. Every removed line of the diff is one of those hit lines (54 lines, 55 hits, checked by script in the scratchpad), and every change is Schema.Number to Schema.Finite (53) or Schema.NumberFromString to Schema.FiniteFromString (2), nothing else. Recount at the head: 0 in libfabrika and 0 in next/apps/fabrika; the Schema.Number left in source is either Schema.Number.check(Schema.isFinite(), ...), which the check does not flag, or program text inside a string. No telemetry file is in the diff, so the sink's checked hour (-Infinity) is untouched. Each narrowed field is a clock reading, a rev, a position or a count; the writers read Clock.currentTimeMillis (WatchersSql.ts:90, :106), and JSON rows cannot hold an infinity, so no stored row is refused. FiniteFromString keeps the string encoding, so saved watcher rows keep their shape. One behavior moves: a program whose wake returns NaN or Infinity is now ProgramDown at Program.ts:738 instead of passing a value JSON writes as null; no law holds the old behavior and the new one is the stricter one. Field row lists the three folders with a hit for the integrator's lock; no lock and no L1 by coordinator design. Decision 0565 is followed (a check fixed to zero with the check's own fix); 0524 holds (no list entry, no disable line). The finding: watchers.ts:6's comment still says the string encoding keeps non-finite values, which line 7 now refuses, and GatewayRevocation.integration.test.ts:610 still names NumberFromString.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 27,
+  "note": "Read-only apart from this row. Head e486edb48. pnpm typecheck exit 0. loosening.sh 891075e7a HEAD: 10 unrecognized-change hits, all test-side Schema.Number to Schema.Finite: none loosens a law (readers.laws' fc.jsonValue never yields a non-finite number, so its malformed set is the same; the other test schemas narrow with the product or tighten an assertion, RunnerInitTest.ts:247). Plants by reading in readers.laws L(control bucket bytes), watchers.test W1 and RunnerInitTest's deadline decode. Tests one file at a time, maxWorkers 1, at e486edb48: 24 files green, 17 unit and 7 integration (GatewayRevocation, Runner, node Watchers, RunnerInit, Reload, Replies, ProgramMailRuntime). Runner.integration.test.ts first lost one test (watcher fanout plant, 93 s) to the 60 s timeout at load 9; rerun alone, 117 of 117 passed. Nothing refused by the 0178 guard. git merge-tree onto origin/fabrikalfa/effect-mechanical 71c4e4b: no conflict. The started time is the first time read in this run, a few minutes after it began.",
+  "step": "review"
+}

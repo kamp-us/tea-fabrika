@@ -9,7 +9,7 @@ import { Model, watchers } from "./watchers.ts";
 
 const Client = Schema.Struct({
   client: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
-  at: Schema.Number,
+  at: Schema.Finite,
   position: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 

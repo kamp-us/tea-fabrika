@@ -135,14 +135,14 @@ const REQUESTERS = Object.fromEntries(
 ) as Record<Pair, ReturnType<typeof mailRequester>>;
 
 const TimerModel = Schema.Struct({
-  at: Schema.NullOr(Schema.Number),
-  ticks: Schema.Array(Schema.Number),
+  at: Schema.NullOr(Schema.Finite),
+  ticks: Schema.Array(Schema.Finite),
   requests: Schema.Int,
 });
 
 const TimerMsg = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("arm"), at: Schema.Number }),
-  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("arm"), at: Schema.Finite }),
+  Schema.Struct({ type: Schema.Literal("timer"), at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("crash") }),
   Schema.Struct({ type: Schema.Literal("request"), ref: Schema.String, value: Schema.Int, reply: Schema.String }),
   Schema.Struct({ type: Schema.Literal("note"), token: Schema.String }),

@@ -3,7 +3,7 @@ import { Array as Arr, Schema, SchemaTransformation } from "effect";
 
 const Config = Schema.Struct({
   most: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
-  ttl: Schema.Number,
+  ttl: Schema.Finite,
 });
 
 const Pending = Schema.Struct({
@@ -11,7 +11,7 @@ const Pending = Schema.Struct({
   label: Schema.String,
   location: Schema.String,
   code: Schema.String,
-  until: Schema.Number,
+  until: Schema.Finite,
   clients: Schema.NonEmptyArray(Schema.String),
   pass: Schema.NullOr(Schema.String),
   has: Schema.Array(Schema.String),
@@ -44,10 +44,10 @@ const Msg = Schema.Union([
     has: Pending.fields.has,
     as: Pending.fields.as,
     client: Schema.String,
-    at: Schema.Number,
+    at: Schema.Finite,
   }),
   Schema.Struct({ type: Schema.Literal("leave"), key: Schema.String, client: Schema.String }),
-  Schema.Struct({ type: Schema.Literal("expire"), at: Schema.Number }),
+  Schema.Struct({ type: Schema.Literal("expire"), at: Schema.Finite }),
   Schema.Struct({ type: Schema.Literal("accepted"), keys: Schema.Array(Schema.String) }),
 ]);
 
@@ -57,7 +57,7 @@ export const Row = Schema.Struct({
   label: Schema.String,
   location: Schema.String,
   code: Schema.String,
-  until: Schema.Number,
+  until: Schema.Finite,
   tabs: Schema.Int,
   clients: Schema.NonEmptyArray(Schema.String),
   pass: Schema.NullOr(Schema.String),

@@ -6,7 +6,7 @@ import { Schema } from "effect";
 const Life = {
   id: Schema.NonEmptyString,
   start: Schema.NonEmptyString,
-  at: Schema.Number,
+  at: Schema.Finite,
 };
 
 const Reason = Schema.Literals(["open", "crash", "memory", "core"]);
@@ -15,7 +15,7 @@ const Exit = {
   exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int)),
   signal: Schema.optionalKey(Schema.NullOr(Schema.String)),
   bytes: Schema.optionalKey(Schema.Int),
-  backoff: Schema.optionalKey(Schema.Number),
+  backoff: Schema.optionalKey(Schema.Finite),
 };
 
 /**
@@ -49,11 +49,11 @@ export const BrainEvent = Schema.TaggedUnion({
     pid: Schema.Int,
     bytes: Schema.Int,
     limit: Schema.Int,
-    grace: Schema.Number,
+    grace: Schema.Finite,
   },
   killed: { ...Life, pid: Schema.Int },
   exited: { ...Life, reason: Reason, ...Exit },
-  restarting: { ...Life, reason: Reason, ...Exit, backoff: Schema.Number },
+  restarting: { ...Life, reason: Reason, ...Exit, backoff: Schema.Finite },
   braked: { ...Life, reason: Schema.Literals(["intensity", "restart_failed"]), ...Exit },
   stopped: { ...Life, reason: Schema.Literal("stop"), ...Exit },
 });
