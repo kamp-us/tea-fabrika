@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1057-antislop-no-manual-tag-comparison-4-review",
+  "ticket": "1057",
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-16T01:59:24-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Review of record for slice AS-no-manual-tag-comparison-4 (anti-slop-effect/no-manual-tag-comparison, decisions 0563 and 0567), in our tooling (.agents) and next/ (libfabrika desktop and permissions), range eeb8ecdbb..869e1e2ae on branch fabrikalfa/antislop-no-manual-tag-comparison-4: merge-ready, no blocking fault, no finding row. Recount with the rule forced to error in a scratch config outside the repo: 314 hits at eeb8ecdbb (.agents 221, desktop 91, permissions 2; 134 in test files and shared suites, 180 in product files), 0 at the head, as both step rows say. Every rewrite was read and answers what the old code answered: each exhaustive Union.match or Match.valueTags replaces an if chain or switch whose cases the union lists in full, so the type check holds it; each Match.orElse or matchOrElse keeps the old default branch (chain.ts step_run_err, flow/machine.ts step_run_err, flow/run.ts tapError, land.ts queue and sev0Allows, BrainServiceManaged.ts translate and the native code read, host.ts outcomeName, Remove.ts exitCode, movecheck.ts pathIn); Option and Result checks keep their meaning (Merge.ts, Queue.ts, Publish.ts, Freeze.ts, Incident.ts, drive.ts mutboxAnswer and firstEventAt). The three helpers answer the same: polled (BrainLife.ts) is the old ternary shared by fail and the wake handler; confirmation (BrainServiceManaged.ts) is the old stopped-reads-removed expression used twice; whileOpen (Level.ts) is the old 'no sev0 is open' refusal shared by allowed, next and closed. Predicate.isTagged is used only on fieldfile.ts's Record<string, unknown> row and quest.ts's JSON.parse result typed unknown, both 0567 point 4. The build touched no test file, shared suite or test support file, and no exam-paths.json glob. No assertion was removed or narrowed: each loosening.sh 'removed expect' hit is a rewritten expect that checks the same value, and two (chain.test.ts's fake-adapter turn laws) now run where they used to be skipped behind an early return.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Read-only apart from this row; head 869e1e2ae. Ran: pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 (exit 1, only the expected zero-lock lines from oxlint-plugins/anti-slop.ts for .agents/**, next/packages/libfabrika/src/desktop/** and next/packages/libfabrika/src/permissions/**; the other 17 parts pass); one pnpm typecheck (exit 0); loosening.sh eeb8ecdbb HEAD (37 hits, all import lines or rewritten expects, none a loosened law); 37 test files one at a time, all green, including the reached BrainControlLaunchd.laws.integration.test.ts (15) and Relations.integration.test.ts (1). Plants in a scratch copy, never the branch: Level.ts whileOpen accepting a closed sev0 turns 2 Level.test.ts laws red; gc.ts decidePin removing on a refused pgrep turns gc.test.ts's pgrep law red; movecheck.ts moveFaults ignoring named modified files turns movecheck.test.ts's move PR law red. Started time not taken at the start, so null. For the integrator: git merge-tree with origin/main conflicts in 22 of this slice's files beyond the 40 the stack top eeb8ecdbb already conflicts in, because main holds 1501 and 1507 as squashes; the fold onto the landed stack resolves them.",
+  "plants": [
+    { "law": ".agents/skills/sev/scripts/Level.test.ts: fold property and the two-opened vector", "plant": "Level.ts whileOpen returns the closed sev0 as a success", "result": "red" },
+    { "law": ".agents/skills/lead/scripts/gc.test.ts: a process list pgrep cannot read always keeps the pin", "plant": "gc.ts decidePin removes on refused", "result": "red" },
+    { "law": ".agents/skills/lead/scripts/movecheck.test.ts: a move PR changes only the table's renames, files that only follow them, and the named files", "plant": "movecheck.ts moveFaults checks a named modified file", "result": "red" }
+  ],
+  "step": "review"
+}
