@@ -636,17 +636,18 @@ const frameText = (r: FrameRecipe, state: { readonly held: ReadonlyArray<W>; rea
     held !== undefined && Math.floor(state.pick / 2) % 2 === 0
       ? { stream: held.stream, after: held.after + 1 }
       : r.params;
-  const base: Record<string, unknown> = {
+  const base: Record<string, fc.JsonValue> = {
     ...r.extra,
     jsonrpc: "2.0",
     id,
     method: r.method,
     ...(r.presence === "missing" ? {} : { params: r.presence === "null" ? null : params }),
   };
-  const [change, value] = r.mutation.split(":");
+  // Every mutation with a change names its value after the colon, so the default is never read.
+  const [change, value = ""] = r.mutation.split(":");
 
   if (change === "drop") {
-    delete base[value!];
+    delete base[value];
   } else if (change === "jsonrpc") {
     base.jsonrpc = value;
   } else if (change === "id") {
@@ -706,7 +707,7 @@ class Refused {
 
 /** A fresh failure value from its recipe; a proxy logs each read of `reason` in `trace`. */
 const failure = (f: Failure, trace: Array<string>): unknown => {
-  const fields: Record<string, unknown> = f.reason === "absent" ? {} : { reason: f.reason };
+  const fields: { readonly reason?: Failure["reason"] } = f.reason === "absent" ? {} : { reason: f.reason };
   const extra = f.extra === undefined ? {} : { extra: f.extra };
   const target: unknown = (() => {
     switch (f.kind) {

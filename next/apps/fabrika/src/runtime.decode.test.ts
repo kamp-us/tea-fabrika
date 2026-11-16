@@ -122,7 +122,7 @@ type Message = typeof Message extends fc.Arbitrary<infer A> ? A : never;
 
 /** A fresh message from its recipe; a proxy logs each read of `type` in `trace`. */
 const message = (r: Message, trace: Array<string>): unknown => {
-  const fields: Record<string, unknown> = r.type === "absent" ? {} : { type: r.type };
+  const fields: { readonly type?: Message["type"] } = r.type === "absent" ? {} : { type: r.type };
   const target: unknown = (() => {
     switch (r.container) {
       case "plain":

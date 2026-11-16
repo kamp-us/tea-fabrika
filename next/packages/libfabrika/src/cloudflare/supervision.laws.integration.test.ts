@@ -281,7 +281,13 @@ const policySamples = fc
 
 it("P1: the Worker description carries the checked policy and rejects corrupt RPC declarations", async () => {
   type Model = { policy: Policy | undefined; valid: boolean; checked: boolean };
-  type Real = { raw: Record<string, unknown>; checked: unknown; described: unknown | null; calls: number };
+  /** The walk's raw declaration: it sets, corrupts or deletes the policy, and hands the rest on whole. */
+  type Real = {
+    raw: { readonly machine?: unknown; policy?: unknown };
+    checked: unknown;
+    described: unknown | null;
+    calls: number;
+  };
   const checkPolicy = (value: unknown, policy: Policy | undefined) => {
     const fields = Schema.decodeUnknownSync(Schema.Struct({ policy: Schema.optionalKey(Schema.Unknown) }))(value);
     expect(fields).toEqual(policy === undefined ? {} : { policy });
@@ -388,7 +394,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
   await fc.assert(
     fc.asyncProperty(commands, async (moves) => {
       const real: Real = { raw: {}, checked: null, described: null, calls: 0 };
-      real.raw = {
+      const declaration = {
         name: "counter",
         machine: Machine.make({
           model: Model,
@@ -408,6 +414,7 @@ it("P1: the Worker description carries the checked policy and rejects corrupt RP
         writes: {},
         wake: () => null,
       };
+      real.raw = declaration;
       await fc.asyncModelRun(() => ({ model: { policy: undefined, valid: true, checked: false }, real }), moves);
     }),
     { seed: 119120, numRuns: runsFor({ fast: 10, full: 100 }) },

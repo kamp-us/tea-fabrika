@@ -1082,7 +1082,17 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Focus, done
         sentinels.push(Redacted.value(privateKey));
       }
 
-      const outputs: Record<string, unknown> = {
+      // Each named output the scan reads, by what it holds: frames, URLs, logs, spans and the stored
+      // rows, any of them nested, with Maps, bigints and Errors among them.
+      const outputs: {
+        frames: unknown;
+        urls: unknown;
+        logs: unknown;
+        spans: unknown;
+        measurements: unknown;
+        attachments: unknown;
+        ledger: unknown;
+      } = {
         frames: w.frames,
         urls: w.urls.flatMap((url) => [url, encodeURIComponent(url), decodeURIComponent(url)]),
         logs: w.logs,

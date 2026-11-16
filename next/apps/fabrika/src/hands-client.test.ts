@@ -542,7 +542,7 @@ const flow = (f: Flow, focus: "E1" | "S1", done: Set<string>) =>
     done.add(requested.length > 0 && (yield* finished()) ? "finished" : "unfinished");
     // The secrets law reads every stored row, as A12 does.
     const tables = b.sql.exec("SELECT name FROM sqlite_master WHERE type='table'").map((row) => String(row.name));
-    const outputs: Record<string, unknown> = {
+    const outputs = {
       frames: d.sockets.map((socket) => socket.sent),
       journal: [...kept.values.entries()],
       ledger: tables.map((table) => b.sql.exec(`SELECT * FROM "${table.replace(/"/g, '""')}"`)),

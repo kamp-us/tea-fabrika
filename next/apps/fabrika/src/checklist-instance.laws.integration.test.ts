@@ -547,7 +547,7 @@ const Notice = Schema.Struct({
   params: Schema.Record(Schema.String, Schema.Unknown),
 });
 
-const without = (params: Readonly<Record<string, unknown>>) => {
+const without = (params: (typeof Notice.Type)["params"]) => {
   const { pid: _pid, ...rest } = params;
   return rest;
 };

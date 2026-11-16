@@ -51,6 +51,17 @@ export interface Local {
   readonly fault: unknown;
 }
 
+/**
+ * One ledger row as the suite reads it: its case, id, stream and decoded JSON body. The driver
+ * gives the ledger's own rows; `runtime/` never imports `ledger/`, so the suite names only what it reads.
+ */
+interface LedgerRow {
+  readonly _tag: string;
+  readonly id: string;
+  readonly stream: string;
+  readonly body: Schema.Json;
+}
+
 export interface World {
   readonly runner: (name: string) => Effect.Effect<ProgramRunner["Service"], unknown>;
   readonly input: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
@@ -63,7 +74,7 @@ export interface World {
   readonly replace: (name: string, saved: Checkpoint) => Effect.Effect<void, unknown>;
   readonly checkpoint: (name: string) => Effect.Effect<unknown, unknown>;
   readonly journal: (name: string) => Effect.Effect<unknown, unknown>;
-  readonly entries: Effect.Effect<ReadonlyArray<Readonly<Record<string, unknown>>>, unknown>;
+  readonly entries: Effect.Effect<ReadonlyArray<LedgerRow>, unknown>;
   readonly snapshot: Effect.Effect<unknown, unknown>;
   readonly reopen: Effect.Effect<void>;
   readonly cut: (boundary: number | null) => void;

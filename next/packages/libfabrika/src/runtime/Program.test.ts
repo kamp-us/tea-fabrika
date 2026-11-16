@@ -182,7 +182,14 @@ const policies = fc
   }));
 
 type PolicyModel = { valid: boolean; checked: boolean; policy: Policy | undefined };
-type PolicyReal = { raw: Record<string, unknown>; checked: unknown; described: unknown | null; calls: string[] };
+
+/** The walk's raw declaration: it reads the machine, and sets, corrupts or deletes the policy. */
+type PolicyReal = {
+  raw: { readonly machine: unknown; policy?: unknown };
+  checked: unknown;
+  described: unknown | null;
+  calls: string[];
+};
 
 const policyCheck = (value: unknown, policy: Policy | undefined) => {
   const fields = Schema.decodeUnknownSync(Schema.Struct({ policy: Schema.optionalKey(Schema.Unknown) }))(value);
@@ -551,7 +558,8 @@ describe("Program.make authoring laws, next/", () => {
       .option(
         fc.oneof(
           fc.tuple(declarations, missing).map(([{ fields }, field]) => {
-            const raw: Record<string, unknown> = { ...Program.make(fields) };
+            const made = Program.make(fields);
+            const raw: Partial<typeof made> = { ...made };
             delete raw[field];
             return raw;
           }),
@@ -1053,8 +1061,9 @@ const MachineRecipe = fc.record({
 type MachineRecipe = typeof MachineRecipe extends fc.Arbitrary<infer A> ? A : never;
 
 const built = (r: MachineRecipe, base: typeof machine): unknown => {
+  // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- D4's probe: generated JSON keys beside machine fields that hold functions, tables, numbers or text, so the guard meets any value
   const own: Record<string, unknown> = { ...r.extra };
-  const inherited: Record<string, unknown> = {};
+  const inherited: { update?: unknown; model?: unknown; msg?: unknown } = {};
   const table = { ...base.update };
 
   if (r.update === "inherited") {
@@ -1393,8 +1402,16 @@ describe("T737 Program guards keep acceptance and identity, next/", () => {
 
   /** One generated answer to a Cmd the walk saw the machine return. */
   const answer = (a: Answer, pending: unknown): unknown => {
-    const own: Record<string, unknown> = a.extra === undefined ? {} : { extra: a.extra };
-    const inherited: Record<string, unknown> = {};
+    // The answer's own fields and the ones its prototype holds: each generated, wrong ones included.
+    const own: {
+      extra?: string;
+      type?: Answer["type"];
+      cmd?: unknown;
+      at?: unknown;
+      value?: unknown;
+      error?: unknown;
+    } = a.extra === undefined ? {} : { extra: a.extra };
+    const inherited: { at?: number; value?: number } = {};
 
     if (a.type !== "missing") {
       own.type = a.type;

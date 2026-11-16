@@ -21,15 +21,17 @@
 // The walk starts at the real init. Each step reads the state it folded and picks a move possible
 // there: the live id, a past id, another dial, an answer to a Cmd really waiting, a clock that went
 // back. Stale moves are chosen on purpose.
-import { applyCell } from "@demlik/tea";
+import { applyCell, type Machine } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Arbitrary, Predicate, Schema } from "effect";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
 
-type Msg = { readonly type: string; readonly [key: string]: unknown };
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+/** The machine's own Cmds, `hello` and `knock`, as its `init` and update cells give them. */
+type Cmd = typeof handshakeMachine extends Machine<infer _S, infer _M, infer C, infer _U, infer _X> ? C : never;
+/** A Msg as the walk builds it, stale and malformed ones included: JSON fields, and the Cmd an answer settles. */
+type Msg = { readonly type: string; readonly [key: string]: Schema.Json | Cmd };
 type State = { readonly _tag: string; readonly dial: number; readonly [key: string]: Schema.Json };
 
 const step = (s: State, m: Msg): readonly [State, ReadonlyArray<Cmd>] =>

@@ -400,7 +400,7 @@ describe("P39 slice 4b: the hands launcher end to end", () => {
                     secret.toString("hex"),
                     encodeURIComponent(seen.d),
                   ];
-                  const outputs: Record<string, unknown> = {
+                  const outputs = {
                     stdout: seen.lines,
                     stderr: seen.stderr,
                     journal: seen.journal,

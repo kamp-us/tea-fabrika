@@ -42,6 +42,7 @@ import { applyCell } from "@demlik/tea";
 // answer. The tiles are the checklist's tile shape (a draft and a submit that presses `add`), a second
 // generated tile machine, and a tile with none. Tuval may not import a program, so the checklist's own
 // tile is stepped through its registration in the checklist's laws (L22, L24).
+import type { Machine as MachineOf } from "@demlik/tea";
 import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
@@ -126,13 +127,17 @@ const POOL = ["milk", "bread", "eggs"] as const;
 /** A typed draft is marked, so a row or an unsent write that copies it shows. */
 const DRAFT = "draft~";
 
-type Cmd = { readonly type: string; readonly [key: string]: unknown };
+/** The window's own Cmds, as its `init` and update cells give them. */
+type Cmd = typeof machine extends MachineOf<infer _S, infer _M, infer C, infer _U, infer _X> ? C : never;
 type Call = { readonly _tag: string; readonly [key: string]: Schema.Json };
+/** A socket write, its call read as JSON fields by name, as the laws read it. */
 type Write = { readonly type: "write"; readonly call: Call; readonly id: number; readonly dial: number };
 type Row = { readonly _tag: string; readonly [key: string]: Schema.Json };
 
 const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<Cmd>] => applyCell(machine, s, m);
-const isWrite = (c: Cmd): c is Write => c.type === "write";
+const isWrite = (c: Cmd): c is Cmd & Write => c.type === "write";
+/** Whether a Cmd has this type, read as any text, so a law can look for a Cmd the window never declares. */
+const named = (c: { readonly type: string }, type: string): boolean => c.type === type;
 /** A saved Model as it mounts: the polite region's burst is empty, and its id is kept (0504). */
 const mounted = (s: WindowModel): WindowModel => ({ ...s, said: { id: s.said.id, messages: [] } });
 const recordIn = (c: Cmd): Row | null => (c.type === "record" ? (c["record"] as Row) : null);
@@ -917,7 +922,7 @@ describe("L8: the window parent's connection", () => {
           const tileMachine = tileFor(before.name)!;
           const [own, out] = applyCell(tileMachine, before.own as never, m.msg as never) as readonly [
             unknown,
-            ReadonlyArray<Cmd>,
+            ReadonlyArray<ReturnType<typeof press>>,
           ];
           seen.stepped++;
           const blockedPress = before.reach._tag !== "open" && out.some((c) => c.type === "press");
@@ -930,7 +935,7 @@ describe("L8: the window parent's connection", () => {
             "another tile's Model moved",
           ).toEqual(prev.tiles.filter((t) => t.id !== m.id).map((t) => t.own));
           expect(
-            cmds.filter((c) => c.type === "press"),
+            cmds.filter((c) => named(c, "press")),
             "a tile machine's press left the parent as a Cmd",
           ).toEqual([]);
 
@@ -3350,7 +3355,9 @@ const goOnline = (w: DeskWorld, machine: typeof deskWindow, each: (e: DeskEvent)
     machine,
     each,
   );
-  const hello = w.waiting.find((c) => c.type === "hello" && c["dial"] === dial);
+  const hello = w.waiting.find(
+    (c): c is Extract<Cmd, { readonly type: "hello" }> => c.type === "hello" && c.dial === dial,
+  );
 
   if (hello !== undefined) {
     deskStep(w, { type: "hello_ok", cmd: hello, value: null } as WindowMsg, machine, each);
