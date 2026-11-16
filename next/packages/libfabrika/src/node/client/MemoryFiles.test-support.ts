@@ -4,7 +4,7 @@
 // file, `rename` replaces, and `stat` reports the type bits with the permission bits, as Node does.
 // Nothing here touches the disk. A call it does not model fails, as `layerNoop` makes it.
 import type { Layer, Scope } from "effect";
-import { Effect, FileSystem, Option, PlatformError } from "effect";
+import { Effect, FileSystem, Option, PlatformError, Predicate } from "effect";
 import { ByteSize } from "effect";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
@@ -427,7 +427,7 @@ export const layer = (d: Disk): Layer.Layer<FileSystem.FileSystem> => {
           return fail("NotFound", "utimes", normal(raw));
         }
 
-        entry.mtime = typeof mtime === "number" ? dateAt(mtime) : mtime;
+        entry.mtime = Predicate.isNumber(mtime) ? dateAt(mtime) : mtime;
         return Effect.void;
       }),
   });

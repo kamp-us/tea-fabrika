@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { checkSshsig, verifySshsig } from "./Sshsig.ts";
 import { line, realArmor, SPACE, text } from "./SshsigWebauthn.test-support.ts";
@@ -20,7 +20,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   return Buffer.concat([u32(b.length), b]);
 };
 

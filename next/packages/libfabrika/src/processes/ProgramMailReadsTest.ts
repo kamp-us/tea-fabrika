@@ -8,7 +8,7 @@
 // so a failure always prints the count at the largest history the law uses.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Result, Schema, type Scope } from "effect";
+import { Effect, Layer, Result, Schema, type Scope, Predicate } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -73,7 +73,7 @@ const counted = (sql: Sql) => {
 
       for (const row of rows) {
         for (const value of Object.values(row)) {
-          count.bytes += typeof value === "string" ? encoder.encode(value).length : 8;
+          count.bytes += Predicate.isString(value) ? encoder.encode(value).length : 8;
         }
       }
 

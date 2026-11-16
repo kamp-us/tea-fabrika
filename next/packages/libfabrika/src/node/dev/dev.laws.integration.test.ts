@@ -63,7 +63,7 @@ it("the control plugin returns a typed error for malformed platform port data", 
               startDev({ name: "port-test", port: 18787, build: "test", home, ...BRAIN }, (local) =>
                 Effect.suspend(() => {
                   const plugin = [...local.mapUnsafe.values()].find(
-                    (value) => typeof value === "object" && value !== null && "sockets" in value,
+                    (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
                   ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
                   return plugin.start({ "fabrika-control": raw });
                 }),

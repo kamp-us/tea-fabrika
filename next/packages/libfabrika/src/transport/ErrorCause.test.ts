@@ -3,7 +3,7 @@
 // and verify share) and `Webauthn.ts:176` (client data that does not decode). Each run makes its
 // own passkey and signs with it, so only the client data is damaged.
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { subtle } from "./internal/binary.ts";
 import { PasskeyLine, writeWebauthnSshsig } from "./Webauthn.ts";
@@ -77,7 +77,7 @@ describe("T695, the WebCrypto edge keeps what WebCrypto rejected with", () => {
 });
 
 const field = (value: string | Uint8Array) => {
-  const bytes = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const bytes = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(bytes.length);
   return Buffer.concat([size, bytes]);

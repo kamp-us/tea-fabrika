@@ -7,7 +7,7 @@
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Arbitrary, Cause, Context, Effect, Exit, Layer, Schema, Scope, Stream, Predicate } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import { SinkError } from "../coordination/index.ts";
 import { InputId } from "../Id.ts";
@@ -185,7 +185,7 @@ const replyRows = (sql: Sql, id: string) =>
         .exec(`SELECT * FROM "${table}"`)
         .flatMap((row) =>
           Object.entries(row).flatMap(([column, value]) =>
-            typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
+            Predicate.isString(value) && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
           ),
         ),
     );
@@ -197,7 +197,7 @@ const replyCells = (sql: Sql): ReadonlyArray<string> =>
     .map(({ name }) => String(name))
     .filter((table) => !KNOWN.has(table))
     .flatMap((table) => sql.exec(`SELECT * FROM "${table}"`).flatMap((row) => Object.values(row)))
-    .filter((cell): cell is string => typeof cell === "string");
+    .filter((cell): cell is string => Predicate.isString(cell));
 
 let counter = 0;
 

@@ -2,7 +2,7 @@
 // its busy state and waits (0037, 0046). Callbacks only: no database, no runtime. Each walk reads
 // the saved attachment and the pending callbacks before it picks the next move (0093).
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Result, Schema, Tracer } from "effect";
+import { Deferred, Effect, Result, Schema, Tracer, Predicate } from "effect";
 import * as fc from "fast-check";
 import { connection } from "./Connection.ts";
 import { Answer, Attached, Wait } from "./Wire.ts";
@@ -523,7 +523,7 @@ describe("T703 connection driver laws", () => {
   });
 });
 
-const isRev = (result: unknown) => typeof result === "object" && result !== null && "rev" in result;
+const isRev = (result: unknown) => Predicate.isObjectOrArray(result) && "rev" in result;
 
 const no = (id: string | number, reason: string) => ({
   _tag: "send",
@@ -737,7 +737,7 @@ const failure = (f: Failure, trace: Array<string>): unknown => {
     }
   })();
 
-  if (!f.proxy || (typeof target !== "object" && typeof target !== "function") || target === null) {
+  if (!f.proxy || !Predicate.isObjectKeyword(target)) {
     return target;
   }
 

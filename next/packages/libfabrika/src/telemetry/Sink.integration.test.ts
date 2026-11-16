@@ -25,7 +25,7 @@ import { DatabaseSync } from "node:sqlite";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Cause, Effect, Exit, Layer, Option, Redacted, Schema, Stream, Tracer, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
@@ -121,7 +121,7 @@ const places = (db: DatabaseSync, marker: string): Array<string> => {
   for (const { name } of tables) {
     for (const row of db.prepare(`SELECT * FROM "${String(name)}"`).all()) {
       for (const [column, value] of Object.entries(row)) {
-        if (typeof value === "string" && value.includes(marker)) {
+        if (Predicate.isString(value) && value.includes(marker)) {
           found.add(`${String(name)}.${column}`);
         }
       }
@@ -1275,7 +1275,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               let dropped = 0;
 
               for (const [k, v] of Object.entries(tags)) {
-                if (typeof v === "string") {
+                if (Predicate.isString(v)) {
                   if (v.length <= 128) {
                     expect(kept[k]).toBe(v);
                   } else {
@@ -1283,7 +1283,7 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
                     expect(String(kept[k]).length).toBeLessThanOrEqual(128);
                     expect(kept[`${k}.length`]).toBe(v.length);
                   }
-                } else if (typeof v === "number" || typeof v === "boolean") {
+                } else if (Predicate.isNumber(v) || Predicate.isBoolean(v)) {
                   expect(kept[k]).toBe(v);
                 } else if (Redacted.isRedacted(v)) {
                   expect(kept[k]).toBe("<redacted>");
@@ -1296,9 +1296,12 @@ describe("p99, tags hold names, ids and numbers; a message only in content", () 
               expect(kept["fab.sink.dropped"] ?? 0).toBe(dropped);
 
               for (const v of Object.values(kept)) {
-                expect(["string", "number", "boolean"]).toContain(typeof v);
+                expect(
+                  Predicate.isString(v) || Predicate.isNumber(v) || Predicate.isBoolean(v),
+                  `${String(v)} is a string, a number or a boolean`,
+                ).toBe(true);
 
-                if (typeof v === "string") {
+                if (Predicate.isString(v)) {
                   expect(v.length).toBeLessThanOrEqual(128);
                   expect(v).not.toContain(SECRET);
                 }

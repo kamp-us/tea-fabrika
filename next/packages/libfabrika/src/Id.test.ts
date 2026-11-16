@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
-import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer } from "effect";
+import { Arbitrary, Cause, Clock, Effect, Exit, Schema, SchemaIssue, Tracer, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
@@ -97,7 +97,7 @@ const validPrefix = (type: string): boolean =>
   [...type].every((char) => "abcdefghijklmnopqrstuvwxyz_".includes(char));
 
 const accepts = (input: unknown, type?: string): boolean => {
-  if (typeof input !== "string") {
+  if (!Predicate.isString(input)) {
     return false;
   }
 
@@ -973,7 +973,7 @@ describe("T518 shared Id generator", () => {
     // The real format check runs synchronously after the state write and encoding.
     // Observe there: a fiber can yield between allocation and returning to its caller.
     const decoding = vi.spyOn(check, "run").mockImplementation((input, self, options) => {
-      if (typeof input === "string") {
+      if (Predicate.isString(input)) {
         allocated.push(input);
       }
 

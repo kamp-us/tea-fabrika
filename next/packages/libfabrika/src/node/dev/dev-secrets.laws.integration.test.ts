@@ -9,7 +9,7 @@ import { inspect } from "node:util";
 import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Logger, ManagedRuntime, Redacted, Schema, Predicate } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
@@ -62,7 +62,7 @@ const forms = (text: string) => [
 ];
 
 const strings = (value: unknown): Array<string> => {
-  if (typeof value === "string") {
+  if (Predicate.isString(value)) {
     return [value];
   }
 
@@ -70,7 +70,7 @@ const strings = (value: unknown): Array<string> => {
     return value.flatMap(strings);
   }
 
-  return value !== null && typeof value === "object"
+  return Predicate.isObjectOrArray(value)
     ? Object.entries(value).flatMap(([key, child]) => [key, ...strings(child)])
     : [];
 };
@@ -312,7 +312,7 @@ const flow = async (sample: Flow) => {
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
               const plugin = [...local.mapUnsafe.values()].find(
-                (value) => typeof value === "object" && value !== null && "sockets" in value,
+                (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
               ) as {
                 sockets: ReadonlyArray<{ service: { props: { json: string } } }>;
                 start: (ports: Record<string, number>) => Effect.Effect<unknown>;

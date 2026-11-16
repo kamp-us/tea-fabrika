@@ -37,6 +37,7 @@ import {
   Scope,
   Stream,
   Tracer,
+  Predicate,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -267,7 +268,7 @@ const records = (secrets: ReadonlyArray<string>, trace: boolean) => {
   const logger = Logger.layer([
     Logger.make((options) => {
       // Effect 4 keeps a line's annotations on its fiber; a logger that throws would hide the line.
-      const plain = (_: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
+      const plain = (_: string, value: unknown) => (Predicate.isBigInt(value) ? value.toString() : value);
       logs.push(
         JSON.stringify(options.message, plain),
         JSON.stringify(options.fiber.getRef(References.CurrentLogAnnotations), plain),
@@ -384,7 +385,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 
 /** The ledger's Sql, with the two cuts a send can meet: its mail save and its acknowledgement. */
 const faulting = (sql: Sql, fault: World["fault"]) => {
-  const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => typeof p === "string");
+  const strings = (params: ReadonlyArray<SqlValue>) => params.filter((p): p is string => Predicate.isString(p));
   const wrapped: Sql = {
     exec: (query, ...params) => {
       if (/^\s*INSERT\b/i.test(query)) {
@@ -1618,7 +1619,7 @@ const ackFaulting = (sql: Sql, fault: Pipe["fault"]): Sql => ({
     if (
       fault.ack &&
       /^\s*INSERT\b/i.test(query) &&
-      params.some((p) => typeof p === "string" && /\/acked\/[0-9]+$/.test(p))
+      params.some((p) => Predicate.isString(p) && /\/acked\/[0-9]+$/.test(p))
     ) {
       fault.ack = false;
       throw new Error("SQLITE_FULL planted at the ack write");

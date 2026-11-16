@@ -4,7 +4,7 @@
 // Plants: accept the first version; omit one signed binding; consume before checking; admit verify.
 import { createHash } from "node:crypto";
 import { assert, describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { checkHello, sameOrigin, selectVersion } from "./Hello.ts";
 import { Admission, type Who } from "./Wire.ts";
@@ -20,7 +20,7 @@ const u32 = (n: number) => {
 };
 
 const field = (value: string | Uint8Array) => {
-  const b = typeof value === "string" ? Buffer.from(value, "utf8") : Buffer.from(value);
+  const b = Predicate.isString(value) ? Buffer.from(value, "utf8") : Buffer.from(value);
   return Buffer.concat([u32(b.length), b]);
 };
 

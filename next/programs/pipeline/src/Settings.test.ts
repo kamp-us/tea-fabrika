@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, SchemaIssue } from "effect";
+import { ConfigProvider, Effect, Exit, SchemaIssue, Predicate } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -76,8 +76,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         if (Exit.isSuccess(decoded)) {
           for (const [key, setting] of Object.entries(Settings.all.settings)) {
             const from = setting.segments.reduce<unknown>(
-              (value, segment) =>
-                value !== null && typeof value === "object" ? Reflect.get(value, segment) : undefined,
+              (value, segment) => (Predicate.isObjectOrArray(value) ? Reflect.get(value, segment) : undefined),
               table,
             );
             expect(Reflect.get(decoded.value, key)).toEqual(from ?? setting.default);
@@ -132,7 +131,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           const keys = refused.cause.reasons.flatMap((reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
                 )
               : [],
           );
@@ -155,7 +154,7 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
 it("L11: every declared numeric setting refuses zero, negatives and fractions at its own path", () => {
   fc.assert(
     fc.property(invalid, fc.nat(), (bad, pick) => {
-      const declarations = Settings.all.declarations.filter((d) => typeof d.default === "number");
+      const declarations = Settings.all.declarations.filter((d) => Predicate.isNumber(d.default));
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = declaration.path.split(".") as [string, string];
@@ -170,7 +169,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
           const paths = refused.cause.reasons.flatMap((reason) =>
             reason._tag === "Fail" && reason.error.cause._tag === "SchemaError"
               ? SchemaIssue.makeFormatterStandardSchemaV1()(reason.error.cause.issue).issues.map((issue) =>
-                  (issue.path ?? []).map((part) => String(typeof part === "object" ? part.key : part)).join("."),
+                  (issue.path ?? []).map((part) => String(Predicate.isObject(part) ? part.key : part)).join("."),
                 )
               : [],
           );

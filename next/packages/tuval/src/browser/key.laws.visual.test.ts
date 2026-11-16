@@ -16,7 +16,7 @@
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Effect } from "effect";
+import { Effect, Predicate } from "effect";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -137,12 +137,12 @@ const stored = (page: Page) =>
           out.push({ kind: `key:${v.type}`, extractable: v.extractable, exported });
         } else if (v instanceof ArrayBuffer || ArrayBuffer.isView(v)) {
           out.push({ kind: "bytes", hex: hex(v) });
-        } else if (typeof v === "string") {
+        } else if (Predicate.isString(v)) {
           out.push({
             kind: "string",
             hex: [...new TextEncoder().encode(v)].map((x) => x.toString(16).padStart(2, "0")).join(""),
           });
-        } else if (typeof v === "object" && v !== null) {
+        } else if (Predicate.isObjectOrArray(v)) {
           for (const one of Object.values(v)) {
             await walk(one);
           }

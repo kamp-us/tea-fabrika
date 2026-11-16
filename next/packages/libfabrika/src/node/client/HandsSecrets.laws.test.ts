@@ -37,6 +37,7 @@ import {
   Schema,
   Scope,
   Tracer,
+  Predicate,
 } from "effect";
 import { Base64, Base64Url, Hex } from "effect/encoding";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
@@ -80,7 +81,7 @@ const forms = (d: string): ReadonlyArray<string> => {
 /** Any value as text, Maps, bigints and errors included, so a scan reads every field. */
 const text = (value: unknown): string =>
   JSON.stringify(value, (_k, v: unknown) =>
-    typeof v === "bigint"
+    Predicate.isBigInt(v)
       ? String(v)
       : v instanceof Map
         ? Object.fromEntries(v)

@@ -1,5 +1,6 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
+import { Predicate } from "effect";
 import * as fc from "fast-check";
 
 type Patch = {
@@ -104,7 +105,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
     for (const [i, one] of value.entries()) {
       out.push(...paths(one, [...at, String(i)]));
     }
-  } else if (typeof value === "object" && value !== null) {
+  } else if (Predicate.isObjectOrArray(value)) {
     for (const [key, one] of Object.entries(value)) {
       out.push(...paths(one, [...at, key]));
     }
@@ -114,7 +115,7 @@ const paths = (value: unknown, at: ReadonlyArray<string> = []): Array<ReadonlyAr
 };
 
 const read = (value: unknown, at: ReadonlyArray<string>): unknown =>
-  at.reduce<unknown>((v, key) => (typeof v === "object" && v !== null ? Reflect.get(v, key) : undefined), value);
+  at.reduce<unknown>((v, key) => (Predicate.isObjectOrArray(v) ? Reflect.get(v, key) : undefined), value);
 
 /** `value` with `f` done to the container at `at`, copied on the way down. */
 const change = (value: unknown, at: ReadonlyArray<string>, f: (v: unknown) => unknown): unknown => {
@@ -166,7 +167,7 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
       );
     }
 
-    return typeof here === "object" && here !== null
+    return Predicate.isObjectOrArray(here)
       ? change(value, at, (p) => (Array.isArray(p) ? [...p, e.value] : { ...Object(p), [e.key]: e.value }))
       : change(value, at, () => e.value);
   }, structuredClone(before));

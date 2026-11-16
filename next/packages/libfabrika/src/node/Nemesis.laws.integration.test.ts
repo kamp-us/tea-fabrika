@@ -3,7 +3,7 @@ import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous S
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer } from "effect";
+import { Arbitrary, Context, Effect, FileSystem, Layer, Path, Schema, Stream, Tracer, Predicate } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -256,7 +256,7 @@ NemesisTest.suite({
         ).pipe(Effect.provide(records));
         const health = sql
           .exec("SELECT * FROM measurements")
-          .filter((row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]));
+          .filter((row) => Predicate.isString(row["piece"]) && /nemesis/i.test(row["piece"]));
         return { rows, health };
       }).pipe(Effect.orDie),
     };

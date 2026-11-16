@@ -2,7 +2,7 @@
 // with or without that memo; they exist to turn a wrong memo red. A long-lived manager is one layer
 // build kept for a whole history; a fresh one is built for a single call and folds from rev 0.
 import { describe, expect, it } from "@effect/vitest";
-import { Cause, Effect, Exit, Layer } from "effect";
+import { Cause, Effect, Exit, Layer, Predicate } from "effect";
 import * as fc from "fast-check";
 import { Ledger } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -131,7 +131,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
     if (Exit.isSuccess(exit)) {
       const value: unknown = exit.value;
 
-      if (typeof value === "object" && value !== null && Object.hasOwn(value, "at")) {
+      if (Predicate.isObjectOrArray(value) && Object.hasOwn(value, "at")) {
         const { at: _at, ...rest } = value as { readonly at: unknown };
         return { ok: rest };
       }
@@ -140,7 +140,7 @@ const answer = <A, E>(effect: Effect.Effect<A, E>): Effect.Effect<Answer> =>
     }
 
     const error: unknown = Cause.squash(exit.cause);
-    return { refused: typeof error === "object" && error !== null && "reason" in error ? error.reason : error };
+    return { refused: Predicate.isObjectOrArray(error) && "reason" in error ? error.reason : error };
   });
 
 /** One call on whichever manager is in context. */

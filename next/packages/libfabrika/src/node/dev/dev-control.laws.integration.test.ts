@@ -7,7 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema } from "effect";
+import { Clock, Context, Deferred, Duration, Effect, FileSystem, Option, Queue, Schema, Predicate } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { TestClock } from "effect/testing";
 import { vi } from "vitest";
@@ -239,7 +239,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       }
 
       const value: unknown = Reflect.get(target, key);
-      return typeof value === "function" ? value.bind(target) : value;
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
   // Hold each pending-file rename, and acknowledge the write once its folder sync has closed: the
@@ -277,7 +277,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
       }
 
       const value: unknown = Reflect.get(target, key);
-      return typeof value === "function" ? value.bind(target) : value;
+      return Predicate.isFunction(value) ? value.bind(target) : value;
     },
   });
 
@@ -333,7 +333,7 @@ const run = Effect.fnUntraced(function* (walk: Walk) {
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
           const plugin = [...local.mapUnsafe.values()].find(
-            (value) => typeof value === "object" && value !== null && "sockets" in value,
+            (value) => Predicate.isObjectOrArray(value) && "sockets" in value,
           ) as { start: (ports: Record<string, unknown>) => Effect.Effect<unknown> };
           listen = (port) => plugin.start({ "fabrika-control": port });
           observe({ type: "start", worker: NAME, pid: walk.pid });

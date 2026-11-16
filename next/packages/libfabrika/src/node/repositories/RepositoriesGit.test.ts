@@ -3,7 +3,20 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Sink, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FileSystem,
+  Layer,
+  Path,
+  Schema,
+  Sink,
+  Stream,
+  Predicate,
+} from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -170,8 +183,9 @@ describe.each(GitLaws.gits)("T878 pinned repository reads, $name git", (layer) =
                       command.args.includes(fault.flag)
                     ) {
                       hits++;
-                      const bytes =
-                        typeof fault.output === "string" ? new TextEncoder().encode(fault.output) : fault.output;
+                      const bytes = Predicate.isString(fault.output)
+                        ? new TextEncoder().encode(fault.output)
+                        : fault.output;
                       return Effect.succeed(
                         ChildProcessSpawner.makeHandle({
                           pid: ChildProcessSpawner.ProcessId(1),

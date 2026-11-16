@@ -57,7 +57,7 @@ const chain = (error: unknown): ReadonlyArray<unknown> => {
   const found: Array<unknown> = [];
   let at: unknown = error;
 
-  while (typeof at === "object" && at !== null && !found.includes(at)) {
+  while (Predicate.isObjectOrArray(at) && !found.includes(at)) {
     found.push(at);
     at = beneath(at);
   }

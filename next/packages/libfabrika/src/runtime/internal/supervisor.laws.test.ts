@@ -23,7 +23,7 @@
 import { applyCell } from "@demlik/tea";
 import { propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
-import { Result, Schema } from "effect";
+import { Result, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { A, ExitReason, fcErrorClass, from } from "../../processes/Process.test-support.ts";
@@ -63,9 +63,7 @@ const roundTrip = (model: Model): unknown =>
 /** JSON text with sorted keys: a decoded copy may order its fields differently. */
 const canon = (value: unknown): string =>
   JSON.stringify(value, (_key, v: unknown) =>
-    v !== null && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b)))
-      : v,
+    Predicate.isObject(v) ? Object.fromEntries(Object.entries(v).toSorted(([a], [b]) => a.localeCompare(b))) : v,
   );
 
 const decodes = (raw: unknown): boolean => Result.isSuccess(Schema.decodeUnknownResult(Supervision)(raw));

@@ -8,7 +8,7 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema, Scope, Tracer, Predicate } from "effect";
 import { Digest } from "effect/crypto";
 import { vi } from "vitest";
 import { Writer } from "../coordination/index.ts";
@@ -49,7 +49,7 @@ const FIXTURE = { hash: createHash("sha256").update("fixture").digest("hex"), so
 const settingsExec =
   (base: Sql, failed: () => boolean, cause: Error, counted: (kind: "read" | "append") => void): Sql["exec"] =>
   (query, ...args) => {
-    const settings = args.some((arg) => typeof arg === "string" && arg.startsWith("settings/instance/"));
+    const settings = args.some((arg) => Predicate.isString(arg) && arg.startsWith("settings/instance/"));
 
     if (settings && /SELECT \* FROM entries WHERE stream = \? AND rev > \?/i.test(query)) {
       counted("read");

@@ -26,7 +26,7 @@ import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { RpcCallError } from "alchemy/Rpc";
 import type { Layer, Scope } from "effect";
-import { Effect, Option, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream, Predicate } from "effect";
 import { TestClock } from "effect/testing";
 import { processId } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -193,7 +193,7 @@ describe.each(backends)("p102, a record rolls and never fills, on RecordManager.
             const values = Object.values(rolled[0] ?? {});
             expect(values, "rolled names the next part").toContain(part(p + 1));
             expect(
-              values.some((v) => typeof v === "number" && v >= CAP),
+              values.some((v) => Predicate.isNumber(v) && v >= CAP),
               "rolled keeps the part's size then, at or past the cap",
             ).toBe(true);
           }

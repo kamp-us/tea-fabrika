@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer } from "effect";
+import { Cause, Clock, Effect, Exit, Layer, Option, Schema, Stream, Tracer, Predicate } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -702,7 +702,7 @@ describe("T285, sink keep-law", () => {
                     BigInt(sample.ms) * 1_000_000n,
                   );
                   expect(row.attributes).toEqual({
-                    ...(typeof sample.value === "string"
+                    ...(Predicate.isString(sample.value)
                       ? cut("test.value", sample.value)
                       : { "test.value": sample.value }),
                     ...(job ? { "fab.process": PROCESS } : {}),

@@ -13,6 +13,7 @@ import {
   Schema,
   Sink,
   Stream,
+  Predicate,
 } from "effect";
 import { Digest } from "effect/crypto";
 import type { ChildProcess } from "effect/process";
@@ -94,7 +95,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
 
         const args = command.args.map((arg) => String(arg));
         seen.push({ executable: command.command, args, options: command.options });
-        const supplied = typeof answer === "function" ? yield* answer(args, spec) : answer;
+        const supplied = Predicate.isFunction(answer) ? yield* answer(args, spec) : answer;
         let response: Response = {
           ...supplied,
           stderr: supplied.stderr.replace("test.p19.brain", (args.at(-1) ?? "").split("/").at(-1) ?? ""),

@@ -153,7 +153,7 @@ const target = (document: Json, ref: string) => {
 /** A node with its references followed: the referenced fields, with the node's own over them. */
 const resolve = (document: Json, node: Json): Json => {
   const { $ref, allOf, ...own } = node;
-  const below = typeof $ref === "string" ? resolve(document, target(document, $ref)) : {};
+  const below = Predicate.isString($ref) ? resolve(document, target(document, $ref)) : {};
   const parts = Array.isArray(allOf) ? allOf.map((part: Json) => resolve(document, part)) : [];
   return Object.assign({}, below, ...parts, own);
 };
@@ -172,7 +172,7 @@ const refs = (value: unknown): Array<string> =>
   Array.isArray(value)
     ? value.flatMap(refs)
     : Predicate.isObject(value)
-      ? Object.entries(value).flatMap(([key, v]) => (key === "$ref" && typeof v === "string" ? [v] : refs(v)))
+      ? Object.entries(value).flatMap(([key, v]) => (key === "$ref" && Predicate.isString(v) ? [v] : refs(v)))
       : [];
 
 /** The generated document read back by Effect's own JSON Schema reader. */
@@ -294,7 +294,7 @@ it("T753 L7 shared byte schemas keep distinct file defaults, descriptions and re
         for (const d of group.declarations) {
           const node = leaf(document, d.segments)!;
           expect(node.description).toBe(d.doc);
-          expect(typeof node.default).toBe("string");
+          expect(node.default).toBeTypeOf("string");
           expect(node.default).not.toBe(String(d.default));
           expect(Schema.decodeUnknownSync(Schema.toCodecStringTree(shared))(node.default)).toBe(d.default);
           const input = { limits: { [d.segments[1]!]: node.default } };

@@ -19,6 +19,7 @@ import {
   Sink,
   Stream,
   Tracer,
+  Predicate,
 } from "effect";
 import { Digest } from "effect/crypto";
 import { ChildProcessSpawner } from "effect/process";
@@ -529,7 +530,7 @@ it("L9 [secrets]: generated opening flows redact every report, pending state, er
           expect(values.length, `${name} must be observed`).toBeGreaterThan(0);
           const output =
             JSON.stringify(values, (_key: string, value: unknown) =>
-              typeof value === "bigint" ? value.toString() : value,
+              Predicate.isBigInt(value) ? value.toString() : value,
             ) + inspect(values, { depth: null });
 
           for (const spelling of [secret, folder, url].flatMap(forms)) {

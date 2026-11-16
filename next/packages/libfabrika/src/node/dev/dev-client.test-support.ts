@@ -1,5 +1,5 @@
 // P12, next/. The HTTP client `startDev`'s laws provide, over each run's own `fetch` stub.
-import { Layer } from "effect";
+import { Layer, Predicate } from "effect";
 import { FetchHttpClient } from "effect/http";
 
 /**
@@ -13,4 +13,4 @@ export const fetchClient = FetchHttpClient.layer.pipe(
 
 /** A stubbed `fetch` call's body as text, sent as a string or as the client's bytes. */
 export const bodyText = (options: RequestInit | undefined): string =>
-  typeof options?.body === "string" ? options.body : new TextDecoder().decode(options?.body as Uint8Array);
+  Predicate.isString(options?.body) ? options.body : new TextDecoder().decode(options?.body as Uint8Array);

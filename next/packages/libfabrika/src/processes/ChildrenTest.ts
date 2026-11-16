@@ -29,6 +29,7 @@ import {
   type Scope,
   Stream,
   Tracer,
+  Predicate,
 } from "effect";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -173,9 +174,7 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
 };
 
 const body = (entry: Entry): Record<string, unknown> =>
-  typeof entry.body === "object" && entry.body !== null && !Array.isArray(entry.body)
-    ? (entry.body as Record<string, unknown>)
-    : {};
+  Predicate.isObject(entry.body) ? (entry.body as Record<string, unknown>) : {};
 
 /** The store's Sql with two cuts: on the next INSERT, or on the first transaction after an INSERT. */
 const cutting = (sql: Sql) => {
@@ -290,7 +289,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
 const reorder = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(reorder)
-    : typeof value === "object" && value !== null
+    : Predicate.isObjectOrArray(value)
       ? Object.fromEntries(
           Object.entries(value)
             .reverse()
@@ -302,7 +301,7 @@ const reorder = (value: unknown): unknown =>
 const sorted = (value: unknown): unknown =>
   Array.isArray(value)
     ? value.map(sorted)
-    : typeof value === "object" && value !== null
+    : Predicate.isObjectOrArray(value)
       ? Object.fromEntries(
           Object.entries(value)
             .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))

@@ -36,6 +36,7 @@ import {
   Schedule,
   Schema,
   Scope,
+  Predicate,
 } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf, vi } from "vitest";
@@ -1241,7 +1242,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             for (const e of entries) {
               const start = e.body.code as { readonly hash?: string } | undefined;
 
-              if (e.stream.startsWith("processes/") && typeof start?.hash === "string") {
+              if (e.stream.startsWith("processes/") && Predicate.isString(start?.hash)) {
                 expect(earlier(start.hash, e.rev), `${e.stream} ${e.id} starts on ${start.hash}`).toBe(true);
               }
 

@@ -168,7 +168,7 @@ describe("L2, metadata is required, scope is nonempty, and the decoded type is k
       // @ts-expect-error since is a release, never a number (T730 L10).
       Setting.make("a.b", { schema: Port, default: 1, doc: "d", scope: ["person"], reload: "restart", since: 1 }),
     ];
-    expect(typeof refused).toBe("function");
+    expect(refused).toBeTypeOf("function");
   });
 
   // oxlint-disable-next-line fabrika/law-shape -- a type law: its expectTypeOf lines are the check, so it is neither a property nor an example

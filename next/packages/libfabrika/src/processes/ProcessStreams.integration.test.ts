@@ -1,7 +1,7 @@
 // P33 review round 2, one rule instead of single guarded ids: every event the brain writes about a
 // process lives on a stream only the brain may write, and reading an inbox never throws.
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Effect, Result, Schema } from "effect";
+import { Arbitrary, Effect, Result, Schema, Predicate } from "effect";
 import { Ledger } from "../ledger/Ledger.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
 import { Mailbox } from "./Mailbox.ts";
@@ -342,8 +342,7 @@ describe("P33, an inbox read is total", () => {
     }),
     Schema.Struct({ m: Schema.Struct({ _tag: Schema.Literal("DOWN"), ref: json(1) }) }),
   ]);
-  const hasM = (body: unknown): body is { readonly m: unknown } =>
-    typeof body === "object" && body !== null && !Array.isArray(body) && Object.hasOwn(body, "m");
+  const hasM = (body: unknown): body is { readonly m: unknown } => Predicate.isObject(body) && Object.hasOwn(body, "m");
   // Plant: drop nested mail in envelopes with 2 to 4 keys. Shrinks to {ref: 0, m: []}.
   it.effect.prop(
     "junk send bodies never fail a receive, and later receives on that inbox still work",

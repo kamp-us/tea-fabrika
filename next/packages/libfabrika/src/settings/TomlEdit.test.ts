@@ -1,7 +1,7 @@
 // T877, next/: L1-L8 exercise the public service. Layout hints use fast-check;
 // values come from Effect Schema. The model never reads the adapter's edit index.
 import { describe, expect, it } from "@effect/vitest";
-import { ByteSize, Effect, Exit, Schema } from "effect";
+import { ByteSize, Effect, Exit, Schema, Predicate } from "effect";
 import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
@@ -63,7 +63,7 @@ const layout = (seed: number) => fc.sample(layouts, { seed, numRuns: 1 })[0]!;
 type Layout = ReturnType<typeof layout>;
 const pick = <A>(xs: ReadonlyArray<A>, hint: number): A => xs[hint % xs.length]!;
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s === b[i]);
-const record = (v: unknown): v is Tree => typeof v === "object" && v !== null && !Array.isArray(v);
+const record = (v: unknown): v is Tree => Predicate.isObject(v);
 
 const frozen = (value: unknown): unknown =>
   Array.isArray(value)

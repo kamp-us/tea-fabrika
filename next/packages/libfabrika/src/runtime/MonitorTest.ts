@@ -45,6 +45,7 @@ import {
   Schedule,
   Schema,
   Scope,
+  Predicate,
 } from "effect";
 import * as fc from "fast-check";
 import { InputId, Writer } from "../coordination/index.ts";
@@ -327,7 +328,7 @@ const cutting = (sql: Sql, world: World): Sql => ({
     if (
       world.fault.cut &&
       /^\s*INSERT\b/i.test(query) &&
-      params.some((p) => typeof p === "string" && p.startsWith('["DOWN",'))
+      params.some((p) => Predicate.isString(p) && p.startsWith('["DOWN",'))
     ) {
       world.fault.cut = false;
       world.done.add("cut:fired");
@@ -525,7 +526,7 @@ const host = Effect.fnUntraced(function* (
       ProgramLoader.layer(PROGRAMS, {
         ping: (cmd: unknown) =>
           Effect.sync(() => {
-            const ref = typeof cmd === "object" && cmd !== null && "ref" in cmd ? String(cmd.ref) : "";
+            const ref = Predicate.isObjectOrArray(cmd) && "ref" in cmd ? String(cmd.ref) : "";
             world.pings.push(ref);
             return Outcome.ok(ref);
           }),

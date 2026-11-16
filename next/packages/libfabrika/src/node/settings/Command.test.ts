@@ -29,6 +29,7 @@ import {
   References,
   Sink,
   Tracer,
+  Predicate,
 } from "effect";
 import { Command as Cli } from "effect/cli";
 import { Digest } from "effect/crypto";
@@ -151,7 +152,7 @@ const spans = () => {
       .map((span) =>
         JSON.stringify(
           { name: span.name, attributes: [...span.attributes], events: span.events, status: span.status },
-          (_key, value: unknown) => (typeof value === "bigint" ? String(value) : value),
+          (_key, value: unknown) => (Predicate.isBigInt(value) ? String(value) : value),
         ),
       )
       .join("\n");

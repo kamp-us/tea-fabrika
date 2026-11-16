@@ -1,7 +1,7 @@
 // T753, next/. The caller owns the SQLite driver; settings/StartsTest owns the shared laws.
 import { DatabaseSync } from "node:sqlite"; // edge: the ledger's synchronous Sql driver needs node:sqlite
 import { describe, expect } from "@effect/vitest";
-import { Context, Effect, Exit, Layer, Option, Schema } from "effect";
+import { Context, Effect, Exit, Layer, Option, Schema, Predicate } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -312,7 +312,7 @@ describe("L5 minimal start path, next/", () => {
         let lower: unknown = error.reason;
 
         for (let depth = 0; depth < 8 && lower !== cause; depth++) {
-          lower = typeof lower === "object" && lower !== null && "cause" in lower ? lower.cause : undefined;
+          lower = Predicate.isObjectOrArray(lower) && "cause" in lower ? lower.cause : undefined;
         }
 
         expect(lower).toBe(cause);

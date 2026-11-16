@@ -6,7 +6,7 @@
 // Edge: Effect has no node:sqlite driver.
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
-import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer } from "effect";
+import { Context, Effect, FileSystem, Layer, Path, Stream, Tracer, Predicate } from "effect";
 import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -75,7 +75,7 @@ export const databases = Effect.gen(function* () {
         // Cloudflare limits each stored row. Node SQLite needs the same failure at this edge.
         if (/^\s*(INSERT|UPDATE)\b/i.test(query)) {
           const size = params.reduce<number>(
-            (total, value) => total + (typeof value === "string" ? bytes.encode(value).byteLength : 8),
+            (total, value) => total + (Predicate.isString(value) ? bytes.encode(value).byteLength : 8),
             0,
           );
 

@@ -23,7 +23,7 @@
 // back. Stale moves are chosen on purpose.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import { Arbitrary, Schema } from "effect";
+import { Arbitrary, Schema, Predicate } from "effect";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -77,7 +77,7 @@ type Event = {
   readonly known: ReadonlyArray<{ readonly id: string; readonly dial: number }>; // ids named before this step
 };
 
-const liveId = (s: State): string | undefined => (typeof s["id"] === "string" ? s["id"] : undefined);
+const liveId = (s: State): string | undefined => (Predicate.isString(s["id"]) ? s["id"] : undefined);
 
 /** Every move the world allows now. */
 const moves = (w: World, c: Pick): ReadonlyArray<() => Msg> => {
@@ -156,7 +156,7 @@ const fold = (list: ReadonlyArray<Pick>, each: (e: Event) => void): void => {
     w.waiting = [...w.waiting.filter((cmd) => !("cmd" in m) || m["cmd"] !== cmd), ...cmds];
 
     for (const cmd of cmds) {
-      if (typeof cmd["id"] === "string") {
+      if (Predicate.isString(cmd["id"])) {
         w.ids.push({ id: cmd["id"], dial: Number(cmd["dial"]) });
       }
     }
@@ -175,7 +175,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
     ({ list }) => {
       fold(list, ({ prev, m, next, cmds, known }) => {
         const own = liveId(prev);
-        const dialed = typeof m["dial"] === "number" ? m["dial"] : null;
+        const dialed = Predicate.isNumber(m["dial"]) ? m["dial"] : null;
         const label = `${m.type} in ${prev._tag}`;
 
         if (m.type === "answer" && (m["id"] !== own || dialed !== prev.dial)) {
@@ -206,7 +206,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
         }
 
         // A request id is never named twice, so an answer to an old one can never match.
-        for (const c of cmds.filter((c) => typeof c["id"] === "string")) {
+        for (const c of cmds.filter((c) => Predicate.isString(c["id"]))) {
           expect(
             known.some((k) => k.id === c["id"]),
             `${c.type} reused ${String(c["id"])}`,
@@ -256,7 +256,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
         // Any other reason ends the dial's exchange as refused, keeping the door's word when it is
         // one and `other` when it is not, and sends nothing.
         const refusal = m["reason"];
-        const refusedNow = matched && prev._tag === "initializing" && typeof refusal === "string";
+        const refusedNow = matched && prev._tag === "initializing" && Predicate.isString(refusal);
 
         if (refusedNow && refusal !== "not_granted") {
           expect([next, cmds], `${label}: the door refused for ${refusal}`).toMatchObject([
@@ -271,7 +271,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
 
         for (const field of ["ms", "since"]) {
           const n = next[field];
-          expect(n === undefined || (typeof n === "number" && n >= 0), `${field} ${String(n)}`).toBe(true);
+          expect(n === undefined || (Predicate.isNumber(n) && n >= 0), `${field} ${String(n)}`).toBe(true);
         }
       });
       return true;

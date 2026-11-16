@@ -24,7 +24,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Path, Schema, Tracer } from "effect";
+import { Effect, FileSystem, Path, Schema, Tracer, Predicate } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
@@ -223,11 +223,11 @@ const strings = (source: string) => {
   assert.equal(parsed.errors.length, 0);
   const found: string[] = [];
   const visit = (x: unknown): void => {
-    if (x === null || typeof x !== "object") {
+    if (!Predicate.isObjectOrArray(x)) {
       return;
     }
 
-    if ("type" in x && x.type === "Literal" && "value" in x && typeof x.value === "string") {
+    if ("type" in x && x.type === "Literal" && "value" in x && Predicate.isString(x.value)) {
       found.push(x.value);
     }
 
@@ -293,7 +293,7 @@ const observe = async () => {
             emitted.push(
               item.type === "chunk"
                 ? item.code
-                : typeof item.source === "string"
+                : Predicate.isString(item.source)
                   ? item.source
                   : new TextDecoder().decode(item.source),
             );
@@ -589,7 +589,7 @@ const observeCalls = async () => {
               text:
                 item.type === "chunk"
                   ? item.code
-                  : typeof item.source === "string"
+                  : Predicate.isString(item.source)
                     ? item.source
                     : new TextDecoder().decode(item.source),
             })),
@@ -1108,7 +1108,7 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
             const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
             const seen = JSON.stringify(
               spans.map((s) => ({ name: s.name, attributes: [...s.attributes], events: s.events, status: s.status })),
-              (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+              (_key, v: unknown) => (Predicate.isBigInt(v) ? String(v) : v),
             );
 
             if (result._tag === "Failure") {

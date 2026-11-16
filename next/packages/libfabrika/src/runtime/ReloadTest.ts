@@ -17,6 +17,7 @@ import {
   Schema,
   Scope,
   Stream,
+  Predicate,
 } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -126,7 +127,7 @@ const upgradesFor = (spec: Spec) =>
       name: `${spec.shape}_${from}`,
       from,
       run: (m: unknown): unknown =>
-        spec.shape === "field" && typeof m === "object" && m !== null && !("step" in m) ? { ...m, step: 1 } : m,
+        spec.shape === "field" && Predicate.isObjectOrArray(m) && !("step" in m) ? { ...m, step: 1 } : m,
     }));
 
 const ping = Cmd.make("ping", { input: Schema.Struct({ n: Schema.Number }), ok: Schema.Number, err: [] });
@@ -341,7 +342,7 @@ const loader = (code: Code) => ({
                     yield* Deferred.await(code.cmdGate);
                   }
 
-                  const n = typeof cmd === "object" && cmd !== null && "n" in cmd ? Number(cmd.n) : 0;
+                  const n = Predicate.isObjectOrArray(cmd) && "n" in cmd ? Number(cmd.n) : 0;
                   return Outcome.ok(n);
                 }),
             },

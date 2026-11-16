@@ -20,7 +20,7 @@
 // toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
+import { ConfigProvider, Effect, Exit, Layer, Path, Predicate } from "effect";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -282,7 +282,7 @@ describe("P39 slice 4b: the real command layer", () => {
             // value could be written.
             const text = JSON.stringify(
               { c: command.command, a: command.args.map(String), o: command.options },
-              (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
+              (_k, v) => (Predicate.isObjectOrArray(v) && "value" in v ? String(v.value) : v),
             );
             const forms = [
               planted,
