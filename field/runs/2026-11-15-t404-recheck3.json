@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t404-recheck3",
+  "ticket": "kamp-us/tea-fabrika#404",
+  "pr": "kamp-us/tea-fabrika#1366",
+  "started": "2026-11-15T22:27:44-08:00",
+  "ended": "2026-11-15T22:33:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "reviewer",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Ticket 404 recheck of the door law round at head d1ccceee9 (P34c slice 4, quotas, in next/), since the last reviewed head 80fbe9340 (row 36db10a81): merge-ready, two finding rows. (1) The door law 'Q9/Q12 the assembled door refuses before an envelope, binding, reply or local step is saved' (next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts:1919-1990) now sends through the real Connection service (workers/gateway ConnectionService.message, then transport/Connection.ts frame and ordinary, then cloudflare/connection.ts, then the Project) and reads the door object's own sums, unsent and measurements tables, so it reaches the layer that counts a refusal. It goes red on the door plant (fabrikalfa/t404-plant-door, aa0c5f8d): 'refusal 0 was not counted' at 2ae329a9b and 'refusal 0 saved a span row in the door's store' at d1ccceee9 (tests, build and cloud box rows). (2) The quota span fix (transport/Connection.ts:233 adds quota to the frame span's refused tag) follows 0143's 'every span that encloses the refused call follows it ... the frame span', with quota joined to the counted refusals by 0147 ('refused and counted (0143)'); it matches cloudflare/connection.ts:48, which already tagged quota on the RPC span. Its law is the door-store clause, red on the real code before the fix (field/runs/2026-11-15-t404-door-norow-tests1.json). (3) The hour pin fakes only Date, starting at SENT (2026-11-08T04:00:00.000Z, the top of an hour) and moving at real speed; Effect 4.1.2's live clock reads Date.now and re-anchors its nanosecond clock when it drifts over 1 s from it (internal/effect.js wallTimeNanos), so span hours follow the pin. loosening.sh 36db10a81 HEAD stops at its first hit, an unrecognized change at line 24 (the two added imports); a hand read of the whole test diff finds no removed expect, no muted test and no fewer runs: the send moved from Project.route to the Connection, a deeper path, and three expects were added. No law is loosened. (4) The hour-crossing write charge is settled as a bug by the lead and ticketed as a follow-up after 1366; the decision line that settles it is 0153's 'A program cannot be pushed over its quota by inputs the door refuses' (0143 itself bounds only rows). Cloud box: twin mail 0031 (fabrikalfa/mail-session_015QKFcyNLy5pXJpaqP8sM7S) ran at the d1ccceee9 tree, the same head: runtime-recovery.laws.integration 13 of 13, worker-quotas.integration 3 of 3, door plant 1 failed 12 passed.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Laptop, plain tests only, at d1ccceee9: transport/Connection.test.ts 6 passed, cloudflare/connection.test.ts 11 passed. Plant in a scratch worktree (deleted after): drop quota from Connection.ts:233; Connection.test.ts 6 passed, cloudflare/connection.test.ts 11 passed, runtime/Gateway.laws.test.ts 10 passed, so no plain law holds the frame tag for quota; only the integration door law does. Plants by reading: count a quota refusal under reserved (the 'elsewhere' clause goes red); drop the RPC span's quota tag in cloudflare/connection.ts:48 (a runtime.rpc unsent row lands, the door-store clause goes red); count a refused span and also save it as a row (the door-store clause goes red). A refusal that writes a row to the door's spans, content, archived or sizes tables escapes: the door clause reads only unsent and measurements. No .integration. file ran on the laptop, no pnpm typecheck.",
+  "driver_caused": false,
+  "step": "review",
+  "costUsd": null,
+  "billed": null
+}
