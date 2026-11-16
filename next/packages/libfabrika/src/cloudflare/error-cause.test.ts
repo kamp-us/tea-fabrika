@@ -14,6 +14,7 @@ import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProgramDown } from "../runtime/Program.ts";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain, SinkError } from "../telemetry/Trace.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
@@ -199,8 +200,8 @@ const env: Env = fake({
   PROJECT: {
     getByName: () =>
       Stub.make<ProjectBinding>(() => rejects(new Error("no project in this law")), {
-        // @ts-expect-error StartsTest.reply is the wire reply, its value unknown; the member's type names the decoded receipt
-        settingsStart: async () => StartsTest.reply(instanceFixture({ name: "p", port: 8787 })),
+        settingsStart: async () =>
+          Start.Reply.cases.ok.make({ value: StartsTest.receipt(instanceFixture({ name: "p", port: 8787 })) }),
       }),
   },
   RECORD: { getByName: () => Stub.make<RecordBinding>(() => rejects(new Error("no record in this law"))) },

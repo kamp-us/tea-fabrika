@@ -15,6 +15,7 @@ import { Stub } from "@kampus/vitest";
 import { Cause, Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import type { ConnectionBinding, ProcessBinding, ProjectBinding, RecordBinding } from "./bindings.ts";
 import * as Route from "./fetch.ts";
@@ -54,8 +55,7 @@ const world = (port: number) => {
     PROJECT: {
       getByName: () =>
         Stub.make<ProjectBinding>(recorded("project"), {
-          // @ts-expect-error StartsTest.reply is the wire reply, its value unknown; the member's type names the decoded receipt
-          settingsStart: async () => StartsTest.reply(input),
+          settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(input) }),
         }),
     },
     CONNECTION: {

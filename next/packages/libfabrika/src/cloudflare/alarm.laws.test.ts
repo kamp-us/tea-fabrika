@@ -14,6 +14,7 @@ import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Alarm } from "../runtime/Entry.ts";
 import { ProgramRunner, Sent } from "../runtime/Runner.ts";
+import * as Start from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import type { ProjectBinding } from "./bindings.ts";
@@ -169,8 +170,7 @@ it("A1: supported alarm operations preserve the logical wake and schedule or cle
           );
           const stub = Stub.make<R2Bucket>(unexpected);
           const project = Stub.make<ProjectBinding>(unexpected, {
-            // @ts-expect-error StartsTest.reply is the wire reply, its value unknown; the member's type names the decoded receipt
-            settingsStart: async () => StartsTest.reply(start),
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
           });
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
@@ -379,8 +379,7 @@ it("A2: an alarm that fails dies as a defect, one that is done ran its saved wak
           );
           const stub = Stub.make<R2Bucket>(unexpected);
           const project = Stub.make<ProjectBinding>(unexpected, {
-            // @ts-expect-error StartsTest.reply is the wire reply, its value unknown; the member's type names the decoded receipt
-            settingsStart: async () => StartsTest.reply(start),
+            settingsStart: async () => Start.Reply.cases.ok.make({ value: StartsTest.receipt(start) }),
           });
           // The app's checked read of the instance setting, as next/apps/fabrika/src/runtime.ts has it.
           ProcessObject.layer({

@@ -36,7 +36,7 @@ import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
 import { ProgramRunner } from "../runtime/Runner.ts";
 import { RecordedStart } from "../settings/RecordedStart.ts";
-import { Failure } from "../settings/Start.ts";
+import { Failure, Reply } from "../settings/Start.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { SpanSink } from "../telemetry/Sink.ts";
 import type { ProjectBinding } from "./bindings.ts";
@@ -324,8 +324,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           (spy) => Effect.sync(() => spy.mockRestore()),
         );
         const project = Stub.make<ProjectBinding>(unexpected, {
-          // @ts-expect-error StartsTest.reply is the wire reply, its value unknown; the member's type names the decoded receipt
-          settingsStart: async () => StartsTest.reply(good),
+          settingsStart: async () => Reply.cases.ok.make({ value: StartsTest.receipt(good) }),
         });
         ProcessObject.layer({
           programs: {},
