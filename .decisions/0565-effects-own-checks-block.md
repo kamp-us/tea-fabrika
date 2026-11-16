@@ -1,7 +1,7 @@
 ---
 id: 0565
 title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
-status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)
+status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md), [0575](0575-deterministic-keys-is-the-service-id-form.md)
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
 ---
@@ -315,7 +315,7 @@ too.
     const encodePointer = Schema.encodeEffect(Pointer);
     ```
 
-  - **`deterministicKeys` (35) against our service id shape**
+  - **RULED on 2026-11-15 by [0575](0575-deterministic-keys-is-the-service-id-form.md): clash 4, `deterministicKeys` (35) against our service id shape**
     ([0120](0120-effect-code-guidelines.md), E7).
 
     ```ts
@@ -333,3 +333,4 @@ too.
 
 - 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) names which of our rules give way to a check of the Effect checker or another trusted rule, and which stay. `fabrika/no-node-imports`, `fabrika/no-effect-run-outside-edge` and `fabrika/no-hand-tag` go to trusted rules; `fabrika/no-promises` stays, since theirs is narrower. It leaves `deterministicKeys` and `service-id` as an unruled clash.
 - 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) rules clashes 1 and 2. `unstableApiUsage`: `@stability` is dropped until the first release and the check is an error, with `allowedUnstableApis` naming each unstable Effect part we use. `apiStabilityLeak`: recounted after the tags go; an error if zero, off if hits remain from Effect's unstable types, which we use on purpose.
+- 2026-11-15: [0575](0575-deterministic-keys-is-the-service-id-form.md) rules clash 4. `deterministicKeys` is an error and sets the service ID form, `service-id` is deleted, and the sweep tries `keyPatterns` with our dot form first, then renames the 35 IDs to the checker's form.
