@@ -1,7 +1,8 @@
 // Arm: how the lead turns on GitHub's merge when ready for one pull request (0530, 0544), the one
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
-//   arm   the pull request is open, into main, and no plan -> the full run (scheduled.yaml) on its
+//   arm   the pull request is open, into main, and no plan -> each new exported name is named
+//         under `## New names` (Names.ts, 0587) -> the full run (scheduled.yaml) on its
 //         branch is read at its head -> green on every job: marked ready if a draft, then merge when
 //         ready on, as a squash pinned to that head
 //
@@ -19,6 +20,7 @@ import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
 import { logText } from "../ci/typecheck.ts";
+import * as Names from "./Names.ts";
 import { type Detail, PullRequests } from "./PullRequests.ts";
 
 /** The full run's workflow file: the whole suite, which a pull request's own checks never run (0534, 0536). */
@@ -216,6 +218,12 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
 
   if (refused !== null) {
     return yield* refuse(refused);
+  }
+
+  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+
+  if (unnamed !== null) {
+    return yield* refuse(unnamed);
   }
 
   const files = yield* prs.files(found.number);

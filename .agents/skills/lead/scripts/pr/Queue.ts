@@ -4,7 +4,8 @@
 // our own laptop; it is not product.
 //
 //   add      the pull request is open, ready and into main -> leak grep on its net change, on each
-//            of its commits and on its title and description, each failing closed -> `ci-required`
+//            of its commits and on its title and description, each failing closed -> each new
+//            exported name is named under `## New names` (Names.ts, 0587) -> `ci-required`
 //            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
@@ -14,6 +15,7 @@
 // it happened. Read through its module: `Queue.add(...)`.
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
+import * as Names from "./Names.ts";
 import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
 import { Pushes } from "./Pushes.ts";
 import { Sweeps } from "./Sweeps.ts";
@@ -112,6 +114,12 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   yield* pushes.leakChange(a.dir, found.oid);
   yield* pushes.leakGrep(a.dir, found.oid);
   yield* pushes.leakText(a.dir, words(found));
+  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+
+  if (unnamed !== null) {
+    return yield* new NotQueued({ reason: `pr ${found.number}: ${unnamed}` });
+  }
+
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (0162). So the
   // required check is read first, and anything but a finished success asks nothing.
   const required = yield* requiredAt(found.oid, a.wait);

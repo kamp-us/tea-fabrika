@@ -105,6 +105,9 @@ catalog:
   mdast-util-from-markdown: 2.1.0
   mdast-util-gfm: 3.1.0
   micromark-extension-gfm: 3.0.0
+  # The copy-paste detector (0040, 0587): a pull request's new clones as advice, by .github/ci/copies.ts
+  # with .jscpd.json's settings. MIT. v5 is a Rust binary in a per-platform package, no install script.
+  jscpd: 5.4.3
   miniflare: 4.20260730.0
   playwright: 1.64.1
   react: 19.3.1
