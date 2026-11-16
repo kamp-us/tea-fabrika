@@ -1,39 +1,53 @@
 // T1062 slice 1, next/: L4 of docs/plan/quests/error-cause-PLAN.md (decision 0568). The session's
 // sender check makes `SendersError` with no failure below it (`access/SessionSenders.ts:22`, a key
 // that no longer belongs), so its cause may be missing: `Schema.optional(Schema.Defect())`, never
-// `Schema.optionalKey`. A cause written as `undefined` decodes, and every value the old
-// `optionalKey` schema read decodes to the same value.
-// Plant: put `Schema.optionalKey(Schema.Defect())` back on `Senders.ts:43`; the written-undefined
-// case fails to decode.
+// `Schema.optionalKey`, and never `Schema.Unknown`. A cause written as `undefined` decodes, an
+// encoded Error decodes to an Error, and every value the old `optionalKey` schema read decodes to
+// the same value.
+// Plants: put `Schema.optionalKey(Schema.Defect())` back on `Senders.ts:43`, and the
+// written-undefined case fails to decode; set it to `Schema.optional(Schema.Unknown)`, and the
+// encoded Error stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 50;
 
-/** How a cause reaches the decoder: no key, a key written as `undefined`, or a JSON value. */
-type Form = "absent" | "undefined" | "json";
-const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json"];
+/**
+ * How a cause reaches the decoder: no key, a key written as `undefined`, a JSON value, or an Error
+ * in the encoded form `Schema.Defect()` writes, the one case where `Defect` and `Unknown` differ.
+ */
+type Form = "absent" | "undefined" | "json" | "error";
+const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json", "error"];
 
 /** The schema `SendersError` had before 0568. */
 const before = Schema.Struct({ ...SendersError.fields, cause: Schema.optionalKey(Schema.Defect()) });
 
-/** One encoded `SendersError`, its reason from its own literals and its cause in a drawn form. */
+/** An Error with a drawn name and message, encoded the way `Schema.Defect()` writes it. */
+const encodedError = fc
+  .record({ name: fc.string(), message: fc.string() })
+  .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
+
+/** The cause in each form, or no key at all. */
+const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
+  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
+
+/**
+ * One encoded `SendersError`: made with its reason drawn from its own literals and no cause, encoded
+ * by the old schema, then given its cause in a drawn form.
+ */
 const encoded = fc
   .record({
     reason: fc.constantFrom(...SendersError.fields.reason.literals),
     form: fc.constantFrom(...FORMS),
     json: fc.jsonValue(),
+    error: encodedError,
   })
-  .map(({ reason, form, json }) => ({
+  .map(({ reason, form, json, error }) => ({
     form,
-    value: {
-      _tag: "SendersError",
-      reason,
-      ...(form === "absent" ? {} : { cause: form === "undefined" ? undefined : json }),
-    },
+    value: { ...Schema.encodeUnknownSync(before)(new SendersError({ reason })), ...causeKey(form, json, error) },
   }));
 
 /**
@@ -48,7 +62,7 @@ const own = (value: object) =>
   );
 
 describe("T1062 L4, a sender error whose cause may be missing reads a cause written as undefined", () => {
-  it("L4: SendersError decodes a written-undefined cause, and every value the optionalKey schema read to the same value", () => {
+  it("L4: SendersError decodes a written-undefined cause, an encoded Error to an Error, and every value the optionalKey schema read to the same value", () => {
     const seen = new Map<Form, number>();
     fc.assert(
       fc.property(encoded, ({ form, value }) => {
@@ -62,12 +76,16 @@ describe("T1062 L4, a sender error whose cause may be missing reads a cause writ
           expect(now.value.cause).toBeUndefined();
         }
 
+        if (Exit.isSuccess(now) && form === "error") {
+          expect(now.value.cause, "an encoded Error decodes to an Error").toBeInstanceOf(Error);
+        }
+
         if (Exit.isSuccess(now) && Exit.isSuccess(old)) {
           expect(now.value).toBeInstanceOf(SendersError);
           expect(own(now.value)).toEqual(own(old.value));
         }
       }),
-      { seed: SEED, numRuns: RUNS },
+      { seed: SEED, numRuns: runsFor({ fast: 50, full: 200 }) },
     );
 
     for (const form of FORMS) {

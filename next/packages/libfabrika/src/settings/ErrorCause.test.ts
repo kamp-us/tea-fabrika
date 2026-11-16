@@ -1,42 +1,63 @@
 // T1062 slice 1, next/: L4 of docs/plan/quests/error-cause-PLAN.md (decision 0568). Some sites make
 // `SettingsError` (`Files.ts:98`, an `invalid` built from a rule) and `SnapshotError`
 // (`Snapshot.ts:157`, a hash that does not match) with no failure below them, so their cause may be
-// missing: `Schema.optional(Schema.Defect())`, never `Schema.optionalKey`. A cause written as
-// `undefined` decodes, and every value the old `optionalKey` schema read decodes to the same value.
-// Plant: put `Schema.optionalKey(Schema.Defect())` back on `Files.ts:29` or `Snapshot.ts:47`; the
-// written-undefined case of that error fails to decode.
+// missing: `Schema.optional(Schema.Defect())`, never `Schema.optionalKey`, and never
+// `Schema.Unknown`. A cause written as `undefined` decodes, an encoded Error decodes to an Error,
+// and every value the old `optionalKey` schema read decodes to the same value.
+// Plants: put `Schema.optionalKey(Schema.Defect())` back on `Files.ts:29` or `Snapshot.ts:47`, and
+// the written-undefined case of that error fails to decode; set either line to
+// `Schema.optional(Schema.Unknown)`, and that error's encoded Error cause stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
+import { runsFor } from "@kampus/vitest";
 import { Exit, Schema } from "effect";
 import * as fc from "fast-check";
 import { SettingsError } from "./Files.ts";
 import { SnapshotError } from "./Snapshot.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
-const RUNS = 50;
 
-/** How a cause reaches the decoder: no key, a key written as `undefined`, or a JSON value. */
-type Form = "absent" | "undefined" | "json";
+/**
+ * How a cause reaches the decoder: no key, a key written as `undefined`, a JSON value, or an Error
+ * in the encoded form `Schema.Defect()` writes, the one case where `Defect` and `Unknown` differ.
+ */
+type Form = "absent" | "undefined" | "json" | "error";
+const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json", "error"];
 
-/** Each error moved to `optional`, beside the schema it had before 0568. */
+const settingsBefore = Schema.Struct({ ...SettingsError.fields, cause: Schema.optionalKey(Schema.Defect()) });
+const snapshotBefore = Schema.Struct({ ...SnapshotError.fields, cause: Schema.optionalKey(Schema.Defect()) });
+
+/**
+ * Each error moved to `optional`, beside the schema it had before 0568, and its encoded form with no
+ * cause: made with drawn fields and encoded by the old schema.
+ */
 const errors = {
   SettingsError: {
     now: SettingsError,
-    before: Schema.Struct({ ...SettingsError.fields, cause: Schema.optionalKey(Schema.Defect()) }),
-    fields: fc.record({
-      reason: fc.constantFrom(...SettingsError.fields.reason.literals),
-      message: fc.string(),
-    }),
+    before: settingsBefore,
+    encoded: fc
+      .record({ reason: fc.constantFrom(...SettingsError.fields.reason.literals), message: fc.string() })
+      .map((fields) => Schema.encodeUnknownSync(settingsBefore)(new SettingsError(fields))),
   },
   SnapshotError: {
     now: SnapshotError,
-    before: Schema.Struct({ ...SnapshotError.fields, cause: Schema.optionalKey(Schema.Defect()) }),
-    fields: fc.record({ message: fc.string() }),
+    before: snapshotBefore,
+    encoded: fc
+      .record({ message: fc.string() })
+      .map((fields) => Schema.encodeUnknownSync(snapshotBefore)(new SnapshotError(fields))),
   },
 } as const;
 
 type Name = keyof typeof errors;
 const NAMES: ReadonlyArray<Name> = ["SettingsError", "SnapshotError"];
-const FORMS: ReadonlyArray<Form> = ["absent", "undefined", "json"];
+
+/** An Error with a drawn name and message, encoded the way `Schema.Defect()` writes it. */
+const encodedError = fc
+  .record({ name: fc.string(), message: fc.string() })
+  .map(({ name, message }) => Schema.encodeUnknownSync(Schema.Defect())(Object.assign(new Error(message), { name })));
+
+/** The cause in each form, or no key at all. */
+const causeKey = (form: Form, json: fc.JsonValue, error: unknown): { cause?: unknown } =>
+  form === "absent" ? {} : { cause: form === "undefined" ? undefined : form === "json" ? json : error };
 
 /** One encoded value of a drawn error, its cause in a drawn form. */
 const encoded = fc
@@ -44,17 +65,10 @@ const encoded = fc
     name: fc.constantFrom(...NAMES),
     form: fc.constantFrom(...FORMS),
     json: fc.jsonValue(),
+    error: encodedError,
   })
-  .chain(({ name, form, json }) =>
-    errors[name].fields.map((fields) => ({
-      name,
-      form,
-      value: {
-        _tag: name,
-        ...fields,
-        ...(form === "absent" ? {} : { cause: form === "undefined" ? undefined : json }),
-      },
-    })),
+  .chain(({ name, form, json, error }) =>
+    errors[name].encoded.map((base) => ({ name, form, value: { ...base, ...causeKey(form, json, error) } })),
   );
 
 /**
@@ -69,7 +83,7 @@ const own = (value: object) =>
   );
 
 describe("T1062 L4, a settings error whose cause may be missing reads a cause written as undefined", () => {
-  it("L4: SettingsError and SnapshotError decode a written-undefined cause, and every value the optionalKey schema read to the same value", () => {
+  it("L4: SettingsError and SnapshotError decode a written-undefined cause, an encoded Error to an Error, and every value the optionalKey schema read to the same value", () => {
     const seen = new Map<string, number>();
     fc.assert(
       fc.property(encoded, ({ name, form, value }) => {
@@ -83,12 +97,16 @@ describe("T1062 L4, a settings error whose cause may be missing reads a cause wr
           expect(now.value.cause).toBeUndefined();
         }
 
+        if (Exit.isSuccess(now) && form === "error") {
+          expect(now.value.cause, `${name} decodes an encoded Error to an Error`).toBeInstanceOf(Error);
+        }
+
         if (Exit.isSuccess(now) && Exit.isSuccess(before)) {
           expect(now.value).toBeInstanceOf(errors[name].now);
           expect(own(now.value)).toEqual(own(before.value));
         }
       }),
-      { seed: SEED, numRuns: RUNS },
+      { seed: SEED, numRuns: runsFor({ fast: 50, full: 200 }) },
     );
 
     for (const name of NAMES) {
