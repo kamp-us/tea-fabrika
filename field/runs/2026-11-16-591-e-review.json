@@ -1,0 +1,47 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-e-review",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-16T00:41:38-08:00",
+  "ended": "2026-11-16T01:06:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send tests",
+  "why": "Slice E of the exam-to-lint plan (0591), next/ and oxlint-plugins/, branch fabrikalfa/exam-to-lint-e at 015499d, reviewed as its own three ranges (262d4dc..efdc0b7, the merge 6853640, 6853640..015499d). changes: 1; findings: 1. The rule, its planted folders, the turn-on at zero, the seven reason lines, the layer move of Testing.ts, the shard renames, the merge's import resolutions and the deletion of laws-scan all hold. The one blocking class: five S2 walks leave out Msgs their machine takes, so a saved field only those Msgs reach is never saved and a load fault on it goes unseen. The window walk sends no key (the tests step's own presses plant came back green) and walks no tezgah window; tezgah's program walk sends no focus move and no cursor, so every tile's cursor stays null; the queue walk sends no child reply, so landing never ends and the tree_drift stop is never saved; the hands walk finishes only ok, so held stays empty; the chaos walk never answers now or inspect with an error. Each S2 walk must offer every Msg its machine takes and assert that it reached each, as the Prefix, tezgah child and quota walks already do. Non-blocking: the new laws use fc.assert with a hand seed, which 0579 says is not the way; its sweep owns them.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/machine-has-laws.test.ts: M6",
+      "plant": "by reading, oxlint-plugins/machine-has-laws.ts: LAWS without the .visual form, lawsOf without the stem check, or TEST without the Test.ts kits; each makes a planted folder answer wrongly (a passing folder in its .visual form, e/inline.tsx, f/helperTest.ts)",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2",
+      "plant": "by reading, next/packages/libfabrika/src/client/WindowMachine.ts loadedInto: a load resets presses, or resets prefix; not caught, since the walk sends no key and walks no tezgah window",
+      "result": "green"
+    },
+    {
+      "law": "next/programs/tezgah/src/program.laws.test.ts: S2",
+      "plant": "by reading, next/programs/tezgah/src/program.ts init: a load sets every tile's cursor to null; not caught, since the S2 walk sends no focus move and its splits carry no cursor",
+      "result": "green"
+    },
+    {
+      "law": "next/programs/pipeline/src/Queue.laws.test.ts: S2",
+      "plant": "by reading, next/programs/pipeline/src/Queue.ts: a load drops a field of a saved tree_drift stop; not caught, since the S2 walk sends no reply and never saves that stop",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/HandsMachine.laws.test.ts: S2",
+      "plant": "by reading, next/packages/libfabrika/src/client/HandsMachine.ts init: a load empties held; not caught, since the S2 walk finishes only ok and held stays empty",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": "Ran at 015499d, under nice -n 19 pnpm exec vitest run --maxWorkers=1: oxlint-plugins/machine-has-laws.test.ts (1 test), the 31 laws files (222 tests), vitest.shards.test.ts (34) and .github/ci/shard-rows.test.ts (7), all green. The rule alone (a scratch config with only fabrika/machine-has-laws) found 0 hits on next/ and 1 on .agents/ (flow/machine.ts:99, the finding row's). pnpm lint in full with NODE_OPTIONS=--max-old-space-size=6144: 17 of 18 parts passed; lint:promise-types died with EPIPE while another agent's vitest ran, and passed alone (0 findings); a second full run, with this row, lost three parts to EPIPE while other agents ran; a third, on a quiet box, passed all 18 parts. One pnpm typecheck exits 0. loosening.sh on both ranges: every removed law and fewer numRuns hit is a git mv rename seen as a delete, plus laws-scan's four laws, which M6's twelve folders and the rule at zero hold. The 30-hit recount was not rerun at 262d4dc: this worktree stays on the reviewed head.",
+  "step": "review"
+}
