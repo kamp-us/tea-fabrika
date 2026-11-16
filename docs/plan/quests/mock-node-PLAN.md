@@ -29,6 +29,32 @@ RECORD: Stub.make<Env["RECORD"]>(unexpected, {
 
 ## Doubts, read these first
 
+- **Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): the contract file is
+  `ObjectCalls.ts` (certain, it is the ruling).** The tests step's round 2
+  ([`field/runs/2026-11-16-mock-node-tests2.json`](../../../field/runs/2026-11-16-mock-node-tests2.json),
+  branch `fabrikalfa/mock-node-s1` at `4049b9a9d`) found that the name this plan gave the contract,
+  `next/packages/libfabrika/src/cloudflare/Objects.ts`, differs only in letter case from the
+  existing `next/packages/libfabrika/src/cloudflare/objects.ts` on main: libfabrika's `tsc` fails
+  with TS1261, and a case-insensitive disk, as on a Mac, sees one file. **Wrong, kept as the
+  record:** `Objects.ts`. Every place below that named it now says `ObjectCalls.ts`, and the laws
+  import it as `../cloudflare/ObjectCalls.ts` (from `RunnerAdmission.integration.test.ts`) and
+  `./ObjectCalls.ts` (from `ProjectAuditTest.ts`). The name, checked in one line: no question word
+  (0081), and both words are the industry's, Cloudflare's Durable Object and the RPC call it takes
+  (OTP's `gen_server:call`, as the services' own comment says; `records.ts find "object calls
+  name"` found no settled name for this file, and no other file in `cloudflare/` on main clashes
+  with it in any case).
+- **Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): two places where the
+  tests step followed the code over the plan, for the signer.** Both are in `.oxlintrc.json`'s
+  lock block for `next/packages/libfabrika/src/node/*.ts` on `fabrikalfa/mock-node-s1` at
+  `4049b9a9d`, and the lock's sketch under "The shape" now says the same:
+  - (a) The lock's `eslint/no-restricted-properties` is at `error`, not this plan's `warn`. Those
+    files have no `JSON.parse` fire, and `lint.ts` fails a `warn` line with no fire left ("has no
+    fire left in next/packages/libfabrika/src/node/*.ts"), so the rule blocks at zero there, as
+    [0523](../../../.decisions/0523-advice-rules-block-where-clean.md) asks of a folder at zero.
+  - (b) The block writes out `Data.TaggedError` and `JSON.parse` again, as the signing note asks,
+    since an override replaces a rule's options. `Data.TaggedError` is on main but not on the slice
+    branch's base `b510ed2`, so the fold with main keeps it.
+
 - **Amendment (2026-11-16, merge session ruling on node-s1): this slice now has a product change
   (certain).** The tests step sent the plan back
   ([`field/runs/2026-11-15-mock-node-tests1.json`](../../../field/runs/2026-11-15-mock-node-tests1.json),
@@ -224,8 +250,14 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
     // Kept on as it is: the same members, with the same messages as below.
     "vitest/no-restricted-vi-methods": ["error", { /* fn, mock, doMock, spyOn, stubEnv */ }],
     "eslint/no-restricted-properties": [
-      "warn",
-      // Written out again, since an override replaces options: the `JSON.parse` entry, of the warn block that writes it out again.
+      // Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): `error`, as the code
+      // has it. Wrong, kept as the record: `warn`. These files have no JSON.parse fire, and lint.ts
+      // fails a warn line with no fire left, so the rule blocks at zero here (0523).
+      "error",
+      // Written out again, since an override replaces options (amendment, same ruling): the
+      // `Data.TaggedError` entry, on main though not on the slice's base b510ed2, and `JSON.parse`.
+      { "object": "Data", "property": "TaggedError", "message": "Use Schema.TaggedErrorClass (0573, the Effect checker's preferSchemaTaggedError)." },
+      { "object": "JSON", "property": "parse", "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)." },
       { "object": "vi", "property": "fn", "message": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579)." },
       { "object": "vi", "property": "mock", "message": "Give the code a service and provide a test layer (0555)." },
       { "object": "vi", "property": "doMock", "message": "Give the code a service and provide a test layer (0555)." },
@@ -242,7 +274,10 @@ filed by the lead: `vitest/no-restricted-vi-methods` misses chained calls. The
   block's level, and the lock's block sits after that block, the way the Reflect ban's blocks write
   out the `JSON.parse` entry (`.oxlintrc.json` on main at `b490a3203`). On main `node/*.ts` takes the `warn` block that writes out `JSON.parse` alone, so the lock is one block, as the sketch shows. At `warn`, a `vi`
   fire still blocks: `pnpm lint` lets only a `JSON.parse` fire of this rule advise
-  (0523, the advice map `pnpm lint` reads). No file loses an entry, and no file gains one but the
+  (0523, the advice map `pnpm lint` reads). **Wrong, kept as the record (amendment 2026-11-16,
+  merge session ruling on node-s1's tests round 2):** the lock is at `error`, not `warn`, since
+  `node/*.ts` has no `JSON.parse` fire and `lint.ts` fails a `warn` line with no fire left; and it
+  writes out `Data.TaggedError` with `JSON.parse` (see the doubts). No file loses an entry, and no file gains one but the
   `vi` entries. Whichever slice lands later carries the entries the others landed first: another folder's `vi` entries, the `process.stdout` and `process.stderr` entries of the cloudflare plan's M13 (on these files but `*.test.ts`, the way M13 leaves test files out), or any new set.
 - **The plant, red first.** The lock's law runs a second plant beside node's `VI_METHODS`:
   `VI_PROPERTIES`, under the code `eslint(no-restricted-properties)` as `REFLECT` is, in every
@@ -288,7 +323,9 @@ in `R` and provides a test layer (Effect's `Layer.mock`, the Recorder's base). S
 service takes the object's registered name first, and stays an Effect member the Recorder records.
 
 ```ts
-// next/packages/libfabrika/src/cloudflare/Objects.ts, the contract only (0095). A sketch.
+// next/packages/libfabrika/src/cloudflare/ObjectCalls.ts, the contract only (0095). A sketch.
+// Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): ObjectCalls.ts.
+// Wrong, kept as the record: Objects.ts, which differs from objects.ts beside it only in case (TS1261).
 import { Context } from "effect";
 import type { RecordShape } from "./objects.ts";
 import type { ProcessClient } from "./platform.ts";
@@ -364,6 +401,9 @@ export const projectLayer = (ctx, env, options, local = ...) =>
 
 ```ts
 // next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts, the Harness. A sketch.
+// Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): the contract's path.
+import type { ProcessObjects, RecordObjects } from "./ObjectCalls.ts";
+
 export interface Harness {
   // ... open, door, tail as today
   readonly environment: (box: Box, usage: Usage, loaded: Loaded) => Omit<Env, "INSTANCE">; // `accept` moves out
@@ -375,6 +415,9 @@ export interface Harness {
 
 ```ts
 // next/packages/libfabrika/src/node/RunnerAdmission.integration.test.ts. A sketch.
+// Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): the contract's path.
+import { ProcessObjects, RecordObjects } from "../cloudflare/ObjectCalls.ts";
+
 const objects: ProjectAuditTest.Harness["objects"] = (box, accept) =>
   Layer.merge(
     Recorder.layer(ProcessObjects, {
@@ -459,8 +502,9 @@ idFromName` still for a binding member the stubs left out. The steps as first wr
   tsconfig and says so. Amendment 2026-11-16 (merge session ruling on node-s1): that diagnostics run
   reports Effect's checks only, so M4 is read from libfabrika's own `tsc --noEmit -p .`, run once,
   alone.
-- Amendment 2026-11-16 (merge session ruling on node-s1): until the build lands `Objects.ts` and
-  `projectLayerWithoutObjects`, the test file does not compile. That is the tests step's red: M3 and
+- Amendment 2026-11-16 (merge session ruling on node-s1): until the build lands `ObjectCalls.ts`
+  (amendment 2026-11-16, merge session ruling on node-s1's tests round 2; wrong, kept as the
+  record: `Objects.ts`) and `projectLayerWithoutObjects`, the test file does not compile. That is the tests step's red: M3 and
   M4 go green at the build's head.
 - No law needs the real machine, so none is host-only (0178). M3 is an `.integration.` law already;
   no new one is added. No law reads a secret.
@@ -475,7 +519,7 @@ idFromName` still for a binding member the stubs left out. The steps as first wr
 | oxlint-plugins/plants.test.ts | tests | tests | M1: `VI_METHODS`' lines refused exactly in every folder of every block that sets the rule, as the `REFLECT` scenario does |
 | field/runs/2026-11-15-mock-node-tests1.json | tests | docs | the tests step's run row, with its plants |
 | next/packages/libfabrika/src/cloudflare/ProjectAuditTest.ts | tests | tests | amendment 2026-11-16 (merge session ruling on node-s1): `Harness` gains `objects(box, accept)`, a layer of `ProcessObjects` and `RecordObjects`; `environment` drops `accept`; `projectWalk` calls `projectLayerWithoutObjects` and provides `harness.objects`. No law of the suite changes |
-| next/packages/libfabrika/src/cloudflare/Objects.ts | build | 30 | amendment 2026-11-16: new, the contract only (0095): `ByName`, `ProcessObjects`, `RecordObjects` |
+| next/packages/libfabrika/src/cloudflare/ObjectCalls.ts | build | 30 | amendment 2026-11-16: new, the contract only (0095): `ByName`, `ProcessObjects`, `RecordObjects`. Amendment (2026-11-16, merge session ruling on node-s1's tests round 2): named `ObjectCalls.ts`; wrong, kept as the record: `Objects.ts`, which clashes in case with `objects.ts` |
 | next/packages/libfabrika/src/cloudflare/ProcessObjectsRpc.ts | build | 25 | amendment 2026-11-16: new, `layer(stub)`, each member through `ProcessClient.make(stub(object))` |
 | next/packages/libfabrika/src/cloudflare/RecordObjectsRpc.ts | build | 12 | amendment 2026-11-16: new, `layer(stub)`, each member through `stub(object)` |
 | next/packages/libfabrika/src/cloudflare/runtime.ts | build | 35 | amendment 2026-11-16: the Project's seven `ProcessClient.make(processStub(...))` calls ask `ProcessObjects`; `recordLayer` reads `RecordObjects`; `projectLayerWithoutObjects` is today's `projectLayer` body, and `projectLayer` provides both Rpc layers from `env`; `processLayer` provides `RecordObjectsRpc.layer` |
@@ -496,8 +540,9 @@ Amendment 2026-11-16 (merge session ruling on node-s1). Searched: libfabrika's `
 `telemetry/` folders on main for a service that calls a Durable Object by name, `@kampus/vitest`,
 and Effect 4.1.3's `Layer`.
 
-- `next/packages/libfabrika/src/cloudflare/Objects.ts` (`ByName`, `ProcessObjects`,
-  `RecordObjects`): `ProcessClient` (`platform.ts`) is a service of one stub, built inline by its
+- `next/packages/libfabrika/src/cloudflare/ObjectCalls.ts` (`ByName`, `ProcessObjects`,
+  `RecordObjects`; amendment 2026-11-16, merge session ruling on node-s1's tests round 2; wrong,
+  kept as the record: `Objects.ts`): `ProcessClient` (`platform.ts`) is a service of one stub, built inline by its
   caller, so no law can provide it per name; `RecordManager.remote` takes a per-name function but
   of the raw `RecordShape`, not a service. Neither is in the Project's requirements, so none fits.
   Both are reused inside the new layers.
@@ -562,7 +607,8 @@ same branch, `fabrikalfa/mock-node-s1`, from its head `2d2f8bfb9`:
    shape in "Amendment: `msg` and `write` through typed services"; M2's plants, M3's new plant and
    M4's two plants run once and recorded. The file does not compile until the build: that is its
    red.
-2. **Build:** `Objects.ts`, `ProcessObjectsRpc.ts`, `RecordObjectsRpc.ts`, the `runtime.ts` and
+2. **Build:** `ObjectCalls.ts` (amendment 2026-11-16, merge session ruling on node-s1's tests
+   round 2; wrong, kept as the record: `Objects.ts`), `ProcessObjectsRpc.ts`, `RecordObjectsRpc.ts`, the `runtime.ts` and
    `connection.ts` changes and the glossary rows; the checks under "Validation" green.
 3. **Review:** as before, plus that no `ProcessClient.make(processStub(...))` is left in the
    Project's logic in `runtime.ts`.
