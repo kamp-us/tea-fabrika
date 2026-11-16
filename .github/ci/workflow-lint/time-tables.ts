@@ -1,6 +1,6 @@
 // Today's CI, serving both versions. TT1 and TT2: each test leg's time table (time-table.ts) and
 // its timings upload, in check.yaml and scheduled.yaml.
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { fileName, STEP } from "../time-table.ts";
 import { compact, env, map, type Rule, sameEntries, steps, TOKEN, uses } from "./shared.ts";
 

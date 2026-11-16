@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's check job (F1, ticket 985): each step on its own
 // flag, the field rows last, and the one ratchet step that holds every list file to shrinking (0524).
-import { Array as Arr, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";

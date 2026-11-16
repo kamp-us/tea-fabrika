@@ -1,7 +1,7 @@
 // Today's CI, serving both versions. check.yaml's fail fast (ticket 990): every job but ci-required
 // ends with the stop step (F1), only ci-required runs on always() (F2), the token may cancel the run
 // and no job sets its own (F3), and no checkout keeps the token in .git/config (F4).
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { allSteps, compact, isStop, map, type Rule } from "./shared.ts";
 
 export const failFast: Rule = ({ workflow, jobs }, require) => {

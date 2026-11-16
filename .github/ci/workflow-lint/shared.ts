@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
-import { Array as Arr, Result } from "effect";
+import * as Arr from "effect/Array";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** A parsed check.yaml, cut into the parts every rule reads. */

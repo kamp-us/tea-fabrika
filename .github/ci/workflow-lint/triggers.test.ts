@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";

@@ -1,6 +1,9 @@
 // Today's CI, serving both versions. check.yaml's next job: its legs (E1, E10), each leg's
 // `--shard` (E2), the vitest and end-to-end steps (E3, E11), and its pinned commands.
-import { Array as Arr, pipe, Option, Order } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import {
   CHANGED_FROM_BASE,
   chromium,

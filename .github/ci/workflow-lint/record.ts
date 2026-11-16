@@ -1,6 +1,8 @@
 // Today's CI, serving both versions. check.yaml's Q1: the record a ready pull request run leaves
 // for the merge queue, its one upload, and every job testing the tree the record names.
-import { Array as Arr, Option, Order } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import { allSteps, classifier, compact, FLAGS, map, type Rule, sameEntries, steps, uses } from "./shared.ts";
 import { isTimings, TIMED_LEGS } from "./time-tables.ts";
 

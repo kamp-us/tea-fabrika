@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's changes job, its own work: the small scans that
 // run after any failure, the full-history checkout, and the classify step with the run's event.
-import { Array as Arr, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { classifier, commands, compact, map, type Rule, steps } from "./shared.ts";
 
 export const classifyStep: Rule = ({ jobs }, require) => {

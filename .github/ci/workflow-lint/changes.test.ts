@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import {
   changedOnPullRequests,
   env,

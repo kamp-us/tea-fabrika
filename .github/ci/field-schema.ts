@@ -3,7 +3,8 @@
 // A finding row's core is decision 0035's own: its keys, the closed `rule` list and its proof.
 // Decision 0090: a new row is its own file, field/<log>/<date>-<slug>.json; the old .jsonl files
 // are history. Both hold the same rows, so one schema reads both.
-import { Schema, Array as Arr } from "effect";
+import { Schema } from "effect";
+import * as Arr from "effect/Array";
 
 const Log = Schema.Literals(["notes", "runs", "findings"]);
 export type Log = typeof Log.Type;

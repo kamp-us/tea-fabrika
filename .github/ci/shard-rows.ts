@@ -1,7 +1,9 @@
 // Today's CI, about next/'s test files.
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Array as Arr, Order, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";

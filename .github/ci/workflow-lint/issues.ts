@@ -1,5 +1,7 @@
 // Today's CI, serving both versions. Who may touch issues (0534, 0541).
-import { Array as Arr, pipe, Result } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 import { VERDICT } from "./scheduled.ts";
 import { isMap, map } from "./shared.ts";

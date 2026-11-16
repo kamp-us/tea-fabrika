@@ -2,7 +2,9 @@
 import { readFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Array as Arr, Result, Order } from "effect";
+import * as Arr from "effect/Array";
+import * as Order from "effect/Order";
+import * as Result from "effect/Result";
 import { measured } from "../../vitest.shards.ts";
 
 export const LIMIT = 60;

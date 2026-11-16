@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs";
-import { Array as Arr, pipe, Order, Option } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as scheduled from "./scheduled.mjs";

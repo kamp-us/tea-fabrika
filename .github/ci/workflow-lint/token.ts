@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's M1: changes' classify step and the test jobs' time
 // tables are the steps but the stop steps that get the token.
-import { Array as Arr, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { map, type Rule, steps, TOKEN } from "./shared.ts";
 import { TIME_TABLE, TIMED_LEGS, timeTableEnv } from "./time-tables.ts";
 

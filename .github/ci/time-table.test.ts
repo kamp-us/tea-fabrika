@@ -1,5 +1,7 @@
 import { relative, resolve } from "node:path";
-import { type Duration, Effect, Array as Arr, Option } from "effect";
+import { type Duration, Effect } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import {

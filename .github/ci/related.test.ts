@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import { Array as Arr, pipe, Order } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Order from "effect/Order";
 import * as fc from "fast-check";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";

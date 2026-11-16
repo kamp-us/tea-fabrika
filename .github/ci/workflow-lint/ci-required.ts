@@ -1,5 +1,5 @@
 // Today's CI, serving both versions. check.yaml's ci-required job, the one required check.
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { compact, map, type Rule, steps } from "./shared.ts";
 
 export const ciRequired: Rule = ({ jobs }, require) => {

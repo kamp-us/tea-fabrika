@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { type Plant, rejects, type Workflow } from "./wiring.test-support.ts";
 
 // Today's CI, serving both versions. Covers jobs.ts: when each gated job runs, the jobs that may

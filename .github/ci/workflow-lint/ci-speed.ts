@@ -1,5 +1,9 @@
 // Today's CI, serving both versions. ci-speed.yaml's shape (K1 to K7), the daily speed measure.
-import { Array as Arr, pipe, Result, Order, Option } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 import { allSteps, compact, isMap, map } from "./shared.ts";
 

@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e34-tests2",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T01:13:17-08:00",
+  "ended": "2026-11-16T01:24:43-08:00",
+  "parent": "2026-11-16-effect-e34-review1",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round of the tests step for judgment slice E34 (preferEffectArray in .github/ci), in our tooling, after the review sent it back on one class: the slice's effect imports used the barrel where ruling E47 (judgment-rulings-0026.md on fabrikalfa/twin-tools) says tooling imports by subpath. A scratch codemod rewrote all 52 import lines in 52 files: each name this slice added now has its own subpath import (import * as Arr from \"effect/Array\", import { pipe } from \"effect/Function\", and Option, Order and Result from effect/Option, effect/Order and effect/Result), the form E31 and E33 use. In the 4 widened lines only this slice's names moved, and each file's own barrel names stay: field-schema.ts keeps Schema, field-check.test.ts keeps Arbitrary, Effect and Schema, time-table.ts keeps type Duration, Effect, Result, Schedule and Schema, time-table.test.ts keeps type Duration and Effect. No other line changed: the diff is 52 lines out and 121 in, every one an import line, so no comment or law moved. Counts as they stand: 662 hits met, 601 fixed, 61 left, all in the three .mjs scripts that run before install: changes.mjs 21, required.mjs 5, scheduled.mjs 35.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "For the lock's exclude (ruling Q4, exact paths, never a glob): the four .github/ci .mjs files that run before install are .github/ci/changes.mjs, .github/ci/gate.mjs (only on main, not on this branch yet), .github/ci/required.mjs and .github/ci/scheduled.mjs. For the fold: this branch's base does not hold PR 1462, and main's .github/ci/tsconfig.json (since 1462, and again in 1516) sets barrelImportPackages [\"effect\"] with preferBarrelImport at error, with a comment that tooling scripts import Effect from the barrel as 0577 has programs do; .agents/tsconfig.json and oxlint-plugins/tsconfig.json say the same. That block is the opposite of E47, so once main is merged in, every subpath import here (and E31's and E33's) reads as a preferBarrelImport error in typecheck. The fold needs a lead or owner call before it lands: drop or change that block in the three tooling tsconfigs per E47 (and say how E47 squares with 0577), or take E47 back. This branch has no such block, so lint and typecheck here are green either way. Merge conflicts the review found, for the integrator: 4 with origin/main (.github/ci/workflow-lint/check-job.ts, check-job.test.ts, scheduled.ts, scheduled.test.ts), and 40 files with fabrikalfa/effect-e33, mostly import lines and the same try/catch blocks. Checks at the code of this commit: pnpm format; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 green (0 blocking, jsdocs clean, no doc block moved); the CI package's tsc typecheck green; vitest one file at a time (nice 19, maxWorkers 1, on top of cc45457 with this change) over all 27 test files the change touches, which also load wiring.test-support.ts: 27 files and 894 tests passed. No law was loosened, no expect or comment dropped, no lock line and no @effect-diagnostics line added. No plant: the change is import lines only and no law changed. No .integration. or .visual. file is reached.",
+  "plants": [],
+  "step": "tests"
+}

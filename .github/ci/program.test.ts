@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import { transformSync } from "esbuild";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";

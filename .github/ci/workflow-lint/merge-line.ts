@@ -1,7 +1,8 @@
 // Today's CI, serving both versions. What the merge line runs no more: no tooling test (T1, 0539),
 // in check.yaml and in every other workflow a pull request or the merge queue starts, and nothing of
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import { parse } from "yaml";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
 

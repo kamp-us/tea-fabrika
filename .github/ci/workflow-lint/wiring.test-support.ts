@@ -3,7 +3,7 @@
 // every generated valid workflow, one at a time, so an unrelated error cannot mask it.
 // T342: all 24 input plants were rejected in each of 100 generated workflows.
 // A source plant ignoring next's required job condition failed this property too.
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored } from "../changes.mjs";

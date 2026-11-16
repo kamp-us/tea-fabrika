@@ -2,7 +2,9 @@
 // comment-only change under next/ runs only the reader tests (the plan for CI paths, slice 2).
 // changes.mjs imports this file only after the parser's install, and a failed import runs every
 // next/ test, so nothing here may be needed by its first pass.
-import { Array as Arr, Result, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Result from "effect/Result";
 import { parseSync } from "oxc-parser";
 
 /** How CI runs git: the arguments, then the exit status and what it printed. */

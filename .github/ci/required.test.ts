@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { jobs } from "./changes.mjs";

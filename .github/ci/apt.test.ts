@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { expect, it, onTestFinished } from "vitest";
 
 // Today's CI. Covers apt.sh, the apt step of next's chromium step. No root

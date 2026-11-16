@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. check.yaml's jobs: what each gated job waits on and when it
 // skips, which jobs may not come back (F3, ticket 985), and every job's time limit (ticket 496).
-import { Array as Arr, pipe } from "effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import { gated, gates } from "../required.mjs";
 import { compact, map, type Rule } from "./shared.ts";
 

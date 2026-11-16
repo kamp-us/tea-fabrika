@@ -1,5 +1,8 @@
 // Today's CI, serving both versions. scheduled.yaml's shape (SC1 to SC13).
-import { Array as Arr, Result, Order, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 import {
   allSteps,

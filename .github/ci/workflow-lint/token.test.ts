@@ -1,4 +1,5 @@
-import { Array as Arr, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import {
   loader,
   type Plant,

@@ -1,4 +1,4 @@
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import { type Plant, rejects, step, type Workflow } from "./wiring.test-support.ts";
 
 // Today's CI, serving both versions. Covers ci-required.ts, the one required check. Each plant is

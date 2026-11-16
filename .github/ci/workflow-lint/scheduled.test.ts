@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Array as Arr } from "effect";
+import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";

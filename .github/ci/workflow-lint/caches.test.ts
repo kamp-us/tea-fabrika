@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { Array as Arr, Option } from "effect";
+import * as Arr from "effect/Array";
+import * as Option from "effect/Option";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { cacheFiles, lintCaches } from "./caches.ts";
