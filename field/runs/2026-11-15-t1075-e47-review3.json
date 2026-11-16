@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-review3",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T22:24:08-08:00",
+  "ended": "2026-11-15T22:24:39-08:00",
+  "parent": "2026-11-15-t1075-e47-tests4",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Second recheck of record of slice E47 of the Effect-checker sweep (ticket 1075) at 03affde9: merge-ready, findings 0. The fault review2 named is fixed: next/apps/fabrika/src/exam/promise-types.ts, src/instance-one-file.integration.test.ts and src/worker-mail.integration.test.ts are byte for byte as at b0cae406 (git diff b0cae406 HEAD on each is empty), so they import Effect from the barrel as 0577 and 0023's table row keep for apps. effect-tsgo diagnostics on next/apps/fabrika/tsconfig.json with preferBarrelImport, globalConsole and globalConsoleInEffect at error finds 9 preferBarrelImport hits, the plan's E13 count, none in those three files, and 0 console hits. The tooling files keep the subpath imports the merge-session ruling sets, and lintWorkflow and its new property law stand as review2 found. Hits: 99 met, 92 fixed by hand edits, 0 by quick fix, 7 left for the owner (changes.mjs 1, required.mjs 2, scheduled.mjs 2, gitignore.mjs 1, program-package-layout.test.ts 1), 0 waiting on 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 1,
+  "note": "Read-only on the branch apart from this row. Read the whole fix commit 03affde9: the three files' import lines and the tests4 row. Ran at 03affde9: next/apps/fabrika/src/exam/no-promises.integration.test.ts 15 green, which runs promise-types.ts. Still for the lead from review2: the tooling subpath ruling has no decision file, and origin/fabrikalfa/effect-e0's .agents/tsconfig.json sets preferBarrelImport at error for tooling; a merge of origin/main still conflicts in oxlint-plugins/lint.ts with #1373. Not run: the two next/ integration tests that start real instances, whose files are back to the reviewed b0cae406 bytes; pnpm typecheck, which nothing in this commit can change beyond the b0cae406 state review1 typechecked.",
+  "step": "review"
+}
