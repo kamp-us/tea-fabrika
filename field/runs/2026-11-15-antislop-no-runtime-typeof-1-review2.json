@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-runtime-typeof-1-review2",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:39:24-08:00",
+  "ended": "2026-11-15T22:41:37-08:00",
+  "parent": "2026-11-15-antislop-no-runtime-typeof-1-tests2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Recheck of slice AS-no-runtime-typeof-1 at 419c24e67 after the fix round, next/: merge-ready. The class review1 named is fixed. git diff bcad0080d..419c24e67 is empty for next/apps/fabrika/e2e/first-window.visual.test.ts and instance.visual.test.ts, and reload.visual.test.ts differs from base only at its import line and lines 216 and 388, which run in Node (objects is called at 224 and 228 on an answer the test already holds). So no Predicate call is left in any page.evaluate or addInitScript body. The round changed nothing else: three e2e files and the tests2 row. With the rule forced on in a scratch config there are 24 hits: 11 in the four .github/ci .mjs scripts, the six page-side lines (first-window 135 and 167, instance 137 and 246, reload 85 and 158) and 7 in pull request 1366's two files, so the counts hold at 320 met, 296 fixed and 24 left. Leaving the six ignore lines to the lock pull request is right: a scratch edit that added the 0563 C line above instance.visual.test.ts 137 made oxlint report 'Unused oxlint-disable directive' at error, because reportUnusedDisableDirectives is error and the rule is not on for next/apps/fabrika yet. The lock pull request owes the six lines, with the exact text the tests2 row gives, in the same change as the lock line.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 3,
+  "note": "Read-only apart from this row; the scratch edit was undone and git status was clean. Ran at 419c24e67: the rule forced on in a scratch config (24 hits, as above); pnpm lint, which fails only on the zero lock's three asks for oxlint-plugins, next/packages/libfabrika/src/client and next/programs/tezgah, with no unused-directive error; tsc --noEmit for next/apps/fabrika, passed. Not run: the three .visual. files, which no brief named. The proof that their page bodies hold no Predicate is the base comparison above. Still true from review1: a merge of origin/main 623e161 conflicts in oxlint-plugins/integration-test-name.ts, and main's side has no runtime typeof.",
+  "step": "review"
+}
