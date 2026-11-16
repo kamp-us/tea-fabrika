@@ -114,7 +114,7 @@ const socket = Effect.fnUntraced(function* (
     while (true) {
       const frame = yield* Queue.take(inbox).pipe(Effect.timeout("20 seconds"));
 
-      if (frame instanceof Closed) {
+      if (Schema.is(Closed)(frame)) {
         return yield* frame;
       }
 
@@ -128,7 +128,7 @@ const socket = Effect.fnUntraced(function* (
   do {
     const frame = yield* Queue.take(inbox).pipe(Effect.timeout("20 seconds"));
 
-    if (frame instanceof Closed) {
+    if (Schema.is(Closed)(frame)) {
       return yield* frame;
     }
 

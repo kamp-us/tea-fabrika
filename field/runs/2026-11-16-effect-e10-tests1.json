@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e10-tests1",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T10:00:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E10 of the Effect-check sweep (instanceOfSchema), in next/ and our tooling, on one branch for the integrator. Recount on origin/main: 53 hits over the 13 tsconfigs, 17 in this slice's folders (libfabrika src/*.ts, access, node, settings; the app's src/*.ts; .agents), none in a file of pull request 1366; the other 36 are lib:cloudflare, processes, runtime, ledger (slice E66, after 1366). Lock: an overrides entry in libfabrika's, the app's and .agents/ tsconfig. Report: hits met 53 (17 in the slice), fixed by quick fix 0, fixed by hand with the Edit tool 17 (15 in exam paths, 2 in product files), left 0, waiting on 1366 0. Files: next/packages/libfabrika/src/Id.ts, src/access/SessionSenderTest.ts, src/node/settings/Load.integration.test.ts, src/settings/Files.test.ts, src/settings/Snapshot.test.ts, next/apps/fabrika/src/door.integration.test.ts, src/tasks-wire.integration.test.ts, .agents/skills/lead/scripts/flow/landing.ts. Each fix is x instanceof C made Schema.is(C)(x). The three tsconfigs show 0 errors. The LOCKED row waits for E0. Pull request 1448 was opened before the shape changed and is left as it is.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 60,
+  "note": "Tests run, narrow, --maxWorkers=1: settings Files.test and Snapshot.test, node/settings Load.integration.test, node/access SessionSender.integration.test, app tasks-wire.integration.test and door.integration.test, Id.test, landing.test. pnpm lint passed 16 of 17 parts; lint:dead was killed with SIGABRT in this box. No full typecheck.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "one `x instanceof NotGranted` line added to src/access/SessionSenderTest.ts: libfabrika's instanceOfSchema errors go from 1 to 2",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/access/**/*.ts dropped from libfabrika's override with the planted line still in: the count goes from 2 back to 1, so the glob is what holds that folder",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

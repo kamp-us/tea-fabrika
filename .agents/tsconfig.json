@@ -21,13 +21,15 @@
             }
           }
         },
-        // These folders: schemaNumber (E4), preferTypedSchemaDecoder (E5).
+        // These folders: schemaNumber (E4), preferTypedSchemaDecoder (E5), instanceOfSchema
+        // (E10).
         {
           "include": ["**/*.ts"],
           "options": {
             "diagnosticSeverity": {
               "schemaNumber": "error",
-              "preferTypedSchemaDecoder": "error"
+              "preferTypedSchemaDecoder": "error",
+              "instanceOfSchema": "error"
             }
           }
         },

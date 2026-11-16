@@ -197,7 +197,7 @@ export class Generator extends Context.Service<
           const now = yield* Clock.currentTimeMillis;
           return yield* Effect.try({
             try: () => allocate(schema, prefix, now),
-            catch: (error) => (error instanceof IdError ? error : new IdError({ reason: "entropy", cause: error })),
+            catch: (error) => (S.is(IdError)(error) ? error : new IdError({ reason: "entropy", cause: error })),
           });
         }),
       };

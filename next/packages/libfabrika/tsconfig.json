@@ -53,6 +53,15 @@
               }
             }
           },
+          // These folders: instanceOfSchema (E10).
+          {
+            "include": ["src/*.ts", "src/access/**/*.ts", "src/node/**/*.ts", "src/settings/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "instanceOfSchema": "error"
+              }
+            }
+          },
           // These folders: catchToOrElseSucceed (E9).
           {
             "include": ["src/node/**/*.ts", "src/transport/**/*.ts"],

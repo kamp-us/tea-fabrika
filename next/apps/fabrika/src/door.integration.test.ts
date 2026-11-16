@@ -1848,7 +1848,7 @@ describe("P10 review regressions", () => {
     readonly refused: (failure: unknown, thrown: unknown) => void;
   };
   const gatewayCrypto = (failure: unknown, thrown: unknown) => {
-    assert(failure instanceof GatewayError);
+    assert(Schema.is(GatewayError)(failure));
     expect(failure).toMatchObject({ _tag: "GatewayError", reason: { _tag: "Crypto" } });
     expect(failure.reason.cause).toBe(thrown);
   };
@@ -1857,12 +1857,12 @@ describe("P10 review regressions", () => {
     expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
   };
   const membershipCrypto = (failure: unknown, thrown: unknown) => {
-    assert(failure instanceof SessionManagerError);
+    assert(Schema.is(SessionManagerError)(failure));
     expect(failure).toMatchObject({
       _tag: "SessionManagerError",
       reason: { _tag: "Membership", cause: { _tag: "LedgerError", reason: "crypto" } },
     });
-    assert(failure.reason.cause instanceof LedgerError);
+    assert(Schema.is(LedgerError)(failure.reason.cause));
     expect(failure.reason.cause.cause).toBe(thrown);
   };
   const edges: ReadonlyArray<Edge> = [

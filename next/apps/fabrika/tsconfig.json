@@ -45,6 +45,15 @@
                 "catchToOrElseSucceed": "error"
               }
             }
+          },
+          // These folders: instanceOfSchema (E10).
+          {
+            "include": ["src/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "instanceOfSchema": "error"
+              }
+            }
           }
         ]
       }
