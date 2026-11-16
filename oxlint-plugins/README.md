@@ -359,8 +359,11 @@ Its property test generates file contents and checks nearby paths stay allowed.
 `.oxlintrc.json` turns it on for, to one Effect runtime (P12, L11): it imports `runMain` from
 `@kampus/tuval/browser` once, starts it once as a statement of the module, reads it nowhere else,
 and calls no other `run*`. It took over `next/apps/fabrika/src/build.test.ts`'s format law (0591).
-`one-page-runtime.test.ts` generates the entry in each start spelling and the four planted breaks,
-and plants them at the entry's path with the real config. Count on 2026-11-16, on the real entry:
+It counts every import of `runMain`, from any module and under any local name, and reads a member
+named by a string key (`Effect["runPromise"]`) as the same name written plainly.
+`one-page-runtime.test.ts` generates the entry in each start spelling and seven planted breaks (the
+plan's four, and the review's renamed second import, `runMain` renamed from another module, and a
+run read by a string key), and plants them at the entry's path with the real config. Count on 2026-11-16, on the real entry:
 0 fires. The `no-restricted-imports` lines that keep the TOML adapter and its parser to their
 callers (T730's L9) are planted, generated, in `settings-imports.test.ts`.
 

@@ -8,7 +8,9 @@
 // start at module scope) is a second page runtime. Any other `run*` name (`Effect.runPromise`,
 // `runFork`, `ManagedRuntime.runSync`) is a run the page does not own.
 //
-// It reads written names only: an alias of `runMain` or of a run function is not traced.
+// Every import of `runMain`, from any module and under any local name, is counted: only the one from
+// `@kampus/tuval/browser` under its own name passes. A member read through a string key
+// (`Effect["runPromise"]`, a template with no expressions) counts as the same name written plainly.
 import type { CreateRule } from "@oxlint/plugins";
 import type { Node } from "./match.ts";
 
@@ -18,6 +20,22 @@ const OTHER_RUN = /^run[A-Z]\w*$/;
 
 const isRunMain = (node: Node | null | undefined): boolean =>
   node != null && node.type === "Identifier" && node.name === NAME;
+
+/** The name a string literal or a template with no expressions spells, or null. */
+const spelled = (node: Node): string | null =>
+  node.type === "Literal" && typeof node.value === "string"
+    ? node.value
+    : node.type === "TemplateLiteral" && node.expressions.length === 0
+      ? (node.quasis[0]?.value.cooked ?? null)
+      : null;
+
+/** The name an import specifier takes from its module: `runMain` in `{ runMain as boot }` and `{ "runMain" as boot }`. */
+const importedName = (node: Node): string | null =>
+  node.type === "ImportSpecifier"
+    ? node.imported.type === "Identifier"
+      ? node.imported.name
+      : spelled(node.imported)
+    : null;
 
 /** The `runMain` a start statement calls, or null when the statement is not a start. */
 const startOf = (statement: Node): Node | null => {
@@ -52,36 +70,61 @@ const startOf = (statement: Node): Node | null => {
 export const onePageRuntime: CreateRule = {
   create(context) {
     const reads: Node[] = [];
+    const read = (node: Node, name: string) => {
+      if (name === NAME) {
+        reads.push(node);
+        return;
+      }
+
+      if (OTHER_RUN.test(name)) {
+        context.report({
+          node,
+          message: `\`${name}\` runs an Effect the page does not own. The page entry hands its one program to \`runMain\` from \`${FROM}\` and calls no other run function (P12, L11).`,
+        });
+      }
+    };
     return {
       Identifier(node) {
         const { parent } = node as Node & { readonly parent: Node };
 
-        if (node.name === NAME) {
-          if (parent.type !== "ImportSpecifier") {
-            reads.push(node);
-          }
-
-          return;
+        // An import's names are counted in `Program:exit`, by what the specifier imports.
+        if (!(node.name === NAME && parent.type === "ImportSpecifier")) {
+          read(node, node.name);
         }
+      },
+      MemberExpression(node) {
+        const name = node.computed ? spelled(node.property) : null;
 
-        if (OTHER_RUN.test(node.name)) {
-          context.report({
-            node,
-            message: `\`${node.name}\` runs an Effect the page does not own. The page entry hands its one program to \`runMain\` from \`${FROM}\` and calls no other run function (P12, L11).`,
-          });
+        if (name !== null) {
+          read(node.property, name);
         }
       },
       "Program:exit"(program) {
-        const imports = program.body.filter(
-          (node) =>
-            node.type === "ImportDeclaration" &&
-            node.source.value === FROM &&
-            node.specifiers.some((s) => s.type === "ImportSpecifier" && isRunMain(s.imported) && isRunMain(s.local)),
+        const imports = program.body.flatMap((node) =>
+          node.type === "ImportDeclaration"
+            ? node.specifiers
+                .filter((s) => importedName(s) === NAME)
+                .map((s) => ({
+                  s,
+                  own:
+                    node.source.value === FROM &&
+                    s.type === "ImportSpecifier" &&
+                    isRunMain(s.local) &&
+                    isRunMain(s.imported),
+                }))
+            : [],
         );
+        const own = imports.find((i) => i.own);
+        // Every other import of `runMain` is refused where it stands; with none at all, the module is.
+        const refused: Node[] = imports.filter((i) => i !== own).map((i) => i.s);
 
-        if (imports.length !== 1) {
+        if (own === undefined && refused.length === 0) {
+          refused.push(program);
+        }
+
+        for (const node of refused) {
           context.report({
-            node: imports[1] ?? program,
+            node,
             message: `Import \`runMain\` from \`${FROM}\` once, under its own name: the page's one Effect program starts through it (P12, L11).`,
           });
         }
