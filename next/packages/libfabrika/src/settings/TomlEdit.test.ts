@@ -770,6 +770,18 @@ describe("T877 public TOML edits, next/", () => {
         cycle.self = cycle;
         const sparse: Array<unknown> = Array.from({ length: 2 });
         Reflect.deleteProperty(sparse, 0);
+        // A hole whose index the prototype holds is still a hole: the guard reads own elements only,
+        // as Object.hasOwn did before the Effect-check sweep turned it into the in operator.
+        const shadowed: Array<unknown> = Array.from({ length: 2 }, () => 1);
+        Reflect.deleteProperty(shadowed, 0);
+        Object.setPrototypeOf(shadowed, Object.assign(Object.create(Array.prototype), { 0: "inherited" }));
+
+        for (const holed of [sparse, shadowed]) {
+          for (const value of [holed, { nested: [holed] }]) {
+            const error = yield* refusal(toml.set(start.text, path, value), "Value");
+            expect(error.message).toBe("A TOML array cannot contain a missing element.");
+          }
+        }
 
         const bad: ReadonlyArray<unknown> = [
           null,
