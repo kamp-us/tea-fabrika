@@ -33,7 +33,7 @@ Decision [0563](../.decisions/0563-anti-slop-plugin-as-it-ships.md) takes the an
 
 `.oxlintrc.json` loads its two plugins, `anti-slop` and `anti-slop-effect`. The owner took ten of their rules: `anti-slop/max-ternary-depth` (0558), `anti-slop/require-safety-comment-for-type-assertion` (0561), `anti-slop/require-readable-spacing`, `anti-slop/no-unknown-parameters`, `anti-slop/no-unknown-returns`, `anti-slop/no-runtime-typeof`, `anti-slop-effect/no-manual-tagged-construction` and `anti-slop-effect/no-manual-tagged-type` (0562, 0563), and the two Match rules `anti-slop-effect/no-manual-tag-comparison` and `anti-slop-effect/prefer-effect-match` ([0567](../.decisions/0567-a-tagged-value-is-matched.md)). No other rule of the two plugins is on anywhere.
 
-**How a rule goes on in a folder.** Each taken rule has one block at the very end of `overrides`, and it lists the folders where the rule has no hit. A folder is one of: `.agents/**`, `.github/ci/**`, `oxlint-plugins/**`, the files right in libfabrika's `src/` as `next/packages/libfabrika/src/*`, each libfabrika module, each other package, each program and the app. A rule is never `"off"` or `"warn"`, and never in the root `rules`. A pull request that brings a folder to zero adds the folder to that rule's block. The zero lock (`anti-slop.ts`) makes that hold: a whole run lints the scope once more with the taken rules on, and fails on a folder with no hit that the rule's block does not list, and on a listed glob that is not a folder of the scope. When every folder is listed, the list becomes the scope's four globs: `next/**`, `.agents/**`, `oxlint-plugins/**` and `.github/ci/**`. `anti-slop/require-readable-spacing` has no block yet, since no folder is at zero for it: its first block comes with its first sweep.
+**How a rule goes on in a folder.** Each taken rule has one block at the very end of `overrides`, and it lists the folders where the rule has no hit. A folder is one of: `.agents/**`, `.github/ci/**`, `oxlint-plugins/**`, the files right in libfabrika's `src/` as `next/packages/libfabrika/src/*`, each libfabrika module, each other package, each program and the app. A rule is never `"off"` or `"warn"`, and never in the root `rules`. A pull request that brings a folder to zero adds the folder to that rule's block. The zero lock (`anti-slop.ts`) makes that hold: a whole run lints the scope once more with the taken rules on, and fails on a folder with no hit that the rule's block does not list, and on a listed glob that is not a folder of the scope. When every folder is listed, the list becomes the scope's four globs: `next/**`, `.agents/**`, `oxlint-plugins/**` and `.github/ci/**`. `anti-slop/require-readable-spacing` is the one taken rule with a safe autofix, so its sweep is `pnpm format` with the folder on its block. Its first sweep (ticket 1057, 2026-11-16) added 14,717 blank lines and nothing else, and listed 26 folders. The nine folders it left hold files of pull request 1366, which the sweep left as they were so that 1366 does not conflict: libfabrika's `cloudflare`, `gateway`, `ledger`, `processes`, `runtime`, `settings`, `telemetry` and `transport`, and `next/apps/fabrika`. `transport` left the block when 1366 took in `transport/Connection.ts`. Their sweep is `pnpm format` again after 1366 merges.
 
 **Loaded only from there.** A whole run also fails when a `jsPlugins` entry named `anti-slop` or `anti-slop-effect` loads from any path but `vendor/anti-slop/src/index.ts` or `vendor/anti-slop/src/effect/index.ts` (`strays` in `anti-slop.ts`), so an edited copy in another folder cannot stand in for the pinned one.
 
@@ -45,7 +45,7 @@ Count on 2026-11-15, from the zero lock's own run over this branch (main at `6ea
 |---|---|
 | `max-ternary-depth` | 18 |
 | `require-safety-comment-for-type-assertion` | 11 |
-| `require-readable-spacing` | 0 |
+| `require-readable-spacing` | 0, and 26 after its first sweep on 2026-11-16 |
 | `no-unknown-parameters` | 11 |
 | `no-unknown-returns` | 15 |
 | `no-runtime-typeof` | 12 |
@@ -949,7 +949,7 @@ A call counts only through the module its name came from, in any spelling (`{ sp
 | the local instance or workerd | `localInstance(…)`; `killWorkerd(…)` from `workerd.test-support.ts` |
 | a signal | `process.kill(…)` |
 | the network | `fetch(…)` or `new WebSocket(…)` whose literal URL names a host other than this machine, unless the file stubs `fetch` with `vi.stubGlobal("fetch", …)`; a socket's client call (`https.get`, `request`, `connect`) to such a URL |
-| local disk | `new DatabaseSync(path)` from `node:sqlite` unless the path is `":memory:"`; `mkdtemp` and `mkdtempSync` from `node:fs`, `fs.promises` or `node:fs/promises`; `makeTempDirectory`, `makeTempFile` and their `Scoped` forms on the `FileSystem` service, with Node's layer |
+| local disk | `new DatabaseSync(path)` from `node:sqlite`, and `make(path)` and `open(path)` from `@kampus/vitest/TestDatabase` (ticket 1029), unless the path is `":memory:"`; `mkdtemp` and `mkdtempSync` from `node:fs`, `fs.promises` or `node:fs/promises`; `makeTempDirectory`, `makeTempFile` and their `Scoped` forms on the `FileSystem` service, with Node's layer |
 
 "With Node's layer" means the call is real only on `NodeServices` (or `NodeChildProcessSpawner` for
 a process, `NodeFileSystem` for disk) from `@effect/platform-node`. In one file's own code it counts
@@ -1093,9 +1093,59 @@ main's number back, and the 50 that the real-IO part holds in memory test files 
 `RuleTester` and then one real oxlint run over the planted files with the repo's config. Law 1 plants
 every count form at counts 1 to 5,000 (100, 101, 300 and 3,000 pinned) inside a law that opens SQLite
 and inside one in memory, in each test-file name, in `next/` and in `packages/`, which the rule does
-not hold: only the law over real IO fires. Law 2 plants five IO imports (SQLite, a child process, a
-`node:fs` write, miniflare and the SQLite layer) at counts 1 to 5,000 beside the five false alarm
-kinds above and a law in memory, which must pass.
+not hold: only the law over real IO fires. Law 2 plants seven IO imports (SQLite, a child process, a
+`node:fs` write, miniflare, the SQLite layer, and the test database module through its namespace and
+by name) and `runsFor` from `@kampus/vitest`'s root, which is not IO, at counts 1 to 5,000 beside
+the five false alarm kinds above and a law in memory, which must pass.
+
+## A test opens SQLite through the test database, ticket 1029
+
+`test-database` refuses `new DatabaseSync(file)` in a `next/` test file (`*.test.ts`, `*.test.tsx`),
+a shared suite (`*Test.ts`) or a test kit (`*.test-support.ts`), unless `file` is the literal
+`":memory:"`. A test opens a SQLite file through `TestDatabase` in `@kampus/vitest/TestDatabase`
+(decision 0538):
+
+```ts
+const db = yield* TestDatabase.make(file); // a file the test owns: journal in memory, no disk sync
+const theirs = yield* TestDatabase.open(file, { readOnly: true }); // a file another party owns: sets nothing
+new DatabaseSync(":memory:"); // passes: no file
+new DatabaseSync(file); // refused
+```
+
+In SQLite's default mode every commit writes and deletes a rollback journal and syncs the disk, so a
+law's time is the disk's (ticket 1028, decision 0052). `make` fixes the mode in one place:
+`journal_mode=MEMORY` and `synchronous=OFF`, not a setting, since nobody picks a test's journal mode
+(0069). `open` is for a file a running instance or the product's span queue owns, and it changes
+nothing in it. A reopen is `ScopedRef.set(ref, TestDatabase.make(file))`.
+
+It reads the constructor through the module its name came from: `DatabaseSync` named or renamed from
+`node:sqlite` (or `sqlite`), or `sqlite.DatabaseSync` through a namespace or default import. A local
+class of the same name, a parameter that shadows the import, a look-alike module, product code and
+files outside `next/` pass. It reads syntax, so a `DatabaseSync` reached through another module's
+helper, or `Reflect.construct`, slips past it.
+
+**Measured** on 2026-11-14 on `origin/main` at `86a7668d6`: 62 calls in 53 files. Every one is a file
+store that moves to `make` or a file another party owns that moves to `open`, so none is right as it is
+once `open` exists: 0 false alarms in 62, and the rule blocks (AGENTS.md, "Checks"). The 28 in-memory
+files and the child script inside a template string in `instance-database.integration.test.ts` do
+not fire by construction. A law that must keep SQLite's default mode to prove durability opens its
+file with `open` and sets its own pragma line, as `next/apps/fabrika/e2e/stored.integration.test.ts`
+does; if a line must still write the constructor, it carries
+`// oxlint-disable-next-line fabrika/test-database -- <why>`, and the lead reads it at merge.
+
+Main, merged in on 2026-11-15, had added six more test files that opened SQLite by hand, and the
+rule fired on each. Each moved the same way: the three stores to `make`, the hands journal and the
+span read's planted files to `open`, and `LedgerTurnReads.integration.test.ts`, whose law needs WAL
+as a Durable Object keeps it, to `open` with its own pragma line.
+
+`test-database.test.ts` holds its law, a property through oxlint's `RuleTester` at seed 119120 over
+the import form (named, renamed, namespace, default), the module (`node:sqlite`, `sqlite`, two
+look-alikes), the argument (`":memory:"` in three spellings, a variable, a literal or built path,
+with options) and the path (a test, a suite, a test kit, product code, outside `next/`). Its three
+plants are named in its header. Two scenarios run oxlint with the repo's own config: one over a
+planted `next/` folder, where a hand-opened file is refused in a test, a suite and a test kit and
+passes in product code, and one over the real tree, which is at zero. `integration-test-name` and `runs-from-depth` read the module too,
+so a file that moves to it keeps its integration name and its depth-read count.
 
 ## No `Reflect.get`, `Reflect.set` or `Reflect.has`, decision 0554
 

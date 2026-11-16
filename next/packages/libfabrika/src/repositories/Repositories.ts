@@ -29,6 +29,7 @@ export const Branch = Schema.String.check(
  * @category schemas
  */
 export const ObjectId = Schema.String.check(Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/));
+
 /**
  * Schema for a SHA-256 digest in lowercase hex. It holds a snapshot's `key` and the hash of its
  * settings document.
@@ -58,6 +59,7 @@ export const Snapshot = Schema.Struct({
   text: Schema.NullOr(Schema.String),
   hash: Hash,
 });
+
 /**
  * A repository snapshot, as `Repositories.open` answers it.
  *

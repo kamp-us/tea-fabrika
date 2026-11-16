@@ -18,6 +18,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     () =>
       Effect.gen(function* () {
         const seen = new Set<string>();
+
         const tape = Schema.Struct({
           body: Line.fields.body,
           traceId: Line.fields.traceId,
@@ -28,17 +29,21 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             Schema.isMaxLength(16),
           ),
         });
+
         const law = Effect.fnUntraced(function* (a: typeof tape.Type) {
           const store = yield* open;
           const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
           const layers = () =>
             Layer.mergeAll(
               LedgerSql.layer(store.sql, { reader: "discovery-law" }),
               LedgerStreamsSql.layer(store.sql),
             ).pipe(Layer.provide(quiet));
+
           let life = yield* Layer.build(layers());
           const names = new Set<string>();
           let sequence = 0;
+
           const append = Effect.fnUntraced(function* (stream: string, id: string) {
             // Discovery needs valid entries; parent checks and writer encoding have their own laws.
             const line = lineFor(
@@ -53,6 +58,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               },
               Schema.TaggedStruct("discovery", { value: Line.fields.body }).make({ value: a.body }),
             );
+
             const answer = yield* Ledger.use((l) => l.append(stream, id, line)).pipe(Effect.provide(life));
             expect(answer._tag).toBe("placed");
             names.add(stream);
@@ -81,12 +87,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
             const actual = yield* LedgerStreams.use((s) => Stream.runCollect(s.list(a.prefix))).pipe(
               Effect.provide(life),
             );
+
             const expected = [...names].filter((name) => name.startsWith(a.prefix)).sort();
             expect([...actual]).toEqual(expected);
             expect(new Set(actual).size).toBe(actual.length);
             seen.add(a.prefix);
           }
         });
+
         const result = yield* Arbitrary.checkEffect(
           Arbitrary.schema(tape),
           (a) =>
@@ -97,6 +105,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           // 15 walks never reach a `%` job name at this seed.
           { seed: 119120, runs: runsFor({ fast: 30, full: 60 }), concurrency: 1 },
         );
+
         expect(result._tag, Arbitrary.formatCheckFailure(result)).toBe("Passed");
 
         for (const reached of ["reopen", "duplicate", "job:%", "job:_", "job:\\", "job:é"]) {
@@ -112,6 +121,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     ({ text }) =>
       Effect.gen(function* () {
         const failure = new Error(text);
+
         const sql: Sql = {
           exec: () => {
             // oxlint-disable-next-line fabrika/no-throw-in-effect-gen -- edge: a synchronous database driver throws
@@ -123,10 +133,12 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
           },
           size: () => 0,
         };
+
         const result = yield* LedgerStreams.use((s) => Stream.runCollect(s.list("job:"))).pipe(
           Effect.provide(LedgerStreamsSql.layer(sql)),
           Effect.result,
         );
+
         expect(result._tag).toBe("Failure");
 
         if (result._tag === "Failure") {

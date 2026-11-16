@@ -8,7 +8,9 @@ import * as RateLimit from "../RateLimit.ts";
 import * as Rate from "./rateLimit.ts";
 
 type Model = typeof Rate.machine.model.Type;
+
 type Msg = typeof Rate.machine.msg.Type;
+
 type Cmd = ReturnType<typeof Rate.machine.init>[1][number];
 
 const Policy = Schema.Struct({
@@ -27,16 +29,19 @@ const trace = (initial: typeof Policy.Type, picks: typeof Tape.Type) => {
 
   for (const pick of picks) {
     const p = state._tag !== "fresh" ? state.policy : initial;
+
     // Read the state before choosing a repeat, a backward clock, expiry, skipped windows or a policy change.
     const times =
       state._tag !== "fresh"
         ? [state.at, state.at - 1, state.until - 1, state.until, state.until + p.window * 3]
         : [18];
+
     const msg: Msg = {
       type: "take",
       at: times[pick % times.length]!,
       policy: pick % 7 === 0 ? (pick % 2 ? { ...p, window: p.window + 1 } : { ...p, limit: p.limit + 1 }) : p,
     };
+
     messages.push(msg);
     state = applyCell<Model, Msg, Cmd>(Rate.machine, state, msg)[0];
   }
@@ -112,11 +117,13 @@ it.prop(
   { window: Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 1000 })) },
   ({ window }) => {
     const state = Rate.machine.init(null, {})[0];
+
     const [next, cmds] = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
       type: "take",
       at: Number.MAX_SAFE_INTEGER,
       policy: { limit: 1, window },
     });
+
     expect(next).toEqual(state);
     expect(cmds).toHaveLength(1);
     expect(cmds[0]!.decision).toMatchObject({ _tag: "invalid", cause: expect.anything() });
@@ -127,15 +134,19 @@ it.prop(
 it("vector: expiry is half-open, just before, at and after the end", () => {
   // The plan pins the exact boundary as well as generating time walks above.
   let state = Rate.machine.init(null, {})[0];
+
   const take = (at: number) => {
     const result = applyCell<Model, Msg, Cmd>(Rate.machine, state, {
       type: "take",
       at,
       policy: { limit: 1, window: 60 },
     });
+
     state = result[0];
+
     return result[1][0]!.decision;
   };
+
   expect(take(18)).toEqual({ _tag: "allowed", count: 1, ttl: 42 });
   expect(take(59)).toEqual({ _tag: "refused", retryAfter: 1 });
   expect(take(60)).toEqual({ _tag: "allowed", count: 1, ttl: 60 });

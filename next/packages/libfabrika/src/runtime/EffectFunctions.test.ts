@@ -58,9 +58,13 @@ const attributes = fc.record({
 });
 
 const PROCESS = "process_01jc9q4w7zfm8s5r2t6v0xkb4d";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const DAY = 86_400_000;
+
 const BIG = 1_000_000_000;
+
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
 
 const request = Effect.fn("test.request")(function* <A, E, R>(body: Effect.Effect<A, E, R>) {
@@ -72,13 +76,16 @@ const capture = (delegate?: Tracer.Tracer, spans: Array<Tracer.Span> = []) => {
     span(options) {
       const span = delegate?.span(options) ?? new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   return { spans, tracer };
 };
 
 const tags = (span: Tracer.Span) => Object.fromEntries(span.attributes);
+
 const parentId = (span: Tracer.Span) => Option.getOrNull(Option.map(span.parent, (p) => p.spanId));
 
 const ended = (span: Tracer.Span, ok: boolean) => {
@@ -115,6 +122,7 @@ const disk = () => {
   const db = new DatabaseSync(":memory:");
   const actual = nodeSql(db);
   const fault = { armed: false };
+
   const sql: Sql = {
     ...actual,
     transaction: (work) => {
@@ -126,6 +134,7 @@ const disk = () => {
       return actual.transaction(work);
     },
   };
+
   return { db, sql, fault };
 };
 
@@ -157,6 +166,7 @@ describe("T285, ledger tracing keep-laws", () => {
       ),
       after: fc.nat(8),
     });
+
     await fc.assert(
       fc.asyncProperty(
         attributes,
@@ -224,6 +234,7 @@ describe("T285, ledger tracing keep-laws", () => {
                               : call.op === "id_reused"
                                 ? { ...input, body: { changed: a.value } }
                                 : input;
+
                     const answer = yield* ledger.append(a.stream, id, changed);
                     const accepted = call.op === "append";
 
@@ -293,6 +304,7 @@ describe("T285, ledger tracing keep-laws", () => {
           const d = disk();
           const c = capture();
           let mode = "ok";
+
           const bell = Layer.succeed(Doorbell, {
             ring: () => {
               if (mode === "throw") {
@@ -368,12 +380,14 @@ describe("T285, ledger tracing keep-laws", () => {
                   d.fault.armed = true;
                   const before = c.spans.length;
                   const parent = yield* Effect.currentSpan;
+
                   const work: Effect.Effect<unknown, LedgerError> =
                     op === "append"
                       ? ledger.append(a.stream, `${a.id}/${i}`, line(a, ctx.traceId))
                       : op === "read"
                         ? Stream.runCollect(ledger.read(a.stream, 0))
                         : ledger.wait(a.stream, 0);
+
                   const exit = yield* Effect.exit(work);
                   expect(Exit.isFailure(exit)).toBe(true);
                   const spans = c.spans.slice(before);
@@ -413,6 +427,7 @@ describe("T285, coordination tracing keep-laws", () => {
         async (a, ctx, keys, failures) => {
           const d = disk();
           const c = capture();
+
           const layer = ClientManagerLedger.layer({
             name: a.id,
             keys,
@@ -486,6 +501,7 @@ describe("T285, coordination tracing keep-laws", () => {
         async (ctx, calls, exhaustedAt) => {
           const d = disk();
           const c = capture();
+
           const manager = ProcessManager.layer(
             {
               owner: Owner.cases.brain.make({}),
@@ -507,6 +523,7 @@ describe("T285, coordination tracing keep-laws", () => {
                   d.fault.armed = call.op === "info" && call.fails;
                   const before = c.spans.length;
                   const work: Effect.Effect<unknown, LedgerError> = call.op === "info" ? processes.info : ids.next;
+
                   const exit = yield* Effect.exit(
                     request(work).pipe(
                       Effect.provideService(
@@ -515,6 +532,7 @@ describe("T285, coordination tracing keep-laws", () => {
                       ),
                     ),
                   );
+
                   const ok = call.op === "next" || !call.fails;
                   expect(Exit.isSuccess(exit)).toBe(ok);
                   const spans = c.spans.slice(before);
@@ -536,6 +554,7 @@ describe("T285, coordination tracing keep-laws", () => {
                 }
 
                 const before = c.spans.length;
+
                 const exit = yield* Effect.exit(
                   request(ids.next).pipe(
                     Effect.provideService(
@@ -544,6 +563,7 @@ describe("T285, coordination tracing keep-laws", () => {
                     ),
                   ),
                 );
+
                 expect(Exit.isFailure(exit)).toBe(true);
                 const spans = c.spans.slice(before);
                 expect(spans.map((s) => s.name)).toEqual(["test.request", "process.next", "id.next"]);
@@ -577,6 +597,7 @@ describe("T285, caller context keep-laws", () => {
         fc.integer({ min: 0, max: 2_000_000_000_000 }),
         async (a, ctx, n, at) => {
           const c = capture();
+
           const input = {
             by: a.by,
             for: PERSON,
@@ -584,6 +605,7 @@ describe("T285, caller context keep-laws", () => {
             parent: n === null ? null : `in-${PROCESS}-${n}`,
             build: a.build,
           };
+
           await Effect.runPromise(
             request(
               Effect.gen(function* () {
@@ -613,9 +635,11 @@ describe("T285, caller context keep-laws", () => {
     fc.assert(
       fc.property(attributes, (a) => {
         const c = capture();
+
         const exit = Effect.runSyncExit(
           fromHere({ by: a.by, for: PERSON, seen: 0, parent: null, build: a.build }).pipe(Effect.withTracer(c.tracer)),
         );
+
         expect(Exit.isFailure(exit)).toBe(true);
         const failure = Exit.match(exit, { onFailure: Cause.squash, onSuccess: () => undefined });
         expect(Cause.isNoSuchElementError(failure)).toBe(true);
@@ -634,6 +658,7 @@ describe("T285, sink keep-law", () => {
       failure: fc.constantFrom("ok", "fail", "die"),
       ms: fc.nat(1000),
     });
+
     await fc.assert(
       fc.asyncProperty(
         context,
@@ -644,6 +669,7 @@ describe("T285, sink keep-law", () => {
           const d = disk();
           const parts: Array<DatabaseSync> = [];
           const known = new Map<string, Sql>();
+
           const records = RecordManager.sql((name) => {
             const found = known.get(name);
 
@@ -655,8 +681,10 @@ describe("T285, sink keep-law", () => {
             parts.push(db);
             const sql = nodeSql(db);
             known.set(name, sql);
+
             return sql;
           }, BIG);
+
           const layer = Layer.mergeAll(SpanSink.layer(d.sql, { object: "tracing-test" }), records, Archive.memory);
           const chain = job ? Chain.cases.job.make({ process: PROCESS }) : Chain.cases.spans.make({});
           let now = 100 * DAY;
@@ -841,12 +869,14 @@ const runnerWorld = (
     sessions = disk(),
     sink = disk(),
     processes = disk();
+
   const spans: Array<Tracer.Span> = [];
   const flushes: Array<ReadonlyArray<string>> = [];
   const fault = { at: "none" };
   /** The process a checked write's session was delivered to; a successor writes under its own ID. */
   const writer = { process: PROCESS };
   const owner = Writer.cases.person.make({ key: a.key, for: PERSON });
+
   const base = Layer.mergeAll(
     LedgerSql.layer(data.sql, { reader: "runner-test" }).pipe(Layer.provide(quiet)),
     SessionManager.layer(sessions.sql, () => Effect.succeed(owner), {
@@ -857,12 +887,14 @@ const runnerWorld = (
     RecordManager.memory(BIG),
     Archive.memory,
   );
+
   const checked = Layer.effect(
     CheckedWriter,
     Effect.gen(function* () {
       const ledger = yield* Ledger;
       const mailbox = yield* Mailbox;
       const sessions = yield* SessionManager;
+
       return {
         append: Effect.fnUntraced(function* (input: Incoming) {
           if (fault.at === "append_storage") {
@@ -936,12 +968,14 @@ const runnerWorld = (
       };
     }),
   );
+
   // Ticket 402: every runner is supervised. The real manager keeps its process table in its own
   // ledger and its first start names PROCESS; receipts live beside ProcessStore.
   // P34: a successor gets a new process ID, so the world's generator never repeats one.
   let ids = 0;
   const idFor = (n: number) => (n === 0 ? PROCESS : `process_01jc9q4w7zfm8s5r2t6v0x${String(n).padStart(4, "0")}`);
   const nextId = Effect.sync(() => idFor(ids++));
+
   const manager = Layer.effectDiscard(
     ProcessManager.use((m) =>
       m.start(
@@ -974,6 +1008,7 @@ const runnerWorld = (
     ),
     Layer.provide(LedgerTransactionSql.layer(processes.sql).pipe(Layer.provide(quiet))),
   );
+
   const adapters = Layer.mergeAll(
     ProgramLoader.layer(
       { [program.name]: program },
@@ -998,6 +1033,7 @@ const runnerWorld = (
     Recording.layer,
     manager,
   ).pipe(Layer.provideMerge(Mailbox.layer.pipe(Layer.provideMerge(base))));
+
   const observed = Layer.mergeAll(
     Layer.effect(
       Tracer.Tracer,
@@ -1018,6 +1054,7 @@ const runnerWorld = (
       })),
     ),
   ).pipe(Layer.provideMerge(adapters));
+
   const layer = ProgramRunner.layer(
     {
       id: PROCESS,
@@ -1028,6 +1065,7 @@ const runnerWorld = (
     },
     { recovery: { sql: state.sql, name: a.name, capacity: 1024 ** 3 }, chunk: mailChunk.default },
   ).pipe(Layer.provideMerge(observed));
+
   const input = (n: number, m: unknown) =>
     decodeIncoming({
       id: `letter-${n}`,
@@ -1041,6 +1079,7 @@ const runnerWorld = (
       seen: 0,
       span: signer,
     });
+
   return {
     layer,
     spans,
@@ -1172,6 +1211,7 @@ describe("T285, runner tracing keep-laws", () => {
       value: fc.integer(),
       client: fc.string({ minLength: 1, maxLength: 20 }),
     });
+
     await fc.assert(
       fc.asyncProperty(
         context,
@@ -1213,6 +1253,7 @@ describe("T285, runner tracing keep-laws", () => {
                   const writing = ["own", "caused", "write_refused", "write_storage"].includes(call.op);
                   const handling = ["work", "handler_fail", "handler_die"].includes(call.op);
                   const stream = `facts/${a.name}`;
+
                   const m = writing
                     ? { type: "write", value: call.value, own: call.op === "own", stream }
                     : call.op === "step_throw"
@@ -1220,6 +1261,7 @@ describe("T285, runner tracing keep-laws", () => {
                       : call.op === "refuse"
                         ? { type: "unknown", value: call.value }
                         : { type: "work", value: call.value };
+
                   const input = w.input(n, m);
                   // The letter is delivered to the process that will step it: the successor, when this op starts it.
                   const target = starting ? w.upcoming() : pid;
@@ -1243,18 +1285,22 @@ describe("T285, runner tracing keep-laws", () => {
 
                   const op =
                     call.op === "open" || call.op === "bad_client" ? "open" : call.op === "due" ? "due" : "step";
+
                   const body: Effect.Effect<unknown, unknown> =
                     op === "open"
                       ? runner.open(call.op === "bad_client" ? "" : call.client)
                       : op === "due"
                         ? runner.due(call.value)
                         : runner.msg(call.op === "bad_input" ? { value: call.value } : input);
+
                   const before = w.spans.length;
                   const flushes = w.flushes.length;
                   const exit = yield* Effect.exit(request(body));
+
                   const ok =
                     !waiting &&
                     !["bad_client", "bad_input", "step_throw", "write_storage", "append_storage"].includes(call.op);
+
                   expect(
                     Exit.isSuccess(exit),
                     `${call.op}: ${Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "success"}`,
@@ -1276,12 +1322,14 @@ describe("T285, runner tracing keep-laws", () => {
                   // The first op after the wait starts the successor under it; its spans are checked
                   // below, the op's own spans stay as before.
                   const recovering = spans.filter((s) => s.name === "runner.recover" || s.name === "runner.restart");
+
                   const expected = [
                     `runner.${op}`,
                     ...(waiting ? [] : writing || handling ? ["runner.cmd"] : []),
                     ...(waiting ? [] : writing ? ["runner.write"] : []),
                     ...(!waiting && call.op === "step_throw" ? ["runner.throw"] : []),
                   ];
+
                   const selected = spans.filter((s) => s.name.startsWith("runner.") && !recovering.includes(s));
                   expect(
                     selected.map((s) => s.name),
@@ -1353,9 +1401,11 @@ describe("T285, runner tracing keep-laws", () => {
 
                   if (!waiting && (writing || handling)) {
                     const cmd = selected[1]!;
+
                     const letter = (yield* Stream.runCollect((yield* Ledger).read(`${a.name}/inbox`, 0))).find(
                       (entry) => entry.id === input.id,
                     )!;
+
                     ended(cmd, !["handler_fail", "handler_die", "write_storage"].includes(call.op));
                     child(cmd, operation);
                     expect(tags(cmd)).toEqual({

@@ -26,6 +26,7 @@ export const PullRequest = Schema.Struct({
   state: Schema.Literals(["OPEN", "CLOSED", "MERGED"]),
   draft: Schema.Boolean,
 });
+
 export type PullRequest = typeof PullRequest.Type;
 
 /** One pull request read alone, with the words a squash puts on main and where it merged. */
@@ -38,6 +39,7 @@ export const Detail = Schema.Struct({
   /** The commit its base holds for it once merged; `null` until then. */
   mergeCommit: Schema.NullOr(Schema.String),
 });
+
 export type Detail = typeof Detail.Type;
 
 /**
@@ -45,6 +47,7 @@ export type Detail = typeof Detail.Type;
  * hunks, `null` where GitHub shows none (a binary file, or one too big to show).
  */
 export const Patch = Schema.Struct({ path: Schema.String, patch: Schema.NullOr(Schema.String) });
+
 export type Patch = typeof Patch.Type;
 
 /**

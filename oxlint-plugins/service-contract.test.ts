@@ -7,9 +7,13 @@ import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { serviceContract } from "./service-contract.ts";
 
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
+
 const top = "next/packages/libfabrika/src/desktop/";
+
 const headers = 'import { Context as C, Schema as S, Effect, Layer } from "effect";\n';
 
 const shape =
@@ -68,6 +72,7 @@ it("vector: schemas and errors pass; platform imports and running code fail", ()
 it("scenario: L12 the repo config rejects a static Layer at every new contract path", async () => {
   // The config, not RuleTester, must activate this rule at each approved contract.
   const paths = ["BrainService", "BrainControl", "BrainProbe"].map((name) => `${top}${name}.ts`);
+
   const result = await plant(
     Object.fromEntries(paths.map((file) => [file, `${headers}${shape} { static layer = Layer.empty; }\n`])),
   );

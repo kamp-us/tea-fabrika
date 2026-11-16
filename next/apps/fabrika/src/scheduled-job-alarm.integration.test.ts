@@ -10,16 +10,21 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 
 const PROJECT = "scheduled-job-alarm";
+
 const NAME = "beat:1";
+
 // P40: a build table key is `pack/program`, the name the fixture pack declares.
 const PROGRAM = "schedules/beat";
+
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const WAIT = 25_000;
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value);
   const size = Buffer.alloc(4);
   size.writeUInt32BE(body.length);
+
   return Buffer.concat([size, body]);
 };
 
@@ -74,8 +79,10 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             alchemy: process.env.ALCHEMY_HOME,
             tracking: process.env.DO_NOT_TRACK,
           };
+
           process.env.FABRIKA_HOME = home;
           process.env.DO_NOT_TRACK = "1";
+
           return previous;
         }),
         (previous) =>
@@ -112,6 +119,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
       expect(code).toBeDefined();
       yield* Effect.gen(function* () {
         const held = yield* Effect.acquireRelease(heldPort(), (port) => port.release);
+
         const options = RecordWireTest.startupFixture({
           home,
           name: PROJECT,
@@ -120,7 +128,9 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           window: raw,
           port: held.port,
         });
+
         const instance = yield* localInstance(built, options);
+
         const from: From = {
           by: fingerprint,
           for: PERSON,
@@ -130,13 +140,16 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
           build: built.build,
         };
+
         const started = yield* Effect.promise(() =>
           Reflect.get(instance.project(PROJECT), "start")(
             { _tag: "first", id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } },
             from,
           ),
         );
+
         const pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
+
         const beats = yield* until(
           "three beat facts",
           Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")("beats", 0, "audit")).pipe(
@@ -144,6 +157,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
           ),
           (rows) => rows.length >= 3,
         );
+
         expect(beats.length).toBeGreaterThanOrEqual(3);
 
         for (let index = 1; index < beats.length; index++) {
@@ -157,6 +171,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         const rows = Schema.decodeUnknownSync(Schema.Array(Letter))(
           yield* Effect.promise(() => Reflect.get(instance.project(PROJECT), "read")(`${NAME}/inbox`, 0, "audit")),
         );
+
         const timers = rows.filter((row) => Schema.is(Timer)(row.body.m));
         expect(timers.length).toBeGreaterThanOrEqual(3);
         expect(new Set(timers.map((row) => row.id)).size).toBe(timers.length);
@@ -180,14 +195,18 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
             const before = Schema.decodeUnknownSync(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
+
             const alarm = yield* Effect.promise(() => Reflect.get(instance.process(pid), "savedAlarm")());
+
             const after = Schema.decodeUnknownSync(View)(
               yield* Effect.promise(() => Reflect.get(instance.process(pid), "open")("scheduled-job-observer")),
             );
+
             return { before, alarm, after };
           }),
           ({ before, after }) => before.view._tag === "idle" && after.view._tag === "idle" && before.rev === after.rev,
         );
+
         expect(stable.before.view._tag).toBe("idle");
 
         if (stable.before.view._tag === "idle") {

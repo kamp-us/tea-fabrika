@@ -47,6 +47,7 @@ export const mint = <P>(
 ): Proof<P> => {
   const proof: Proof<P> = { [ProofTypeId]: (never) => never, sender, permission, object };
   minted.set(proof, { key, holds });
+
   return proof;
 };
 

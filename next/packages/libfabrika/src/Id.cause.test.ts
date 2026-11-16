@@ -44,6 +44,7 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
 
               // A new millisecond on the test clock, so the next ID draws fresh random bits.
               yield* TestClock.adjust(Duration.millis(1));
+
               const error = yield* Effect.flip(
                 Effect.acquireUseRelease(
                   Effect.sync(() => randomThrows(failure)),
@@ -51,6 +52,7 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
                   (spy) => Effect.sync(() => spy.mockRestore()),
                 ),
               );
+
               expect(error).toBeInstanceOf(Id.IdError);
               expect(error.reason).toBe("entropy");
               expect(error.cause).toBe(failure);

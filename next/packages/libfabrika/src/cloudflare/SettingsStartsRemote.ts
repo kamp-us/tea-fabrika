@@ -64,6 +64,7 @@ const call = Effect.fnUntraced(function* (
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );
   const raw = yield* work;
+
   const reply = yield* Schema.decodeUnknownEffect(Start.Reply)(raw, { onExcessProperty: "error" }).pipe(
     Effect.mapError((cause) => new StartsError({ reason: new Decode({ cause }) })),
   );
@@ -90,5 +91,6 @@ const call = Effect.fnUntraced(function* (
           : reply._tag === "Storage"
             ? new Storage({ cause: reply })
             : new Unreachable({ cause: reply });
+
   return yield* new StartsError({ reason });
 });

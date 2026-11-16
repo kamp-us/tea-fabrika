@@ -21,6 +21,7 @@ export const serviceContract: CreateRule = {
 
     const schemas = new Set<string>();
     const report = (node: Node) => context.report({ node, message: MESSAGE });
+
     const schemaValue = (node: Node): boolean => {
       if (node.type === "Literal" || node.type === "Identifier") {
         return true;
@@ -28,11 +29,13 @@ export const serviceContract: CreateRule = {
 
       if (node.type === "CallExpression") {
         const name = dotted(node.callee);
+
         return name !== null && schemas.has(name.split(".")[0] ?? "");
       }
 
       return node.type === "MemberExpression" && schemas.has(dotted(node)?.split(".")[0] ?? "");
     };
+
     return {
       ImportDeclaration(node) {
         if (

@@ -51,4 +51,5 @@ export const Enqueue = Schema.Struct({
 });
 
 export const Drop = Schema.Struct({ type: Schema.Literal("drop"), change: CodeHost.ChangeId });
+
 export const Resume = Schema.Struct({ type: Schema.Literal("resume") });

@@ -22,6 +22,7 @@ export const ExitReason = Schema.TaggedUnion({
     error: Schema.optionalKey(ErrorClass),
   },
 });
+
 /**
  * Why a process ended, as `ExitReason` decodes it.
  *

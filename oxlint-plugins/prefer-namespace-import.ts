@@ -22,6 +22,7 @@ import { dirname, join } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
 
 const EFFECT = dirname(createRequire(import.meta.url).resolve("effect/package.json"));
+
 const BARREL = /^effect(?:\/([a-z][a-z0-9-]*))?$/;
 
 /** The folder of modules a barrel names, or `undefined` for a source that is no barrel. */
@@ -68,6 +69,7 @@ export const preferNamespaceImport: CreateRule = {
 
           const name =
             specifier.imported.type === "Identifier" ? specifier.imported.name : String(specifier.imported.value);
+
           const type = node.importKind === "type" || specifier.importKind === "type" ? "import type" : "import";
 
           if (isModule(folder, name)) {

@@ -40,6 +40,7 @@ import {
 
 /** The law's own limit in ms: a brain, a browser and about twenty waits of at most 30 s each. */
 const LIMIT = 300_000;
+
 /** How long the law waits to see that something did not happen, in ms: a split or close reaches
  *  tezgah and comes back in well under a second on the real `dev.ts`. */
 const QUIET = 2_000;
@@ -147,10 +148,12 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 
           // C-b %: t1 and a new tile side by side, focus on the new one.
           yield* keys(page, "Control+b", "%");
+
           const side = yield* drawnAs(
             (n, v) => n === 2 && typeof v.workspaces[0]!.layout !== "string" && v.workspaces[0]!.layout.dir === "row",
             "two side by side",
           );
+
           expect(focused(side).id, "L21: the split's new tile takes focus").not.toBe(t1.id);
           expect(shown(side)[0]!.id, "L21: the new tile goes after t1").toBe(t1.id);
           yield* shoot(page, "split-right", "side-by-side");
@@ -195,8 +198,10 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
             },
             "letter_tezgah_frame_grid",
           );
+
           const grid = yield* drawnAs((n, v) => {
             const l = v.workspaces[0]!.layout;
+
             return (
               n === 4 &&
               typeof l !== "string" &&
@@ -204,6 +209,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
               l.parts.every((p) => typeof p.inner !== "string" && p.inner.dir === "row" && p.inner.parts.length === 2)
             );
           }, "a 2x2");
+
           yield* shoot(page, "grid", "grid-2x2");
           yield* armedShot("grid-2x2");
           yield* askShot("grid-2x2");
@@ -257,6 +263,7 @@ describe("L21: the tab draws tezgah's workspace, and splits and closes by keys",
 // Everything else on the socket passes as it is. Then the socket drops, and the next dial reads the
 // tab's own tezgah, which exists.
 const NOBODY = `processes/tezgah:${typeId("person", 77).slice("person_".length)}`;
+
 const TEZGAH_READ = /"stream":"processes\/tezgah:[^"]*"/;
 
 describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah once it exists", () => {
@@ -270,12 +277,14 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           const dev = yield* devServer(h);
           const b = yield* browser;
           const profiled = yield* profile(b);
+
           const wire = {
             hide: true,
             /** Per socket, the tezgah streams the tab read on it, in order. */
             reads: [] as Array<Array<string>>,
             sockets: [] as Array<{ close: () => Promise<void> }>,
           };
+
           yield* promised(() =>
             profiled.routeWebSocket(/.*/, (ws) => {
               const server = ws.connectToServer();
@@ -287,6 +296,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
 
                 if (typeof message !== "string" || found === null) {
                   server.send(message);
+
                   return;
                 }
 
@@ -308,7 +318,9 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
             const status = yield* promised(() =>
               page.evaluate(() => document.querySelector(".statusbar")?.textContent ?? ""),
             );
+
             const opening = yield* promised(() => page.getByText("Opening", { exact: true }).count());
+
             return { status, polite: (yield* drawn(page)).polite, opening };
           });
 
@@ -342,6 +354,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
           // tezgah exists for this person now; the socket drops, and the next dial finds it.
           wire.hide = false;
           yield* promised(() => wire.sockets.at(-1)!.close());
+
           const one = yield* settle(
             page,
             r,
@@ -349,6 +362,7 @@ describe("Desk R: a tab whose person has no tezgah says so, and follows tezgah o
             (view, d) => [...(shown(view).length === 1 ? [] : ["not yet one tile"]), ...differences(view, d)],
             "R2: after a redial, the tab follows its tezgah and draws workspace 1",
           );
+
           expect(shown(one), "R2: the tab draws tezgah's one tile").toHaveLength(1);
           expect((yield* says).status, "R2: once tezgah is there, the status bar no longer says it is not").not.toMatch(
             words,

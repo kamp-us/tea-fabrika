@@ -52,6 +52,7 @@ describe("T518, TraceId generation", () => {
           count: 200,
           seed: sampleSeed,
         });
+
         expect(values).toHaveLength(200);
 
         for (const value of values) {
@@ -72,6 +73,7 @@ describe("T246, fromHere", () => {
     { input: inputParents, own: Schema.Boolean, traceId: traceIds },
     ({ input, own, traceId }) => {
       const parent = own ? null : input;
+
       // The layer's own scope holds the open database.
       const world = Layer.unwrap(
         memory.pipe(
@@ -86,16 +88,19 @@ describe("T246, fromHere", () => {
           ),
         ),
       );
+
       return Effect.gen(function* () {
         expect(fromHere, "fromHere reads the span already in scope").toBeTypeOf("function");
         yield* TestClock.setTime(Date.parse(SENT));
         const referee = yield* Referee;
+
         // The test's object-call bridge runs the real referee; it invents no answer or stored row.
         const calls: LedgerCalls = {
           append: (stream, id, line) => Effect.runPromise(referee.append(stream, id, line)),
           read: (stream, after, reader) => Effect.runPromise(referee.read(stream, after, reader)),
           wait: (stream, after, reader) => Effect.runPromise(referee.wait(stream, after, reader)),
         };
+
         const writer = { ...from, parent };
         yield* Effect.gen(function* () {
           const span = yield* Effect.currentSpan;
@@ -118,9 +123,11 @@ describe("T246, fromHere", () => {
         expect(entry).toMatchObject({ id: "w-1", parent, traceId });
         yield* SpanSink.use((sink) => sink.flush);
         const spans = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+
         const append = spans.filter(
           (span) => span.name === "ledger.call" && span.attributes["rpc.method"] === "append",
         );
+
         expect(append).toHaveLength(1);
         expect(append[0]?.traceId).toBe(traceId);
         expect(entry?.traceId).toBe(append[0]?.traceId);

@@ -22,7 +22,9 @@ import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 
 const ED25519 = "ssh-ed25519";
+
 const BEGIN = "-----BEGIN SSH SIGNATURE-----";
+
 const END = "-----END SSH SIGNATURE-----";
 
 /** `string("ssh-ed25519") string(<n bytes>)` and nothing after: the n bytes. */
@@ -32,6 +34,7 @@ const ed25519 = (blob: Uint8Array, n: number): Option.Option<Bytes> =>
     const type = yield* read.string();
     const value = yield* read.string();
     yield* holds(same(type, utf8(ED25519)) && value.length === n && read.rest() === 0);
+
     return value;
   });
 
@@ -62,6 +65,7 @@ export const KeyLine = Schema.String.pipe(
   ),
   Schema.brand("KeyLine"),
 );
+
 /**
  * The type of a decoded `KeyLine`: a string branded as an Ed25519 key line.
  *
@@ -71,7 +75,9 @@ export type KeyLine = typeof KeyLine.Type;
 
 /** A hash a signature may name, the spec's two, with WebCrypto's name for it. */
 type Hash = { readonly name: "sha512" | "sha256"; readonly web: "SHA-512" | "SHA-256" };
+
 const SHA512: Hash = { name: "sha512", web: "SHA-512" };
+
 const SHA256: Hash = { name: "sha256", web: "SHA-256" };
 
 /** A Map, so a name such as `constructor` is no hash. */
@@ -111,6 +117,7 @@ const read = (armored: string): Option.Option<Sshsig> =>
     const hash = yield* fields.string();
     const signature = yield* fields.string();
     yield* holds(same(magic, utf8("SSHSIG")) && version === 1 && fields.rest() === 0);
+
     return {
       key,
       space,
@@ -120,6 +127,7 @@ const read = (armored: string): Option.Option<Sshsig> =>
   });
 
 type Answer = { readonly signer: string } | { readonly reason: "bad_signature" };
+
 const refused: Answer = { reason: "bad_signature" };
 
 /**
@@ -178,6 +186,7 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
   return yield* Option.match(
     Option.gen(function* () {
       const sig = yield* read(a.armored);
+
       const signer = yield* Option.fromNullishOr(
         a.signers.find((line) =>
           Option.exists(
@@ -186,7 +195,9 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
           ),
         ),
       );
+
       yield* holds(same(sig.space, utf8(a.space)));
+
       return { sig, signer };
     }),
     {
@@ -202,6 +213,7 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
             }
 
             const checked = yield* checkPasskey(sig.key, sig.signature, bytes, a.policy);
+
             return checked === null ? bad : Checked.cases.passkey.make({ signer, ...checked });
           }
 
@@ -213,6 +225,7 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
 
           const key = yield* subtle("importKey", "raw", publicKey.value, { name: "Ed25519" }, false, ["verify"]);
           const ok = yield* subtle("verify", { name: "Ed25519" }, key, signature.value, bytes);
+
           return ok ? Checked.cases.key.make({ signer }) : bad;
         }).pipe(Effect.orElseSucceed(() => bad)),
     },
@@ -240,6 +253,7 @@ export const checkSshsig = Effect.fn("transport.checkSshsig")(function* (a: {
     ...a,
     signers: a.signers.filter((line) => Option.isSome(keyBlob(line))),
   });
+
   return checked._tag === "key" ? { signer: checked.signer } : refused;
 });
 
@@ -265,9 +279,11 @@ export const writeSshsig = Effect.fn("transport.writeSshsig")(function* <E>(a: {
     onNone: () => Effect.die("a KeyLine always holds an Ed25519 key"),
     onSome: Effect.succeed,
   });
+
   const bytes = yield* Effect.orDie(signedBytes(a.space, SHA512, a.text));
   const raw = yield* a.sign(bytes);
   const signature = join(field(ED25519), field(raw));
+
   return armor(
     join(utf8("SSHSIG"), u32(1), field(key), field(a.space), field(""), field(SHA512.name), field(signature)),
   );

@@ -22,6 +22,7 @@ const types = () => {
   expectTypeOf<"layer" extends keyof typeof Contract.PersonCheck ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<"layer" extends keyof typeof Contract ? true : false>().toEqualTypeOf<false>();
   expectTypeOf<ReturnType<typeof PersonCheckTest.layer>>().toEqualTypeOf<Layer.Layer<Contract.PersonCheck>>();
+
   const badLines = () => {
     // @ts-expect-error A new access kind must acquire words before any client can show it.
     const missingWords: Record<Kind | "future-client-kind", string> = Menu.words;
@@ -29,8 +30,10 @@ const types = () => {
     const staticLayer = Contract.PersonCheck.layer;
     // @ts-expect-error A platform handle cannot stand in for an ordinary reason string.
     const handle = Contract.PersonCheck.of({ ask: (_reason: { show: () => void }) => null });
+
     return [missingWords, staticLayer, handle];
   };
+
   void badLines;
 };
 

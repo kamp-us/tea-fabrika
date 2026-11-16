@@ -13,12 +13,16 @@ import { Readiness, Children } from "./BrainProbe.ts";
 import * as ServiceTest from "./BrainServiceTest.ts";
 
 const options = { seed: 119120, numRuns: 150 };
+
 const ctx = stubCtxThrowingProxy<unknown>();
+
 const Failure = Schema.TaggedUnion({ Operation: {} });
+
 const oldId = Schema.decodeSync(Id.Cmd)("cmd_01m6v5270hf3c8x2q7w9z4k5mn");
 
 const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
   const settled = <A>(value: fc.Arbitrary<A>) => fc.record({ value, failed: fc.integer({ min: 0, max: 9 }) });
+
   const reply = <T extends BrainLife.Command["type"], A>(
     cmd: Extract<BrainLife.Command, { type: T }>,
     answer: { value: A; failed: number },
@@ -26,6 +30,7 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
     (answer.failed === 0
       ? { type: `${cmd.type}_err`, cmd, error: Failure.cases.Operation.make({}), at: 0 }
       : { type: `${cmd.type}_ok`, cmd, value: answer.value, at: 0 }) as BrainLife.Msg;
+
   const guided = arbGuidedSequence(
     machine,
     ctx,
@@ -58,6 +63,7 @@ const walks = (machine: ReturnType<typeof BrainLife.machine>) => {
     },
     { maxLength: 240, size: "max" },
   );
+
   return guided.map((msgs) => {
     let [state] = machine.init(null, ctx);
     const history: Array<Extract<BrainLife.Msg, { cmd: unknown }>> = [];
@@ -105,6 +111,7 @@ describe("P19 lifecycle", () => {
             equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
             seed: 119120,
           });
+
           return true;
         },
         options,
@@ -191,6 +198,7 @@ describe("P19 lifecycle", () => {
             }
 
             reached.add(prev.pending.type);
+
             const replies: ReadonlyArray<BrainLife.Msg> = [
               msg,
               {
@@ -211,6 +219,7 @@ describe("P19 lifecycle", () => {
                   prev,
                   { ...reply, at },
                 );
+
                 const expected = prev.action === "up" ? "failed_up" : "failed_stop";
 
                 if (
@@ -228,6 +237,7 @@ describe("P19 lifecycle", () => {
                   cmd: { ...msg.cmd, id: oldId },
                   at,
                 } as BrainLife.Msg);
+
                 expect(stale).toEqual(prev);
                 expect(staleCmds).toEqual([]);
               }
@@ -297,6 +307,7 @@ it.effect.prop(
           const poisoned = { ...msg, cause: secret, stderr: secret, url: `${Outside.spec.url}?secret=${encoded}` };
           const [next] = applyCell(machine, prev, poisoned);
           const outputs = [JSON.stringify(next), JSON.stringify(Schema.encodeSync(BrainLife.Model)(next))];
+
           return outputs.every((output) =>
             [secret, encoded, JSON.stringify(secret).slice(1, -1)].every((form) => !output.includes(form)),
           );

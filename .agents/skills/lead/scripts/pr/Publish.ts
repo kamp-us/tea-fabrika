@@ -56,6 +56,7 @@ export const publish = Effect.fn("Publish.publish")(function* (a: Ask) {
   }
 
   const pr = yield* prs.draft(branch, a.text);
+
   return { pr, opened: true, draft: true } satisfies Published;
 });
 

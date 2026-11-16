@@ -36,6 +36,7 @@ const from: From = {
 };
 
 const rev = fc.integer({ min: 1, max: 1_000_000 });
+
 const arrivedAt = fc.integer({ min: 1_700_000_000_000, max: 1_900_000_000_000 });
 
 /** What the Project answers: a good reply of each case, or one of the ways an answer goes wrong. */
@@ -55,6 +56,7 @@ const Case = fc.oneof(
     .record({ rev, arrivedAt, word: fc.stringMatching(/^[a-z]{1,8}$/) })
     .map(({ word, ...fields }) => ({ shape: "extra" as const, fields, word })),
 );
+
 type Case = typeof Case extends fc.Arbitrary<infer A> ? A : never;
 
 it.effect(
@@ -62,8 +64,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const reached = new Set<string>();
+
       const check = Effect.fnUntraced(function* (choice: Case) {
         const sent: Array<unknown> = [];
+
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {
@@ -88,10 +92,12 @@ it.effect(
             }),
           },
         } as unknown as Env;
+
         const answer = yield* HandsTasks.use((hands) => hands.ask(ask, from)).pipe(
           Effect.provide(handsLayer(env, "hands-test")),
           Effect.result,
         );
+
         expect(sent, "the Project is asked once per ask").toHaveLength(1);
         reached.add(choice.shape === "good" ? `good:${choice.reply._tag}` : choice.shape);
 
@@ -99,6 +105,7 @@ it.effect(
           expect(Result.isSuccess(answer) && answer.success, "a good reply is the Project's own answer").toEqual(
             choice.reply,
           );
+
           return;
         }
 
@@ -109,6 +116,7 @@ it.effect(
           expect(answer.failure.reason, `${choice.shape}: the Cmd stays dispatched for its retry`).toBe("unavailable");
         }
       });
+
       const property = fc.asyncProperty(Case, (choice) => Effect.runPromise(check(choice)));
       yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: 60 }));
       // An empty run cannot pass: every case was answered at least once.

@@ -68,6 +68,7 @@ export const Incoming = Schema.Struct({
   seen: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   span: Schema.Struct({ traceId: Schema.String, spanId: Schema.String }),
 });
+
 /**
  * One delivered input as the runner takes it, as `Incoming` decodes it.
  *
@@ -128,6 +129,7 @@ export class ProgramLoader extends Context.Service<
       ProgramLoader,
       Effect.gen(function* () {
         const context = yield* Effect.context<R>();
+
         return {
           load: Effect.fn("loader.load")(function* (name: string, build = "node") {
             if (!Object.hasOwn(programs, name)) {
@@ -137,6 +139,7 @@ export class ProgramLoader extends Context.Service<
             const loaded = yield* Effect.fromResult(stepper(programs[name])).pipe(
               Effect.mapError((cause) => new ProgramDown({ reason: "load", error: "ProgramDown", cause })),
             );
+
             return {
               stepper: loaded,
               execution: nodeExecution(programs[name], build),
@@ -240,6 +243,7 @@ export class Recording extends Context.Service<
     Effect.gen(function* () {
       const sink = yield* SpanSink;
       const context = yield* Effect.context<RecordManager | Archive>();
+
       return { flush: sink.flush.pipe(Effect.provideContext(context)) };
     }),
   );

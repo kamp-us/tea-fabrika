@@ -2,13 +2,12 @@
 // This scenario is intentionally not replaced by a Node-only runner.
 // edge: create only an ephemeral signing identity for this private test instance
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
-// edge: inspect only this scenario's own object databases
-import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
@@ -299,36 +298,39 @@ const accounting = Effect.fnUntraced(function* (home: string, name: string, proc
         continue;
       }
 
-      yield* Effect.acquireUseRelease(
-        Effect.sync(() => new DatabaseSync(file)),
-        (db) =>
-          Effect.gen(function* () {
-            const exists = (table: string) =>
-              db.prepare("SELECT name FROM sqlite_master WHERE name=?").get(table) !== undefined;
-            const sql = nodeSql(db);
+      // This scenario's own object databases, which the instance owns: opened with nothing set.
+      yield* Effect.scoped(
+        TestDatabase.open(file).pipe(
+          Effect.orDie,
+          Effect.flatMap((db) =>
+            Effect.gen(function* () {
+              const exists = (table: string) =>
+                db.prepare("SELECT name FROM sqlite_master WHERE name=?").get(table) !== undefined;
+              const sql = nodeSql(db);
 
-            if (
-              exists("entries") &&
-              db.prepare("SELECT 1 FROM entries WHERE stream=? LIMIT 1").get(`processes/${name}`) !== undefined
-            ) {
-              projectUse = yield* Quotas.use((q) => q.recovery(name)).pipe(
-                Effect.provide(
-                  QuotasSql.layer(sql, {
-                    brain: "SHA256:fixture",
-                    limits: { writes: 13_760, storage: 1_000_000_000, recovery },
-                  }),
-                ),
-              );
-            }
+              if (
+                exists("entries") &&
+                db.prepare("SELECT 1 FROM entries WHERE stream=? LIMIT 1").get(`processes/${name}`) !== undefined
+              ) {
+                projectUse = yield* Quotas.use((q) => q.recovery(name)).pipe(
+                  Effect.provide(
+                    QuotasSql.layer(sql, {
+                      brain: "SHA256:fixture",
+                      limits: { writes: 13_760, storage: 1_000_000_000, recovery },
+                    }),
+                  ),
+                );
+              }
 
-            if (
-              exists("process_state") &&
-              db.prepare("SELECT 1 FROM process_state WHERE process=?").get(process) !== undefined
-            ) {
-              processUse = yield* QuotasSql.accounting(sql, { name, limits: recovery.process }).status;
-            }
-          }),
-        (db) => Effect.sync(() => db.close()),
+              if (
+                exists("process_state") &&
+                db.prepare("SELECT 1 FROM process_state WHERE process=?").get(process) !== undefined
+              ) {
+                processUse = yield* QuotasSql.accounting(sql, { name, limits: recovery.process }).status;
+              }
+            }),
+          ),
+        ),
       );
     }
   }

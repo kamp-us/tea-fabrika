@@ -39,10 +39,15 @@ import { ProcessManager } from "./ProcessManager.ts";
 export type Store = { readonly sql: Sql };
 
 const SEED = 119120;
+
 const BRAIN = "SHA256:brain";
+
 const HASH = "build-a";
+
 const FABRIKA = Model.ref("fabrika", "demo");
+
 const FOUNDER = "person_01jcfounder0000000000000000";
+
 const OTHER = "person_01jcother000000000000000000";
 
 const PIDS: ReadonlyArray<string> = Array.from(
@@ -51,9 +56,13 @@ const PIDS: ReadonlyArray<string> = Array.from(
 );
 
 const QUEUE = "queue";
+
 const WORKER = "worker";
+
 const MERGER = "merger";
+
 const ROGUE = "rogue";
+
 const PROGRAMS = [QUEUE, WORKER, MERGER, ROGUE] as const;
 
 /** The names the boot registers, each a requester of its own program and with no member behind it. */
@@ -68,6 +77,7 @@ const subjectFor = (person: string) => `person:${person}`;
 /** A person's window, or an agent let in for that person. */
 const senderFrom = (holder: "founder" | "other", as: "person" | "agent") => {
   const person = holder === "founder" ? FOUNDER : OTHER;
+
   return as === "person"
     ? Sender.cases.person.make({ key: `SHA256:window-${holder}`, for: person })
     : Sender.cases.agent.make({ key: `SHA256:agent-${holder}`, for: person });
@@ -139,10 +149,12 @@ const stack = (
   gate: { current: Gate | undefined; turns: number },
 ) => {
   const tx = LedgerTransactionSql.layer(sql).pipe(Layer.provide(quiet));
+
   const gated = Layer.effect(
     LedgerTransaction,
     Effect.gen(function* () {
       const real = yield* LedgerTransaction;
+
       return LedgerTransaction.of({
         transact: <A>(step: (turn: LedgerTurn) => A) =>
           Effect.suspend(() => (gate.current === undefined ? Effect.void : gate.current(gate.turns++))).pipe(
@@ -151,7 +163,9 @@ const stack = (
       });
     }),
   ).pipe(Layer.provide(tx));
+
   const data = Layer.merge(LedgerSql.layer(sql, { reader: "connection:test" }).pipe(Layer.provide(quiet)), gated);
+
   return ChildrenLedger.layer({ grants, fabrika: FABRIKA }).pipe(
     Layer.provideMerge(
       ProcessManager.layer(
@@ -173,11 +187,13 @@ const snapshot = (sql: Sql): Record<string, ReadonlyArray<Record<string, SqlValu
   const tables = sql
     .exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
     .map((row) => String(row.name));
+
   return Object.fromEntries(tables.map((table) => [table, sql.exec(`SELECT * FROM "${table}"`)]));
 };
 
 const ids = (values: ReadonlyArray<string>) => {
   let calls = 0;
+
   return Effect.sync(() => {
     const value = values[calls++];
 
@@ -203,15 +219,19 @@ const world = Effect.fnUntraced(function* (
   const gate: { current: Gate | undefined; turns: number } = { current: undefined, turns: 0 };
   const context = yield* Layer.build(stack(sql, ids(PIDS), grants, changes, inputs, gate));
   const spans: Array<Tracer.NativeSpan> = [];
+
   const tracer = Tracer.make({
     span(options) {
       const span = new Tracer.NativeSpan(options);
       spans.push(span);
+
       return span;
     },
   });
+
   const run = <A, E>(effect: Effect.Effect<A, E, Children | ProcessManager | Relations | Ledger>) =>
     effect.pipe(Effect.provideContext(context), Effect.withTracer(tracer));
+
   const boot = new Map<string, { readonly process: string; readonly program: string }>();
 
   for (const [name, program] of BOOT) {
@@ -220,27 +240,34 @@ const world = Effect.fnUntraced(function* (
         p.start(Start.cases.first.make({ id: `boot:${name}`, name, code: { program, hash: HASH } }), from(null)),
       ),
     ).pipe(Effect.orDie);
+
     boot.set(name, { process: placed.process, program });
   }
 
   let n = 0;
   const start = (child: Child, said: From) => run(Children.use((c) => c.start(child, said))).pipe(Effect.exit);
+
   /** The `started` line the brain wrote for `name` at `id`, read from the store's own rows. */
   const startedLine = (name: string, id: string) =>
     run(Ledger.use((ledger) => Stream.runCollect(ledger.read(`processes/${name}`, 0)))).pipe(
       Effect.orDie,
       Effect.map((rows) => [...rows].find((row) => row._tag === "started" && row.id === id)),
     );
+
   /** Delivers an input to `process` as the gateway would, and answers its id. */
   const deliver = (process: string, sender: Sender) => {
     const id = `in-${process}-${++n}`;
     inputs.set(id, { process, sender, state: "live" });
+
     return id;
   };
+
   const write = (changes: ReadonlyArray<Relation.Change>) =>
     run(Relations.use((r) => r.write(changes, WRITER))).pipe(Effect.orDie);
+
   const fresh = (program: string, requester: string, input: boolean): Child => {
     const k = ++n;
+
     return {
       id: `t953/${k}`,
       name: `${program}:t${k}`,
@@ -249,10 +276,12 @@ const world = Effect.fnUntraced(function* (
       ...(input ? { input: { k } } : {}),
     };
   };
+
   return { sql, boot, inputs, start, startedLine, deliver, write, fresh, spans, gate };
 });
 
 type World = Effect.Success<ReturnType<typeof world>>;
+
 type Answer = Exit.Exit<Started, ChildrenError>;
 
 const granted = (grants: ReadonlyArray<typeof StartGrant.Type>, source: string, to: string) =>
@@ -288,6 +317,7 @@ const Grants = fc.uniqueArray(fc.record({ source: fc.constantFrom(...PROGRAMS), 
 
 /** The relations a case starts with: the owner row or not, and the other person's role. */
 const Roles = fc.record({ owner: fc.boolean(), other: fc.constantFrom("none", "member", "admin") });
+
 type Roles = typeof Roles extends fc.Arbitrary<infer A> ? A : never;
 
 const startingRows = (roles: Roles): ReadonlyArray<Relation.Change> => [
@@ -318,6 +348,7 @@ const SenderCase = fc.record({
   program: fc.constantFrom(...PROGRAMS),
   input: fc.boolean(),
 });
+
 type SenderCase = typeof SenderCase extends fc.Arbitrary<infer A> ? A : never;
 
 const pick = <A>(items: ReadonlyArray<A>, n: number): A => {
@@ -417,6 +448,7 @@ const NoSenderCase = fc.record({
   requester: fc.nat(),
   program: fc.constantFrom(...PROGRAMS),
 });
+
 type NoSenderCase = typeof NoSenderCase extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -428,11 +460,13 @@ const noSenderLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const w = yield* world(open, c.grants, startingRows(c.roles));
     const boots = [...w.boot.values()];
     const requester = pick(boots, c.requester);
+
     // An input delivered to another process, by a sender who holds `start`: it is not this start's cause.
     const elsewhere = pick(
       boots.filter((b) => b.process !== requester.process),
       c.requester,
     );
+
     const parent = c.cause === "null" ? null : w.deliver(elsewhere.process, senderFrom("founder", "person"));
     const child = w.fresh(c.program, requester.process, false);
     const before = snapshot(w.sql);
@@ -458,6 +492,7 @@ const RemovedCase = fc.record({
   requester: fc.nat(),
   program: fc.constantFrom(...PROGRAMS),
 });
+
 type RemovedCase = typeof RemovedCase extends fc.Arbitrary<infer A> ? A : never;
 
 /** L12 and L13 on one case: the sender's key is removed, with a grant that would let the program through. */
@@ -497,6 +532,7 @@ const OwnerCase = fc.record({
   program: fc.constantFrom(...PROGRAMS),
   requester: fc.nat(),
 });
+
 type OwnerCase = typeof OwnerCase extends fc.Arbitrary<infer A> ? A : never;
 
 /**
@@ -508,6 +544,7 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     const w = yield* world(open, c.grants, [OWNER, otherRow("member")]);
     const boots = [...w.boot.values()];
     const boot = pick(boots, c.requester);
+
     // The requester: a boot process with no member, or a process a member's input started. `recorded`
     // is the member the requester's own `started` line names, read from the store's rows.
     const requester =
@@ -524,6 +561,7 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             expect(line?.body, "L20: the requester's started line records its member").toMatchObject({
               member: recorded,
             });
+
             return {
               process: Exit.isSuccess(placed) ? placed.value.process : expect.fail("started"),
               program: c.middle,
@@ -545,6 +583,7 @@ const ownerLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
       boots.filter((b) => b.process !== requester.process),
       c.requester,
     );
+
     const parent = c.cause === "null" ? null : w.deliver(elsewhere.process, senderFrom("founder", "person"));
     const child = w.fresh(c.program, requester.process, false);
     const before = snapshot(w.sql);

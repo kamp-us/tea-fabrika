@@ -760,11 +760,12 @@
               },
               {
                 // The library's shared suites and test kits: of our names, only the test primitives
-                // (0538), which they read their case counts from. Its own tests stay as the library's
-                // part has them: macOS matches these globs without case, so a `.test.ts` lands here.
+                // (0538), which they read their case counts from, and their SQLite module, which opens
+                // a test's file (ticket 1029). Its own tests stay as the library's part has them: macOS
+                // matches these globs without case, so a `.test.ts` lands here.
                 "name": "library suites",
                 "files": ["next/packages/libfabrika/**/*Test.ts", "next/packages/libfabrika/**/*.test-support.ts"],
-                "may": ["@kampus/vitest"],
+                "may": ["@kampus/vitest", "@kampus/vitest/TestDatabase"],
                 "tests": ["@kampus/libfabrika", "@kampus/vitest"]
               },
               {
@@ -856,10 +857,11 @@
               },
               {
                 // A program's shared suites and test kits: what the box may import, and the test
-                // primitives (0538), which they read their case counts from.
+                // primitives (0538), which they read their case counts from, with their SQLite module
+                // (ticket 1029).
                 "name": "program suites",
                 "files": ["next/programs/*/src/**/*Test.ts", "next/programs/*/src/**/*.test-support.ts"],
-                "may": ["@kampus/libfabrika", "@kampus/vitest"]
+                "may": ["@kampus/libfabrika", "@kampus/vitest", "@kampus/vitest/TestDatabase"]
               },
               {
                 // What the box loads: no tuval and no React. `pnpm lint:layers` refuses a box file
@@ -1145,6 +1147,14 @@
       // on experiment 292's classified tree: 73 files fired, 72 drive a resource (oxlint-plugins/README.md).
       "files": ["next/**/*.test.ts", "next/**/*.test.tsx"],
       "rules": { "fabrika/integration-test-name": "error" }
+    },
+    {
+      // Ticket 1029, decision 0538: a test, shared suite or test kit opens a SQLite file through
+      // `@kampus/vitest/TestDatabase`, `make` for a file it owns and `open` for one another party
+      // owns; only `":memory:"` keeps `new DatabaseSync`. Measured on `86a7668d6`: 62 calls in 53
+      // files, none right as it was once `open` exists, so it blocks (oxlint-plugins/README.md).
+      "files": ["next/**/*.test.ts", "next/**/*.test.tsx", "next/**/*Test.ts", "next/**/*.test-support.ts"],
+      "rules": { "fabrika/test-database": "error" }
     },
     {
       // A resource is released by the scope that acquired it, never by an after-hook that a thrown
@@ -2743,8 +2753,7 @@
     // block lists the folders where its rule has no hit, and is on as an error there and nowhere
     // else. A pull request that brings a folder to zero adds it here, and a whole `pnpm lint` fails
     // until it does (oxlint-plugins/anti-slop.ts). A rule is never "off" or "warn". Once every folder
-    // is on a list, the list becomes the four globs of the scope. `anti-slop/require-readable-spacing`
-    // has no block yet: no folder is at zero for it, so its first block comes with the first sweep.
+    // is on a list, the list becomes the four globs of the scope.
     {
       // 0558: no ternary nests more than 2 deep.
       "files": [
@@ -2908,6 +2917,39 @@
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
+    },
+    {
+      // 0563, 0021: a blank line before a `return` and every control statement, around a multi-line
+      // binding, and between top-level statements, as the rule ships.
+      "files": [
+        ".agents/**",
+        ".github/ci/**",
+        "oxlint-plugins/**",
+        "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/access/**",
+        "next/packages/libfabrika/src/ci/**",
+        "next/packages/libfabrika/src/client/**",
+        "next/packages/libfabrika/src/codehost/**",
+        "next/packages/libfabrika/src/coordination/**",
+        "next/packages/libfabrika/src/desktop/**",
+        "next/packages/libfabrika/src/node/**",
+        "next/packages/libfabrika/src/packs/**",
+        "next/packages/libfabrika/src/permissions/**",
+        "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/repositories/**",
+        "next/packages/libfabrika/src/schedules/**",
+        "next/packages/libfabrika/src/tasks/**",
+        "next/packages/libfabrika/src/tezgah/**",
+        "next/packages/tuval/**",
+        "next/packages/vitest/**",
+        "next/programs/chaos/**",
+        "next/programs/checklist/**",
+        "next/programs/counter/**",
+        "next/programs/inbox/**",
+        "next/programs/pipeline/**",
+        "next/programs/tezgah/**"
+      ],
+      "rules": { "anti-slop/require-readable-spacing": "error" }
     }
   ]
 }

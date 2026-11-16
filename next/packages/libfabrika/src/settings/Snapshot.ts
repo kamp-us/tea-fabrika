@@ -21,6 +21,7 @@ export const Snapshot = Schema.Struct({
   origins: Schema.Record(Schema.String, Origin),
   hash: Schema.String,
 });
+
 /**
  * The decoded type of `Snapshot`.
  *
@@ -47,10 +48,13 @@ export class SnapshotError extends Schema.TaggedError<SnapshotError, { readonly 
 
 const hashValues = Effect.fnUntraced(function* (values: Snapshot["values"]) {
   const sorted = Object.entries(values).sort(([a], [b]) => (a < b ? -1 : 1));
+
   const text = JSON.stringify(sorted, (_key, value: unknown) =>
     Predicate.isObject(value) ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : 1))) : value,
   );
+
   const digest = yield* Digest.Digest;
+
   return yield* digest.digestHex(Digest.sha256, new TextEncoder().encode(text));
 });
 
@@ -67,6 +71,7 @@ const declaredOrigin = (declaration: Setting.Setting<unknown>) =>
 
       if (origin._tag === "file") {
         const file = origin.file;
+
         return (
           file.length > 0 &&
           !/^(?:[\\/]|[A-Za-z]:)/.test(file) &&
@@ -99,14 +104,17 @@ export const make = Effect.fnUntraced(function* <A, R extends Record<string, Set
   const encoded: Snapshot["values"] = yield* Schema.encodeUnknownEffect(Codec.values(group))(resolved.values).pipe(
     Effect.orDie,
   );
+
   const values = Object.fromEntries(
     Object.entries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
   );
+
   const snapshot: Snapshot = {
     values,
     origins: Schema.decodeUnknownSync(Schema.Record(Schema.String, Origin))(resolved.origins),
     hash: yield* hashValues(values),
   };
+
   return snapshot;
 });
 
@@ -125,28 +133,35 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
 ) {
   const strict = { onExcessProperty: "error" } as const;
   const paths = group.declarations.map((d) => d.path);
+
   const fields = <S extends Schema.Top>(schema: S) =>
     paths.length === 0
       ? Schema.Record(Schema.String, Schema.Never)
       : Schema.Struct(Object.fromEntries(paths.map((path) => [path, schema])));
+
   const origins =
     paths.length === 0
       ? fields(Origin)
       : Schema.Struct(Object.fromEntries(group.declarations.map((d) => [d.path, declaredOrigin(d)])));
+
   const envelope = Schema.Struct({ values: fields(Schema.Json), origins, hash: Schema.String });
+
   const refused = (cause: unknown) =>
     new SnapshotError({
       message: "The saved settings are invalid.",
       cause: Redacted.make(cause),
     });
+
   const saved = yield* Schema.decodeUnknownEffect(envelope)(input, strict).pipe(Effect.mapError(refused));
   const codec = Codec.values(group);
   const named = Object.fromEntries(Object.entries(group.settings).map(([name, d]) => [name, saved.values[d.path]]));
   const values = yield* Schema.decodeUnknownEffect(codec)(named, strict).pipe(Effect.mapError(refused));
   const encoded: Snapshot["values"] = yield* Schema.encodeEffect(codec)(values).pipe(Effect.mapError(refused));
+
   const canonical = Object.fromEntries(
     Object.entries(group.settings).map(([name, d]) => [d.path, Option.getOrThrow(Rec.get(encoded, name))]),
   );
+
   const hash = yield* hashValues(canonical);
 
   if (saved.hash !== hash) {
@@ -154,5 +169,6 @@ export const read = Effect.fnUntraced(function* <A, R extends Record<string, Set
   }
 
   const snapshot: Snapshot = { values: canonical, origins: saved.origins, hash };
+
   return { values, snapshot };
 });

@@ -12,6 +12,7 @@ const Listener = Schema.TaggedUnion({
   absent: {},
   known: { port: Port },
 });
+
 type Listener = typeof Listener.Type;
 
 // An exit leaves a replacement waiting for its listener; the token names the driver's handle.
@@ -19,6 +20,7 @@ const Replacement = Schema.TaggedUnion({
   none: {},
   pending: { id: Schema.String },
 });
+
 type Replacement = typeof Replacement.Type;
 
 const Session = Schema.Struct({
@@ -86,6 +88,7 @@ export const DevState = Schema.TaggedUnion({
   stopping: { start: Schema.NullOr(Schema.String), listener: Listener, replacement: Replacement },
   stopped: { listener: Listener },
 });
+
 type DevState = typeof DevState.Type;
 
 const Msg = Schema.Union([
@@ -178,6 +181,7 @@ const replacement = (s: DevState): Replacement => {
  */
 export const pending = (s: DevState): string | null => {
   const r = replacement(s);
+
   return r._tag === "pending" ? r.id : null;
 };
 
@@ -224,6 +228,7 @@ export const latest = (s: DevState): string | null => {
 
 const active = (s: DevState) => {
   const tag = s._tag;
+
   return tag !== "braked" && tag !== "stopping" && tag !== "stopped";
 };
 
@@ -264,6 +269,7 @@ export const devLife = Machine.make({
       // The listener, not the start, completes a replacement.
       if (s._tag === "spawned" || s._tag === "online") {
         const { session, pid } = s;
+
         return [
           listener._tag === "known"
             ? DevState.cases.online.make({ session, pid, port: listener.port, replacement: none })
@@ -293,6 +299,7 @@ export const devLife = Machine.make({
       const session = { start: m.start, after, build: m.build };
       const port = address(s);
       const kept = replacement(s);
+
       return [
         port === null
           ? DevState.cases.spawned.make({ session, pid: m.pid, replacement: kept })
@@ -320,6 +327,7 @@ export const devLife = Machine.make({
       }
 
       const { session, listener } = s;
+
       return [
         DevState.cases.waiting.make({
           session,

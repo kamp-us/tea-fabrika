@@ -8,8 +8,11 @@ import { senderTest } from "@kampus/libfabrika/testing";
 import { Arbitrary, Effect, FileSystem, Schema } from "effect";
 
 const SEED = 119120;
+
 const options = { arbitrary: { seed: SEED, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
+
 const text = (min: number, max: number) => Schema.String.check(Schema.isMinLength(min), Schema.isMaxLength(max));
+
 const int = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
 
 const json = (depth: number): Schema.Codec<Schema.Json> =>
@@ -291,6 +294,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const b = yield* target(ctx),
         a = yield* b.waiting(c);
+
       waiting(a);
       yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
@@ -304,6 +308,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const b = yield* target(ctx),
         a = yield* b.approved(c);
+
       expect(a).toEqual({ afterRestart: true, otherName: false, drives: 0 });
       yield* refusePersonInputs(b, c);
     }).pipe(Effect.provide(platform)),
@@ -317,6 +322,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const b = yield* target(ctx),
         a = yield* b.check(c);
+
       expect(a.letters.length).toBeGreaterThan(0);
       letters(a.letters);
       visible(a.result, c.note, a.agent);
@@ -333,6 +339,7 @@ it.effect.prop(
       const b = yield* target(ctx),
         malformed = yield* b.malformed(c),
         missing = yield* b.missing(c);
+
       expect(malformed).toEqual({ refused: true, letters: [] });
       expect(missing).toEqual({ reason: "missing", letters: [] });
       yield* refusePersonInputs(b, c);
@@ -370,8 +377,10 @@ it.prop(
     personRefusalControls();
     checkDeclarations(cleanTools, declarations);
     unknownTool({ words: "unknown tool checklist_add", letters: [] }, "checklist_add");
+
     const id = "letter_0000000000e008000000000001",
       parent = "input_0000000000e008000000000001";
+
     const agent = { key: `SHA256:agent-${c.name}`, for: "person_0000000000e008000000000001" };
     letters([id, id]);
     visible({ saved: c.note, shown: c.note, by: agent.key, for: agent.for }, c.note, agent);
@@ -442,9 +451,11 @@ it.prop(
         }
 
         const d = declarations.filter((d) => !d.personOnly)[i - 1]!;
+
         const shape = Schema.decodeUnknownSync(
           Schema.Struct({ properties: Schema.Record(Schema.String, Schema.Unknown) }),
         )(inputSchema(d));
+
         const bad = { ...shape.properties, value: { type: "object", properties: {} } };
         expect(() =>
           tools(
@@ -466,6 +477,7 @@ it.prop(
     const withoutNote = standard.map((d) =>
       d.name === "check" ? { ...d, schema: Schema.Struct({ name: text(1, 80) }) } : d,
     );
+
     expect(() => tools(cleanTools(withoutNote))).toThrow();
 
     expect(() => unknownTool({ words: "saved checklist_add", letters: [] }, "checklist_add")).toThrow();
@@ -483,6 +495,7 @@ it.prop(
     for (const inputs of declarationSets(declarations)) {
       const clean = cleanTools(inputs),
         publicInputs = inputs.filter((d) => !d.personOnly);
+
       tools(clean, inputs);
 
       for (const [i, tool] of clean.entries()) {
@@ -492,6 +505,7 @@ it.prop(
         if (i > 0) {
           const properties = object(schema.properties),
             value = object(properties.value);
+
           mutations.push({ ...schema, properties: { ...properties, value: { ...value, enum: [null] } } });
 
           for (const [field, fieldSchema] of Object.entries(object(value.properties ?? {}))) {
@@ -545,8 +559,10 @@ it.prop(
   { code: Arbitrary.schema(text(1, 96)) },
   ({ code }) => {
     personRefusalControls();
+
     const approval = `approval-${code}`,
       reply = { words: `Waiting for approval. Code: ${approval}`, letters: [] };
+
     const clean: Waiting = {
       code: approval,
       tools: cleanTools(),
@@ -558,6 +574,7 @@ it.prop(
         checklist_items: reply,
       },
     };
+
     waiting(clean);
 
     for (const tool of waitingTools) {
@@ -580,9 +597,11 @@ it.prop(
   { message: Arbitrary.schema(text(0, 128)) },
   ({ message }) => {
     personRefusalControls();
+
     const failed = (): Bridge => {
       throw new Error(`failed import: ${message}`);
     };
+
     expect(presence(new Set(), failed)).toBeNull();
 
     for (const p of [
@@ -604,6 +623,7 @@ it.prop(
       malformed: () => Effect.die("control only"),
       missing: () => Effect.die("control only"),
     };
+
     expect(presence(new Set(paths), () => clean)).toBe(clean);
     expect(() => presence(new Set(paths), () => ({ ...clean, hidden: undefined! }))).toThrow("missing bridge export");
   },

@@ -18,7 +18,9 @@ interface PongShape {
 }
 
 class Ping extends Cloudflare.DurableObject<Ping, PingShape>()("Ping") {}
+
 class Pong extends Cloudflare.DurableObject<Pong, PongShape>()("Pong") {}
+
 export class Host extends Cloudflare.Worker<Host, Record<never, never>, Ping | Pong>()("SiblingHost") {}
 
 const PingLive = Ping.make(
@@ -58,9 +60,11 @@ export default Host.make(
   },
   Effect.gen(function* () {
     const pings = yield* Ping.from(Host);
+
     return {
       fetch: Effect.gen(function* () {
         const reply = yield* pings.getByName("one").hit(0);
+
         return yield* HttpServerResponse.json(reply);
       }).pipe(
         Effect.catchCause((cause) => Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 }))),

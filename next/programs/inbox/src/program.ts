@@ -33,6 +33,7 @@ export const inboxMachine = Machine.make({
       }
 
       const { type: _type, ...fields } = msg;
+
       return [{ rows: [...model.rows, Row.cases.added.make(fields)] }, []];
     },
   },

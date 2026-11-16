@@ -85,9 +85,11 @@ export const ADVICE_LINES = 600;
 
 /** Where a changed line belongs: only `product` counts as product lines. */
 export const Kind = Schema.Literals(["product", "test", "docs", "lock", "generated", "other"]);
+
 export type Kind = typeof Kind.Type;
 
 const PRODUCT = ["next/", "apps/", "programs/", "packages/"];
+
 const LOCKS = new Set(["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]);
 
 /** A file name that ends in `Test.ts` or `Test.tsx`, with a capital T and at least one character before it. */
@@ -132,6 +134,7 @@ export const Row = Schema.TaggedUnion({
   text: { path: Schema.String, lines: Schema.Int },
   binary: { path: Schema.String },
 });
+
 export type Row = typeof Row.Type;
 
 /** `git diff --numstat -z -M`: `added\tdeleted\tpath\0`, or `added\tdeleted\t\0from\0to\0` after a rename. */
@@ -175,6 +178,7 @@ export const countLines = (rows: ReadonlyArray<Row>, generated: ReadonlySet<stri
 export const diffLine = (tally: Tally, advice: number): string => {
   const warning =
     tally.product > advice ? `, more than ${advice}: should it have been sliced? (advice only, 0099)` : "";
+
   const apart = `${tally.test} test, ${tally.docs} docs, ${tally.lock} lock, ${tally.generated} generated, ${tally.other} other lines, ${tally.binary} binary files`;
 
   return `size: ${tally.product} product lines${warning}; not counted: ${apart}`;
@@ -212,6 +216,7 @@ const unfenced = (text: string): ReadonlyArray<string> => {
 
     if (mark?.[1] !== undefined) {
       fence = mark[1];
+
       return "";
     }
 
@@ -235,6 +240,7 @@ const splitRow = (row: string): ReadonlyArray<string> => {
   }
 
   cells.push(row.slice(start).trim());
+
   return cells.slice(row.startsWith("|") ? 1 : 0, start === row.length ? -1 : undefined);
 };
 
@@ -245,6 +251,7 @@ const NUMBER = /^~?\s*(\d{1,3}(?:,\d{3})+|\d+)(?!\d)/;
 /** The whole number a cell starts with, or null when it starts with a word. */
 export const numberIn = (cell: string): number | null => {
   const found = NUMBER.exec(plain(cell));
+
   return found?.[1] === undefined ? null : Number(found[1].replaceAll(",", ""));
 };
 
@@ -300,6 +307,7 @@ export const readPlan = (text: string): PlanSize => {
     slices: slices.map(({ order, text }) => {
       const estimate = LINES.exec(text)?.[1];
       const name = plain(text).split(/[:.]/)[0]?.trim() ?? "";
+
       return { order, name, lines: estimate === undefined ? null : Number(estimate.replaceAll(",", "")) };
     }),
   };
@@ -310,6 +318,7 @@ export const Advice = Schema.TaggedUnion({
   unsized: { order: Schema.Int, name: Schema.String },
   unknown: {},
 });
+
 export type Advice = typeof Advice.Type;
 
 export const advise = (size: PlanSize): ReadonlyArray<Advice> =>
@@ -354,6 +363,7 @@ const git = Effect.fn("sizecap.git")(function* (args: ReadonlyArray<string>) {
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const proc = yield* ChildProcess.make("git", [...args], { stdin: "ignore" });
+
       const [out, , code] = yield* Effect.all([text(proc.stdout), text(proc.stderr), proc.exitCode], {
         concurrency: 3,
       });
@@ -400,6 +410,7 @@ const diff = Command.make(
   Effect.fn("sizecap.diff")(function* ({ base, head }) {
     const from = (yield* gitOk(["merge-base", base, head])).trim();
     const rows = parseNumstat(yield* gitOk(["diff", "--numstat", "-z", "-M", from, head]));
+
     const generated = yield* generatedAt(
       head,
       rows.map((row) => row.path),
@@ -414,9 +425,11 @@ const plan = Command.make(
   { file: Argument.String("plan") },
   Effect.fn("sizecap.plan")(function* ({ file }) {
     const fs = yield* FileSystem.FileSystem;
+
     const text = yield* fs
       .readFileString(file)
       .pipe(Effect.mapError(() => Failed.make({ reason: "file", message: `cannot read ${file}` })));
+
     const size = readPlan(text);
 
     yield* Console.log(planLine(size));

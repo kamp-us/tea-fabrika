@@ -5,6 +5,7 @@ import { InputId } from "./Id.ts";
 
 /** A place in the log or in a stream. Both count from 1; 0 means before the first. */
 export const Rev = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 export type Rev = typeof Rev.Type;
 
 /**

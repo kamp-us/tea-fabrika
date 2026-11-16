@@ -27,6 +27,7 @@ export const layer = Layer.effect(
   Journal,
   Effect.gen(function* () {
     const store = KeyValueStore.toSchemaStore(yield* KeyValueStore.KeyValueStore, Entry);
+
     return {
       read: (task: string) =>
         store.get(task).pipe(Effect.mapBoth({ onFailure: translated, onSuccess: Option.getOrNull })),

@@ -18,15 +18,19 @@ const lint = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = path.resolve(import.meta.dirname, "../../../../..");
+
   const read = (file: string) =>
     fs.readFileString(path.join(root, file)).pipe(Effect.mapError(() => Unread.make({ path: file })));
+
   const ledger = yield* read("compiler-ledger.json").pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Row)))),
   );
+
   const paths = (yield* fs.glob("next/**/*.tsx", { root, exclude: ["**/node_modules/**"] }))
     .map((p) => path.relative(root, path.join(root, p)))
     .filter((p) => !p.includes("node_modules") && !p.includes(".test."))
     .sort();
+
   const files = new Map<string, string>();
 
   for (const path of paths) {

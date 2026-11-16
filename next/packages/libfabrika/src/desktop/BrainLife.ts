@@ -11,28 +11,41 @@ import { BrainSpec } from "./BrainSpec.ts";
 
 // tea checks a Cmd's input as the value update already holds, so the schema is its decoded side.
 const Input = Schema.toType(Schema.Struct({ id: Id.Cmd }));
+
 const Errors = ["Operation", "Conflict"] as const;
+
 const inspect = Cmd.make("inspect", { input: Input, ok: Status, err: Errors });
+
 const install = Cmd.make("install", { input: Input, ok: Schema.Null, err: Errors });
+
 const start = Cmd.make("start", { input: Input, ok: Schema.Null, err: Errors });
+
 const stop = Cmd.make("stop", { input: Input, ok: Schema.Null, err: Errors });
+
 const ready = Cmd.make("ready", { input: Input, ok: Readiness, err: Errors });
+
 const cleanup = Cmd.make("cleanup", { input: Input, ok: Children, err: Errors });
+
 const remove = Cmd.make("remove", { input: Input, ok: Schema.Null, err: Errors });
+
 const commands = { inspect, install, start, stop, ready, cleanup, remove };
+
 const Action = Schema.Literals(["up", "stop"]);
 
 const Command = Schema.Struct({
   type: Schema.Literals(["inspect", "install", "start", "stop", "ready", "cleanup", "remove"]),
   id: Id.Cmd,
 });
+
 /**
  * Commands emitted by the lifecycle.
  *
  * @category models
  */
 export type Command = ReturnType<(typeof commands)[keyof typeof commands]>;
+
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 const Sequence = { sequence: Count };
 
 const Flow = {
@@ -51,6 +64,7 @@ const Failure = {
 };
 
 const Up = { ...Flow, action: Schema.Literal("up") };
+
 const Down = { ...Flow, action: Schema.Literal("stop") };
 
 /**
@@ -73,11 +87,16 @@ export const Model = Schema.TaggedUnion({
   failed_up: Failure,
   failed_stop: Failure,
 });
+
 type Model = typeof Model.Type;
+
 type Active = Extract<Model, { deadline: number }>;
+
 type Cell = readonly [Model, ReadonlyArray<Command>];
+
 // tea adds malformed_result to every settled error: a reply whose value fails its own schema.
 const Error = Schema.TaggedUnion({ Operation: {}, Conflict: {}, malformed_result: {} });
+
 const Observation = { at: Schema.Finite, next: Schema.optionalKey(Id.Cmd) };
 
 const responses = <const T extends Command["type"], S extends Schema.Top>(type: T, value: S) =>
@@ -108,6 +127,7 @@ const Msg = Schema.Union([
   ...responses("cleanup", Children),
   ...responses("remove", Schema.Null),
 ]);
+
 /**
  * Requests, clock observations and settled replies accepted by the lifecycle.
  *
@@ -127,6 +147,7 @@ const flow = (m: Active) => ({
 });
 
 const up = (m: Active) => ({ ...flow(m), action: "up" as const });
+
 const down = (m: Active) => ({ ...flow(m), action: "stop" as const });
 
 const matches = (m: Model, cmd: Command): m is Active =>
@@ -149,6 +170,7 @@ const issue = (m: Active, type: Command["type"], allocated?: typeof Id.Cmd.Type)
   const sequence = m.sequence + 1;
   const id = allocated ?? Id.Cmd.make(`cmd_0000000000e008${sequence.toString(16).padStart(12, "0")}`);
   const pending = commands[type]({ id });
+
   return [{ ...m, sequence, pending: { type: pending.type, id: pending.id } }, [pending]];
 };
 
@@ -174,6 +196,7 @@ const error = (m: Active, msg: Extract<Msg, { error: unknown }>): Cell =>
  */
 export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly settings: Snapshot.Snapshot }) => {
   const poll = Number(settings.values["desktop.brain-poll"]);
+
   const begin = (m: Model, action: typeof Action.Type, at: number, next?: typeof Id.Cmd.Type): Cell =>
     active(m)
       ? [m, []]
@@ -192,6 +215,7 @@ export const machine = ({ spec, settings }: { readonly spec: BrainSpec; readonly
           "inspect",
           next,
         );
+
   const again = (m: Active, at: number): Cell => [{ ...m, pending: null, wake: at + poll }, []];
 
   return Machine.make({

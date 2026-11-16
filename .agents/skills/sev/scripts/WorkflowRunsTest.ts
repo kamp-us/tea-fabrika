@@ -7,6 +7,7 @@ import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 export const Call = Schema.TaggedUnion({
   cancel: { id: Schema.Finite },
 });
+
 export type Call = typeof Call.Type;
 
 /** The calls that fail with a reason, by name. */
@@ -20,6 +21,7 @@ export const world = (runs: ReadonlyArray<Run> = []): World => ({ runs: [...runs
 export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns> => {
   const fails = (name: keyof Failing) => {
     const reason = failing[name];
+
     return reason === undefined ? Effect.void : Effect.fail(WorkflowRunsError.make({ reason }));
   };
 
@@ -33,6 +35,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns
     }
 
     w.runs[at] = { ...found, ...to };
+
     return Effect.void;
   };
 

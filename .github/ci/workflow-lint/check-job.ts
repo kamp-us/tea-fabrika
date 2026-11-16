@@ -4,12 +4,16 @@
 import { compact, env, map, ROW_INSTALL, type Rule, steps } from "./shared.ts";
 
 const BUILD = "needs.changes.outputs.build!='false'";
+
 // The commit a run's change starts from, for vitest's `--changed`: a pull request's base, a merge
 // queue group's base, or what main held before a push. All zeros (a first push) is no base.
 const TEST_BASE = `\${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before) || '' }}`;
+
 const RATCHET = 'node next/apps/fabrika/src/exam/ratchet.ts --base "$BASE"';
+
 // 0587: the clones a pull request adds, as advice. Only a pull request has a base to tell a clone new by.
 const COPIES = 'node .github/ci/copies.ts --base "$BASE"';
+
 const COPIES_BASE = `\${{ github.event.pull_request.base.sha }}`;
 
 // The check job's flags (ticket 985): lint on check, field rows on field, the CI package's install
@@ -17,6 +21,7 @@ const COPIES_BASE = `\${{ github.event.pull_request.base.sha }}`;
 const CHECK = "needs.changes.outputs.check!='false'";
 
 const ROWS = "!cancelled()&&needs.changes.outputs.field!='false'";
+
 const ROWS_ALONE = "needs.changes.outputs.check=='false'";
 
 export const checkJob: Rule = ({ jobs }, require) => {
@@ -57,6 +62,7 @@ export const checkJob: Rule = ({ jobs }, require) => {
   const ratchets = checkSteps.filter(
     (step) => typeof step["run"] === "string" && step["run"].includes("next/apps/fabrika/src/exam/ratchet"),
   );
+
   require(ratchets.length === 1 &&
     ratchets[0]?.["run"] === RATCHET &&
     compact(map(ratchets[0]?.["env"])["BASE"]) === compact(TEST_BASE) &&

@@ -34,6 +34,7 @@ export class RunnerMail extends Context.Service<RunnerMail, { readonly process: 
  * @category schemas
  */
 export const From = Line.mapFields(({ _tag, body: _body, ...fields }) => fields);
+
 /**
  * What a writer says about itself on a write: `by`, `for`, `sentAt`, `seen`, `parent`, `traceId`
  * and `build`. The same value the `From` schema decodes.
@@ -73,15 +74,22 @@ export type History = Letter & {
 
 /** Span tag keys: OpenTelemetry's messaging names where they fit, `fab.<thing>.*` for the rest. */
 const STREAM = "messaging.destination.name";
+
 const ID = "messaging.message.id";
+
 const OPERATION = "messaging.operation.type";
+
 const tag = (word: string): string => `fab.mailbox.${word}`;
 
 /** A letter's line: its case, and its body `{m}`. */
 const SEND = "send";
+
 const Sent = Schema.Struct({ m: Schema.Json });
+
 const Send = Schema.TaggedStruct(SEND, Sent.fields);
+
 const decodeJson = Schema.decodeUnknownOption(Schema.Json);
+
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
 /**
@@ -200,11 +208,13 @@ export class Mailbox extends Context.Service<
     Mailbox,
     Effect.gen(function* () {
       const ledger = yield* Ledger;
+
       /** The one reader under both reads: each `send` entry past `after`, counted on its span. */
       const reader = (name: string, after: Rev, span: string) =>
         Stream.unwrap(
           Effect.sync(() => {
             const count = { letters: 0, skipped: 0 };
+
             return ledger.read(inbox(name), after).pipe(
               Stream.mapEffect((entry) =>
                 Effect.map(history(entry), (found) => {
@@ -235,6 +245,7 @@ export class Mailbox extends Context.Service<
             },
           }),
         );
+
       return {
         send: Effect.fn("mailbox.send")(
           function* (to: string, id: string, m: unknown, from: From) {
@@ -244,6 +255,7 @@ export class Mailbox extends Context.Service<
             });
             // Mail never takes a stream or an id only the brain writes.
             const runner = yield* Effect.serviceOption(RunnerMail);
+
             const own = Option.exists(
               runner,
               (r) => r.name === to && id.startsWith(`${r.process}/`) && inRunnerSpace(id),

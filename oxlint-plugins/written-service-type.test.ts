@@ -12,7 +12,9 @@ import { writtenServiceType } from "./written-service-type.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();
+
 RuleTester.it = (_name, fn) => fn();
+
 // From the top of the repo, so the rule reads each path as oxlint gives it there.
 const tester = new RuleTester({ cwd: join(import.meta.dirname, "..") });
 
@@ -327,6 +329,7 @@ const file = (
 
   // Each import is written once: two services may ask for the same line.
   const head = [...new Set(imports)];
+
   return { text: `${[...head, ...body].join("\n")}\n`, fires: fires.map((at) => head.length + at + 1) };
 };
 
@@ -364,6 +367,7 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
   // Case 8, and the config's wiring: the same file fires in next/ product code and nowhere else.
   expect(fired).not.toHaveLength(0);
   const planted = fired[0]!;
+
   const off = [
     "next/packages/libfabrika/src/unit/Unit.test.ts",
     "next/apps/fabrika/src/unit/Unit.test.tsx",
@@ -371,6 +375,7 @@ it("fires exactly on a read service whose type holds ReturnType, Effect.Success 
     "next/packages/libfabrika/src/unit/Unit.test-support.ts",
     "packages/fabrika/src/unit/Unit.ts",
   ];
+
   const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
   const linted = await plant(Object.fromEntries([product, tsx, ...off].map((path) => [path, planted.text])));
   expect(linted(CODE, product)).toEqual(planted.fires);

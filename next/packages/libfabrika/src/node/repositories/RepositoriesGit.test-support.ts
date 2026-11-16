@@ -10,6 +10,7 @@ import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
 export const runs = { seed: 119120, numRuns: 200 };
+
 // CI exhausted 60 s for L5 and both L2 properties. Allow 10 ms per real Git command,
 // including scoped setup/cleanup, and count the longest generated tape of four moves.
 // A fixture runs six commands. A complete open runs twelve; L5 injects the URL lookup,
@@ -18,6 +19,7 @@ export const gitCommandBudget = 10;
 
 export const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
   return (yield* spawner.string(
     ChildProcess.make("git", [...args], {
       cwd,
@@ -40,9 +42,11 @@ export const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", b
   const path = yield* Path.Path;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "t878-git-" });
   yield* RepositoryOpenTest.isolateGit(root);
+
   const origin = path.join(root, "origin.git"),
     repo = path.join(root, "selected"),
     person = path.join(root, "person");
+
   yield* fs.makeDirectory(person);
   yield* git(root, ["init", "--bare", `--object-format=${format}`, `--initial-branch=${branch}`, origin]);
   yield* git(root, ["clone", origin, repo]);
@@ -53,6 +57,7 @@ export const fixture = Effect.fnUntraced(function* (format: "sha1" | "sha256", b
   yield* git(repo, ["commit", "-m", "fixture"]);
   yield* git(repo, ["push", "origin", branch]);
   const commit = yield* git(repo, ["rev-parse", "HEAD"]);
+
   return { fs, path, root, origin, repo, person, branch, commit };
 });
 

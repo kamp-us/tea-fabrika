@@ -30,6 +30,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
     Runners,
     Effect.gen(function* () {
       const services = yield* Effect.context<R>();
+
       const run = Effect.fn("Runners.run")(function* (step: Step) {
         const runner = table[step.name];
 
@@ -39,6 +40,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
 
         return yield* runner(step).pipe(Effect.provideContext(services));
       });
+
       return Runners.of({ names: new Set(Object.keys(table)), run });
     }),
   );

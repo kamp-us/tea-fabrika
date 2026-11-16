@@ -11,6 +11,7 @@ import * as Schema from "effect/Schema";
  * @category schemas
  */
 export const Readiness = Schema.TaggedUnion({ waiting: {}, ready: {} });
+
 /**
  * Schema for an owned-resource answer: still waiting, or every owned group and the listener gone.
  *

@@ -6,6 +6,7 @@ import { beat, LATE, line } from "./heartbeat.ts";
 const options = { seed: 119120, numRuns: 300 };
 
 const now = fc.integer({ min: 1.7e12, max: 1.9e12 });
+
 const age = fc.integer({ min: -LATE, max: 3 * LATE });
 
 describe("the mutation heartbeat, today's tooling", () => {

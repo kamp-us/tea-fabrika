@@ -13,6 +13,7 @@ import { type Env, settings } from "./runtime.ts";
 vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
+
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
@@ -72,6 +73,7 @@ describe("T695, the app's wiring keeps what failed", () => {
                   settings: { ...valid.settings, values: { ...valid.settings.values, "instance.port": bad } },
                 }
               : { ...valid, [field]: bad };
+
         const instance = JSON.stringify(damaged);
         const error = yield* Effect.flip(settings({ INSTANCE: instance } as Env));
         expect(error.reason).toBe("bad_row");

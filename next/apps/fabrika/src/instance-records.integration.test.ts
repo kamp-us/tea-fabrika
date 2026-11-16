@@ -37,23 +37,31 @@ const recordCalls = (stub: {
 });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
+
 const SENT = "2026-11-08T04:00:00.000Z";
+
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
 const ids = Effect.runSync(Id.Generator.pipe(Effect.provide(Id.Generator.layer)));
+
 const processId = () => Effect.runSync(ids.next(Id.Process));
 
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     n = Buffer.alloc(4);
+
   n.writeUInt32BE(body.length);
+
   return Buffer.concat([n, body]);
 };
 
 const identity = () => {
   const pair = generateKeyPairSync("ed25519"),
     raw = pair.publicKey.export({ format: "jwk" }).x!;
+
   const bytes = Buffer.from(raw, "base64url"),
     blob = Buffer.concat([field("ssh-ed25519"), field(bytes)]);
+
   return {
     raw,
     line: `ssh-ed25519 ${blob.toString("base64")}`,
@@ -66,8 +74,10 @@ const identity = () => {
         field("sha512"),
         field(createHash("sha512").update(text).digest()),
       ]);
+
       const v = Buffer.alloc(4);
       v.writeUInt32BE(1);
+
       const packet = Buffer.concat([
         Buffer.from("SSHSIG"),
         v,
@@ -77,6 +87,7 @@ const identity = () => {
         field("sha512"),
         field(Buffer.concat([field("ssh-ed25519"), field(sign(null, payload, pair.privateKey))])),
       ]);
+
       return `-----BEGIN SSH SIGNATURE-----\n${packet
         .toString("base64")
         .match(/.{1,70}/g)!
@@ -117,12 +128,15 @@ const world = async (
   const { localState } = await import("alchemy/State/LocalState");
   const { build } = await import("./build.ts");
   const { localInstance } = await import("./local-instance.ts");
+
   const home = mkdtempSync(join(tmpdir(), "p12-o-")),
     key = identity();
+
   const previousHome = process.env.FABRIKA_HOME;
   process.env.FABRIKA_HOME = home;
   let hits = 0;
   let release: Effect.Effect<void> = Effect.void;
+
   const outbound = httpServer((_request, reply) => {
     hits++;
     reply.end("reachable");
@@ -142,9 +156,11 @@ const world = async (
     const at = await Effect.runPromise(heldPort());
     release = at.release;
     symlinkSync(resolve(import.meta.dirname, "../node_modules"), join(home, "node_modules"));
+
     const writer = join(home, "writer.ts"),
       timer = join(home, "timer.ts"),
       sealed = join(home, "sealed.ts");
+
     const common = [
       'import {Machine, Cmd} from "@demlik/tea/effect";',
       'import {Schema} from "effect";',
@@ -155,6 +171,7 @@ const world = async (
       'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
       'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
     ].join("\n");
+
     writeFileSync(writer, `${common}\nexport const program = {...declaration,name:"p12/writer-fixture"};`);
     writeFileSync(timer, `${common}\nexport const program = {...declaration,name:"p12/timer-fixture"};`);
     writeFileSync(
@@ -183,6 +200,7 @@ const world = async (
         'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
       ].join("\n"),
     );
+
     const built = await Effect.runPromise(
       build({
         out: join(home, "dist"),
@@ -213,6 +231,7 @@ const world = async (
             limits: { recordBytes: 64 * 1024 },
           }),
         );
+
         const from: From = {
           by: key.fingerprint,
           for: PERSON,
@@ -222,6 +241,7 @@ const world = async (
           traceId: TRACE,
           build: built.build,
         };
+
         yield* Effect.promise(() =>
           test(instance, key, {
             hits: () => hits,
@@ -229,6 +249,7 @@ const world = async (
             start: async (name, program) => {
               const code = built.programs[program];
               expect(code, `fixture program ${program} must be built`).toBeDefined();
+
               const started = await Reflect.get(instance.project("p12-records"), "start")(
                 {
                   _tag: "first",
@@ -238,6 +259,7 @@ const world = async (
                 },
                 from,
               );
+
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started);
             },
           }),
@@ -354,6 +376,7 @@ export class Control extends Brain.Control {
   }
 }`,
   );
+
   const bundle = await rolldown({
     input: entry,
     platform: "browser",
@@ -398,8 +421,10 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
   const name = `/client/${encodeURIComponent(key.fingerprint)}/${tab}`;
   const socket = new WebSocket(instance.url.replace("http", "ws") + name);
   const frames: any[] = [];
+
   let closeCode: number | undefined,
     serial = 0;
+
   socket.addEventListener("message", (event) => {
     if (event.data !== "pong") {
       frames.push(JSON.parse(String(event.data)));
@@ -411,6 +436,7 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
   socket.addEventListener("error", () => {
     closeCode ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
     for (;;) {
       const index = frames.findIndex(match);
@@ -426,11 +452,14 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
       await pause();
     }
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const nonce = (await next((frame) => frame.method === "challenge")).params.nonce;
   expect(
     (
@@ -448,6 +477,7 @@ const wire = async (instance: any, key: ReturnType<typeof identity>, tab: string
       })
     ).error,
   ).toBeUndefined();
+
   return { name, call, socket, frames, closeCode: () => closeCode };
 };
 
@@ -456,8 +486,10 @@ const workerdPid = () => {
     .split("\n")
     .flatMap((row) => {
       const m = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(row);
+
       return m ? [{ pid: Number(m[1]), parent: Number(m[2]), command: m[3]! }] : [];
     });
+
   const descendants = new Set([process.pid]);
 
   for (let n = 0; n < rows.length; n++) {
@@ -470,14 +502,17 @@ const workerdPid = () => {
 
   const matches = rows.filter((row) => descendants.has(row.pid) && /\/workerd(?:\s|$)/.test(row.command));
   expect(matches.length).toBeLessThanOrEqual(1);
+
   return matches[0]?.pid ?? 0;
 };
 
 const admitted = async (instance: any, key: ReturnType<typeof identity>, project = "p12-records") => {
   const p = instance.project(project);
+
   const client = await p.connect(),
     nonce = await p.challenge(client),
     tab = "internal-test";
+
   const hello = await p.initialize(
     client,
     {
@@ -494,7 +529,9 @@ const admitted = async (instance: any, key: ReturnType<typeof identity>, project
     },
     { url: instance.url, tab, name: key.fingerprint },
   );
+
   expect(hello._tag).toBe("online");
+
   return { p, client };
 };
 
@@ -503,6 +540,7 @@ const routed = (p: any, client: string, method: string, params: unknown) => p.ro
 const read = async (p: any, client: string, stream: string) => {
   const r = await routed(p, client, "ledger.read", { stream, after: 0 });
   expect(r._tag).toBe("ok");
+
   return r.result.entries as Array<any>;
 };
 
@@ -513,6 +551,7 @@ describe("P12 real object adapters", () => {
     await world(async (instance, key) => {
       const p = instance.project("p12-records"),
         { client } = await admitted(instance, key);
+
       const pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
       let c = await wire(instance, key, "wait-recovery");
       const gateway = (method: string, ...args: unknown[]) => p.testGateway(c.name, method, args);
@@ -521,17 +560,21 @@ describe("P12 real object adapters", () => {
       try {
         for (const mode of ["sleep", "abort", "replacement"] as const) {
           let settled = false;
+
           const wait = () =>
             c.call("ledger.wait", { stream: "counter:1/inbox", after }).then(
               (answer) => {
                 settled = true;
+
                 return { answer };
               },
               () => {
                 settled = true;
+
                 return { closed: true };
               },
             );
+
           let waiting = wait();
           let before = await gateway("testState");
 
@@ -617,6 +660,7 @@ describe("P12 real object adapters", () => {
 
           expect(rings).toEqual([{ to: c.name, stream: "counter:1/inbox", after }]);
           expect(settled, `${mode} wait must still be parked before append`).toBe(false);
+
           const reply = await routed(p, client, "process.send", {
             pid,
             letter: `after-${mode}`,
@@ -624,6 +668,7 @@ describe("P12 real object adapters", () => {
             sentAt: SENT,
             seen: 0,
           });
+
           expect(reply).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
           after = reply.result.rev;
           expect(await waiting).toMatchObject({ answer: { id: pending.id, result: { rev: after } } });
@@ -641,13 +686,16 @@ describe("P12 real object adapters", () => {
     await world(async (instance, key) => {
       const p = instance.project("p12-records"),
         pid = (await p.info()).find((row: any) => row.name === "counter:1").process;
+
       const process = instance.process(pid),
         c = await wire(instance, key, "busy-recovery");
+
       let retry: Awaited<ReturnType<typeof wire>> | undefined;
 
       try {
         await process.testHold();
         const params = { pid, letter: "busy-once", m: { type: "inc" }, sentAt: SENT, seen: 0 };
+
         const pending = c.call("process.send", params).then(
           (answer) => ({ answer }),
           () => ({ closed: true }),
@@ -693,6 +741,7 @@ describe("P12 real object adapters", () => {
     await world(async (instance, key) => {
       const p = instance.project("p12-records"),
         c = await wire(instance, key, "close-leaves");
+
       // A session is kept under the key its hello was admitted with: the raw key or its fingerprint.
       const sessions = async () => [
         ...(await p.gateways.online(key.fingerprint)),
@@ -718,6 +767,7 @@ describe("P12 real object adapters", () => {
   it("scenario: p79 plant: an old close cannot remove the newer session; failed real probes give unknown", async () => {
     await world(async (instance, key) => {
       const p = instance.project("p12-records");
+
       const first = {
         client: "client-1",
         key: key.fingerprint,
@@ -725,6 +775,7 @@ describe("P12 real object adapters", () => {
         session: processId(),
         at: 1,
       };
+
       await p.gateways.join(first);
       const newer = processId();
       await p.gateways.join({ ...first, session: newer, at: 2 });
@@ -759,9 +810,11 @@ describe("P12 real object adapters", () => {
       expect(part).toBeGreaterThan(0);
       // Lose a successful write reply and resend it through the real manager.
       const manager = RecordManager.remote((name) => recordCalls(instance.record("project-a", name)));
+
       const found = await Effect.runPromise(
         RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)),
       );
+
       expect(found.map((r) => r.spanId)).toEqual(rows.map((r) => r.span.spanId));
       const held = await first.read(chain, 0, 0);
       const retry = await first.write(chain, 0, [rows[0], { span: span(99), content: null }]);
@@ -806,6 +859,7 @@ describe("P12 real object adapters", () => {
                 }
               : { put: calls.put, head: async () => ({ sha256: "0".repeat(64) }) },
           );
+
           const records = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
           // P37: a failed archive try deletes nothing and never fails `flush`.
           await expect(
@@ -844,8 +898,10 @@ describe("P12 real object adapters", () => {
   it("scenario: recording/content plant: flush before final span, omit failure flush, or trace the sink recursively", async () => {
     await world(async (instance, key, fixture) => {
       const { p, client } = await admitted(instance, key);
+
       const info = await p.info(),
         pid = info.find((i: any) => i.name === "counter:1").process;
+
       const input = {
         pid,
         letter: "recorded",
@@ -854,6 +910,7 @@ describe("P12 real object adapters", () => {
         seen: 0,
         traceId: TRACE,
       };
+
       const accepted = await routed(p, client, "process.send", input);
       expect(accepted).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
       const broken = await fixture.start("broken:1", "p12/writer-fixture");
@@ -866,8 +923,10 @@ describe("P12 real object adapters", () => {
         }),
       ).rejects.toThrow();
       const manager = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
+
       const collect = (chain: any) =>
         Effect.runPromise(RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)));
+
       const job = await collect({ _tag: "job", process: pid });
       expect(job.some((r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
       const failures = await collect({ _tag: "job", process: broken.process });
@@ -893,6 +952,7 @@ describe("P12 real object adapters", () => {
         // Trusted declarations for this process permit the event; the signer is bound to this pid.
         const started = await fixture.start("writer:1", "p12/writer-fixture");
         const pid = started.process;
+
         const delivered = await routed(p, client, "process.send", {
           pid,
           letter: "cause",
@@ -901,6 +961,7 @@ describe("P12 real object adapters", () => {
           seen: 0,
           traceId: TRACE,
         });
+
         expect(delivered).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
         const parent = (await read(p, client, "writer:1/inbox"))[0].parent;
         const capability = p.forProcess(pid);
@@ -918,6 +979,7 @@ describe("P12 real object adapters", () => {
           await p.exit(pid, { _tag: "normal" }, fixture.from);
         } else {
           const { revokeText } = await import("@kampus/libfabrika/access/Text");
+
           const text = revokeText({
             id: "revoke-1",
             key: key.raw,
@@ -926,6 +988,7 @@ describe("P12 real object adapters", () => {
             saw: { label: "fixture", location: "local", method: "command", check: "none" },
             sentAt: SENT,
           });
+
           expect(await p.grant({ text, armored: key.proof(text) })).toMatchObject({ _tag: "applied" });
         }
 
@@ -1000,8 +1063,10 @@ describe("P12 real object adapters", () => {
       const object = instance.process(started.process);
       // An hour away: the wake is saved, and no alarm arrives to keep the object awake.
       const far = Date.now() + 3_600_000;
+
       const send = (letter: string, m: unknown) =>
         routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
+
       expect(await send("arm", { type: "schedule", at: far })).toMatchObject({
         _tag: "ok",
         result: { _tag: "accepted" },
@@ -1033,8 +1098,10 @@ describe("P12 real object adapters", () => {
     await world(async (instance, key, fixture) => {
       const { p, client } = await admitted(instance, key);
       const accepted = { _tag: "ok", result: { _tag: "accepted" } };
+
       const send = (pid: string, letter: string, m: unknown) =>
         routed(p, client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
+
       const timers = async (name: string) =>
         (await p.read(`${name}/inbox`, 0, "audit")).filter((row: any) => row.body.m?.type === "timer");
 

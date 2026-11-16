@@ -9,11 +9,15 @@ import * as Result from "effect/Result";
 import * as S from "effect/Schema";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
+
 const low62 = (1n << 62n) - 1n;
+
 const maxRandom = (1n << 74n) - 1n;
+
 const maxTime = 2 ** 48 - 1;
 
 export type IdValue<P extends string> = Brand.Branded<string, P>;
+
 export type IdSchema<P extends string> = S.Codec<IdValue<P>, string>;
 
 export class IdError extends S.TaggedError<IdError, { readonly brand: unique symbol }>()("IdError", {
@@ -29,6 +33,7 @@ const validPrefix = (prefix: string): boolean => /^[a-z](?:[a-z_]{0,61}[a-z])?$/
 
 const split = (id: string): readonly [string, string] => {
   const separator = id.lastIndexOf("_");
+
   return [id.slice(0, Math.max(0, separator)), id.slice(separator + 1)];
 };
 
@@ -49,15 +54,18 @@ const valid = (id: string): boolean => {
   }
 
   const uuid = [...suffix].reduce((bits, char) => (bits << 5n) | BigInt(alphabet.indexOf(char)), 0n);
+
   return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
 };
 
 /** Any canonical TypeID containing a UUIDv7. Validation never trims or repairs input. */
 export const Schema = S.String.check(S.makeFilter(valid, { expected: "a UUIDv7 TypeID" }));
+
 export type Schema = typeof Schema.Type;
 
 const specific = <const P extends string>(prefix: P) => {
   const a = "[0-9a-hjkmnp-tv-z]";
+
   const schema = Object.assign(
     S.String.check(S.isPattern(new RegExp(`^${prefix}_[0-7]${a}{9}[ef]${a}{2}[89abrstv]${a}{12}$`))).pipe(
       // Prefixes may come from runtime input; make and makeEffect validate them first.
@@ -65,7 +73,9 @@ const specific = <const P extends string>(prefix: P) => {
     ),
     { prefix } as const,
   );
+
   prefixes.set(schema, prefix);
+
   return schema;
 };
 
@@ -107,30 +117,48 @@ export const Type = S.Literals([
   "add",
   "deny",
 ]);
+
 export type Type = typeof Type.Type;
 
 export const Ledger = make("ledger");
+
 export const Person = make("person");
+
 export const Process = make("process");
+
 export const Connection = make("connection");
+
 export const Tab = make("tab");
+
 export const Mailbox = make("mailbox");
+
 export const Input = make("input");
+
 export const InputId = Input;
+
 export type InputId = typeof InputId.Type;
+
 export const Letter = make("letter");
+
 export const Cmd = make("cmd");
+
 export const Monitor = make("monitor");
+
 export const Entry = make("entry");
+
 export const Grant = make("grant");
+
 export const Revoke = make("revoke");
+
 export const Add = make("add");
+
 export const Deny = make("deny");
 
 /** Compare UUID suffixes first, with the complete prefix breaking ties. */
 export const Order = Ordering.make<Schema>((left, right) => {
   const [lp, ls] = split(left),
     [rp, rs] = split(right);
+
   return Ordering.String(ls, rs) || Ordering.String(lp, rp);
 });
 
@@ -162,6 +190,7 @@ export class Generator extends Context.Service<
     Effect.sync(() => {
       let at = -1,
         random = 0n;
+
       // Keep allocation and validation synchronous so fibers observe IDs in allocation order.
       const allocate = <P extends string>(schema: IdSchema<P>, prefix: string, now: number) => {
         if (!Number.isSafeInteger(now) || now < 0 || now > maxTime) {
@@ -187,10 +216,12 @@ export class Generator extends Context.Service<
 
         at = nextAt;
         random = nextRandom;
+
         return Result.getOrThrowWith(S.decodeResult(schema)(`${prefix}_${encode(at, random)}`), (cause) =>
           IdError.make({ reason: "prefix", cause }),
         );
       };
+
       return {
         next: Effect.fn("id.next")(function* <P extends string>(schema: IdSchema<P>) {
           const prefix = prefixes.get(schema);
@@ -201,6 +232,7 @@ export class Generator extends Context.Service<
 
           yield* Effect.annotateCurrentSpan({ type: prefix });
           const now = yield* Clock.currentTimeMillis;
+
           return yield* Effect.try({
             try: () => allocate(schema, prefix, now),
             catch: (error) => (S.is(IdError)(error) ? error : IdError.make({ reason: "entropy", cause: error })),

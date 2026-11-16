@@ -25,7 +25,9 @@ import { projects } from "../vitest.config.ts";
 import { verify } from "./vendored.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+
 const home = mkdtempSync(join(tmpdir(), "vendored-"));
+
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 
 const runs = { seed: 119120, numRuns: 20 };
@@ -49,7 +51,9 @@ const git = (cwd: string, args: ReadonlyArray<string>): string => {
     ],
     { cwd, encoding: "utf8" },
   );
+
   expect(ran.status, ran.stderr).toBe(0);
+
   return ran.stdout.trim();
 };
 
@@ -74,10 +78,12 @@ const pinned = (files: Readonly<Record<string, string>>): { readonly root: strin
   writeFileSync(join(root, "vendor", "anti-slop", "pin.json"), `${JSON.stringify(pin, null, 2)}\n`);
   git(root, ["add", "-A"]);
   git(root, ["commit", "-q", "-m", "the pin"]);
+
   return { root, tree };
 };
 
 const KINDS = ["none", "byte", "add", "remove", "tree"] as const;
+
 type Kind = (typeof KINDS)[number];
 
 /** One edit of the copy: which kind, whether it is committed, and the numbers that place it. */
@@ -198,11 +204,14 @@ const extended = (config: string): ReadonlyArray<string> => {
   const top = statement?.type === "ExpressionStatement" ? statement.expression : undefined;
   const object = top?.type === "ParenthesizedExpression" ? top.expression : top;
   const properties = object?.type === "ObjectExpression" ? object.properties : [];
+
   const named = properties.find(
     (property) => property.type === "Property" && property.key.type === "Literal" && property.key.value === "extends",
   );
+
   const value = named?.type === "Property" ? named.value : undefined;
   const items = value?.type === "ArrayExpression" ? value.elements : [value];
+
   return items.flatMap((item) =>
     item?.type === "Literal" && Predicate.isString(item.value)
       ? [relative(ROOT, join(ROOT, dirname(config), item.value))]
@@ -257,11 +266,13 @@ describe("L6 nothing of this repo's runs or checks the vendored files", () => {
       const shown = spawnSync(TSC, ["--showConfig", "-p", config], { cwd: ROOT, encoding: "utf8" });
       expect(shown.status, `${config}: ${shown.stderr}`).toBe(0);
       const files = Schema.decodeUnknownSync(Shown)(shown.stdout).files ?? [];
+
       return files
         .map((file) => relative(ROOT, join(ROOT, dirname(config), file)))
         .filter((file) => file === "vendor" || file.startsWith("vendor/"))
         .map((file) => `${config}: ${file}`);
     });
+
     expect(reached).toEqual([]);
   });
 });

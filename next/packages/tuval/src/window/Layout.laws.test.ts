@@ -23,6 +23,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { Layout as Desk, tileName } from "./Layout.tsx";
 
 const SEED = 119120;
+
 const ID_ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz";
 
 const typeId = (prefix: string, n: number): string => {
@@ -46,7 +47,9 @@ type Node = {
 };
 
 const VOID = new Set(["area", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+
 const TAG = /<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:="[^"]*")?)*)\s*(\/?)>/g;
+
 const ATTR = /([^\s=>/]+)(?:="([^"]*)")?/g;
 
 const unescape = (text: string) =>
@@ -250,6 +253,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
             keep: "failed",
             cursor: null,
           } as Tile;
+
           expect(tileName(tile), "L20: program first, then t<n>").toBe(`${name}, t${n}`);
         },
       ),
@@ -272,6 +276,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
         ),
         (cmds) => {
           const first = typeId("tile", 1) as TileId;
+
           const real: Desk = {
             w: Schema.decodeSync(Workspace)({
               id: typeId("workspace", 1),
@@ -293,6 +298,7 @@ describe("L20: one main, one region per open tile named by tileName, aria-curren
             ],
             next: 2,
           };
+
           check(real, seen);
           fc.modelRun(() => ({ model: real, real }), cmds);
         },
@@ -329,9 +335,11 @@ const SMALLEST = { width: 220, height: 120 } as const;
 /** A set of strips for the walk: every tile but the focused one drawn under 220x120 at its full share. */
 const stripsAt = (w: Workspace, size: { readonly width: number; readonly height: number }): ReadonlySet<TileId> => {
   const drawn = Layout.rects(w.layout, size, { gap: Layout.GAP });
+
   return new Set(
     Layout.order(w.layout).filter((t) => {
       const r = drawn.get(t)!;
+
       return t !== w.focus && (r.width < SMALLEST.width || r.height < SMALLEST.height);
     }),
   );
@@ -375,6 +383,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
     fc.assert(
       fc.property(Folded, ({ width, height, cuts, focus }) => {
         const first = typeId("tile", 1) as TileId;
+
         let w: Workspace = Schema.decodeSync(Workspace)({
           id: typeId("workspace", 1),
           n: 1,
@@ -382,6 +391,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
           focus: first,
           recent: [first],
         });
+
         const tiles: Array<Tile> = [
           {
             id: first,
@@ -422,6 +432,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
         const shown = tiles.filter((t) => live.includes(t.id));
         const strips = stripsAt(w, { width, height });
         const byId = new Map(shown.map((t) => [t.id, t]));
+
         const root = parse(
           renderToStaticMarkup(
             createElement(Desk, {
@@ -432,6 +443,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
             } as Parameters<typeof Desk>[0]),
           ),
         );
+
         const mains = all(root).filter(isMain);
         expect(mains, "L31: the markup has one main").toHaveLength(1);
         const open = live.filter((t) => !strips.has(t));

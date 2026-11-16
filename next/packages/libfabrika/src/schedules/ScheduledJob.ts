@@ -18,6 +18,7 @@ export const Model = Schema.TaggedUnion({
   idle: { next: Schema.Finite, period: Schema.Int },
   running: { due: Schema.Finite, period: Schema.Int },
 });
+
 /**
  * The job's state: `idle` with the next due time, or `running` with the time of the timer message
  * that started it.

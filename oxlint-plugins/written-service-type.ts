@@ -69,6 +69,7 @@ const memberName = (node: ESTree.MemberExpression): string | null => {
 /** A type the file declares itself, an alias or an interface, or `null` for any other name. */
 const declared = (variable: Variable | undefined): Node | null => {
   const node: Node | undefined = variable?.defs[0]?.node;
+
   return node?.type === "TSTypeAliasDeclaration" || node?.type === "TSInterfaceDeclaration" ? node : null;
 };
 
@@ -113,6 +114,7 @@ export const writtenServiceType: CreateRule = {
     /** Whether a node is the `effect` barrel, imported as a namespace. */
     const isBarrel = (node: Node): boolean => {
       const at = imported(resolve(node));
+
       return at !== null && at.from === "effect" && at.name === "*";
     };
 
@@ -120,6 +122,7 @@ export const writtenServiceType: CreateRule = {
     const isModule = (node: Node, name: string): boolean => {
       if (node.type === "Identifier") {
         const at = imported(resolve(node));
+
         return (
           at !== null &&
           ((at.from === "effect" && at.name === name) || (at.from === `effect/${name}` && at.name === "*"))
@@ -143,6 +146,7 @@ export const writtenServiceType: CreateRule = {
       }
 
       const at = imported(resolve(node));
+
       return at !== null && at.from === "effect/Context" && at.name === "Service";
     };
 
@@ -157,6 +161,7 @@ export const writtenServiceType: CreateRule = {
       }
 
       const at = imported(resolve(name));
+
       return at !== null && at.from === "effect/Effect" && at.name === "Success";
     };
 
@@ -200,6 +205,7 @@ export const writtenServiceType: CreateRule = {
       }
 
       seen.delete(declaration);
+
       return found;
     };
 

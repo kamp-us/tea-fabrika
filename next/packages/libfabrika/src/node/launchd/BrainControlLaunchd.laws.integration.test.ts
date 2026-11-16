@@ -27,8 +27,11 @@ import * as ServiceLaunchd from "./BrainServiceLaunchd.ts";
 import * as LaunchdTest from "./Launchd.test-support.ts";
 
 FilesTest.suite(LaunchdTest.nodeFiles);
+
 const options = { arbitrary: { seed: 119120, runs: 100 } };
+
 const Value = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9 &<>"雪]{1,30}$/));
+
 const NativeValue = Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9雪][a-zA-Z0-9 &<>雪]{0,28}[a-zA-Z0-9雪]$/));
 
 const Signal = Schema.Literals([
@@ -64,6 +67,7 @@ it.effect.prop(
   ([initiallyLoaded, late]) =>
     Effect.gen(function* () {
       const outside = yield* Outside.make({ job: initiallyLoaded ? Outside.loaded() : Outside.absent });
+
       const disk = yield* LaunchdTest.open(
         "none",
         Effect.fnUntraced(function* (args: ReadonlyArray<string>, spec: BrainSpec) {
@@ -104,12 +108,14 @@ it.effect.prop(
           };
         }),
       );
+
       yield* disk.control.install;
       const original = yield* disk.read;
       expect(original).not.toBeNull();
       const removalObservations: Array<string | null> = [];
       const removed = yield* Deferred.make<void>();
       const reply = yield* Deferred.make<void>();
+
       const control = Layer.succeed(BrainControl, {
         ...disk.control,
         remove: disk.control.remove.pipe(
@@ -127,6 +133,7 @@ it.effect.prop(
           Effect.uninterruptible,
         ),
       });
+
       const context = yield* Layer.build(
         Managed.layer(disk.spec, disk.settings).pipe(
           Layer.provide(
@@ -149,6 +156,7 @@ it.effect.prop(
           ),
         ),
       );
+
       const brain = Context.get(context, BrainService);
       const stopping = yield* Effect.forkScoped(brain.stop);
       yield* Deferred.await(removed);
@@ -185,11 +193,13 @@ it.effect.prop(
       const timeout = 1_000;
       const stuck = yield* Deferred.make<void>();
       const gone = yield* Deferred.make<void>();
+
       // One world per attempt: `stubbornAt` names the native command that ignores SIGTERM, or none.
       const attempt = Effect.fnUntraced(function* (stubbornAt: number | null) {
         let loaded = action === "stop";
         let armed = false;
         let commands = 0;
+
         const disk = yield* LaunchdTest.open(
           "none",
           (args, spec) =>
@@ -252,6 +262,7 @@ it.effect.prop(
         }
 
         armed = true;
+
         const context = yield* Layer.build(
           Managed.layer(disk.spec, disk.settings).pipe(
             Layer.provide(
@@ -274,8 +285,10 @@ it.effect.prop(
             ),
           ),
         );
+
         return { disk, brain: Context.get(context, BrainService), from: disk.seen.length };
       });
+
       // A red run must not hang on the stubborn command: its own exit always arrives at the end.
       yield* Effect.gen(function* () {
         // The stubborn command is one this action really runs: a clean attempt counts them first.
@@ -362,12 +375,14 @@ it.effect.prop(
   ([word, code, spawnFailure, signal]) =>
     Effect.gen(function* () {
       const secret = `sentinel-${word}/+&`;
+
       const disk = yield* LaunchdTest.open(spawnFailure ? "spawn" : "none", {
         code,
         stdout: secret,
         stderr: secret,
         ...(signal === null ? {} : { signal }),
       });
+
       const exit = yield* disk.control.inspect.pipe(Effect.exit);
       expect(Exit.isFailure(exit)).toBe(true);
       const failure = Exit.isFailure(exit) ? Cause.squash(exit.cause) : null;
@@ -436,13 +451,16 @@ it.effect.prop(
               stderr: 'Could not find service "test.p19.brain" in domain for user gui: 501\n',
               ...(signal === null ? {} : { signal }),
             });
+
             const delivered: Array<(typeof Rows.Type)[number]> = [];
             const refused = new Map<string, (typeof Rows.Type)[number]>();
             let available = false;
+
             const probe = Layer.succeed(BrainProbe, {
               ready: Effect.succeed(Readiness.cases.ready.make({})),
               cleanup: Effect.succeed(Children.cases.gone.make({})),
             });
+
             const forward = Effect.fnUntraced(function* (
               _target: "record" | "bucket",
               _name: string,
@@ -461,12 +479,15 @@ it.effect.prop(
               }
 
               delivered.push(...rows);
+
               return { _tag: "written", count: rows.length };
             });
+
             const reopen = Effect.fnUntraced(function* (action: "up" | "stop" = "up") {
               const context = yield* Layer.build(
                 ServiceLaunchd.layer(disk.spec, disk.settings, probe, forward).pipe(Layer.provide(disk.native)),
               );
+
               return yield* Context.get(context, BrainService)[action].pipe(Effect.exit);
             });
 
@@ -500,6 +521,7 @@ it.effect.prop(
               const commands = delivered.filter(
                 ({ span }) => span.name === "BrainService.command" && span.attributes["fab.result"] === "Command",
               );
+
               expect(commands.length).toBeGreaterThanOrEqual(attempts + 2);
 
               for (const { span } of commands) {
@@ -537,6 +559,7 @@ it.effect.prop(
         Effect.sync(() => {
           const previous = process.env.FABRIKA_P19_SENTINEL;
           process.env.FABRIKA_P19_SENTINEL = secret;
+
           return previous;
         }),
         (previous) =>
@@ -551,10 +574,12 @@ it.effect.prop(
       const disk = yield* LaunchdTest.open("none", { code: 5, stdout: secret, stderr: secret });
       yield* disk.control.install;
       const sent: Array<unknown> = [];
+
       const probe = Layer.succeed(BrainProbe, {
         ready: Effect.succeed(Readiness.cases.ready.make({})),
         cleanup: Effect.succeed(Children.cases.gone.make({})),
       });
+
       const context = yield* Layer.build(
         ServiceLaunchd.layer(
           disk.spec,
@@ -563,10 +588,12 @@ it.effect.prop(
           (_target: "record" | "bucket", _name: string, _method: string, args: ReadonlyArray<unknown>) =>
             Effect.sync(() => {
               sent.push(args);
+
               return { _tag: "written" };
             }),
         ).pipe(Layer.provide(disk.native)),
       );
+
       const failed = yield* Context.get(context, BrainService).up.pipe(Effect.exit);
       expect(Exit.isFailure(failed)).toBe(true);
       const fs = yield* FileSystem.FileSystem;
@@ -612,6 +639,7 @@ it.effect.prop(
               : corruption === "leading"
                 ? ` ${word}`
                 : `${word} `;
+
       const input =
         field === "args"
           ? { args: [value] }
@@ -620,7 +648,9 @@ it.effect.prop(
             : field === "build"
               ? { build: value }
               : {};
+
       const opened: Array<Effect.Success<ReturnType<typeof LaunchdTest.open>>> = [];
+
       const exit = yield* Effect.gen(function* () {
         const disk = yield* LaunchdTest.open(
           "none",
@@ -628,9 +658,11 @@ it.effect.prop(
           input,
           field === "home" ? (corruption === "leading" ? `${word} ` : value) : "",
         );
+
         opened.push(disk);
         yield* disk.control.install;
       }).pipe(Effect.exit);
+
       expect(Exit.isFailure(exit)).toBe(true);
       expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : null).toMatchObject({
         _tag: "BrainControlError",

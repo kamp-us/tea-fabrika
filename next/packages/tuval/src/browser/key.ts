@@ -19,10 +19,15 @@ import * as Schema from "effect/Schema";
 import { errorClass } from "./index.ts";
 
 const DB = "fabrika";
+
 const STORE = "keys";
+
 const KEY = "window";
+
 const PERSIST = "persist";
+
 const ED = "Ed25519";
+
 const USES: Array<KeyUsage> = ["sign", "verify"];
 
 /** A failure's platform name: a `DOMException`'s, which the platform takes from a fixed list, or
@@ -68,6 +73,7 @@ const request = Effect.fnUntraced(function* <A>(op: StoreError["op"], make: () =
             req.result.close();
           }
         };
+
         req.onerror = null;
       });
     } catch (error) {
@@ -86,6 +92,7 @@ const openDb = Effect.fnUntraced(function* (name: string, store: string) {
           open.result.createObjectStore(store);
         }
       };
+
       return open;
     }),
     (db) => Effect.sync(() => db.close()),
@@ -133,6 +140,7 @@ const atomically = <A>(
         store.put(decided.put, key);
       }
     };
+
     return () => out as A;
   });
 
@@ -144,6 +152,7 @@ const field = (bytes: Uint8Array): Uint8Array => {
   const out = new Uint8Array(4 + bytes.length);
   new DataView(out.buffer).setUint32(0, bytes.length);
   out.set(bytes, 4);
+
   return out;
 };
 
@@ -164,6 +173,7 @@ const makeKey = Effect.gen(function* () {
   const raw = new Uint8Array(out);
   // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto hashes through a Promise
   const digest = yield* Effect.tryPromise({ try: () => s.digest("SHA-256", raw), catch: bad });
+
   return {
     pair,
     raw: Base64Url.encode(raw),
@@ -180,6 +190,7 @@ const lineFor = Effect.fnUntraced(function* (raw: string): Effect.fn.Return<KeyL
 
   const type = new TextEncoder().encode("ssh-ed25519");
   const blob = new Uint8Array([...field(type), ...field(bytes.success)]);
+
   return yield* Schema.decodeEffect(KeyLine)(`ssh-ed25519 ${Base64.encode(blob)}`).pipe(
     Effect.mapError(() => StoreError.make({ op: "read", error: "DataError" })),
   );
@@ -196,6 +207,7 @@ const identity = (stored: Stored, found: Identity["found"]): Effect.Effect<Ident
       const bad = storeFailure("sign");
       // oxlint-disable-next-line fabrika/no-promises -- edge: WebCrypto signs through a Promise
       const signed = Effect.tryPromise({ try: () => s.sign(ED, key, data), catch: bad });
+
       return Effect.map(signed, (signature) => new Uint8Array(signature));
     },
   }));
@@ -215,6 +227,7 @@ export const browserKey = Layer.sync(ClientKey, () => {
     }
 
     const candidate = yield* makeKey;
+
     const chosen = yield* atomically<{
       readonly stored: Stored;
       readonly found: Identity["found"];
@@ -229,14 +242,18 @@ export const browserKey = Layer.sync(ClientKey, () => {
             },
           },
     );
+
     return yield* identity(chosen.stored, chosen.found);
   }, Effect.scoped);
+
   const claimPersist = Effect.gen(function* () {
     const d = yield* openDb(DB, STORE);
+
     return yield* atomically(d, PERSIST, (now) =>
       now === undefined ? { put: { claimed: true }, value: true } : { value: false },
     );
   }).pipe(Effect.scoped, Effect.withSpan("client.persist"));
+
   const persist = Effect.suspend(() => {
     const st: StorageManager | undefined = navigator.storage;
 
@@ -247,5 +264,6 @@ export const browserKey = Layer.sync(ClientKey, () => {
     // oxlint-disable-next-line fabrika/no-promises -- edge: the Storage API asks for persistence through a Promise
     return Effect.tryPromise({ try: () => st.persist(), catch: () => "failed" as const });
   });
+
   return { current, claimPersist, persist };
 });

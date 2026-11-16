@@ -13,6 +13,7 @@ const Ended = Schema.Struct({
   row: SpanRow,
   content: Schema.NullOr(Schema.String),
 });
+
 /** @internal */
 export type Ended = typeof Ended.Type;
 
@@ -30,6 +31,7 @@ const Model = Schema.TaggedUnion({
   holding: { checked: Checked, spans: Schema.NonEmptyArray(Ended) },
   reported: { checked: Checked, spans: Schema.NonEmptyArray(Ended) },
 });
+
 type Model = typeof Model.Type;
 
 const Msg = Schema.Union([
@@ -51,6 +53,7 @@ export const machine = Machine.make({
   update: {
     commit_failed: (s, m) => {
       const spans = [...held(s), ...m.more];
+
       return [
         Arr.isReadonlyArrayNonEmpty(spans)
           ? Model.cases.holding.make({ checked: s.checked, spans })
@@ -60,6 +63,7 @@ export const machine = Machine.make({
     },
     committed: (s, m) => {
       const checked = m.sized && m.hour > s.checked ? m.hour : s.checked;
+
       return [
         s._tag === "failed" || s._tag === "holding"
           ? Model.cases.failed.make({ checked })

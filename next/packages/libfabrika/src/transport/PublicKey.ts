@@ -16,6 +16,7 @@ import { KeyLine } from "./Sshsig.ts";
  */
 export const fingerprint = Effect.fnUntraced(function* (raw: Uint8Array) {
   const hash = yield* subtle("digest", "SHA-256", new Uint8Array(raw));
+
   return `SHA256:${Base64.encode(new Uint8Array(hash)).replace(/=+$/, "")}`;
 });
 

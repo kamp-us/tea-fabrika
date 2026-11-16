@@ -40,20 +40,27 @@ const generated = <S extends Schema.ConstraintDecoder<unknown>>(schema: S): fc.A
   );
 
 const input = generated(Id.InputId);
+
 const repository = generated(Id.make("repository"));
+
 const person = generated(Id.make("person"));
+
 const trace = fc.stringMatching(/^[1-9a-f][0-9a-f]{31}$/);
+
 const digest = fc.stringMatching(/^[0-9a-f]{64}$/);
+
 const tape = fc.array(fc.record({ move: fc.nat(), pick: fc.nat() }), { minLength: 1, maxLength: 12 });
 
 const settings = Effect.gen(function* () {
   const empty = { value: {}, spans: [] };
+
   const resolved = yield* Sources.resolve(Declarations.all, {
     flags: Sources.flags({}),
     env: Sources.env({}),
     repo: Sources.file(".fabrika/fabrika.toml", empty),
     person: Sources.file("~/.fabrika/fabrika.toml", empty),
   });
+
   return yield* LoadSnapshot.make(Declarations.all, resolved);
 });
 
@@ -64,12 +71,14 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     Effect.scoped(
       Effect.gen(function* () {
         const store = yield* open;
+
         const context = yield* Layer.build(
           RepositoryTrustLedger.layer.pipe(
             Layer.provideMerge(LedgerSql.layer(store.sql, { reader: "brain" })),
             Layer.provide(Layer.succeed(Doorbell, { ring: () => Effect.void })),
           ),
         );
+
         return yield* body(store, Context.get(context, RepositoryTrust), Context.get(context, Ledger));
       }),
     );
@@ -92,6 +101,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               run((store, trust) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
+
                   const recorded = {
                     by: "brain",
                     for: operator,
@@ -101,6 +111,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     traceId,
                     build: "fixture-build",
                   };
+
                   const selected = Event.cases.selected.make({
                     repository: repoId,
                     key,
@@ -112,7 +123,9 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     settings: snapshot,
                     request: selection,
                   });
+
                   const first = yield* trust.write(selected, recorded);
+
                   const accepted = Event.cases.decision.make({
                     repository: repoId,
                     key,
@@ -124,6 +137,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     actor: operator,
                     method: "terminal",
                   });
+
                   yield* trust.write(accepted, { ...recorded, seen: first.rev, parent: selection });
 
                   for (const cell of cells) {
@@ -133,17 +147,22 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(same).toContainEqual(accepted);
                     // Fingerprints distinguish another clone and a changed destination, even with the same safe label.
                     const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${key.slice(1)}`;
+
                     const distinct =
                       otherKey === key ? `${key.slice(0, -1)}${key.endsWith("0") ? "1" : "0"}` : otherKey;
+
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
+
                     const otherPerson = Schema.decodeSync(Id.make("person"))(
                       `${operator.slice(0, -1)}${operator.endsWith("0") ? "1" : "0"}`,
                     );
+
                     const otherIdentity = yield* trust.history(key, otherPerson);
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(same.filter((event) => event._tag === "decision")).toEqual([accepted]);
+
                     const reopened = Schema.decodeSync(Id.InputId)(
                       `${selection.slice(0, -1)}${selection.endsWith("0") ? "1" : "0"}`,
                     );
@@ -170,11 +189,13 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                           commit: (cell.pick % 2 === 0 ? "c" : "d").repeat(40),
                         },
                       });
+
                       const state = yield* session.send({
                         type: "history",
                         selection: reopened,
                         events: candidate.events,
                       });
+
                       expect(state._tag).toBe(candidate.known ? "saving" : "awaiting_trust");
 
                       if (state._tag === "saving") {
@@ -184,6 +205,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                           request: reopened,
                           receipt: first,
                         });
+
                         expect(ready._tag).toBe("ready");
                       }
                     }
@@ -192,6 +214,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               ).pipe(Effect.provide(Digest.layerWebCrypto)),
             ),
         );
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
@@ -219,6 +242,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                 run((store, trust, ledger) =>
                   Effect.gen(function* () {
                     const snapshot = yield* settings;
+
                     const recorded = {
                       by: "brain",
                       for: operator,
@@ -228,6 +252,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       traceId,
                       build: "fixture-build",
                     };
+
                     const selected = Event.cases.selected.make({
                       repository: repoId,
                       key,
@@ -239,8 +264,10 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       settings: snapshot,
                       request: selection,
                     });
+
                     const receipt = yield* trust.write(selected, recorded);
                     const envelope = { ...recorded, seen: receipt.rev, parent: selection };
+
                     const decision = Event.cases.decision.make({
                       repository: repoId,
                       key,
@@ -252,6 +279,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       actor: operator,
                       method: "terminal",
                     });
+
                     const opened = Event.cases.opened.make({
                       repository: repoId,
                       key,
@@ -262,6 +290,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       settings: snapshot,
                       result: "ready",
                     });
+
                     const decisions = yield* trust.write(decision, envelope);
                     const openings = yield* trust.write(opened, envelope);
 
@@ -281,17 +310,21 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
 
                     // The adapter's actual writes, observed before the real ledger sees them.
                     const lines: Array<{ stream: string; id: string; line: Line }> = [];
+
                     const captured = {
                       ...ledger,
                       append: (stream: string, id: string, line: Line) => {
                         lines.push({ stream, id, line });
+
                         return ledger.append(stream, id, line);
                       },
                     };
+
                     const service = yield* RepositoryTrust.pipe(
                       Effect.provide(RepositoryTrustLedger.layer),
                       Effect.provideService(Ledger, captured),
                     );
+
                     yield* service.write(selected, recorded);
                     yield* service.write(decision, envelope);
                     yield* service.write(opened, envelope);
@@ -307,6 +340,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                 ).pipe(Effect.provide(Digest.layerWebCrypto)),
               ),
           );
+
           // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
           const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
           // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test
@@ -330,6 +364,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
               run((_store, trust, ledger) =>
                 Effect.gen(function* () {
                   const snapshot = yield* settings;
+
                   const selected = Event.cases.selected.make({
                     repository: repoId,
                     key,
@@ -341,6 +376,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     settings: snapshot,
                     request: selection,
                   });
+
                   const event = Event.cases.decision.make({
                     repository: repoId,
                     key,
@@ -352,6 +388,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     actor: operator,
                     method: "terminal",
                   });
+
                   const recorded = {
                     by: "brain",
                     for: operator,
@@ -361,23 +398,28 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     traceId,
                     build: "fixture-build",
                   };
+
                   const receipt = yield* trust.write(selected, { ...recorded, parent: null });
 
                   for (const cell of cells) {
                     let appends = 0;
+
                     const broken = {
                       ...ledger,
                       append: () => {
                         appends++;
+
                         return cell.move % 2 === 0
                           ? Effect.fail(LedgerError.make({ reason: "storage" }))
                           : Effect.succeed(Appended.cases.refused.make({ reason: "bad_parent" }));
                       },
                     };
+
                     const failed = yield* RepositoryTrust.pipe(
                       Effect.provide(RepositoryTrustLedger.layer),
                       Effect.provideService(Ledger, broken),
                     );
+
                     const result = yield* failed.write(event, { ...recorded, seen: receipt.rev }).pipe(Effect.exit);
                     expect(appends).toBe(1);
                     expect(Exit.isFailure(result)).toBe(true);
@@ -401,17 +443,21 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       ...Schema.encodeSync(Event)(event),
                       body: { repository: repoId, key, request: selection, decision: cell.pick },
                     });
+
                     const bad = { ...ledger, read: () => Stream.make(corrupt) };
+
                     const reader = yield* RepositoryTrust.pipe(
                       Effect.provide(RepositoryTrustLedger.layer),
                       Effect.provideService(Ledger, bad),
                     );
+
                     expect(Exit.isFailure(yield* reader.history(key, operator).pipe(Effect.exit))).toBe(true);
                   }
                 }),
               ).pipe(Effect.provide(Digest.layerWebCrypto)),
             ),
         );
+
         // oxlint-disable-next-line fabrika/no-promises -- edge: fast-check's runner returns a Promise
         const check = async () => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 30, full: 300 }) });
         // oxlint-disable-next-line fabrika/no-promises -- edge: await fast-check within the scoped test

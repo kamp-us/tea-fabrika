@@ -42,8 +42,10 @@ it("type: T1 Journal and Commands speak their own errors and shared names only, 
     readonly has: ReadonlyArray<string>;
     readonly execute: (command: Command) => Effect.Effect<Result>;
   }>();
+
   // The journal's one layer is over Effect's own store, which it needs and never names in the contract.
   type Store = typeof JournalStore.layer;
+
   expectTypeOf<Layer.Success<Store>>().toEqualTypeOf<Journal>();
   expectTypeOf<Layer.Error<Store>>().toEqualTypeOf<never>();
   expectTypeOf<Layer.Services<Store>>().toEqualTypeOf<KeyValueStore.KeyValueStore>();

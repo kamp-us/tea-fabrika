@@ -50,6 +50,7 @@ describe("P10 passkey records", () => {
             old: null,
           },
         };
+
         expect(Schema.decodeUnknownSync(Add)(add)).toEqual(add);
         const command = { ...add, saw: { ...add.saw, method: "command", kept: null, typed: false } };
         expect(Schema.decodeUnknownSync(Add)(command)).toEqual(command);
@@ -73,6 +74,7 @@ describe("P10 passkey records", () => {
           .subarray(Object.keys(full), { maxLength: 6 })
           .map((keys) => Object.fromEntries(keys.map((key) => [key, full[key as keyof typeof full]]))),
       );
+
     fc.assert(
       fc.property(incomplete, text, text, (passkey, key, window) => {
         expect(Schema.is(Adds)({ _tag: "person", key, window, passkey })).toBe(false);
@@ -116,6 +118,7 @@ describe("P10 passkey records", () => {
         proof: "SSHSIG proof",
       },
     };
+
     fc.assert(
       fc.property(
         fc

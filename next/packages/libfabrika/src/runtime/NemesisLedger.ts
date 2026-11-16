@@ -34,6 +34,7 @@ const make = Effect.fnUntraced(function* (operation: Nemesis["Service"]["fire"])
         "fab.nemesis.boundary": snapshot.boundary,
         "fab.nemesis.processBoundary": snapshot.processBoundary,
       });
+
       return Chaos.Report.make({
         ...counts,
         ...snapshot,

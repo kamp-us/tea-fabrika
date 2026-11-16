@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Holder, fill, late, newest, readOutput, says, Sweep, sweep, sweeps, Outcome } from "./gcloop.ts";
 
 const options = { seed: 119120, numRuns: 200 };
+
 const MIN = 60_000;
 
 const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
@@ -17,6 +18,7 @@ const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Sc
 /** A temp state folder, given back when the law ends. */
 const temp = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
+
   return yield* Effect.acquireRelease(fs.makeTempDirectory({ prefix: "gcloop-" }), (dir) =>
     fs.remove(dir, { recursive: true, force: true }).pipe(Effect.ignore),
   );
@@ -72,6 +74,7 @@ describe("readOutput", () => {
             ...trees.map(([p, reason, m]) => `removed worktree ${p}: ${reason}, ${m} MB`),
             TOTAL,
           ];
+
           const read = readOutput(lines.join("\n"));
           expect(read.removed.boxes).toEqual(boxes.map(([n]) => n));
           expect(read.removed.worktrees).toEqual(trees.map(([p]) => p));
@@ -94,6 +97,7 @@ describe("readOutput", () => {
         TOTAL,
       ].join("\n"),
     );
+
     expect(read.removed).toEqual({ boxes: [], worktrees: [], facts: [] });
     expect(read.mutbox).toContain("mutbox gc: stopped after 30 s");
   });
@@ -115,6 +119,7 @@ describe("the status line", () => {
               sweepAt(now - i, Outcome.cases.skipped.make({ reason: "a sweep is going" })),
             ),
           ];
+
           const line = says(records, now, minutes);
           const want = age > 2 * minutes * MIN;
           expect(late(records[0] ?? null, now, minutes)).toBe(want);
@@ -134,6 +139,7 @@ describe("the status line", () => {
         const records = ranOrSkipped.map((ranIt, i) =>
           sweepAt(i * MIN, ranIt ? Outcome.cases.ok.make({}) : Outcome.cases.skipped.make({ reason: "x" })),
         );
+
         const at = ranOrSkipped.lastIndexOf(true);
         expect(newest(records)).toEqual({ last: at < 0 ? null : records[at], skipped: records.length - 1 - at });
         expect(says(records, 0, 30).late).toBe(at < 0 || late(records[at] ?? null, 0, 30));
@@ -145,12 +151,14 @@ describe("the status line", () => {
   // vector: the words a person reads, ok and failed.
   it("vector: one ok and one failed sweep read as plain lines", () => {
     const now = Date.parse("2026-11-11T12:00:00Z");
+
     const ok = Sweep.make({
       ...sweepAt(now - 12 * MIN),
       removed: { boxes: ["a", "b"], worktrees: ["/w"], facts: [] },
       kept: ["c: touched 3 min ago"],
       freedMb: 840,
     });
+
     expect(says([ok], now, 30).text).toBe(
       "gc: last swept 12m ago (timer), ok in 1s, removed 2 boxes and 1 worktree, 840 MB; kept 1; every 30m",
     );
@@ -182,10 +190,12 @@ describe("a sweep", () => {
         ran(
           Effect.gen(function* () {
             const state = yield* temp;
+
             const done = yield* Effect.all(
               pids.slice(0, n).map((pid) => sweep(ask(state, echo(TOTAL, 0, 0.4), pid))),
               { concurrency: "unbounded" },
             );
+
             const tags = done.map((s) => s.outcome._tag).sort();
             expect(tags).toEqual(["ok", ...Array.from({ length: n - 1 }, () => "skipped")]);
             expect((yield* sweeps(state)).length).toBe(n);
@@ -225,8 +235,10 @@ describe("a sweep", () => {
       Effect.gen(function* () {
         const state = yield* temp;
         const fs = yield* FileSystem.FileSystem;
+
         const write = (holder: Holder) =>
           fs.writeFileString(`${state}/gc.lock`, Schema.encodeSync(Schema.fromJsonString(Holder))(holder));
+
         const now = Date.now();
 
         yield* write(Holder.make({ pid: 1, startedAt: new Date(now).toISOString() }));
@@ -266,6 +278,7 @@ describe("the timer's unit", () => {
   const template = (dir: string) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+
       return yield* fs.readFileString(`${dir}/../gc.plist`);
     });
 
@@ -274,8 +287,10 @@ describe("the timer's unit", () => {
     fc.assert(
       fc.property(fc.string(), fc.string(), (a, b) => {
         const filled = fill("<s>{{a}}</s><s>{{b}}</s>", { a, b });
+
         const esc = (t: string) =>
           t.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
         expect(filled).toEqual(Result.succeed(`<s>${esc(a)}</s><s>${esc(b)}</s>`));
         expect(fill("{{a}} {{c}}", { a })).toEqual(Result.fail("the unit file has no value for {{c}}"));
       }),
@@ -288,6 +303,7 @@ describe("the timer's unit", () => {
       Effect.gen(function* () {
         const text = yield* template(import.meta.dirname);
         expect(text).not.toMatch(/\/Users\/|\/home\/|\$HOME/);
+
         const filled = fill(text, {
           label: "local.tea-fabrika.gc",
           node: "/n",
@@ -298,6 +314,7 @@ describe("the timer's unit", () => {
           path: "/usr/bin:/bin",
           log: "/l/gc-timer.log",
         });
+
         expect(Result.isSuccess(filled)).toBe(true);
         const unit = Result.getOrElse(filled, () => "");
         expect(unit).toContain("<key>StartInterval</key>\n  <integer>1800</integer>");

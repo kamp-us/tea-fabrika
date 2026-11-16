@@ -46,10 +46,12 @@ vi.mock("virtual:fabrika-built", () => ({
 }));
 
 const STARTS = [{ source: "p42/starter", to: "p42/child" }];
+
 /** Bounded waits tied to observable facts. */
 const WAIT = 25_000;
 
 type Fixture = Effect.Success<ReturnType<typeof childInstance>>;
+
 // The instance's private local capability, read call by call as ticket 402's test reads it.
 type Instance = Fixture["instance"] & Record<string, any>;
 
@@ -108,6 +110,7 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
   socket.addEventListener("error", () => {
     closeCode ??= 1006;
   });
+
   const next = async (match: (frame: any) => boolean) => {
     const end = Date.now() + WAIT;
 
@@ -127,11 +130,14 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
 
     throw new Error(`no frame in ${WAIT} ms; last frames ${JSON.stringify(frames.slice(-3))}`);
   };
+
   const call = async (method: string, params: unknown) => {
     const id = ++serial;
     socket.send(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+
     return next((frame) => frame.id === id);
   };
+
   const close = async () => {
     socket.close();
     const end = Date.now() + WAIT;
@@ -140,6 +146,7 @@ const socketAt = (instance: Instance, key: Key, tab: string) => {
       await pause(20);
     }
   };
+
   return { call, next, pushed, close };
 };
 
@@ -149,7 +156,9 @@ const wire = Effect.fnUntraced(function* (instance: Instance, key: Key, tab: str
     Effect.sync(() => socketAt(instance, key, tab)),
     (held) => Effect.promise(held.close),
   );
+
   yield* Effect.promise(() => hello(instance, key, tab, client));
+
   return { call: client.call, pushed: client.pushed };
 });
 
@@ -193,8 +202,10 @@ const world = (
       Effect.gen(function* () {
         const fixture = yield* childInstance(starts);
         const scope = yield* Effect.scope;
+
         const connect = (tab: string) =>
           Effect.runPromise(Scope.provide(scope)(wire(fixture.instance as Instance, fixture.key, tab)));
+
         yield* Effect.promise(() => test(fixture, connect));
       }),
     ),
@@ -202,6 +213,7 @@ const world = (
 
 const helpers = ({ instance, hashes, from }: Fixture) => {
   const project = () => (instance as Instance).project(PROJECT);
+
   const call = (method: string, ...args: ReadonlyArray<unknown>) => {
     const target = project();
     const invoke = target[method];
@@ -212,6 +224,7 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
 
     return invoke.apply(target, [...args]);
   };
+
   return {
     start: async (name: string, program: "starter" | "child") => {
       const started = await call(
@@ -219,6 +232,7 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
         { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
         from,
       );
+
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
     },
     facts: async (stream: string) =>
@@ -234,10 +248,14 @@ const Secret = fc
   .map(([word, suffix]) => word + suffix);
 
 const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encodeURIComponent(text)];
+
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
+
 type SecretPick = typeof SecretPick extends fc.Arbitrary<infer A> ? A : never;
+
 type SecretWalk = { step: (pick: SecretPick) => Effect.Effect<void, unknown> };
+
 type ChildOutput = "reply" | "span" | "row" | "log";
 
 const ProjectTape = fc
@@ -275,6 +293,7 @@ const projectSecrets = Effect.fnUntraced(function* (
 ) {
   const fixture = yield* childProject();
   const outputs: Record<ChildOutput, Array<string>> = { reply: [], span: [], row: [], log: [] };
+
   const logger = Logger.make((options) => {
     outputs.log.push(
       Logger.formatSimple.log(options),
@@ -282,16 +301,20 @@ const projectSecrets = Effect.fnUntraced(function* (
       Logger.formatJson.log(options),
     );
   });
+
   const logging = Logger.layer([logger]);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let runtime = yield* Scope.provide(scope)(fixture.acquire());
+
   const reopen = Effect.fnUntraced(function* () {
     yield* Scope.close(scope, Exit.void);
     scope = yield* Scope.make();
     runtime = yield* Scope.provide(scope)(fixture.acquire());
   });
+
   const project = yield* Effect.promise(() => runtime.runPromise(ProjectService.pipe(Effect.provide(logging))));
+
   let child = {
     id: `${project.boot.process}/1/0`,
     name: "child:secret",
@@ -299,7 +322,9 @@ const projectSecrets = Effect.fnUntraced(function* (
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
+
   let pid: string | undefined;
+
   const call = Effect.fnUntraced(function* () {
     const outcome = yield* Effect.tryPromise({
       try: () =>
@@ -309,6 +334,7 @@ const projectSecrets = Effect.fnUntraced(function* (
               path === "exit"
                 ? p.processExit(pid ?? "", { _tag: "normal" }, fixture.from)
                 : p.processChild(child, fixture.from);
+
             return request;
           }).pipe(Effect.provide(logging)),
         ),
@@ -325,12 +351,14 @@ const projectSecrets = Effect.fnUntraced(function* (
 
     return outcome;
   });
+
   const placed = Effect.fnUntraced(function* () {
     const starts = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
     const saved = starts.filter((row) => row._tag === "started");
     expect(saved, "L11: the failing path follows a committed child start").toHaveLength(1);
     pid = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(saved[0]?.body).process;
   });
+
   const remaining = new Set<ChildFailure>(
     path === "descriptor"
       ? ["owner", "descriptor"]
@@ -340,8 +368,10 @@ const projectSecrets = Effect.fnUntraced(function* (
           ? ["pending", "configure", "ack"]
           : ["exit_write", "down", "watch_cleanup", "retire"],
   );
+
   const expected = remaining.size;
   const reached = new Set<ChildFailure>();
+
   const inspectRows = () => {
     outputs.row.push(...outputText(fixture.rows()));
     outputs.span.push(...outputText(fixture.recorded));
@@ -379,6 +409,7 @@ const projectSecrets = Effect.fnUntraced(function* (
       }
 
       inspectRows();
+
       return;
     }
 
@@ -399,17 +430,21 @@ const projectSecrets = Effect.fnUntraced(function* (
       // A completed exit is irreversible. Each remaining failure needs a live child, with both
       // an inbound watch to signal and an outbound watch to remove in the same exit turn.
       child = { ...child, id: `${project.boot.process}/${reached.size + 1}/0`, name: `child:secret:${reached.size}` };
+
       const started = yield* Effect.promise(() =>
         runtime.runPromise(
           ProjectService.use((p) => p.processChild(child, fixture.from)).pipe(Effect.provide(logging)),
         ),
       );
+
       expect(started).toMatchObject({ _tag: "ok", value: { _tag: "started" } });
       yield* placed();
       const process = pid ?? "";
+
       const watched = yield* Effect.promise(() =>
         runtime.runPromise(ProjectService.use((p) => p.processMonitor(`in-${reached.size}`, process, fixture.from))),
       );
+
       expect(watched).toMatchObject({ _tag: "ok" });
       yield* fixture.monitor(process, project.boot.process, `out-${reached.size}`);
     }
@@ -448,14 +483,17 @@ const projectSecrets = Effect.fnUntraced(function* (
     remaining.delete(point);
     reached.add(point);
   });
+
   yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), tape));
   expect(reached.size, "L11: every available failure operation was exercised").toBe(expected);
   expect(fixture.configured.filter((c) => c.descriptor.name === child.name).length).toBeGreaterThan(0);
+
   const recorded = fixture.recorded.flatMap((batch) =>
     Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) })))(
       batch,
     ),
   );
+
   expect(recorded.length, "L11: real stored spans were inspected").toBeGreaterThan(0);
 
   // Each string leaf gets every check, without Vitest matcher bookkeeping in this hot loop.
@@ -488,7 +526,9 @@ const StoragePath = [
   "read",
   "append",
 ] as const;
+
 type StoragePath = (typeof StoragePath)[number];
+
 type StorageCut = { path: StoragePath; operation: number; statement: string };
 
 const storageCall = Effect.fnUntraced(function* (
@@ -503,12 +543,15 @@ const storageCall = Effect.fnUntraced(function* (
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let runtime = yield* Scope.provide(scope)(fixture.acquire());
+
   const reopen = Effect.gen(function* () {
     yield* Scope.close(scope, Exit.void);
     scope = yield* Scope.make();
     runtime = yield* Scope.provide(scope)(fixture.acquire());
   });
+
   const project = yield* Effect.promise(() => runtime.runPromise(ProjectService));
+
   const child = {
     id: `${project.boot.process}/1/0`,
     name: "child:storage",
@@ -516,6 +559,7 @@ const storageCall = Effect.fnUntraced(function* (
     requester: Recipient.cases.process.make({ process: project.boot.process }),
     input: { type: "inc" },
   };
+
   const start = ProjectService.use((p) => p.processChild(child, fixture.from));
   let pid = "";
   let rev = 0;
@@ -523,18 +567,22 @@ const storageCall = Effect.fnUntraced(function* (
 
   if (path === "recovery") {
     fixture.cut();
+
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     }).pipe(Effect.result);
+
     prepared = Result.isFailure(failed) && fixture.hit();
     yield* reopen;
   } else if (path === "configuration") {
     fixture.fail("configure", new Error("configuration interrupted"));
+
     const failed = yield* Effect.tryPromise({
       try: () => runtime.runPromise(start),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     }).pipe(Effect.result);
+
     prepared = Result.isFailure(failed) && fixture.hit();
   } else if (path !== "fresh") {
     const started = yield* Effect.promise(() => runtime.runPromise(start));
@@ -576,6 +624,7 @@ const storageCall = Effect.fnUntraced(function* (
   }
 
   expect(prepared, `L11: ${path} begins in its required process state`).toBe(true);
+
   const call = ProjectService.use((p): Effect.Effect<unknown, unknown> => {
     switch (path) {
       case "status":
@@ -611,17 +660,22 @@ const storageCall = Effect.fnUntraced(function* (
         );
     }
   });
+
   const printed: Array<string> = [];
+
   const logging = Logger.layer([
     Logger.make((options) => {
       printed.push(Logger.formatSimple.log(options), Logger.formatLogFmt.log(options), Logger.formatJson.log(options));
     }),
   ]);
+
   const invoke = Effect.tryPromise({
     try: () => runtime.runPromise(call.pipe(Effect.provide(logging))),
     catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
+
   yield* inspect(fixture, invoke, reopen);
+
   return printed;
 });
 
@@ -648,6 +702,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
   const reached = new Set<string>();
   const leaks = new Set<string>();
   const perWalk = Math.max(4, Math.ceil(inventory.length / 100));
+
   const tape = fc
     .commands(
       [
@@ -660,8 +715,10 @@ const storageSecrets = Effect.fnUntraced(function* () {
       { maxCommands: perWalk + 8, size: "max" },
     )
     .filter((commands) => [...commands].length >= perWalk);
+
   const law = Effect.fnUntraced(function* (secret: string, commands: Iterable<fc.AsyncCommand<object, SecretWalk>>) {
     let moves = 0;
+
     const step = Effect.fnUntraced(function* (pick: SecretPick) {
       // The model records completed cuts only. Pick an unvisited operation that its prepared
       // process state can reach, or repeat a visited one once the whole inventory is covered.
@@ -673,12 +730,15 @@ const storageSecrets = Effect.fnUntraced(function* () {
       }
 
       const marker = forms(secret)[pick.encoding] ?? secret;
+
       const fault = Object.assign(new Error(`SQLITE_FULL at ${marker}`), {
         name: marker,
         code: marker,
         errcode: marker,
       });
+
       const outputs: Record<ChildOutput, Array<string>> = { reply: [], row: [], span: [], log: [] };
+
       const printed = yield* Effect.scoped(
         storageCall(cut.path, (fixture, call, reopen) =>
           Effect.gen(function* () {
@@ -708,6 +768,7 @@ const storageSecrets = Effect.fnUntraced(function* () {
           }),
         ),
       );
+
       outputs.log.push(...(printed ?? []));
 
       for (const [output, texts] of Object.entries(outputs)) {
@@ -724,9 +785,11 @@ const storageSecrets = Effect.fnUntraced(function* () {
 
       moves++;
     });
+
     yield* Effect.promise(() => fc.asyncModelRun(() => ({ model: {}, real: { step } }), commands));
     expect(moves, "L11: the storage walk is not empty").toBeGreaterThan(0);
   });
+
   yield* Effect.promise(() =>
     fc.assert(
       fc.asyncProperty(Secret, tape, (secret, commands) => Effect.runPromise(law(secret, commands))),
@@ -777,6 +840,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           const first = yield* Scope.provide(scope)(fixture.acquire());
           const project = yield* Effect.promise(() => first.runPromise(ProjectService));
           const boot = project.boot.process;
+
           const child = {
             id: `${boot}/1/0`,
             name: "child:cut",
@@ -784,10 +848,13 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             requester: Recipient.cases.process.make({ process: boot }),
             input: { type: "inc" },
           };
+
           fixture.cut();
+
           const cut = yield* Effect.promise(() =>
             first.runPromise(Effect.exit(project.processChild(child, fixture.from))),
           );
+
           expect(fixture.hit(), "L10: the cut reached the descriptor write").toBe(true);
           expect(cut._tag).toBe("Failure");
           const starts = yield* Effect.promise(() => first.runPromise(project.read("processes/child:cut", 0, "audit")));
@@ -833,6 +900,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     const values = new Map<string, unknown>();
     let armed: number | undefined;
     let fail = true;
+
     // oxlint-disable-next-line fabrika/no-type-assertions -- the fixture supplies only the storage calls configureProcess reads; workerd owns the full context
     const ctx = {
       exports: { IsolateTail: () => ({ fetch: async () => new Response() }) },
@@ -851,6 +919,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         },
       },
     } as unknown as Parameters<typeof configureProcess>[0];
+
     const descriptor: Descriptor = {
       id: "process_0000000000e008000000000001",
       name: "child:alarm",
@@ -858,10 +927,12 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       build: "p42-alarm",
       owner: Writer.cases.person.make({ key: "SHA256:test", for: "person_01m6v5270hf3c8x2q7w9z4k5mn" }),
     };
+
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const unused = () => Effect.die("unexpected process service call");
+
           const runtime = yield* Effect.acquireRelease(
             Effect.sync(() =>
               ManagedRuntime.make(
@@ -882,6 +953,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
             ),
             (runtime: ManagedRuntime.ManagedRuntime<ProcessService, never>) => runtime.disposeEffect,
           );
+
           yield* Effect.promise(async () => {
             const first = await Effect.runPromise(Effect.result(configureProcess(ctx, descriptor, runtime, true)));
             expect(first._tag).toBe("Failure");
@@ -909,6 +981,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const starter = await start("starter:1", "starter");
       const client = await connect("desk-s1");
       const founder = { _tag: "person", key: fixture.key.fingerprint, for: fixture.from.for };
+
       const asks = [
         { program: "p42/child", name: "child:desk-s1" },
         { program: "p42/starter", name: "starter:desk-s1" },
@@ -926,6 +999,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         () => client.call("view.open", { pid: starter }),
         (opened) => (opened.result?.view?.told?.length ?? 0) >= asks.length,
       );
+
       const told = view.result.view.told as Array<unknown>;
       expect(told, "L1: no start was refused, though no grant names its program").not.toContain("forbidden");
 
@@ -969,16 +1043,20 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const client = await connect("children");
 
       const quiet = client.pushed.length;
+
       const sent = await client.call(
         "process.send",
         letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
       );
+
       expect(sent, "the starter takes the letter").toMatchObject({ result: { _tag: "accepted" } });
+
       const child = await until(
         "the child is live",
         () => live("child:1"),
         (pid) => pid !== undefined,
       );
+
       // Settle: anything the start would push has had its turn.
       await pause(1_000);
       const after = client.pushed.slice(quiet);
@@ -1002,11 +1080,13 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const { start, live, facts } = helpers(fixture);
       const starter = await start("starter:1", "starter");
       const peer = await start("child:boot", "child");
+
       const other = await until(
         "the independent counter is live",
         () => live("counter:1"),
         (pid) => pid !== undefined,
       );
+
       expect(other).toBeDefined();
       const client = await connect("children");
 
@@ -1023,9 +1103,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         () => client.call("view.open", { pid: other }),
         (frame) => frame.result?.view?.count === 2,
       );
+
       expect(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))).toMatchObject({
         result: { _tag: "accepted" },
       });
+
       const peerView = await until(
         "another life of the child's program has a nonzero count",
         () => client.call("view.open", { pid: peer }),
@@ -1036,6 +1118,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "process.send",
         letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
       );
+
       const first = String(
         await until(
           "the started child is live",
@@ -1043,12 +1126,14 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           (pid) => pid !== undefined,
         ),
       );
+
       // It runs: its first letter was stepped, and a door letter steps it again.
       const view = await until(
         "the child stepped its first letter",
         () => client.call("view.open", { pid: first }),
         (frame) => frame.result?.view?.count === 1,
       );
+
       expect(view, "L10: the child's first letter is its input").toMatchObject({ result: { view: { count: 1 } } });
       expect(await client.call("process.send", letter(first, "inc-1", { type: "inc" }))).toMatchObject({
         result: { _tag: "accepted" },
@@ -1058,29 +1143,35 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         () => client.call("view.open", { pid: first }),
         (frame) => frame.result?.view?.count === 2,
       );
+
       const starterView = await until(
         "the starter saved its request and answer",
         () => client.call("view.open", { pid: starter }),
         (frame) => frame.result?.view?.asked === 1 && frame.result?.view?.told?.length === 1,
       );
+
       expect(starterView.result.view.told).toMatchObject([{ _tag: "started", process: first, name: "child:1" }]);
 
       // A throw restarts it: one restarted fact naming the old life, in the child's own name.
       await client.call("process.send", letter(first, "throw-1", { type: "throw" }));
+
       const [restarted] = await until(
         "one restarted fact after the child's throw",
         async () => (await facts("processes/child:1")).filter((fact) => fact._tag === "restarted"),
         (rows) => rows.length >= 1,
       );
+
       expect(restarted, "L10: P34 restarts the child in its own name").toMatchObject({
         after: first,
         name: "child:1",
       });
+
       const second = await until(
         "the successor is live",
         () => live("child:1"),
         (pid) => pid !== undefined && pid !== first,
       );
+
       expect(second).toBe(restarted?.["process"]);
 
       // Its starter and the other program keep their lives and their counts.
@@ -1127,6 +1218,7 @@ const checkRefusalTypes = () => {
   // A refusal widened to `string` would let this through.
   // @ts-expect-error a stop refusal is one of its names, never any string
   const widened: (typeof StartChild.stopChild.errTags)[number] = "anything";
+
   return widened;
 };
 

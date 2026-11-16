@@ -144,9 +144,13 @@ import {
 import * as RunId from "./runid.ts";
 
 const HERE = import.meta.dirname;
+
 export const STEPS = ["plan", "tests", "build", "mutation", "review"] as const;
+
 export type StepName = (typeof STEPS)[number];
+
 const AGENTS = ["codex", "codex-exec", "claude"] as const;
+
 export type AgentName = (typeof AGENTS)[number];
 
 /**
@@ -199,7 +203,9 @@ type Outcome = typeof drive.schema.Type;
 
 /** What a stuck step was stuck on (0076): a tool around the work, or the work itself. */
 export const FAULTS = ["tool", "work"] as const;
+
 export type Fault = (typeof FAULTS)[number];
+
 type StuckReason = Extract<Outcome, { kind: "stuck" }>["why"];
 
 /**
@@ -231,6 +237,7 @@ const isStuckReason = (s: string): s is StuckReason => Object.hasOwn(FAULT, s);
 /** The fault as a log line names it, after the outcome: ` (fault: tool)`, or nothing. */
 const faultNote = (outcome: string, reason: string): string => {
   const fault = faultFrom(outcome, reason);
+
   return fault === null ? "" : ` (fault: ${fault})`;
 };
 
@@ -264,6 +271,7 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
       .replace(/^commits check: /, "")
       .split("; ")
       .filter((h) => !/^and \d+ more$/.test(h));
+
     return held.length > 0 && held.every((h) => /^stale_link\b/.test(h)) ? "tool" : "work";
   }
 
@@ -286,8 +294,11 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
 const BOX_CHECKS = ["plan_unapproved", "base_not_signed", "shared_ticket", "root_not_ancestor"] as const;
 
 const CHECKS = [...BOX_CHECKS, "quest_running", "agent_cap", "low_disk", "branch_checked_out", "docker_busy"] as const;
+
 type Check = (typeof CHECKS)[number];
+
 type Refused = { readonly kind: "refused"; readonly check: Check };
+
 /** How a drive ends: the step's outcome, or a start check that refused before the step ran. */
 type End = Outcome | Refused;
 
@@ -342,6 +353,7 @@ const Ask = Schema.Struct({
   /** When this run started, in ms: a report older than this is not this run's. */
   started: Schema.Finite,
 });
+
 type Ask = typeof Ask.Type;
 
 const Read = Schema.Struct({
@@ -365,6 +377,7 @@ const Read = Schema.Struct({
   report: Schema.String,
   problem: Schema.NullOr(Schema.String),
 });
+
 type Read = typeof Read.Type;
 
 const Done = Schema.Struct({ ok: Schema.Boolean, detail: Schema.String });
@@ -377,6 +390,7 @@ const Started = Schema.TaggedUnion({
 });
 
 const boxNew = Cmd.make("box_new", { input: Ask, ok: Started, err: ["unknown"] });
+
 const stepRead = Cmd.make("step_read", { input: Ask, ok: Read, err: ["unknown"] });
 
 const backupPush = Cmd.make("backup_push", {
@@ -407,6 +421,7 @@ type Cmds =
   | ReturnType<typeof record>;
 
 type DraftSub = Sub<"draft", Ask>;
+
 /** The agent's turn, as it ended (./agents.ts). */
 type Drafted = { readonly type: "drafted"; readonly turned: Turned<Answer> };
 
@@ -495,6 +510,7 @@ const readAnswer = (report: string): typeof Said.Type => {
 
   const verb = (m[1] ?? "").split(/\s+/)[0]?.toLowerCase() ?? "";
   const reason = (m[3] ?? "").replace(/^[`*\s]+|[`*\s]+$/g, "");
+
   return Said.cases.one.make({ verb, to: m[2]?.toLowerCase() ?? "", reason });
 };
 
@@ -514,6 +530,7 @@ const verdictText = (report: string) =>
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
   const lines = outsideFences(verdictText(report)).map((l) => l.replace(/^[`*#\s]+/, ""));
+
   return /^merge-ready\b/i.test(lines[0] ?? "") && !lines.some((l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
@@ -532,6 +549,7 @@ const greenOf = (report: string) => {
 };
 
 type Judged = { readonly outcome: Outcome; readonly reason: string };
+
 type Ended = { readonly outcome: End; readonly reason: string };
 
 const stuck = (reason: Extract<Outcome, { kind: "stuck" }>["why"], text: string): Judged => ({
@@ -653,8 +671,10 @@ export const decide = (ask: Ask, read: Read, answer: Answer | null = null): Judg
       return { outcome: { kind: "done", part: false, head: read.head }, reason: said.reason };
     case "send": {
       const to = said.to === "tests" ? "tests" : said.to === "plan" ? "plan" : "build";
+
       return { outcome: { kind: "send", to, why: "step_said" }, reason: said.reason };
     }
+
     case "ask":
       // oxlint-disable-next-line eslint/id-denylist -- today's outcome shape, as outcomesOf writes it
       return { outcome: { kind: "ask", who: "lead", for: "question" }, reason: said.reason };
@@ -676,6 +696,7 @@ export const reportOf = (path: string, started: number, mtime: number | null): s
 // ---------------------------------------------------------------- the machine
 
 type Step = readonly [Model, readonly Cmds[]];
+
 const stay = (s: Model): Step => [s, []];
 
 /** A stuck box stays for the lead to look at, and so does one holding work no branch has, whatever
@@ -691,6 +712,7 @@ const recordIt = (
 ): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${left.join(", ")})` : j.reason;
+
   const entry = record({
     ask,
     outcome: endName(j.outcome),
@@ -701,6 +723,7 @@ const recordIt = (
     spent,
     ...(plants === undefined ? {} : { plants }),
   });
+
   return [{ phase: "recording", ask, outcome: j.outcome, reason, head, kept, spent }, [entry]];
 };
 
@@ -789,6 +812,7 @@ export const machine = defineMachine({
       if (j.outcome.kind !== "stuck" && m.value.commits > 0) {
         const asked = backupPush({ ask: s.ask, head });
         const pushing = { outcome: j.outcome, reason: j.reason, head, left: m.value.left, spent: s.spent, plants };
+
         return [{ phase: "pushing", ask: s.ask, ...pushing }, [asked]];
       }
 
@@ -823,6 +847,7 @@ export const machine = defineMachine({
       }
 
       const outcome: Outcome = { kind: "stuck", why: "record_failed" };
+
       return [{ ...s, phase: "over", outcome, reason: `${s.reason} (${m.value.detail})`, kept: true }, []];
     },
     record_err: (s): Step =>
@@ -854,6 +879,7 @@ export type Env = {
 
 export const sh = (cmd: string, args: readonly string[], cwd?: string) => {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
 
@@ -862,6 +888,7 @@ const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" |
 /** This run's report, or `null` when it wrote none. */
 const writtenReport = (ask: Ask) => {
   const mtime = existsSync(ask.report) ? statSync(ask.report).mtimeMs : null;
+
   return reportOf(ask.report, ask.started, mtime);
 };
 
@@ -872,6 +899,7 @@ export const loadEnv = (): Env => {
     '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
     join(HERE, "env.sh"),
   ]);
+
   const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = r.out.split("\n");
 
   if (r.code !== 0 || !MAIN) {
@@ -898,12 +926,14 @@ const SHAPES = [
 /** `file:line` of each added line that leaks. The private words are read here and never printed. */
 const leaksIn = (diff: string, repo: string): string[] => {
   const file = join(homedir(), ".fabrika/leak-words");
+
   const words = existsSync(file)
     ? readFileSync(file, "utf8")
         .split("\n")
         .map((w) => w.trim().toLowerCase())
         .filter(Boolean)
     : [];
+
   const hits: string[] = [];
   let path: string | null = null;
   let line = 0;
@@ -936,6 +966,7 @@ const stepsIn = (env: Env, root: string, head: string): Set<string> =>
       .filter(Boolean)
       .flatMap((sha) => {
         const r = sh("git", ["-C", env.MAIN, "notes", "--ref=fabrika", "show", sha]);
+
         return r.code === 0 ? stepOf(r.out) : [];
       }),
   );
@@ -964,6 +995,7 @@ const boxGit = (env: Pick<Env, "BOXES">, box: string, ...args: string[]) => {
     ],
     { encoding: "utf8", env: SAFE_GIT },
   );
+
   return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
 
@@ -992,6 +1024,7 @@ const gitView = (env: Env, ask: Ask): string | null => {
   writeFileSync(join(own, "HEAD"), `${ask.base}\n`);
   copyFileSync(join(env.BOXES, `${ask.box}-gitdata`, "index"), join(own, "index"));
   writeFileSync(join(work, ".git"), `gitdir: ${own}\n`);
+
   return null;
 };
 
@@ -1067,10 +1100,12 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
 
   const moved = caseRenames(boxTree(env.BOXES, box), listed.out.split("\0").filter(Boolean));
   const old = new Set(moved.map((m) => m.from));
+
   const changes: Change[] = [
     ...changedFiles(status.out).filter((c) => !old.has(c.path)),
     ...moved.map((m) => ({ xy: "R ", ...m })),
   ];
+
   return { ...status, changes };
 };
 
@@ -1081,10 +1116,12 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
 export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
   const lines = report.split("\n").map((l) => l.replace(/^[#*`\s]+|[*`\s]+$/g, ""));
   const prose = lines.find((l) => l.length > 0 && !l.startsWith("{"));
+
   const reason = lines
     .filter((l) => l.startsWith("{"))
     .map((l) => /"reason"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(l)?.[1]?.replace(/\\(.)/g, "$1").trim())
     .find((w) => w !== undefined && w.length > 0);
+
   return `T${ask.ticket} ${ask.step}: ${(prose ?? reason ?? "the step's work").slice(0, 72)}`;
 };
 
@@ -1097,6 +1134,7 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
 const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
   const git = (...args: string[]) => {
     const r = spawnSync("git", ["-C", env.MAIN, ...args], { encoding: "utf8", env: SAFE_GIT });
+
     return { code: r.status ?? -1, out: r.stdout ?? "", err: r.stderr ?? "" };
   };
 
@@ -1170,6 +1208,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
     }
 
     const head = sh("git", ["-C", wt, "rev-parse", "HEAD"]).out.trim();
+
     return git("update-ref", `refs/heads/${ask.branch}`, head);
   } finally {
     git("worktree", "remove", "--force", wt);
@@ -1182,6 +1221,7 @@ export const commitsSaid = (
   questSteps: ReadonlySet<string>,
 ): string => {
   const rules = heldRules(check.out, questSteps);
+
   return rules.length > 0
     ? `commits check: ${rules.slice(0, 5).join("; ")}${rules.length > 5 ? `; and ${rules.length - 5} more` : ""}`
     : `commits check exit ${check.code}: ${tail(check.out + check.err)}`;
@@ -1206,6 +1246,7 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
     .toReversed()
     .map((l) => /^refused ([a-z_]+): ?(.*)$/.exec(l.trim()))
     .find((m) => m !== null);
+
   const check = BOX_CHECKS.find((c) => c === line?.[1]);
 
   if (code === 3 && line && check) {
@@ -1222,6 +1263,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
   const git = (...args: string[]) => sh("git", ["-C", env.MAIN, "-c", "core.hooksPath=/dev/null", ...args]);
   let phases = started;
   let ready: number | null = null;
+
   return {
     box_new: (cmd: Ask) =>
       Effect.sync(() => {
@@ -1239,6 +1281,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           "--quest",
           cmd.quest,
         );
+
         writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
         phases = [...phases, ...phasesIn(r.err)];
         ready = Date.now();
@@ -1249,12 +1292,14 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const problem = gitView(env, cmd);
+
         return problem === null ? started : Started.cases.failed.make({ detail: problem });
       }),
     step_read: (ask: Ask) =>
       Effect.sync((): Read => {
         const written = writtenReport(ask);
         const report = written === null ? "" : readFileSync(written, "utf8");
+
         const empty = {
           commits: 0,
           unsigned: [],
@@ -1269,6 +1314,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 
         if (ask.step === "plan") {
           const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--draft", ask.report], env.MAIN);
+
           return {
             ...empty,
             head: ask.base,
@@ -1306,11 +1352,13 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const head = ask.step === "review" ? ask.base : git("rev-parse", ref).out.trim();
+
         const failed = (message: string, r: { code: number; err: string }) => ({
           ...empty,
           head,
           problem: `${message}: ${tail(r.err)}`,
         });
+
         const count = git("rev-list", "--count", `${ask.base}..${head}`);
 
         if (count.code !== 0) {
@@ -1326,10 +1374,13 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const names = [...new Set(touched.out.split("\n").filter(Boolean))];
+
         const at = (rev: string, path: string) => {
           const r = git("show", `${rev}:${path}`);
+
           return r.code === 0 ? r.out : null;
         };
+
         const manifests = lockfileBehind(
           names
             .filter((n) => n === "pnpm-workspace.yaml" || /(^|\/)package\.json$/.test(n))
@@ -1337,6 +1388,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           workspaceGlobs(at(head, "pnpm-workspace.yaml") ?? ""),
           names.includes("pnpm-lock.yaml"),
         );
+
         const examRun =
           names.length === 0
             ? { code: 0, out: "", err: "" }
@@ -1355,6 +1407,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           .split("\n")
           .filter(Boolean)
           .map((l) => l.split("\t")[0] ?? l);
+
         // Each commit's own added lines, so nothing a later commit removed slips past.
         const diff = git("log", "-p", "-U0", "--no-color", "--format=", `${ask.base}..${head}`);
 
@@ -1405,6 +1458,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const { ask } = cmd;
         const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Publish.DRAFT_BODY };
         const services = Layer.mergeAll(PushesProcess.layer(HERE), PullRequestsGh.layer(env.GH_REPO, env.MAIN));
+
         return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
           Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
           Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
@@ -1451,13 +1505,16 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         const ok = notes.length === 0;
         const outcome = ok ? e.outcome : "stuck:record_failed";
         const keep = e.keep || !ok;
+
         // A stuck step, or a build sent back for exam paths, does not move the quest's head.
         const accepted =
           !outcome.startsWith("stuck") && !outcome.startsWith("refused") && outcome !== "send:tests:exam_paths";
+
         const state = join(env.BOXES, "state", `${ask.quest}.json`);
         const saved = savedQuest(state) ?? { quest: ask.quest, steps: [] };
         // From the box made to the agent's first event: the harness and the model starting.
         const first = existsSync(ask.events) ? firstEventAt(readFileSync(ask.events, "utf8")) : null;
+
         const entry = {
           step: ask.step,
           box: ask.box,
@@ -1475,6 +1532,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           ended,
           phases: first === null || ready === null ? phases : [...phases, { name: "agent_start", ms: first - ready }],
         };
+
         const quest: Quest = {
           ...saved,
           ticket: ask.ticket,
@@ -1484,6 +1542,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           head: accepted ? e.head : (saved.head ?? ask.base),
           steps: [...saved.steps, entry],
         };
+
         writeFileSync(`${state}.tmp`, `${JSON.stringify(quest, null, "\t")}\n`);
         renameSync(`${state}.tmp`, state);
         appendFileSync(
@@ -1506,15 +1565,18 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 /** What a step is told on top of the brief: its skill, and that drive commits its work. */
 export const agentTail = (ask: Pick<Ask, "step" | "ticket">, electron: boolean) => {
   const skill = `You are the ${ask.step} step for ticket ${ask.ticket}, run by drive.ts in a box. Use the ${ask.step} skill: read .agents/skills/${ask.step}/SKILL.md first and follow it.\n`;
+
   const commit =
     ask.step === "plan"
       ? "Change no file. Your final message is the plan.\n"
       : ask.step === "review"
         ? "Change no file: a review that leaves a changed file is stuck. git reads work in your box (diff, log, show). Run no command that writes, not even a scratch copy or a temp file: your box refuses it, and a refused command ends your turn with no answer.\n"
         : "git only reads in your box (status, diff, log, show): its data is outside, where the box lets nothing write. Do not try to stage, stash, check out or commit, run stepcommit or pnpm commits sign; you hold no step key. Leave every change in the tree, and drive.ts commits and signs all of it as one step commit when you answer. Never push.\n";
+
   const lock = holdsElectron(ask.step, electron)
     ? "drive.ts holds the laptop's Electron lock (state/electron.lock) for you for this whole step, so do not take it or wait on it. Start at most one Electron app at a time, and close it before you answer.\n"
     : "";
+
   return `\n\n---\n${skill}${commit}${lock}${NO_ESCALATION}${ask.step === "plan" ? "" : FINISH}`;
 };
 
@@ -1551,6 +1613,7 @@ const planOwners = (env: Env, plan: string) => {
   }
 
   const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
+
   return r.code === 0 ? Option.getOrNull(Schema.decodeOption(Owners)(r.out.trim())) : null;
 };
 
@@ -1569,10 +1632,12 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
   const mine = Object.keys(owners)
     .filter((p) => owners[p] === step || (step === "mutation" && owners[p] === "tests"))
     .toSorted();
+
   const other =
     "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
     "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
     "git status and check every changed path against this list.\n";
+
   return mine.length === 0
     ? `The approved plan's files table gives the ${step} step no path, so you may change none. ${other}\n---\n\n`
     : `The only paths the approved plan's files table gives the ${step} step (one ending in / covers ` +
@@ -1592,6 +1657,7 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
 
   const last = steps.findLast((s) => s.step === "mutation" && typeof s.report === "string");
   const text = last?.report ? read(last.report) : null;
+
   return text === null || !last?.report
     ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe quest's newest mutation report (${last.report}), whole. Your box cannot read outside itself, so read it here:\n\n${text.trim()}\n`;
@@ -1650,6 +1716,7 @@ const MutboxLine = Schema.fromJsonString(
 /** What mutbox.ts answered, from its last line: its outcome and why. Anything else is stuck. */
 export const mutboxAnswer = (stdout: string): { outcome: "done" | "skip" | "stuck"; reason: string } => {
   const line = Schema.decodeOption(MutboxLine)(stdout.trim().split("\n").at(-1) ?? "");
+
   return line._tag === "Some"
     ? {
         outcome: line.value.outcome,
@@ -1697,9 +1764,11 @@ const runMutbox: MutboxRun = (args) =>
       stdin: "ignore",
       stderr: "inherit",
     });
+
     const [out, code] = yield* Effect.all([ran.stdout.pipe(Stream.decodeText(), Stream.mkString), ran.exitCode], {
       concurrency: 2,
     });
+
     return { code: Number(code), out };
   }).pipe(
     Effect.scoped,
@@ -1723,8 +1792,10 @@ export const mutationDraft =
   (env, agents, ask) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
+
       const stop = (reason: string) =>
         fs.writeFileString(ask.report, `${reason}\n`).pipe(Effect.ignore, Effect.as(stuckBefore(reason)));
+
       const prompt = yield* fs.readFileString(ask.prompt).pipe(Effect.orElseSucceed(() => ""));
       const related = relatedIn(prompt);
 
@@ -1749,6 +1820,7 @@ export const mutationDraft =
       // The prompt file is the record of what the agent was asked, so it gets the report too.
       const whole = `${prompt}${mutboxTail(report, answer.outcome === "skip")}\n${text}`;
       yield* fs.writeFileString(ask.prompt, whole).pipe(Effect.ignore);
+
       return yield* turn(env, agents, ask, whole);
     }).pipe(Effect.provide(nodeServices));
 
@@ -1809,6 +1881,7 @@ export const agentCapFull = (agents: number): boolean => agents >= AGENT_CAP;
 /** One timed part of a step's start, in ms, kept on the step's entry in state/<quest>.json, so the
  * lead reads where a start's time goes (ticket 673: 100 to 180 s before the agent acted). */
 const Phase = Schema.Struct({ name: Schema.String, ms: Schema.Finite });
+
 type Phase = typeof Phase.Type;
 
 /** The `phase <name> <ms>` lines box.sh new prints on stderr, in order. */
@@ -1821,6 +1894,7 @@ const FirstEvent = Schema.fromJsonString(Schema.Struct({ at: Schema.String }));
 export const firstEventAt = (events: string): number | null => {
   const first = Schema.decodeOption(FirstEvent)(events.split("\n", 1)[0] ?? "");
   const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
+
   return Number.isFinite(at) ? at : null;
 };
 
@@ -1828,6 +1902,7 @@ export const firstEventAt = (events: string): number | null => {
 const freeGb = (path: string): number | null => {
   const r = sh("df", ["-k", path]);
   const kb = Number(r.out.trim().split("\n").at(-1)?.trim().split(/\s+/)[3]);
+
   return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
 };
 
@@ -1856,6 +1931,7 @@ const holderOf = (porcelain: string, branch: string): string | null => {
  */
 export const dockerHolder = (lock: string | null, alive: (pid: number) => boolean): number | null => {
   const pid = Number(lock?.trim());
+
   return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
 };
 
@@ -1885,6 +1961,7 @@ const usage = () => {
 
 const flag = (args: string[], name: string) => {
   const i = args.indexOf(name);
+
   return i === -1 ? undefined : args[i + 1];
 };
 
@@ -1940,6 +2017,7 @@ const questLock = (boxes: string, quest: string) => join(boxes, "state", `${ques
  */
 export const holdQuest = (boxes: string, quest: string): number | null => {
   mkdirSync(join(boxes, "state"), { recursive: true });
+
   return holdLock(questLock(boxes, quest));
 };
 
@@ -1963,6 +2041,7 @@ export const runNames = (boxes: string, quest: string): string[] => {
   const state = join(boxes, "state", `${quest}.json`);
   const saved = savedQuest(state);
   const trees = boxTrees(boxes);
+
   return [
     ...readdirSync(boxes),
     ...(existsSync(trees) ? readdirSync(trees) : []),
@@ -1999,7 +2078,9 @@ export const Start = Schema.TaggedUnion({
 });
 
 export type Prepared = typeof Start.cases.prepared.Type;
+
 export type Refusal = typeof Start.cases.refused.Type;
+
 const refusal = Start.cases.refused.make;
 
 const usageError = (reason: string): Refusal => refusal({ outcome: "usage", reason, exit: 2 });
@@ -2078,8 +2159,10 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `refs/remotes/origin/${ref}^{commit}`]).out.trim(),
     )
     .filter(Boolean);
+
   const isAncestor = (a: string, b: string) =>
     sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
+
   const lastHead = startHead(pushed, saved?.head, isAncestor);
   const from = step === "plan" ? "HEAD" : (p.from ?? lastHead ?? "origin/main");
   const base = sh("git", ["-C", env.MAIN, "rev-parse", "-q", "--verify", `${from}^{commit}`]).out.trim();
@@ -2103,6 +2186,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   const box = RunId.next(quest, step, runNames(env.BOXES, quest));
   const at = (suffix: string) => join(env.BOXES, `${box}${suffix}`);
   const claude = agent === "claude";
+
   const ask: Ask = {
     quest,
     step,
@@ -2123,12 +2207,15 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     minutes: Number(process.env.DRIVE_MINUTES ?? 60),
     started: Date.now(),
   };
+
   // The agents running now: the ACP harnesses drive starts (and a Codex exec a hand started).
   // Where pgrep cannot list processes, the cap is skipped with one line (pgrep.ts).
   const counts = ["codex-acp/dist/index.js", "claude-agent-acp/dist/index.js", "^codex exec"].map((pattern) => {
     const r = sh("pgrep", ["-f", pattern]);
+
     return pgrepAnswer(r.code, r.out);
   });
+
   const refused = counts.some((c) => c._tag === "refused");
   const agents = counts.reduce((sum, c) => sum + (c._tag === "listed" ? c.count : 0), 0);
 
@@ -2152,6 +2239,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
   if (free === null || free < MIN_FREE_GB) {
     const said = free === null ? "df could not read the free space" : `${free} GB free`;
     const loop = sh(process.execPath, [join(HERE, "gcloop.ts"), "status", "--keeps"]);
+
     return refusal({
       outcome: endName({ kind: "refused", check: "low_disk" }),
       reason: `${said} on the boxes' volume; drive needs ${MIN_FREE_GB}; ${loop.out.trim() || `gcloop.ts status failed: ${tail(loop.err)}`}`,
@@ -2199,6 +2287,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     step === "review"
       ? "Keep your verdict line, merge-ready or changes: <n>, as the report's first line.\nThe verdict is not the answer. The last line is `answer: done <why>` when merge-ready, else `answer: send build <why>`, `send tests` or `send plan`. Never `answer: merge-ready`.\n"
       : "";
+
   writeFileSync(
     ask.prompt,
     ownedHead(step, planOwners(env, plan)) +
@@ -2209,6 +2298,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
       tailFor(step) +
       verdict,
   );
+
   return Start.cases.prepared.make({ ask, electron, phases });
 };
 
@@ -2246,6 +2336,7 @@ export const driveStep = (
 ): Effect.Effect<DriveLine> => {
   const { ask } = p;
   const lock = join(env.BOXES, "state", "electron.lock");
+
   const program = Effect.gen(function* () {
     const waitStart = Date.now();
 
@@ -2280,6 +2371,7 @@ export const driveStep = (
       subscribe: { draft: agentsDraft(env, agents) },
       terminal: (m) => m.phase === "over",
     });
+
     const runtime = yield* handle.ready;
     // tea's change notifier fires after each transition and before its first Cmd starts.
     runtime.subscribe(() => onPhase(runtime.getState().phase));
@@ -2291,6 +2383,7 @@ export const driveStep = (
     }
 
     const outcome = endName(end.outcome);
+
     return {
       outcome,
       quest: ask.quest,
@@ -2317,6 +2410,7 @@ export const driveStep = (
       }),
     ),
   );
+
   return program.pipe(
     Effect.catchCause((cause) =>
       Effect.succeed({
@@ -2355,6 +2449,7 @@ const main = () => {
   const env = loadEnv();
   // prepare takes the quest for this process; it is given back however the process ends.
   process.on("exit", () => freeQuest(env.BOXES, quest));
+
   const prepared = prepare(env, {
     quest,
     step: step as StepName,
@@ -2392,6 +2487,7 @@ const main = () => {
         electron: holdsElectron(prepared.ask.step, prepared.electron),
       }),
     );
+
     return;
   }
 
@@ -2420,6 +2516,7 @@ const main = () => {
       }),
     ),
   );
+
   NodeRuntime.runMain(program);
 };
 

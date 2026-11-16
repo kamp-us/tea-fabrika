@@ -55,6 +55,7 @@ export const layer = (options: {
     Effect.gen(function* () {
       const state = yield* ObjectState;
       const env = yield* WorkerEnvironment;
+
       const bindings: Env = {
         INSTANCE: env.INSTANCE,
         PROJECT: env.PROJECT,
@@ -64,12 +65,15 @@ export const layer = (options: {
         LOADER: env.LOADER,
         MEASUREMENTS: env.MEASUREMENTS,
       };
+
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
+
       const service = ObjectService.make(
         ProcessService,
         processLayer(raw, bindings, options.programs, options.input(bindings)),
       );
+
       // `configure` saves the descriptor first, then runs the service's first turn from a context.
       const context = { contextEffect: service.pipe(Effect.map((process) => ProcessService.context(process))) };
       const use = <A, E>(call: (process: Service) => Effect.Effect<A, E>) => called(service.pipe(Effect.flatMap(call)));

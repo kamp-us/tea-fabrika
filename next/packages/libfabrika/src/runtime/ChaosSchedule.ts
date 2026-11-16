@@ -62,5 +62,6 @@ const select = (choice: number, start: typeof Chaos.Start.Type): Chaos.Fault => 
 export const draw = (schedule: typeof Schedule.Type, start: typeof Chaos.Start.Type) => {
   const random = xoroshiro128plusFromState(schedule.words);
   const choice = uniformInt(random, 0, 9);
+
   return { fault: select(choice, start), schedule: Schedule.make({ version: 1, words: words(random.getState()) }) };
 };

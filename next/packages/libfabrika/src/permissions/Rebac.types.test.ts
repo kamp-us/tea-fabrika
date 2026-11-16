@@ -15,17 +15,20 @@ import { RelationsError } from "./Relations.ts";
 import type { Sender } from "./Senders.ts";
 
 type Passed<R> = R extends Result.Result<infer A, unknown> ? A : never;
+
 type Refused<R> = R extends Result.Result<unknown, infer E> ? E : never;
 
 /** A second right on the same permission and object type: only its id tells it apart. */
 class Other extends Rebac.Permission<Other>()("t953/Other", { model: Model, on: "fabrika", permission: "start" }) {}
 
 type StartProof = Passed<ReturnType<typeof StartProgram.within>>;
+
 type OtherProof = Passed<ReturnType<typeof Other.within>>;
 
 /** The values the assertions read. Never called: its body is checked by the compiler only. */
 const shapes = (proof: StartProof, other: OtherProof) => {
   const needs = StartProgram;
+
   return {
     needs,
     provided: needs.pipe(Rebac.provide(proof)),
@@ -39,6 +42,7 @@ type Shapes = ReturnType<typeof shapes>;
 const undeclared = () => {
   // @ts-expect-error "window" is not an object type of fabrika's model.
   const window = Model.ref("window", "w1");
+
   const model = Rebac.make("t953-names")
     .type("person", {})
     .type("fabrika", {
@@ -46,16 +50,20 @@ const undeclared = () => {
       // @ts-expect-error "drive" is no relation or permission of the fabrika type.
       permissions: { start: (p) => p.union("drive") },
     });
+
   const robots = Rebac.make("t953-robots")
     .type("person", {})
     .type("fabrika", {
       // @ts-expect-error "robot" is not an object type this model declares.
       relations: { owner: ["robot"] },
     });
+
   // @ts-expect-error the fabrika type declares no permission "view".
   class View extends Rebac.Permission<View>()("t/View", { model: Model, on: "fabrika", permission: "view" }) {}
+
   // @ts-expect-error the model declares no object type "window" to put a right on.
   class Drive extends Rebac.Permission<Drive>()("t/Drive", { model: Model, on: "window", permission: "start" }) {}
+
   return [window, model, robots, View, Drive];
 };
 
@@ -67,6 +75,7 @@ const forged = (sender: Sender, tuples: Tuples) => {
   const minted = Rebac.mint(sender, "start", "fabrika:demo", StartProgram);
   // A proof that passes is only ever the answer of a check.
   const checked = StartProgram.within(tuples, sender, Model.ref("fabrika", "demo"));
+
   return { literal, minted, checked };
 };
 
@@ -80,6 +89,7 @@ const uncaused = (cause: unknown) => {
   // @ts-expect-error every caller of RelationsError has a cause, so the field is required (0568).
   const bare = RelationsError.make({ reason: "storage" });
   const kept = RelationsError.make({ reason: "bad_row", cause });
+
   return { bare, kept };
 };
 

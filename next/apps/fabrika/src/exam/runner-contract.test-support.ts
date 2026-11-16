@@ -35,7 +35,9 @@ import { Arbitrary, Effect, Layer, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
 export const opts = { arbitrary: { seed: 119120, runs: 300, size: 4096, concurrency: 1 }, timeout: 60_000 };
+
 export const number = (min: number, max: number) => Schema.Int.check(Schema.isBetween({ minimum: min, maximum: max }));
+
 export const text = (max: number) => Schema.String.check(Schema.isMinLength(0), Schema.isMaxLength(max));
 
 export const Body = Schema.Union([
@@ -53,7 +55,9 @@ export const RefusalCases = Arbitrary.schema(
 );
 
 export const ReplayCases = Arbitrary.array(Arbitrary.schema(Body), { minLength: 0, maxLength: 32 });
+
 const Model = Schema.Struct({ body: Schema.String, version: Schema.Int });
+
 type Model = typeof Model.Type;
 
 export const Msg = Schema.Union([
@@ -66,8 +70,11 @@ export const Msg = Schema.Union([
   // A person-only write port, so the runner's person-only refusal has a real port to guard.
   Schema.Struct({ type: Schema.Literal("guard"), body: Schema.String }),
 ]);
+
 type Msg = typeof Msg.Type;
+
 const probe = Cmd.make("probe", { input: Schema.Struct({}), ok: Schema.Null, err: [] });
+
 export const empty = { body: "", version: 0 };
 
 export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws = false) => {
@@ -89,6 +96,7 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
       probe_err: (s) => [s, []],
     },
   });
+
   return Program.make({
     name: "notes-exam",
     machine,
@@ -112,10 +120,13 @@ export const makeProgram = (refuse: (s: Model, m: Msg) => Refusal | null, throws
 };
 
 export const person = "person_0000000000e008000000000001";
+
 export const process = Schema.decodeSync(Id.Process)("process_0000000000e008000000000001");
+
 export const writer = Writer.cases.agent.make({ key: "SHA256:exam-agent", for: person });
 
 const name = "notes-exam:1";
+
 export const build = "p8-exam";
 
 export const id = (prefix: "input" | "letter", n: number) =>
@@ -139,12 +150,16 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     Effect.sync(() => new DatabaseSync(":memory:")),
     (db) => Effect.sync(() => db.close()),
   );
+
   const sql = nodeSql(db);
   const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
   const ledger = Layer.mergeAll(LedgerSql.layer(sql, { reader: "p8" }), LedgerTransactionSql.layer(sql)).pipe(
     Layer.provide(quiet),
   );
+
   let nextProcess = 0;
+
   const manager = ProcessManager.layer(
     {
       owner: Owner.cases.brain.make({}),
@@ -153,14 +168,18 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     },
     Effect.sync(() => `process_0000000000e008${(++nextProcess).toString(16).padStart(12, "0")}`),
   ).pipe(Layer.provide(ledger));
+
   const shared = Layer.mergeAll(Mailbox.layer, ProcessStore.layer(sql, { process })).pipe(Layer.provideMerge(ledger));
   const mail = yield* Mailbox.pipe(Effect.provide(shared));
   const store = yield* ProcessStore.pipe(Effect.provide(shared));
   const log = yield* Ledger.pipe(Effect.provide(ledger));
+
   const updates: Update[] = [],
     calls: string[] = [];
+
   let blockAppend = false;
   let alarmAt: number | null = null;
+
   const append = (i: Incoming) =>
     mail.send(name, i.id, i.envelope.input, {
       by: i.envelope.by.key,
@@ -171,6 +190,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
       traceId: i.span.traceId,
       build,
     });
+
   const wiring = Layer.mergeAll(
     shared,
     ProgramLoader.layer(
@@ -179,6 +199,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         probe: () =>
           Effect.sync(() => {
             calls.push("cmd");
+
             return Outcome.ok(null);
           }),
       },
@@ -186,6 +207,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     Layer.succeed(CheckedWriter, {
       append: (i) => {
         calls.push("append");
+
         return blockAppend ? Effect.succeed(Appended.cases.refused.make({ reason: "seen_ahead" })) : append(i);
       },
       commit: () => Effect.die("exam has no writes"),
@@ -205,6 +227,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
     }),
     Layer.succeed(Recording, { flush: Effect.void }),
   );
+
   // P34 (PR 760): every runner is supervised, so recovery and the ProcessManager are always wired,
   // and its process is started first, as libfabrika's runner.test.ts boots it.
   const boot = ProcessManager.use((p) =>
@@ -222,6 +245,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
       ),
     ),
   ).pipe(Effect.provide(manager));
+
   const runner = () =>
     boot.pipe(
       Effect.andThen(
@@ -235,6 +259,7 @@ export const world = Effect.fnUntraced(function* (program: ReturnType<typeof mak
         ),
       ),
     );
+
   return {
     runner,
     // The Gateway law's door reads these (runner-contract-replay.test.ts).

@@ -1,7 +1,7 @@
 // P13 slice 2, next/. Real SQLite files and ledger services for runtime's admission laws (0062).
-import { DatabaseSync } from "node:sqlite"; // edge: Effect has no synchronous SQLite handle for referee transactions
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -32,6 +32,7 @@ import { BRAIN, type Harness } from "../runtime/RunnerRepliesTest.ts";
 import { Written } from "../telemetry/Records.ts";
 
 const quiet = Layer.succeed(Doorbell, { ring: () => Effect.void });
+
 // T843: the gateway needs a sender budget; this one is far above what the audit laws send.
 const RATE_LIMIT = { limit: 100_000, window: 60_000 };
 
@@ -39,11 +40,8 @@ const files = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "p13-admission-" });
-  return (name: string) =>
-    Effect.acquireRelease(
-      Effect.sync(() => new DatabaseSync(path.join(folder, `${name}.sqlite`))),
-      (db) => Effect.sync(() => db.close()),
-    ).pipe(Effect.map(nodeSql));
+
+  return (name: string) => TestDatabase.make(path.join(folder, `${name}.sqlite`)).pipe(Effect.map(nodeSql));
 }).pipe(Effect.provide(NodeServices.layer), Effect.orDie);
 
 const services: Harness["services"] = (inbox, manager) =>
@@ -95,6 +93,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
   const unused = vi.fn((): never => {
     throw new Error("unused platform call");
   });
+
   const namespace = <Get extends (...args: never[]) => unknown>(getByName: Get) => ({
     getByName,
     newUniqueId: unused,
@@ -103,12 +102,14 @@ const environment: ProjectAuditTest.Harness["environment"] = (
     get: unused,
     jurisdiction: unused,
   });
+
   return {
     PROJECT: namespace(unused),
     CONNECTION: namespace(unused),
     LOADER: {
       get: (key: string, code: Parameters<ReturnType<ProjectAuditTest.Harness["environment"]>["LOADER"]["get"]>[1]) => {
         loaded(key, code());
+
         return { getEntrypoint: vi.fn().mockReturnValue(box), getDurableObjectClass: unused };
       },
       load: unused,
@@ -126,6 +127,7 @@ const environment: ProjectAuditTest.Harness["environment"] = (
           }
 
           const rev = accept();
+
           return Sent.cases.accepted.make({ rev, pos: rev });
         },
       })),

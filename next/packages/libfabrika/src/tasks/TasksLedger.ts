@@ -30,16 +30,22 @@ const Stored = Schema.TaggedUnion({
   finished: { execution: Schema.NonEmptyString, result: Result, recorded: Schema.optionalKey(Recorded) },
   collected: { collection: Collection, recorded: Schema.optionalKey(Recorded) },
 });
+
 type Stored = typeof Stored.Type;
 
 /** One line of a `target:` stream: the task a hands key was asked for, as a pointer. */
 const Pointer = Schema.TaggedStruct("requested", { id: Schema.NonEmptyString, process: ProcessId });
+
 const encodePointer = Schema.encodeSync(Pointer);
+
 const decodePointer = Schema.decodeUnknownSync(Pointer);
 
 const decodeStored = Schema.decodeUnknownSync(Stored);
+
 const encodeStored = Schema.encodeSync(Stored);
+
 const decodeEvent = Schema.decodeUnknownSync(Event);
+
 const decodeCall = Schema.decodeUnknownResult(Schema.Struct({ msg: Msg, recorded: Recorded }));
 
 /** A task's stream prefix. It keeps the word it was first written with, `job:`, since a saved
@@ -102,6 +108,7 @@ const translated = (cause: LedgerError) =>
 const saved = (turn: LedgerTurn, id: string): Task => {
   const entries = [...turn.read(stream(id), 0)].map((entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
   const events = entries.map(({ entry, stored }) => decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }));
+
   return { state: fold(entries.map(({ stored }) => stored)).state, events };
 };
 
@@ -142,6 +149,7 @@ export const layer = Layer.effect(
 
       const { msg, recorded } = decoded.success;
       const stored = toStored(msg);
+
       const answer = yield* ledger
         .transact((turn) => {
           const model = step(fold([...turn.read(stream(id), 0)].map((entry) => decodeStored(valueFor(entry)))), msg);
@@ -188,9 +196,11 @@ export const layer = Layer.effect(
         const proposed = yield* ids
           .next(Execution)
           .pipe(Effect.mapError((cause) => TasksError.make({ reason: "storage", cause })));
+
         const { receipt, state } = yield* call(id, { type: "take", executor, execution: proposed }, recorded);
         // An accepted or repeated take leaves the task owned, so the saved assignment is there.
         const execution = state._tag === "absent" || state._tag === "requested" ? proposed : state.assignment.execution;
+
         return { ...receipt, execution };
       }),
       started: Effect.fn("tasks.started")(function* (id: string, execution: string, recorded: Recorded) {
@@ -211,9 +221,11 @@ export const layer = Layer.effect(
         return yield* ledger
           .transact((turn) => {
             const index = targetStream(key);
+
             const tasks = [...turn.read(index, 0)]
               .map((entry) => saved(turn, decodePointer(valueFor(entry)).id))
               .filter((found) => OPEN.has(found.state._tag));
+
             return { tasks, rev: turn.head(index) };
           })
           .pipe(Effect.mapError(translated));

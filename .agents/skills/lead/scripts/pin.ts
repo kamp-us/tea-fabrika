@@ -43,6 +43,7 @@ export const Pinned = Schema.Struct({
   commit: Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/)),
   folder: Schema.String,
 });
+
 export type Pinned = typeof Pinned.Type;
 
 const PinnedText = Schema.fromJsonString(Pinned);
@@ -53,6 +54,7 @@ export const PinState = Schema.TaggedUnion({
   pinned: { pin: Pinned },
   malformed: { value: Schema.String },
 });
+
 export type PinState = typeof PinState.Type;
 
 /** What FABRIKA_PIN's value says. A value that does not parse is never read as no pin. */
@@ -92,9 +94,11 @@ export class PinFailed extends Schema.TaggedError<PinFailed, { readonly brand: u
 
 const ran = Effect.fnUntraced(function* (command: ChildProcess.Command) {
   const handle = yield* command;
+
   const [output, code] = yield* Effect.all([Stream.mkString(Stream.decodeText(handle.all)), handle.exitCode], {
     concurrency: 2,
   });
+
   return { code: Number(code), output: output.trim() };
 }, Effect.scoped);
 
@@ -114,6 +118,7 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+
   const head = yield* git(o.main, ["rev-parse", "--verify", "HEAD^{commit}"]).pipe(
     Effect.mapError(failed("git could not start")),
   );
@@ -135,11 +140,13 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
     fs.makeDirectory(folder, { recursive: true }).pipe(Effect.mapError(failed(`${folder} cannot be made`))),
     () => fs.remove(folder, { recursive: true, force: true }).pipe(Effect.ignore),
   );
+
   const copied = yield* ran(
     ChildProcess.make("git", ["-C", o.main, "archive", "--format=tar", head.output, "--", ...ARCHIVED]).pipe(
       ChildProcess.pipeTo(ChildProcess.make("tar", ["-x", "-f", "-", "-C", folder])),
     ),
   ).pipe(Effect.mapError(failed("git archive or tar could not start")));
+
   const script = pinnedScript(folder, o.script);
 
   if (copied.code !== 0 || !(yield* fs.exists(script).pipe(Effect.orElseSucceed(() => false)))) {
@@ -149,6 +156,7 @@ export const acquire = Effect.fn("pin.acquire")(function* (o: {
   yield* fs
     .symlink(path.join(o.main, "node_modules"), path.join(folder, "node_modules"))
     .pipe(Effect.mapError(failed(`node_modules cannot be linked into ${folder}`)));
+
   return Pinned.make({ commit: head.output, folder });
 });
 
@@ -171,6 +179,7 @@ export const runPinned = Effect.fn("pin.runPinned")(
       stdout: "inherit",
       stderr: "inherit",
     });
+
     return Number(yield* handle.exitCode);
   },
   Effect.scoped,

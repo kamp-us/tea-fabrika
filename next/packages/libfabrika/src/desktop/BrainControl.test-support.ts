@@ -36,7 +36,9 @@ const World = Schema.Struct({
   listener: Schema.Literals(["waiting", "ready", "foreign"]),
   children: Schema.Literals(["alive", "gone"]),
 });
+
 type World = typeof World.Type;
+
 const Msg = Schema.Struct({ type: Schema.Literal("observe"), world: World });
 
 const facts = Machine.make({
@@ -57,13 +59,16 @@ type Call = {
 
 export const make = Effect.fn("BrainControlTest.make")(function* (initial: Partial<World> = {}) {
   let [world] = facts.init(null, {});
+
   const observe = (next: Partial<World>) =>
     Effect.sync(() => {
       [world] = applyCell(facts, world, { type: "observe", world: { ...world, ...next } });
     });
+
   yield* observe(initial);
   const calls: Array<Action> = [];
   const pending: Array<Call> = [];
+
   const invoke = Effect.fnUntraced(function* (action: Action) {
     const gate = yield* Deferred.make<void, BrainControlError>();
     yield* Effect.sync(() => {
@@ -77,6 +82,7 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
     });
     yield* Deferred.await(gate);
   });
+
   const control = Layer.succeed(BrainControl, {
     inspect: invoke("inspect").pipe(Effect.map(() => world.job)),
     install: invoke("install").pipe(Effect.andThen(observe({ file: "matching" }))),
@@ -84,6 +90,7 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
     stop: invoke("stop"),
     remove: invoke("remove").pipe(Effect.andThen(observe({ file: "absent" }))),
   });
+
   const probe = Layer.succeed(BrainProbe, {
     ready: invoke("ready").pipe(
       Effect.mapError((cause) => BrainProbeError.make({ reason: Unreachable.make({ cause }) })),
@@ -106,6 +113,7 @@ export const make = Effect.fn("BrainControlTest.make")(function* (initial: Parti
       }),
     ),
   });
+
   return {
     control,
     probe,
