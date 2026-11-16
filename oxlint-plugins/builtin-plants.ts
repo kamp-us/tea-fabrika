@@ -84,9 +84,11 @@ export const VI_METHODS: Plant = {
     ["// vi.fn() in a comment", false],
     ['export const g = "vi.fn()";', false],
     ["export const h = other.fn();", false],
-    // Documented misses, measured on oxlint 1.90.0: a chained call on vi.fn's result and a bare
-    // reference are not refused. The review reads for them.
+    // Known gap, measured on oxlint 1.90.0: a call chained onto a banned vi call and a bare reference
+    // are not refused. The lock is not final until the plan's amendment pairs this rule with
+    // eslint/no-restricted-properties on `vi`; until then the review reads for these.
     ["export const i = vi.fn().mockReturnValue(1);", false],
+    ['export const k = vi.spyOn(console, "warn").mockImplementation(() => undefined);', false],
     ["export const j = vi.fn;", false],
   ],
 };

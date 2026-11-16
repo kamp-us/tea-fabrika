@@ -4,7 +4,7 @@
   "ticket": "kamp-us/tea-fabrika#1067",
   "pr": null,
   "started": "2026-11-15T23:12:08-08:00",
-  "ended": "2026-11-15T23:40:18-08:00",
+  "ended": "2026-11-15T23:43:34-08:00",
   "parent": null,
   "active": null,
   "role": "step",
@@ -69,10 +69,10 @@
   ],
   "tokens": null,
   "tools": null,
-  "minutes": 28,
+  "minutes": 31,
   "driver_caused": false,
   "costUsd": null,
   "billed": null,
-  "note": "Plan and code differ, code wins: Stub.make's rest is typed A[keyof A]; WorkerLoader.get's name is string | null, so the loader stub throws on a null name before calling loaded. M4's planned plant (write renamed writ) does not apply, since write had to go by name in rest. One effect-tsgo diagnostics run on libfabrika's tsconfig: 816 messages, 0 errors or warnings, none in RunnerAdmission.integration.test.ts; it reports Effect checks only, so M4 was read from libfabrika's own tsc --noEmit -p ., run four times, one at a time and only when no other compiler ran. Each plant was run once on a saved copy and restored by copy. A .integration. law ran in this box (CLAUDE_CODE_REMOTE=true, PR 1508's guard), and the 0178 guard refused nothing. pnpm format, the list ratchet and plants.test.ts (237 of 237) pass. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144): 16 of 18 parts passed in one run; lint:dead and lint:promise-types crashed with EPIPE from the TypeScript API while another agent's compiler ran, and both passed when rerun alone (0 findings; unreachable ledger PASS, none new).",
+  "note": "The lock block is not final until the plan's amendment lands. A lead ruling, given during this step, pairs every vi lock with eslint/no-restricted-properties entries on vi; it is not signed yet, so no such entry was added. As the ruling asked, VI_METHODS now also plants the chained forms vi.fn().mockReturnValue(1) and vi.spyOn(console, \"warn\").mockImplementation(...); oxlint 1.90.0 refuses neither (M1 green with both marked not refused), and they are marked as the known gap. Plan and code differ, code wins: Stub.make's rest is typed A[keyof A]; WorkerLoader.get's name is string | null, so the loader stub throws on a null name before calling loaded. M4's planned plant (write renamed writ) does not apply, since write had to go by name in rest. One effect-tsgo diagnostics run on libfabrika's tsconfig: 816 messages, 0 errors or warnings, none in RunnerAdmission.integration.test.ts; it reports Effect checks only, so M4 was read from libfabrika's own tsc --noEmit -p ., run four times, one at a time and only when no other compiler ran. Each plant was run once on a saved copy and restored by copy. A .integration. law ran in this box (CLAUDE_CODE_REMOTE=true, PR 1508's guard), and the 0178 guard refused nothing. pnpm format, the list ratchet and plants.test.ts (237 of 237) pass. pnpm lint (NODE_OPTIONS=--max-old-space-size=6144): 16 of 18 parts passed in one run; lint:dead and lint:promise-types crashed with EPIPE from the TypeScript API while another agent's compiler ran, and both passed when rerun alone (0 findings; unreachable ledger PASS, none new).",
   "step": "tests"
 }
