@@ -1,12 +1,13 @@
 // Today's CI, serving both versions. What every workflow-lint rule reads with: the parsed
 // workflow's parts, step lists, expression spacing, and the values more than one rule pins.
 import { parse } from "yaml";
+import type { YamlMap } from "./yaml.ts";
 
 /** A parsed check.yaml, cut into the parts every rule reads. */
 export interface Workflow {
-  readonly workflow: Record<string, unknown>;
-  readonly on: Record<string, unknown>;
-  readonly jobs: Record<string, unknown>;
+  readonly workflow: YamlMap;
+  readonly on: YamlMap;
+  readonly jobs: YamlMap;
 }
 
 /** Adds `reason` to the lint's errors unless `holds`. */
@@ -15,14 +16,13 @@ export type Require = (holds: boolean, reason: string) => void;
 /** One family of check.yaml's laws: it calls `require` once for each law it holds. */
 export type Rule = (workflow: Workflow, require: Require) => void;
 
-export const isMap = (value: unknown): value is Record<string, unknown> =>
+export const isMap = (value: unknown): value is YamlMap =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-export const map = (value: unknown): Record<string, unknown> => (isMap(value) ? value : {});
+export const map = (value: unknown): YamlMap => (isMap(value) ? value : {});
 
 /** Every step of a job, in order, the stop step included. */
-export const allSteps = (job: Record<string, unknown>): Record<string, unknown>[] =>
-  Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : [];
+export const allSteps = (job: YamlMap): YamlMap[] => (Array.isArray(job["steps"]) ? job["steps"].filter(isMap) : []);
 
 // Fail fast (ticket 990): every job but ci-required ends with this step. Once an earlier step
 // failed, on a pull request or a merge queue group, it cancels the job's own run, so the jobs still
@@ -36,7 +36,7 @@ const STOP = {
 };
 
 /** The stop step exactly as STOP writes it, its `if` spaced any way, with nothing else on it. */
-export const isStop = (step: Record<string, unknown>) =>
+export const isStop = (step: YamlMap) =>
   step["name"] === STOP.name &&
   compact(step["if"]) === STOP.if &&
   JSON.stringify(step["env"]) === JSON.stringify(STOP.env) &&
@@ -47,15 +47,14 @@ export const isStop = (step: Record<string, unknown>) =>
 const CANCEL = /\brun\s+cancel\b|\/(?:force-)?cancel\b/;
 
 /** A step that cancels a workflow run: by the CLI, by the REST API, or with an action named for it. */
-export const cancels = (step: Record<string, unknown>) =>
+export const cancels = (step: YamlMap) =>
   (typeof step["run"] === "string" && CANCEL.test(step["run"])) ||
   (typeof step["uses"] === "string" && /cancel/i.test(step["uses"]));
 
 /** A job's own work: its steps less the stop step, which the fail-fast law judges alone. */
-export const steps = (job: Record<string, unknown>): Record<string, unknown>[] =>
-  allSteps(job).filter((step) => !isStop(step));
+export const steps = (job: YamlMap): YamlMap[] => allSteps(job).filter((step) => !isStop(step));
 
-export const commands = (job: Record<string, unknown>) =>
+export const commands = (job: YamlMap) =>
   steps(job).flatMap((step) =>
     typeof step["run"] === "string" ? step["run"].split("\n").map((line) => line.trim()) : [],
   );
@@ -95,7 +94,7 @@ export const sameEntries = (left: readonly [string, unknown][], right: readonly 
   left.length === right.length &&
   right.every(([key, value]) => left.some(([other, held]) => other === key && held === value));
 
-export const uses = (step: Record<string, unknown>, action: string) =>
+export const uses = (step: YamlMap, action: string) =>
   typeof step["uses"] === "string" && step["uses"].startsWith(`${action}@`);
 
 // Chromium's OS packages come from apt, so the step first finds a mirror that answers (apt.sh).
@@ -127,13 +126,13 @@ const parsed = (text: string | undefined): unknown[] => {
  * next's matrix, `fromJSON(needs.changes.outputs.shards || (<when> && '<full>' || '<vitest legs>'))`:
  * when the full fallback runs, the full legs, and the other legs, numbers and strings kept apart.
  */
-export const fallbacks = (job: Record<string, unknown>) => {
+export const fallbacks = (job: YamlMap) => {
   const found = FALLBACKS.exec(compact(map(map(job["strategy"])["matrix"])["shard"]));
   return { when: found?.[1] ?? "", full: parsed(found?.[2]), plain: parsed(found?.[3]) };
 };
 
 /** The full fallback's legs: what a pull request with the `visual` label runs unsized. */
-export const legs = (job: Record<string, unknown>): unknown[] => fallbacks(job).full;
+export const legs = (job: YamlMap): unknown[] => fallbacks(job).full;
 
 /** The legs that run vitest: the ones written as a quoted whole number. */
 export const numbered = (all: readonly unknown[]): string[] =>

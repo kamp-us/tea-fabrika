@@ -3,6 +3,7 @@
 // today's app (T2) or today's promise checks (T6, 0525, 0533).
 import { parse } from "yaml";
 import { CHANGED_FROM_BASE, compact, denominator, map, type Rule, SHARD_OF, steps } from "./shared.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's app: its package name, or its folder outside next/. No command in check.yaml runs it.
 const TODAYS_APP = /fabrika-app-old|(?<!next\/)apps\/fabrika\b/;
@@ -48,7 +49,7 @@ const shellCommands = (script: string) =>
  * argument leaves that folder. Either way it reads no shell value but RUNNER_TEMP, untouched, and
  * the step's own pinned `VITEST_VARS`, and no `${{ }}` or command substitution.
  */
-const toolingJobs = (workflow: Record<string, unknown>): string[] => {
+const toolingJobs = (workflow: YamlMap): string[] => {
   const outer = { ...map(workflow["env"]) };
   return Object.entries(map(workflow["jobs"]))
     .filter(([, job]) =>

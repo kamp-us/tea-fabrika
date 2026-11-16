@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
 import { options, type Plant, rejects, stepsOf, stop, stopping, wiring, type Workflow } from "./wiring.test-support.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers fail-fast.ts (ticket 990, F1 to F4). Each plant is
 // given to every generated valid workflow alone (wiring.test-support.ts), so an unrelated error
@@ -124,14 +125,14 @@ const plants: Plant[] = [
     `F4: ${job}'s checkout keeps the token in .git/config`,
     (w) => {
       const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
-      Reflect.deleteProperty(checkout["with"] as Record<string, unknown>, "persist-credentials");
+      Reflect.deleteProperty(checkout["with"] as YamlMap, "persist-credentials");
     },
   ]),
   [
     "F4: a checkout sets persist-credentials to true",
     (w) => {
       const checkout = stepsOf(w, "check")[0]!;
-      (checkout["with"] as Record<string, unknown>)["persist-credentials"] = true;
+      (checkout["with"] as YamlMap)["persist-credentials"] = true;
     },
   ],
 ];

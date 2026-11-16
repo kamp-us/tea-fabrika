@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readPaths, validSha } from "./changes.mjs";
-import { checkRow, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
+import { checkRow, type Fields, fieldsOf, Finding, inFolder, type Log, logOf, rowName } from "./field-schema.ts";
 
 const lines = (text: string): string[] =>
   text === "" ? [] : (text.endsWith("\n") ? text.slice(0, -1) : text).split("\n");
@@ -86,7 +86,7 @@ const checkLines = (file: string, base: string, head: string): Report => {
 };
 
 /** The key that holds a row's own id, which must be its file name: none on a rating. */
-const idKey = (log: Log | null, row: Record<string, unknown>) =>
+const idKey = (log: Log | null, row: Fields) =>
   log === "runs" ? "run" : log === "notes" || row["_tag"] === "finding" ? "id" : null;
 
 /**
@@ -118,7 +118,7 @@ const checkRowFile = (file: string, base: string, head: string): Report => {
   }
 
   findings.push(...checkRow(file, 1, value));
-  const row: Record<string, unknown> = typeof value === "object" && value !== null ? { ...value } : {};
+  const row = fieldsOf(value);
   const key = idKey(logOf(file), row);
 
   if (name !== undefined && key !== null && row[key] !== name) {

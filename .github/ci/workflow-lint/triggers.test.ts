@@ -4,6 +4,7 @@ import { expect, it } from "vitest";
 import { ignored, jobs } from "../changes.mjs";
 import { isFieldPath } from "../field-check.ts";
 import { options, type Plant, rejects, type Workflow } from "./wiring.test-support.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers triggers.ts: the events, ignored paths, cancels and
 // draft names. Each plant is given to every generated valid workflow alone (wiring.test-support.ts),
@@ -157,7 +158,7 @@ const plants: Plant[] = [
   [
     "the merge queue's group stops running the checks",
     (w) => {
-      delete (w.on as Record<string, unknown>)["merge_group"];
+      delete (w.on as YamlMap)["merge_group"];
     },
   ],
   [

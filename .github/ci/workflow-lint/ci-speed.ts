@@ -1,6 +1,7 @@
 // Today's CI, serving both versions. ci-speed.yaml's shape (K1 to K7), the daily speed measure.
 import { parse } from "yaml";
 import { allSteps, compact, isMap, map } from "./shared.ts";
+import type { YamlMap } from "./yaml.ts";
 
 /** The token ci-speed.yaml's one job gets: what its measure reads, and the one issue it writes. */
 export const CI_SPEED_TOKEN = { actions: "read", contents: "read", issues: "write", "pull-requests": "read" };
@@ -29,7 +30,7 @@ export const lintCiSpeed = (text: string): string[] => {
       errors.push(`ci-speed.yaml: ${reason}`);
     }
   };
-  let workflow: Record<string, unknown>;
+  let workflow: YamlMap;
 
   try {
     workflow = map(parse(text));

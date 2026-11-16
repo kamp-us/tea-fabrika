@@ -14,6 +14,7 @@ import {
   timings,
   type Workflow,
 } from "./wiring.test-support.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers time-tables.ts: each test leg's time table and timings
 // upload (TT1, TT2). Each plant is given to every generated valid workflow alone
@@ -112,7 +113,7 @@ it("scenario: Q1 and TT2: a timings upload named as a tested-tree record is refu
   // `matched` (changes.mjs) trusts an artifact by its `tested-<tree>-<base>` name from a green run,
   // so a timings upload under that name could stand in for a record.
   const workflow: Parsed = parse(readFileSync(new URL("../../workflows/check.yaml", import.meta.url), "utf8"));
-  (step(workflow, "next", "timings")["with"] as Record<string, unknown>)["name"] = `tested-\${{ github.sha }}-base`;
+  (step(workflow, "next", "timings")["with"] as YamlMap)["name"] = `tested-\${{ github.sha }}-base`;
   expect(lint(JSON.stringify(workflow))).toEqual([
     "check.yaml: Q1: the record's upload is the one step in check.yaml that uploads an artifact, beside the test legs' timings",
     "check.yaml: TT2: next uploads its timings file once, after the time table step, on every result, never failing the job, within a minute",

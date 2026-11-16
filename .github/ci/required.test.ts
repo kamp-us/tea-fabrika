@@ -9,7 +9,8 @@ import { gated, gates, judge } from "./required.mjs";
 // names the edge case it holds from the list at the top of required.mjs.
 const options = { seed: 119120, numRuns: 100 };
 
-type Job = { result?: unknown; outputs?: Record<string, unknown> };
+// A job's outputs, as `toJSON(needs)` gives them: each one a string, or missing.
+type Job = { result?: unknown; outputs?: Record<string, string | undefined> };
 
 const ungated = fc.constantFrom("changes", "field", "legs", "lint", "extra-job");
 const bad = fc.constantFrom("failure", "cancelled", "", "neutral", undefined, 1);

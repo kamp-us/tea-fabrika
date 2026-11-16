@@ -2,6 +2,7 @@
 import { parse } from "yaml";
 import { VERDICT } from "./scheduled.ts";
 import { isMap, map } from "./shared.ts";
+import type { YamlMap } from "./yaml.ts";
 
 /**
  * The two jobs that may hold the `issues` permission, each by its workflow file and its job name
@@ -25,7 +26,7 @@ const touchesIssues = (grant: unknown) => grant === "write-all" || (isMap(grant)
  */
 export const lintIssues = (workflows: Readonly<Record<string, string>>): string[] =>
   Object.entries(workflows).flatMap(([path, text]) => {
-    let workflow: Record<string, unknown>;
+    let workflow: YamlMap;
 
     try {
       workflow = map(parse(text));

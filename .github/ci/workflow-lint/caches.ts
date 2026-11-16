@@ -4,6 +4,7 @@ import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 import { compact, map, steps, uses } from "./shared.ts";
+import type { YamlMap } from "./yaml.ts";
 
 const lines = (value: unknown) =>
   typeof value === "string"
@@ -44,8 +45,8 @@ export const lintCaches = (files: CacheFiles): string[] => {
       errors.push(reason);
     }
   };
-  let action: Record<string, unknown>, workspace: Record<string, unknown>;
-  const workflows: [string, Record<string, unknown>][] = [];
+  let action: YamlMap, workspace: YamlMap;
+  const workflows: [string, YamlMap][] = [];
 
   try {
     action = map(parse(files.action));
@@ -66,11 +67,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
       Array.isArray(on) ? on.includes(event) : on === event || event in map(on),
     );
   });
-  const everyStep: [string, Record<string, unknown>][] = [
-    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
+  const everyStep: [string, YamlMap][] = [
+    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, YamlMap]),
     ...perRef.flatMap(([path, workflow]) =>
       Object.values(map(workflow["jobs"])).flatMap((job) =>
-        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
+        steps(map(job)).map((step) => [path, step] as [string, YamlMap]),
       ),
     ),
   ];
@@ -83,11 +84,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // C1b. A pnpm store cache did not pay on any ref, main included (action.yml gives the seconds),
   // so no workflow keeps one: not setup-node's own cache, not pnpm/action-setup's, and no cache
   // step whose path is the store.
-  const allSteps: [string, Record<string, unknown>][] = [
-    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
+  const allSteps: [string, YamlMap][] = [
+    ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, YamlMap]),
     ...workflows.flatMap(([path, workflow]) =>
       Object.values(map(workflow["jobs"])).flatMap((job) =>
-        steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
+        steps(map(job)).map((step) => [path, step] as [string, YamlMap]),
       ),
     ),
   ];
@@ -145,7 +146,7 @@ export const lintCaches = (files: CacheFiles): string[] => {
   const keyStep = typecheckSteps.find((s) => s["id"] === "tsc-key");
   const restore = typecheckSteps.find((s) => s["id"] === "tsc");
   const save = typecheckSteps.find((s) => uses(s, "actions/cache/save") && map(s["with"])["key"] === TSC_SAVED);
-  const at = (step: Record<string, unknown> | undefined) => (step === undefined ? -1 : typecheckSteps.indexOf(step));
+  const at = (step: YamlMap | undefined) => (step === undefined ? -1 : typecheckSteps.indexOf(step));
   const install = typecheckSteps.find((s) => s["run"] === "pnpm install --frozen-lockfile");
   const run = typecheckSteps.find((s) => s["run"] === "pnpm typecheck");
   require(folder !== undefined && folder !== "", "scripts/typecheck.sh passes --tsBuildInfoFile under a folder");

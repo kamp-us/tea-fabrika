@@ -2,14 +2,15 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintCiSpeed } from "./ci-speed.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers ci-speed.ts.
 // ci-speed.yaml, the daily measure (experiment 293): the checked-in file passes, and each plant on
 // it gives its one error, so no rule hides behind another.
 type SpeedFile = {
-  on: Record<string, unknown>;
+  on: YamlMap;
   permissions: unknown;
-  jobs: Record<string, Record<string, unknown> & { steps: Record<string, unknown>[] }>;
+  jobs: Record<string, YamlMap & { steps: YamlMap[] }>;
 };
 
 const speedFile = (): SpeedFile =>
@@ -52,7 +53,7 @@ for (const [name, plant, error] of [
   ],
   [
     "K4: the checkout keeps its token",
-    (w: SpeedFile) => void delete (speedJob(w).steps[0]!["with"] as Record<string, unknown>)["persist-credentials"],
+    (w: SpeedFile) => void delete (speedJob(w).steps[0]!["with"] as YamlMap)["persist-credentials"],
     "K4: its checkout sets persist-credentials: false",
   ],
   [

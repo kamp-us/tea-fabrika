@@ -10,6 +10,7 @@ import {
   token,
   type Workflow,
 } from "./wiring.test-support.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers record.ts: the record a ready pull request run leaves
 // for the merge queue (Q1). Each plant is given to every generated valid workflow alone
@@ -19,7 +20,7 @@ import {
 const recordEnv = (w: Workflow) => step(w, "changes", "record")["env"] as Record<string, string>;
 
 /** changes' upload of the record, for a plant that changes one input. */
-const uploadWith = (w: Workflow) => step(w, "changes", "upload the record")["with"] as Record<string, unknown>;
+const uploadWith = (w: Workflow) => step(w, "changes", "upload the record")["with"] as YamlMap;
 
 const plants: Plant[] = [
   // Q1: a ready pull request run records the tree it tests and what changes printed, and uploads it
@@ -97,7 +98,7 @@ const plants: Plant[] = [
     `Q1: ${job}'s checkout is told its ${key}`,
     (w) => {
       const checkout = stepsOf(w, job).find((s) => String(s["uses"]).startsWith("actions/checkout@"))!;
-      (checkout["with"] as Record<string, unknown>)[key] = value;
+      (checkout["with"] as YamlMap)[key] = value;
     },
   ]),
   ...(["typecheck", "next"] as const).map((job): [string, (w: Workflow) => void] => [

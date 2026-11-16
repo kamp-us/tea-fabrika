@@ -2,6 +2,7 @@
 // its timings upload, in check.yaml and scheduled.yaml.
 import { fileName, STEP } from "../time-table.ts";
 import { compact, env, map, type Rule, sameEntries, steps, TOKEN, uses } from "./shared.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Each test leg's time table (time-table.ts): its steps' seconds from GitHub's jobs API, read with
 // the workflow's token, and its slowest test files from its report, in the job summary. Then the same
@@ -30,7 +31,7 @@ const TIMINGS = {
 };
 
 /** TT2 and Q1: an upload of exactly a leg's timings file, under its own name, and nothing else. */
-export const isTimings = (step: Record<string, unknown>): boolean => {
+export const isTimings = (step: YamlMap): boolean => {
   const given = map(step["with"]);
   const kept = given["retention-days"];
   return (
@@ -49,7 +50,7 @@ export const isTimings = (step: Record<string, unknown>): boolean => {
  * the job's last command, so it times every step before it; it runs on every result, a red or
  * canceled leg too, and never fails the job. Its timings file is uploaded after it, the same way.
  */
-export const timed = (name: string, job: Record<string, unknown>, report: string): string[] => {
+export const timed = (name: string, job: YamlMap, report: string): string[] => {
   const list = steps(job);
   const tables = list.filter((s) => s["run"] === TIME_TABLE);
   const uploads = list.filter((s) => uses(s, "actions/upload-artifact") && map(s["with"])["path"] === TIMINGS.path);

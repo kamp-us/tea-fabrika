@@ -17,6 +17,7 @@ import {
   VISUAL_FILES,
 } from "./shared.ts";
 import { TIME_TABLE, timed } from "./time-tables.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's version is frozen (0525, 0533), so the schedule's vitest call of the tooling tests runs the
 // `tooling` project alone: next/ and the three trees of today's tests are projects of their own, and
@@ -89,7 +90,7 @@ const BACKSTOP = 3;
  * the run; a job that runs into its own limit ends `cancelled`, and so does the run, whatever fails
  * after it.
  */
-const limitOf = (jobs: Record<string, unknown>, suite: keyof typeof SUITES): unknown => {
+const limitOf = (jobs: YamlMap, suite: keyof typeof SUITES): unknown => {
   const commands: readonly string[] = SUITES[suite];
   const found = steps(map(jobs[TESTS_JOB])).filter((s) => typeof s["run"] === "string" && commands.includes(s["run"]));
   const limits = new Set(found.map((s) => s["timeout-minutes"]));
@@ -101,7 +102,7 @@ const backstop = (next: number, tooling: number) =>
   `\${{ ${ON_TOOLING} && ${tooling + BACKSTOP} || ${next + BACKSTOP} }}`;
 
 /** A matrix job's legs, as the workflow lists them: a plain list, never an expression. */
-const listed = (job: Record<string, unknown>): unknown[] => {
+const listed = (job: YamlMap): unknown[] => {
   const shard = map(map(job["strategy"])["matrix"])["shard"];
   return Array.isArray(shard) ? shard : [];
 };
@@ -111,7 +112,7 @@ const listed = (job: Record<string, unknown>): unknown[] => {
  * it needs. A job that needs one that is not there, or a loop, counts as 0: GitHub refuses such a
  * workflow, and the other rules name what is wrong.
  */
-const depth = (jobs: Record<string, unknown>, name: string, seen: readonly string[] = []): number => {
+const depth = (jobs: YamlMap, name: string, seen: readonly string[] = []): number => {
   const needs = map(jobs[name])["needs"];
   const list = typeof needs === "string" ? [needs] : Array.isArray(needs) ? needs : [];
   const known = list.filter(
@@ -376,8 +377,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ), "SC8: the tooling legs run every tooling test once, legs tooling-1 to tooling-N, each its share of them");
 
   // SC9. The commands are only these: no step runs another test command or narrows one.
-  const commandsOf = (job: Record<string, unknown>) =>
-    steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
+  const commandsOf = (job: YamlMap) => steps(job).flatMap((s) => (typeof s["run"] === "string" ? [s["run"]] : []));
   require(JSON.stringify(commandsOf(tests).toSorted()) ===
     JSON.stringify(
       ["pnpm install --frozen-lockfile", WHOLE_NEXT, chromium, WHOLE_E2E, WHOLE_TOOLING, TIME_TABLE].toSorted(),

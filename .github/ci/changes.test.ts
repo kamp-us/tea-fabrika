@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Schema } from "effect";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { checkTracked } from "../../oxlint-plugins/gitignore.mjs";
@@ -1881,7 +1882,7 @@ it("scenario: the GitHub reader asks only with a token, a repository and a workf
   const artifact = { name: ci.recordName(tree.head, tree.base), expired: false, workflow_run: { id: 11 } };
   const job = { name: "ci-required", conclusion: "success" };
   // Most specific first: a run's jobs, a run, then the rest.
-  const answers: Record<string, unknown> = {
+  const answers: Record<string, Schema.Json> = {
     "runs/11/jobs": { jobs: [job] },
     "runs/11": { event: "pull_request" },
     artifacts: { artifacts: [artifact] },

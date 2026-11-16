@@ -136,8 +136,15 @@ const words: Record<string, readonly string[]> = {
   outcome: ["merged", "pass", "fail", "triaged", "parked", "skip", "stopped"],
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
+// A row is read with JSON.parse, so every value in it is JSON's.
+const isObject = (value: unknown): value is Schema.JsonObject =>
   typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** A row's fields, as JSON.parse gives them. */
+export type Fields = Schema.JsonObject;
+
+/** The fields of a parsed row, or none when it is not a JSON object. */
+export const fieldsOf = (value: unknown): Fields => (isObject(value) ? value : {});
 
 /** Never put a value or a decoder's input-bearing error into a finding. */
 export const checkRow = (file: string, line: number, value: unknown): Finding[] => {

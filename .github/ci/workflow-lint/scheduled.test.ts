@@ -3,6 +3,7 @@ import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintScheduled } from "./scheduled.ts";
+import type { YamlMap, YamlValue } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers scheduled.ts's laws on scheduled.yaml, the full run of
 // all of next/ and every tooling test on main (0534), which a push to main or the hourly catch-up
@@ -14,20 +15,20 @@ const options = { seed: 119120, numRuns: 100 };
 const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
 const check = read("check.yaml");
 
-type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
+type Step = YamlMap & { env?: YamlMap; with?: YamlMap };
 
-type Job = Record<string, unknown> & {
+type Job = YamlMap & {
   steps: Step[];
-  strategy?: { "fail-fast"?: unknown; "max-parallel"?: unknown; matrix: { shard: unknown } };
-  permissions?: unknown;
-  needs?: unknown;
+  strategy?: { "fail-fast"?: YamlValue; "max-parallel"?: YamlValue; matrix: { shard: YamlValue } };
+  permissions?: YamlValue;
+  needs?: YamlValue;
 };
 
-type Workflow = Record<string, unknown> & {
-  on: Record<string, unknown>;
-  env?: Record<string, unknown>;
-  concurrency: Record<string, unknown>;
-  permissions: unknown;
+type Workflow = YamlMap & {
+  on: YamlMap;
+  env?: YamlMap;
+  concurrency: YamlMap;
+  permissions: YamlValue;
   jobs: Record<string, Job>;
 };
 
@@ -65,7 +66,7 @@ const step = (w: Workflow, job: string, name: string): Step => {
 // concurrency group's name, how many legs run at once within the cap, and the spacing in an `if`,
 // a job's or a step's. Each is varied only where the real workflow has it, so a part it lacks stays
 // missing.
-const spaced = (value: unknown, gap: string) =>
+const spaced = (value: YamlValue, gap: string) =>
   typeof value === "string" ? value.replace(/ *(==|!=|&&|\|\|) */g, `${gap}$1${gap}`) : value;
 
 const scheduled = fc

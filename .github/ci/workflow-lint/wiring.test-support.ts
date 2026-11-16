@@ -7,6 +7,7 @@ import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { ignored } from "../changes.mjs";
 import { lintWorkflow as lint } from "../workflow-lint.ts";
+import type { YamlMap } from "./yaml.ts";
 
 export const options = { seed: 119120, numRuns: 100 };
 
@@ -43,10 +44,10 @@ type NextStep = {
 
 // A test leg's time table and its timings upload, with the keys a plain step leaves out. The wiring
 // below adds both to each test job, last before the stop step.
-export type Timed = Record<string, unknown> & {
+export type Timed = YamlMap & {
   if?: string;
   env?: Record<string, string>;
-  with?: Record<string, unknown>;
+  with?: YamlMap;
 };
 
 const nextSteps = (list: NextStep[]) => list;
@@ -335,9 +336,9 @@ const valid = (label: string, extra: string) => ({
             "retention-days": 1,
             overwrite: true,
             "if-no-files-found": "error",
-          } as Record<string, unknown>,
+          } as YamlMap,
         },
-      ] as Record<string, unknown>[],
+      ] as YamlMap[],
     },
     check: {
       name: `\${{ github.event.pull_request.draft && 'lint' || 'check' }}`,
@@ -352,7 +353,7 @@ const valid = (label: string, extra: string) => ({
         { name: "build", run: "pnpm build", if: build },
         { name: "lists only shrink", if: checkFlag, env: testEnv, run: ratchet },
         { name: "field rows", if: rowsFlag, env, run: "node .github/ci/field-check.ts" },
-      ] as Record<string, unknown>[],
+      ] as YamlMap[],
     },
     typecheck: {
       needs: "changes",
@@ -411,7 +412,7 @@ const valid = (label: string, extra: string) => ({
           with: { "sparse-checkout": ".github/ci", "persist-credentials": false },
         },
         { name: "judge", env: { NEEDS: `\${{ toJSON(needs) }}` }, run: "node .github/ci/required.mjs" },
-      ] as Record<string, unknown>[],
+      ] as YamlMap[],
     },
   },
 });
@@ -419,8 +420,8 @@ const valid = (label: string, extra: string) => ({
 export type Workflow = ReturnType<typeof valid>;
 
 /** A job's steps as one plain list, whatever its own step type. */
-export const stepsOf = (w: Workflow, job: (typeof stopping)[number] | "ci-required"): Record<string, unknown>[] =>
-  w.jobs[job].steps as Record<string, unknown>[];
+export const stepsOf = (w: Workflow, job: (typeof stopping)[number] | "ci-required"): YamlMap[] =>
+  w.jobs[job].steps as YamlMap[];
 
 /** Sets a next step's SHARD, kept in its place among the step's env keys. */
 const setShard = (found: NextStep, shard: string) => {
@@ -465,20 +466,20 @@ export const wiring = fc
     return clean;
   });
 
-type Step = Record<string, unknown> & { with?: Record<string, unknown> };
+type Step = YamlMap & { with?: YamlMap };
 
 type Jobs = Record<
   string,
   {
     steps: Step[];
-    strategy?: { matrix: Record<string, unknown> };
+    strategy?: { matrix: YamlMap };
     outputs?: Record<string, string>;
     needs?: string | string[];
   }
 >;
 
 // The caches and the scenarios on the checked-in workflows read them as parsed YAML.
-export type Parsed = Record<string, unknown> & { jobs: Jobs; runs: { steps: Step[] } };
+export type Parsed = YamlMap & { jobs: Jobs; runs: { steps: Step[] } };
 
 /** One way to break a valid workflow, with its name. */
 export type Plant = [string, (workflow: Workflow) => void];

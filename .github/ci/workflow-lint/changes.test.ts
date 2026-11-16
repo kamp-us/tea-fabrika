@@ -10,6 +10,7 @@ import {
   step,
   type Workflow,
 } from "./wiring.test-support.ts";
+import type { YamlMap } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers changes.ts: changes' flags and outputs, the parser's
 // pass and the size step (S1). Each plant is given to every generated valid workflow alone
@@ -140,15 +141,15 @@ const plants: Plant[] = [
       ],
       [
         "the size step has no budget",
-        (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as Record<string, unknown>, "BUDGET"),
+        (w) => Reflect.deleteProperty(step(w, "changes", "size")["env"] as YamlMap, "BUDGET"),
       ],
       [
         "the size step's budget is text",
-        (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: "240" }),
+        (w) => Object.assign(step(w, "changes", "size")["env"] as YamlMap, { BUDGET: "240" }),
       ],
       [
         "the size step's budget is zero",
-        (w) => Object.assign(step(w, "changes", "size")["env"] as Record<string, unknown>, { BUDGET: 0 }),
+        (w) => Object.assign(step(w, "changes", "size")["env"] as YamlMap, { BUDGET: 0 }),
       ],
       [
         "the size step reads the first pass alone",

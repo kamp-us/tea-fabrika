@@ -3,24 +3,25 @@ import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 import { lintIssues } from "./issues.ts";
+import type { YamlMap, YamlValue } from "./yaml.ts";
 
 // Today's CI, serving both versions. Covers issues.ts: who may touch issues.
 const options = { seed: 119120, numRuns: 100 };
 const read = (path: string) => readFileSync(new URL(`../../workflows/${path}`, import.meta.url), "utf8");
 
-type Step = Record<string, unknown> & { env?: Record<string, unknown>; with?: Record<string, unknown> };
+type Step = YamlMap & { env?: YamlMap; with?: YamlMap };
 
-type Job = Record<string, unknown> & {
+type Job = YamlMap & {
   steps: Step[];
-  strategy?: { "fail-fast"?: unknown; "max-parallel"?: unknown; matrix: { shard: unknown } };
-  permissions?: unknown;
-  needs?: unknown;
+  strategy?: { "fail-fast"?: YamlValue; "max-parallel"?: YamlValue; matrix: { shard: YamlValue } };
+  permissions?: YamlValue;
+  needs?: YamlValue;
 };
 
-type Workflow = Record<string, unknown> & {
-  on: Record<string, unknown>;
-  concurrency: Record<string, unknown>;
-  permissions: unknown;
+type Workflow = YamlMap & {
+  on: YamlMap;
+  concurrency: YamlMap;
+  permissions: YamlValue;
   jobs: Record<string, Job>;
 };
 
@@ -31,7 +32,7 @@ const SCHEDULED = ".github/workflows/scheduled.yaml";
 const SPEED = ".github/workflows/ci-speed.yaml";
 const ALLOWED: Record<string, string> = { [SCHEDULED]: "report", [SPEED]: "measure" };
 
-const grant = fc.constantFrom<unknown>(
+const grant = fc.constantFrom<YamlValue>(
   "write-all",
   { issues: "write" },
   { issues: "read" },
@@ -124,13 +125,13 @@ for (const [label, plant, error] of [
 it("property: any other workflow that grants issues, at the top or on a job, is named", () => {
   fc.assert(
     fc.property(other, grant, fc.boolean(), (path, given, onJob) => {
-      const workflow: Record<string, unknown> = {
+      const workflow: YamlMap = {
         on: { push: {} },
         jobs: { a: { "runs-on": "ubuntu-latest", steps: [] } },
       };
 
       if (onJob) {
-        (workflow["jobs"] as Record<string, Record<string, unknown>>)["a"]!["permissions"] = given;
+        (workflow["jobs"] as Record<string, YamlMap>)["a"]!["permissions"] = given;
       } else {
         workflow["permissions"] = given;
       }
@@ -141,7 +142,7 @@ it("property: any other workflow that grants issues, at the top or on a job, is 
       const clean = structuredClone(workflow);
 
       if (onJob) {
-        (clean["jobs"] as Record<string, Record<string, unknown>>)["a"]!["permissions"] = { contents: "read" };
+        (clean["jobs"] as Record<string, YamlMap>)["a"]!["permissions"] = { contents: "read" };
       } else {
         clean["permissions"] = { contents: "read" };
       }
