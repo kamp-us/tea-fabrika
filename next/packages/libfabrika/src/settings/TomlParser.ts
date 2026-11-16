@@ -15,7 +15,11 @@ const key = (node: AST.TOMLKey): Array<string> => getStaticTOMLValue(node);
 // A terminator keeps 1.0.3's EOF-zero token range complete, without changing source offsets.
 const syntax = (text: string): AST.TOMLProgram => parseTOML(`${text} `);
 
-// Own properties matter here: TOML keys may spell __proto__, constructor or toString.
+// Own properties matter here: TOML keys may spell __proto__, constructor or toString, and a hole in
+// an array stays missing when its prototype holds that index.
+const owns = <P extends string | number>(target: object, name: P): target is { [K in P]: unknown } =>
+  Predicate.hasProperty(target, name) && Rec.has<string, unknown>(target, String(name));
+
 const put = (table: object, path: Edit.Path, value: unknown): void => {
   let parent = table;
 
@@ -23,7 +27,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
     if (i === path.length - 1) {
       Object.defineProperty(parent, segment, { value, enumerable: true, writable: true, configurable: true });
     } else {
-      if (!(Predicate.hasProperty(parent, segment) && Rec.has<string, unknown>(parent, String(segment)))) {
+      if (!owns(parent, segment)) {
         Object.defineProperty(parent, segment, {
           value: typeof path[i + 1] === "number" ? [] : {},
           enumerable: true,
@@ -32,10 +36,7 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
         });
       }
 
-      const next =
-        Predicate.hasProperty(parent, segment) && Rec.has<string, unknown>(parent, String(segment))
-          ? parent[segment]
-          : undefined;
+      const next = owns(parent, segment) ? parent[segment] : undefined;
 
       // An array of tables is a step too. The parser refuses a document that writes through a
       // scalar, so a scalar here is a bug in this walk, and it fails as main's defineProperty did.
@@ -184,7 +185,7 @@ const encoded = (value: unknown, ancestors: ReadonlySet<object> = new Set()): un
 
     if (Array.isArray(value)) {
       for (let i = 0; i < value.length; i++) {
-        if (!Predicate.hasProperty(value, i)) {
+        if (!owns(value, i)) {
           throw new TypeError("A TOML array cannot contain a missing element.");
         }
       }
