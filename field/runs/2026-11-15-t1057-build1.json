@@ -10,7 +10,7 @@
   "role": "build",
   "model": "claude-sonnet-5-5",
   "effort": null,
-  "outcome": "sent_back",
+  "outcome": "send",
   "why": "wrote the one docs row in next/AGENTS.md the plan names; pnpm typecheck fails on two type errors in the tests step's oxlint-plugins/anti-slop.ts and anti-slop.test.ts, which the build may not edit",
   "tokens": null,
   "tools": null,
