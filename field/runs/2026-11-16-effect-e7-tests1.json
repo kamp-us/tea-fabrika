@@ -15,7 +15,7 @@
   "tokens": null,
   "tools": null,
   "minutes": 50,
-  "note": "Counts from effect-tsgo diagnostics per tsconfig: 45 errors with the lock before the fixes, 5 after. Four type-law asserts of the form expectTypeOf<typeof X.Type>().toEqualTypeOf<X>() now read expectTypeOf<X>().toEqualTypeOf<X>(), which the check forces; the review should look at whether they still prove anything.",
+  "note": "Counts from effect-tsgo diagnostics per tsconfig: 45 errors with the lock before the fixes, 5 after. Three type-law asserts of the form expectTypeOf<typeof X.Type>().toEqualTypeOf<X>() now read expectTypeOf<X>().toEqualTypeOf<X>(), which the check forces; the review should look at whether they still prove anything.",
   "plants": [
     {
       "law": "L1",
