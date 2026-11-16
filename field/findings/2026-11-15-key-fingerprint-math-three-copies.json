@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-15-key-fingerprint-math-three-copies",
+  "date": "2026-11-15",
+  "by": "plan",
+  "model": "claude-opus-5-5",
+  "rule": "duplicate",
+  "location": {
+    "path": "next/packages/libfabrika/src/transport/Hello.ts",
+    "line": 159
+  },
+  "says": "In next/, the OpenSSH SHA256 fingerprint and ssh-ed25519 key line of a raw Ed25519 key are computed by hand in three places that must agree byte for byte.",
+  "proof": "transport/Hello.ts:159 builds `SHA256:${Base64.encode(hash).replace(/=+$/, \"\")}` and lines 165-168 the 51-byte ssh-ed25519 blob; gateway/Gateway.ts:2047 returns the same `SHA256:` string from its own digest; tuval/src/browser/key.ts makeKey and lineFor build both again from the same raw bytes.",
+  "cost": "A change to one copy (a padding rule, a key type) leaves the door, the gateway and the browser key disagreeing on who a key is, and each new client (the hands key file) would add a fourth copy.",
+  "head": "7dad34bb679ef26e74df03f00294c455674a3ae1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1315"
+}
