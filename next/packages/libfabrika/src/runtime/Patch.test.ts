@@ -1,7 +1,9 @@
 // p22. RFC 6902 patches are checked with an independent small applicator, never patch's own apply.
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
+import { apply, diff } from "./Patch.ts";
 
 type Patch = {
   readonly op: "add" | "remove" | "replace";
@@ -9,7 +11,7 @@ type Patch = {
   readonly value?: unknown;
 };
 
-const apply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
+const independentApply = (before: unknown, patches: ReadonlyArray<Patch>): unknown => {
   let root = structuredClone(before);
 
   for (const patch of patches) {
@@ -57,30 +59,27 @@ describe("p22 whole view plus patches", () => {
     ["primitive root", 2, "three"],
     ["removed keys", { a: 1, b: { c: 2 } }, { b: { d: 3 } }],
   ] as const) {
-    it(`plant, patch the wrong path or order: ${label}`, async () => {
-      const { diff } = await import("./Patch.ts");
+    it(`plant, patch the wrong path or order: ${label}`, () => {
       const copy = structuredClone(before);
-      expect(apply(before, diff(before, after))).toEqual(after);
+      expect(independentApply(before, diff(before, after))).toEqual(after);
       expect(before).toEqual(copy);
     });
   }
 
-  it("plant, compare only objects: every JSON pair and a chain of watcher bases reconstructs", async () => {
-    const { diff } = await import("./Patch.ts");
+  it("plant, compare only objects: every JSON pair and a chain of watcher bases reconstructs", () => {
     fc.assert(
       fc.property(fc.array(fc.jsonValue(), { minLength: 2, maxLength: 12 }), (views) => {
         let watcher: unknown = structuredClone(views[0]);
 
         for (const next of views.slice(1)) {
-          watcher = apply(watcher, diff(watcher, next));
+          watcher = independentApply(watcher, diff(watcher, next));
           expect(watcher).toEqual(next);
         }
       }),
       { seed: 119120, numRuns: 100 },
     );
   });
-  it("plant, emit needless work: an unchanged view has no patch", async () => {
-    const { diff } = await import("./Patch.ts");
+  it("plant, emit needless work: an unchanged view has no patch", () => {
     const value = { rows: [{ id: 1, title: "a/b~" }], count: 3 };
     expect(diff(value, structuredClone(value))).toEqual([]);
   });
@@ -173,9 +172,7 @@ const edited = (before: unknown, edits: ReadonlyArray<EditChoice>): unknown =>
 const UNSAFE = ["__proto__", "constructor", "prototype"] as const;
 
 describe("L6: apply undoes diff and never changes its inputs", () => {
-  it("applying diff(before, after) to before gives after, for after derived from before by generated edits", async () => {
-    const { apply, diff } = await import("./Patch.ts");
-    const { Result } = await import("effect");
+  it("applying diff(before, after) to before gives after, for after derived from before by generated edits", () => {
     fc.assert(
       fc.property(fc.jsonValue(), fc.array(editChoice, { maxLength: 8 }), (before, edits) => {
         const after = edited(before, edits);
@@ -198,9 +195,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
     );
   });
 
-  it("an array index past its end is refused without changing the view or operations", async () => {
-    const { apply } = await import("./Patch.ts");
-    const { Result } = await import("effect");
+  it("an array index past its end is refused without changing the view or operations", () => {
     fc.assert(
       fc.property(
         fc.array(fc.jsonValue(), { maxLength: 20 }),
@@ -220,9 +215,7 @@ describe("L6: apply undoes diff and never changes its inputs", () => {
     );
   });
 
-  it("a path through __proto__, constructor or prototype is refused, at any depth, and nothing is polluted", async () => {
-    const { apply } = await import("./Patch.ts");
-    const { Result } = await import("effect");
+  it("a path through __proto__, constructor or prototype is refused, at any depth, and nothing is polluted", () => {
     fc.assert(
       fc.property(
         fc.jsonValue(),
@@ -266,10 +259,7 @@ const RFC6901 = {
 };
 
 describe("L7: pointers and operations as the RFCs give them", () => {
-  it("vector: RFC 6901 section 5, each pointer names the value the RFC says, read through a replace", async () => {
-    const { apply } = await import("./Patch.ts");
-    const { Result } = await import("effect");
-
+  it("vector: RFC 6901 section 5, each pointer names the value the RFC says, read through a replace", () => {
     const vectors: ReadonlyArray<readonly [string, ReadonlyArray<string | number>]> = [
       ["/foo", ["foo"]],
       ["/foo/0", ["foo", 0]],
@@ -305,10 +295,7 @@ describe("L7: pointers and operations as the RFCs give them", () => {
     );
   });
 
-  it("vector: RFC 6902 appendix A, the add, remove and replace examples and their errors", async () => {
-    const { apply } = await import("./Patch.ts");
-    const { Result } = await import("effect");
-
+  it("vector: RFC 6902 appendix A, the add, remove and replace examples and their errors", () => {
     const ok: ReadonlyArray<readonly [string, Json, ReadonlyArray<unknown>, Json]> = [
       [
         "A.1 adding an object member",
