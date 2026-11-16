@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-trusted-rules-0573-plan",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T21:21:58-08:00",
+  "ended": "2026-11-15T21:38:05-08:00",
+  "parent": null,
+  "active": null,
+  "role": "planner",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "The plan for decision 0573, as amended by 0575, in next/ and our tooling (docs/plan/quests/trusted-rules-0573-PLAN.md). Pull request 1 swaps no-data-taggederror, no-context-tag, no-node-filesystem and one-id-module, each at 0 hits, and adds the spacing superset check. A probe found the Effect checker narrower than ours for a bare Data.TaggedError reference and blind to 73 untyped files, so oxlint's no-restricted-properties and no-restricted-types stand beside it. no-hand-tag waits on 20 lines of the anti-slop pair, padding-line-between-statements on 15,791 spacing lines, no-implicit-effect-concurrency on the @effect/tsgo 0.69.0 bump.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Run in a cloud box with no step keys, so the commit is unsigned (stepcommit --commit-only). plancheck --draft passes. One open question for the owner.",
+  "step": "plan"
+}

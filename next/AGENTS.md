@@ -37,7 +37,7 @@ libfabrika
 | Rule | Check |
 |---|---|
 | Effect all the way: nothing is built on Promises | `fabrika/no-promises` |
-| Effect's platform modules, not `node:` imports | `fabrika/no-node-imports`, `fabrika/no-node-filesystem` |
+| Effect's platform modules, not `node:` imports | `fabrika/no-node-imports` |
 | An edge is one line under a marked comment with its reason | `fabrika/edge-comment` |
 | No bare `of` and no `xOf` name; `Lease.of(...)` through its module is fine | `fabrika/no-of` |
 | No hand-written `_tag`: Effect Schema writes it | `fabrika/no-hand-tag` |
