@@ -3,7 +3,29 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // `Effect.map` then `Effect.mapError` is one `Effect.mapBoth`. On for the folders where it fires
+        // or is clean, until the package is at zero and the block moves up to the whole package.
+        // The globs read from this folder. Each slice that turns a check on adds its folders here.
+        "overrides": [
+          {
+            "include": [
+              "src/client/**/*.ts",
+              "src/cloudflare/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts"
+            ],
+            "options": {
+              "diagnosticSeverity": { "mapMapErrorToMapBoth": "error" }
+            }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

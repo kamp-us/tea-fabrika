@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e14-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T09:00:00-08:00",
+  "ended": "2026-11-16T09:30:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "E14 tests step, in next/ and our tooling: mapMapErrorToMapBoth locked at error in libfabrika (client, cloudflare, desktop, ledger, node) and the app's src top. Recount on 13 tsconfigs: 7 hits, 1 in an exam path (fixed by hand edit), 6 in product files left for the build, 0 in pull request 1366's files. The checker's quick fix was not run (rule change: no script edits files).",
+  "tokens": null,
+  "tools": null,
+  "minutes": 30,
+  "note": "Typecheck red only on the 6 product hits. Ran: effect-tsgo diagnostics per tsconfig; pnpm format; pnpm lint.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "Effect.map then Effect.mapError added in src/client/Plant.ts: libfabrika count 5 -> 6, error at Plant.ts:5; removed",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node glob dropped from the entry: node hits vanish, count 5 -> 3; put back",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}
