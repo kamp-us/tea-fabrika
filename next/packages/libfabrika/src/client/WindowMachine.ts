@@ -2054,24 +2054,41 @@ export type Handling = "leave" | "pass" | "take";
  * @stability unstable
  * @category getters
  */
-export const handle = (
-  window: ReturnType<typeof windowMachineFor>,
-  table: Keys.Table,
-  now: WindowModel,
-  unread: Unread,
-  press: KeyPress,
-): { readonly handling: Handling; readonly unread: Unread } => {
-  const waiting = unread.keys.slice(Math.max(0, now.presses - unread.from));
-  const ahead = waiting.reduce((s, m) => applyCell(window, s, m)[0], now);
-  const routed = Keys.route(table, ahead.prefix, null, press);
-  const handling: Handling =
-    routed._tag === "platform" || (routed._tag === "tile" && ahead.prefix._tag === "idle")
-      ? "leave"
-      : routed._tag === "tile"
-        ? "pass"
-        : "take";
-  return {
-    handling,
-    unread: { from: now.presses, keys: handling === "leave" ? waiting : [...waiting, press] },
-  };
-};
+export const handle: {
+  (
+    table: Keys.Table,
+    now: WindowModel,
+    unread: Unread,
+    press: KeyPress,
+  ): (window: ReturnType<typeof windowMachineFor>) => { readonly handling: Handling; readonly unread: Unread };
+  (
+    window: ReturnType<typeof windowMachineFor>,
+    table: Keys.Table,
+    now: WindowModel,
+    unread: Unread,
+    press: KeyPress,
+  ): { readonly handling: Handling; readonly unread: Unread };
+} = Function.dual(
+  5,
+  (
+    window: ReturnType<typeof windowMachineFor>,
+    table: Keys.Table,
+    now: WindowModel,
+    unread: Unread,
+    press: KeyPress,
+  ): { readonly handling: Handling; readonly unread: Unread } => {
+    const waiting = unread.keys.slice(Math.max(0, now.presses - unread.from));
+    const ahead = waiting.reduce((s, m) => applyCell(window, s, m)[0], now);
+    const routed = Keys.route(table, ahead.prefix, null, press);
+    const handling: Handling =
+      routed._tag === "platform" || (routed._tag === "tile" && ahead.prefix._tag === "idle")
+        ? "leave"
+        : routed._tag === "tile"
+          ? "pass"
+          : "take";
+    return {
+      handling,
+      unread: { from: now.presses, keys: handling === "leave" ? waiting : [...waiting, press] },
+    };
+  },
+);

@@ -1,4 +1,4 @@
-import { Option, Result } from "effect";
+import { Option, Result, Function } from "effect";
 import type { Sender, SendersError } from "../../permissions/Senders.ts";
 import type { Life } from "./processTable.ts";
 
@@ -18,8 +18,19 @@ export const recorded = (life: Life): Sender | undefined =>
  *
  * @internal
  */
-export const pick = (
-  sender: Result.Result<Option.Option<Sender>, SendersError>,
-  member: Sender | undefined,
-): Result.Result<Option.Option<Sender>, SendersError> =>
-  Result.map(sender, (asked) => Option.orElse(asked, () => Option.fromUndefinedOr(member)));
+export const pick: {
+  (
+    member: Sender | undefined,
+  ): (sender: Result.Result<Option.Option<Sender>, SendersError>) => Result.Result<Option.Option<Sender>, SendersError>;
+  (
+    sender: Result.Result<Option.Option<Sender>, SendersError>,
+    member: Sender | undefined,
+  ): Result.Result<Option.Option<Sender>, SendersError>;
+} = Function.dual(
+  2,
+  (
+    sender: Result.Result<Option.Option<Sender>, SendersError>,
+    member: Sender | undefined,
+  ): Result.Result<Option.Option<Sender>, SendersError> =>
+    Result.map(sender, (asked) => Option.orElse(asked, () => Option.fromUndefinedOr(member))),
+);

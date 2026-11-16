@@ -7,6 +7,7 @@ import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Schema from "effect/Schema";
@@ -105,7 +106,14 @@ const make = (sql: Sql, options: { readonly build: string; readonly policy: Poli
  * @stability unstable
  * @category layers
  */
-export const layer = (
-  sql: Sql,
-  options: { readonly build: string; readonly policy: Policy },
-): Layer.Layer<RateLimiter.RateLimiterStore> => Layer.succeed(RateLimiter.RateLimiterStore, make(sql, options));
+export const layer: {
+  (options: {
+    readonly build: string;
+    readonly policy: Policy;
+  }): (sql: Sql) => Layer.Layer<RateLimiter.RateLimiterStore>;
+  (sql: Sql, options: { readonly build: string; readonly policy: Policy }): Layer.Layer<RateLimiter.RateLimiterStore>;
+} = Function.dual(
+  2,
+  (sql: Sql, options: { readonly build: string; readonly policy: Policy }): Layer.Layer<RateLimiter.RateLimiterStore> =>
+    Layer.succeed(RateLimiter.RateLimiterStore, make(sql, options)),
+);

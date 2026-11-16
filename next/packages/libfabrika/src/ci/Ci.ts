@@ -7,6 +7,7 @@ import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import * as Equivalence from "effect/Equivalence";
+import * as Function from "effect/Function";
 import * as Schema from "effect/Schema";
 
 /**
@@ -55,13 +56,21 @@ export const CheckRun = Schema.Struct({
   url: Schema.NullOr(Schema.NonEmptyString),
 });
 
+const sameKeyBody = Equivalence.Struct({ name: Equivalence.String, source: Equivalence.String });
+
+/** A run's key: the two fields `sameKey` compares. */
+type Key = Parameters<typeof sameKeyBody>[0];
+
 /**
  * Compares a run's name and source field by field, including any NUL characters.
  *
  * @stability unstable
  * @category guards
  */
-export const sameKey = Equivalence.Struct({ name: Equivalence.String, source: Equivalence.String });
+export const sameKey: {
+  (that: Key): (self: Key) => boolean;
+  (self: Key, that: Key): boolean;
+} = Function.dual(2, sameKeyBody);
 
 /**
  * Schema for one current run per name and source, in no defined order.

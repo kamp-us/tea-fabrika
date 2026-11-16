@@ -109,7 +109,10 @@ const resolved = (key: string, mod: Backend["mod"]): string => key.replace(/(^|\
  * @stability unstable
  * @category constructors
  */
-export const backend = (platform: Backend["platform"], os: Backend["os"]): Backend => {
+export const backend: {
+  (os: Backend["os"]): (platform: Backend["platform"]) => Backend;
+  (platform: Backend["platform"], os: Backend["os"]): Backend;
+} = Function.dual(2, (platform: Backend["platform"], os: Backend["os"]): Backend => {
   const mod = os === "macos" || os === "ios" ? "meta" : "ctrl";
   const mods = os === "unknown" ? (["ctrl", "meta"] as const) : [mod];
   const cannot =
@@ -122,7 +125,7 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
         ? ["meta+q", "meta+h"]
         : [];
   return { platform, os, mod, cannot };
-};
+});
 
 /**
  * Returns what a backend is shipped of the default rows: every row, in order, with each key that
@@ -131,8 +134,12 @@ export const backend = (platform: Backend["platform"], os: Backend["os"]): Backe
  * @stability unstable
  * @category constructors
  */
-export const ship = <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend): ReadonlyArray<B> =>
-  defaults.map((row) => ({ ...row, keys: row.keys.filter((k) => !on.cannot.includes(resolved(k, on.mod))) }));
+export const ship: {
+  <B extends Binding>(on: Backend): (defaults: ReadonlyArray<B>) => ReadonlyArray<B>;
+  <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend): ReadonlyArray<B>;
+} = Function.dual(2, <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend): ReadonlyArray<B> =>
+  defaults.map((row) => ({ ...row, keys: row.keys.filter((k) => !on.cannot.includes(resolved(k, on.mod))) })),
+);
 
 /**
  * Loads rows into a window's table, or fails on the first row bound to a key its backend can never
@@ -141,7 +148,10 @@ export const ship = <B extends Binding>(defaults: ReadonlyArray<B>, on: Backend)
  * @stability unstable
  * @category constructors
  */
-export const load = (bindings: ReadonlyArray<Binding>, on: Backend): Result.Result<Table, LoadError> => {
+export const load: {
+  (on: Backend): (bindings: ReadonlyArray<Binding>) => Result.Result<Table, LoadError>;
+  (bindings: ReadonlyArray<Binding>, on: Backend): Result.Result<Table, LoadError>;
+} = Function.dual(2, (bindings: ReadonlyArray<Binding>, on: Backend): Result.Result<Table, LoadError> => {
   const after = new Map<string, string>();
   const alone = new Map<string, string>();
 
@@ -162,7 +172,7 @@ export const load = (bindings: ReadonlyArray<Binding>, on: Backend): Result.Resu
   }
 
   return Result.succeed({ backend: on, rows: bindings, prefix: PREFIX, after, alone });
-};
+});
 
 const R = Routed.cases;
 

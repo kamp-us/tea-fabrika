@@ -8,7 +8,7 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Equal, Option, Result, Schema } from "effect";
+import { Equal, Option, Result, Schema, Function } from "effect";
 import { LedgerError } from "../ledger/Ledger.ts";
 import type { LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, valueFor } from "../ledger/Log.ts";
@@ -298,8 +298,14 @@ export const recoverActivity = (raw: unknown): Result.Result<typeof Recovered.Ty
  * @stability unstable
  * @category guards
  */
-export const canRestart = (times: ReadonlyArray<number>, now: number, period: number, intensity: number): boolean =>
-  times.filter((at) => at >= now - period).length + 1 <= intensity;
+export const canRestart: {
+  (now: number, period: number, intensity: number): (times: ReadonlyArray<number>) => boolean;
+  (times: ReadonlyArray<number>, now: number, period: number, intensity: number): boolean;
+} = Function.dual(
+  4,
+  (times: ReadonlyArray<number>, now: number, period: number, intensity: number): boolean =>
+    times.filter((at) => at >= now - period).length + 1 <= intensity,
+);
 
 /**
  * Error for a call the process table refuses. A refusal writes nothing.
@@ -423,13 +429,16 @@ const decodeAcked = Schema.decodeUnknownOption(Acked);
  * @stability unstable
  * @category getters
  */
-export const ackedPos = (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev => {
+export const ackedPos: {
+  (name: string, by: string): (turn: Pick<LedgerTurn, "read" | "head">) => Rev;
+  (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev;
+} = Function.dual(3, (turn: Pick<LedgerTurn, "read" | "head">, name: string, by: string): Rev => {
   const stream = acked(name);
   const newest = [...turn.read(stream, Math.max(0, turn.head(stream) - 1))].at(-1);
   return newest === undefined || newest.by !== by
     ? 0
     : Option.match(decodeAcked(valueFor(newest)), { onNone: () => 0, onSome: (ack) => ack.pos });
-};
+});
 
 const decodeIdParts = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Unknown)));
 

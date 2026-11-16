@@ -9,7 +9,7 @@
  * @stability unstable
  */
 import { applyCell } from "@demlik/tea";
-import { Result } from "effect";
+import { Result, Function } from "effect";
 import type { Access, Folded, MemberEvent, Reason } from "./Access.ts";
 import { access, members } from "./Access.ts";
 
@@ -42,10 +42,13 @@ const step = (model: Folded, event: MemberEvent): Folded => {
  * @stability unstable
  * @category combinators
  */
-export const allows = (model: Folded, event: MemberEvent): Result.Result<Folded, Reason> => {
+export const allows: {
+  (event: MemberEvent): (model: Folded) => Result.Result<Folded, Reason>;
+  (model: Folded, event: MemberEvent): Result.Result<Folded, Reason>;
+} = Function.dual(2, (model: Folded, event: MemberEvent): Result.Result<Folded, Reason> => {
   const next = step(model, event);
   return next.reply._tag === "accepted" ? Result.succeed(next) : Result.fail(next.reply.reason);
-};
+});
 
 /**
  * Returns who belongs after every event in order, each one taken or refused by the machine.

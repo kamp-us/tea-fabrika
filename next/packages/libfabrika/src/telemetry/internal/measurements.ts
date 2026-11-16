@@ -6,7 +6,7 @@
 // Every step here is plain code over the synchronous `Sql`; the sink runs the row, the rollup and
 // the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
 // try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
-import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
+import { Clock, Effect, Option, Result, Schema, Struct, Function } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
@@ -39,24 +39,34 @@ export const HEALTH_TABLES = [
 ];
 
 /** @internal Counts in place, including counts held while storage was full. */
-export const countRefused = (sql: Sql, { piece, hour, refused, count }: SumPoint): void =>
-  void sql.exec(
-    `INSERT INTO sums (piece, hour, refused, count) VALUES (?, ?, ?, ?)
+export const countRefused: {
+  (point: SumPoint): (sql: Sql) => void;
+  (sql: Sql, point: SumPoint): void;
+} = Function.dual(
+  2,
+  (sql: Sql, { piece, hour, refused, count }: SumPoint): void =>
+    void sql.exec(
+      `INSERT INTO sums (piece, hour, refused, count) VALUES (?, ?, ?, ?)
     ON CONFLICT (piece, hour, refused) DO UPDATE SET count = count + excluded.count`,
-    piece,
-    hour,
-    refused,
-    count,
-  );
+      piece,
+      hour,
+      refused,
+      count,
+    ),
+);
 
 const SumColumns = SumPoint.mapFields(Struct.omit(["_tag"]));
 const decodeSum = Schema.decodeUnknownSync(SumColumns);
 
 /** @internal Closed hours in [from, to), oldest first, then the closed tag value. */
-export const readSums = (sql: Sql, piece: string, from: number, to: number): Array<SumPoint> =>
+export const readSums: {
+  (piece: string, from: number, to: number): (sql: Sql) => Array<SumPoint>;
+  (sql: Sql, piece: string, from: number, to: number): Array<SumPoint>;
+} = Function.dual(4, (sql: Sql, piece: string, from: number, to: number): Array<SumPoint> =>
   sql
     .exec(`SELECT * FROM sums WHERE piece = ? AND hour >= ? AND hour < ? ORDER BY hour, refused`, piece, from, to)
-    .map((row) => SumPoint.make(decodeSum(row)));
+    .map((row) => SumPoint.make(decodeSum(row))),
+);
 
 const HealthColumns = Schema.Struct({
   piece: Schema.String,
@@ -97,17 +107,23 @@ const toHealth = (row: unknown): Measurements => {
 };
 
 /** @internal */
-export const writeHealth = (sql: Sql, { piece, at, ms, ok, error, lag, spanId }: Measurements): void =>
-  void sql.exec(
-    `INSERT INTO measurements (piece, at, ms, ok, error, lag, "spanId") VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    piece,
-    at,
-    ms,
-    ok ? 1 : 0,
-    error,
-    lag,
-    spanId,
-  );
+export const writeHealth: {
+  (health: Measurements): (sql: Sql) => void;
+  (sql: Sql, health: Measurements): void;
+} = Function.dual(
+  2,
+  (sql: Sql, { piece, at, ms, ok, error, lag, spanId }: Measurements): void =>
+    void sql.exec(
+      `INSERT INTO measurements (piece, at, ms, ok, error, lag, "spanId") VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      piece,
+      at,
+      ms,
+      ok ? 1 : 0,
+      error,
+      lag,
+      spanId,
+    ),
+);
 
 /** Nearest rank: the smallest value with at least `percent` of the sorted values at or below it. */
 const rank = (sorted: ReadonlyArray<number>, percent: number): number =>
@@ -137,7 +153,10 @@ const summarize = (hour: number, rows: ReadonlyArray<Measurements>): Array<Metri
 
 /** Rolls up every closed hour before `now` that has health rows and no summary yet. */
 /** @internal */
-export const rollup = (sql: Sql, now: number): void => {
+export const rollup: {
+  (now: number): (sql: Sql) => void;
+  (sql: Sql, now: number): void;
+} = Function.dual(2, (sql: Sql, now: number): void => {
   const hours = sql
     .exec(
       `SELECT DISTINCT (at / ${HOUR}) * ${HOUR} AS hour FROM measurements
@@ -167,11 +186,14 @@ export const rollup = (sql: Sql, now: number): void => {
 
     sql.exec(`INSERT INTO aggregated (hour) VALUES (?)`, hour);
   }
-};
+});
 
 /** A size row from `Sql.size()`, unless this hour already has one. */
 /** @internal */
-export const writeSize = (sql: Sql, now: number): void => {
+export const writeSize: {
+  (now: number): (sql: Sql) => void;
+  (sql: Sql, now: number): void;
+} = Function.dual(2, (sql: Sql, now: number): void => {
   const start = hourStart(now);
   const [had] = sql.exec(`SELECT count(*) AS n FROM sizes WHERE at >= ? AND at < ?`, start, start + HOUR);
 
@@ -180,15 +202,19 @@ export const writeSize = (sql: Sql, now: number): void => {
   }
 
   sql.exec(`INSERT INTO sizes (at, bytes) VALUES (?, ?)`, now, sql.size());
-};
+});
 
 /** The summaries whose hour is in `[from, to)`, oldest first. */
 /** @internal */
-export const readSummaries = (sql: Sql, from: number, to: number): Array<MetricPoint> =>
+export const readSummaries: {
+  (from: number, to: number): (sql: Sql) => Array<MetricPoint>;
+  (sql: Sql, from: number, to: number): Array<MetricPoint>;
+} = Function.dual(3, (sql: Sql, from: number, to: number): Array<MetricPoint> =>
   sql.exec(`SELECT * FROM summary WHERE hour >= ? AND hour < ? ORDER BY hour, piece`, from, to).map((row) => {
     const { p50, p95, max, ...rest } = decodeSummary(row);
     return MetricPoint.make({ ...rest, ms: { p50, p95, max } });
-  });
+  }),
+);
 
 const encoder = new TextEncoder();
 

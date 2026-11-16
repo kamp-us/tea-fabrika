@@ -8,7 +8,7 @@
  *
  * @stability unstable
  */
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 import * as Id from "../Id.ts";
 import { ProcessName } from "../processes/Process.ts";
 
@@ -210,5 +210,10 @@ export const tezgahName = (person: string): string => `tezgah:${body(person, "pe
  * @stability unstable
  * @category getters
  */
-export const childName = (program: string, tile: TileId): string =>
-  `${program.slice(program.lastIndexOf("/") + 1)}:${body(tile, "tile")}`;
+export const childName: {
+  (tile: TileId): (program: string) => string;
+  (program: string, tile: TileId): string;
+} = Function.dual(
+  2,
+  (program: string, tile: TileId): string => `${program.slice(program.lastIndexOf("/") + 1)}:${body(tile, "tile")}`,
+);

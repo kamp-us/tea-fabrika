@@ -5,7 +5,7 @@
  *
  * @internal
  */
-import { Clock, Effect, Option, Predicate, Queue, Random, Schema, Stream } from "effect";
+import { Clock, Effect, Option, Predicate, Queue, Random, Schema, Stream, Function } from "effect";
 import { Socket } from "effect/socket";
 import type { Identity } from "../../transport/ClientKey.ts";
 import { ErrorClass } from "../../transport/ClientRows.ts";
@@ -83,15 +83,24 @@ const dialWait = Effect.fn("dial.wait")(function* (tries: number) {
  *
  * @internal
  */
-export const send = (
-  handles: ReadonlyMap<number, Handle>,
-  dial: number,
-  text: string,
-): Effect.Effect<void, "none" | Socket.SocketError> =>
-  Effect.suspend((): Effect.Effect<void, "none" | Socket.SocketError> => {
-    const handle = handles.get(dial);
-    return handle === undefined ? Effect.fail("none" as const) : handle.writer.write(text);
-  });
+export const send: {
+  (
+    dial: number,
+    text: string,
+  ): (handles: ReadonlyMap<number, Handle>) => Effect.Effect<void, "none" | Socket.SocketError>;
+  (handles: ReadonlyMap<number, Handle>, dial: number, text: string): Effect.Effect<void, "none" | Socket.SocketError>;
+} = Function.dual(
+  3,
+  (
+    handles: ReadonlyMap<number, Handle>,
+    dial: number,
+    text: string,
+  ): Effect.Effect<void, "none" | Socket.SocketError> =>
+    Effect.suspend((): Effect.Effect<void, "none" | Socket.SocketError> => {
+      const handle = handles.get(dial);
+      return handle === undefined ? Effect.fail("none" as const) : handle.writer.write(text);
+    }),
+);
 
 /**
  * The socket Sub for one client: `dial(n, key, tries)` opens dial `n` with the key `key` gives, at

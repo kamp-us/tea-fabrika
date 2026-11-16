@@ -1,4 +1,5 @@
 // Program mail's pure rules, next/ (P41 slice 1, T1041): a delivery's ID, the host's grant and the inbox cap.
+import { Function } from "effect";
 import type { Rev } from "../../Rev.ts";
 import type { Grants } from "../ProgramMail.ts";
 
@@ -14,8 +15,14 @@ export const mailId = (command: string): string => `${command}/mail`;
  * inherited key.
  * @internal
  */
-export const granted = (grants: Grants, source: string, to: string): boolean =>
-  Object.hasOwn(grants, source) && (grants[source] ?? []).includes(to);
+export const granted: {
+  (source: string, to: string): (grants: Grants) => boolean;
+  (grants: Grants, source: string, to: string): boolean;
+} = Function.dual(
+  3,
+  (grants: Grants, source: string, to: string): boolean =>
+    Object.hasOwn(grants, source) && (grants[source] ?? []).includes(to),
+);
 
 /** The business `ref` a message carries, if it has one. @internal */
 export const businessRef = (m: unknown): string | null =>
@@ -26,7 +33,13 @@ export const businessRef = (m: unknown): string | null =>
  * an ack ahead of the end reads as none unread.
  * @internal
  */
-export const unread = (end: Rev, acked: Rev): number => Math.max(0, end - acked);
+export const unread: {
+  (acked: Rev): (end: Rev) => number;
+  (end: Rev, acked: Rev): number;
+} = Function.dual(2, (end: Rev, acked: Rev): number => Math.max(0, end - acked));
 
 /** Whether an inbox ending at `end` holds its cap of unread letters, so a new one is refused. @internal */
-export const full = (end: Rev, acked: Rev, cap: number): boolean => unread(end, acked) >= cap;
+export const full: {
+  (acked: Rev, cap: number): (end: Rev) => boolean;
+  (end: Rev, acked: Rev, cap: number): boolean;
+} = Function.dual(3, (end: Rev, acked: Rev, cap: number): boolean => unread(end, acked) >= cap);

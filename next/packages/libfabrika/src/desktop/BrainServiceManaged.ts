@@ -7,6 +7,7 @@ import { applyCell } from "@demlik/tea";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -243,11 +244,16 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   return BrainService.of({ up: perform("up").pipe(Effect.as({ url: spec.url })), stop: perform("stop") });
 });
 
+const layerBody = (spec: BrainSpec, settings: Snapshot.Snapshot) =>
+  Layer.effect(BrainService, make(spec, settings)).pipe(Layer.provide(Id.Generator.layer));
+
 /**
  * Serializes complete operations and captures lower services once.
  *
  * @stability unstable
  * @category layers
  */
-export const layer = (spec: BrainSpec, settings: Snapshot.Snapshot) =>
-  Layer.effect(BrainService, make(spec, settings)).pipe(Layer.provide(Id.Generator.layer));
+export const layer: {
+  (settings: Snapshot.Snapshot): (spec: BrainSpec) => ReturnType<typeof layerBody>;
+  (spec: BrainSpec, settings: Snapshot.Snapshot): ReturnType<typeof layerBody>;
+} = Function.dual(2, layerBody);

@@ -4,6 +4,7 @@
  * @stability unstable
  */
 import * as Effect from "effect/Effect";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -15,13 +16,7 @@ import type * as Snapshot from "../../settings/Snapshot.ts";
 import { devRecording } from "../dev/dev-recording.ts";
 import * as Control from "./BrainControlLaunchd.ts";
 
-/**
- * Selects launchd and an isolated durable queue, leaving readiness to the caller.
- *
- * @stability unstable
- * @category layers
- */
-export const layer = <E, R>(
+const layerBody = <E, R>(
   spec: BrainSpec,
   settings: Snapshot.Snapshot,
   probe: Layer.Layer<BrainProbe, E, R>,
@@ -51,3 +46,33 @@ export const layer = <E, R>(
       );
     }),
   );
+
+/**
+ * Selects launchd and an isolated durable queue, leaving readiness to the caller.
+ *
+ * @stability unstable
+ * @category layers
+ */
+export const layer: {
+  <E, R>(
+    settings: Snapshot.Snapshot,
+    probe: Layer.Layer<BrainProbe, E, R>,
+    forward: (
+      target: "record" | "bucket",
+      name: string,
+      method: string,
+      args: ReadonlyArray<unknown>,
+    ) => Effect.Effect<unknown, E>,
+  ): (spec: BrainSpec) => ReturnType<typeof layerBody<E, R>>;
+  <E, R>(
+    spec: BrainSpec,
+    settings: Snapshot.Snapshot,
+    probe: Layer.Layer<BrainProbe, E, R>,
+    forward: (
+      target: "record" | "bucket",
+      name: string,
+      method: string,
+      args: ReadonlyArray<unknown>,
+    ) => Effect.Effect<unknown, E>,
+  ): ReturnType<typeof layerBody<E, R>>;
+} = Function.dual(4, layerBody);

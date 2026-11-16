@@ -4,7 +4,7 @@
  *
  * @stability unstable
  */
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Function } from "effect";
 import type { Sql } from "../Sql.ts";
 import { pages } from "./internal/ledgerPages.ts";
 import { type Doorbell, Ledger } from "./Ledger.ts";
@@ -23,7 +23,10 @@ import * as RefereeSql from "./RefereeSql.ts";
  * @stability unstable
  * @category layers
  */
-export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell> =>
+export const layer: {
+  (caller: { readonly reader: string }): (sql: Sql) => Layer.Layer<Ledger, never, Doorbell>;
+  (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell>;
+} = Function.dual(2, (sql: Sql, caller: { readonly reader: string }): Layer.Layer<Ledger, never, Doorbell> =>
   Layer.effect(
     Ledger,
     Effect.gen(function* () {
@@ -34,4 +37,5 @@ export const layer = (sql: Sql, caller: { readonly reader: string }): Layer.Laye
         wait: (stream, after) => referee.wait(stream, after, caller.reader),
       };
     }),
-  ).pipe(Layer.provide(RefereeSql.layer(sql)));
+  ).pipe(Layer.provide(RefereeSql.layer(sql))),
+);

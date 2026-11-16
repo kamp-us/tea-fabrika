@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect";
+import { Option, Schema, Function } from "effect";
 import type { Entry } from "../../ledger/Log.ts";
 import type { Letter } from "../Mailbox.ts";
 import type { ProcessTable } from "../Process.ts";
@@ -6,13 +6,7 @@ import type { ProcessTable } from "../Process.ts";
 const Sent = Schema.Struct({ m: Schema.Json });
 const decodeSent = Schema.decodeUnknownOption(Sent);
 
-/**
- * Fresh delivery uses today's cancellations. Historical mailbox replay stays unchanged. It never
- * fails on what another writer put in the inbox: a `send` with no `m` is skipped, and any `m` is
- * mail unless the table calls it a signal.
- */
-/** @internal */
-export const processMail = (table: ProcessTable, process: string, entries: Iterable<Entry>) => {
+const processMailBody = (table: ProcessTable, process: string, entries: Iterable<Entry>) => {
   const letters: Array<{ letter: Letter; arrivedAt: number }> = [];
 
   for (const entry of entries) {
@@ -50,3 +44,14 @@ export const processMail = (table: ProcessTable, process: string, entries: Itera
 
   return letters;
 };
+
+/**
+ * Fresh delivery uses today's cancellations. Historical mailbox replay stays unchanged. It never
+ * fails on what another writer put in the inbox: a `send` with no `m` is skipped, and any `m` is
+ * mail unless the table calls it a signal.
+ */
+/** @internal */
+export const processMail: {
+  (process: string, entries: Iterable<Entry>): (table: ProcessTable) => ReturnType<typeof processMailBody>;
+  (table: ProcessTable, process: string, entries: Iterable<Entry>): ReturnType<typeof processMailBody>;
+} = Function.dual(3, processMailBody);

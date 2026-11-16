@@ -17,6 +17,7 @@ import {
   Semaphore,
   Stream,
   SubscriptionRef,
+  Function,
 } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
@@ -140,7 +141,10 @@ class SignalError extends Schema.TaggedError<SignalError>()("SignalError", {
  * @stability unstable
  * @category combinators
  */
-export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
+export const signal: {
+  (name: Signal): (pid: number) => Effect.Effect<void>;
+  (pid: number, name: Signal): Effect.Effect<void>;
+} = Function.dual(2, (pid: number, name: Signal): Effect.Effect<void> =>
   Effect.try({
     try: () => {
       process.kill(pid, name);
@@ -152,7 +156,8 @@ export const signal = (pid: number, name: Signal): Effect.Effect<void> =>
       () => Effect.void,
     ),
     Effect.orDie,
-  );
+  ),
+);
 
 // How a bounded stop ended: `refused` when the state no longer held the sampled process and no
 // signal went out, `itself` when the process went before a SIGKILL, and `killed` after one.

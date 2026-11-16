@@ -12,7 +12,7 @@
  *
  * @stability unstable
  */
-import { Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import { Context, Effect, Layer, Option, Schema, Stream, Function } from "effect";
 import type { Sql } from "../Sql.ts";
 import { type Chain, Content, partName, Rolled, SinkError, SpanRow, sinkError } from "./Trace.ts";
 
@@ -339,20 +339,7 @@ const sqlStore = (sql: Sql): Store => {
   };
 };
 
-/**
- * Creates one record part's four calls over its own `Sql`: `write`, `read`, `content` and
- * `deleteContent`. A part object's methods hand off to these.
- *
- * **Details**
- *
- * `chain` and `at` say which part this is, and `cap` is the size in bytes at which it rolls.
- * Building it touches nothing: the tables come with the first call. A throw from storage is a
- * `SinkError`.
- *
- * @stability unstable
- * @category constructors
- */
-export const recordPart = (sql: Sql, chain: Chain, at: number, cap: number) => {
+const recordPartBody = (sql: Sql, chain: Chain, at: number, cap: number) => {
   const calls = local(part(sqlStore(sql), chain, at, cap));
   return {
     write: Effect.fnUntraced(function* (rows: ReadonlyArray<Sent>) {
@@ -369,6 +356,24 @@ export const recordPart = (sql: Sql, chain: Chain, at: number, cap: number) => {
     }),
   };
 };
+
+/**
+ * Creates one record part's four calls over its own `Sql`: `write`, `read`, `content` and
+ * `deleteContent`. A part object's methods hand off to these.
+ *
+ * **Details**
+ *
+ * `chain` and `at` say which part this is, and `cap` is the size in bytes at which it rolls.
+ * Building it touches nothing: the tables come with the first call. A throw from storage is a
+ * `SinkError`.
+ *
+ * @stability unstable
+ * @category constructors
+ */
+export const recordPart: {
+  (chain: Chain, at: number, cap: number): (sql: Sql) => ReturnType<typeof recordPartBody>;
+  (sql: Sql, chain: Chain, at: number, cap: number): ReturnType<typeof recordPartBody>;
+} = Function.dual(4, recordPartBody);
 
 const encoder = new TextEncoder();
 

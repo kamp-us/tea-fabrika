@@ -4,7 +4,7 @@
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
 import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
-import { Result } from "effect";
+import { Result, Function } from "effect";
 
 type Options<S, M> = {
   readonly msgs: ReadonlyArray<M>;
@@ -15,64 +15,77 @@ type Options<S, M> = {
 };
 
 /** Checks every cut, the first and the last included. Never runs a Cmd. */
-export const syncTest = <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
-  machine: Machine<S, M, C, U, Ctx>,
-  ctx: Ctx,
-  { msgs, encode, decode, equals, seed }: Options<S, M>,
-): void => {
-  const [first] = machine.init(null, ctx);
-  const models: Array<S> = [first];
-  const cmds: Array<ReadonlyArray<C>> = [];
+export const syncTest: {
+  <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
+    ctx: Ctx,
+    options: Options<S, M>,
+  ): (machine: Machine<S, M, C, U, Ctx>) => void;
+  <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
+    machine: Machine<S, M, C, U, Ctx>,
+    ctx: Ctx,
+    options: Options<S, M>,
+  ): void;
+} = Function.dual(
+  3,
+  <S, M extends { readonly type: string }, C extends Cmd, U extends Sub, Ctx>(
+    machine: Machine<S, M, C, U, Ctx>,
+    ctx: Ctx,
+    { msgs, encode, decode, equals, seed }: Options<S, M>,
+  ): void => {
+    const [first] = machine.init(null, ctx);
+    const models: Array<S> = [first];
+    const cmds: Array<ReadonlyArray<C>> = [];
 
-  for (const msg of msgs) {
-    const [next, out] = applyCell<S, M, C>(machine, models.at(-1) ?? first, msg);
-    models.push(next);
-    cmds.push(out);
-  }
-
-  const fail = (cut: number, message: string): never => {
-    throw new Error(`syncTest (seed ${seed}): after a save at cut ${cut}, ${message}`);
-  };
-  /** Boots from the model saved at `cut` and replays the rest against the unbroken run. */
-  const resume = (cut: number, model: S, loaded: S): void => {
-    let [state] = machine.init(loaded, ctx);
-
-    if (!equals(state, model)) {
-      fail(cut, "init(loaded) is not the model that was saved");
+    for (const msg of msgs) {
+      const [next, out] = applyCell<S, M, C>(machine, models.at(-1) ?? first, msg);
+      models.push(next);
+      cmds.push(out);
     }
 
-    for (let i = cut; i < msgs.length; i++) {
-      const msg = msgs[i];
+    const fail = (cut: number, message: string): never => {
+      throw new Error(`syncTest (seed ${seed}): after a save at cut ${cut}, ${message}`);
+    };
+    /** Boots from the model saved at `cut` and replays the rest against the unbroken run. */
+    const resume = (cut: number, model: S, loaded: S): void => {
+      let [state] = machine.init(loaded, ctx);
 
-      if (msg === undefined) {
-        break;
+      if (!equals(state, model)) {
+        fail(cut, "init(loaded) is not the model that was saved");
       }
 
-      const [next, out] = applyCell<S, M, C>(machine, state, msg);
+      for (let i = cut; i < msgs.length; i++) {
+        const msg = msgs[i];
 
-      if (!equals(next, models[i + 1])) {
-        fail(cut, `the model after message ${i} differs`);
+        if (msg === undefined) {
+          break;
+        }
+
+        const [next, out] = applyCell<S, M, C>(machine, state, msg);
+
+        if (!equals(next, models[i + 1])) {
+          fail(cut, `the model after message ${i} differs`);
+        }
+
+        if (!equals(out, cmds[i])) {
+          fail(cut, `the Cmds of message ${i} differ`);
+        }
+
+        state = next;
       }
+    };
 
-      if (!equals(out, cmds[i])) {
-        fail(cut, `the Cmds of message ${i} differ`);
+    for (const [cut, model] of models.entries()) {
+      const text = JSON.stringify(encode(model));
+      const loaded = Result.try(() => decode(JSON.parse(text)));
+
+      if (Result.isFailure(loaded)) {
+        fail(cut, "the saved JSON text does not load");
+      } else {
+        resume(cut, model, loaded.success);
       }
-
-      state = next;
     }
-  };
-
-  for (const [cut, model] of models.entries()) {
-    const text = JSON.stringify(encode(model));
-    const loaded = Result.try(() => decode(JSON.parse(text)));
-
-    if (Result.isFailure(loaded)) {
-      fail(cut, "the saved JSON text does not load");
-    } else {
-      resume(cut, model, loaded.success);
-    }
-  }
-};
+  },
+);
 
 type Who = { readonly key: string; readonly for: string };
 

@@ -7,6 +7,7 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
@@ -351,10 +352,15 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
   return BrainControl.of({ inspect, install, start, stop, remove });
 });
 
+const layerBody = (spec: BrainSpec, settings: Snapshot.Snapshot) => Layer.effect(BrainControl, make(spec, settings));
+
 /**
  * Controls the exact GUI-domain job derived from the canonical home.
  *
  * @stability unstable
  * @category layers
  */
-export const layer = (spec: BrainSpec, settings: Snapshot.Snapshot) => Layer.effect(BrainControl, make(spec, settings));
+export const layer: {
+  (settings: Snapshot.Snapshot): (spec: BrainSpec) => ReturnType<typeof layerBody>;
+  (spec: BrainSpec, settings: Snapshot.Snapshot): ReturnType<typeof layerBody>;
+} = Function.dual(2, layerBody);

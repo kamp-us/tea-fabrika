@@ -3,7 +3,7 @@
  *
  * @stability unstable
  */
-import { Effect, Result, Schema, Stream } from "effect";
+import { Effect, Result, Schema, Stream, Function } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Task, Result as TaskResult, type Recorded } from "../tasks/Task.ts";
@@ -52,21 +52,34 @@ const refusal = (attached: typeof Attached.cases.online.Type): string | null =>
  * @stability unstable
  * @category routing
  */
-export const waitOn = (
-  attached: typeof Attached.cases.online.Type,
-  input: unknown,
-): Result.Result<{ readonly stream: string; readonly after: Rev }, string> => {
-  const refused = refusal(attached);
+export const waitOn: {
+  (
+    input: unknown,
+  ): (
+    attached: typeof Attached.cases.online.Type,
+  ) => Result.Result<{ readonly stream: string; readonly after: Rev }, string>;
+  (
+    attached: typeof Attached.cases.online.Type,
+    input: unknown,
+  ): Result.Result<{ readonly stream: string; readonly after: Rev }, string>;
+} = Function.dual(
+  2,
+  (
+    attached: typeof Attached.cases.online.Type,
+    input: unknown,
+  ): Result.Result<{ readonly stream: string; readonly after: Rev }, string> => {
+    const refused = refusal(attached);
 
-  if (refused !== null) {
-    return Result.fail(refused);
-  }
+    if (refused !== null) {
+      return Result.fail(refused);
+    }
 
-  const decoded = Schema.decodeUnknownResult(Wait, strict)(input);
-  return Result.isFailure(decoded)
-    ? Result.fail("bad_input")
-    : Result.succeed({ stream: targetStream(attached.identity.key), after: decoded.success.after });
-};
+    const decoded = Schema.decodeUnknownResult(Wait, strict)(input);
+    return Result.isFailure(decoded)
+      ? Result.fail("bad_input")
+      : Result.succeed({ stream: targetStream(attached.identity.key), after: decoded.success.after });
+  },
+);
 
 const ok = (result: Schema.Json, wake: string | null = null): Routed => ({
   answer: Answer.cases.ok.make({ result }),

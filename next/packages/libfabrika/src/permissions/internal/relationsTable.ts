@@ -3,7 +3,7 @@
 // `RelationsLedger.ts` trusts only its own writer, and `RelationsMemory.ts` trusts what it was given.
 import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import { Schema, Function } from "effect";
 import { Row } from "../Relation.ts";
 
 const Model = Schema.Struct({ tuples: Schema.ReadonlySet(Schema.String) });
@@ -23,8 +23,10 @@ export const TuplesTypeId: unique symbol = Symbol.for("@kampus/libfabrika/permis
  *
  * @internal
  */
-export const tupleKey = (subject: string, relation: string, object: string): string =>
-  `${subject}#${relation}@${object}`;
+export const tupleKey: {
+  (relation: string, object: string): (subject: string) => string;
+  (subject: string, relation: string, object: string): string;
+} = Function.dual(3, (subject: string, relation: string, object: string): string => `${subject}#${relation}@${object}`);
 
 /** @internal */
 export const relations = Machine.make({
@@ -68,5 +70,9 @@ export const fold = (rows: Iterable<typeof Row.Type>) => {
  *
  * @internal
  */
-export const holds = (tuples: { readonly [TuplesTypeId]: ReadonlySet<string> }, key: string): boolean =>
-  tuples[TuplesTypeId].has(key);
+export const holds: {
+  (key: string): (tuples: { readonly [TuplesTypeId]: ReadonlySet<string> }) => boolean;
+  (tuples: { readonly [TuplesTypeId]: ReadonlySet<string> }, key: string): boolean;
+} = Function.dual(2, (tuples: { readonly [TuplesTypeId]: ReadonlySet<string> }, key: string): boolean =>
+  tuples[TuplesTypeId].has(key),
+);

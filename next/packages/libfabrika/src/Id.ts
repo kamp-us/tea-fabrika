@@ -1,5 +1,5 @@
 // next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
-import { type Brand, Clock, Context, Effect, Layer, Order as Ordering, Result, Schema as S } from "effect";
+import { type Brand, Clock, Context, Effect, Function, Layer, Order as Ordering, Result, Schema as S } from "effect";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 const low62 = (1n << 62n) - 1n;
@@ -120,12 +120,17 @@ export const Revoke = make("revoke");
 export const Add = make("add");
 export const Deny = make("deny");
 
-/** Compare UUID suffixes first, with the complete prefix breaking ties. */
-export const Order = Ordering.make<Schema>((left, right) => {
+const OrderBody = Ordering.make<Schema>((left, right) => {
   const [lp, ls] = split(left),
     [rp, rs] = split(right);
   return Ordering.String(ls, rs) || Ordering.String(lp, rp);
 });
+
+/** Compare UUID suffixes first, with the complete prefix breaking ties. */
+export const Order: {
+  (right: Schema): (left: Schema) => ReturnType<typeof OrderBody>;
+  (left: Schema, right: Schema): ReturnType<typeof OrderBody>;
+} = Function.dual(2, OrderBody);
 
 const entropy = (): bigint =>
   crypto.getRandomValues(new Uint8Array(10)).reduce((n, byte) => (n << 8n) | BigInt(byte), 0n) & maxRandom;
