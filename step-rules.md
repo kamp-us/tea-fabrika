@@ -115,6 +115,15 @@ runs `pnpm lint` or `pnpm typecheck` at a time. With more, the memory limit kill
 dying with EPIPE; both seen 2026-11-16), and the run reads as red for no code reason. A part that
 dies that way is run again alone before anyone calls it red.
 
+**The big-PR stack (owner, 2026-11-16).** The merge session builds and lands three PRs as a
+stack: 1501 (`fabrikalfa/effect-mechanical`) on main, then 1507
+(`fabrikalfa/antislop-mechanical`) on 1501, then 1301 (TestDatabase) on 1507. They stop
+re-merging main. Never push to `fabrikalfa/effect-mechanical` or `fabrikalfa/antislop-mechanical`
+while the stack is built; a change there goes to the twin, which mails the merge session first.
+Effect mechanical round 2 bases on `fabrikalfa/effect-mechanical`, and any anti-slop mechanical
+follow-up on `fabrikalfa/antislop-mechanical`, never on main. A judgment slice keeps its own branch,
+and folds onto the stack's top only once the stack lands, never onto a stale main.
+
 **After a worktree agent moves its checkout to the branch head,** check `git status`. If the index
 or files still hold the old content, restore them with `git checkout HEAD -- <paths>` before you
 read or test anything (seen twice on 2026-11-16).
