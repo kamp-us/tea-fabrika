@@ -109,6 +109,15 @@
                 "catchToOrElseSucceed": "error"
               }
             }
+          },
+          // These folders: flatMapConditionalToFilterOrFail (E18).
+          {
+            "include": ["src/processes/**/*.ts", "src/telemetry/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "flatMapConditionalToFilterOrFail": "error"
+              }
+            }
           }
         ]
       }

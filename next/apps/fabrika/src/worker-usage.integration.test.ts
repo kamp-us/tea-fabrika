@@ -123,7 +123,12 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
       (frame) => frame !== undefined || socket.readyState === WebSocket.CLOSED,
       "the signed client received no matching frame within 10 seconds",
     ).pipe(
-      Effect.flatMap((frame) => (frame === undefined ? Effect.die("the signed client closed") : Effect.succeed(frame))),
+      Effect.filterOrFail(
+        (frame) => frame !== undefined,
+        () => "the signed client closed",
+      ),
+      // The look cannot fail, so this only turns the filter's failure back into the die it was.
+      Effect.orDie,
     );
   let serial = 0;
   const call = Effect.fnUntraced(function* (method: string, params: unknown) {

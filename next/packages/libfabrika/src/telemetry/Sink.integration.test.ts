@@ -480,13 +480,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0 ? Effect.fail(new SinkError({ reason: value, held: 0 })) : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: value, held: 0 }),
                     ),
+                  ),
               };
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
               expect(count(db, "unsent")).toBe(4);
@@ -681,15 +680,12 @@ describe("p98, a span that ends is never dropped", () => {
               const lossy = {
                 ...real,
                 write: (...args: Parameters<typeof real.write>) =>
-                  real
-                    .write(...args)
-                    .pipe(
-                      Effect.flatMap((written) =>
-                        lose-- > 0
-                          ? Effect.fail(new SinkError({ reason: "unreachable", held: 0 }))
-                          : Effect.succeed(written),
-                      ),
+                  real.write(...args).pipe(
+                    Effect.filterOrFail(
+                      () => lose-- <= 0,
+                      () => new SinkError({ reason: "unreachable", held: 0 }),
                     ),
+                  ),
               };
               yield* Effect.exit(flush.pipe(Effect.provideService(RecordManager, lossy)));
               expect(count(db, "unsent")).toBe(2);
