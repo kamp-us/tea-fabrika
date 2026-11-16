@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path, type Scope } from "effect";
+import { layer } from "@effect/vitest";
+import { Effect, FileSystem, Path } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { load, reached, scriptReads } from "./script-reads.mjs";
@@ -32,10 +33,6 @@ const forms = (from: string, path: string, form: number) => {
 };
 
 const none = () => false;
-
-// Edge: Vitest awaits the Promise a test hands back. The scope gives the temp folder back.
-const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
-  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 
 /** A generated tree, and for each test the set of files its edges reach. */
 const build = ({ skills, tests, form }: Model) => {
@@ -339,9 +336,12 @@ describe("scriptReads", () => {
   });
 });
 
-describe("load", () => {
-  it("scenario: a folder on disk, since nothing else checks what load reads and the lint and the Vitest plugin both trust it", () =>
-    ran(
+// The block shares one platform layer, which holds no state of its own, and `it.effect` gives each
+// test a scope that gives the temp folder back.
+layer(NodeServices.layer)("load", (it) => {
+  it.effect(
+    "scenario: a folder on disk, since nothing else checks what load reads and the lint and the Vitest plugin both trust it",
+    () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
@@ -381,5 +381,5 @@ describe("load", () => {
         });
         expect(scriptReads(tree, exists, prose)).toEqual({ raw: [], unreached: [`${scripts}/lost.sh`] });
       }),
-    ));
+  );
 });
