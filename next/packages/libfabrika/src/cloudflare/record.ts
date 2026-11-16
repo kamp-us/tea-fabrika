@@ -80,6 +80,7 @@ export const RecordPartLive = RecordPart.make(
     const Legacy = Schema.Struct({
       limits: Schema.optionalKey(Schema.Struct({ recordBytes: Schema.Int.check(Schema.isGreaterThan(0)) })),
     });
+    // SAFETY: Alchemy types the Worker's `env` as `Record<string, any>`; the Brain Worker in next/apps/fabrika/alchemy.run.ts binds every key `Env` names.
     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: Alchemy supplies the Worker's typed binding handles
     const bindings = env as unknown as Env;
     const recorded = recordedLayer(bindings);
@@ -99,6 +100,7 @@ export const RecordPartLive = RecordPart.make(
     const cap = settingsFailure(owner.context).pipe(
       Effect.map((context) => Context.get(context, RecordedStart).input.limits?.recordBytes),
     );
+    // SAFETY: Alchemy's `fromDurableObjectState` stores workerd's own state object as `raw`, typed through its import of the `@cloudflare/workers-types` module rather than the global `DurableObjectState` this file uses.
     // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw storage until PR 8; not reported, 0042 amendment 2026-11-09
     const raw = state.raw as unknown as DurableObjectState;
     return Effect.succeed({

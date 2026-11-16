@@ -124,6 +124,7 @@ export const machine = Machine.make({
   model: Model,
   msg: Msg,
   cmds: [],
+  // SAFETY: `types` is a phantom slot that only carries the Ctx type, and tea never reads its value; `init` decodes the real ctx with `Config`.
   types: { ctx: {} as typeof Config.Type },
   init: (loaded, ctx) => {
     const config = Schema.decodeUnknownSync(Config)(ctx);

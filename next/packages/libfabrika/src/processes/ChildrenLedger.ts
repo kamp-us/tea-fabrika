@@ -378,6 +378,7 @@ export const layer = (config: {
       const start = Effect.fn("children.start")(
         function* (input: Child, from: From) {
           // Decode first: the name is judged before any other field.
+          // SAFETY: `input` comes over the Project's `processChild` RPC unchecked, so it may not be a `Child`; the cast only widens it to an optional unknown `name`, and `decodeChild` checks the rest below.
           if (!isName((input as { readonly name?: unknown } | undefined)?.name)) {
             return yield* refuse("bad_name");
           }

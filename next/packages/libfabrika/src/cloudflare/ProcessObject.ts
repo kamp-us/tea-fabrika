@@ -67,6 +67,7 @@ export const layer = (options: {
         LOADER: env.LOADER,
         MEASUREMENTS: env.MEASUREMENTS,
       };
+      // SAFETY: Alchemy's `fromDurableObjectState` stores workerd's own state object as `raw`, typed through its import of the `@cloudflare/workers-types` module rather than the global `DurableObjectState` this file uses.
       // oxlint-disable-next-line fabrika/no-type-assertions -- edge: raw state until S5 and S6; not reported, 0042 amendment 2026-11-09
       const raw = state.raw as unknown as DurableObjectState;
       const service = ObjectService.make(
