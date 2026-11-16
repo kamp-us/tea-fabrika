@@ -395,8 +395,6 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
       const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
       fc.assert(
         fc.property(fc.commands([commandArb], { maxCommands: 70, size: "max" }), (commands) => {
-          sync(
-            Effect.scoped(
               Effect.gen(function* () {
                 const context = yield* Layer.build(testLayer);
                 const real = { host: Context.get(context, CodeHost), control: Context.get(context, Control) };
@@ -410,9 +408,7 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
                   }),
                   commands,
                 );
-              }),
-            ),
-          );
+          }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 100, examples: [[collisionWalk]] },
       );

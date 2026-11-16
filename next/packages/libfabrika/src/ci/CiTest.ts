@@ -275,8 +275,6 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
 
       fc.assert(
         fc.property(fc.commands([command], { maxCommands: 45 }), run, (commands, first) => {
-          sync(
-            Effect.scoped(
               Effect.gen(function* () {
                 const context = yield* Layer.build(testLayer);
                 const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
@@ -319,9 +317,7 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
                 for (const commit of new Set(Arr.map(reports, (r) => r.commit))) {
                   expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
                 }
-              }),
-            ),
-          );
+          }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 200 },
       );

@@ -29,8 +29,8 @@ const check = { seed: SEED, numRuns: 100 };
 
 /** The three generated outputs for a group, as the generation entry writes them. */
 const outputs = <A>(group: Setting.Group<A>) => ({
-  person: JsonSchema.format(JsonSchema.make(Files.schema(group, "person"))),
-  repo: JsonSchema.format(JsonSchema.make(Files.schema(group, "repo"))),
+  person: Files.schema(group, "person").pipe(JsonSchema.make, JsonSchema.format),
+  repo: Files.schema(group, "repo").pipe(JsonSchema.make, JsonSchema.format),
   reference: Reference.markdown(group),
 });
 
