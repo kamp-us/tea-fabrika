@@ -1,4 +1,7 @@
-// P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
+// P12, next/. The real command is the entry's exported `main`, run here on the law's arguments with
+// Node's services and the law's own layers (0555: nothing stands in for `NodeRuntime.runMain`); no
+// process or socket starts.
+import { NodeServices } from "@effect/platform-node";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
@@ -6,34 +9,21 @@ import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
-
-const cli = vi.hoisted(() => ({
-  work: undefined as Effect.Effect<unknown, unknown> | undefined,
-  layer: undefined as Layer.Layer<ChildProcessSpawner.ChildProcessSpawner> | undefined,
-}));
-
-vi.mock("@effect/platform-node", async (original) => {
-  const actual = await original<typeof import("@effect/platform-node")>();
-  return {
-    ...actual,
-    NodeServices: {
-      get layer() {
-        return Layer.merge(actual.NodeServices.layer, cli.layer ?? Layer.empty);
-      },
-    },
-    NodeRuntime: {
-      runMain: (work: Effect.Effect<unknown, unknown>) => {
-        cli.work = work;
-      },
-    },
-  };
-});
+import { main } from "../grant.ts";
 
 /**
- * Runs the captured command with this run's `fetch` stub as the client's `fetch`. A fresh process
- * reads the global once; here one process runs many laws, and the client would keep the first stub.
+ * Runs the grant command on `args` with this run's `fetch` stub as the client's `fetch`, and the
+ * law's `spawner` in place of Node's, when it gives one. Node's services come last, so a layer of
+ * the law's own wins over them.
  */
-const run = () => Effect.runPromiseExit(cli.work!.pipe(Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch)));
+const run = (args: ReadonlyArray<string>, spawner?: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner>) =>
+  Effect.runPromiseExit(
+    main(args).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, globalThis.fetch),
+      Effect.provide(spawner ?? Layer.empty),
+      Effect.provide(NodeServices.layer),
+    ),
+  );
 
 /** What one `fetch` call puts on the wire: its method, every header, and its body as text. */
 const wire = (options: RequestInit | undefined) => ({
@@ -59,27 +49,12 @@ it("grant command rejects malformed outside URLs as GrantError before fetching o
   );
   await fc.assert(
     fc.asyncProperty(invalid, async (url) => {
-      const argv = process.argv;
       const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
-      process.argv = [
-        process.execPath,
-        "grant.ts",
-        "client",
-        url,
-        "public-fingerprint",
-        "--code=made-up",
-        "--key=unused-key-path",
-      ];
 
       try {
-        cli.work = undefined;
-        vi.resetModules();
-        await import("../grant.ts");
-        expect(cli.work).toBeDefined();
-        typed(await run(), "bad_url");
+        typed(await run(["client", url, "public-fingerprint", "--code=made-up", "--key=unused-key-path"]), "bad_url");
         expect(fetch).not.toHaveBeenCalled();
       } finally {
-        process.argv = argv;
         fetch.mockRestore();
       }
     }),
@@ -103,17 +78,12 @@ it("grant usage guard names the error for each missing argument or flag", async 
       }
 
       // Removing the URL also removes its following positional argument so the CLI cannot shift it.
-      const argv = process.argv;
       const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
-      process.argv = [process.execPath, "grant.ts", ...args];
 
       try {
-        vi.resetModules();
-        await import("../grant.ts");
-        typed(await run(), usage);
+        typed(await run(args), usage);
         expect(fetch).not.toHaveBeenCalled();
       } finally {
-        process.argv = argv;
         fetch.mockRestore();
       }
     }),
@@ -170,7 +140,7 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
       fc.asyncProperty(generated, async (data) => {
         const commands: Array<ChildProcess.Command> = [];
         const signed: Array<string> = [];
-        cli.layer = Layer.succeed(
+        const spawner = Layer.succeed(
           ChildProcessSpawner.ChildProcessSpawner,
           ChildProcessSpawner.make((command) =>
             Effect.gen(function* () {
@@ -230,11 +200,8 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
 
           return Response.json(mode === "target" ? data.badTarget : mode === "waiting" ? null : data.target);
         });
-        const argv = process.argv;
         const log = vi.spyOn(console, "log").mockImplementation(() => {});
-        process.argv = [
-          process.execPath,
-          "grant.ts",
+        const args = [
           "client",
           "http://127.0.0.1:18787/ignored?q=ignored",
           data.fingerprint,
@@ -244,10 +211,8 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
         ];
 
         try {
-          vi.resetModules();
-          await import("../grant.ts");
           const before = Date.now();
-          const exit = await run();
+          const exit = await run(args, spawner);
           const reason = results[mode];
 
           if (reason === null) {
@@ -316,8 +281,6 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
             expect(log).not.toHaveBeenCalled();
           }
         } finally {
-          process.argv = argv;
-          cli.layer = undefined;
           fetch.mockRestore();
           log.mockRestore();
         }
@@ -330,17 +293,12 @@ for (const mode of Object.keys(results) as Array<keyof typeof results>) {
 it("grant reports bad_args when the CLI refuses unknown flags", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), async (flag) => {
-      const argv = process.argv;
       const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("must not fetch"));
-      process.argv = [process.execPath, "grant.ts", `--unknown-${flag}`];
 
       try {
-        vi.resetModules();
-        await import("../grant.ts");
-        typed(await run(), "bad_args");
+        typed(await run([`--unknown-${flag}`]), "bad_args");
         expect(fetch).not.toHaveBeenCalled();
       } finally {
-        process.argv = argv;
         fetch.mockRestore();
       }
     }),

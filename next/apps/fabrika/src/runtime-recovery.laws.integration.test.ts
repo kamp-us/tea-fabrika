@@ -36,25 +36,21 @@ import {
 import { runsFor } from "@kampus/vitest";
 import { Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
-const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
-vi.mock("./table.ts", () => table);
+// P16: the brain entry hands the runtime its built table (0555); these laws hand in this one, filled below.
+const table = { programs: {} as Record<string, { hash: string; source: string }> };
 // Only the platform base class is fake. The box methods run the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
-// P16: the runtime reads its built program table from the build's generated module
-// (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
-vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
 
 // What the Project class hands off: each call runs one service method on the object's runtime.
 const projectObject = (ctx: DurableObjectState, env: Env) => {
-  const runtime = projectRuntime(ctx, env);
+  const runtime = projectRuntime(ctx, env, table.programs);
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
   return {
     runtime,
@@ -108,7 +104,7 @@ type ProjectObject = ReturnType<typeof projectObject>;
 
 // What the Process class hands off, with the same descriptor reads and writes on its handles.
 const processObject = (ctx: DurableObjectState, env: Env) => {
-  const runtime = processRuntime(ctx, env, programs);
+  const runtime = processRuntime(ctx, env, table.programs);
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
   return {
     runtime,

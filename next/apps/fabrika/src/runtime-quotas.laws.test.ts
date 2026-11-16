@@ -36,16 +36,14 @@ import {
 import { runsFor } from "@kampus/vitest";
 import { ByteSize, Clock, Effect, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
-import { programs } from "virtual:fabrika-built";
 import { vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
 
-const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
-vi.mock("./table.ts", () => table);
+// The brain entry hands the runtime its built table (0555); these laws hand in this one, filled below.
+const table = { programs: {} as Record<string, { hash: string; source: string }> };
 // Only the platform base class is fake. The box methods run the real programBox.
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
-vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
@@ -345,7 +343,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
           const processCtx = { id: { name }, storage: handles, exports: loopbacks } as unknown as DurableObjectState;
           const made: Store = { db: processDb, ctx: processCtx, values: handles.values, alarm: null };
           stores.set(storageKey, made);
-          runtimes.set(made, processRuntime(processCtx, env, programs));
+          runtimes.set(made, processRuntime(processCtx, env, table.programs));
           store = made;
         }
 
@@ -451,10 +449,10 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     },
   } as unknown as Env;
   const boot = Effect.sync(() => {
-    projectHeld = projectRuntime(ctx, env);
+    projectHeld = projectRuntime(ctx, env, table.programs);
 
     for (const store of stores.values()) {
-      runtimes.set(store, processRuntime(store.ctx, env, programs));
+      runtimes.set(store, processRuntime(store.ctx, env, table.programs));
     }
   });
   const halt = Effect.gen(function* () {

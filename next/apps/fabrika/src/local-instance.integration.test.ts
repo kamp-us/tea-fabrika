@@ -67,18 +67,12 @@ const filesWithoutSync = Layer.effect(
   ),
 ).pipe(Layer.provideMerge(NodeServices.layer));
 
-// A test's folder, its stubbed home and its fetch spy all go back through the test's scope (0061).
-const sandbox = Effect.gen(function* () {
-  const folder = yield* Effect.acquireRelease(
-    Effect.sync(() => mkdtempSync(join(tmpdir(), "p12-m-"))),
-    (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
-  );
-  yield* Effect.acquireRelease(
-    Effect.sync(() => vi.stubEnv("FABRIKA_HOME", folder)),
-    () => Effect.sync(() => vi.unstubAllEnvs()),
-  );
-  return folder;
-});
+// A test's folder and its fetch spy go back through the test's scope (0061). The folder is handed
+// to the code as `home`, and nothing these laws reach reads FABRIKA_HOME (0555: no env stub).
+const sandbox = Effect.acquireRelease(
+  Effect.sync(() => mkdtempSync(join(tmpdir(), "p12-m-"))),
+  (path) => Effect.sync(() => rmSync(path, { recursive: true, force: true })),
+);
 
 const spyOnFetch = (impl: typeof fetch) =>
   Effect.acquireRelease(

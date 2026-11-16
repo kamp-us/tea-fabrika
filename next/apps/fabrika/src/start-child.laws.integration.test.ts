@@ -14,7 +14,7 @@ import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@k
 import { runsFor } from "@kampus/vitest";
 import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
-import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { assert, describe, expect, expectTypeOf, it } from "vitest";
 import {
   childProject,
   childInstance,
@@ -26,24 +26,22 @@ import {
 } from "./start-child.test-support.ts";
 
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
-const CODE = vi.hoisted(() => ({
+const CODE = {
   counter: { hash: "efe899c74558f20b08bbc19bf0228c0c25bddb7871d80bd34ac8b33c030b3698", source: "counter" },
   checklist: { hash: "6da624dba5235ba1f3901c904a78ea41debbfb0d8a488aeba7063dba508d9211", source: "checklist" },
   tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
   child: { hash: "ddc9e669194254cef019a29d3619a2c16592e5d52e1a81e98b01bd52319149a3", source: "child" },
-}));
+};
 
-vi.mock("virtual:fabrika-built", () => ({
-  programs: {
-    "fabrika/counter": CODE.counter,
-    // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
-    "fabrika/checklist": CODE.checklist,
-    // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
-    "fabrika/tezgah": CODE.tezgah,
-    "p42/child": CODE.child,
-  },
-  assets: {},
-}));
+// The built table the Project runs, handed in as the brain entry hands in its own (0555).
+const PROGRAMS = {
+  "fabrika/counter": CODE.counter,
+  // P14 slice 2: the app boots `checklist:1` after `counter:1`, so the table holds its program too.
+  "fabrika/checklist": CODE.checklist,
+  // Desk S2a: the founder's tezgah boots from the boot list, so the table holds its program too.
+  "fabrika/tezgah": CODE.tezgah,
+  "p42/child": CODE.child,
+};
 
 const STARTS = [{ source: "p42/starter", to: "p42/child" }];
 /** Bounded waits tied to observable facts. */
@@ -273,7 +271,7 @@ const projectSecrets = Effect.fnUntraced(function* (
   secret: string,
   tape: Iterable<fc.AsyncCommand<object, SecretWalk>>,
 ) {
-  const fixture = yield* childProject();
+  const fixture = yield* childProject(PROGRAMS);
   const outputs: Record<ChildOutput, Array<string>> = { reply: [], span: [], row: [], log: [] };
   const logger = Logger.make((options) => {
     outputs.log.push(
@@ -499,7 +497,7 @@ const storageCall = Effect.fnUntraced(function* (
     reopen: Effect.Effect<void>,
   ) => Effect.Effect<void, unknown, Scope.Scope>,
 ) {
-  const fixture = yield* childProject();
+  const fixture = yield* childProject(PROGRAMS);
   let scope = yield* Scope.make();
   yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
   let runtime = yield* Scope.provide(scope)(fixture.acquire());
@@ -771,7 +769,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
-          const fixture = yield* childProject();
+          const fixture = yield* childProject(PROGRAMS);
           const scope = yield* Scope.make();
           yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
           const first = yield* Scope.provide(scope)(fixture.acquire());

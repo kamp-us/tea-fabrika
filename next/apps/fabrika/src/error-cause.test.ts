@@ -4,13 +4,11 @@
 // generated input can cause in-process.
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { build } from "./build.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+// The runtime takes its built table from the brain entry, so these laws import it with no table (0555).
 import { type Env, settings } from "./runtime.ts";
-
-// The brain reads its embedded tables from the build's generated module; these laws build nothing.
-vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;

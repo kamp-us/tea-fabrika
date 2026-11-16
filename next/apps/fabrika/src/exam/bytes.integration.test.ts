@@ -5,11 +5,11 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
+import { Bundler } from "@kampus/libfabrika/node/build/Bundler";
 import { runsFor } from "@kampus/vitest";
-import { Arbitrary, Effect, FileSystem, Path, Schema } from "effect";
+import { Arbitrary, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import * as fc from "fast-check";
-import type { Plugin, RolldownPluginOption } from "rolldown";
-import { vi } from "vitest";
+import type { Plugin } from "rolldown";
 import { build } from "../build.ts";
 
 type Module = {
@@ -36,7 +36,7 @@ type Observed = {
   readonly assets: ReadonlyArray<string>;
 };
 
-const observations = vi.hoisted(() => ({ builds: [] as Observed[] }));
+const observations = { builds: [] as Observed[] };
 
 const moduleReport = (modules: ReadonlyArray<string>): string =>
   modules.map((id) => `P8 module: ${JSON.stringify(id)}\n`).join("");
@@ -60,67 +60,65 @@ it("L7: module reports keep every id on its own line below 4096 characters", () 
   );
 });
 
-// This wrapper calls the actual Rolldown API. The only clean-build option change is the observer.
-vi.mock("rolldown", async (original) => {
-  const real = await original<typeof import("rolldown")>();
-  return {
-    ...real,
-    rolldown: (options: Parameters<typeof real.rolldown>[0]) => {
-      const observer: Plugin = {
-        name: "p8-passive-observer",
-        generateBundle(_options, output) {
-          const ids = new Set(this.getModuleIds());
-          const modules = [...ids].map((id) => {
-            const info = this.getModuleInfo(id);
+// Every Rolldown run of the build goes through libfabrika's Bundler (0555: the bundler is a service,
+// and this law is not the wrapper's own). The law's Bundler runs the real `bundle`, which calls the
+// actual Rolldown API; the only option change is the observer plugin, added last.
+const observedBundle = (...[input, plugins, more]: Parameters<typeof bundle>) => {
+  const observer: Plugin = {
+    name: "p8-passive-observer",
+    generateBundle(_options, output) {
+      const ids = new Set(this.getModuleIds());
+      const modules = [...ids].map((id) => {
+        const info = this.getModuleInfo(id);
 
-            if (info === null) {
-              throw new Error(`Rolldown omitted module info: ${id}`);
-            }
+        if (info === null) {
+          throw new Error(`Rolldown omitted module info: ${id}`);
+        }
 
-            return {
-              id,
-              imports: [...info.importedIds],
-              dynamic: [...info.dynamicallyImportedIds],
-              external: false,
-              code: info.code ?? "",
-            };
-          });
-          const chunks = Object.values(output).flatMap((o) =>
-            o.type === "chunk"
-              ? [
-                  {
-                    file: o.fileName,
-                    code: o.code,
-                    imports: [...o.imports],
-                    dynamic: [...o.dynamicImports],
-                    modules: Object.keys(o.modules),
-                  },
-                ]
-              : [],
-          );
+        return {
+          id,
+          imports: [...info.importedIds],
+          dynamic: [...info.dynamicallyImportedIds],
+          external: false,
+          code: info.code ?? "",
+        };
+      });
+      const chunks = Object.values(output).flatMap((o) =>
+        o.type === "chunk"
+          ? [
+              {
+                file: o.fileName,
+                code: o.code,
+                imports: [...o.imports],
+                dynamic: [...o.dynamicImports],
+                modules: Object.keys(o.modules),
+              },
+            ]
+          : [],
+      );
 
-          // Rolldown 1.2.13 has no Rollup isExternal field. Its external edges have no
-          // parsed module; retain those resolved IDs alongside emitted imports.
-          for (const id of new Set([
-            ...modules.flatMap((m) => [...m.imports, ...m.dynamic]),
-            ...chunks.flatMap((c) => [...c.imports, ...c.dynamic]),
-          ])) {
-            if (!ids.has(id)) {
-              modules.push({ id, imports: [], dynamic: [], external: true, code: "" });
-            }
-          }
+      // Rolldown 1.2.13 has no Rollup isExternal field. Its external edges have no
+      // parsed module; retain those resolved IDs alongside emitted imports.
+      for (const id of new Set([
+        ...modules.flatMap((m) => [...m.imports, ...m.dynamic]),
+        ...chunks.flatMap((c) => [...c.imports, ...c.dynamic]),
+      ])) {
+        if (!ids.has(id)) {
+          modules.push({ id, imports: [], dynamic: [], external: true, code: "" });
+        }
+      }
 
-          const assets = Object.values(output).flatMap((o) =>
-            o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
-          );
-          observations.builds.push({ input: options.input, modules, chunks, assets });
-        },
-      };
-      const plugins: Array<RolldownPluginOption> = Array.isArray(options.plugins) ? options.plugins : [options.plugins];
-      return real.rolldown({ ...options, plugins: [...plugins, observer] });
+      const assets = Object.values(output).flatMap((o) =>
+        o.type === "asset" ? [typeof o.source === "string" ? o.source : new TextDecoder().decode(o.source)] : [],
+      );
+      observations.builds.push({ input, modules, chunks, assets });
     },
   };
-});
+  return bundle(input, [...plugins, observer], more);
+};
+
+/** The law's Bundler: the real one, observed. */
+const observed = Layer.succeed(Bundler, { bundle: observedBundle });
 
 const options = { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 20 }), size: 128, concurrency: 1 } };
 
@@ -282,7 +280,7 @@ it.effect(
           built,
         ),
       ).toThrow();
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, observed])),
   60_000,
 );
 
@@ -371,7 +369,7 @@ it.effect(
           control.built,
         ),
       ).toThrow();
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, observed])),
   60_000,
 );
 
@@ -393,7 +391,7 @@ it.effect.prop(
       const call = tab.observed.find(tabCall(tab.entry))!;
       expect(call.assets, "the page is one of the tab call's own emitted assets").toContain(page!.body);
       expect(tab.observed.filter(isWindow)).toHaveLength(1);
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, observed])),
   { arbitrary: { ...options.arbitrary, runs: runsFor({ fast: 3, full: 3 }) } },
 );
 
@@ -485,7 +483,7 @@ it.effect.prop(
           );
         }
 
-        yield* bundle(path.join(folder, "m0.ts"), []);
+        yield* Bundler.use((b) => b.bundle(path.join(folder, "m0.ts"), []));
         const graph = observations.builds[start];
 
         if (!graph) {
@@ -513,16 +511,18 @@ it.effect.prop(
             `export const text = ${JSON.stringify(g.text)}; ${style === "dynamic" ? `export const bad = () => import(${JSON.stringify(forbidden)});` : `export * from ${JSON.stringify(forbidden)};`}`,
           );
           const n = observations.builds.length;
-          yield* bundle(path.join(folder, "m0.ts"), [
-            {
-              name: "p8-forbidden-external",
-              resolveId(id) {
-                if (id === forbidden) {
-                  return { id, external: true };
-                }
+          yield* Bundler.use((b) =>
+            b.bundle(path.join(folder, "m0.ts"), [
+              {
+                name: "p8-forbidden-external",
+                resolveId(id) {
+                  if (id === forbidden) {
+                    return { id, external: true };
+                  }
+                },
               },
-            },
-          ]);
+            ]),
+          );
           const bad = observations.builds[n];
 
           if (!bad) {
@@ -539,6 +539,6 @@ it.effect.prop(
           ).toThrow();
         }
       }
-    }).pipe(Effect.provide(NodeServices.layer)),
+    }).pipe(Effect.provide([NodeServices.layer, observed])),
   options,
 );

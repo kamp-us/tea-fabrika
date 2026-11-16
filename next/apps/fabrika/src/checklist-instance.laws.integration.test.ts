@@ -39,7 +39,6 @@ import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Schema } from "effect";
 import * as fc from "fast-check";
-import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
@@ -51,10 +50,9 @@ const CODE = {
   tezgah: { hash: "a789b5dbd2d82dbed50bc81e9689731dfbb2e3a068c8373ee22182129a7ceb41", source: "tezgah" },
 };
 
-const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
-vi.mock("./table.ts", () => table);
+// The brain entry hands the runtime its built table (0555); these laws hand in this one, filled per law.
+const table = { programs: {} as Record<string, { hash: string; source: string }> };
 vi.mock("cloudflare:workers", () => ({ WorkerEntrypoint: class {} }));
-vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 const SEED = 119120;
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -170,13 +168,13 @@ const storage = (db: DatabaseSync, alarm?: (at: number | null) => void) => {
 };
 
 const projectObject = (ctx: DurableObjectState, env: Env) => {
-  const runtime = projectRuntime(ctx, env);
+  const runtime = projectRuntime(ctx, env, table.programs);
   const run = <A, E>(use: (p: ProjectCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProjectService.use(use));
   return { runtime, run, exit: () => runtime.runPromiseExit(ProjectService) };
 };
 
 const processObject = (ctx: DurableObjectState, env: Env) => {
-  const runtime = processRuntime(ctx, env, built);
+  const runtime = processRuntime(ctx, env, table.programs);
   const run = <A, E>(use: (p: ProcessCalls) => Effect.Effect<A, E>) => runtime.runPromise(ProcessService.use(use));
   return {
     runtime,
@@ -201,7 +199,7 @@ type Heard = { readonly client: string; readonly news: unknown };
 const world = (options: { readonly lacks?: string } = {}) =>
   Effect.acquireRelease(
     Effect.sync(() => {
-      // In place: the mocked modules hold this very object, so a new one would never reach them.
+      // In place: every runtime of the world is handed this very object, so each law fills it anew.
       Object.assign(table.programs, {
         "fabrika/counter": CODE.counter,
         "fabrika/checklist": CODE.checklist,

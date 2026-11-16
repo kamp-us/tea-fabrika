@@ -30,12 +30,12 @@ const hash = (s: string) => createHash("sha256").update(s).digest("hex");
 // names (0042, tests included).
 type Platform = Parameters<typeof workerLoader>[0];
 
+// Each law hands its home to the code as `home`; no code these laws reach reads FABRIKA_HOME or
+// TYPESAFE_API_KEY, and local-instance.ts sets DO_NOT_TRACK itself before Alchemy loads (0555: no
+// process environment is stubbed).
 const home = () => {
   const h = mkdtempSync("/tmp/fh.");
   homes.push(h);
-  vi.stubEnv("FABRIKA_HOME", h);
-  vi.stubEnv("TYPESAFE_API_KEY", undefined);
-  vi.stubEnv("DO_NOT_TRACK", "1");
   return h;
 };
 
@@ -148,7 +148,6 @@ afterEach(() => {
   vi.doUnmock("alchemy");
   vi.doUnmock("@alchemy.run/cloudflare");
   vi.resetModules();
-  vi.unstubAllEnvs();
 
   for (const h of homes.splice(0)) {
     rmSync(h, { recursive: true, force: true });

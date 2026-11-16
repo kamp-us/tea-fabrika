@@ -1,48 +1,14 @@
 // T737 D7, next/. The app names a door input by its `type` with Predicate now. This law takes the
-// callback the runtime really composes: `projectRuntime` builds its project layer, the layer's door
-// builds the Gateway layer, and both are captured here. An independent copy of the guard before that
-// change is the oracle: the same name, and the same reads of `type` in the same order.
-import { RecordedStart } from "@kampus/libfabrika";
+// callback the runtime hands the Gateway as `inputs.name`, which runtime.ts exports as `inputName`
+// (0555: a value handed in, where the law once captured it through mocks of the project runtime and
+// the door). An independent copy of the guard before that change is the oracle: the same name, and
+// the same reads of `type` in the same order.
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
-import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
-import { Effect, Exit, Layer, Result } from "effect";
+import { Effect, Exit, Result } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
-import { describe, expect, it, vi } from "vitest";
-import * as RecordWireTest from "./record-wire.test-support.ts";
-import { projectRuntime, settings as decodeSettings } from "./runtime.ts";
-
-const held = vi.hoisted(() => ({ project: [] as Array<unknown>, door: [] as Array<unknown> }));
-
-vi.mock("virtual:fabrika-built", () => ({ programs: {}, assets: {} }));
-vi.mock("@kampus/libfabrika/workers/gateway", () => ({ connectionLayer: () => Layer.empty }));
-
-vi.mock("@kampus/libfabrika/workers/runtime", async (original) => ({
-  ...(await original<typeof import("@kampus/libfabrika/workers/runtime")>()),
-  projectRuntime: (_ctx: unknown, _env: unknown, options: unknown) => {
-    held.project.push(options);
-    return { runPromise: Effect.runPromise, dispose: async () => {} };
-  },
-}));
-
-vi.mock("./door.ts", () => ({
-  Gateway: {
-    pipe: (f: (self: Effect.Effect<void>) => unknown) => f(Effect.void),
-    layer: (options: unknown) => {
-      held.door.push(options);
-      return Layer.empty;
-    },
-  },
-}));
-
-const settings = {
-  name: "fabrika",
-  person: "person",
-  founder: "founder",
-  window: null,
-  port: 8123,
-  build: "b",
-};
+import { describe, expect, it } from "vitest";
+import { settings as decodeSettings, inputName } from "./runtime.ts";
 
 const decode = (env: unknown): ReturnType<typeof decodeSettings> => Reflect.apply(decodeSettings, undefined, [env]);
 
@@ -59,32 +25,6 @@ StartsTest.law(
       expect(Exit.isFailure(bad)).toBe(true);
     }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );
-
-/** The `inputs.name` callback, as the runtime composes it. */
-const composedName = async (): Promise<(m: unknown) => string | undefined> => {
-  const ctx: unknown = { id: { name: "project-a" } };
-  const input = RecordWireTest.settingsFixture(settings);
-  const env = { INSTANCE: JSON.stringify(input) };
-  const runtime: ReturnType<typeof projectRuntime> = Reflect.apply(projectRuntime, undefined, [ctx, env]);
-  await runtime.runPromise(Effect.void);
-  await runtime.dispose();
-  const project = held.project.at(-1);
-  const door = typeof project === "object" && project !== null ? Reflect.get(project, "door") : undefined;
-  expect(typeof door).toBe("function");
-  const checked = await Effect.runPromise(readSettings(env));
-  // The door is read off an untyped capture, so its Effect is named here, as `runtime` is above.
-  const built: Effect.Effect<unknown, unknown, RecordedStart> = Reflect.apply(door, undefined, [
-    { deliver: () => Effect.void },
-  ]);
-  await Effect.runPromise(
-    built.pipe(Effect.provideService(RecordedStart, { ...checked, receipt: StartsTest.receipt(input) })),
-  );
-  const options = held.door.at(-1);
-  const inputs = typeof options === "object" && options !== null ? Reflect.get(options, "inputs") : undefined;
-  const name = typeof inputs === "object" && inputs !== null ? Reflect.get(inputs, "name") : undefined;
-  expect(typeof name).toBe("function");
-  return (m) => Reflect.apply(name, undefined, [m]);
-};
 
 const oldName = (m: unknown) =>
   typeof m === "object" && m !== null && "type" in m && typeof m.type === "string" ? m.type : undefined;
@@ -185,8 +125,9 @@ const answer = (f: (m: unknown) => string | undefined, r: Message) => {
 };
 
 describe("T737 D7 the app's message-name callback equals its old guard, next/", () => {
-  it("names generated messages as the old guard did, with the same reads of type", async () => {
-    const name = await composedName();
+  // Plant (run once): in runtime.ts, have `inputName` read `m.type` before its guard; the trace differs.
+  it("names generated messages as the old guard did, with the same reads of type", () => {
+    const name: (m: unknown) => string | undefined = inputName;
     const seen = new Set<string>();
     fc.assert(
       fc.property(Message, (r) => {

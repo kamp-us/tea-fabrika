@@ -1,14 +1,17 @@
-// P12, next/. Run the real build and dev command with a recorded FileSystem and Path layer.
-import { createHash } from "node:crypto";
+// P12, next/. Run the real build and dev command with a recorded FileSystem and Path layer. dev.ts's
+// command is its exported `main`, run on each law's arguments and settings (0555).
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import { Bundler } from "@kampus/libfabrika/node/build/Bundler";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
 import { runsFor } from "@kampus/vitest";
 import {
   Arbitrary,
   Cause,
+  ConfigProvider,
   Effect,
   Exit,
   FileSystem,
@@ -24,34 +27,53 @@ import {
 import { ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
+import { main } from "../dev.ts";
 import { build } from "./build.ts";
 import { Row } from "./exam/compiler.ts";
 
-const cli = vi.hoisted(() => ({
-  work: undefined as Effect.Effect<unknown, unknown> | undefined,
-  layer: undefined as
-    | Layer.Layer<FileSystem.FileSystem | Path.Path>
-    | Layer.Layer<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner>
-    | undefined,
-}));
+// The instance records each start's options, so a law sees the port it was started with. dev.ts is
+// handed this start in place of the real local instance (0555: a value handed in).
+const instances: Array<{ readonly port: number }> = [];
 
-vi.mock("@effect/platform-node", async (original) => {
-  const actual = await original<typeof import("@effect/platform-node")>();
-  return {
-    ...actual,
-    NodeServices: {
-      get layer() {
-        return cli.layer ?? actual.NodeServices.layer;
-      },
-    },
-    NodeRuntime: {
-      ...actual.NodeRuntime,
-      runMain: (work: Effect.Effect<unknown, unknown>) => {
-        cli.work = work;
-      },
-    },
-  };
+const start = (
+  _built: unknown,
+  options: { readonly settings: { readonly values: Readonly<Record<string, unknown>> } },
+) =>
+  Effect.suspend(() => {
+    instances.push({ port: Number(options.settings.values["instance.port"]) });
+    return Effect.fail({ reason: "test_instance_ready" });
+  });
+
+// Bundler output is platform input here. Compiler behavior has its own real-build laws. Every
+// Rolldown run of the build, its programs included, goes through the Bundler this law hands in.
+const bundler = Layer.mock(Bundler, {
+  bundle: (_input, _plugins, options) =>
+    Effect.succeed({
+      output: [
+        { type: "chunk", fileName: "brain.mjs", code: "export default {};" },
+        ...(options?.phase === "tab"
+          ? [{ type: "asset", fileName: "index.html", source: '<!doctype html><script src="/window.js"></script>' }]
+          : []),
+      ],
+    }),
 });
+
+/**
+ * Runs dev.ts's exported command on `args`, with the law's `layer` first, `env` as the only settings
+ * Effect's `Config` reads (0555: in place of `vi.stubEnv`), the law's instance start and Bundler, and
+ * Node's services last, so a service the law gives wins over Node's.
+ */
+const dev = <E, R>(
+  args: ReadonlyArray<string>,
+  layer: Layer.Layer<FileSystem.FileSystem | Path.Path | R, E>,
+  env: Readonly<Record<string, string>> = {},
+) =>
+  main(args, start).pipe(
+    Effect.provide(layer),
+    Effect.provide(bundler),
+    Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(env))),
+    Effect.provide(NodeServices.layer),
+  );
 
 const instanceFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
@@ -75,21 +97,10 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
   );
   await fc.assert(
     fc.asyncProperty(invalid, async (parent) => {
-      const argv = process.argv;
       const touched = vi.fn(() => Effect.never);
-      cli.layer = Layer.merge(FileSystem.layerNoop({ makeDirectory: touched }), Path.layer);
-      process.argv = [process.execPath, "dev.ts", "--child", `--parent=${parent}`];
-
-      try {
-        vi.resetModules();
-        await import("../dev.ts");
-        instanceFailure(await Effect.runPromiseExit(cli.work!), "parent_gone");
-        expect(touched).not.toHaveBeenCalled();
-      } finally {
-        process.argv = argv;
-        cli.layer = undefined;
-        cli.work = undefined;
-      }
+      const layer = Layer.merge(FileSystem.layerNoop({ makeDirectory: touched }), Path.layer);
+      instanceFailure(await Effect.runPromiseExit(dev(["--child", `--parent=${parent}`], layer)), "parent_gone");
+      expect(touched).not.toHaveBeenCalled();
     }),
     { seed: 119120, numRuns: runsFor({ fast: 4, full: 30 }), examples: [["1"], ["1.5"]] },
   );
@@ -98,7 +109,6 @@ it("dev refuses every invalid parent with reason parent_gone before touching set
 it("dev defaults to a scoped detached child and reports its nonzero exit as child_failed", async () => {
   await fc.assert(
     fc.asyncProperty(fc.uuid(), fc.integer({ min: 0, max: 255 }), async (name, code) => {
-      const argv = process.argv;
       const commands: Array<import("effect/process/ChildProcess").Command> = [];
       const spawn = Layer.succeed(
         ChildProcessSpawner.ChildProcessSpawner,
@@ -121,38 +131,28 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
           }),
         ),
       );
-      cli.layer = Layer.mergeAll(FileSystem.layerNoop({}), Path.layer, spawn);
-      process.argv = [process.execPath, "dev.ts", "--name", name];
+      const layer = Layer.mergeAll(FileSystem.layerNoop({}), Path.layer, spawn);
+      const exit = await Effect.runPromiseExit(dev(["--name", name], layer));
 
-      try {
-        vi.resetModules();
-        await import("../dev.ts");
-        const exit = await Effect.runPromiseExit(cli.work!);
-
-        if (code === 0) {
-          expect(Exit.isSuccess(exit)).toBe(true);
-        } else {
-          instanceFailure(exit, "child_failed");
-        }
-
-        expect(commands).toHaveLength(1);
-        expect(commands[0]).toMatchObject({
-          _tag: "StandardCommand",
-          command: process.execPath,
-          args: [resolve(import.meta.dirname, "../dev.ts"), "--name", name, "--child", `--parent=${process.pid}`],
-          options: {
-            detached: true,
-            stdin: "inherit",
-            stdout: "inherit",
-            stderr: "inherit",
-            forceKillAfter: "3 seconds",
-          },
-        });
-      } finally {
-        process.argv = argv;
-        cli.layer = undefined;
-        cli.work = undefined;
+      if (code === 0) {
+        expect(Exit.isSuccess(exit)).toBe(true);
+      } else {
+        instanceFailure(exit, "child_failed");
       }
+
+      expect(commands).toHaveLength(1);
+      expect(commands[0]).toMatchObject({
+        _tag: "StandardCommand",
+        command: process.execPath,
+        args: [resolve(import.meta.dirname, "../dev.ts"), "--name", name, "--child", `--parent=${process.pid}`],
+        options: {
+          detached: true,
+          stdin: "inherit",
+          stdout: "inherit",
+          stderr: "inherit",
+          forceKillAfter: "3 seconds",
+        },
+      });
     }),
     { seed: 119120, numRuns: runsFor({ fast: 3, full: 15 }), examples: [["clean-exit", 0]] },
   );
@@ -162,7 +162,6 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
   it(`dev reports ${edge} failure with reason settings and never starts a build`, async () => {
     await fc.assert(
       fc.asyncProperty(fc.uuid(), async (name) => {
-        const argv = process.argv;
         const folder = mkdtempSync(join(tmpdir(), "p12-dev-error-"));
         const failure = PlatformError.systemError({
           module: "FileSystem",
@@ -185,19 +184,15 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
             ),
           [edge]: () => Effect.fail(failure),
         });
-        vi.stubEnv("FABRIKA_HOME", folder);
-        cli.layer = Layer.merge(fs, Path.layer);
-        process.argv = [process.execPath, "dev.ts", "--child", `--parent=${process.ppid}`];
 
         try {
-          vi.resetModules();
-          await import("../dev.ts");
-          instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
+          instanceFailure(
+            await Effect.runPromiseExit(
+              dev(["--child", `--parent=${process.ppid}`], Layer.merge(fs, Path.layer), { FABRIKA_HOME: folder }),
+            ),
+            "settings",
+          );
         } finally {
-          process.argv = argv;
-          cli.layer = undefined;
-          cli.work = undefined;
-          vi.unstubAllEnvs();
           rmSync(folder, { recursive: true, force: true });
         }
       }),
@@ -205,45 +200,6 @@ for (const edge of ["makeDirectory", "readFileString", "writeFileString"] as con
     );
   });
 }
-
-// Bundler output is platform input here. Compiler behavior has its own real-build laws.
-// P16's table check refuses a program whose hash is not its source's own SHA-256 hex.
-vi.mock("@kampus/libfabrika/node/build", async (original) => ({
-  ...(await original<typeof import("@kampus/libfabrika/node/build")>()),
-  bundlePrograms: () =>
-    Effect.succeed({
-      "fabrika/counter": { hash: createHash("sha256").update("counter").digest("hex"), source: "counter" },
-    }),
-  bundle: (_input: unknown, _plugins: unknown, options: { readonly phase?: string }) =>
-    Effect.succeed({
-      output: [
-        { type: "chunk", code: "export default {};" },
-        ...(options.phase === "tab"
-          ? [{ type: "asset", fileName: "index.html", source: '<!doctype html><script src="/window.js"></script>' }]
-          : []),
-      ],
-    }),
-}));
-
-vi.mock("./exam/compiler.ts", async (original) => ({
-  ...(await original<typeof import("./exam/compiler.ts")>()),
-  compile: (_file: string, code: string) => ({ code }),
-  check: () => [],
-}));
-
-// The instance records each start's options, so a law sees the port it was started with.
-const instances = vi.hoisted(() => [] as Array<{ readonly port: number }>);
-
-vi.mock("./local-instance.ts", () => ({
-  localInstance: (
-    _built: unknown,
-    options: { readonly settings: { readonly values: Readonly<Record<string, unknown>> } },
-  ) =>
-    Effect.suspend(() => {
-      instances.push({ port: Number(options.settings.values["instance.port"]) });
-      return Effect.fail({ reason: "test_instance_ready" });
-    }),
-}));
 
 const root = resolve(import.meta.dirname, "../../../..");
 
@@ -379,7 +335,7 @@ for (const failed of [false, true]) {
 
         try {
           const result = await Effect.runPromiseExit(
-            build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)),
+            build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer), Effect.provide(bundler)),
           );
           // P14 slice 2 (ticket 828): the app's build selects its tab, so the tab's three stylesheets are
           // read through the same FileSystem too, and every read still comes before the first write.
@@ -472,11 +428,6 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         }
 
         writeFileSync(source, "export const view = 1;");
-        const argv = process.argv;
-        vi.stubEnv("FABRIKA_HOME", folder);
-        vi.stubEnv("FABRIKA_INSTANCE_PORT", undefined);
-        cli.layer = w.layer;
-        cli.work = undefined;
         instances.length = 0;
         const overrides = {
           name,
@@ -490,9 +441,7 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
             choices[field as keyof typeof overrides] ||
             (!choices.saved && ["name", "person", "founder"].includes(field)),
         );
-        process.argv = [
-          process.execPath,
-          "dev.ts",
+        const args = [
           "--child",
           `--parent=${process.ppid}`,
           ...selected.flatMap(([field, value]) =>
@@ -501,10 +450,8 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
         ];
 
         try {
-          vi.resetModules();
-          await import("../dev.ts");
-          expect(cli.work).toBeDefined();
-          const exit = await Effect.runPromiseExit(cli.work!);
+          // Only FABRIKA_HOME is set: no FABRIKA_INSTANCE_PORT of this machine reaches the start.
+          const exit = await Effect.runPromiseExit(dev(args, w.layer, { FABRIKA_HOME: folder }));
           expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
             _tag: "Some",
             value: { reason: "test_instance_ready" },
@@ -532,10 +479,6 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           expect(savedAt).toBeLessThan(buildAt);
           expect(w.paths).toContainEqual([folder, "instance.json"]);
         } finally {
-          process.argv = argv;
-          cli.layer = undefined;
-          cli.work = undefined;
-          vi.unstubAllEnvs();
           rmSync(folder, { recursive: true, force: true });
         }
       },
@@ -585,15 +528,6 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               Effect.sync(() => mkdtempSync(join(tmpdir(), "t664-dev-load-"))),
               (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
             );
-            const argv = process.argv;
-            yield* Effect.addFinalizer(() =>
-              Effect.sync(() => {
-                process.argv = argv;
-                cli.layer = undefined;
-                cli.work = undefined;
-                vi.unstubAllEnvs();
-              }),
-            );
             const source = join(folder, "view.tsx"),
               person = join(folder, "fabrika.toml");
             const w = recorded(
@@ -608,22 +542,18 @@ it("L11: no failed settings load reaches the instance write, the build or the in
               w.files.set(person, failure.body);
             }
 
-            vi.stubEnv("FABRIKA_HOME", folder);
-            vi.stubEnv("FABRIKA_INSTANCE_PORT", failure.kind === "env" ? failure.body : undefined);
-            cli.layer = w.layer;
             instances.length = 0;
-            process.argv = [
-              process.execPath,
-              "dev.ts",
+            const args = [
               "--child",
               `--parent=${process.ppid}`,
               ...["name", "person", "founder"].map((field) => `--${field}=${name}`),
               ...(failure.kind === "flag" ? [`--${alias ? "port" : "instance.port"}=${failure.body}`] : []),
             ];
-
-            vi.resetModules();
-            yield* Effect.promise(() => import("../dev.ts"));
-            const exit = yield* Effect.promise(() => Effect.runPromiseExit(cli.work!));
+            const env = {
+              FABRIKA_HOME: folder,
+              ...(failure.kind === "env" ? { FABRIKA_INSTANCE_PORT: failure.body } : {}),
+            };
+            const exit = yield* Effect.promise(() => Effect.runPromiseExit(dev(args, w.layer, env)));
             instanceFailure(exit, "settings");
             // The dev edge translates the load's error and keeps it as the cause.
             expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
@@ -654,27 +584,16 @@ it("dev without saved settings reports settings for each missing required value"
       const folder = mkdtempSync(join(tmpdir(), "p12-empty-"));
       const source = join(folder, "view.tsx");
       const w = recorded(folder, source, "export const view = 1;", false);
-      const argv = process.argv;
-      vi.stubEnv("FABRIKA_HOME", folder);
-      cli.layer = w.layer;
-      process.argv = [
-        process.execPath,
-        "dev.ts",
+      const args = [
         "--child",
         `--parent=${process.ppid}`,
         ...["name", "person", "founder"].filter((field) => field !== missing).map((field) => `--${field}=${name}`),
       ];
 
       try {
-        vi.resetModules();
-        await import("../dev.ts");
-        instanceFailure(await Effect.runPromiseExit(cli.work!), "settings");
+        instanceFailure(await Effect.runPromiseExit(dev(args, w.layer, { FABRIKA_HOME: folder })), "settings");
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
-        process.argv = argv;
-        cli.layer = undefined;
-        cli.work = undefined;
-        vi.unstubAllEnvs();
         rmSync(folder, { recursive: true, force: true });
       }
     }),
@@ -699,7 +618,9 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
       writeFileSync(source, "export const view = 1;");
 
       try {
-        const exit = await Effect.runPromiseExit(build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer)));
+        const exit = await Effect.runPromiseExit(
+          build({ out: w.out, files: [source] }).pipe(Effect.provide(w.layer), Effect.provide(bundler)),
+        );
         expect(Exit.isFailure(exit)).toBe(true);
         const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
         expect(Cause.hasDies(cause)).toBe(false);
@@ -739,17 +660,11 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
       const w = recorded(folder, source, "export const view = 1;", false);
       w.files.set(file, raw);
       writeFileSync(file, raw);
-      const argv = process.argv;
-      vi.stubEnv("FABRIKA_HOME", folder);
-      cli.layer = w.layer;
-      cli.work = undefined;
-      process.argv = [process.execPath, "dev.ts", "--child", `--parent=${process.ppid}`];
 
       try {
-        vi.resetModules();
-        await import("../dev.ts");
-        expect(cli.work).toBeDefined();
-        const exit = await Effect.runPromiseExit(cli.work!);
+        const exit = await Effect.runPromiseExit(
+          dev(["--child", `--parent=${process.ppid}`], w.layer, { FABRIKA_HOME: folder }),
+        );
         expect(Exit.isFailure(exit)).toBe(true);
         const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
         expect(Cause.hasDies(cause)).toBe(false);
@@ -760,10 +675,6 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
         });
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
-        process.argv = argv;
-        cli.layer = undefined;
-        cli.work = undefined;
-        vi.unstubAllEnvs();
         rmSync(folder, { recursive: true, force: true });
       }
     }),
@@ -787,16 +698,6 @@ it.effect.prop(
   ([secret, port, invalid, choices]) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const argv = yield* Effect.acquireRelease(
-          Effect.sync(() => process.argv),
-          (argv) =>
-            Effect.sync(() => {
-              process.argv = argv;
-              cli.layer = undefined;
-              cli.work = undefined;
-              vi.unstubAllEnvs();
-            }),
-        );
         // Only the counted FileSystem sees this home. No real folder or Worker is opened.
         const folder = join(tmpdir(), `t753-saved-port-${choices[0]}`),
           file = join(folder, "instance.json"),
@@ -809,15 +710,11 @@ it.effect.prop(
           window: null,
           build: "old",
         };
-        vi.stubEnv("FABRIKA_HOME", folder);
-        vi.stubEnv(Declarations.port.env, undefined);
-        cli.layer = w.layer;
-        process.argv = [
-          argv[0]!,
-          "dev.ts",
+        // Only FABRIKA_HOME is set, so no port in this machine's environment reaches the start.
+        const args = [
           "--child",
           `--parent=${process.ppid}`,
-          ...["name", "person", "founder"].map((field) => `--${field}=test`),
+          ...["name", "person", "founder"].map((f) => `--${f}=test`),
         ];
 
         for (const choice of choices) {
@@ -849,15 +746,11 @@ it.effect.prop(
           ]);
           const before = w.calls.length;
           instances.length = 0;
-          cli.work = undefined;
-          vi.resetModules();
-          yield* Effect.tryPromise({
-            try: () => import("../dev.ts"),
-            catch: (cause: unknown) => new Error("dev import failed", { cause }),
-          });
-          expect(cli.work).toBeDefined();
           const exit = yield* Effect.exit(
-            cli.work!.pipe(Effect.provide(logger), Effect.provideService(References.MinimumLogLevel, "All")),
+            dev(args, w.layer, { FABRIKA_HOME: folder }).pipe(
+              Effect.provide(logger),
+              Effect.provideService(References.MinimumLogLevel, "All"),
+            ),
           );
 
           for (const entry of entries) {

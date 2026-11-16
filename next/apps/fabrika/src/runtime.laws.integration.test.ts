@@ -26,11 +26,8 @@ import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
 
-const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
-vi.mock("./table.ts", () => table);
-// P16: the brain reads its embedded tables from the build's generated module
-// (libfabrika's build-modules.d.ts). Mocking both keeps these laws on either wiring.
-vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
+// P16: the brain entry hands the runtime its built table (0555); these laws hand in this one, filled below.
+const table = { programs: {} as Record<string, { hash: string; source: string }> };
 
 vi.mock("effect", async (importOriginal) => {
   const actual = await importOriginal<typeof import("effect")>();
@@ -310,7 +307,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   const startup = vi
     .spyOn(Layer, "buildWithMemoMap")
     .mockImplementation((layer, memo, into) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, into));
-  let runtime = projectRuntime(ctx, env);
+  let runtime = projectRuntime(ctx, env, table.programs);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
   // Added before the build, so a world whose build fails or hangs is closed by its scope too. A scope
   // that already closed runs this close at once, so it is awaited, never run synchronously.
@@ -413,14 +410,14 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     reopen: async () => {
       await runtime.dispose();
       table.programs["fabrika/counter"] = built(`changed counter:${build}`);
-      runtime = projectRuntime(ctx, env);
+      runtime = projectRuntime(ctx, env, table.programs);
       const reopened = await run(ProjectService);
       await settled(db);
       return reopened;
     },
     reopenExit: async () => {
       await runtime.dispose();
-      runtime = projectRuntime(ctx, env);
+      runtime = projectRuntime(ctx, env, table.programs);
       return runtime.runPromiseExit(ProjectService);
     },
   };
@@ -802,7 +799,7 @@ describe("P12 Project saved and wire readers", () => {
             typed(
               await Effect.runPromiseExit(
                 Effect.suspend(() => {
-                  runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw });
+                  runtime = projectRuntime(w.ctx, { ...w.env, INSTANCE: raw }, table.programs);
                   return runtime.contextEffect;
                 }),
               ),

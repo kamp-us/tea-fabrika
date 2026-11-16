@@ -1,0 +1,97 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-t1067-mock-app-src-s5-tests1",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-16T00:10:35-08:00",
+  "ended": "2026-11-16T00:46:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 5 of the mock sweep in next/apps/fabrika/src (plan docs/plan/quests/mock-app-src-PLAN.md on fabrikalfa/mock-plans, decision 0555), in next/. Before, the folder held 43 vi.mock, vi.doMock and vi.stubEnv calls on origin/main at b5b68d315 (the plan counted 40 at 0683861; PR 1366 added runtime-quotas.laws.test.ts with three more). This step rewrote 34 of them out of 14 test files: the built table (virtual:fabrika-built, 8) and ./table.ts (4) are handed to the runtime by each law; the door, project-runtime and gateway mocks of runtime.decode.test.ts (3) go, since the law reads the exported inputName; the local-instance mock of file-services (1) becomes a start function handed to dev.ts's exported main; the compiler mock (1) was dead and goes; the node/build mock (1) and the rolldown mock of exam/bytes.integration.test.ts (1) become a Bundler service the law provides; the two @effect/platform-node mocks go, since each entry exports its command as main(args); the 13 vi.stubEnv calls go, 9 in file-services by a ConfigProvider the law provides and 4 in instance-one-file and local-instance because no code those laws reach reads the names (each law hands its home in as `home`). 9 stay: effect (slice 3), 4 Alchemy and 4 cloudflare:workers (0042). Every law was run green against a scratch prototype of the build's product change, then the prototype was removed; on main's product the changed plain files are red because runtime.ts still imports virtual:fabrika-built and grant.ts still calls NodeRuntime.runMain at import. instance-one-file and local-instance need no product change and are green on main.",
+  "laws": [
+    {
+      "law": "next/apps/fabrika/src/runtime.decode.test.ts: names generated messages as the old guard did, with the same reads of type",
+      "red": "Error: Cannot find package 'virtual:fabrika-built' imported from next/apps/fabrika/src/runtime.ts (runtime.ts imports the virtual module and exports no inputName yet)"
+    },
+    {
+      "law": "next/apps/fabrika/src/error-cause.test.ts: C1 and C3",
+      "red": "Error: Cannot find package 'virtual:fabrika-built' imported from next/apps/fabrika/src/runtime.ts"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime-quotas.laws.test.ts: every law",
+      "red": "Error: Cannot find package 'virtual:fabrika-built' imported from next/apps/fabrika/src/runtime.ts"
+    },
+    {
+      "law": "next/apps/fabrika/src/grant-readers.laws.test.ts: every law",
+      "red": "Error: process.exit unexpectedly called with \"1\" (grant.ts runs NodeRuntime.runMain at import and exports no main)"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime.laws.integration.test.ts, runtime-recovery.laws.integration.test.ts, checklist-instance.laws.integration.test.ts, start-member.laws.integration.test.ts, start-child.laws.integration.test.ts: every law",
+      "red": "after build: red on main for the same import of virtual:fabrika-built in runtime.ts; green (49 and 25 tests) against the prototype"
+    },
+    {
+      "law": "next/apps/fabrika/src/file-services.laws.integration.test.ts and next/apps/fabrika/src/exam/bytes.integration.test.ts: every law",
+      "red": "after build: @kampus/libfabrika/node/build/Bundler and dev.ts's main do not exist yet; green (13 and 6 tests) against the prototype"
+    },
+    {
+      "law": "next/apps/fabrika/src/instance-one-file.integration.test.ts and local-instance.integration.test.ts: every law",
+      "red": "not red: no product change is needed; green on main (7 and 3 tests) with the env stubs gone"
+    }
+  ],
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/runtime-quotas.laws.test.ts: Q12 every entry a live call commits is charged to the account of its cause",
+      "plant": "the prototype runtime.ts ignores the handed-in table and gives the project runtime programs: {}",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime.decode.test.ts: names generated messages as the old guard did, with the same reads of type",
+      "plant": "the prototype inputName reads m.type before it checks the key is there",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/file-services.laws.integration.test.ts: dev chooses flags, saved settings or defaults and saves with mode 0600 before building",
+      "plant": "the prototype dev.ts reads process.env.FABRIKA_HOME again in place of Config",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/file-services.laws.integration.test.ts: L11 no failed settings load reaches the instance write",
+      "plant": "the prototype dev.ts reads each declaration's env name from process.env in place of Config, run at the fast depth (its 10 runs draw no env case)",
+      "result": "green"
+    },
+    {
+      "law": "next/apps/fabrika/src/file-services.laws.integration.test.ts: L11 no failed settings load reaches the instance write",
+      "plant": "the same plant at FABRIKA_TEST_DEPTH=full (100 runs); counterexample {kind: env, body: 0}",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/file-services.laws.integration.test.ts: dev defaults to a scoped detached child and reports its nonzero exit as child_failed",
+      "plant": "the prototype dev.ts spawns its child with process.argv.slice(2) in place of the args main was given",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/grant-readers.laws.test.ts: every law",
+      "plant": "the prototype grant.ts main parses process.argv.slice(2) in place of its args",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/file-services.laws.integration.test.ts: build reads and publishes through FileSystem, success",
+      "plant": "the prototype libfabrika build.ts bundles the brain with bundle.ts's bundle directly, past the Bundler",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/bytes.integration.test.ts: the real one-file build's brain, programs and carried texts contain no MCP",
+      "plant": "the same: the brain bundled past the Bundler",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 36,
+  "note": "The prototype (runtime.ts taking the table, brain.ts and objects.ts handing it in, dev.ts and grant.ts exporting main, Config reads in dev.ts, a Context.Reference Bundler with a narrow output shape that libfabrika's build.ts and bundlePrograms read) lived only in the worktree while the laws ran and was removed by git checkout; no product file is committed. Each plant ran once on that prototype and was restored by copy. Tests ran one file group at a time under nice -n 19 with --maxWorkers=1, with no host override, in the box. No typecheck in this step: effect-tsgo diagnostics on next/apps/fabrika ran once against the prototype and showed only diagnostics the prototype's loose types caused.",
+  "step": "tests"
+}

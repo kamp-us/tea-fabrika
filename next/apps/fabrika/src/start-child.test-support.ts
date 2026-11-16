@@ -14,11 +14,11 @@ import type { From } from "@kampus/libfabrika/processes/Mailbox";
 import { Owner, Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import type { BuiltProgram } from "@kampus/libfabrika/runtime/Built";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
-import { programs } from "virtual:fabrika-built";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
@@ -203,8 +203,11 @@ export type ChildFailure =
   | "watch_cleanup"
   | "retire";
 
-/** The real Project service on scoped SQLite, with only the platform handles supplied by the test. */
-export const childProject = Effect.fnUntraced(function* () {
+/**
+ * The real Project service on scoped SQLite, with only the platform handles supplied by the test,
+ * running the built table `programs` the law hands in, as the brain entry hands in its own (0555).
+ */
+export const childProject = Effect.fnUntraced(function* (programs: Readonly<Record<string, BuiltProgram>>) {
   const db = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
     (held) => Effect.sync(() => held.close()),
@@ -392,7 +395,7 @@ export const childProject = Effect.fnUntraced(function* () {
   // Each restart loses service memory but keeps the database and the remote objects' storage.
   const acquire = () =>
     Effect.acquireRelease(
-      Effect.sync(() => projectRuntime(ctx, env)),
+      Effect.sync(() => projectRuntime(ctx, env, programs)),
       // oxlint-disable-next-line fabrika/no-promises -- edge: ManagedRuntime disposal returns a Promise
       (runtime) => Effect.promise(() => runtime.dispose()),
     );
