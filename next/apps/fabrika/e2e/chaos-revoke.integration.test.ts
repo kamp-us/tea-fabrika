@@ -4,8 +4,9 @@ import { createConnection } from "node:net";
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
 import { Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Clock, Effect, Fiber, FileSystem, Layer, Path, Queue, Schema, Stream } from "effect";
+import { Clock, Effect, Fiber, FileSystem, Layer, Path, Predicate, Queue, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "../src/local-instance.ts";
 import { heldPort } from "../src/port.test-support.ts";
@@ -421,7 +422,7 @@ it.live(
         });
         expect(
           yield* RevokeTest.invoke(project, "grant", [{ text: grant, armored: yield* root.proof(grant) }]),
-        ).toMatchObject({ _tag: "applied" });
+        ).toSatisfy(Predicate.isTagged("applied"));
         const other = yield* RevokeTest.connect(instance.url, otherKey, "other");
         expect(other.first.error).toBeUndefined();
         const input = (letter: string, name: string) => ({
@@ -433,7 +434,7 @@ it.live(
         });
         const before = yield* old.call("process.send", input("old-before", "before"));
         expect(before.error).toBeUndefined();
-        expect(before.result).toMatchObject({ _tag: "accepted" });
+        expect(Schema.is(Sent.cases.accepted)(before.result)).toBe(true);
         const hold = (method: string, params: unknown = {}) =>
           RevokeTest.invoke(project, "route", ["p90-control", method, params, "p90-control"]);
         yield* Effect.acquireRelease(hold("p90.arm", { process: pid }), () => hold("p90.release").pipe(Effect.orDie));
@@ -444,10 +445,10 @@ it.live(
           yield* RevokeTest.until(
             hold("p90.status"),
             (answer) =>
-              Schema.is(Schema.Struct({ _tag: Schema.Literal("ok"), result: RevokeHold.Model }))(answer) &&
+              Schema.is(Schema.TaggedStruct("ok", { result: RevokeHold.Model }))(answer) &&
               answer.result._tag === "held",
           ),
-        ).toMatchObject({ result: { _tag: "held", process: pid } });
+        ).toMatchObject({ result: RevokeHold.Model.cases.held.make({ process: pid }) });
         // Nothing has been written yet. The real request has already passed online membership.
         expect((yield* rows("gateway/inputs")).filter((row) => row.by === oldKey.fingerprint)).toHaveLength(1);
         const binding = Chaos.Target.make({
@@ -505,9 +506,9 @@ it.live(
               sentAt: RevokeTest.SENT,
               saw: { label: "Old test client", location: "local", method: "command", check: "none" },
             });
-            expect(
-              yield* RevokeTest.invoke(project, "grant", [{ text, armored: yield* root.proof(text) }]),
-            ).toMatchObject({ _tag: "applied" });
+            expect(yield* RevokeTest.invoke(project, "grant", [{ text, armored: yield* root.proof(text) }])).toSatisfy(
+              Predicate.isTagged("applied"),
+            );
             return Outcome.ok(Chaos.Fired.cases.fired.make({ hit: null }));
           });
         const nemesis = NemesisLedger.layer(() => Effect.die("only the host fire handler revokes")).pipe(
@@ -546,11 +547,13 @@ it.live(
           return yield* Effect.die(new Error("signed revoke is absent from real history"));
         }
 
-        expect(yield* hold("p90.release")).toMatchObject({ result: { _tag: "released", process: pid } });
+        expect(yield* hold("p90.release")).toMatchObject({
+          result: RevokeHold.Model.cases.released.make({ process: pid }),
+        });
         const queued = yield* Fiber.join(delayed);
 
         if (queued._tag === "Success") {
-          expect(queued.value.result).not.toMatchObject({ _tag: "accepted" });
+          expect(Schema.is(Sent.cases.accepted)(queued.value.result)).toBe(false);
           expect(queued.value.error).toBeDefined();
         }
 
@@ -559,7 +562,7 @@ it.live(
           .pipe(Effect.exit);
 
         if (late._tag === "Success") {
-          expect(late.value.result).not.toMatchObject({ _tag: "accepted" });
+          expect(Schema.is(Sent.cases.accepted)(late.value.result)).toBe(false);
           expect(late.value.error).toBeDefined();
         }
 
@@ -568,7 +571,7 @@ it.live(
         expect(fresh.first.error).toMatchObject({ data: { reason: "not_granted" } });
         const live = yield* other.call("process.send", input("other-after", "other-still-works"));
         expect(live.error).toBeUndefined();
-        expect(live.result).toMatchObject({ _tag: "accepted" });
+        expect(Schema.is(Sent.cases.accepted)(live.result)).toBe(true);
         const inbox = yield* RevokeTest.until(rows(`${TARGET}/inbox`), (entries) =>
           entries.some((entry) => entry.id === "other-after"),
         );

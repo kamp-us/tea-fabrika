@@ -24,6 +24,8 @@ import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import * as Headless from "@kampus/libfabrika/client/Headless";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
+import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { ClientKey, type Identity } from "@kampus/libfabrika/transport/ClientKey";
 import { ClientRows } from "@kampus/libfabrika/transport/ClientRows";
 import { KeyLine } from "@kampus/libfabrika/transport/Sshsig";
@@ -35,6 +37,11 @@ import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** A `process.send` that came back with no result: the refusal's reason, or `none`. */
+const Unanswered = Schema.TaggedStruct("error", { reason: Schema.String });
+/** How a person reached a tezgah move: by a key chord, restated from the program's own `Via`. */
+const ByKey = Schema.TaggedStruct("key", { keys: Schema.String });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const PROJECT = "desk-s2a";
@@ -258,7 +265,7 @@ const open: RunnerTest.Open = Effect.gen(function* () {
           sentAt: SENT,
           seen: 0,
         });
-        return answer.result ?? { _tag: "error", reason: String(answer.error?.data?.reason ?? "none") };
+        return answer.result ?? Unanswered.make({ reason: String(answer.error?.data?.reason ?? "none") });
       }),
     view: Effect.promise(async () => (await socket.call("view.open", { pid: tezgah.pid })).result?.view),
     process: (name: string) =>
@@ -354,11 +361,11 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
               const sent = await socket.call("process.send", {
                 pid: tezgah.pid,
                 letter: `desk-s2a-l12-${++letters}`,
-                m: { type: "did", via: { _tag: "key", keys: "ctrl+b %" }, ...m },
+                m: { type: "did", via: ByKey.make({ keys: "ctrl+b %" }), ...m },
                 sentAt: SENT,
                 seen: 0,
               });
-              expect(sent.result, `L12: tezgah takes ${JSON.stringify(m)}`).toMatchObject({ _tag: "accepted" });
+              expect(Schema.is(Sent.cases.accepted)(sent.result), `L12: tezgah takes ${JSON.stringify(m)}`).toBe(true);
             };
 
             await until(
@@ -402,7 +409,7 @@ describe("Desk S2a L12: a headless window follows tezgah on the real instance", 
             expect(
               ended.filter((row) => row._tag === "exited").map((row) => row.reason),
               "L12: the closed tile's process ends with shutdown",
-            ).toMatchObject([{ _tag: "shutdown" }]);
+            ).toMatchObject([ExitReason.cases.shutdown.make({})]);
           });
         }),
       ).pipe(Effect.provide(NodeServices.layer)),

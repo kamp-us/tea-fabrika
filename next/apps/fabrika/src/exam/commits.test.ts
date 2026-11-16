@@ -5,7 +5,7 @@ import { Option } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
-  type Answer,
+  Answer,
   annotate,
   chain,
   check,
@@ -17,7 +17,9 @@ import {
   inScope,
   keysProblem,
   type Logged,
-  type Note,
+  Link,
+  Note,
+  PersonLink,
   plain,
   type PullRequest,
   ROLES,
@@ -34,36 +36,41 @@ const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,24}$/);
 const filename = fc.stringMatching(/^[a-z][a-z0-9_-]{0,16}$/);
 const role = fc.constantFrom(...ROLES);
 
-const anyNote = fc.record({
-  _tag: fc.constant("attested" as const),
-  step: role,
-  ticket,
-  version: fc.integer({ min: 1, max: 10000 }),
-  from: sha,
-  to: sha,
-  key: fc.string(),
-  sig: fc.string(),
-});
+// fast-check: edge cases -- shas, tickets and versions are drawn in the ranges P01 to P03 always drew, so the decoder laws keep their reach
+const anyNote = fc
+  .record({
+    step: role,
+    ticket,
+    version: fc.integer({ min: 1, max: 10000 }),
+    from: sha,
+    to: sha,
+    key: fc.string(),
+    sig: fc.string(),
+  })
+  .map((fields) => Note.make(fields));
 
-const anyLink = fc.record({
-  _tag: fc.constant("attested" as const),
-  step: fc.constantFrom(...ROLES, "person" as const),
-  ticket,
-  version: fc.integer({ min: 1 }),
-  from: fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
-  to: fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
-  key: fc.string(),
-  sig: fc.string(),
-  by: fc.string(),
-  arrivedAt: fc.string(),
-  parent: fc.option(fc.string(), { nil: null }),
-  traceId: fc.string(),
-  commit: sha,
-  pr: fc.string(),
-  base: sha,
-  squash: sha,
-  keys: sha,
-});
+const anyLink = fc
+  .record({
+    step: fc.constantFrom(...ROLES, "person" as const),
+    ticket,
+    version: fc.integer({ min: 1 }),
+    from: fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
+    to: fc.stringMatching(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
+    key: fc.string(),
+    sig: fc.string(),
+    by: fc.string(),
+    arrivedAt: fc.string(),
+    parent: fc.option(fc.string(), { nil: null }),
+    traceId: fc.string(),
+    commit: sha,
+    pr: fc.string(),
+    base: sha,
+    squash: sha,
+    keys: sha,
+  })
+  .map(({ step, ...fields }) =>
+    step === "person" ? PersonLink.make({ ...fields, step }) : Link.make({ ...fields, step }),
+  );
 
 const signed = (note: Note, signer: Role | null = note.step) => ({ note, signer });
 
@@ -96,16 +103,20 @@ const EXAM_ROWS = [
 const EXAM = examMatcher(EXAM_ROWS);
 
 const answers = (p: PullRequest) => check(p, EXAM).answers;
-const DONE = { _tag: "done" as const };
+const DONE = Answer.cases.done.make({});
 
-const stuck = (reason: string, sha: string, more: object = {}) => ({
-  _tag: "stuck",
-  reason,
-  sha,
-  ...more,
-});
+const stuck = (
+  reason: (typeof Answer.cases.stuck.Type)["reason"],
+  sha: string,
+  more: { readonly paths?: ReadonlyArray<string>; readonly step?: Role } = {},
+) =>
+  Answer.cases.stuck.make({
+    reason,
+    sha,
+    ...more,
+  });
 
-const ask = (paths: string[]): Answer => ({ _tag: "ask", to: "owner", for: "exam_read", paths });
+const ask = (paths: string[]): Answer => Answer.cases.ask.make({ to: "owner", for: "exam_read", paths });
 
 const examPaths = fc
   .uniqueArray(filename, { minLength: 1, maxLength: 8 })
@@ -404,16 +415,17 @@ const route = fc
   .tuple(fc.uniqueArray(sha, { minLength: 4, maxLength: 10 }), ticket, fc.array(role, { minLength: 10, maxLength: 10 }))
   .map(([trees, ticket, roles]) => {
     const versions = { tests: 0, build: 0, lead: 0 };
-    const notes = trees.slice(1).map((to, i): Note => ({
-      _tag: "attested",
-      step: roles[i]!,
-      ticket,
-      version: ++versions[roles[i]!],
-      from: trees[i]!,
-      to,
-      key: `key-${i}`,
-      sig: `sig-${i}`,
-    }));
+    const notes = trees.slice(1).map((to, i): Note =>
+      Note.make({
+        step: roles[i]!,
+        ticket,
+        version: ++versions[roles[i]!],
+        from: trees[i]!,
+        to,
+        key: `key-${i}`,
+        sig: `sig-${i}`,
+      }),
+    );
     return { trees, notes, commits: notes.map((n) => commit(n)) };
   });
 
@@ -796,8 +808,8 @@ describe("printed lines", () => {
         sha,
         fc.constantFrom("stale_link", "unsigned_commit", "broken_chain", "build_touched_exam"),
         (step, sha, reason) => {
-          expect(plain({ _tag: "stuck", reason, sha, step })).toBe(`stuck ${reason} ${sha} step ${step}`);
-          expect(plain({ _tag: "stuck", reason, sha })).toBe(`stuck ${reason} ${sha}`);
+          expect(plain(Answer.cases.stuck.make({ reason, sha, step }))).toBe(`stuck ${reason} ${sha} step ${step}`);
+          expect(plain(Answer.cases.stuck.make({ reason, sha }))).toBe(`stuck ${reason} ${sha}`);
           expect(plain(DONE)).toBe("done");
         },
       ),

@@ -5,11 +5,19 @@
 // before the start it caused is asked, every run. A real instance gives no way to hold a step after
 // its letter is delivered.
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
-import { Recipient } from "@kampus/libfabrika/processes/Process";
+import { Sender } from "@kampus/libfabrika/permissions/Senders";
+import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
+import { Answer } from "@kampus/libfabrika/transport/Wire";
+import { ChildReplies } from "@kampus/libfabrika/workers/bindings";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
 import { Effect, Exit, Schema, Scope } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
@@ -149,12 +157,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const instance: Instance = yield* Scope.provide(first)(home.boot);
           yield* Effect.promise(async () => {
             const started = await instance.project(PROJECT).start(
-              {
-                _tag: "first",
+              Start.cases.first.make({
                 id: "start-starter:1",
                 name: "starter:1",
                 code: { program: "p42/starter", hash: home.hashes.starter },
-              },
+              }),
               home.from,
             );
             const starter = Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -165,7 +172,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
                 "process.send",
                 letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1" }),
               );
-              expect(sent, "the starter takes the person's letter").toMatchObject({ result: { _tag: "accepted" } });
+              expect(Schema.is(AcceptedReply)(sent), "the starter takes the person's letter").toBe(true);
               const child = await until(
                 "L17: the child is live with no start grant",
                 () => livePid(instance, "child:1"),
@@ -174,11 +181,12 @@ describe("T953: a start is checked against the member who caused it, end to end"
               const line = (await rows(instance, "processes/child:1")).find(
                 (row) => row._tag === "started" && row.body.process === child,
               );
-              expect(line?.body.member, "L17: the started line names the person whose input caused it").toEqual({
-                _tag: "person",
-                key: home.key.fingerprint,
-                for: home.from.for,
-              });
+              expect(line?.body.member, "L17: the started line names the person whose input caused it").toEqual(
+                Sender.cases.person.make({
+                  key: home.key.fingerprint,
+                  for: home.from.for,
+                }),
+              );
             } finally {
               await window.close();
             }
@@ -242,7 +250,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
               ),
             ),
           );
-          expect(granted, "the founder's grant lets the agent in").toMatchObject({ _tag: "applied" });
+          expect(granted._tag, "the founder's grant lets the agent in").toBe("applied");
           // The agent comes online and sends an input to the boot's process.
           const agent = yield* call(ProjectService.use((p) => p.connect()));
           const nonce = yield* call(ProjectService.use((p) => p.challenge(agent)));
@@ -267,12 +275,12 @@ describe("T953: a start is checked against the member who caused it, end to end"
               ),
             ),
           );
-          expect(online, "the agent is online").toMatchObject({ _tag: "online" });
+          expect(CheckedHello.isAnyOf(["online"])(online), "the agent is online").toBe(true);
           const boot = project.boot.process;
           const sent = yield* call(
             ProjectService.use((p) => p.route(agent, "process.send", letter(boot, "agent-inc", { type: "inc" }))),
           );
-          expect(sent, "the door takes the agent's input").toMatchObject({ _tag: "ok" });
+          expect(Answer.isAnyOf(["ok"])(sent), "the door takes the agent's input").toBe(true);
           const incoming = Schema.decodeUnknownSync(
             Schema.Struct({ id: Schema.String, envelope: Schema.Struct({ id: Schema.String }) }),
           )(fixture.delivered.at(-1));
@@ -293,7 +301,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
               ),
             ),
           );
-          expect(revoked, "the founder's revoke removes the agent").toMatchObject({ _tag: "applied" });
+          expect(revoked._tag, "the founder's revoke removes the agent").toBe("applied");
           // The test plays the runner: the step on that input asks for a child.
           const child = {
             id: `${boot}/agent-inc/0`,
@@ -304,10 +312,11 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const answer = yield* call(
             ProjectService.use((p) => p.processChild(child, { ...fixture.from, parent: incoming.envelope.id })),
           );
-          expect(answer, "L18: the removed sender's start is refused forbidden").toEqual({
-            _tag: "ChildrenError",
-            reason: "forbidden",
-          });
+          expect(answer, "L18: the removed sender's start is refused forbidden").toEqual(
+            ChildReplies.cases.ChildrenError.make({
+              reason: "forbidden",
+            }),
+          );
           const starts = yield* call(ProjectService.use((p) => p.read("processes/child:agent", 0, "audit")));
           expect(starts, "L18: the refused start wrote nothing").toEqual([]);
         }),

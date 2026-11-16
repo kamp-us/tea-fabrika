@@ -4,7 +4,9 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
+import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { Context, Effect, FileSystem, Layer, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
@@ -13,6 +15,9 @@ import { instanceDatabase } from "./instance-database.test-support.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 const PROJECT = "isolate-usage-test";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -148,7 +153,7 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
   expect(hello.error, "the signed client must be admitted before any program input").toBeUndefined();
   return Effect.fnUntraced(function* (process: string, letter: string, input: unknown) {
     const reply = yield* call("process.send", { pid: process, letter, m: input, sentAt: FROM.sentAt, seen: 0 });
-    expect(reply).toMatchObject({ result: { _tag: "accepted" } });
+    expect(Schema.is(AcceptedReply)(reply)).toBe(true);
   });
 });
 
@@ -277,12 +282,11 @@ const start = (world: World["Service"], name: string, program: string) =>
   invoke(
     world.instance.project(PROJECT),
     "start",
-    {
-      _tag: "first",
+    Start.cases.first.make({
       id: `start-${name}`,
       name,
       code: { program, hash: world.built.programs[program]?.hash ?? "missing" },
-    },
+    }),
     world.from,
   ).pipe(Effect.map((reply) => Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(reply).process));
 
@@ -293,7 +297,7 @@ const read = (world: World["Service"], process: string) =>
     const page = yield* invoke(
       world.instance.record(PROJECT, `job/${process}/0`),
       "read",
-      { _tag: "job", process },
+      Chain.cases.job.make({ process }),
       0,
       0,
     ).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Struct({ spans: Schema.Array(SpanRow) }))));

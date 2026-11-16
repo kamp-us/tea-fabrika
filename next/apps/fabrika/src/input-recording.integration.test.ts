@@ -2,10 +2,12 @@
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import { Answer } from "@kampus/libfabrika/transport/Wire";
 import { runsFor } from "@kampus/vitest";
 import { localState } from "alchemy/State/LocalState";
-import { Effect, FileSystem, Path, Schema } from "effect";
+import { Effect, FileSystem, Path, Predicate, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
@@ -22,6 +24,10 @@ const SENT = "2026-11-11T00:00:00Z";
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
 const Stored = Schema.Struct({ id: Schema.String, body: Schema.Json });
 const Started = Schema.Struct({ process: Schema.String });
+/** A door answer `ok` whose result is the program's refusal. */
+const OkRefused = Schema.TaggedStruct("ok", { result: Sent.cases.refused });
+/** A door answer `ok` whose result is the runner's `accepted`. */
+const OkAccepted = Schema.TaggedStruct("ok", { result: Sent.cases.accepted });
 
 const Journal = Schema.Struct({
   crashes: Schema.Int,
@@ -209,7 +215,7 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       },
       { url: instance.url, tab, name: fingerprint },
     ]);
-    expect(answer).toMatchObject({ _tag: "online" });
+    expect(Predicate.isTagged("online")(answer)).toBe(true);
     return client;
   });
   let client = yield* connect(0);
@@ -281,17 +287,17 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
       if (move === "audit_failed") {
         expect(result._tag).toBe("Failure");
       } else {
-        expect(result).toMatchObject({ _tag: "Success", success: { _tag: "ok" } });
+        expect(Result.isSuccess(result)).toBe(true);
+        expect(Result.isSuccess(result) ? result.success : undefined).toSatisfy(Predicate.isTagged("ok"));
         received.push(Metadata.make({ type: m.type, note: m.note, base: m.base, reason: m.reason }));
 
         if (move === "admit") {
           count++;
           accepted.push({ letter, m, answer: result._tag === "Success" ? result.success : null });
         } else {
-          expect(result).toMatchObject({
-            _tag: "Success",
-            success: { _tag: "ok", result: { _tag: "refused", reason: "changed_elsewhere", now: count } },
-          });
+          expect(Result.isSuccess(result) ? result.success : undefined).toMatchObject(
+            Answer.cases.ok.make({ result: Sent.cases.refused.make({ reason: "changed_elsewhere", now: count }) }),
+          );
           refused.push({ letter, m, answer: result._tag === "Success" ? result.success : null });
         }
       }
@@ -313,23 +319,27 @@ const walk = Effect.fnUntraced(function* (tape: ReadonlyArray<number>, reached: 
   // A13 reaches the project call below the wire. An unknown type must remain a normal refusal.
   const unknown = { type: `unknown-${count}-${serial}`, body: `BODY-unknown-${tape.at(-1)} "/雪\n` };
   expect(
-    yield* invoke(project, "route", [
-      client,
-      "process.send",
-      { pid, letter: `unknown-${++serial}`, m: unknown, sentAt: SENT, seen: 0 },
-    ]),
-  ).toMatchObject({ _tag: "ok", result: { _tag: "refused" } });
+    Schema.is(OkRefused)(
+      yield* invoke(project, "route", [
+        client,
+        "process.send",
+        { pid, letter: `unknown-${++serial}`, m: unknown, sentAt: SENT, seen: 0 },
+      ]),
+    ),
+  ).toBe(true);
   reached.add("unknown");
 
   // The same client can still submit a valid input after the refusal.
   const control = { type: "save", note: "record", base: count, reason: "user-save", body: "control" };
   expect(
-    yield* invoke(project, "route", [
-      client,
-      "process.send",
-      { pid, letter: `control-${++serial}`, m: control, sentAt: SENT, seen: 0 },
-    ]),
-  ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+    Schema.is(OkAccepted)(
+      yield* invoke(project, "route", [
+        client,
+        "process.send",
+        { pid, letter: `control-${++serial}`, m: control, sentAt: SENT, seen: 0 },
+      ]),
+    ),
+  ).toBe(true);
   const rows = yield* invoke(project, "read", ["gateway/inputs", 0, "p13-unknown-check"]);
 
   for (const form of [unknown.body, JSON.stringify(unknown.body).slice(1, -1), encodeURIComponent(unknown.body)]) {

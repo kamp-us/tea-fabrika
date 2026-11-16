@@ -9,7 +9,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
-import { LISTS } from "./ratchet.ts";
+import { Answer, LISTS } from "./ratchet.ts";
 
 /** A lint row's key, as the ratchet reads it. */
 const lintKey = (r: { file: string; rule: string; code: string }) => JSON.stringify([r.file, r.rule, r.code]);
@@ -71,9 +71,9 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       const out = ratchet(base);
       expect(out.status).toBe(1);
       expect(jsonLines(out.stdout)).toEqual([
-        { _tag: "stuck", file: "next-ledger.json", reason: "row_added", rows: [lintKey(extra)] },
-        { _tag: "done", file: "agents-ledger.json" },
-        { _tag: "done", file: "unreachable-ledger.json" },
+        Answer.cases.stuck.make({ file: "next-ledger.json", reason: "row_added", rows: [lintKey(extra)] }),
+        Answer.cases.done.make({ file: "agents-ledger.json" }),
+        Answer.cases.done.make({ file: "unreachable-ledger.json" }),
       ]);
       expect(out.stdout).toContain("::error file=next-ledger.json::");
     }),
@@ -87,7 +87,7 @@ describe("ratchet.ts, as CI runs it (L4)", () => {
       commit("head");
       const out = ratchet(base);
       expect(out.status).toBe(0);
-      expect(jsonLines(out.stdout)).toEqual(LISTS.map((list) => ({ _tag: "done", file: list.file })));
+      expect(jsonLines(out.stdout)).toEqual(LISTS.map((list) => Answer.cases.done.make({ file: list.file })));
     }),
   );
 

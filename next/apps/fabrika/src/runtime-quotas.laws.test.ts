@@ -19,11 +19,16 @@ import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
 import { hands } from "@kampus/libfabrika/runtime/Hands";
+import { Input } from "@kampus/libfabrika/runtime/Program";
 import * as QuotaRunnerTest from "@kampus/libfabrika/runtime/QuotaRunnerTest";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { send } from "@kampus/libfabrika/runtime/Send";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { targetStream } from "@kampus/libfabrika/tasks/Tasks";
+import { Written } from "@kampus/libfabrika/telemetry/Records";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
+import { Answer } from "@kampus/libfabrika/transport/Wire";
 import {
   commitReply,
   configureProcess,
@@ -157,10 +162,10 @@ const worker = (name: string) => ({
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
   inputs: {
-    inc: { _tag: "write", schema: Msg, description: "Count", personOnly: false },
-    throw: { _tag: "write", schema: Msg, description: "Fail", personOnly: false },
-    tell: { _tag: "write", schema: Msg, description: "Mail another name", personOnly: false },
-    ask: { _tag: "write", schema: Msg, description: "Ask the hands", personOnly: false },
+    inc: Input.cases.write.make({ schema: Msg, description: "Count", personOnly: false }),
+    throw: Input.cases.write.make({ schema: Msg, description: "Fail", personOnly: false }),
+    tell: Input.cases.write.make({ schema: Msg, description: "Mail another name", personOnly: false }),
+    ask: Input.cases.write.make({ schema: Msg, description: "Ask the hands", personOnly: false }),
   },
   outputs: {},
   writes: {},
@@ -379,7 +384,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     CONNECTION: {
       getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }),
     },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+    RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
     MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
@@ -510,25 +515,27 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
   const nonce = yield* project((p) => p.challenge(client));
   const tab = "quota-laws";
   expect(
-    yield* project((p) =>
-      p.initialize(
-        client,
-        {
-          versions: [1],
-          has: ["seal"],
-          ping: "30s",
-          key: key.raw,
-          tab,
-          nonce,
-          platform: "headless",
-          os: "linux",
-          sentAt: SENT,
-          signed: key.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
-        },
-        { url: URL, tab, name: key.fingerprint },
+    CheckedHello.isAnyOf(["online"])(
+      yield* project((p) =>
+        p.initialize(
+          client,
+          {
+            versions: [1],
+            has: ["seal"],
+            ping: "30s",
+            key: key.raw,
+            tab,
+            nonce,
+            platform: "headless",
+            os: "linux",
+            sentAt: SENT,
+            signed: key.proof(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
+          },
+          { url: URL, tab, name: key.fingerprint },
+        ),
       ),
     ),
-  ).toMatchObject({ _tag: "online" });
+  ).toBe(true);
   const view = Effect.fnUntraced(function* (name: string) {
     const store = yield* storeFor(name);
     return Schema.decodeUnknownSync(View)(yield* process(store, (p) => p.open("audit"))).view;
@@ -672,8 +679,9 @@ const Cell = Schema.Struct({
 
 const Tape = Schema.Array(Cell).check(Schema.isMinLength(3), Schema.isMaxLength(10));
 const options = { timeout: 300_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } };
-const accepted = { _tag: "ok", result: { _tag: "accepted" } };
-const refused = { _tag: "refused", reason: "quota" };
+/** A door answer `ok` whose result is the runner's `accepted`. */
+const OkAccepted = Schema.TaggedStruct("ok", { result: Sent.cases.accepted });
+const refused = Answer.cases.refused.make({ reason: "quota" });
 const none = { writes: 0, bytes: 0 };
 
 const cost = (entries: ReadonlyArray<Parameters<typeof encodedBytes>[0]>) => ({
@@ -739,7 +747,7 @@ describe("P34c live wiring, both object stores", () => {
                   : move === "ask"
                     ? { type: "ask" }
                     : { type: "inc", text: "é😀".repeat(c.amount % 64) };
-              expect(yield* w.input(name, `${move}:${n}`, m)).toMatchObject(accepted);
+              expect(Schema.is(OkAccepted)(yield* w.input(name, `${move}:${n}`, m))).toBe(true);
 
               if (move === "tell") {
                 told.set(name, required(told.get(name)) + 1);
@@ -834,7 +842,7 @@ describe("P34c live wiring, both object stores", () => {
             const used = required(before.program[program]);
             const reply = yield* w.input(name, id, { type: "inc", text });
 
-            if (Schema.is(Schema.Struct({ _tag: Schema.Literal("refused") }))(reply)) {
+            if (Schema.is(Schema.TaggedStruct("refused", {}))(reply)) {
               // The typed answer, before an envelope, a binding, a reply or a local step is saved.
               expect(reply).toMatchObject(refused);
               expect(yield* w.rows).toEqual(rows);
@@ -850,7 +858,7 @@ describe("P34c live wiring, both object stores", () => {
               return false;
             }
 
-            expect(reply).toMatchObject(accepted);
+            expect(Schema.is(OkAccepted)(reply)).toBe(true);
             counted.set(name, required(counted.get(name)) + 1);
             admitted++;
             yield* w.settle(Effect.map(w.view(name), (view) => view.count === required(counted.get(name))));
@@ -889,7 +897,7 @@ describe("P34c live wiring, both object stores", () => {
               // A refusal is true only if the message did not fit: with the wall moved away the same
               // message lands, and its committed charge, the message and its step, passes that room.
               yield* w.widen;
-              expect(yield* w.input("alpha:1", "aimed", { type: "inc", text })).toMatchObject(accepted);
+              expect(Schema.is(OkAccepted)(yield* w.input("alpha:1", "aimed", { type: "inc", text }))).toBe(true);
               yield* w.settle(Effect.map(w.view("alpha:1"), (view) => view.count === 2));
               expect(yield* pair(["aimed", "step:aimed"])).toBeGreaterThan(left);
               return;

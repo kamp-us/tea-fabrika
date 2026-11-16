@@ -2,7 +2,7 @@
 // refusal laws are in runner-contract.test.ts; both share runner-contract.test-support.ts.
 // Source: next/packages/libfabrika/src/app/runner.test.ts at 9b48d622b5d4.
 import { expect, it } from "@effect/vitest";
-import { Gateway, Id, type ProgramRunner } from "@kampus/libfabrika";
+import { Gateway, Id, ProgramDown, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
@@ -12,6 +12,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import { Answer } from "@kampus/libfabrika/transport/Wire";
 import { Arbitrary, Cause, Effect, Exit, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as RateLimiter from "effect/persistence/RateLimiter";
@@ -41,7 +42,8 @@ const failedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
 
   if (Exit.isFailure(exit)) {
-    expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "ProgramDown", reason });
+    expect(Cause.squash(exit.cause)).toBeInstanceOf(ProgramDown);
+    expect(Cause.squash(exit.cause)).toMatchObject({ reason });
   }
 };
 
@@ -194,7 +196,13 @@ it.effect.prop(
 
       for (const [i, body] of bodies.entries()) {
         const result = yield* runner.msg(incoming(i + 1, body, i));
-        expect(result).toEqual({ _tag: "accepted", rev: placed[i]?.rev, pos: placed[i]?.pos });
+        const place = placed[i];
+
+        if (place === undefined) {
+          return yield* Effect.die("a body has no placing");
+        }
+
+        expect(result).toEqual(Sent.cases.accepted.make({ rev: place.rev, pos: place.pos }));
       }
 
       expect(spy.calls).toBe(0);
@@ -247,7 +255,7 @@ it.effect.prop(
         const result = yield* Effect.exit(runner.msg(input));
 
         if (tries === 3) {
-          expect(result).toEqual(Exit.succeed({ _tag: "refused", reason: "dead" }));
+          expect(result).toEqual(Exit.succeed(Sent.cases.refused.make({ reason: "dead" })));
         } else {
           failedAs(result, "step");
         }
@@ -256,7 +264,7 @@ it.effect.prop(
           {
             tries,
             errors: Array.from({ length: tries }, () => "Error"),
-            result: tries === 3 ? { _tag: "refused", reason: "dead" } : null,
+            result: tries === 3 ? Sent.cases.refused.make({ reason: "dead" }) : null,
           },
         ]);
         expect(yield* w.rows()).toEqual([]);
@@ -270,7 +278,7 @@ it.effect.prop(
   opts,
 );
 
-const terminalAnswer = (actual: unknown) => expect(actual).toEqual({ _tag: "refused", reason: "dead" });
+const terminalAnswer = (actual: unknown) => expect(actual).toEqual(Answer.cases.refused.make({ reason: "dead" }));
 
 it.effect.prop(
   "p25: the real Gateway answers dead on terminal delivery and its saved settled retry",
@@ -307,7 +315,7 @@ it.effect.prop(
 
       expect(sender.deliveries()).toBe(3);
       expect(sender.bindings()).toMatchObject([
-        { state: { _tag: "settled", result: { _tag: "refused", reason: "dead" } } },
+        { state: { _tag: "settled", result: Sent.cases.refused.make({ reason: "dead" }) } },
       ]);
       // A new real Gateway layer reads the saved binding; the runner must not receive a fourth delivery.
       const restarted = yield* sender.connect;
@@ -317,8 +325,8 @@ it.effect.prop(
       expect(yield* w.rows()).toEqual([]);
 
       for (const bad of [
-        { _tag: "ok", result: { _tag: "refused", reason: "dead" } },
-        { _tag: "ok", result: body },
+        Answer.cases.ok.make({ result: Sent.cases.refused.make({ reason: "dead" }) }),
+        Answer.cases.ok.make({ result: body }),
       ]) {
         expect(() => terminalAnswer(bad)).toThrow();
       }

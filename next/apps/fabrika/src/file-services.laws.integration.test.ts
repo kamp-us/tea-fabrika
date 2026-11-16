@@ -14,14 +14,16 @@ import {
   FileSystem,
   Layer,
   Logger,
+  Option,
   Path,
   PlatformError,
+  Predicate,
   References,
   Schema,
   Sink,
   Stream,
 } from "effect";
-import { ChildProcessSpawner } from "effect/process";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
 import { expect, vi } from "vitest";
 import { build } from "./build.ts";
@@ -57,10 +59,9 @@ const instanceFailure = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
   const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
   expect(Cause.hasDies(cause)).toBe(false);
-  expect(Cause.findErrorOption(cause)).toMatchObject({
-    _tag: "Some",
-    value: { _tag: "InstanceError", reason },
-  });
+  const error = Option.getOrUndefined(Cause.findErrorOption(cause));
+  expect(error).toSatisfy(Predicate.isTagged("InstanceError"));
+  expect(error).toMatchObject({ reason });
 };
 
 it("dev refuses every invalid parent with reason parent_gone before touching settings", async () => {
@@ -136,8 +137,8 @@ it("dev defaults to a scoped detached child and reports its nonzero exit as chil
         }
 
         expect(commands).toHaveLength(1);
+        expect(commands[0]).toSatisfy(ChildProcess.isStandardCommand);
         expect(commands[0]).toMatchObject({
-          _tag: "StandardCommand",
           command: process.execPath,
           args: [resolve(import.meta.dirname, "../dev.ts"), "--name", name, "--child", `--parent=${process.pid}`],
           options: {
@@ -424,10 +425,9 @@ for (const failed of [false, true]) {
           expect(Cause.hasDies(cause)).toBe(false);
 
           if (failed) {
-            expect(Cause.findErrorOption(cause)).toMatchObject({
-              _tag: "Some",
-              value: { _tag: "BuildError", reason: "publish" },
-            });
+            const error = Option.getOrUndefined(Cause.findErrorOption(cause));
+            expect(error).toSatisfy(Predicate.isTagged("BuildError"));
+            expect(error).toMatchObject({ reason: "publish" });
           }
         } finally {
           rmSync(folder, { recursive: true, force: true });
@@ -505,10 +505,9 @@ it("dev chooses flags, saved settings or defaults and saves with mode 0600 befor
           await import("../dev.ts");
           expect(cli.work).toBeDefined();
           const exit = await Effect.runPromiseExit(cli.work!);
-          expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
-            _tag: "Some",
-            value: { reason: "test_instance_ready" },
-          });
+          const error = Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty);
+          expect(Option.isSome(error)).toBe(true);
+          expect(Option.getOrUndefined(error)).toMatchObject({ reason: "test_instance_ready" });
           const calls = w.calls.filter(([, path]) => path === folder || path === file);
           // T664: the port is a setting now, so it leaves the saved state and goes to the instance.
           const { port: _flag, ...founding } = Object.fromEntries(selected);
@@ -626,14 +625,14 @@ it("L11: no failed settings load reaches the instance write, the build or the in
             const exit = yield* Effect.promise(() => Effect.runPromiseExit(cli.work!));
             instanceFailure(exit, "settings");
             // The dev edge translates the load's error and keeps it as the cause.
-            expect(Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty)).toMatchObject({
-              _tag: "Some",
-              value: {
-                cause: {
-                  _tag: "SettingsError",
-                  reason: ["flag", "env"].includes(failure.kind) ? "invalid" : failure.kind,
-                },
-              },
+            const translated = Option.getOrUndefined(
+              Cause.findErrorOption(Exit.isFailure(exit) ? exit.cause : Cause.empty),
+            );
+            expect(Predicate.hasProperty(translated, "cause") ? translated.cause : undefined).toSatisfy(
+              Predicate.isTagged("SettingsError"),
+            );
+            expect(translated).toMatchObject({
+              cause: { reason: ["flag", "env"].includes(failure.kind) ? "invalid" : failure.kind },
             });
             // Counted fakes: the build reads its source first, the instance records each start.
             expect(w.calls.filter(([call, path]) => call === "write" || call === "temp" || path === source)).toEqual(
@@ -704,10 +703,9 @@ it("build returns BuildError for malformed compiler ledger bytes supplied by Fil
         const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
         expect(Cause.hasDies(cause)).toBe(false);
         expect(Cause.hasFails(cause)).toBe(true);
-        expect(Cause.findErrorOption(cause)).toMatchObject({
-          _tag: "Some",
-          value: { _tag: "BuildError", reason: "read" },
-        });
+        const error = Option.getOrUndefined(Cause.findErrorOption(cause));
+        expect(error).toSatisfy(Predicate.isTagged("BuildError"));
+        expect(error).toMatchObject({ reason: "read" });
         expect(w.calls.filter(([call]) => call === "write" || call === "rename")).toEqual([]);
       } finally {
         rmSync(folder, { recursive: true, force: true });
@@ -754,10 +752,9 @@ it("dev returns InstanceError for malformed saved settings without writing or bu
         const cause = Exit.isFailure(exit) ? exit.cause : Cause.empty;
         expect(Cause.hasDies(cause)).toBe(false);
         expect(Cause.hasFails(cause)).toBe(true);
-        expect(Cause.findErrorOption(cause)).toMatchObject({
-          _tag: "Some",
-          value: { _tag: "InstanceError", reason: "settings" },
-        });
+        const error = Option.getOrUndefined(Cause.findErrorOption(cause));
+        expect(error).toSatisfy(Predicate.isTagged("InstanceError"));
+        expect(error).toMatchObject({ reason: "settings" });
         expect(w.calls.filter(([call]) => call === "write" || call === "temp")).toEqual([]);
       } finally {
         process.argv = argv;

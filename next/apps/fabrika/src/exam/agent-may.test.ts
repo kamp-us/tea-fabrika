@@ -7,7 +7,7 @@ import { expect, it } from "@effect/vitest";
 import { Gateway, Id, type Incoming } from "@kampus/libfabrika";
 import { Adds } from "@kampus/libfabrika/access/Access";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
-import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { NotGranted, Writer } from "@kampus/libfabrika/access/SessionManager";
 import { addText, Change, grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Doorbell, Ledger } from "@kampus/libfabrika/ledger/Ledger";
@@ -20,7 +20,9 @@ import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
+import * as Wire from "@kampus/libfabrika/transport/Wire";
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Effect, Exit, FileSystem, Layer, Schema, Stream } from "effect";
 import { Base64, Base64Url } from "effect/encoding";
@@ -191,7 +193,7 @@ const world = Effect.fnUntraced(function* () {
 type World = Effect.Success<ReturnType<typeof world>>;
 
 const identity = (input: Incoming, fingerprint: string) => {
-  expect(input.envelope.by).toEqual({ _tag: "agent", key: fingerprint, for: person });
+  expect(input.envelope.by).toEqual(Writer.cases.agent.make({ key: fingerprint, for: person }));
   Schema.decodeUnknownSync(Id.InputId)(input.envelope.id);
 };
 
@@ -199,7 +201,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) => {
   expect(Exit.isFailure(exit)).toBe(true);
 
   if (Exit.isFailure(exit)) {
-    expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "NotGranted" });
+    expect(Cause.squash(exit.cause)).toBeInstanceOf(NotGranted);
   }
 };
 
@@ -223,10 +225,11 @@ it.effect.prop(
         const before = w.delivered.length;
         const hello = yield* w.hello(stranger, `${role}-${c.name.slice(0, 80)}`, role);
         expect(hello.result._tag).not.toBe("online");
-        expect(yield* w.door.route(hello.client, "process.send", request(c.body))).toEqual({
-          _tag: "refused",
-          reason: "not_granted",
-        });
+        expect(yield* w.door.route(hello.client, "process.send", request(c.body))).toEqual(
+          Wire.Answer.cases.refused.make({
+            reason: "not_granted",
+          }),
+        );
         expect(w.delivered).toHaveLength(before);
       }
     }),
@@ -242,12 +245,13 @@ it.effect.prop(
 
       for (const role of ["person", "window", "agent"]) {
         const { client, result } = yield* w.hello(w.agent, `${role}-${c.name}`, role);
-        expect(result).toMatchObject({ _tag: "online", identity: { as: "agent" } });
+        expect(CheckedHello.isAnyOf(["online"])(result)).toBe(true);
+        expect(result).toMatchObject({ identity: { as: "agent" } });
         const req = {
           ...request(c.body),
           letter: `letter_0000000000e00800000000000${role === "person" ? 1 : role === "window" ? 2 : 3}`,
         };
-        expect(yield* w.door.route(client, "process.send", req)).toMatchObject({ _tag: "ok" });
+        expect(Wire.Answer.isAnyOf(["ok"])(yield* w.door.route(client, "process.send", req))).toBe(true);
         const input = w.delivered.at(-1);
 
         if (input === undefined) {
@@ -410,10 +414,9 @@ it.effect.prop(
 
       yield* w.door.accept(input);
       expect((yield* w.door.grant({ text: removal, armored: yield* w.root.sign(removal) }))._tag).toBe("applied");
-      expect(yield* w.door.route(client, "process.send", request(c.body))).toEqual({
-        _tag: "refused",
-        reason: "not_granted",
-      });
+      expect(yield* w.door.route(client, "process.send", request(c.body))).toEqual(
+        Wire.Answer.cases.refused.make({ reason: "not_granted" }),
+      );
       failure(yield* Effect.exit(w.door.accept(input)));
       failure(yield* Effect.exit(w.door.sign(pid, "cmd_0000000000e008000000000002", input.envelope.id, "saved")));
     }),
@@ -453,13 +456,13 @@ const methodAnswer = (method: string, actual: { _tag: string; reason?: string })
   expect(actual._tag).toBeTypeOf("string");
 
   if (method === "ledger.wait:parked") {
-    expect(actual).toMatchObject({ _tag: "parked" });
+    expect(actual._tag).toBe("parked");
   } else if (method === "ledger.wait") {
     expect(actual._tag).toBe("ok");
   } else if (allowed.has(method)) {
     expect(actual._tag).toBe("ok");
   } else {
-    expect(actual).toEqual({ _tag: "refused", reason: "not_for_agents" });
+    expect(actual).toEqual(Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
   }
 };
 
@@ -517,10 +520,8 @@ const presence = (files: ReadonlySet<string>, load: () => PolicyDoor): PolicyDoo
 };
 
 const knockAnswer = (actual: Effect.Success<ReturnType<PolicyDoor["knock"]>>, as: string) => {
-  expect(actual.answer).toMatchObject({
-    _tag: "ok",
-    result: { code: expect.any(String), until: expect.any(Number) },
-  });
+  expect(actual.answer._tag).toBe("ok");
+  expect(actual.answer).toMatchObject({ result: { code: expect.any(String), until: expect.any(Number) } });
   expect(actual.row.as).toBe(as);
   expect(actual.admitted).toBe(false);
   expect(actual.writes).toEqual([]);
@@ -535,7 +536,7 @@ const installedRefusal = Effect.fnUntraced(function* (policy: PolicyDoor, method
     }),
   );
   // A person actually reaches the new handler: an unknown method is not this plant.
-  expect(yield* policy.personCall(method)).toEqual({ _tag: "ok", result: { body } });
+  expect(yield* policy.personCall(method)).toEqual(Wire.Answer.cases.ok.make({ result: { body } }));
   expect(calls).toBe(1);
   methodAnswer(method, yield* policy.call(method));
   expect(calls).toBe(1);
@@ -607,7 +608,7 @@ it.prop(
         method,
         allowed.has(method) || method === "ledger.wait"
           ? { _tag: "ok" }
-          : { _tag: "refused", reason: "not_for_agents" },
+          : Wire.Answer.cases.refused.make({ reason: "not_for_agents" }),
       );
     }
 
@@ -615,13 +616,13 @@ it.prop(
       methodAnswer(`process.send:checklist:${input}`, { _tag: "ok" });
     }
 
-    personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
+    personRefusal(() => Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
     methodAnswer("ledger.wait:parked", { _tag: "parked" });
 
     for (const as of ["window", "agent"]) {
       knockAnswer(
         {
-          answer: { _tag: "ok", result: { code: "123456", until: 1 } },
+          answer: Wire.Answer.cases.ok.make({ result: { code: "123456", until: 1 } }),
           row: { as },
           admitted: false,
           writes: [],
@@ -650,17 +651,17 @@ it.prop(
       expect(() => methodAnswer(method, { _tag: "ok" })).toThrow();
     }
 
-    personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
+    personRefusal(() => Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
     expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
 
     for (const reason of ["person_only", "not_allowed", "unknown_method"]) {
-      expect(() => methodAnswer("spans.read", { _tag: "refused", reason })).toThrow();
+      expect(() => methodAnswer("spans.read", Wire.Answer.cases.refused.make({ reason }))).toThrow();
     }
 
     expect(() => failure(Exit.succeed({ _tag: "accepted" }))).toThrow();
     expect(() => methodAnswer("ledger.wait:parked", { _tag: "ok" })).toThrow();
     const knock = {
-      answer: { _tag: "ok", result: { code: "123456", until: 1 } },
+      answer: Wire.Answer.cases.ok.make({ result: { code: "123456", until: 1 } }),
       row: { as: "window" },
       admitted: false,
       writes: [],
@@ -686,7 +687,9 @@ it.effect.prop(
       const handler = new Map<string, () => Effect.Effect<Schema.Json>>();
       const dispatch = Effect.fnUntraced(function* (method: string) {
         const h = handler.get(method);
-        return h ? { _tag: "ok", result: yield* h() } : { _tag: "refused", reason: "unknown_method" };
+        return h
+          ? Wire.Answer.cases.ok.make({ result: yield* h() })
+          : Wire.Answer.cases.refused.make({ reason: "unknown_method" });
       });
       const clean: PolicyDoor = {
         install: (m, h) =>
@@ -694,7 +697,7 @@ it.effect.prop(
             handler.set(m, h);
           }),
         personCall: dispatch,
-        call: () => Effect.succeed({ _tag: "refused", reason: "not_for_agents" }),
+        call: () => Effect.succeed(Wire.Answer.cases.refused.make({ reason: "not_for_agents" })),
         checklistInputs: () => Effect.void,
         parkedWait: Effect.succeed({ _tag: "parked" }),
         knock: () => Effect.die("control only"),
@@ -731,7 +734,7 @@ it.prop(
       expect(() => presence(new Set([p]), failed)).toThrow("failed import");
     }
 
-    personRefusal(() => ({ _tag: "refused", reason: "not_for_agents" }));
+    personRefusal(() => Wire.Answer.cases.refused.make({ reason: "not_for_agents" }));
     expect(() => personRefusal(() => ({ _tag: "ok" }))).toThrow();
     const clean: PolicyDoor = {
       install: () => Effect.void,

@@ -29,6 +29,7 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, Option, Path, Queue, Schema, Stream } from "effect";
@@ -231,12 +232,11 @@ const flow = Effect.fnUntraced(
     // The task's requester is a started name: a finish wakes it (P39 slice 3).
     yield* call("requester start failed", () =>
       Reflect.get(project, "start")(
-        {
-          _tag: "first",
+        Start.cases.first.make({
           id: "start-wire",
           name: "wire:1",
           code: { program: "fabrika/counter", hash: built.programs["fabrika/counter"]?.hash ?? "missing" },
-        },
+        }),
         {
           by: root.fingerprint,
           for: PERSON,

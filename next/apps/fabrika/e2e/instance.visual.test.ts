@@ -4,7 +4,8 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { Effect } from "effect";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
+import { Effect, Schema } from "effect";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -328,7 +329,8 @@ describe("P12 real browser protocol", () => {
       sentAt: "2026-11-08T04:00:00.000Z",
       seen: 0,
     });
-    expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
+    expect(Schema.is(Sent.cases.accepted)(accepted.result)).toBe(true);
+    expect(accepted.result).toMatchObject({ pos: 1 });
     expect((await waiting).result).toMatchObject({ rev: accepted.result.rev });
     // The original connection must receive the patch before a reload or another view.open.
     await a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch"));

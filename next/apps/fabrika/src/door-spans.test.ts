@@ -19,6 +19,7 @@ import { Archive } from "@kampus/libfabrika/telemetry/Archive";
 import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
 import { runsFor } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Result, Schema, Stream, Tracer } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
@@ -495,7 +496,7 @@ const online = Effect.fnUntraced(function* (
   a: Sample,
 ) {
   const h = yield* hello(d, w.window, a.text);
-  expect(yield* d.initialize(h.client, h.input, h.trusted)).toMatchObject({ _tag: "online" });
+  expect(CheckedHello.isAnyOf(["online"])(yield* d.initialize(h.client, h.input, h.trusted))).toBe(true);
   return h.client;
 });
 

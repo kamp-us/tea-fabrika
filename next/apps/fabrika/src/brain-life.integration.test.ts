@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
+import { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { Effect } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
@@ -302,7 +303,7 @@ describe("P12 local brain life", () => {
         pending = await read();
       }
 
-      expect(pending, details()).toEqual(expect.arrayContaining([expect.objectContaining({ _tag: "braked" })]));
+      expect(pending.some(BrainEvent.isAnyOf(["braked"])), details()).toBe(true);
       // Wait past every installed backoff. No new child or outer HTTP restart is allowed.
       await new Promise<void>((done) => setTimeout(done, 2000));
       expect(

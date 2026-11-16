@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
-import type { BrainEvent } from "@kampus/libfabrika/brain-event";
+import { BrainEvent } from "@kampus/libfabrika/brain-event";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";
+import { Written } from "@kampus/libfabrika/telemetry/Records";
 import { runsFor } from "@kampus/vitest";
-import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Schema } from "effect";
+import { Context, Deferred, Effect, Fiber, FileSystem, Layer, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { FetchHttpClient } from "effect/http";
 import { vi } from "vitest";
@@ -177,7 +178,8 @@ it.live.prop(
         Effect.provide(filesWithoutSync),
         Effect.result,
       );
-      expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SchemaError" } });
+      expect(Result.isFailure(result)).toBe(true);
+      expect(Result.isFailure(result) ? result.failure : undefined).toBeInstanceOf(Schema.SchemaError);
       expect(fetched).not.toHaveBeenCalled();
     }),
   { arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },
@@ -260,7 +262,7 @@ it.live.prop(
           await Effect.runPromise(Deferred.await(release));
         }
 
-        return Response.json({ value: call.method === "write" ? { _tag: "written" } : null });
+        return Response.json({ value: call.method === "write" ? Written.cases.written.make({}) : null });
       });
       const kill = yield* spyOnKill;
       const { startDev } = yield* Effect.promise(() => import("./instance.ts"));
@@ -281,7 +283,8 @@ it.live.prop(
         yield* Deferred.await(reached);
         yield* Effect.yieldNow;
         expect(starting.pollUnsafe()).toBeUndefined();
-        expect(events).toMatchObject([{ _tag: "started", reason: "open", build }]);
+        expect(events.map(BrainEvent.isAnyOf(["started"]))).toEqual([true]);
+        expect(events).toMatchObject([{ reason: "open", build }]);
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(starting);
       }).pipe(

@@ -106,17 +106,24 @@ it.effect.prop(
   { arbitrary: { seed: SEED, runs: runsFor({ fast: 5, full: 50 }) } },
 );
 
+/** One move of L13: change the file's port, start, replay a saved start, or start a new process. */
+const Action = Schema.TaggedUnion({
+  change: { port: Schema.optional(Schema.Int) },
+  start: {},
+  replay: { which: Schema.Int },
+  "new-process": { env: Schema.optional(Schema.Int) },
+});
+
+// fast-check: edge cases -- ports stay in 1..65535 and a missing port is common, as the moves were drawn before Action existed
 const action = fc.oneof(
-  fc.record({
-    _tag: fc.constant("change" as const),
-    port: fc.option(fc.integer({ min: 1, max: 65535 }), { nil: undefined }),
-  }),
-  fc.record({ _tag: fc.constant("start" as const) }),
-  fc.record({ _tag: fc.constant("replay" as const), which: fc.nat() }),
-  fc.record({
-    _tag: fc.constant("new-process" as const),
-    env: fc.option(fc.integer({ min: 1, max: 65535 }), { nil: undefined }),
-  }),
+  fc
+    .record({ port: fc.option(fc.integer({ min: 1, max: 65535 }), { nil: undefined }) })
+    .map((fields) => Action.cases.change.make(fields)),
+  fc.constant(Action.cases.start.make({})),
+  fc.record({ which: fc.nat() }).map((fields) => Action.cases.replay.make(fields)),
+  fc
+    .record({ env: fc.option(fc.integer({ min: 1, max: 65535 }), { nil: undefined }) })
+    .map((fields) => Action.cases["new-process"].make(fields)),
 );
 
 describe("L13, each process start keeps the exact settings and hash it began with", () => {

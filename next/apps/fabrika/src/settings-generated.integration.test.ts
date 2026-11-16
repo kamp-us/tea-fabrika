@@ -23,6 +23,9 @@ import { Effect, FileSystem, Path, Result, Schema } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 
+/** One edit to a declared setting: a new doc, or a new default. */
+const Change = Schema.TaggedUnion({ doc: { doc: Schema.String }, default: { default: Schema.Int } });
+
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const check = { seed: SEED, numRuns: 100 };
 
@@ -46,6 +49,7 @@ const committed = Effect.gen(function* () {
 
 const Port = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 const segment = fc.stringMatching(/^[a-z][a-z0-9]{0,5}$/);
+// fast-check: edge cases -- a doc is drawn as Markdown-looking words with spacing and marks, which a bare string Arbitrary never reaches
 const doc = fc.stringMatching(/^[A-Z][a-z |*_`#\n]{3,30}\.$/);
 
 const declared = fc.uniqueArray(
@@ -123,6 +127,7 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
   });
 
   it("outputs ignore declaration order, and a changed doc or default reaches each output that shows it", () => {
+    // fast-check: edge cases -- each change is drawn against the generated declarations it edits, with ports in 1..65535 as before
     fc.assert(
       fc.property(
         declared.chain((ds) =>
@@ -134,8 +139,8 @@ describe("L1, the generated schemas and reference stay fresh and deterministic",
             ),
             fc.nat(ds.length - 1),
             fc.oneof(
-              doc.map((d) => ({ _tag: "doc" as const, doc: d })),
-              fc.integer({ min: 1, max: 65535 }).map((v) => ({ _tag: "default" as const, default: v })),
+              doc.map((d) => Change.cases.doc.make({ doc: d })),
+              fc.integer({ min: 1, max: 65535 }).map((v) => Change.cases.default.make({ default: v })),
             ),
           ),
         ),

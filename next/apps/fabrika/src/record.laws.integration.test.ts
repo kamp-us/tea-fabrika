@@ -4,13 +4,13 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, it, layer } from "@effect/vitest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Written } from "@kampus/libfabrika/telemetry/Records";
-import type { SinkError } from "@kampus/libfabrika/telemetry/Sink";
+import { SinkError } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain, Content, partName, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
-import { Context, Effect, Layer, Option, Result, Schema } from "effect";
+import { Context, Effect, Layer, Match, Option, Result, Schema } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 
@@ -173,14 +173,14 @@ for (const [kind, live] of [
             });
           const result = yield* exercise(actual);
           expect(result).toEqual(yield* exercise(oracle));
-          expect(result.write).toEqual({ _tag: "written" });
+          expect(result.write).toEqual(Written.cases.written.make({}));
           expect(result.read).toMatchObject({
             spans: rows.slice(input.after).map((r) => ({ spanId: r.span.spanId })),
             after: Math.max(input.after, rows.length),
             rolled: false,
           });
           expect(result.again).toEqual(result.deleted);
-          expect(result.missing).toEqual({ _tag: "absent", rolled: false });
+          expect(Match.valueTags(result.missing, { absent: ({ rolled }) => rolled, found: () => null })).toBe(false);
         }),
       options,
     );
@@ -202,7 +202,7 @@ for (const [kind, live] of [
           const exercise = (part: Part) =>
             Effect.gen(function* () {
               // One batch lands whole; the next mixed batch must see the crossed cap.
-              expect(yield* part.write(chain, input.at, rows)).toEqual({ _tag: "written" });
+              expect(yield* part.write(chain, input.at, rows)).toEqual(Written.cases.written.make({}));
               const written = yield* part.write(chain, input.at, [...rows, fresh]);
               const page = yield* part.read(chain, input.at, 0);
               return { written, page };
@@ -210,11 +210,12 @@ for (const [kind, live] of [
           const { driver } = yield* Wire;
           const actual = yield* exercise(yield* driver(name, cap));
           expect(actual).toEqual(yield* exercise(yield* node(name, cap)));
-          expect(actual.written).toEqual({
-            _tag: "rolled",
-            next: partName(chain, input.at + 1),
-            had: rows.map((row) => row.span.spanId),
-          });
+          expect(actual.written).toEqual(
+            Written.cases.rolled.make({
+              next: partName(chain, input.at + 1),
+              had: rows.map((row) => row.span.spanId),
+            }),
+          );
           expect(actual.page).toMatchObject({
             spans: rows.map((row) => ({ spanId: row.span.spanId })),
             after: rows.length,
@@ -242,8 +243,8 @@ for (const [kind, live] of [
 
           for (const call of calls) {
             const result = yield* Effect.result(call);
+            expect(Result.match(result, { onSuccess: () => null, onFailure: (e) => e })).toBeInstanceOf(SinkError);
             expect(Result.match(result, { onSuccess: () => null, onFailure: (e) => e })).toMatchObject({
-              _tag: "SinkError",
               reason: "bad_row",
               held: 0,
             });
@@ -266,7 +267,7 @@ it.effect.prop(
       const part = yield* node(name, 1);
       const expected = yield* (yield* node(name, 1)).write(chain, input.at, input.rows);
       expect(yield* part.write(chain, input.at, input.rows)).toEqual(expected);
-      expect(expected).toEqual({ _tag: "rolled", next: partName(chain, input.at + 1), had: [] });
+      expect(expected).toEqual(Written.cases.rolled.make({ next: partName(chain, input.at + 1), had: [] }));
       expect(yield* part.read(chain, input.at, 0)).toEqual({ spans: [], after: 0, rolled: true });
     }),
   options,

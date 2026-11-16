@@ -76,7 +76,8 @@ export const added = (base: ReadonlyArray<string>, head: ReadonlyArray<string>):
   });
 };
 
-const Answer = Schema.TaggedUnion({
+/** One list's answer: `done`, or `stuck` with the reason and the rows that were added. */
+export const Answer = Schema.TaggedUnion({
   done: { file: Schema.String },
   stuck: {
     file: Schema.String,

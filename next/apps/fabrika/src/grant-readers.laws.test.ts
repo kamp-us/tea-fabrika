@@ -1,7 +1,7 @@
 // P12, next/. The real command is captured at its NodeRuntime edge; no process or socket starts.
 import { grantText } from "@kampus/libfabrika/access/Text";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Effect, Exit, Layer, Option, Schema, Sink, Stream } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Predicate, Schema, Sink, Stream } from "effect";
 import { FetchHttpClient } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as fc from "fast-check";
@@ -48,7 +48,8 @@ const typed = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Cause.hasDies(cause)).toBe(false);
   expect(Cause.hasFails(cause)).toBe(true);
   const error = Cause.findErrorOption(cause);
-  expect(error).toMatchObject({ _tag: "Some", value: { _tag: "GrantError", reason } });
+  expect(Option.getOrUndefined(error)).toSatisfy(Predicate.isTagged("GrantError"));
+  expect(Option.getOrUndefined(error)).toMatchObject({ reason });
   expect(Option.getOrUndefined(error)).toBeInstanceOf(Error);
 };
 

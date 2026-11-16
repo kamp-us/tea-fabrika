@@ -14,12 +14,16 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-15T04:00:00.000Z";
@@ -333,7 +337,7 @@ const world = async (test: (instance: Instance, fixture: Fixture) => Promise<voi
               const code = built.programs[program];
               expect(code).toBeDefined();
               const started = await Reflect.get(instance.project(PROJECT), "start")(
-                { _tag: "first", id: `start-${name}`, name, code: { program, hash: code!.hash } },
+                Start.cases.first.make({ id: `start-${name}`, name, code: { program, hash: code!.hash } }),
                 from,
               );
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -378,7 +382,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
     const client = await fixture.connect("watch");
     const log = async () => ((await client.call("view.open", { pid: reader })).result?.view?.log ?? []) as any[];
     const send = async (pid: string, id: string, m: unknown) =>
-      expect(await client.call("process.send", letter(pid, id, m))).toMatchObject({ result: { _tag: "accepted" } });
+      expect(Schema.is(AcceptedReply)(await client.call("process.send", letter(pid, id, m)))).toBe(true);
 
     // The refusal is reply data across the Project's RPC, and the reader folds it as the Cmd's error.
     await send(reader, "watch-0", { type: "watch", name: "absent:1" });
@@ -416,7 +420,7 @@ it("scenario: M13, a program in one Process object is refused a watch on a name 
       "M13: exactly one DOWN, for the kept ref, the writer's life, its name and normal; none for the dropped ref",
     ).toEqual([
       ...forgotten,
-      { type: "DOWN", ref: kept, process: writer, name: "writer:1", reason: { _tag: "normal" } },
+      { type: "DOWN", ref: kept, process: writer, name: "writer:1", reason: ExitReason.cases.normal.make({}) },
     ]);
   });
 }, 180_000);
@@ -433,8 +437,10 @@ it("scenario: M16, a watcher that only waits folds the DOWN with no call into it
     });
 
     expect(
-      await client.call("process.send", letter(reader, "watch-1", { type: "watch", name: "writer:1" })),
-    ).toMatchObject({ result: { _tag: "accepted" } });
+      Schema.is(AcceptedReply)(
+        await client.call("process.send", letter(reader, "watch-1", { type: "watch", name: "writer:1" })),
+      ),
+    ).toBe(true);
     await pushed(client, reader, "monitor_ok");
 
     // Nothing below calls the reader's object: the quit goes to the writer's, and the reader has no
@@ -457,7 +463,7 @@ it("scenario: M16, a watcher that only waits folds the DOWN with no call into it
         ref: expect.stringMatching(new RegExp(`^${reader}/`)),
         process: writer,
         name: "writer:1",
-        reason: { _tag: "normal" },
+        reason: ExitReason.cases.normal.make({}),
       },
     ]);
   });

@@ -6,7 +6,7 @@ import { Effect, Exit } from "effect";
 import * as fc from "fast-check";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
-import { added, judge, LISTS } from "./ratchet.ts";
+import { added, Answer, judge, LISTS } from "./ratchet.ts";
 
 /** A lint row's key, as the ratchet reads it. */
 const lintKey = (r: { file: string; rule: string; code: string }) => JSON.stringify([r.file, r.rule, r.code]);
@@ -71,14 +71,15 @@ describe("row identity follows each reader (L2)", () => {
         ),
         ({ rows, i, name, suffix, order, list }) => {
           const moved = rows.map((r, j) => (j === i ? { ...r, [name]: r[name] + suffix } : r));
-          expect(answer(list, text(rows), text(moved))).toEqual({
-            _tag: "stuck",
-            file: list.file,
-            reason: "row_added",
-            rows: [lintKey(moved[i]!)],
-          });
+          expect(answer(list, text(rows), text(moved))).toEqual(
+            Answer.cases.stuck.make({
+              file: list.file,
+              reason: "row_added",
+              rows: [lintKey(moved[i]!)],
+            }),
+          );
           const extra = order.map((r) => ({ ...r, note: suffix }));
-          expect(answer(list, text(rows), text(extra))).toEqual({ _tag: "done", file: list.file });
+          expect(answer(list, text(rows), text(extra))).toEqual(Answer.cases.done.make({ file: list.file }));
         },
       ),
       runs,
@@ -99,14 +100,15 @@ describe("row identity follows each reader (L2)", () => {
         ),
         ({ rows, i, name, suffix, order }) => {
           const moved = rows.map((r, j) => (j === i ? { ...r, [name]: r[name] + suffix } : r));
-          expect(answer(DEAD, text(rows), text(moved))).toEqual({
-            _tag: "stuck",
-            file: DEAD.file,
-            reason: "row_added",
-            rows: [deadKey(moved[i]!)],
-          });
+          expect(answer(DEAD, text(rows), text(moved))).toEqual(
+            Answer.cases.stuck.make({
+              file: DEAD.file,
+              reason: "row_added",
+              rows: [deadKey(moved[i]!)],
+            }),
+          );
           const reworded = order.map((r) => ({ ...r, reason: r.reason + suffix }));
-          expect(answer(DEAD, text(rows), text(reworded))).toEqual({ _tag: "done", file: DEAD.file });
+          expect(answer(DEAD, text(rows), text(reworded))).toEqual(Answer.cases.done.make({ file: DEAD.file }));
         },
       ),
       runs,
@@ -119,26 +121,29 @@ describe("a file that comes, goes or does not read (L3)", () => {
     for (const list of LISTS) {
       const rows = ROWS[list.file as keyof typeof ROWS];
       const keys = rows.map((r) => ("scope" in r ? deadKey(r) : lintKey(r)));
-      expect(answer(list, null, text(rows))).toEqual({
-        _tag: "stuck",
-        file: list.file,
-        reason: "row_added",
-        rows: keys,
-      });
-      expect(answer(list, text(rows), null)).toEqual({ _tag: "done", file: list.file });
-      expect(answer(list, null, null)).toEqual({ _tag: "done", file: list.file });
-      expect(answer(list, text(rows), "{ not json")).toEqual({
-        _tag: "stuck",
-        file: list.file,
-        reason: "not_a_list",
-        rows: [],
-      });
-      expect(answer(list, text(rows), JSON.stringify({ entries: [{ file: 1 }] }))).toEqual({
-        _tag: "stuck",
-        file: list.file,
-        reason: "not_a_list",
-        rows: [],
-      });
+      expect(answer(list, null, text(rows))).toEqual(
+        Answer.cases.stuck.make({
+          file: list.file,
+          reason: "row_added",
+          rows: keys,
+        }),
+      );
+      expect(answer(list, text(rows), null)).toEqual(Answer.cases.done.make({ file: list.file }));
+      expect(answer(list, null, null)).toEqual(Answer.cases.done.make({ file: list.file }));
+      expect(answer(list, text(rows), "{ not json")).toEqual(
+        Answer.cases.stuck.make({
+          file: list.file,
+          reason: "not_a_list",
+          rows: [],
+        }),
+      );
+      expect(answer(list, text(rows), JSON.stringify({ entries: [{ file: 1 }] }))).toEqual(
+        Answer.cases.stuck.make({
+          file: list.file,
+          reason: "not_a_list",
+          rows: [],
+        }),
+      );
       // The base's own file does not read: main is broken, so the check fails closed.
       expect(Exit.isFailure(Effect.runSyncExit(judge(list, "{ not json", text(rows))))).toBe(true);
     }
@@ -165,17 +170,19 @@ describe("a renamed file keeps its rows (L5)", () => {
         ({ rows, renamed, extra, list }) => {
           const renames = new Map(renamed.map((file) => [file, `${file}.integration`]));
           const head = rows.map((r) => ({ ...r, file: renames.get(r.file) ?? r.file }));
-          expect(Effect.runSync(judge(list, text(rows), text(head), renames))).toEqual({
-            _tag: "done",
-            file: list.file,
-          });
+          expect(Effect.runSync(judge(list, text(rows), text(head), renames))).toEqual(
+            Answer.cases.done.make({
+              file: list.file,
+            }),
+          );
           const grown = [...head, { ...extra, file: `${extra.file}.new` }];
-          expect(Effect.runSync(judge(list, text(rows), text(grown), renames))).toEqual({
-            _tag: "stuck",
-            file: list.file,
-            reason: "row_added",
-            rows: [lintKey({ ...extra, file: `${extra.file}.new` })],
-          });
+          expect(Effect.runSync(judge(list, text(rows), text(grown), renames))).toEqual(
+            Answer.cases.stuck.make({
+              file: list.file,
+              reason: "row_added",
+              rows: [lintKey({ ...extra, file: `${extra.file}.new` })],
+            }),
+          );
           // Without the renames the same head is every renamed row added: the map is what admits them.
           const unmapped = Effect.runSync(judge(list, text(rows), text(head)));
           expect(unmapped._tag === "stuck" ? unmapped.rows.length : 0).toBe(renamed.length);

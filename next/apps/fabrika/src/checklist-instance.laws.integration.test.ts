@@ -23,9 +23,12 @@ import type { Descriptor } from "@kampus/libfabrika";
 import { programBox } from "@kampus/libfabrika/box";
 import { windowMachineFor } from "@kampus/libfabrika/client/WindowMachine";
 import { fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Written } from "@kampus/libfabrika/telemetry/Records";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
 import {
   configureProcess,
   processDescriptor,
@@ -43,6 +46,9 @@ import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = {
@@ -346,7 +352,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
             probe: async () => 42,
           }),
         },
-        RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+        RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
         MEASUREMENTS: {},
         LOADER: {
           get: (id: string) => ({
@@ -412,7 +418,7 @@ type World = Effect.Success<ReturnType<typeof world>>;
 const call = <A>(w: World, use: (p: ProjectCalls) => Effect.Effect<A, unknown>) =>
   Effect.promise(() => w.project.run(use));
 
-const Started = Schema.Struct({ _tag: Schema.Literal("started"), body: Schema.Struct({ process: Schema.String }) });
+const Started = Schema.TaggedStruct("started", { body: Schema.Struct({ process: Schema.String }) });
 
 /** The live process each boot entry placed first, read from its own `processes/<name>`. */
 const placings = (w: World) =>
@@ -449,7 +455,7 @@ const admit = (w: World) =>
         { url: "http://127.0.0.1:18787", tab, name: w.key.fingerprint },
       ),
     );
-    expect(admitted).toMatchObject({ _tag: "online" });
+    expect(CheckedHello.isAnyOf(["online"])(admitted)).toBe(true);
     return client;
   });
 
@@ -580,9 +586,7 @@ describe("L13: notices name their process", () => {
                     seen: 0,
                   }),
                 );
-                expect(answer, `send ${n + 1} reaches the same live process`).toMatchObject({
-                  result: { _tag: "accepted" },
-                });
+                expect(Schema.is(AcceptedReply)(answer), `send ${n + 1} reaches the same live process`).toBe(true);
                 model = applyCell(checklistMachine, model, msg)[0];
                 // Let the platform's past-time alarm run between inputs, as it does in dev.ts.
                 yield* settle;

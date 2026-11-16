@@ -23,6 +23,7 @@ import {
   verifyCommit,
   acceptPgp,
   personLink,
+  PersonNote,
   squashed,
   log,
 } from "./commits-git.test-support.ts";
@@ -115,8 +116,7 @@ describe("person git signatures (p83b)", () => {
             expect(verifyCommit(r, c)).toBe(0);
             r.git("update-ref", "refs/heads/pr", c);
             const checked = r.check();
-            const note = {
-              _tag: "attested",
+            const note = PersonNote.make({
               step: "person",
               ticket: "251",
               version: 1,
@@ -124,7 +124,7 @@ describe("person git signatures (p83b)", () => {
               to: r.head(`${c}^{tree}`),
               key: fingerprint("person"),
               sig,
-            };
+            });
             const { squash, rows } = squashed(r, [{ note, commit: c }]);
             log(r, rows);
             const chained = r.run(["chain", "--squash", squash]);

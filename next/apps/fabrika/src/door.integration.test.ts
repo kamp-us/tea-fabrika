@@ -16,40 +16,50 @@ import { Id, Sent } from "@kampus/libfabrika";
 import { Adds, Add, Grant, MemberEvent, Saw, Revoke } from "@kampus/libfabrika/access/Access";
 import { ClientManager } from "@kampus/libfabrika/access/ClientManager";
 import * as ClientManagerLedger from "@kampus/libfabrika/access/ClientManagerLedger";
-import { SessionManagerError, SignRequest } from "@kampus/libfabrika/access/SessionManager";
+import {
+  Membership,
+  SessionManagerError,
+  SigningRefused,
+  SignRequest,
+  Writer,
+} from "@kampus/libfabrika/access/SessionManager";
 import { grantText, addText, enrollmentText, revokeText } from "@kampus/libfabrika/access/Text";
-import { GatewayError } from "@kampus/libfabrika/gateway/GatewayError";
+import { Crypto, GatewayError, Storage } from "@kampus/libfabrika/gateway/GatewayError";
 import * as RateLimiterSql from "@kampus/libfabrika/gateway/RateLimiterSql";
 import { Doorbell, Ledger, LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import * as LedgerSql from "@kampus/libfabrika/ledger/LedgerSql";
 import { LedgerTransaction, type LedgerTurn } from "@kampus/libfabrika/ledger/LedgerTransaction";
 import * as LedgerTransactionSql from "@kampus/libfabrika/ledger/LedgerTransactionSql";
 import { lineFor } from "@kampus/libfabrika/ledger/Log";
+import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { type From as ProcessFrom, Mailbox } from "@kampus/libfabrika/processes/Mailbox";
 import {
   ProcessEvent,
   Recipient,
   Owner,
   Down,
+  NoProc,
   Start,
   clientInbox,
   signalId,
 } from "@kampus/libfabrika/processes/Process";
 import { ProcessIdGenerator } from "@kampus/libfabrika/processes/ProcessIdGenerator";
 import { ProcessManager } from "@kampus/libfabrika/processes/ProcessManager";
+import { AuditError } from "@kampus/libfabrika/runtime/Audit";
 import { nodeExecution } from "@kampus/libfabrika/runtime/Execution";
 import { MailWakeups } from "@kampus/libfabrika/runtime/MailWakeups";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
-import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { RecordManager, Written } from "@kampus/libfabrika/telemetry/Records";
 import { SinkError, SpanSink } from "@kampus/libfabrika/telemetry/Sink";
-import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Chain, Content, SpanRow, SumPoint } from "@kampus/libfabrika/telemetry/Trace";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
 import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
-import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
+import { Answer, Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
-import { Arbitrary, Deferred, Effect, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
+import { Arbitrary, Deferred, Effect, Exit, Fiber, Layer, Logger, Option, Result, Schema, Stream } from "effect";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -85,7 +95,7 @@ const SAW = {
 
 const SENT = "2026-11-08T04:00:00.000Z";
 /** A fresh step's crash, as the runner reports one: P34c slice 1's structured exit reason. */
-const CRASHED = { _tag: "crashed", phase: "step", error: "Error" } as const;
+const CRASHED = ExitReason.cases.crashed.make({ phase: "step", error: "Error" });
 /** The brain's own writer key in these worlds: the `by` its ProcessManager stamps on every line. */
 const BRAIN_KEY = "SHA256:brain";
 const START = processId();
@@ -301,6 +311,13 @@ const Input = Schema.TaggedUnion({
 });
 
 const comment = (text = "hello") => Input.cases.comment.make({ ticket: { id: "ticket-7" }, text });
+
+/** A refusal by the door's grant, deny or enrollment call, restated: their reply schemas are private to the gateway. */
+const DoorRefusal = Schema.TaggedStruct("refused", { reason: Schema.String });
+/** The `answered` event these laws ask the door to write. */
+const Answered = Schema.TaggedStruct("answered", {});
+/** The `saved` event these laws ask the door to write, carrying the generated value. */
+const Saved = Schema.TaggedStruct("saved", { value: Schema.Json });
 
 type Envelope = {
   id: string;
@@ -670,13 +687,12 @@ describe("P13 selected input recording", () => {
                 const result = yield* Effect.result(d.route(client, "process.send", request(id, comment(body))));
 
                 if (move === "ok") {
-                  expect(result).toMatchObject({ _tag: "Success", success: { _tag: "ok" } });
+                  expect(Result.isSuccess(result) && Answer.isAnyOf(["ok"])(result.success)).toBe(true);
                   history.push({ id, body, before: delivered });
                 } else {
-                  expect(result).toMatchObject({
-                    _tag: "Failure",
-                    failure: { _tag: "AuditError", reason: { _tag: expect.any(String) } },
-                  });
+                  expect(Result.isFailure(result)).toBe(true);
+                  expect(Result.isFailure(result) ? result.failure : undefined).toBeInstanceOf(AuditError);
+                  expect(result).toHaveProperty("failure.reason._tag", expect.any(String));
 
                   if (result._tag === "Failure") {
                     printable.push(String(result.failure), JSON.stringify(result.failure));
@@ -686,9 +702,7 @@ describe("P13 selected input recording", () => {
                   expect(w.deliveries).toHaveLength(delivered);
                   // Retry from the allocated binding, after repairing the selector.
                   mode = "ok";
-                  expect(yield* d.route(client, "process.send", request(id, comment(body)))).toMatchObject({
-                    _tag: "ok",
-                  });
+                  expect((yield* d.route(client, "process.send", request(id, comment(body))))._tag).toBe("ok");
                   history.push({ id, body, before: delivered });
                 }
 
@@ -804,7 +818,7 @@ const wire = Effect.fnUntraced(function* (
       getByName: () => ({
         write: (_chain: unknown, _part: number, rows: ReadonlyArray<unknown>) => {
           saved.push(...rows);
-          return Promise.resolve({ _tag: "written" });
+          return Promise.resolve(Written.cases.written.make({}));
         },
       }),
     },
@@ -904,19 +918,17 @@ describe("T843 sender budget, next/", () => {
             );
 
             if (passed === limit) {
-              expect(answer).toEqual({ _tag: "refused", reason: "rate_limited", retryAfter: 42_000 });
+              expect(answer).toEqual(Answer.cases.refused.make({ reason: "rate_limited", retryAfter: 42_000 }));
               expect(w.usedInputs).toHaveLength(before);
               expect(w.deliveries).toHaveLength(sent);
             } else {
-              expect(answer).toMatchObject(
-                move === "reserved"
-                  ? { _tag: "refused", reason: "reserved" }
-                  : move === "bad"
-                    ? { _tag: "refused", reason: "bad_input" }
-                    : move === "unknown"
-                      ? { _tag: "refused", reason: "unknown_method" }
-                      : { _tag: "ok" },
-              );
+              if (move === "reserved" || move === "bad" || move === "unknown") {
+                const reason = { reserved: "reserved", bad: "bad_input", unknown: "unknown_method" }[move];
+                expect(answer).toMatchObject(Answer.cases.refused.make({ reason }));
+              } else {
+                expect(answer._tag).toBe("ok");
+              }
+
               passed++;
               delivered ||= move === "send";
             }
@@ -1093,8 +1105,9 @@ describe("T843 sender budget, next/", () => {
           broken = true;
 
           for (let n = 0; n < count; n++) {
-            expect(yield* Effect.flip(d.route(client, "process.send", request(`not-counted-${n}`)))).toMatchObject({
-              _tag: "SinkError",
+            const failure = yield* Effect.flip(d.route(client, "process.send", request(`not-counted-${n}`)));
+            expect(failure).toBeInstanceOf(SinkError);
+            expect(failure).toMatchObject({
               reason: "storage",
             });
           }
@@ -1162,13 +1175,17 @@ describe("T843 sender budget, next/", () => {
         expect(Result.isFailure(status)).toBe(true);
 
         if (Result.isFailure(status)) {
-          expect(status.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+          const failure = status.failure;
+          expect(failure).toBeInstanceOf(SinkError);
+          expect(failure).toMatchObject({ reason: "storage" });
           expect(status.failure.held).toBeLessThanOrEqual(1);
         }
 
         if (Result.isFailure(sent)) {
           // The public completion reports how much the connection holds after a full disk.
-          expect(sent.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+          const failure = sent.failure;
+          expect(failure).toBeInstanceOf(SinkError);
+          expect(failure).toMatchObject({ reason: "storage" });
           const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(sent.failure);
           expect(failed.held).toBeLessThanOrEqual(2);
         }
@@ -1194,7 +1211,7 @@ describe("T843 sender budget, next/", () => {
       expect(c.saved).toHaveLength(recorded);
       yield* TestClock.setTime(REFUSED_HOUR + HOUR);
       expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
-        { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 3 },
+        SumPoint.make({ piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 3 }),
       ]);
     }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
   });
@@ -1281,7 +1298,9 @@ describe("T843 sender budget, next/", () => {
               expect(c.read().waits.length).toBeLessThan(pending.length);
 
               if (Result.isFailure(result)) {
-                expect(result.failure).toMatchObject({ _tag: "SinkError", reason: "storage" });
+                const failure = result.failure;
+                expect(failure).toBeInstanceOf(SinkError);
+                expect(failure).toMatchObject({ reason: "storage" });
                 const failed = Schema.decodeUnknownSync(Schema.Struct({ held: Schema.Int }))(result.failure);
                 expect(failed.held).toBeLessThanOrEqual(2);
               }
@@ -1297,7 +1316,9 @@ describe("T843 sender budget, next/", () => {
               } else {
                 expect(c.frames).toHaveLength(frames);
                 const status = yield* Effect.flip(projectSink.check);
-                expect(status).toMatchObject({ _tag: "SinkError", reason: "storage" });
+                const failure = status;
+                expect(failure).toBeInstanceOf(SinkError);
+                expect(failure).toMatchObject({ reason: "storage" });
                 expect(status.held).toBeLessThanOrEqual(1);
               }
 
@@ -1326,7 +1347,7 @@ describe("T843 sender budget, next/", () => {
             expect(c.archives).toHaveLength(archived);
             yield* TestClock.setTime(REFUSED_HOUR + HOUR);
             expect(yield* projectSink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
-              { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 4 },
+              SumPoint.make({ piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 4 }),
             ]);
           }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, sink)))));
         }),
@@ -1405,7 +1426,9 @@ describe("T843 sender budget, next/", () => {
           }
 
           yield* SpanSink.use((sink) => sink.flush);
-          const batches = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+          const batches = yield* RecordManager.use((records) =>
+            Stream.runCollect(records.read(Chain.cases.spans.make({}))),
+          );
           yield* TestClock.adjust("16 days");
           yield* SpanSink.use((sink) => sink.summaries(REFUSED_HOUR, REFUSED_HOUR + HOUR));
           const outputs = JSON.stringify({
@@ -1430,7 +1453,7 @@ describe("T843 sender budget, next/", () => {
           }
 
           expect(yield* SpanSink.use((sink) => sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR))).toEqual([
-            { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 },
+            SumPoint.make({ piece: "gateway.route", hour: REFUSED_HOUR, refused: "rate_limited", count: count + 1 }),
           ]);
           expect(
             c.db
@@ -1693,10 +1716,11 @@ describe("P10 review regressions", () => {
   });
   const pendingHello = Effect.fnUntraced(function* (d: typeof Gateway.Service, k: World["window"], tab: string) {
     const { client, hello, trusted } = yield* signedHello(d, k, tab);
-    expect(yield* d.initialize(client, hello, trusted)).toMatchObject({
-      _tag: "refused",
-      reason: "not_granted",
-    });
+    expect(yield* d.initialize(client, hello, trusted)).toMatchObject(
+      CheckedHello.cases.refused.make({
+        reason: "not_granted",
+      }),
+    );
     return { client, hello, trusted };
   });
 
@@ -1738,7 +1762,7 @@ describe("P10 review regressions", () => {
                   const reply = yield* d.knock(client, pass === undefined ? { label } : { label, pass });
 
                   if (!kept.includes(name)) {
-                    expect(reply).toEqual({ _tag: "refused", reason: "not_waiting" });
+                    expect(reply).toEqual(Answer.cases.refused.make({ reason: "not_waiting" }));
                     continue;
                   }
 
@@ -1747,7 +1771,7 @@ describe("P10 review regressions", () => {
                   expect(new Set(rows.map((r) => r.key)).size).toBe(rows.length);
                   const row = rows.find((r) => r.key === k.raw);
                   assert(row);
-                  expect(reply).toEqual({ _tag: "ok", result: { code: row.code, until: row.until } });
+                  expect(reply).toEqual(Answer.cases.ok.make({ result: { code: row.code, until: row.until } }));
                 }
               }).pipe(w.provide);
             }),
@@ -1769,11 +1793,12 @@ describe("P10 review regressions", () => {
             yield* Effect.gen(function* () {
               const d = yield* Gateway;
               const { client, hello, trusted } = yield* signedHello(d, stranger, tab);
-              expect(yield* d.initialize(client, hello, trusted)).toEqual({
-                _tag: "refused",
-                reason: "not_granted",
-                fingerprint: stranger.fingerprint,
-              });
+              expect(yield* d.initialize(client, hello, trusted)).toEqual(
+                CheckedHello.cases.refused.make({
+                  reason: "not_granted",
+                  fingerprint: stranger.fingerprint,
+                }),
+              );
             }).pipe(w.provide);
           }),
         ),
@@ -1811,7 +1836,8 @@ describe("P10 review regressions", () => {
               const code = String(random % 1_000_000).padStart(6, "0");
               expect(code).toMatch(/^[0-9]{6}$/);
               expect((yield* d.watch(owner.client)).rows.map((r) => r.code)).toEqual([code]);
-              expect(reply).toMatchObject({ _tag: "ok", result: { code } });
+              expect(reply._tag).toBe("ok");
+              expect(reply).toMatchObject({ result: { code } });
             }).pipe(w.provide);
           }),
         ),
@@ -1849,19 +1875,18 @@ describe("P10 review regressions", () => {
   };
   const gatewayCrypto = (failure: unknown, thrown: unknown) => {
     assert(failure instanceof GatewayError);
-    expect(failure).toMatchObject({ _tag: "GatewayError", reason: { _tag: "Crypto" } });
+    expect(failure.reason).toBeInstanceOf(Crypto);
     expect(failure.reason.cause).toBe(thrown);
   };
   const ledgerCrypto = (failure: unknown) => {
     expect(failure).toBeInstanceOf(LedgerError);
-    expect(failure).toMatchObject({ _tag: "LedgerError", reason: "crypto" });
+    expect(failure).toMatchObject({ reason: "crypto" });
   };
   const membershipCrypto = (failure: unknown, thrown: unknown) => {
     assert(failure instanceof SessionManagerError);
-    expect(failure).toMatchObject({
-      _tag: "SessionManagerError",
-      reason: { _tag: "Membership", cause: { _tag: "LedgerError", reason: "crypto" } },
-    });
+    expect(failure.reason).toBeInstanceOf(Membership);
+    expect(failure.reason.cause).toBeInstanceOf(LedgerError);
+    expect(failure.reason.cause).toMatchObject({ reason: "crypto" });
     assert(failure.reason.cause instanceof LedgerError);
     expect(failure.reason.cause.cause).toBe(thrown);
   };
@@ -1988,11 +2013,12 @@ describe("P10 review regressions", () => {
               const overflow = yield* signedHello(d, w.agent, "overflow");
               const before = w.sql.exec("SELECT total_changes() total")[0]?.total;
               const result = yield* Effect.result(d.initialize(overflow.client, overflow.hello, overflow.trusted));
-              expect.soft(result).toMatchObject({
-                _tag: "Failure",
-                // A full store is the gateway's own fault, with no lower one beneath it.
-                failure: { _tag: "GatewayError", reason: { _tag: "Storage", cause: undefined } },
-              });
+              expect.soft(Result.isFailure(result)).toBe(true);
+              const failure = Result.isFailure(result) ? result.failure : undefined;
+              // A full store is the gateway's own fault, with no lower one beneath it.
+              expect.soft(failure).toBeInstanceOf(GatewayError);
+              expect.soft(failure instanceof GatewayError ? failure.reason : undefined).toBeInstanceOf(Storage);
+              expect.soft(failure).toMatchObject({ reason: { cause: undefined } });
               expect.soft(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
               expect.soft(receipts()).toEqual(full);
               yield* TestClock.adjust(w.settings.waiting.ttl - 1);
@@ -2003,7 +2029,7 @@ describe("P10 review regressions", () => {
                   tab: earlier.hello.tab,
                   name: w.window.fingerprint,
                 }),
-              ).toMatchObject({ _tag: "refused", reason: "bad_nonce" });
+              ).toMatchObject(CheckedHello.cases.refused.make({ reason: "bad_nonce" }));
               expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(beforeReplay);
             }).pipe(w.provide);
           }),
@@ -2056,9 +2082,7 @@ describe("P10 review regressions", () => {
         expect(w.notices).toEqual([]);
         expect(w.sql.exec("SELECT name FROM gateway_state WHERE name=?", `client/${saved.client}`)).toHaveLength(1);
         const before = yield* entries("gateway/hellos");
-        expect(yield* d.initialize(saved.client, saved.hello, saved.trusted)).toMatchObject({
-          _tag: "refused",
-        });
+        expect((yield* d.initialize(saved.client, saved.hello, saved.trusted))._tag).toBe("refused");
         expect(yield* entries("gateway/hellos")).toEqual(before);
         yield* online(d, w, "fresh-proof", w.otherWindow);
       }).pipe(w.provide);
@@ -2123,7 +2147,7 @@ describe("P10 review regressions", () => {
                         },
                         { url: URL, tab: client, name: w.otherWindow.fingerprint },
                       ),
-                    ).toMatchObject({ _tag: "refused", reason: "bad_signature" });
+                    ).toMatchObject(CheckedHello.cases.refused.make({ reason: "bad_signature" }));
                   }
                 }
 
@@ -2183,7 +2207,7 @@ describe("P10 review regressions", () => {
                     },
                     { url: URL, tab, name: w.window.fingerprint },
                   ),
-                ).toMatchObject({ _tag: "refused", reason: "bad_nonce" });
+                ).toMatchObject(CheckedHello.cases.refused.make({ reason: "bad_nonce" }));
                 expect(w.sql.exec("SELECT total_changes() total")[0]?.total).toBe(before);
               }).pipe(w.provide);
             }),
@@ -2239,7 +2263,7 @@ describe("P10 review regressions", () => {
           );
 
           for (const attempt of attempts) {
-            expect(attempt).toMatchObject({ _tag: "Success", value: { _tag: answer } });
+            expect(Exit.isSuccess(attempt) ? attempt.value._tag : undefined).toBe(answer);
           }
 
           expect(w.sql.exec("SELECT count(*) total FROM gateway_bindings")[0]?.total).toBe(0);
@@ -2320,10 +2344,11 @@ describe("P10 review regressions", () => {
                 saw: ADD_SAW,
                 sentAt: SENT,
               });
-              expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject({
-                _tag: "refused",
-                reason: "bad_enrollment",
-              });
+              expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject(
+                DoorRefusal.make({
+                  reason: "bad_enrollment",
+                }),
+              );
               expect(yield* entries("gateway/access")).toEqual(before);
             }).pipe(w.provide);
           }),
@@ -2475,10 +2500,11 @@ describe("P10 door admission and waiting", () => {
                   tab: value,
                   name: kind === "wrong name" ? stranger.fingerprint : k.fingerprint,
                 });
-                expect(answer).toMatchObject({
-                  _tag: "refused",
-                  reason: kind === "unknown" ? "not_granted" : kind === "no version" ? "no_version" : "bad_signature",
-                });
+                expect(answer).toMatchObject(
+                  CheckedHello.cases.refused.make({
+                    reason: kind === "unknown" ? "not_granted" : kind === "no version" ? "no_version" : "bad_signature",
+                  }),
+                );
                 expect((yield* d.knock(client, { label: "Pending" }))._tag).toBe(kind === "unknown" ? "ok" : "refused");
                 expect(rawRows(w.db, "gateway/access")).toEqual([]);
                 expect(rawRows(w.db, "gateway/hellos")).toEqual([]);
@@ -2798,10 +2824,11 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
             sentAt: SENT,
             signed: yield* p.k.sign(`fabrika-hello\n${URL}\n${tab}\n${nonce}`),
           };
-          expect(yield* d.initialize(client, hello, { url: URL, tab, name: p.k.fingerprint })).toMatchObject({
-            _tag: "refused",
-            reason: "not_granted",
-          });
+          expect(yield* d.initialize(client, hello, { url: URL, tab, name: p.k.fingerprint })).toMatchObject(
+            CheckedHello.cases.refused.make({
+              reason: "not_granted",
+            }),
+          );
           connection = { client, key: p.k.raw };
           connections.push(connection);
         }
@@ -2816,7 +2843,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
         if (reply._tag === "refused") {
           // Only a pruned connection is refused: a fresh tab is the newest pending connection.
           expect(repeat).toBeDefined();
-          expect(reply).toEqual({ _tag: "refused", reason: "not_waiting" });
+          expect(reply).toEqual(Answer.cases.refused.make({ reason: "not_waiting" }));
           expect(rows).toEqual(kept);
           continue;
         }
@@ -2824,7 +2851,7 @@ const doorWalk = Effect.fnUntraced(function* (moves: ReadonlyArray<DoorMove>, cu
         const old = kept.find((r) => r.key === connection.key);
         const row = rows.find((r) => r.key === connection.key);
         assert(row);
-        expect(reply).toEqual({ _tag: "ok", result: { code: row.code, until: row.until } });
+        expect(reply).toEqual(Answer.cases.ok.make({ result: { code: row.code, until: row.until } }));
 
         if (old !== undefined) {
           const clients = old.clients.includes(connection.client) ? old.clients : [...old.clients, connection.client];
@@ -2969,7 +2996,8 @@ describe("P10 signed membership changes", () => {
               armed = true;
               const result = yield* d.grant({ text: loser, armored: signature });
               expect(armed).toBe(false);
-              expect(result).toMatchObject({ _tag: "ignored", reason: "used" });
+              expect(result._tag).toBe("ignored");
+              expect(result).toMatchObject({ reason: "used" });
               expect(yield* d.grant({ text: loser, armored: signature })).toEqual(result);
               const members = yield* manager.members;
               expect(members.keys.get(winnerKey.line)?.live).toBe(true);
@@ -3039,23 +3067,26 @@ describe("P10 signed membership changes", () => {
               const { client } = yield* online(d, w);
               const agent = yield* grantWindow(d, w, "agent", "agent");
               expect((yield* d.watch(agent.client))._tag).toBe("refused");
-              expect(yield* d.deny(agent.client, { key: w.otherWindow.raw })).toMatchObject({
-                _tag: "refused",
-                reason: "person_only",
-              });
+              expect(yield* d.deny(agent.client, { key: w.otherWindow.raw })).toMatchObject(
+                DoorRefusal.make({
+                  reason: "person_only",
+                }),
+              );
 
               for (const params of [{ key: w.otherWindow.raw }, { key: w.otherWindow.raw, saw: value, by: "forged" }]) {
-                expect(yield* d.deny(client, params)).toMatchObject({
-                  _tag: "refused",
-                  reason: "bad_input",
-                });
+                expect(yield* d.deny(client, params)).toMatchObject(
+                  DoorRefusal.make({
+                    reason: "bad_input",
+                  }),
+                );
               }
 
               const answer = yield* d.route(client, "gateway.deny", {
                 key: w.otherWindow.raw,
                 saw: value,
               });
-              expect(answer).toMatchObject({ _tag: "ok", result: { _tag: "applied" } });
+              expect(answer._tag).toBe("ok");
+              expect(answer).toHaveProperty("result._tag", "applied");
               const last = (yield* entries("gateway/access")).at(-1)!;
               expect(last._tag).toBe("denied");
               expect(last.body).toMatchObject({
@@ -3127,10 +3158,11 @@ describe("P10 signed membership changes", () => {
                           saw: ADD_SAW,
                           sentAt: SENT,
                         });
-                expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject({
-                  _tag: "refused",
-                  reason: "wrong_ledger",
-                });
+                expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject(
+                  DoorRefusal.make({
+                    reason: "wrong_ledger",
+                  }),
+                );
                 expect(called).not.toHaveBeenCalled();
                 expect(yield* entries("gateway/access")).toEqual([]);
               }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients)))));
@@ -3283,9 +3315,9 @@ describe("P10 inputs, retries and signer", () => {
                 personOnly: value,
               });
               const parent = w.deliveries[0]!.envelope.id;
-              expect(
-                yield* Effect.flip(writeId("claimed-approval", d.signer(parent, PROCESS, "answered"))),
-              ).toMatchObject({ _tag: "SigningRefused", reason: "person_only" });
+              const failure = yield* Effect.flip(writeId("claimed-approval", d.signer(parent, PROCESS, "answered")));
+              expect(failure).toBeInstanceOf(SigningRefused);
+              expect(failure).toMatchObject({ reason: "person_only" });
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -3339,8 +3371,9 @@ describe("P10 inputs, retries and signer", () => {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
               lose = true;
-              expect(yield* Effect.flip(d.route(client, "process.send", request(value)))).toMatchObject({
-                _tag: "LedgerError",
+              const failure = yield* Effect.flip(d.route(client, "process.send", request(value)));
+              expect(failure).toBeInstanceOf(LedgerError);
+              expect(failure).toMatchObject({
                 reason: "unreachable",
               });
               expect(lose).toBe(false);
@@ -3389,7 +3422,7 @@ describe("P10 inputs, retries and signer", () => {
         expect(Object.keys(e).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
         expect(e.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
         expect(Object.values((yield* stamped()).at(-1)!.body ?? {})).toContain(1);
-        expect(e.by).toEqual({ _tag: "person", key: w.window.fingerprint, for: PERSON });
+        expect(e.by).toEqual(Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }));
         expect(e.arrivedAt).toBe(1_790_000_000_000);
         expect(e.input).toEqual(comment());
       }).pipe(w.provide);
@@ -3424,7 +3457,9 @@ describe("P10 inputs, retries and signer", () => {
           // Keep arbitrary values, including undefined, and also mark the forged field itself.
           for (const value of [write.value, forged]) {
             const params = spoofedParams({ ...write, value }, "spoof");
-            expect(yield* d.route(client, write.method, params)).toEqual({ _tag: "refused", reason: "reserved" });
+            expect(yield* d.route(client, write.method, params)).toEqual(
+              Answer.cases.refused.make({ reason: "reserved" }),
+            );
             expect(w.deliveries).toEqual([]);
             expect(w.usedInputs.length).toBe(before);
             expect(yield* stamped()).toEqual([]);
@@ -3563,7 +3598,7 @@ describe("P10 inputs, retries and signer", () => {
           const deliveries = [...w.deliveries];
           const uploaded = [...archives];
           const beforeSums = before.find(([name]) => name === "object")![1].sums!;
-          const target = { piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved" };
+          const target = { piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved" } as const;
           const had = beforeSums.find(
             (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
           );
@@ -3578,7 +3613,9 @@ describe("P10 inputs, retries and signer", () => {
             ? request("t860", inner)
             : { ...request("t860", write.m), [write.key]: write.value };
 
-          expect(yield* d.route(client, "process.send", params)).toEqual({ _tag: "refused", reason: "reserved" });
+          expect(yield* d.route(client, "process.send", params)).toEqual(
+            Answer.cases.refused.make({ reason: "reserved" }),
+          );
           yield* sink.flush;
           expect(w.usedInputs).toEqual(usedInputs);
           expect(w.deliveries).toEqual(deliveries);
@@ -3604,7 +3641,7 @@ describe("P10 inputs, retries and signer", () => {
           expect(archives).toEqual(uploaded);
           yield* TestClock.setTime(REFUSED_HOUR + HOUR);
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
-            { _tag: "sum", ...target, count: 1 },
+            SumPoint.make({ ...target, count: 1 }),
           ]);
         }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
       }),
@@ -3643,7 +3680,7 @@ describe("P10 inputs, retries and signer", () => {
           yield* TestClock.setTime(REFUSED_HOUR + HOUR);
           const sink = yield* SpanSink;
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, REFUSED_HOUR + HOUR)).toEqual([
-            { _tag: "sum", piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved", count: writes.length },
+            SumPoint.make({ piece: "gateway.route", hour: REFUSED_HOUR, refused: "reserved", count: writes.length }),
           ]);
         }).pipe(w.provide);
       }),
@@ -3682,13 +3719,14 @@ describe("P10 inputs, retries and signer", () => {
           yield* TestClock.setTime(openHour + 2000);
           const expected = [...counts]
             .sort(([a], [b]) => a - b)
-            .map(([hour, count]) => ({
-              _tag: "sum",
-              piece: "gateway.route",
-              hour,
-              refused: "reserved",
-              count,
-            }));
+            .map(([hour, count]) =>
+              SumPoint.make({
+                piece: "gateway.route",
+                hour,
+                refused: "reserved",
+                count,
+              }),
+            );
           expect(yield* sink.sums("gateway.route", REFUSED_HOUR, openHour + HOUR)).toEqual(
             expected.filter((point) => point.hour < openHour),
           );
@@ -3718,14 +3756,17 @@ describe("P10 inputs, retries and signer", () => {
           const envelope = w.deliveries[0]!.envelope;
           expect(Object.keys(envelope).sort()).toEqual(["arrivedAt", "by", "id", "input"]);
           expect(envelope.id).toMatch(/^input_[0-7][0-9a-hjkmnp-tv-z]{25}$/);
-          expect(envelope.by).toEqual({ _tag: "person", key: w.window.fingerprint, for: PERSON });
+          expect(envelope.by).toEqual(Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }));
           expect(envelope.arrivedAt).toBe(REFUSED_HOUR + 1000);
           expect(envelope.input).toEqual(m);
           const received = yield* stamped();
           expect(received).toHaveLength(1);
-          expect(received[0]).toMatchObject({ _tag: "received", id: envelope.id });
+          expect(received[0]?._tag).toBe("received");
+          expect(received[0]).toMatchObject({ id: envelope.id });
           expect(w.db.prepare("SELECT count(*) AS n FROM measurements WHERE piece='gateway.route'").get()?.n).toBe(1);
-          const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+          const rows = yield* RecordManager.use((records) =>
+            Stream.runCollect(records.read(Chain.cases.spans.make({}))),
+          );
           expect(rows.filter((row) => row.name === "gateway.route")).toHaveLength(1);
           expect(rows.filter((row) => row.name === "gateway.input")).toHaveLength(1);
         }).pipe(w.provide);
@@ -3797,9 +3838,8 @@ describe("P10 inputs, retries and signer", () => {
         const { client } = yield* online(d, w);
         yield* d.route(client, "process.send", request("first"));
         const parent = w.deliveries[0]!.envelope.id;
-        expect(yield* Effect.flip(d.route(client, "process.send", request("second")))).toMatchObject({
-          _tag: "LedgerError",
-        });
+        const failure = yield* Effect.flip(d.route(client, "process.send", request("second")));
+        expect(failure).toBeInstanceOf(LedgerError);
         expect(w.deliveries).toHaveLength(1);
         expect((yield* writeId("saved-a", d.signer(parent, PROCESS, "saved"))).parent).toBe(parent);
       }).pipe(w.provide);
@@ -3834,7 +3874,9 @@ describe("P10 inputs, retries and signer", () => {
                 w.controls.answer = answered;
                 const params = request(`answer-${n++}`);
                 const expected =
-                  reason === "dead" ? { _tag: "refused", reason: "dead" } : { _tag: "ok", result: answered };
+                  reason === "dead"
+                    ? Answer.cases.refused.make({ reason: "dead" })
+                    : Answer.cases.ok.make({ result: answered });
                 // These are JSON replies: -0 and 0 have the same wire representation.
                 const wire = (value: unknown) => JSON.parse(JSON.stringify(value));
                 expect(wire(yield* d.route(client, "process.send", params))).toEqual(wire(expected));
@@ -3935,10 +3977,11 @@ describe("P10 passkey roots and recovery", () => {
 
               for (const over of [{ flags: 25 }, { origin: "https://other.test" }]) {
                 const proof = yield* sk.sign(text, over);
-                expect(yield* d.grant({ text, armored: proof.armored })).toMatchObject({
-                  _tag: "refused",
-                  reason: "bad_signature",
-                });
+                expect(yield* d.grant({ text, armored: proof.armored })).toMatchObject(
+                  DoorRefusal.make({
+                    reason: "bad_signature",
+                  }),
+                );
                 expect(yield* entries("gateway/access")).toEqual(before);
               }
 
@@ -4129,9 +4172,7 @@ describe("P10 passkey roots and recovery", () => {
               const result = yield* d.grant({ text: second.text, armored: second.armored });
               assert(result._tag !== "applied");
               expect(result.reason).toBe("used");
-              expect(yield* d.grant({ text: first.text, armored: first.armored })).toMatchObject({
-                _tag: "applied",
-              });
+              expect((yield* d.grant({ text: first.text, armored: first.armored }))._tag).toBe("applied");
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -4221,7 +4262,7 @@ describe("P10 revocation and append", () => {
                     process: PROCESS,
                     kind: "saved",
                     stream: "target",
-                    event: { _tag: "saved", value },
+                    event: Saved.make({ value }),
                   }),
                 ))._tag,
               ).toBe("NotGranted");
@@ -4253,7 +4294,7 @@ describe("P10 revocation and append", () => {
                 process: PROCESS,
                 kind: "saved",
                 stream: "target",
-                event: { _tag: "saved", value },
+                event: Saved.make({ value }),
               };
 
               for (const change of [
@@ -4291,8 +4332,10 @@ describe("P33 the door never writes process lifecycle events", () => {
         const parent = w.deliveries.at(-1)!.envelope.id;
         yield* writeId("fact-a", d.signer(parent, PROCESS, kind));
         expect(
-          yield* Effect.flip(d.append({ id: "fact-a", parent, process: PROCESS, kind, stream, event: { _tag: kind } })),
-        ).toMatchObject({ _tag: "SigningRefused" });
+          (yield* Effect.flip(
+            d.append({ id: "fact-a", parent, process: PROCESS, kind, stream, event: { _tag: kind } }),
+          ))._tag,
+        ).toBe("SigningRefused");
         expect(yield* entries(stream)).toEqual([]);
       }).pipe(w.provide);
     });
@@ -4368,11 +4411,11 @@ describe("P33 signal ids belong to the brain", () => {
                 const parent = w.deliveries.at(-1)!.envelope.id;
                 const event = { _tag: "send", m: { _tag: "DOWN", ref: "watch:1", reason: value } };
                 // The signer refuses a signal id outright, and the append refuses it if reached.
-                expect(yield* Effect.flip(writeId(id, d.signer(parent, PROCESS, "send")))).toMatchObject({
-                  _tag: "SigningRefused",
-                });
+                expect((yield* Effect.flip(writeId(id, d.signer(parent, PROCESS, "send"))))._tag).toBe(
+                  "SigningRefused",
+                );
                 expect(
-                  yield* Effect.flip(
+                  (yield* Effect.flip(
                     d.append({
                       id,
                       parent,
@@ -4381,8 +4424,8 @@ describe("P33 signal ids belong to the brain", () => {
                       stream: "notes",
                       event,
                     }),
-                  ),
-                ).toMatchObject({ _tag: "SigningRefused" });
+                  ))._tag,
+                ).toBe("SigningRefused");
                 expect(yield* entries("notes")).toEqual([]);
                 // The same append under an ordinary id lands: the id alone was refused.
                 yield* writeId("note-1", d.signer(parent, PROCESS, "send"));
@@ -4440,15 +4483,15 @@ describe("P33 signal ids belong to the brain", () => {
               yield* d.route(client, "process.send", request("press"));
               const parent = w.deliveries.at(-1)!.envelope.id;
               const taken = JSON.stringify(["DOWN", toWatcher, value]);
-              expect(yield* Effect.flip(writeId(taken, d.signer(parent, PROCESS, "send")))).toMatchObject({
-                _tag: "SigningRefused",
-              });
+              expect((yield* Effect.flip(writeId(taken, d.signer(parent, PROCESS, "send"))))._tag).toBe(
+                "SigningRefused",
+              );
               const forged = {
                 _tag: "send",
                 m: { _tag: "DOWN", ref: value, process: TARGET, reason: "normal", to: toWatcher },
               };
               expect(
-                yield* Effect.flip(
+                (yield* Effect.flip(
                   d.append({
                     id: taken,
                     parent,
@@ -4457,23 +4500,23 @@ describe("P33 signal ids belong to the brain", () => {
                     stream: "watcher:1/inbox",
                     event: forged,
                   }),
-                ),
-              ).toMatchObject({ _tag: "SigningRefused" });
+                ))._tag,
+              ).toBe("SigningRefused");
               yield* ProcessManager.use((p) => p.exit(TARGET, CRASHED, brainFrom)).pipe(
                 Effect.provide(processes(w, asBrain, brainSeat)),
               );
               const inbox = yield* entries("watcher:1/inbox");
               expect(inbox).toHaveLength(1);
-              expect(inbox[0]).toMatchObject({
-                _tag: "send",
-                by: BRAIN,
-                body: { m: { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED } },
+              expect(inbox[0]?._tag).toBe("send");
+              expect(inbox[0]).toMatchObject({ by: BRAIN });
+              expect(Schema.decodeUnknownSync(Schema.Struct({ m: Down }))(inbox[0]?.body)).toMatchObject({
+                m: { ref: value, process: TARGET, reason: CRASHED },
               });
               const letters = yield* ProcessManager.use((p) => Stream.runCollect(p.receive(WATCHER, 0))).pipe(
                 Effect.provide(watcher),
               );
               expect(letters.map((letter) => letter.m)).toEqual([
-                { _tag: "DOWN", ref: value, process: TARGET, reason: CRASHED, to: toWatcher },
+                Down.make({ ref: value, process: TARGET, reason: CRASHED, to: toWatcher }),
               ]);
             }).pipe(w.provide);
           }),
@@ -4631,9 +4674,9 @@ describe("P10 span reader and recording", () => {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
               block = true;
-              expect(yield* Effect.flip(d.route(client, "process.send", request("flush-failure")))).toMatchObject({
-                _tag: "SinkError",
-              });
+              expect((yield* Effect.flip(d.route(client, "process.send", request("flush-failure"))))._tag).toBe(
+                "SinkError",
+              );
               expect(w.deliveries).toEqual([]);
               block = false;
               yield* d.route(client, "process.send", request("flush-failure"));
@@ -4717,8 +4760,9 @@ describe("P10 span reader and recording", () => {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
               expect(
-                yield* Effect.flip(d.route(client, "spans.read", { chain: { _tag: "spans" }, after: 0 })),
-              ).toMatchObject({ _tag: "SinkError" });
+                (yield* Effect.flip(d.route(client, "spans.read", { chain: Chain.cases.spans.make({}), after: 0 })))
+                  ._tag,
+              ).toBe("SinkError");
             }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, broken)))));
           }),
         { concurrency: 1, discard: true },
@@ -4779,8 +4823,9 @@ describe("P10 span reader and recording", () => {
                   reason: value,
                 }))._tag,
               ).toBe("ok");
-              expect(Option.getOrThrow(yield* r.content(chain, span.spanId))).toMatchObject({
-                _tag: "deleted",
+              const content = Option.getOrThrow(yield* r.content(chain, span.spanId));
+              expect(Content.isAnyOf(["deleted"])(content)).toBe(true);
+              expect(content).toMatchObject({
                 by: w.window.fingerprint,
                 reason: value,
               });
@@ -4864,8 +4909,9 @@ describe("P10 span reader and recording", () => {
               const d = yield* Gateway;
               const { client } = yield* online(d, w);
               block = true;
-              expect(yield* Effect.flip(d.route(client, "process.send", request(value)))).toMatchObject({
-                _tag: "LedgerError",
+              const failure = yield* Effect.flip(d.route(client, "process.send", request(value)));
+              expect(failure).toBeInstanceOf(LedgerError);
+              expect(failure).toMatchObject({
                 reason: "storage",
               });
               expect(block).toBe(false);
@@ -4934,7 +4980,7 @@ describe("P10 span reader and recording", () => {
             const result = yield* d.route(
               client,
               "process.send",
-              request(`raw-${index}`, { _tag: "keys", bytes: marker }),
+              request(`raw-${index}`, Input.cases.keys.make({ bytes: marker })),
             );
             expect(result._tag).toBe("ok");
           }
@@ -5065,18 +5111,24 @@ describe("P10 refusal records and checked writes", () => {
                     tab: value,
                     name: k.fingerprint,
                   });
-                  expect(result).toMatchObject(
-                    interruption === "stranger flood" && known
-                      ? { _tag: "online" }
-                      : { _tag: "refused", reason: known ? "bad_nonce" : "not_granted" },
-                  );
+
+                  const admitted = interruption === "stranger flood" && known;
+                  expect(result._tag).toBe(admitted ? "online" : "refused");
+
+                  if (!admitted) {
+                    expect(result).toMatchObject(
+                      CheckedHello.cases.refused.make({ reason: known ? "bad_nonce" : "not_granted" }),
+                    );
+                  }
+
                   expect(replace).toBeNull();
                   const knock = yield* d.knock(client, { label: "Checked proof" });
-                  expect(knock).toMatchObject(
-                    interruption === "stranger flood" && !known
-                      ? { _tag: "ok" }
-                      : { _tag: "refused", reason: "not_waiting" },
-                  );
+                  const pending = interruption === "stranger flood" && !known;
+                  expect(knock._tag).toBe(pending ? "ok" : "refused");
+
+                  if (!pending) {
+                    expect(knock).toMatchObject(Answer.cases.refused.make({ reason: "not_waiting" }));
+                  }
                 }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, ledger)))));
               }),
             { discard: true },
@@ -5148,20 +5200,24 @@ describe("P10 refusal records and checked writes", () => {
 
                     yield* Deferred.succeed(release, undefined);
                     const result = yield* Fiber.join(first);
-                    expect(result).toMatchObject(
-                      interruption === "stranger flood" && known
-                        ? { _tag: "online" }
-                        : {
-                            _tag: "refused",
-                            reason: interruption === "replaced" ? "bad_nonce" : "not_granted",
-                          },
-                    );
+                    const admitted = interruption === "stranger flood" && known;
+                    expect(result._tag).toBe(admitted ? "online" : "refused");
+
+                    if (!admitted) {
+                      expect(result).toMatchObject(
+                        CheckedHello.cases.refused.make({
+                          reason: interruption === "replaced" ? "bad_nonce" : "not_granted",
+                        }),
+                      );
+                    }
+
                     const knock = yield* d.knock(client, { label: "Checked proof" });
-                    expect(knock).toMatchObject(
-                      interruption === "stranger flood" && !known
-                        ? { _tag: "ok" }
-                        : { _tag: "refused", reason: "not_waiting" },
-                    );
+                    const pending = interruption === "stranger flood" && !known;
+                    expect(knock._tag).toBe(pending ? "ok" : "refused");
+
+                    if (!pending) {
+                      expect(knock).toMatchObject(Answer.cases.refused.make({ reason: "not_waiting" }));
+                    }
                   } finally {
                     spy.mockRestore();
                   }
@@ -5260,10 +5316,11 @@ describe("P10 refusal records and checked writes", () => {
                 if (retry === "same receipt") {
                   expect(result).toEqual(answer);
                 } else {
-                  expect(result).toMatchObject({
-                    _tag: "refused",
-                    reason: p === null ? "id_reused" : "bad_enrollment",
-                  });
+                  expect(result).toMatchObject(
+                    DoorRefusal.make({
+                      reason: p === null ? "id_reused" : "bad_enrollment",
+                    }),
+                  );
                 }
               }).pipe(
                 Effect.provide(
@@ -5317,14 +5374,16 @@ describe("P10 refusal records and checked writes", () => {
               });
               const armored = yield* w.root.sign(text);
               fail = true;
-              expect(yield* Effect.flip(d.grant({ text, armored }))).toMatchObject({
-                _tag: "LedgerError",
+              const failure = yield* Effect.flip(d.grant({ text, armored }));
+              expect(failure).toBeInstanceOf(LedgerError);
+              expect(failure).toMatchObject({
                 reason: "unreachable",
               });
-              expect(yield* d.grant({ text, armored: `${armored}\n` })).toMatchObject({
-                _tag: "refused",
-                reason: "id_reused",
-              });
+              expect(yield* d.grant({ text, armored: `${armored}\n` })).toMatchObject(
+                DoorRefusal.make({
+                  reason: "id_reused",
+                }),
+              );
               expect((yield* d.grant({ text, armored }))._tag).toBe("applied");
             }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, clients)))));
           }),
@@ -5352,14 +5411,14 @@ describe("P10 refusal records and checked writes", () => {
               yield* Effect.gen(function* () {
                 const d = yield* Gateway;
                 const { client } = yield* online(d, w);
-                expect(yield* d.route(client, method, malformed)).toMatchObject({
-                  _tag: "refused",
-                  reason: "bad_input",
-                });
-                expect((yield* stamped()).at(-1)).toMatchObject({
-                  _tag: "refused",
-                  body: { reason: "bad_input" },
-                });
+                expect(yield* d.route(client, method, malformed)).toMatchObject(
+                  Answer.cases.refused.make({
+                    reason: "bad_input",
+                  }),
+                );
+                const stampedRow = (yield* stamped()).at(-1);
+                expect(stampedRow?._tag).toBe("refused");
+                expect(stampedRow).toMatchObject({ body: { reason: "bad_input" } });
                 expect(w.deliveries).toEqual([]);
               }).pipe(w.provide);
             }),
@@ -5389,22 +5448,22 @@ describe("P10 refusal records and checked writes", () => {
               expect(session.by.key).toBe(w.window.fingerprint);
 
               for (const [stream, event] of [
-                ["gateway/access", { _tag: "answered" }],
+                ["gateway/access", Answered.make({})],
                 ["tickets", null],
                 ["tickets", { _tag: "answered", value: 1n }],
               ] as const) {
-                expect(
-                  yield* Effect.flip(
-                    d.append({
-                      id: "answer",
-                      parent,
-                      process: PROCESS,
-                      kind: "answered",
-                      stream,
-                      event,
-                    }),
-                  ),
-                ).toMatchObject({ _tag: "SigningRefused", reason: "not_delivered" });
+                const failure = yield* Effect.flip(
+                  d.append({
+                    id: "answer",
+                    parent,
+                    process: PROCESS,
+                    kind: "answered",
+                    stream,
+                    event,
+                  }),
+                );
+                expect(failure).toBeInstanceOf(SigningRefused);
+                expect(failure).toMatchObject({ reason: "not_delivered" });
               }
 
               expect(
@@ -5414,7 +5473,7 @@ describe("P10 refusal records and checked writes", () => {
                   process: PROCESS,
                   kind: "answered",
                   stream: "tickets",
-                  event: { _tag: "answered" },
+                  event: Answered.make({}),
                 }))._tag,
               ).toBe("placed");
             }).pipe(w.provide);
@@ -5452,10 +5511,11 @@ describe("P10 refusal records and checked writes", () => {
                 saw: ADD_SAW,
                 sentAt: SENT,
               });
-              expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject({
-                _tag: "refused",
-                reason: "bad_enrollment",
-              });
+              expect(yield* d.grant({ text, armored: yield* w.root.sign(text) })).toMatchObject(
+                DoorRefusal.make({
+                  reason: "bad_enrollment",
+                }),
+              );
               expect(yield* entries("gateway/access")).toEqual(before);
             }).pipe(w.provide);
           }),
@@ -5486,10 +5546,11 @@ describe("P10 refusal records and checked writes", () => {
               });
               const armored = yield* w.root.sign(text);
               expect((yield* d.grant({ text, armored }))._tag).toBe("applied");
-              expect(yield* d.grant({ text, armored: `${armored}\n` })).toMatchObject({
-                _tag: "refused",
-                reason: "id_reused",
-              });
+              expect(yield* d.grant({ text, armored: `${armored}\n` })).toMatchObject(
+                DoorRefusal.make({
+                  reason: "id_reused",
+                }),
+              );
             }).pipe(w.provide);
           }),
         { concurrency: 1, discard: true },
@@ -5552,10 +5613,11 @@ describe("P10 refusal records and checked writes", () => {
                 concurrency: "unbounded",
               });
               expect(answers.map((a) => a._tag).sort()).toEqual(["online", "refused"]);
-              expect(yield* d.knock(client, { label: "Already online" })).toMatchObject({
-                _tag: "refused",
-                reason: "not_waiting",
-              });
+              expect(yield* d.knock(client, { label: "Already online" })).toMatchObject(
+                Answer.cases.refused.make({
+                  reason: "not_waiting",
+                }),
+              );
             }).pipe(w.provide);
           }),
         { discard: true },
@@ -5584,7 +5646,7 @@ describe("P10 refusal records and checked writes", () => {
                   ...request("stolen-trace"),
                   traceId: row.traceId,
                 }),
-              ).toMatchObject({ _tag: "refused", reason: "bad_trace" });
+              ).toMatchObject(Answer.cases.refused.make({ reason: "bad_trace" }));
               yield* d.route(client, "process.send", request("delivered"));
               const traceId = w.deliveries.at(-1)!.trace.traceId;
               expect(
@@ -5593,7 +5655,7 @@ describe("P10 refusal records and checked writes", () => {
                   pid: OTHER_PROCESS,
                   traceId,
                 }),
-              ).toMatchObject({ _tag: "refused", reason: "bad_trace" });
+              ).toMatchObject(Answer.cases.refused.make({ reason: "bad_trace" }));
               expect(
                 (yield* d.route(agent.client, "process.send", {
                   ...request("same-trace"),
@@ -5645,8 +5707,9 @@ describe("P10 refusal records and checked writes", () => {
                 saw: SAW,
                 sentAt: SENT,
               });
-              expect(yield* Effect.flip(d.grant({ text, armored: yield* w.root.sign(text) }))).toMatchObject({
-                _tag: "LedgerError",
+              const failure = yield* Effect.flip(d.grant({ text, armored: yield* w.root.sign(text) }));
+              expect(failure).toBeInstanceOf(LedgerError);
+              expect(failure).toMatchObject({
                 reason: "bad_row",
               });
             }).pipe(w.provide);
@@ -5719,10 +5782,11 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const { client, tab } = yield* online(d, w, "d1", w.window, session);
           const to = Recipient.cases.client.make({ client: tab, session });
           const before = yield* processRows();
-          expect(yield* d.route(client, "process.monitor", { ref: call.ref, pid: call.pid })).toEqual({
-            _tag: "ok",
-            result: null,
-          });
+          expect(yield* d.route(client, "process.monitor", { ref: call.ref, pid: call.pid })).toEqual(
+            Answer.cases.ok.make({
+              result: null,
+            }),
+          );
           const added = (yield* processRows()).slice(before.length);
           expect(
             added.map((row) => [row._tag, row.by, row.body]),
@@ -5730,34 +5794,36 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           ).toEqual([["monitored", BRAIN_KEY, { ref: call.ref, process: call.pid, to, asked: w.window.fingerprint }]]);
           const once = yield* processRows();
           const letters = yield* inboxRows(tab);
-          expect(yield* d.route(client, "process.monitor", { ref: call.ref, pid: call.pid })).toEqual({
-            _tag: "ok",
-            result: null,
-          });
+          expect(yield* d.route(client, "process.monitor", { ref: call.ref, pid: call.pid })).toEqual(
+            Answer.cases.ok.make({
+              result: null,
+            }),
+          );
           expect(yield* processRows(), "the same monitor again wrote a line").toEqual(once);
           expect(yield* inboxRows(tab), "the same monitor again wrote a letter").toEqual(letters);
           const extra = { ...call.extra, ref: `${call.ref}:x`, pid: call.pid };
           // A key every door call reserves (`id`, `by`, `for`, `arrivedAt`) keeps the door's own
           // `reserved` refusal; any other key is this method's `bad_input`.
           const reserved = ["id", "by", "for", "arrivedAt"].some((k) => Object.hasOwn(extra, k));
-          expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Object.keys(extra))).toMatchObject({
-            _tag: "refused",
-            reason: reserved ? "reserved" : "bad_input",
-          });
+          expect(yield* d.route(client, "process.monitor", extra), JSON.stringify(Object.keys(extra))).toMatchObject(
+            Answer.cases.refused.make({
+              reason: reserved ? "reserved" : "bad_input",
+            }),
+          );
           expect(yield* processRows(), "params with another key wrote a line").toEqual(once);
           // A well-formed recipient in the params is still a key the method does not take.
           const forged = Recipient.cases.client.make({ client: "tab-forged", session: processId() });
           expect(
             yield* d.route(client, "process.monitor", { ref: `${call.ref}:f`, pid: call.pid, to: forged }),
-          ).toMatchObject({ _tag: "refused", reason: "bad_input" });
+          ).toMatchObject(Answer.cases.refused.make({ reason: "bad_input" }));
           expect(yield* processRows(), "a recipient named in params wrote a line").toEqual(once);
           const hands = yield* handsOnline(d, w, processId());
           expect(
             yield* d.route(hands.client, "process.monitor", { ref: `${call.ref}:h`, pid: call.pid }),
-          ).toMatchObject({ _tag: "refused", reason: "not_allowed" });
+          ).toMatchObject(Answer.cases.refused.make({ reason: "not_allowed" }));
           const bare = yield* online(d, w, "d1-bare");
           expect(yield* d.route(bare.client, "process.monitor", { ref: `${call.ref}:b`, pid: call.pid })).toMatchObject(
-            { _tag: "refused", reason: "no_session" },
+            Answer.cases.refused.make({ reason: "no_session" }),
           );
           expect(yield* processRows(), "a refused monitor wrote a line").toEqual(once);
         }).pipe(w.provide);
@@ -5799,10 +5865,8 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const { client, tab } = yield* online(d, w, "d2", w.window, session);
           const to = Recipient.cases.client.make({ client: tab, session });
           const inbox = clientInbox(tab);
-          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after: 0 }), "nothing waits yet").toMatchObject(
-            {
-              _tag: "parked",
-            },
+          expect((yield* d.route(client, "ledger.wait", { stream: inbox, after: 0 }))._tag, "nothing waits yet").toBe(
+            "parked",
           );
           expect((yield* d.route(client, "process.monitor", { ref: "w9", pid: counter }))._tag).toBe("ok");
           expect(yield* inboxRows(tab), "a live target's monitor wrote a letter").toEqual([]);
@@ -5814,14 +5878,15 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
             [signalId(to, "w9", 1), BRAIN_KEY, Down.make({ ref: "w9", process: counter, reason: CRASHED, to })],
           ]);
           expect(w.rings.slice(rang), "the exit rang the parked wait on the window's inbox").toContain(inbox);
-          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after: 0 })).toEqual({
-            _tag: "ok",
-            result: { rev: exited[0]!.rev },
-          });
+          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after: 0 })).toEqual(
+            Answer.cases.ok.make({
+              result: { rev: exited[0]!.rev },
+            }),
+          );
           const after = exited[0]!.rev;
-          expect(yield* d.route(client, "ledger.wait", { stream: inbox, after }), "past the DOWN").toMatchObject({
-            _tag: "parked",
-          });
+          expect((yield* d.route(client, "ledger.wait", { stream: inbox, after }))._tag, "past the DOWN").toBe(
+            "parked",
+          );
           const before = w.rings.length;
           expect((yield* d.route(client, "process.monitor", { ref: "w10", pid: counter }))._tag).toBe("ok");
           const gone = (yield* inboxRows(tab)).slice(exited.length);
@@ -5829,7 +5894,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
             [
               signalId(to, "w10", 1),
               BRAIN_KEY,
-              Down.make({ ref: "w10", process: counter, reason: { _tag: "noproc" }, to }),
+              Down.make({ ref: "w10", process: counter, reason: NoProc.make({}), to }),
             ],
           ]);
           expect((yield* monitoredRows()).map((row) => Reflect.get(Object(row.body), "ref"))).toEqual(["w9", "w10"]);
@@ -5837,7 +5902,7 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           expect(
             yield* d.route(client, "ledger.wait", { stream: inbox, after }),
             "a wait past the exit's DOWN wakes on the noproc DOWN",
-          ).toEqual({ _tag: "ok", result: { rev: gone[0]!.rev } });
+          ).toEqual(Answer.cases.ok.make({ result: { rev: gone[0]!.rev } }));
         }).pipe(w.provide);
       }),
   );
@@ -5863,17 +5928,20 @@ describe("P18 slice 2 D1 to D3: a window monitors a process through the door", (
           const answer = yield* d.route(client, "process.monitor", { ref, pid });
 
           if (ref.length === 0 || ref.length > 256) {
-            expect(answer, `a ${ref.length}-character ref`).toMatchObject({ _tag: "refused", reason: "bad_text" });
+            expect(answer, `a ${ref.length}-character ref`).toMatchObject(
+              Answer.cases.refused.make({ reason: "bad_text" }),
+            );
             expect(yield* processRows(), "a refused ref wrote a line").toEqual(before);
             return;
           }
 
           expect(answer._tag, `a ${ref.length}-character ref`).toBe("ok");
           const once = yield* processRows();
-          expect(yield* d.route(client, "process.monitor", { ref, pid: processId() })).toMatchObject({
-            _tag: "refused",
-            reason: "bad_ref",
-          });
+          expect(yield* d.route(client, "process.monitor", { ref, pid: processId() })).toMatchObject(
+            Answer.cases.refused.make({
+              reason: "bad_ref",
+            }),
+          );
           expect(yield* processRows(), "a ref moved to another pid wrote a line").toEqual(once);
         }).pipe(w.provide);
       }),

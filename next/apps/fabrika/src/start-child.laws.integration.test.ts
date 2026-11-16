@@ -5,14 +5,18 @@ import { it as effectIt } from "@effect/vitest";
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import { Sender } from "@kampus/libfabrika/permissions/Senders";
 import { Started } from "@kampus/libfabrika/processes/Children";
+import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
-import { Recipient } from "@kampus/libfabrika/processes/Process";
+import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { ProcessReplies } from "@kampus/libfabrika/workers/bindings";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Result, Schema, Scope } from "effect";
+import { Clock, Effect, Exit, Layer, Logger, ManagedRuntime, Predicate, Result, Schema, Scope } from "effect";
 import * as fc from "fast-check";
 import { assert, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
@@ -24,6 +28,11 @@ import {
   PROJECT,
   SENT,
 } from "./start-child.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
+/** A child start's answer over Project RPC that started a fresh life. */
+const StartedReply = Schema.TaggedStruct("ok", { value: Started.cases.started });
 
 // Each built-in program's hash is the SHA-256 of its source, as `BuiltProgram` requires.
 const CODE = vi.hoisted(() => ({
@@ -216,7 +225,11 @@ const helpers = ({ instance, hashes, from }: Fixture) => {
     start: async (name: string, program: "starter" | "child") => {
       const started = await call(
         "start",
-        { _tag: "first", id: `start-${name}`, name, code: { program: `p42/${program}`, hash: hashes[program] } },
+        Start.cases.first.make({
+          id: `start-${name}`,
+          name,
+          code: { program: `p42/${program}`, hash: hashes[program] },
+        }),
         from,
       );
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -307,7 +320,7 @@ const projectSecrets = Effect.fnUntraced(function* (
           ProjectService.use((p) => {
             const request: Effect.Effect<unknown, unknown> =
               path === "exit"
-                ? p.processExit(pid ?? "", { _tag: "normal" }, fixture.from)
+                ? p.processExit(pid ?? "", ExitReason.cases.normal.make({}), fixture.from)
                 : p.processChild(child, fixture.from);
             return request;
           }).pipe(Effect.provide(logging)),
@@ -372,9 +385,8 @@ const projectSecrets = Effect.fnUntraced(function* (
       expect(Result.isSuccess(answer), "L11: the failed start is retryable").toBe(true);
 
       if (Result.isSuccess(answer) && path !== "exit") {
-        expect(answer.success).toMatchObject({
-          _tag: "ok",
-          value: { _tag: "started", process: pid, name: child.name },
+        expect(Schema.decodeUnknownSync(StartedReply)(answer.success)).toMatchObject({
+          value: { process: pid, name: child.name },
         });
       }
 
@@ -404,13 +416,13 @@ const projectSecrets = Effect.fnUntraced(function* (
           ProjectService.use((p) => p.processChild(child, fixture.from)).pipe(Effect.provide(logging)),
         ),
       );
-      expect(started).toMatchObject({ _tag: "ok", value: { _tag: "started" } });
+      expect(Schema.is(StartedReply)(started)).toBe(true);
       yield* placed();
       const process = pid ?? "";
       const watched = yield* Effect.promise(() =>
         runtime.runPromise(ProjectService.use((p) => p.processMonitor(`in-${reached.size}`, process, fixture.from))),
       );
-      expect(watched).toMatchObject({ _tag: "ok" });
+      expect(ProcessReplies.isAnyOf(["ok"])(watched)).toBe(true);
       yield* fixture.monitor(process, project.boot.process, `out-${reached.size}`);
     }
 
@@ -429,15 +441,15 @@ const projectSecrets = Effect.fnUntraced(function* (
 
     if (path === "exit") {
       const retried = yield* call();
-      expect(retried, "L11: the failed exit remains retryable").toMatchObject({
-        _tag: "Success",
-        success: { _tag: "ok" },
-      });
+      expect(Result.isSuccess(retried), "L11: the failed exit remains retryable").toBe(true);
+      expect(Result.isSuccess(retried) ? retried.success : undefined, "L11: the retried exit answers ok").toSatisfy(
+        Predicate.isTagged("ok"),
+      );
       const rows = yield* Effect.promise(() => runtime.runPromise(project.read(`processes/${child.name}`, 0, "audit")));
       expect(
         rows.filter((row) => row._tag === "exited"),
         "L11: retry writes one normal exit",
-      ).toMatchObject([{ body: { process: pid, reason: { _tag: "normal" } } }]);
+      ).toMatchObject([{ body: { process: pid, reason: ExitReason.cases.normal.make({}) } }]);
       const watches = yield* Effect.promise(() => runtime.runPromise(project.read("processes", 0, "audit")));
       expect(
         watches.filter((row) => row._tag === "demonitored" && JSON.stringify(row.body).includes(`out-${reached.size}`)),
@@ -563,7 +575,9 @@ const storageCall = Effect.fnUntraced(function* (
 
     if (path === "ended") {
       yield* Effect.promise(() =>
-        runtime.runPromise(ProjectService.use((p) => p.processExit(pid, { _tag: "normal" }, fixture.from))),
+        runtime.runPromise(
+          ProjectService.use((p) => p.processExit(pid, ExitReason.cases.normal.make({}), fixture.from)),
+        ),
       );
     }
 
@@ -599,11 +613,11 @@ const storageCall = Effect.fnUntraced(function* (
           letterLine(fixture.from, {
             type: "start_child_ok",
             cmd: { type: "start_child", id: child.id, input: { program: child.code.program, name: child.name } },
-            value: { _tag: "started", process: pid, name: child.name, rev },
+            value: Started.cases.started.make({ process: pid, name: child.name, rev }),
           }),
         );
       case "exit":
-        return p.processExit(pid, { _tag: "normal" }, fixture.from);
+        return p.processExit(pid, ExitReason.cases.normal.make({}), fixture.from);
       default:
         return p.processChild(
           path === "already" || path === "ended" ? { ...child, id: `${project.boot.process}/2/0` } : child,
@@ -800,10 +814,10 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           const reopened = yield* fixture.acquire();
           const recovered = yield* Effect.promise(() => reopened.runPromise(ProjectService));
           const reply = yield* Effect.promise(() => reopened.runPromise(recovered.processChild(child, fixture.from)));
-          expect(reply, "L10: retry finds the saved start with its original revision").toMatchObject({
-            _tag: "ok",
-            value: { _tag: "started", name: child.name, rev: committed[0]?.rev },
-          });
+          expect(
+            Schema.decodeUnknownSync(StartedReply)(reply),
+            "L10: retry finds the saved start with its original revision",
+          ).toMatchObject({ value: { name: child.name, rev: committed[0]?.rev } });
           expect(
             fixture.configured.filter((call) => call.descriptor.name === child.name),
             "L10: recovery rebuilds the descriptor and wakes the first letter once",
@@ -908,7 +922,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const { start, live, facts } = helpers(fixture);
       const starter = await start("starter:1", "starter");
       const client = await connect("desk-s1");
-      const founder = { _tag: "person", key: fixture.key.fingerprint, for: fixture.from.for };
+      const founder = Sender.cases.person.make({ key: fixture.key.fingerprint, for: fixture.from.for });
       const asks = [
         { program: "p42/child", name: "child:desk-s1" },
         { program: "p42/starter", name: "starter:desk-s1" },
@@ -916,9 +930,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
 
       for (const [n, ask] of asks.entries()) {
         expect(
-          await client.call("process.send", letter(starter, `desk-s1-${n}`, { type: "start", ...ask })),
+          Schema.is(AcceptedReply)(
+            await client.call("process.send", letter(starter, `desk-s1-${n}`, { type: "start", ...ask })),
+          ),
           "the starter takes the founder's letter",
-        ).toMatchObject({ result: { _tag: "accepted" } });
+        ).toBe(true);
       }
 
       const view = await until(
@@ -934,7 +950,12 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
           Schema.decodeUnknownOption(Started)(told[n])._tag,
           `L1: the start of ${ask.program} answers in Started's shape`,
         ).toBe("Some");
-        expect(told[n], `L1: ${ask.program} started fresh`).toMatchObject({ _tag: "started", name: ask.name });
+        expect(
+          Schema.decodeUnknownSync(Started.cases.started)(told[n]),
+          `L1: ${ask.program} started fresh`,
+        ).toMatchObject({
+          name: ask.name,
+        });
         expect(await live(ask.name), `L1: ${ask.name} is live`).toBeDefined();
         const lines = (await facts(`processes/${ask.name}`)).filter((fact) => fact._tag === "started");
         expect(lines, "L2: the start's requester is the starter's life, the program that asked").toMatchObject([
@@ -973,7 +994,7 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         "process.send",
         letter(starter, "start-1", { type: "start", program: "p42/child", name: "child:1", input: { type: "inc" } }),
       );
-      expect(sent, "the starter takes the letter").toMatchObject({ result: { _tag: "accepted" } });
+      expect(Schema.is(AcceptedReply)(sent), "the starter takes the letter").toBe(true);
       const child = await until(
         "the child is live",
         () => live("child:1"),
@@ -1011,11 +1032,11 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
       const client = await connect("children");
 
       for (let n = 0; n < 2; n++) {
-        expect(await client.call("process.send", letter(other ?? "", `other-inc-${n}`, { type: "inc" }))).toMatchObject(
-          {
-            result: { _tag: "accepted" },
-          },
-        );
+        expect(
+          Schema.is(AcceptedReply)(
+            await client.call("process.send", letter(other ?? "", `other-inc-${n}`, { type: "inc" })),
+          ),
+        ).toBe(true);
       }
 
       const otherView = await until(
@@ -1023,9 +1044,9 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         () => client.call("view.open", { pid: other }),
         (frame) => frame.result?.view?.count === 2,
       );
-      expect(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))).toMatchObject({
-        result: { _tag: "accepted" },
-      });
+      expect(
+        Schema.is(AcceptedReply)(await client.call("process.send", letter(peer, "peer-inc", { type: "inc" }))),
+      ).toBe(true);
       const peerView = await until(
         "another life of the child's program has a nonzero count",
         () => client.call("view.open", { pid: peer }),
@@ -1050,9 +1071,9 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         (frame) => frame.result?.view?.count === 1,
       );
       expect(view, "L10: the child's first letter is its input").toMatchObject({ result: { view: { count: 1 } } });
-      expect(await client.call("process.send", letter(first, "inc-1", { type: "inc" }))).toMatchObject({
-        result: { _tag: "accepted" },
-      });
+      expect(Schema.is(AcceptedReply)(await client.call("process.send", letter(first, "inc-1", { type: "inc" })))).toBe(
+        true,
+      );
       await until(
         "the child stepped its next letter",
         () => client.call("view.open", { pid: first }),
@@ -1063,7 +1084,9 @@ describe("P42 slice 1: a code start on the real Worker path", () => {
         () => client.call("view.open", { pid: starter }),
         (frame) => frame.result?.view?.asked === 1 && frame.result?.view?.told?.length === 1,
       );
-      expect(starterView.result.view.told).toMatchObject([{ _tag: "started", process: first, name: "child:1" }]);
+      expect(Schema.decodeUnknownSync(Schema.Array(Started.cases.started))(starterView.result.view.told)).toMatchObject(
+        [{ process: first, name: "child:1" }],
+      );
 
       // A throw restarts it: one restarted fact naming the old life, in the child's own name.
       await client.call("process.send", letter(first, "throw-1", { type: "throw" }));

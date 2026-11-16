@@ -12,16 +12,21 @@ import { nodeExecution, type Descriptor, type Incoming } from "@kampus/libfabrik
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { programBox } from "@kampus/libfabrika/box";
 import { Start } from "@kampus/libfabrika/processes/Process";
-import { copied, type ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
+import { copied, ExitReason, fcBadReason, fcExitReason } from "@kampus/libfabrika/processes/Process.test-support";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
-import { Program } from "@kampus/libfabrika/runtime/Program";
+import { Input, Program, Write } from "@kampus/libfabrika/runtime/Program";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { send } from "@kampus/libfabrika/runtime/Send";
 import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Written } from "@kampus/libfabrika/telemetry/Records";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
+import * as Wire from "@kampus/libfabrika/transport/Wire";
+import { ProcessReplies } from "@kampus/libfabrika/workers/bindings";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import {
   commitReply,
@@ -34,12 +39,21 @@ import {
   signingReply,
 } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Exit, Schema } from "effect";
+import { Effect, Exit, Predicate, Schema } from "effect";
 import * as fc from "fast-check";
 import { programs } from "virtual:fabrika-built";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, type Env } from "./runtime.ts";
+
+/** A door answer `ok` whose result is the runner's `accepted`. */
+const OkAccepted = Schema.TaggedStruct("ok", { result: Sent.cases.accepted });
+/** A send that came back with an `ok` door answer. */
+const AnsweredOk = Schema.Struct({ answer: Wire.Answer.cases.ok });
+/** A send whose door answer is `ok` with the runner's `accepted`. */
+const AnsweredAccepted = Schema.Struct({ answer: OkAccepted });
+/** The event the approvals program writes: a bare `answered`. */
+const Answered = Schema.TaggedStruct("answered", {});
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
@@ -205,7 +219,7 @@ const write = Cmd.make("write", {
 });
 
 const caused = (parent: string) =>
-  write({ stream: "events", write: { _tag: "caused", parent, event: { _tag: "answered" } } });
+  write({ stream: "events", write: Write.cases.caused.make({ parent, event: Answered.make({}) }) });
 
 const approvals = {
   name: "p12/approvals",
@@ -226,8 +240,8 @@ const approvals = {
   view: { data: Model, select: (s: typeof Model.Type) => s },
   refuse: () => null,
   inputs: {
-    prepare: { _tag: "write", schema: Msg, description: "Prepare", personOnly: false },
-    approve: { _tag: "write", schema: Msg, description: "Approve", personOnly: true },
+    prepare: Input.cases.write.make({ schema: Msg, description: "Prepare", personOnly: false }),
+    approve: Input.cases.write.make({ schema: Msg, description: "Approve", personOnly: true }),
   },
   outputs: {},
   writes: { answered: { schema: Schema.TaggedStruct("answered", {}), personOnly: true } },
@@ -440,8 +454,8 @@ const poisonProgram = (limit: number | null) => ({
   view: { data: PoisonModel, select: (s: typeof PoisonModel.Type) => s },
   refuse: () => null,
   inputs: {
-    throw: { _tag: "write", schema: PoisonMsg, description: "Fail", personOnly: false },
-    inc: { _tag: "write", schema: PoisonMsg, description: "Count", personOnly: false },
+    throw: Input.cases.write.make({ schema: PoisonMsg, description: "Fail", personOnly: false }),
+    inc: Input.cases.write.make({ schema: PoisonMsg, description: "Count", personOnly: false }),
   },
   outputs: {},
   writes: {},
@@ -736,7 +750,7 @@ const world = (
     CONNECTION: {
       getByName: () => ({ ring: async () => {}, notify: async () => {}, probe: async () => 42 }),
     },
-    RECORD: { getByName: () => ({ write: async () => ({ _tag: "written" }) }) },
+    RECORD: { getByName: () => ({ write: async () => Written.cases.written.make({}) }) },
     MEASUREMENTS: {},
     LOADER: {
       get: (id: string) => ({
@@ -1006,23 +1020,25 @@ const world = (
         nonce = await project.challenge(client),
         tab = "recovery-test";
       expect(
-        await project.initialize(
-          client,
-          {
-            versions: [1],
-            has: ["seal"],
-            ping: "30s",
-            key: key.raw,
-            tab,
-            nonce,
-            platform: "headless",
-            os: "linux",
-            sentAt: SENT,
-            signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
-          },
-          { url: "http://127.0.0.1:18787", tab, name: key.fingerprint },
+        CheckedHello.isAnyOf(["online"])(
+          await project.initialize(
+            client,
+            {
+              versions: [1],
+              has: ["seal"],
+              ping: "30s",
+              key: key.raw,
+              tab,
+              nonce,
+              platform: "headless",
+              os: "linux",
+              sentAt: SENT,
+              signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
+            },
+            { url: "http://127.0.0.1:18787", tab, name: key.fingerprint },
+          ),
         ),
-      ).toMatchObject({ _tag: "online" });
+      ).toBe(true);
       return client;
     },
     /**
@@ -1072,8 +1088,8 @@ const world = (
         return answer === undefined
           ? undefined
           : "result" in answer
-            ? { _tag: "ok", result: answer.result }
-            : { _tag: "refused", reason: answer.error.data.reason };
+            ? Wire.Answer.cases.ok.make({ result: answer.result })
+            : Wire.Answer.cases.refused.make({ reason: answer.error.data.reason });
       };
       expect(
         await call("initialize", {
@@ -1088,7 +1104,7 @@ const world = (
           sentAt: SENT,
           signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\n${tab}\n${nonce}`),
         }),
-      ).toMatchObject({ _tag: "ok" });
+      ).toSatisfy(Predicate.isTagged("ok"));
       return {
         db: doorDb,
         call,
@@ -1125,9 +1141,7 @@ const world = (
           saw: { label: "fixture", location: "local", method: "command", check: "none" },
           sentAt: SENT,
         });
-        expect(await project.grant({ text, armored: key.proof(text) })).toMatchObject({
-          _tag: "applied",
-        });
+        expect((await project.grant({ text, armored: key.proof(text) }))._tag).toBe("applied");
       };
     },
     calls: () => ({ signs, commits }),
@@ -1231,7 +1245,7 @@ StartsTest.law(
               seen: 0,
             }),
           );
-          expect(answer).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(Schema.is(OkAccepted)(answer)).toBe(true);
           count++;
           expect(yield* Effect.promise(() => owner.object.open("settings-audit"))).toMatchObject({ view: { count } });
         } else if (move === "successor") {
@@ -1324,14 +1338,16 @@ describe("P12 Project configure recovery", () => {
       expect(await process.open("audit")).toMatchObject({ rev: 0, view: { count: 0 } });
       const client = await w.admit();
       expect(
-        await w.project.route(client, "process.send", {
-          pid: descriptor.id,
-          letter: "after-restore",
-          m: { type: "inc" },
-          sentAt: SENT,
-          seen: 0,
-        }),
-      ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+        Schema.is(OkAccepted)(
+          await w.project.route(client, "process.send", {
+            pid: descriptor.id,
+            letter: "after-restore",
+            m: { type: "inc" },
+            sentAt: SENT,
+            seen: 0,
+          }),
+        ),
+      ).toBe(true);
       expect(await process.open("audit")).toMatchObject({ rev: 1, view: { count: 1 } });
       expect(await w.project.read("counter:1/inbox", 0, "audit")).toHaveLength(1);
       expect(await w.project.read("processes/counter:1", 0, "audit")).toHaveLength(1);
@@ -1367,7 +1383,7 @@ describe("P12 Process RPC refusal answers", () => {
           (error: unknown) => ({ error }),
         );
       // A policy refusal completes the input. An infrastructure error must not replace it.
-      expect.soft(result).toMatchObject({ answer: { _tag: "ok", result: { _tag: "accepted" } } });
+      expect.soft(Schema.is(AnsweredAccepted)(result)).toBe(true);
       expect(w.calls()).toEqual({ signs: 1, commits: reason === "not_granted" ? 1 : 0 });
       expect(await w.project.read("events", 0, "audit")).toEqual([]);
       const inbox = await w.project.read("approvals:1/inbox", 0, "audit");
@@ -1457,12 +1473,12 @@ const runFlow = async (flow: RecoveryFlow) => {
   const restarts = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
-      .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("restarted") }))(body));
+      .filter((body) => Schema.is(Schema.TaggedStruct("restarted", {}))(body));
   const live = async () => (await w.project.info()).find((row) => row.name === NAME)?.process;
   const downs = async () =>
     (await w.project.read(`processes/${NAME}`, 0, "audit"))
       .map((row) => ({ ...Object(row.body), _tag: row._tag }))
-      .filter((body) => Schema.is(Schema.Struct({ _tag: Schema.Literal("down") }))(body));
+      .filter((body) => Schema.is(Schema.TaggedStruct("down", {}))(body));
   const deadRows = async (pids: ReadonlyArray<string>) =>
     (await Promise.all(pids.map((pid) => w.project.read(`${pid}/dead`, 0, "audit")))).flat();
   const limit = flow.limit ?? 3;
@@ -1473,9 +1489,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   // RPC and decode faults happen before the program and spend no delivery.
   if (flow.fault !== "none") {
     w.fault(flow.fault);
-    expect(await send(original, letter, "throw")).not.toMatchObject({
-      answer: { _tag: "ok", result: { _tag: "accepted" } },
-    });
+    expect(Schema.is(AnsweredAccepted)(await send(original, letter, "throw"))).toBe(false);
     w.fault("none");
     expect(await restarts()).toEqual([]);
   }
@@ -1484,9 +1498,9 @@ const runFlow = async (flow: RecoveryFlow) => {
     const answer = await send(original, letter, "throw");
 
     if (n === limit) {
-      expect(answer).toMatchObject({ answer: { _tag: "refused", reason: "dead" } });
+      expect(answer).toMatchObject({ answer: Wire.Answer.cases.refused.make({ reason: "dead" }) });
     } else {
-      expect(answer).not.toMatchObject({ answer: { _tag: "ok" } });
+      expect(Schema.is(AnsweredOk)(answer)).toBe(false);
     }
 
     if (flow.reopen === "throws" && n === 1) {
@@ -1503,7 +1517,7 @@ const runFlow = async (flow: RecoveryFlow) => {
 
       // Resends while down wake nothing: no step, no try counted, no restart.
       for (let r = 0; r < Math.max(1, flow.resends); r++) {
-        expect(await send(original, letter, "throw")).not.toMatchObject({ answer: { _tag: "ok" } });
+        expect(Schema.is(AnsweredOk)(await send(original, letter, "throw"))).toBe(false);
       }
 
       expect(await restarts()).toHaveLength(n - 1);
@@ -1554,7 +1568,7 @@ const runFlow = async (flow: RecoveryFlow) => {
   if (k === limit) {
     for (let n = 0; n < flow.resends; n++) {
       expect(await send(original, letter, "throw")).toMatchObject({
-        answer: { _tag: "refused", reason: "dead" },
+        answer: Wire.Answer.cases.refused.make({ reason: "dead" }),
       });
     }
   }
@@ -1564,12 +1578,12 @@ const runFlow = async (flow: RecoveryFlow) => {
 
   for (let n = 0; n < flow.healthy; n++) {
     const answer = await send(current, `h${n}${flow.letter}`, "inc");
-    expect(answer).toMatchObject({ answer: { _tag: "ok", result: { _tag: "accepted" } } });
+    expect(Schema.is(AnsweredAccepted)(answer)).toBe(true);
     accepted.push(answer);
   }
 
   expect(await route("view.open", { pid: current })).toMatchObject({
-    answer: { _tag: "ok", result: { view: { count: flow.healthy } } },
+    answer: Wire.Answer.cases.ok.make({ result: { view: { count: flow.healthy } } }),
   });
   const inbox = (await w.project.read(`${NAME}/inbox`, 0, "audit")).length;
 
@@ -1583,12 +1597,12 @@ const runFlow = async (flow: RecoveryFlow) => {
 
   if (k === limit) {
     expect(await send(original, letter, "throw")).toMatchObject({
-      answer: { _tag: "refused", reason: "dead" },
+      answer: Wire.Answer.cases.refused.make({ reason: "dead" }),
     });
   }
 
   expect(await route("view.open", { pid: current })).toMatchObject({
-    answer: { _tag: "ok", result: { view: { count: flow.healthy } } },
+    answer: Wire.Answer.cases.ok.make({ result: { view: { count: flow.healthy } } }),
   });
   expect(await w.project.read(`${NAME}/inbox`, 0, "audit")).toHaveLength(inbox);
   expect(await restarts()).toHaveLength(k);
@@ -1654,7 +1668,7 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
         // The restart starts the new init and re-folds the accepted letters (P34, as
         // runner-supervision.test.ts requires): the healthy letters, never the throws.
         expect(await route("view.open", { pid: next })).toMatchObject({
-          answer: { _tag: "ok", result: { view: { count: flow.healthy } } },
+          answer: Wire.Answer.cases.ok.make({ result: { view: { count: flow.healthy } } }),
         });
         expect(w.newCalls()).toBeGreaterThan(0);
         expect(w.lostDone()).toBe(lost.at <= w.newCalls());
@@ -1667,7 +1681,8 @@ describe("ticket 402: P34 recovery on the Worker runtime", () => {
             () => ({ answer: "ok" }),
             (error: unknown) => ({ error }),
           );
-        expect(reused).toMatchObject({ error: { _tag: "ProcessError", reason: "id_reused" } });
+        expect("error" in reused ? reused.error : undefined).toSatisfy(Predicate.isTagged("ProcessError"));
+        expect(reused).toMatchObject({ error: { reason: "id_reused" } });
       }),
     flowOptions,
   );
@@ -1739,7 +1754,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
                   seen: 0,
                 })
                 .catch(() => undefined);
-              exits.set(target.process, { _tag: "crashed", phase: "step", error: "TypeError" });
+              exits.set(target.process, ExitReason.cases.crashed.make({ phase: "step", error: "TypeError" }));
               const next = await until("successor", w.project.info, (rows) =>
                 rows.some((row) => row.name === target.name && row.process !== target.process),
               );
@@ -1749,7 +1764,7 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
             case "exit": {
               const target = live[cell.pick % live.length]!;
               const reply = await w.project.processExit(target.process, copied(cell.reason), FROM);
-              expect(reply, "a valid reason commits").toMatchObject({ _tag: "ok" });
+              expect(ProcessReplies.isAnyOf(["ok"])(reply), "a valid reason commits").toBe(true);
               exits.set(target.process, cell.reason);
               target.live = false;
               break;
@@ -1759,10 +1774,10 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               const before = await exited(target.name);
               const reply = await w.project
                 .processExit(target.process, cell.bad as ExitReason, FROM)
-                .catch((error: unknown) => ({ _tag: Object(error)._tag }));
-              expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toMatchObject({
-                _tag: "ProcessError",
-              });
+                .catch((error: unknown) => error);
+              expect(reply, `invalid input is a typed refusal: ${JSON.stringify(cell.bad)}`).toSatisfy(
+                Predicate.isTagged("ProcessError"),
+              );
               expect(await exited(target.name), "a refused exit writes nothing").toEqual(before);
               expect(await w.project.processIsLive(target.process)).toBe(true);
               break;
@@ -1771,9 +1786,13 @@ describe("P34c slice 1: structured exit reasons over Project RPC", () => {
               const [process, reason] = [...exits.entries()][cell.pick % exits.size]!;
               const sent = cell.move % 2 === 0 ? copied(reason) : cell.other;
               const reply = await w.project.processExit(process, sent, FROM);
-              expect(reply).toMatchObject(
-                same(sent, reason) ? { _tag: "ok" } : { _tag: "ProcessError", reason: "ended" },
-              );
+
+              if (same(sent, reason)) {
+                expect(ProcessReplies.isAnyOf(["ok"])(reply)).toBe(true);
+              } else {
+                expect(reply).toMatchObject(ProcessReplies.cases.ProcessError.make({ reason: "ended" }));
+              }
+
               break;
             }
             case "reopen":
@@ -1820,7 +1839,7 @@ const oneExchange = async (w: ReturnType<typeof world>, requester: string, respo
     async () => mailModel(w, requester),
     (model) => model?._tag === "answered",
   );
-  expect(mailModel(w, requester)).toMatchObject({ _tag: "answered", ref, value: 8 });
+  expect(mailModel(w, requester)).toMatchObject(RequestModel.cases.answered.make({ ref, value: 8 }));
   expect(mailModel(w, responder)).toMatchObject({ answered: 1 });
   const requests = await w.project.read("responder:1/inbox", 0, "audit");
   expect(requests.filter((row) => Reflect.get(Object(row.body), "m")?.ref === ref)).toHaveLength(1);
@@ -1840,10 +1859,9 @@ it("scenario: W2h, a target reopened before its alarm fires drains the saved let
   const responder = await w.startMail("responder");
   const client = await w.admit();
   w.holdAlarm(responder, true);
-  expect(await w.project.route(client, "process.send", mailRequest(requester, "held-target"))).toMatchObject({
-    _tag: "ok",
-    result: { _tag: "accepted" },
-  });
+  expect(
+    Schema.is(OkAccepted)(await w.project.route(client, "process.send", mailRequest(requester, "held-target"))),
+  ).toBe(true);
   expect(await w.process(responder).object.savedAlarm()).toBeTypeOf("number");
   expect(mailModel(w, responder)?.answered ?? 0).toBe(0);
   await w.reopenProcess(responder);
@@ -1927,7 +1945,7 @@ describe("P34c live object accounting", () => {
             Effect.promise(() =>
               door.call("process.send", { pid, letter: id, m: { type: "inc" }, sentAt: SENT, seen: 0 }),
             );
-          expect(yield* send(pid, "paid")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(Schema.is(OkAccepted)(yield* send(pid, "paid"))).toBe(true);
           expect(yield* Effect.promise(() => w.process(pid).object.open("audit"))).toMatchObject({
             view: { count: 1 },
           });
@@ -1974,7 +1992,9 @@ describe("P34c live object accounting", () => {
             const before = both();
             const counted = refusals();
             const doorBefore = doorRows();
-            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject({ _tag: "refused", reason: "quota" });
+            expect(yield* send(pid, `refused:${n}:${c.pick}`)).toMatchObject(
+              Wire.Answer.cases.refused.make({ reason: "quota" }),
+            );
             const after = both();
             const doorAfter = doorRows();
 
@@ -2007,7 +2027,7 @@ describe("P34c live object accounting", () => {
 
           // A different checked program has its own room in the same Project.
           const counterPid = w.attempts.find((d) => d.name === "counter:1")!.id;
-          expect(yield* send(counterPid, "other-program")).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(Schema.is(OkAccepted)(yield* send(counterPid, "other-program"))).toBe(true);
         }),
       ),
     { timeout: 120_000, arbitrary: { seed: 119120, runs: runsFor({ fast: 3, full: 40 }) } },

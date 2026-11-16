@@ -56,7 +56,8 @@ export const killWorkerd = Effect.fn("workerd.kill")(function* (parent: number) 
 });
 
 /** Where a kill landed for one name: inside a step, with its letter, or between steps. */
-const Moment = Schema.TaggedUnion({ inside: { letter: Schema.String }, between: {} });
+/** Where a kill cut a process: `inside` a step, with its letter, or `between` steps. */
+export const Moment = Schema.TaggedUnion({ inside: { letter: Schema.String }, between: {} });
 
 // Only what the wake rule reads from the saved supervision: its name and whether its journal is
 // `stepping`, with the attempt it names, or `idle`. Any other case matches the empty struct last.

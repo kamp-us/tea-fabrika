@@ -8,12 +8,17 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Activity, ProcessEvent, Recovered, Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { Effect, Layer, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
-import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
+import { killedMoment, killWorkerd, Moment } from "./workerd.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -139,12 +144,11 @@ const world = async (test: (instance: Instance, key: Key, fixture: Fixture) => P
             hash: code!.hash,
             start: async (name) => {
               const started = await Reflect.get(instance.project(PROJECT), "start")(
-                {
-                  _tag: "first",
+                Start.cases.first.make({
                   id: `start-${name}`,
                   name,
                   code: { program: PROGRAM, hash: code!.hash },
-                },
+                }),
                 from,
               );
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -357,7 +361,7 @@ const worldScoped = Effect.gen(function* () {
     hash: code!.hash,
     start: async (name) => {
       const started = await Reflect.get(instance.project(PROJECT), "start")(
-        { _tag: "first", id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } },
+        Start.cases.first.make({ id: `start-${name}`, name, code: { program: PROGRAM, hash: code!.hash } }),
         from,
       );
       return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -430,7 +434,7 @@ const healthy = async (
   const before = await c.call("view.open", { pid });
   expect(before.error, `view.open on ${pid}`).toBeUndefined();
   const sent = await c.call("process.send", send(pid, letter, "inc"));
-  expect(sent, `healthy letter ${letter} on ${pid}`).toMatchObject({ result: { _tag: "accepted" } });
+  expect(Schema.is(AcceptedReply)(sent), `healthy letter ${letter} on ${pid}`).toBe(true);
   const after = await c.call("view.open", { pid });
   expect(after).toMatchObject({ result: { view: { count: before.result.view.count + 1 } } });
   return { rev: sent.result.rev, count: after.result.view.count };
@@ -459,7 +463,8 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           (rows) => rows.length >= 1,
         );
         const second = String(restarted.process);
-        expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
+        expect(ProcessEvent.isAnyOf(["restarted"])(restarted)).toBe(true);
+        expect(restarted).toMatchObject({ after: first, name });
         expect(second).not.toBe(first);
         expect(await restarts(instance, name)).toHaveLength(1);
         await until(
@@ -506,7 +511,8 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           () => restarts(instance, name),
           (found) => found.length >= 2,
         );
-        expect(rows[1]).toMatchObject({ _tag: "restarted", after: second, name });
+        expect(ProcessEvent.isAnyOf(["restarted"])(rows[1])).toBe(true);
+        expect(rows[1]).toMatchObject({ after: second, name });
         const third = String(rows[1].process);
         expect(new Set([first, second, third]).size).toBe(3);
         await until(
@@ -526,9 +532,9 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         expect(await c.call("process.send", poison)).toMatchObject({
           error: { data: { reason: "dead" } },
         });
-        expect(await c.call("process.send", send(third, "healthy", "inc"))).toMatchObject({
-          result: { _tag: "accepted", rev: accepted.rev },
-        });
+        const healthyReply = await c.call("process.send", send(third, "healthy", "inc"));
+        expect(Schema.is(AcceptedReply)(healthyReply)).toBe(true);
+        expect(healthyReply).toMatchObject({ result: { rev: accepted.rev } });
         expect(await c.call("view.open", { pid: third })).toMatchObject({
           result: { view: { count: 1 } },
         });
@@ -563,7 +569,8 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           (rows) => rows.length >= 1,
         );
         const second = String(restarted.process);
-        expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
+        expect(ProcessEvent.isAnyOf(["restarted"])(restarted)).toBe(true);
+        expect(restarted).toMatchObject({ after: first, name });
         expect(second).not.toBe(first);
         await until(
           "the restarted process is live",
@@ -601,12 +608,13 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 
       try {
         await healthy(c, first, "before-abort");
-        await instance.process(first).activity({
-          _tag: "stepping",
-          process: first,
-          letter: "cut",
-          build: fixture.hash,
-        });
+        await instance.process(first).activity(
+          Activity.cases.stepping.make({
+            process: first,
+            letter: "cut",
+            build: fixture.hash,
+          }),
+        );
         await instance
           .process(first)
           .abort()
@@ -619,7 +627,8 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
           (rows) => rows.length >= 1,
         );
         const second = String(restarted.process);
-        expect(restarted).toMatchObject({ _tag: "restarted", after: first, name });
+        expect(ProcessEvent.isAnyOf(["restarted"])(restarted)).toBe(true);
+        expect(restarted).toMatchObject({ after: first, name });
         expect(second).not.toBe(first);
         await until(
           "the successor is live",
@@ -661,28 +670,33 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
 
         for (const n of range(10)) {
           const sent = yield* Effect.promise(() => before.call("process.send", letter(n)));
-          expect(sent, `k-${n} before the kill`).toMatchObject({ result: { _tag: "accepted" } });
+          expect(Schema.is(AcceptedReply)(sent), `k-${n} before the kill`).toBe(true);
           placed.set(n, { rev: sent.result.rev, pos: sent.result.pos });
         }
 
         yield* Effect.promise(() =>
-          instance.process(first).activity({ _tag: "stepping", process: first, letter: "k-10", build: fixture.hash }),
+          instance
+            .process(first)
+            .activity(Activity.cases.stepping.make({ process: first, letter: "k-10", build: fixture.hash })),
         );
         // recover reads storage and wakes nothing, so the marker is on disk before the kill.
-        expect(yield* Effect.promise(() => instance.process(first).recover())).toMatchObject({
-          _tag: "interrupted",
+        const recovered = Schema.decodeUnknownSync(Recovered)(
+          yield* Effect.promise(() => instance.process(first).recover()),
+        );
+        expect(Recovered.isAnyOf(["interrupted"])(recovered)).toBe(true);
+        expect(recovered).toMatchObject({
           letter: "k-10",
         });
         yield* killWorkerd(process.pid);
         const after = yield* reconnected(instance, key, "after");
         // Before the first send, the rows the wake reads say the kill cut k-10, the marker recover() read.
-        expect(yield* killedMoment(home, name, first)).toEqual({ _tag: "inside", letter: "k-10" });
+        expect(yield* killedMoment(home, name, first)).toEqual(Moment.cases.inside.make({ letter: "k-10" }));
 
         // Settled letters are answered from the door's saved bindings and never wake the Process object.
         for (const n of range(10)) {
-          expect(yield* Effect.promise(() => after.call("process.send", letter(n)))).toMatchObject({
-            result: { _tag: "accepted", ...placed.get(n) },
-          });
+          const settled = yield* Effect.promise(() => after.call("process.send", letter(n)));
+          expect(Schema.is(AcceptedReply)(settled)).toBe(true);
+          expect(settled).toMatchObject({ result: { ...placed.get(n) } });
         }
 
         // k-10 is the first call into the object: it sees the marker and is the one refusal.
@@ -691,16 +705,15 @@ describe("ticket 402: P34 supervision on the real Worker path", () => {
         });
         const restarted = yield* restartedAfter(after, name, first);
         const second = restarted.body.process;
-        expect(restarted).toMatchObject({ _tag: "restarted", body: { after: first, name } });
+        expect(restarted._tag).toBe("restarted");
+        expect(restarted).toMatchObject({ body: { after: first, name } });
         expect(second).not.toBe(first);
 
         for (const n of range(10).map((at) => at + 10)) {
           expect(
-            yield* Effect.promise(() => after.call("process.send", letter(n))),
+            Schema.is(AcceptedReply)(yield* Effect.promise(() => after.call("process.send", letter(n)))),
             `k-${n} after the restart`,
-          ).toMatchObject({
-            result: { _tag: "accepted" },
-          });
+          ).toBe(true);
         }
 
         const inbox = yield* Effect.promise(() => rows(instance, `${name}/inbox`));

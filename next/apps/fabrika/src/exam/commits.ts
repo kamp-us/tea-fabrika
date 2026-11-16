@@ -40,7 +40,7 @@ export const Note = Schema.TaggedStruct("attested", {
 export type Note = typeof Note.Type;
 
 /** The same link as a `field/runs.jsonl` row holds it, with what a later reader needs to walk it. */
-const Link = Schema.TaggedStruct("attested", {
+export const Link = Schema.TaggedStruct("attested", {
   ...Note.fields,
   by: Schema.String,
   arrivedAt: Schema.String,
@@ -54,7 +54,8 @@ const Link = Schema.TaggedStruct("attested", {
 });
 type Link = typeof Link.Type;
 
-const PersonLink = Schema.TaggedStruct("attested", {
+/** A link the person signed: a logged link whose step is `person`. */
+export const PersonLink = Schema.TaggedStruct("attested", {
   ...Link.fields,
   step: Schema.Literal("person"),
 });

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -21,6 +22,13 @@ import {
   log,
   twoSteps,
 } from "./commits-git.test-support.ts";
+import { Note } from "./commits.ts";
+
+/** How d4 breaks one logged link: give it a `cause`, keeping or dropping `parent`, or drop a field. */
+const Mutation = Schema.TaggedUnion({
+  cause: { cause: Schema.Unknown, keepParent: Schema.Boolean },
+  drop: { field: Schema.Literals(["parent", "traceId"]) },
+});
 
 describe("done", () => {
   // scenario: two real signing commands and their printed notes must agree with git.
@@ -29,7 +37,7 @@ describe("done", () => {
     r.change("a.ts");
     const signed = r.signWith("tests");
     expect(signed.code).toBe(0);
-    expect(signed.answers[0]).toMatchObject({ _tag: "attested", step: "tests", version: 1 });
+    expect(Schema.decodeUnknownSync(Note)(signed.answers[0])).toMatchObject({ step: "tests", version: 1 });
     r.change("b.ts");
     expect(r.signWith("build").code).toBe(0);
     const out = r.check();
@@ -261,12 +269,12 @@ describe("chain after the merge (p86 and p89)", () => {
     const { squash, rows } = squashed(r, twoSteps(r));
     log(r, rows);
     expect(r.run(["chain", "--squash", squash])).toMatchObject({ code: 0, answers: [DONE] });
-    // A cause of null or a string is what an old link held, so it comes up often.
+    // fast-check: edge cases -- a cause of null or a string is what an old link held, so it comes up often
     const cause = fc.oneof(fc.constant(null), fc.string(), fc.jsonValue());
     const change = fc.oneof(
-      cause.map((cause) => ({ _tag: "cause" as const, cause, keepParent: true })),
-      cause.map((cause) => ({ _tag: "cause" as const, cause, keepParent: false })),
-      fc.constantFrom({ _tag: "drop" as const, field: "parent" }, { _tag: "drop" as const, field: "traceId" }),
+      cause.map((cause) => Mutation.cases.cause.make({ cause, keepParent: true })),
+      cause.map((cause) => Mutation.cases.cause.make({ cause, keepParent: false })),
+      fc.constantFrom(Mutation.cases.drop.make({ field: "parent" }), Mutation.cases.drop.make({ field: "traceId" })),
     );
     fc.assert(
       fc.property(fc.nat(rows.length - 1), change, (at, mutation) => {

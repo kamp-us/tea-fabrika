@@ -44,6 +44,7 @@ import { deserialize } from "node:v8";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import { Clock, Effect, FileSystem, Layer, Path, Predicate, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -52,6 +53,9 @@ import { localInstance } from "./local-instance.ts";
 import { machinePaths } from "./port-home.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 import { startupFixture } from "./record-wire.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 const ROOT = resolve(import.meta.dirname, "../../../..");
 const FIXTURE = resolve(ROOT, "fixtures/next/port-home");
@@ -203,7 +207,7 @@ const press = Effect.fnUntraced(function* (
   });
   expect(hello.error, "the test key is admitted").toBeUndefined();
   const sent = yield* ask("process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
-  expect(sent, "the input is accepted").toMatchObject({ result: { _tag: "accepted" } });
+  expect(Schema.is(AcceptedReply)(sent), "the input is accepted").toBe(true);
   return yield* ask("view.open", { pid });
 }, Effect.scoped);
 

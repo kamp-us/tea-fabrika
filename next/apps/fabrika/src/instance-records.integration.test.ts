@@ -10,19 +10,29 @@ import { join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { Id } from "@kampus/libfabrika";
+import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Activity, Recovered, Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { Archive } from "@kampus/libfabrika/telemetry/Archive";
-import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
+import { RecordManager, Written } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
-import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Chain, SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Layer, Predicate, Schema, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
+/** A door answer `ok` whose result is the runner's `accepted`. */
+const OkAccepted = Schema.TaggedStruct("ok", { result: Sent.cases.accepted });
+/** The fixture program's own event: `noted`, with the count it was written at. */
+const Noted = Schema.TaggedStruct("noted", { n: Schema.optionalKey(Schema.Int) });
 
 // The local instance exposes Promise calls; RecordManager takes Effect calls.
 type RecordCalls = ReturnType<Parameters<typeof RecordManager.remote>[0]>;
@@ -230,12 +240,11 @@ const world = async (
               const code = built.programs[program];
               expect(code, `fixture program ${program} must be built`).toBeDefined();
               const started = await Reflect.get(instance.project("p12-records"), "start")(
-                {
-                  _tag: "first",
+                Start.cases.first.make({
                   id: `start-${name}`,
                   name,
                   code: { program, hash: code!.hash },
-                },
+                }),
                 from,
               );
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started);
@@ -624,7 +633,7 @@ describe("P12 real object adapters", () => {
             sentAt: SENT,
             seen: 0,
           });
-          expect(reply).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+          expect(Schema.is(OkAccepted)(reply)).toBe(true);
           after = reply.result.rev;
           expect(await waiting).toMatchObject({ answer: { id: pending.id, result: { rev: after } } });
           expect((await gateway("testState")).sockets[0].attachment.waits).toEqual([]);
@@ -673,7 +682,7 @@ describe("P12 real object adapters", () => {
         await pending;
         retry = await wire(instance, key, "busy-recovery");
         const first = await retry.call("process.send", params);
-        expect(first).toMatchObject({ result: { _tag: "accepted" } });
+        expect(Schema.is(AcceptedReply)(first)).toBe(true);
         expect(await retry.call("process.send", params)).toMatchObject({ result: first.result });
         const opened = await retry.call("view.open", { pid });
         expect(opened).toMatchObject({ result: { view: { count: 1 } } });
@@ -738,7 +747,7 @@ describe("P12 real object adapters", () => {
   });
   it("scenario: P37 object wiring plant: alias every SQL part, omit project, or lose had after a lost reply", async () => {
     await world(async (instance) => {
-      const chain = { _tag: "spans" } as const;
+      const chain = Chain.cases.spans.make({});
       const first = instance.record("project-a", "spans/0");
       const rows = Array.from({ length: 70 }, (_, n) => ({ span: span(n), content: null }));
       let part = 0;
@@ -765,7 +774,8 @@ describe("P12 real object adapters", () => {
       expect(found.map((r) => r.spanId)).toEqual(rows.map((r) => r.span.spanId));
       const held = await first.read(chain, 0, 0);
       const retry = await first.write(chain, 0, [rows[0], { span: span(99), content: null }]);
-      expect(retry).toMatchObject({ _tag: "rolled", had: [rows[0]!.span.spanId] });
+      expect(Written.isAnyOf(["rolled"])(retry)).toBe(true);
+      expect(retry).toMatchObject({ had: [rows[0]!.span.spanId] });
       expect((await first.read(chain, 0, 0)).spans).toEqual(held.spans);
       await instance.record("project-b", "spans/0").write(chain, 0, [{ span: span(100), content: null }]);
       expect((await instance.record("project-b", "spans/0").read(chain, 0, 0)).spans.map((r: any) => r.spanId)).toEqual(
@@ -855,7 +865,7 @@ describe("P12 real object adapters", () => {
         traceId: TRACE,
       };
       const accepted = await routed(p, client, "process.send", input);
-      expect(accepted).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+      expect(Schema.is(OkAccepted)(accepted)).toBe(true);
       const broken = await fixture.start("broken:1", "p12/writer-fixture");
       await expect(
         routed(p, client, "process.send", {
@@ -868,19 +878,19 @@ describe("P12 real object adapters", () => {
       const manager = RecordManager.remote((name) => recordCalls(instance.record("p12-records", name)));
       const collect = (chain: any) =>
         Effect.runPromise(RecordManager.use((r) => Stream.runCollect(r.read(chain))).pipe(Effect.provide(manager)));
-      const job = await collect({ _tag: "job", process: pid });
+      const job = await collect(Chain.cases.job.make({ process: pid }));
       expect(job.some((r) => r.name === "runner.step" && r.endTimeUnixNano !== "0")).toBe(true);
-      const failures = await collect({ _tag: "job", process: broken.process });
+      const failures = await collect(Chain.cases.job.make({ process: broken.process }));
       expect(failures.some((r) => r.ok === false && r.name === "runner.step")).toBe(true);
       expect(job.every((r) => r.attributes["fab.process"] === pid)).toBe(true);
-      const outside = await collect({ _tag: "spans" });
+      const outside = await collect(Chain.cases.spans.make({}));
       expect(outside.some((r) => r.name === "gateway.initialize")).toBe(true);
       const permanent = JSON.stringify([...job, ...outside, ...failures]);
       expect(permanent).not.toContain("private raw frame P12");
       expect(permanent).not.toContain("private failure P12");
       expect(permanent).not.toContain("PRIVATE KEY");
       expect([...job, ...outside].some((r) => /record\.(write|read)|sink\.flush/.test(r.name))).toBe(false);
-      const again = await collect({ _tag: "job", process: pid });
+      const again = await collect(Chain.cases.job.make({ process: pid }));
       expect(again.map((r) => r.spanId)).toEqual(job.map((r) => r.spanId));
       expect(new Set(job.map((r) => r.spanId)).size).toBe(job.length);
     });
@@ -901,7 +911,7 @@ describe("P12 real object adapters", () => {
           seen: 0,
           traceId: TRACE,
         });
-        expect(delivered).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+        expect(Schema.is(OkAccepted)(delivered)).toBe(true);
         const parent = (await read(p, client, "writer:1/inbox"))[0].parent;
         const capability = p.forProcess(pid);
         const reply = Schema.decodeUnknownSync(SigningReply)(await capability.sign("write-1", parent, "noted"));
@@ -915,7 +925,7 @@ describe("P12 real object adapters", () => {
         expect(receipt.parent).toBe(parent);
 
         if (end === "exit") {
-          await p.exit(pid, { _tag: "normal" }, fixture.from);
+          await p.exit(pid, ExitReason.cases.normal.make({}), fixture.from);
         } else {
           const { revokeText } = await import("@kampus/libfabrika/access/Text");
           const text = revokeText({
@@ -926,33 +936,40 @@ describe("P12 real object adapters", () => {
             saw: { label: "fixture", location: "local", method: "command", check: "none" },
             sentAt: SENT,
           });
-          expect(await p.grant({ text, armored: key.proof(text) })).toMatchObject({ _tag: "applied" });
+          expect((await p.grant({ text, armored: key.proof(text) }))._tag).toBe("applied");
         }
 
-        const refused = { _tag: end === "exit" ? "SigningRefused" : "NotGranted" };
+        const refused = CommitReply.isAnyOf([end === "exit" ? "SigningRefused" : "NotGranted"]);
         expect(
-          Schema.decodeUnknownSync(CommitReply)(
-            await capability.append({
-              id: "write-1",
-              parent,
-              kind: "noted",
-              stream: "events",
-              event: { _tag: "noted", n: 1 },
-            }),
+          refused(
+            Schema.decodeUnknownSync(CommitReply)(
+              await capability.append({
+                id: "write-1",
+                parent,
+                kind: "noted",
+                stream: "events",
+                event: Noted.make({ n: 1 }),
+              }),
+            ),
           ),
-        ).toMatchObject(refused);
+        ).toBe(true);
         expect(await p.read("events", 0, "audit")).toEqual([]);
         // A changed process identity cannot reuse a capability issued to the old process.
-        await expect(
-          capability.append({
+        const forged = await capability
+          .append({
             id: "forged",
             parent,
             process: "another",
             kind: "noted",
             stream: "events",
-            event: { _tag: "noted" },
-          }),
-        ).rejects.toMatchObject({ _tag: "ControlError", reason: "reserved" });
+            event: Noted.make({}),
+          })
+          .then(
+            () => null,
+            (error: unknown) => error,
+          );
+        expect(forged).toSatisfy(Predicate.isTagged("ControlError"));
+        expect(forged).toMatchObject({ reason: "reserved" });
         expect(await p.read("events", 0, "audit")).toEqual([]);
       });
     },
@@ -963,14 +980,16 @@ describe("P12 real object adapters", () => {
       const start = await fixture.start("timer:1", "p12/timer-fixture");
       const process = instance.process(start.process);
       expect(
-        await routed(p, client, "process.send", {
-          pid: start.process,
-          letter: "schedule",
-          m: { type: "schedule", at: 42 },
-          sentAt: SENT,
-          seen: 0,
-        }),
-      ).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+        Schema.is(OkAccepted)(
+          await routed(p, client, "process.send", {
+            pid: start.process,
+            letter: "schedule",
+            m: { type: "schedule", at: 42 },
+            sentAt: SENT,
+            seen: 0,
+          }),
+        ),
+      ).toBe(true);
       await process.abort();
       expect((await p.info()).find((i: any) => i.name === "timer:1").process).toBe(start.process);
       await process.due(42);
@@ -980,14 +999,17 @@ describe("P12 real object adapters", () => {
       expect(await process.open("audit")).toMatchObject({ view: { count: 1, replies: 1 } });
       expect(await process.alarm()).toBe(52);
       // Durable Activity belongs to P33/P11. A wake must report it instead of counting constructors.
-      await process.activity({
-        _tag: "stepping",
-        process: start.process,
-        letter: "interrupted",
-        build: "fixture",
-      });
+      await process.activity(
+        Activity.cases.stepping.make({
+          process: start.process,
+          letter: "interrupted",
+          build: "fixture",
+        }),
+      );
       await process.abort();
-      expect(await process.recover()).toMatchObject({ _tag: "interrupted", letter: "interrupted" });
+      const recovered = Schema.decodeUnknownSync(Recovered)(await process.recover());
+      expect(Recovered.isAnyOf(["interrupted"])(recovered)).toBe(true);
+      expect(recovered).toMatchObject({ letter: "interrupted" });
     });
   });
   // Outside only. Ticket 502 slice S2, law 4: only the platform evicts an idle object, so this waits
@@ -1002,10 +1024,7 @@ describe("P12 real object adapters", () => {
       const far = Date.now() + 3_600_000;
       const send = (letter: string, m: unknown) =>
         routed(p, client, "process.send", { pid: started.process, letter, m, sentAt: SENT, seen: 0 });
-      expect(await send("arm", { type: "schedule", at: far })).toMatchObject({
-        _tag: "ok",
-        result: { _tag: "accepted" },
-      });
+      expect(Schema.is(OkAccepted)(await send("arm", { type: "schedule", at: far }))).toBe(true);
       const view = await object.open("audit");
       expect(view).toMatchObject({ view: { fired: 0, wake: far } });
       expect(await object.alarm()).toBe(far);
@@ -1019,7 +1038,7 @@ describe("P12 real object adapters", () => {
       expect((await p.info()).find((row: any) => row.name === "sleeper:1").process).toBe(started.process);
       expect(await object.testAlarms()).toEqual({ delivered: 0, failed: 0 });
       // The woken instance still takes a letter, and drops the wake it kept.
-      expect(await send("drop", { type: "cancel" })).toMatchObject({ _tag: "ok", result: { _tag: "accepted" } });
+      expect(Schema.is(OkAccepted)(await send("drop", { type: "cancel" }))).toBe(true);
       expect(await object.alarm()).toBeNull();
     }, true);
   }, 120_000);
@@ -1032,7 +1051,6 @@ describe("P12 real object adapters", () => {
   it("scenario: T502 law 10: a saved alarm fires once, a deleted one never fires, and a failed one is retried", async () => {
     await world(async (instance, key, fixture) => {
       const { p, client } = await admitted(instance, key);
-      const accepted = { _tag: "ok", result: { _tag: "accepted" } };
       const send = (pid: string, letter: string, m: unknown) =>
         routed(p, client, "process.send", { pid, letter, m, sentAt: SENT, seen: 0 });
       const timers = async (name: string) =>
@@ -1041,7 +1059,7 @@ describe("P12 real object adapters", () => {
       // 1. A saved alarm fires once: one timer letter for the wake, and the wake is spent.
       const once = await fixture.start("once:1", "p12/alarm-fixture");
       const first = Date.now() + 1_000;
-      expect(await send(once.process, "arm", { type: "schedule", at: first })).toMatchObject(accepted);
+      expect(Schema.is(OkAccepted)(await send(once.process, "arm", { type: "schedule", at: first }))).toBe(true);
       expect(await instance.process(once.process).alarm()).toBe(first);
       await until(
         "the saved alarm's timer letter",
@@ -1062,9 +1080,9 @@ describe("P12 real object adapters", () => {
       // 2. A deleted alarm never fires: the platform delivers nothing after the wake is dropped.
       const never = await fixture.start("never:1", "p12/alarm-fixture");
       const second = Date.now() + 2_000;
-      expect(await send(never.process, "arm", { type: "schedule", at: second })).toMatchObject(accepted);
+      expect(Schema.is(OkAccepted)(await send(never.process, "arm", { type: "schedule", at: second }))).toBe(true);
       expect(await instance.process(never.process).alarm()).toBe(second);
-      expect(await send(never.process, "drop", { type: "cancel" })).toMatchObject(accepted);
+      expect(Schema.is(OkAccepted)(await send(never.process, "drop", { type: "cancel" }))).toBe(true);
       expect(await instance.process(never.process).alarm()).toBeNull();
       await pause(Math.max(0, second - Date.now()) + 1_500);
       expect(await timers("never:1")).toEqual([]);
@@ -1075,7 +1093,7 @@ describe("P12 real object adapters", () => {
       // delivered, once, by a later try after the descriptor is back.
       const retried = await fixture.start("retry:1", "p12/alarm-fixture");
       const third = Date.now() + 2_000;
-      expect(await send(retried.process, "arm", { type: "schedule", at: third })).toMatchObject(accepted);
+      expect(Schema.is(OkAccepted)(await send(retried.process, "arm", { type: "schedule", at: third }))).toBe(true);
       // Both exam calls end in a platform abort, which rejects the call that asked for it.
       await instance
         .process(retried.process)
@@ -1116,11 +1134,12 @@ describe("P12 real object adapters", () => {
       expect((await sealed.init(null)).view).toEqual({ bindings: [], outbound: "blocked" });
       expect(probe.hits()).toBe(0);
       const counter = await loader.load("fabrika/counter", processId());
-      expect(await counter.init(null)).toMatchObject({ _tag: "stepped", view: { count: 0 } });
-      expect(await counter.step({ count: 0 }, { type: "inc" })).toMatchObject({
-        _tag: "stepped",
-        view: { count: 1 },
-      });
+      const first = await counter.init(null);
+      expect(first).toSatisfy(Predicate.isTagged("stepped"));
+      expect(first).toMatchObject({ view: { count: 0 } });
+      const next = await counter.step({ count: 0 }, { type: "inc" });
+      expect(next).toSatisfy(Predicate.isTagged("stepped"));
+      expect(next).toMatchObject({ view: { count: 1 } });
     });
   });
 });

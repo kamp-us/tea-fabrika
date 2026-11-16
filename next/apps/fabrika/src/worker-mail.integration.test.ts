@@ -7,12 +7,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Start } from "@kampus/libfabrika/processes/Process";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { Effect, Schema, Scope } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const SENT = "2026-11-09T04:00:00.000Z";
@@ -208,7 +214,7 @@ const mailDiagnostics = () => {
 
         for (;;) {
           const page = await read(`spans/${pid}/${part}/${after}`, () =>
-            instance.record(PROJECT, `job/${pid}/${part}`).read({ _tag: "job", process: pid }, part, after),
+            instance.record(PROJECT, `job/${pid}/${part}`).read(Chain.cases.job.make({ process: pid }), part, after),
           );
           const decoded = Schema.decodeUnknownSync(
             Schema.NullOr(
@@ -353,12 +359,11 @@ const world = async (
               const code = built.programs[program];
               expect(code).toBeDefined();
               const started = await Reflect.get(instance.project(PROJECT), "start")(
-                {
-                  _tag: "first",
+                Start.cases.first.make({
                   id: `start-${name}`,
                   name,
                   code: { program, hash: code!.hash },
-                },
+                }),
                 from,
               );
               return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -523,9 +528,7 @@ it("scenario: W1 and W6, the door receives waiting then answered 8 and both obje
     const responder = await fixture.start("responder:1");
     const client = await fixture.connect("exchange");
     await client.call("view.open", { pid: requester });
-    expect(await client.call("process.send", request(requester, "exchange"))).toMatchObject({
-      result: { _tag: "accepted" },
-    });
+    expect(Schema.is(AcceptedReply)(await client.call("process.send", request(requester, "exchange")))).toBe(true);
     await changed(client, "waiting");
     const patch = await changed(client, "answered");
     expect(patch.params.patch).toEqual(expect.arrayContaining([{ op: "replace", path: "/value", value: 8 }]));
@@ -548,9 +551,7 @@ it("scenario: W2, aborting the target after its wake preserves one request and o
       try {
         await client.call("view.open", { pid: requester });
         fixture.diagnostics?.note("send.start", { requester, responder });
-        expect(await client.call("process.send", request(requester, "eviction"))).toMatchObject({
-          result: { _tag: "accepted" },
-        });
+        expect(Schema.is(AcceptedReply)(await client.call("process.send", request(requester, "eviction")))).toBe(true);
         fixture.diagnostics?.note("accepted");
 
         // The accepted Send has awaited the target's mailed RPC. No target call precedes the abort.
@@ -746,12 +747,11 @@ const checklistWorld = async (
             const code = built.programs[program];
             expect(code).toBeDefined();
             const started = await Reflect.get(instance.project(PROJECT), "start")(
-              {
-                _tag: "first",
+              Start.cases.first.make({
                 id: `start-${name}`,
                 name,
                 code: { program, hash: code!.hash },
-              },
+              }),
               from,
             );
             return Schema.decodeUnknownSync(Schema.Struct({ process: Schema.String }))(started).process;
@@ -789,23 +789,27 @@ it("scenario: H1, two checklist adds with an immediate wake both land on the sam
     const pid = await fixture.start("checklist:866", "fabrika/checklist");
     const client = await fixture.connect();
     expect(
-      await client.call("process.send", {
-        pid,
-        letter: "add-first",
-        m: { type: "add", name: "first item" },
-        sentAt: SENT,
-        seen: 0,
-      }),
-    ).toMatchObject({ result: { _tag: "accepted" } });
+      Schema.is(AcceptedReply)(
+        await client.call("process.send", {
+          pid,
+          letter: "add-first",
+          m: { type: "add", name: "first item" },
+          sentAt: SENT,
+          seen: 0,
+        }),
+      ),
+    ).toBe(true);
     expect(
-      await client.call("process.send", {
-        pid,
-        letter: "add-second",
-        m: { type: "add", name: "second item" },
-        sentAt: SENT,
-        seen: 0,
-      }),
-    ).toMatchObject({ result: { _tag: "accepted" } });
+      Schema.is(AcceptedReply)(
+        await client.call("process.send", {
+          pid,
+          letter: "add-second",
+          m: { type: "add", name: "second item" },
+          sentAt: SENT,
+          seen: 0,
+        }),
+      ),
+    ).toBe(true);
     expect(await client.call("view.open", { pid })).toMatchObject({
       result: { view: { items: [{ name: "first item" }, { name: "second item" }], left: 2 } },
     });
@@ -951,18 +955,20 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
             await Reflect.get(project, "start")(request, from),
           ).process;
         const code = (role: string) => ({ program: `t1041/${role}`, hash: built.programs[`t1041/${role}`]!.hash });
-        const writer = await start({
-          _tag: "first",
-          id: "start-writer",
-          name: "writer:1",
-          code: code("writer"),
-        });
-        const reader = await start({
-          _tag: "first",
-          id: "start-reader",
-          name: "reader:1",
-          code: code("reader"),
-        });
+        const writer = await start(
+          Start.cases.first.make({
+            id: "start-writer",
+            name: "writer:1",
+            code: code("writer"),
+          }),
+        );
+        const reader = await start(
+          Start.cases.first.make({
+            id: "start-reader",
+            name: "reader:1",
+            code: code("reader"),
+          }),
+        );
         const client = await Effect.runPromise(
           Effect.gen(function* () {
             const socket = yield* Effect.acquireRelease(
@@ -982,14 +988,16 @@ it("scenario: T1041 L14, a repo file's mail.unread = 2 makes the third unread le
         const send = async (n: number) => {
           sent += 1;
           expect(
-            await client.call("process.send", {
-              pid: writer,
-              letter: `letter-${sent}`,
-              m: { type: "letter", n },
-              sentAt: SENT,
-              seen: 0,
-            }),
-          ).toMatchObject({ result: { _tag: "accepted" } });
+            Schema.is(AcceptedReply)(
+              await client.call("process.send", {
+                pid: writer,
+                letter: `letter-${sent}`,
+                m: { type: "letter", n },
+                sentAt: SENT,
+                seen: 0,
+              }),
+            ),
+          ).toBe(true);
           const view = await until(
             `the writer's answer for send ${sent}`,
             async () => (await client.call("view.open", { pid: writer })).result?.view,

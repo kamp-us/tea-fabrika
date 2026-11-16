@@ -2,29 +2,53 @@
 // Only platform handles are supplied here. No sockets or substitute authority rules.
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { Descriptor, Incoming, Sent } from "@kampus/libfabrika";
-import { SigningRefused } from "@kampus/libfabrika/access/SessionManager";
+import { type Descriptor, type Incoming, Sent } from "@kampus/libfabrika";
+import { SigningRefused, Writer } from "@kampus/libfabrika/access/SessionManager";
 import { revokeText } from "@kampus/libfabrika/access/Text";
 import { BrainEvent } from "@kampus/libfabrika/brain-event";
-import { Child, type StartGrant } from "@kampus/libfabrika/processes/Children";
+import { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
+import { Child, Started, type StartGrant } from "@kampus/libfabrika/processes/Children";
+import { ExitReason } from "@kampus/libfabrika/processes/ExitReason";
 import { type From } from "@kampus/libfabrika/processes/Mailbox";
 import { Recipient, Start } from "@kampus/libfabrika/processes/Process";
 import * as Audit from "@kampus/libfabrika/runtime/Audit";
+import * as SettingsStart from "@kampus/libfabrika/settings/Start";
 import * as StartsTest from "@kampus/libfabrika/settings/StartsTest";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
+import { Written } from "@kampus/libfabrika/telemetry/Records";
 import type { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { stopOnAbort } from "@kampus/libfabrika/Testing.test-support";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
+import { CheckedHello } from "@kampus/libfabrika/transport/Hello";
 import { Attached } from "@kampus/libfabrika/transport/Wire";
+import { ChildReplies, ProcessReplies } from "@kampus/libfabrika/workers/bindings";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Option, Schedule, Schema, Scope, Tracer } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Result,
+  Schedule,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { projectRuntime, settings, type Env } from "./runtime.ts";
 import { Settings } from "./settings.ts";
+
+/** A child start's answer over Project RPC that started a fresh life. */
+const StartedReply = Schema.TaggedStruct("ok", { value: Started.cases.started });
+/** The own event these laws write: a bare `noted`. */
+const Noted = Schema.TaggedStruct("noted", {});
 
 const table = vi.hoisted(() => ({ programs: {} as Record<string, { hash: string; source: string }> }));
 vi.mock("./table.ts", () => table);
@@ -217,7 +241,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
     statuses: unknown[] = [];
   let onMessage: (pid: string, input: Incoming) => Promise<Sent> = async (_pid, input) => {
     received.push(input);
-    return { _tag: "accepted", rev: 1, pos: 1 };
+    return Sent.cases.accepted.make({ rev: 1, pos: 1 });
   };
   let onRing: () => Promise<void> = async () => {};
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
@@ -270,7 +294,7 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
       getByName: () => ({
         write: async (_chain: unknown, _part: number, rows: ReadonlyArray<{ span: SpanRow }>) => {
           recorded.push(...rows.map((row) => row.span));
-          return { _tag: "written" };
+          return Written.cases.written.make({});
         },
       }),
     },
@@ -344,25 +368,27 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   const client = await run(p.connect()),
     nonce = await run(p.challenge(client));
   expect(
-    await run(
-      p.initialize(
-        client,
-        {
-          versions: [1],
-          has: ["seal"],
-          ping: "30s",
-          key: key.raw,
-          tab: "tab-a",
-          nonce,
-          platform: "headless",
-          os: "linux",
-          sentAt: SENT,
-          signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\ntab-a\n${nonce}`),
-        },
-        { url: "http://127.0.0.1:18787", tab: "tab-a", name: key.fingerprint },
+    CheckedHello.isAnyOf(["online"])(
+      await run(
+        p.initialize(
+          client,
+          {
+            versions: [1],
+            has: ["seal"],
+            ping: "30s",
+            key: key.raw,
+            tab: "tab-a",
+            nonce,
+            platform: "headless",
+            os: "linux",
+            sentAt: SENT,
+            signed: key.proof(`fabrika-hello\nhttp://127.0.0.1:18787\ntab-a\n${nonce}`),
+          },
+          { url: "http://127.0.0.1:18787", tab: "tab-a", name: key.fingerprint },
+        ),
       ),
     ),
-  ).toMatchObject({ _tag: "online" });
+  ).toBe(true);
   return {
     p,
     run,
@@ -461,7 +487,7 @@ StartsTest.law(
 
         const input = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Settings))(w.env.INSTANCE);
         const receipt = yield* w.settingsRead(input.start);
-        expect(receipt).toMatchObject({ _tag: "ok" });
+        expect(SettingsStart.Reply.isAnyOf(["ok"])(receipt)).toBe(true);
         expect(receipt).not.toHaveProperty("value.starts");
         expect(JSON.stringify(receipt)).not.toContain(`unused-${word}`);
       });
@@ -473,7 +499,7 @@ StartsTest.law(
         if (move === "reopen") {
           project = yield* Effect.promise(() => w.reopen());
         } else if (move === "repeat") {
-          expect(yield* start(saved[choice % saved.length]!)).toMatchObject({ _tag: "ok", value: { _tag: "started" } });
+          expect(Schema.is(StartedReply)(yield* start(saved[choice % saved.length]!))).toBe(true);
         } else {
           const child = Child.make({
             id: `child-${word}-${index}`,
@@ -485,10 +511,10 @@ StartsTest.law(
           const reply = yield* start(child);
 
           if (move === "refuse") {
-            expect(reply).toMatchObject({ _tag: "ChildrenError", reason: "forbidden" });
+            expect(reply).toMatchObject(ChildReplies.cases.ChildrenError.make({ reason: "forbidden" }));
             expect(w.db.prepare("SELECT count(*) AS total FROM entries").get()).toEqual(before);
           } else {
-            expect(reply).toMatchObject({ _tag: "ok", value: { _tag: "started", name: child.name } });
+            expect(Schema.decodeUnknownSync(StartedReply)(reply)).toMatchObject({ value: { name: child.name } });
             saved.push(child);
           }
         }
@@ -540,7 +566,7 @@ const walk = async (w: Awaited<ReturnType<typeof world>>, tape: ReadonlyArray<nu
       const result = await w.run(
         Effect.result(w.p.start(Start.cases.first.make({ id: `p40-${i}`, name: bent, code }), w.from)),
       );
-      expect(result, `${bent} is refused`).toMatchObject({ _tag: "Failure" });
+      expect(Result.isFailure(result), `${bent} is refused`).toBe(true);
       refused++;
     }
 
@@ -593,7 +619,8 @@ describe("P12 Project authority", () => {
     );
     const [row] = await w.run(w.p.read("gateway/brain", 0, "audit"));
     const { _tag, ...body } = event;
-    expect(row).toMatchObject({ traceId: trace, id: write, _tag, body });
+    expect(row).toMatchObject({ traceId: trace, id: write, body });
+    expect(row?._tag).toBe(_tag);
   });
   law(
     "reopening an exited bootstrap reads its first placing without starting it again",
@@ -601,7 +628,7 @@ describe("P12 Project authority", () => {
       const w = await open(trace, build);
       const first = w.p.boot;
       const before = await w.run(w.p.read("processes/counter:1", 0, "audit"));
-      await w.run(w.p.exit(first.process, { _tag: "normal" }, w.from));
+      await w.run(w.p.exit(first.process, ExitReason.cases.normal.make({}), w.from));
       const configured = w.configured.length;
       const reopened = await w.reopen();
       expect(reopened.boot).toEqual(first);
@@ -617,7 +644,7 @@ describe("P12 Project authority", () => {
     await w.send(pid, "prepare", letter);
     const parent = w.received[0]!.envelope.id;
     const result = await w.run(Effect.exit(w.p.sign(pid, write, parent, "answered")));
-    expect(result).toMatchObject({ _tag: "Failure" });
+    expect(Exit.isFailure(result)).toBe(true);
     const failure = Option.getOrThrow(Exit.findErrorOption(result));
     expect(failure).toBeInstanceOf(SigningRefused);
     expect(failure).toMatchObject({ reason: "person_only" });
@@ -627,7 +654,7 @@ describe("P12 Project authority", () => {
       pid = await w.start();
     await w.send(pid, "approve", letter);
     const result = await w.run(Effect.exit(w.p.sign(pid, write, w.received[0]!.envelope.id, "answered")));
-    expect(result).toMatchObject({ _tag: "Success", value: { by: { _tag: "person" } } });
+    expect(Exit.isSuccess(result) && Writer.isAnyOf(["person"])(result.value.by)).toBe(true);
     // The saved delivery is independent evidence of the declaration used at admission.
     const saved = w.db.prepare("SELECT saved FROM gateway_sessions WHERE parent=?").get(w.received[0]!.envelope.id);
     expect(JSON.parse(String(saved!.saved))).toMatchObject({
@@ -645,8 +672,8 @@ describe("P12 Project authority", () => {
       await Effect.runPromise(Deferred.await(release));
       const result = await w.run(w.p.inbox(pid, input));
       return result._tag === "placed"
-        ? { _tag: "accepted", rev: result.rev, pos: result.pos }
-        : { _tag: "refused", reason: result.reason };
+        ? Sent.cases.accepted.make({ rev: result.rev, pos: result.pos })
+        : Sent.cases.refused.make({ reason: result.reason });
     });
     const pending = w.send(pid, "inc", letter).then(
       (answer) => ({ answer }),
@@ -655,7 +682,7 @@ describe("P12 Project authority", () => {
     await Effect.runPromise(Deferred.await(entered));
 
     try {
-      expect(await w.revoke()).toMatchObject({ _tag: "applied" });
+      expect((await w.revoke())._tag).toBe("applied");
     } finally {
       await Effect.runPromise(Deferred.succeed(release, undefined));
     }
@@ -702,11 +729,11 @@ describe("P12 Project authority", () => {
       });
 
       if (operation === "own") {
-        await w.run(w.p.own(pid, write, "events", { _tag: "noted" }));
+        await w.run(w.p.own(pid, write, "events", Noted.make({})));
       } else if (operation === "start") {
         await w.start();
       } else if (operation === "exit") {
-        await w.run(w.p.exit(pid, { _tag: "normal" }, w.from));
+        await w.run(w.p.exit(pid, ExitReason.cases.normal.make({}), w.from));
       } else {
         await w.send(pid, "inc", letter);
         await w.run(w.p.inbox(pid, w.received[0]!));
@@ -726,7 +753,7 @@ describe("P12 Project authority", () => {
         catch: (cause) => new Error("project reopen failed", { cause }),
       }).pipe(Effect.exit),
     );
-    expect(result).toMatchObject({ _tag: "Success" });
+    expect(Exit.isSuccess(result)).toBe(true);
 
     if (Exit.isSuccess(result)) {
       expect(await w.run(result.value.info)).toEqual(before);
@@ -748,9 +775,9 @@ describe("P12 Project authority", () => {
       expect(w.configured.filter((d) => d.id === w.p.boot.process)).toHaveLength(1);
       // P14 slice 2: the boot is a list, so each entry's configure calls back once, in the list's order.
       expect(w.statuses, "each boot entry's configure saw the Project answer its status").toMatchObject([
-        { _tag: "ok", value: { name: "counter:1", state: { process: w.p.boot.process } } },
-        { _tag: "ok", value: { name: "checklist:1" } },
-        { _tag: "ok", value: { name: tezgahName(PERSON) } },
+        ProcessReplies.cases.ok.make({ value: { name: "counter:1", state: { process: w.p.boot.process } } }),
+        ProcessReplies.cases.ok.make({ value: { name: "checklist:1" } }),
+        ProcessReplies.cases.ok.make({ value: { name: tezgahName(PERSON) } }),
       ]);
     }, signal);
   }, 15_000);
@@ -761,7 +788,7 @@ describe("P12 Project authority", () => {
         pid = w.p.boot.process;
       await w.run(
         w.p
-          .own(pid, write, "events", { _tag: "noted" })
+          .own(pid, write, "events", Noted.make({}))
           .pipe(Effect.withParentSpan(Tracer.externalSpan({ traceId: trace, spanId: "00f067aa0ba902b7" }))),
       );
       const [row] = await w.run(w.p.read("events", 0, "audit"));
@@ -779,10 +806,9 @@ describe("P12 Project saved and wire readers", () => {
     const cause = Exit.isFailure(exit) ? exit.cause : Cause.die("unexpected success");
     expect(Cause.hasDies(cause)).toBe(false);
     expect(Cause.hasFails(cause)).toBe(true);
-    expect(Cause.findErrorOption(cause)).toMatchObject({
-      _tag: "Some",
-      value: { _tag: "LedgerError", reason: "bad_row" },
-    });
+    const error = Option.getOrUndefined(Cause.findErrorOption(cause));
+    expect(error).toBeInstanceOf(LedgerError);
+    expect(error).toMatchObject({ reason: "bad_row" });
   };
   it("saved instance settings fail through the Project runtime's typed error channel", async ({ signal }) => {
     const encoded = Schema.fromJsonString(Settings);
@@ -818,8 +844,8 @@ describe("P12 Project saved and wire readers", () => {
 
   for (const reader of ["bootstrap", "own descriptor", "pending descriptor", "own event"] as const) {
     it(`${reader} rejects malformed saved or wire values with LedgerError, never a defect`, async ({ signal }) => {
-      const event = Schema.Struct({ _tag: Schema.String });
-      const values = reader === "own event" ? fc.jsonValue().filter((value) => !Schema.is(event)(value)) : malformed;
+      const tagged = (value: fc.JsonValue) => Predicate.hasProperty(value, "_tag") && Predicate.isString(value._tag);
+      const values = reader === "own event" ? fc.jsonValue().filter((value) => !tagged(value)) : malformed;
       await fc.assert(
         fc.asyncProperty(values, (raw) =>
           owned(async (open) => {
@@ -842,7 +868,7 @@ describe("P12 Project saved and wire readers", () => {
               const exit =
                 reader === "pending descriptor"
                   ? await w.reopenExit()
-                  : await w.run(Effect.exit(w.p.own(pid, "invalid-descriptor", "events", { _tag: "noted" })));
+                  : await w.run(Effect.exit(w.p.own(pid, "invalid-descriptor", "events", Noted.make({}))));
               typed(exit);
             }
           }, signal),
@@ -878,18 +904,20 @@ describe("P12 WebCrypto failures", () => {
             try {
               if (w !== null) {
                 const result = await w.run(Effect.exit(w.p.online(w.key.fingerprint)));
-                expect(result).toMatchObject({ _tag: "Failure" });
-                expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({
-                  _tag: "LedgerError",
-                  reason: "crypto",
-                });
+                expect(Exit.isFailure(result)).toBe(true);
+                expect(Option.getOrThrow(Exit.findErrorOption(result))).toBeInstanceOf(LedgerError);
+                expect(Option.getOrThrow(Exit.findErrorOption(result))).toMatchObject({ reason: "crypto" });
               } else {
                 // oxlint-disable-next-line fabrika/no-type-assertions -- the digest must fail before any R2 method runs
                 const bucket = { put } as unknown as R2Bucket;
-                await expect(bucketCalls(bucket).put("measurements", body, "0".repeat(64))).rejects.toMatchObject({
-                  _tag: "LedgerError",
-                  reason: "crypto",
-                });
+                const refusal = await bucketCalls(bucket)
+                  .put("measurements", body, "0".repeat(64))
+                  .then(
+                    () => null,
+                    (error: unknown) => error,
+                  );
+                expect(refusal).toBeInstanceOf(LedgerError);
+                expect(refusal).toMatchObject({ reason: "crypto" });
                 expect(put).not.toHaveBeenCalled();
               }
 

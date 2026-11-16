@@ -6,7 +6,8 @@ import { NodeServices } from "@effect/platform-node";
 import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
-import { Task, Result } from "@kampus/libfabrika/tasks/Task";
+import { Start } from "@kampus/libfabrika/processes/Process";
+import { Task, Result, State } from "@kampus/libfabrika/tasks/Task";
 import { Effect, FileSystem, Path, Queue, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
@@ -14,6 +15,9 @@ import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
 import { programs } from "./table.ts";
 import type { Project as SeededProject } from "./tasks-wire.test-support.ts";
+
+/** `tasks.take`'s answer when no task waits for the hands. */
+const Idle = Schema.TaggedStruct("idle", {});
 
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
 const PROCESS = "process_01m6v5270hetdrt4r8h9vvjwjs";
@@ -226,12 +230,11 @@ it.live(
       const requester = yield* Effect.tryPromise({
         try: () =>
           Reflect.get(running.project("tasks-wire"), "start")(
-            {
-              _tag: "first",
+            Start.cases.first.make({
               id: "start-wire",
               name: "wire:1",
               code: { program: "fabrika/counter", hash: built.programs["fabrika/counter"]?.hash ?? "missing" },
-            },
+            }),
             {
               by: root.fingerprint,
               for: PERSON,
@@ -270,7 +273,7 @@ it.live(
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
       expect(first.frames.filter((f) => f.method?.startsWith("tasks."))).toEqual([]);
-      const taken = Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.Literal("assigned"), task: Task }))(
+      const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );
       expect(taken.task.state._tag).toBe("assigned");
@@ -288,9 +291,9 @@ it.live(
       const resource = { process: PROCESS, task: "wire-task" };
       no(yield* stranger.call("tasks.read", resource));
       no(yield* stranger.call("tasks.started", { ...resource, execution, sentAt: SENT, seen: 0 }));
-      expect(ok(yield* stranger.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
-        _tag: "idle",
-      });
+      expect(ok(yield* stranger.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual(
+        Idle.make({}),
+      );
       const started = ok(yield* resumed.call("tasks.started", { ...resource, execution, sentAt: SENT, seen: 0 }));
       expect(ok(yield* resumed.call("tasks.started", { ...resource, execution, sentAt: "retry", seen: 0 }))).toEqual(
         started,
@@ -304,11 +307,10 @@ it.live(
         ok(yield* resumed.call("tasks.finish", { ...resource, execution, result, sentAt: "retry", seen: 0 })),
       ).toEqual(finished);
       const read = Schema.decodeUnknownSync(Task)(ok(yield* resumed.call("tasks.read", resource)));
-      expect(read.state).toMatchObject({ _tag: "finished", result, assignment: taken.task.state.assignment });
+      expect(State.isAnyOf(["finished"])(read.state)).toBe(true);
+      expect(read.state).toMatchObject({ result, assignment: taken.task.state.assignment });
       expect(read.events.map((e) => e.event)).toEqual(["requested", "taken", "started", "finished"]);
-      expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual({
-        _tag: "idle",
-      });
+      expect(ok(yield* resumed.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 }))).toEqual(Idle.make({}));
       const revoke = revokeText({
         id: "revoke-hands",
         key: hands.raw,

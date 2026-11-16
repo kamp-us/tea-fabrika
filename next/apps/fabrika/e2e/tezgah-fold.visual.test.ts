@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L33 of the approved
 // plan (docs/plan/quests/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
 // real `dev.ts` in its own temp home on its own port and drives headless Chromium: a 1440x900 tab
@@ -45,6 +45,9 @@ import {
   typeId,
   whole,
 } from "./tezgah.test-support.ts";
+
+/** A move reached by a typed word, restated from tezgah's own `Via`. */
+const Word = Schema.TaggedStruct("word", {});
 
 /** The law's own limit in ms: a brain, two tabs and about sixty waits of at most 30 s each. */
 const LIMIT = 600_000;
@@ -111,7 +114,7 @@ describe("L33: a smaller tab folds what does not fit, and a strip opens by Enter
           /** One letter to tezgah from the second client, then a wait until the view has `done`. */
           const letter = (m: object, done: (view: View) => boolean, label: string) =>
             Effect.gen(function* () {
-              yield* tell(r, pid, { ...m, via: { _tag: "word" } }, `letter_tezgah_fold_${++letters}`);
+              yield* tell(r, pid, { ...m, via: Word.make({}) }, `letter_tezgah_fold_${++letters}`);
               // The wait reads tezgah alone: the tab is checked where the law looks at it.
               return yield* foldSettle(big, r, pid, (view) => (done(view) ? [] : [`not yet ${label}`]), label);
             });

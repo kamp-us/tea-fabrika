@@ -10,11 +10,11 @@ import { createServer as httpServer } from "node:http";
 import { syncBuiltinESMExports } from "node:module";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
-import { Id } from "@kampus/libfabrika";
+import { Id, ProgramDown, Sent } from "@kampus/libfabrika";
 import { workerLoader } from "@kampus/libfabrika/workers";
 import { settings as readSettings } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
@@ -109,27 +109,31 @@ const plantPolicy = (source: string, mode: "binding" | "outbound", name: string,
   return changed;
 };
 
+/** The loader refused to load: a `ProgramDown` of reason `no_program`. */
+const noProgram = (result: Result.Result<unknown, unknown>) => {
+  expect(Result.isFailure(result)).toBe(true);
+  const failure = Result.isFailure(result) ? result.failure : undefined;
+  expect(failure).toBeInstanceOf(ProgramDown);
+  expect(failure).toMatchObject({ reason: "no_program" });
+};
+
 // A loaded program answers its init and step calls with P11's Step. Decode it, never read it raw.
 type Loaded = Readonly<Record<string, (...args: ReadonlyArray<unknown>) => Promise<unknown>>>;
 
-const SealedTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const SealedTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ keys: Schema.Array(Schema.String), outbound: Schema.String }),
 });
 
-const CounterTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const CounterTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ count: Schema.Number }),
 });
 
-const ChecklistTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const ChecklistTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ items: Schema.Array(Schema.Unknown) }),
 });
 
 /** Desk S2a: tezgah's first init, before any window attaches: no workspace, no tile. */
-const TezgahTurn = Schema.Struct({
-  _tag: Schema.Literal("stepped"),
+const TezgahTurn = Schema.TaggedStruct("stepped", {
   model: Schema.Struct({ workspaces: Schema.Array(Schema.Unknown), tiles: Schema.Array(Schema.Unknown) }),
 });
 
@@ -455,7 +459,7 @@ describe("P16 stack and sealed loader", () => {
             "other/counter": { hash: hash(other), source: other },
           });
           const bare = await Effect.runPromise(Effect.result(loader.load("counter", process)));
-          expect(bare).toMatchObject({ _tag: "Failure", failure: { _tag: "ProgramDown", reason: "no_program" } });
+          noProgram(bare);
           const loaded = await Effect.runPromise(loader.load("fabrika/counter", process));
           expect(loaded.hash).toBe(hash(source));
           expect(calls).toEqual([
@@ -471,10 +475,7 @@ describe("P16 stack and sealed loader", () => {
             },
           ]);
           const refused = await Effect.runPromise(Effect.result(loader.load(`missing-${missing}`, process)));
-          expect(refused).toMatchObject({
-            _tag: "Failure",
-            failure: { _tag: "ProgramDown", reason: "no_program" },
-          });
+          noProgram(refused);
           expect(calls).toHaveLength(1);
           const config = calls[0]!.config;
           const sealed = (value: unknown) => assert.deepEqual(value, config);
@@ -823,7 +824,7 @@ describe("P16 copied-file real instance, serial", () => {
                               sentAt: "2026-11-08T04:00:00.000Z",
                               seen: 0,
                             });
-                            expect(answer.result).toMatchObject({ _tag: "accepted" });
+                            expect(Schema.is(Sent.cases.accepted)(answer.result)).toBe(true);
 
                             if (n === 0) {
                               if (again) {
@@ -863,7 +864,7 @@ describe("P16 copied-file real instance, serial", () => {
                               sentAt: "2026-11-08T04:00:00.000Z",
                               seen: 0,
                             });
-                            expect(retried.result).toMatchObject({ _tag: "accepted" });
+                            expect(Schema.is(Sent.cases.accepted)(retried.result)).toBe(true);
                             const after = (await a.call("ledger.read", { stream: "counter:1/inbox", after: 0 })).result
                               .entries;
                             expect(after.filter((r: any) => r.id === "unanswered")).toHaveLength(1);

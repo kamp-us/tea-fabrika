@@ -13,13 +13,20 @@ import { checklistView } from "@kampus/checklist";
 import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
+import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
 import { Clock, Deferred, Effect, Fiber, Schema } from "effect";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
-import { killedMoment, killWorkerd } from "./workerd.test-support.ts";
+import { killedMoment, killWorkerd, Moment } from "./workerd.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
+/** A `process.send` reply whose result is the program's refusal. */
+const RefusedReply = Schema.Struct({ result: Sent.cases.refused });
 
 const APP = resolve(import.meta.dirname, "..");
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -49,15 +56,17 @@ it(
 
         for (const [n, item] of ["milk", "bread"].entries()) {
           expect(
-            yield* first.call("process.send", {
-              pid,
-              letter: `progress_${n}`,
-              m: { type: "add", name: item },
-              sentAt: SENT,
-              seen: 0,
-            }),
+            Schema.is(AcceptedReply)(
+              yield* first.call("process.send", {
+                pid,
+                letter: `progress_${n}`,
+                m: { type: "add", name: item },
+                sentAt: SENT,
+                seen: 0,
+              }),
+            ),
             `send ${n + 1} to the original process`,
-          ).toMatchObject({ result: { _tag: "accepted" } });
+          ).toBe(true);
           yield* Effect.sleep("100 millis");
           const second = yield* reader(h, dev);
           const opened = Schema.decodeUnknownSync(View)(yield* second.call("view.open", { pid }));
@@ -498,12 +507,8 @@ const waitFresh = Effect.fnUntraced(function* (latest: Call) {
 
 const placing = (r: Frame) => {
   expect(r.error).toBeUndefined();
-  expect(r.result).toMatchObject({
-    _tag: "accepted",
-    rev: expect.any(Number),
-    pos: expect.any(Number),
-  });
-  return r.result as { rev: number; pos: number };
+  const { rev, pos } = Schema.decodeUnknownSync(Sent.cases.accepted)(r.result);
+  return { rev, pos };
 };
 
 const view = async (c: Client, pid: string) => {
@@ -647,7 +652,11 @@ const sendPlaced = (c: Client, pid: string, letter: string) =>
   Effect.promise(async () => placing(await send(c, pid, letter)));
 
 /** A send settles as accepted, or as cut by the kill (the socket closed before its answer). Nothing else. */
-type Settled = { _tag: "accepted"; placing: Placing } | { _tag: "cut" };
+const Settled = Schema.TaggedUnion({
+  accepted: { placing: Schema.Struct({ rev: Schema.Number, pos: Schema.Number }) },
+  cut: {},
+});
+type Settled = typeof Settled.Type;
 
 const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.Deferred<void>) =>
   Effect.promise(async (): Promise<Settled> => {
@@ -661,7 +670,7 @@ const sendSettled = (c: Client, pid: string, letter: string, answered: Deferred.
         throw error;
       },
     );
-    return reply === null ? { _tag: "cut" } : { _tag: "accepted", placing: placing(reply) };
+    return reply === null ? Settled.cases.cut.make({}) : Settled.cases.accepted.make({ placing: placing(reply) });
   }).pipe(Effect.tap((settled) => (settled._tag === "accepted" ? Deferred.succeed(answered, undefined) : Effect.void)));
 
 /** Waits, with `ledger.wait` after the last rev seen, for a `restarted {after}` row. None in WAIT fails
@@ -816,9 +825,7 @@ describe("P12 real dev.ts wire", () => {
     const first = placing(await send(c, pid, "before-wait"));
     const waiting = c.call("ledger.wait", { stream: "counter:1/inbox", after: first.rev });
     await other.call("ledger.read", { stream: "counter:1/inbox", after: 0 });
-    expect(await send(other, pid, "bad-wait", { type: "unknown" })).toMatchObject({
-      result: { _tag: "refused" },
-    });
+    expect(Schema.is(RefusedReply)(await send(other, pid, "bad-wait", { type: "unknown" }))).toBe(true);
     expect(placing(await send(other, pid, "before-wait"))).toEqual(first);
     const next = placing(await send(other, pid, "wake-wait"));
     expect(await waiting).toMatchObject({ result: { rev: next.rev } });
@@ -866,7 +873,7 @@ describe("P12 real dev.ts wire", () => {
     // written by anyone other than c's key could come from a stranger.
     const notC = (rows: ReadonlyArray<typeof Entry.Type>) => rows.filter((r) => r.by !== s.key.fingerprint);
     const before = await read(c, "gateway/inputs");
-    const traces = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
+    const traces = await c.call("spans.read", { chain: Chain.cases.spans.make({}), after: 0 });
     const strangerKey = identity(),
       unknownKey = identity(),
       badKey = identity();
@@ -885,7 +892,7 @@ describe("P12 real dev.ts wire", () => {
     const inputs = await read(c, "gateway/inputs");
     expect(inputs.length).toBeGreaterThan(before.length);
     expect(notC(inputs)).toEqual(notC(before));
-    const after = await c.call("spans.read", { chain: { _tag: "spans" }, after: 0 });
+    const after = await c.call("spans.read", { chain: Chain.cases.spans.make({}), after: 0 });
     const keys = [strangerKey, unknownKey, badKey];
     const connections = savedRows(s.home, "dev_clients").filter((row) =>
       keys.some((key) => String(row.connection).includes(encodeURIComponent(key.fingerprint))),
@@ -936,7 +943,7 @@ describe("P12 real dev.ts wire", () => {
     expect(row.traceId).toMatch(/^[0-9a-f]{32}$/);
     const inputs = await read(c, "gateway/inputs");
     expect(inputs.find((r) => r.id === row.parent)).toMatchObject({ traceId: row.traceId });
-    const records = await c.call("spans.read", { chain: { _tag: "job", process: pid }, after: 0 });
+    const records = await c.call("spans.read", { chain: Chain.cases.job.make({ process: pid }), after: 0 });
     expect(records.result.spans.some((r: any) => r.traceId === row.traceId && r.name.includes("runner"))).toBe(true);
   });
   it("scenario: sealed program plant: unknown programs never fall back to a host import", async () => {
@@ -1036,7 +1043,7 @@ describe("P12 real dev.ts wire", () => {
         yield* killWorkerd(s.child.pid!);
         const resumed = yield* reconnected(s, "after-crash");
         // Every answer was in before the kill, so the rows the wake reads say no step was cut.
-        expect(yield* killedMoment(s.home, "counter:1", pid)).toEqual({ _tag: "between" });
+        expect(yield* killedMoment(s.home, "counter:1", pid)).toEqual(Moment.cases.between.make({}));
 
         for (const n of range(20)) {
           const id = `kill-${n}`,
@@ -1099,7 +1106,7 @@ describe("P12 real dev.ts wire", () => {
               return first;
             }
 
-            expect(moment, `${call} refused after a kill between steps`).toMatchObject({ _tag: "inside" });
+            expect(Moment.isAnyOf(["inside"])(moment), `${call} refused after a kill between steps`).toBe(true);
             expect(
               refused.map((r) => r.call),
               "exactly one call meets a refusal",

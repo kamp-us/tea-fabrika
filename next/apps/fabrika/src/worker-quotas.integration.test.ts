@@ -6,8 +6,10 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { Quotas } from "@kampus/libfabrika/processes/Quotas";
 import * as QuotasSql from "@kampus/libfabrika/processes/QuotasSql";
+import { Sent } from "@kampus/libfabrika/runtime/Runner";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import { ByteSize, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -16,6 +18,9 @@ import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
+
+/** A `process.send` reply whose result is the runner's `accepted`. */
+const AcceptedReply = Schema.Struct({ result: Sent.cases.accepted });
 
 const PROJECT = "quota-workers";
 const PERSON = "person_01m6v5270hf3c8x2q7w9z4k5mn";
@@ -263,7 +268,7 @@ const world = Effect.fnUntraced(function* (mode: "writes" | "storage" | "reserve
       yield* rpc(
         project,
         "start",
-        { _tag: "first", id: `start:${name}`, name, code: { program, hash: code.hash } },
+        Start.cases.first.make({ id: `start:${name}`, name, code: { program, hash: code.hash } }),
         from,
       ),
     ).process;
@@ -349,9 +354,9 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
           const ordinary = mode === "writes" ? 21 : 3;
 
           for (let n = 0; n < ordinary; n++) {
-            expect(yield* w.send(alpha, `healthy:${n}`, { type: "inc", text: "é😀" })).toMatchObject({
-              result: { _tag: "accepted" },
-            });
+            expect(Schema.is(AcceptedReply)(yield* w.send(alpha, `healthy:${n}`, { type: "inc", text: "é😀" }))).toBe(
+              true,
+            );
           }
 
           const before = yield* accounting(w.home, "alpha:1", alpha);
@@ -375,7 +380,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
                 Schema.is(
                   Schema.Struct({
                     process: Schema.Struct({
-                      fault: Schema.Struct({ _tag: Schema.Literal("RecoveryReserveExhausted") }),
+                      fault: Schema.TaggedStruct("RecoveryReserveExhausted", {}),
                     }),
                   }),
                 )(use),
@@ -398,9 +403,9 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
                 Schema.Array(Schema.Struct({ name: Schema.String, process: Schema.String })),
               )(yield* rpc(w.project, "info"));
               const successor = info.find((r) => r.name === "alpha:1")!.process;
-              expect(yield* w.send(successor, "fill-cap", { type: "inc", text: "" })).toMatchObject({
-                result: { _tag: "accepted" },
-              });
+              expect(Schema.is(AcceptedReply)(yield* w.send(successor, "fill-cap", { type: "inc", text: "" }))).toBe(
+                true,
+              );
               yield* rpc(w.instance.process(successor), "restart", {
                 id: "person-at-cap",
                 build: w.hash("quota/alpha"),
@@ -421,9 +426,7 @@ for (const mode of ["writes", "storage", "reserve"] as const) {
             }
           }
 
-          expect(yield* w.send(beta, "other", { type: "inc", text: "" })).toMatchObject({
-            result: { _tag: "accepted" },
-          });
+          expect(Schema.is(AcceptedReply)(yield* w.send(beta, "other", { type: "inc", text: "" }))).toBe(true);
         }),
       ).pipe(Effect.provide(NodeServices.layer), Effect.provide(SecureRandom.layerWebCrypto)),
     240_000,

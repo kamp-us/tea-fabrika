@@ -8,9 +8,10 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { runsFor } from "@kampus/vitest";
+import { Schema } from "effect";
 import * as fc from "fast-check";
 import { afterAll, expect } from "vitest";
-import { type Role, signedText } from "./commits.ts";
+import { Answer, Note, type Role, signedText } from "./commits.ts";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
 const PROGRAM = join(import.meta.dirname, "commits.ts");
@@ -157,8 +158,7 @@ class Repo {
     };
     const args = ["-Y", "sign", "-n", opts.ns ?? "fabrika-step", "-f", join(KEYS, signer)];
     const sig = sh(this.dir, "ssh-keygen", args, signedText(link));
-    // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
-    const note = { _tag: "attested", ...link, key: fingerprint(signer), sig };
+    const note = Note.make({ ...link, key: fingerprint(signer), sig });
     this.setNote(sha, JSON.stringify(note));
     return note;
   }
@@ -186,22 +186,18 @@ class Repo {
   }
 }
 
-// oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
-const DONE = { _tag: "done" };
+const DONE = Answer.cases.done.make({});
 const runs = { seed: 119120, numRuns: runsFor({ fast: 3, full: 5 }) };
 const id = fc.stringMatching(/^[A-Za-z0-9._:-]{1,20}$/);
 const name = fc.stringMatching(/^[a-z][a-z0-9_-]{0,12}$/);
 
-const stuck = (reason: string, sha: string, more: object = {}) => ({
-  // oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
-  _tag: "stuck",
-  reason,
-  sha,
-  ...more,
-});
+const stuck = (
+  reason: (typeof Answer.cases.stuck.Type)["reason"],
+  sha: string,
+  more: { readonly paths?: ReadonlyArray<string>; readonly step?: Role } = {},
+) => Answer.cases.stuck.make({ reason, sha, ...more });
 
-// oxlint-disable-next-line fabrika/no-hand-tag -- Expected wire answer for the git exam, preserved from the moved tests.
-const ask = (...paths: string[]) => ({ _tag: "ask", to: "owner", for: "exam_read", paths });
+const ask = (...paths: string[]) => Answer.cases.ask.make({ to: "owner", for: "exam_read", paths });
 
 const verifyCommit = (r: Repo, sha: string, keys = PERSON_KEYS) => {
   const allowed = join(TOP, "git-allowed-signers");
@@ -236,12 +232,13 @@ const acceptPgp = (r: Repo) => {
   r.git("config", "gpg.program", verifier);
 };
 
+/** A note the person signed on a commit: a step's note whose step is `person`. */
+const PersonNote = Schema.TaggedStruct("attested", { ...Note.fields, step: Schema.Literal("person") });
+
 const personLink = (r: Repo, sha: string, signer = "person") => {
   const signature = /^gpgsig(?:-sha256)? (.*(?:\n .*)*)/m.exec(r.git("cat-file", "commit", sha));
   expect(signature).not.toBeNull();
-  return {
-    // oxlint-disable-next-line fabrika/no-hand-tag -- Raw signed input for the git exam, preserved from the moved tests.
-    _tag: "attested",
+  return PersonNote.make({
     step: "person",
     ticket: "229",
     version: 1,
@@ -250,7 +247,7 @@ const personLink = (r: Repo, sha: string, signer = "person") => {
     key: fingerprint(signer),
     // oxlint-disable-next-line typescript/no-non-null-assertion -- The moved test assertion above requires the git signature header.
     sig: `${signature![1]!.replaceAll("\n ", "\n")}\n`,
-  };
+  });
 };
 
 const verifies = (repo: Repo, note: { sig: string; step: Role }, text: string) => {
@@ -334,6 +331,7 @@ export {
   verifyCommit,
   acceptPgp,
   personLink,
+  PersonNote,
   verifies,
   squashed,
   log,

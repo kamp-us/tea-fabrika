@@ -2,7 +2,7 @@
 // delivery laws are in runner-contract-replay.test.ts; both share runner-contract.test-support.ts.
 // Source: next/packages/libfabrika/src/app/runner.test.ts at 9b48d622b5d4.
 import { expect, it } from "@effect/vitest";
-import { ProgramDown, stepper, type Incoming, type ProgramRunner, type Refusal } from "@kampus/libfabrika";
+import { ProgramDown, Sent, stepper, type Incoming, type ProgramRunner, type Refusal } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
 import { Arbitrary, Cause, Effect, Exit, Result, Schema } from "effect";
 import {
@@ -21,7 +21,7 @@ import {
   writer,
 } from "./runner-contract.test-support.ts";
 
-const refusal = (actual: unknown, want: Refusal) => expect(actual).toEqual({ _tag: "refused", ...want });
+const refusal = (actual: unknown, want: Refusal) => expect(actual).toEqual(Sent.cases.refused.make({ ...want }));
 
 const replayRefuse = (spy: { calls: number }): never => {
   spy.calls++;
@@ -32,7 +32,8 @@ const failedAs = (exit: Exit.Exit<unknown, unknown>, reason: string) => {
   expect(Exit.isFailure(exit)).toBe(true);
 
   if (Exit.isFailure(exit)) {
-    expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "ProgramDown", reason });
+    expect(Cause.squash(exit.cause)).toBeInstanceOf(ProgramDown);
+    expect(Cause.squash(exit.cause)).toMatchObject({ reason });
   }
 };
 
@@ -64,7 +65,7 @@ it.prop(
     const pure = Result.getOrThrow(stepper(makeProgram(() => want)));
     refusal(pure.step(empty, { type: "save", body: 17 }), { reason: "bad_msg" });
     refusal(pure.step(empty, { type: "save", body, base: 0, work: false }), want);
-    expect(() => refusal({ _tag: "refused", reason: `${want.reason}!` }, want)).toThrow();
+    expect(() => refusal(Sent.cases.refused.make({ reason: `${want.reason}!` }), want)).toThrow();
   },
   opts,
 );
@@ -187,9 +188,9 @@ it.effect.prop(
 
       // Clean control: the person-only port is real; a person's own guard input is accepted, appended and run.
       const person = Writer.cases.person.make({ key: "SHA256:exam-person", for: writer.for });
-      expect(yield* runner.msg(fresh(BAD.length + 1, badInput(c, "person_only"), person))).toMatchObject({
-        _tag: "accepted",
-      });
+      expect(
+        Sent.isAnyOf(["accepted"])(yield* runner.msg(fresh(BAD.length + 1, badInput(c, "person_only"), person))),
+      ).toBe(true);
       expect((yield* w.rows())[0]).toMatchObject({ id: id("letter", BAD.length + 1) });
       expect(w.calls).toEqual(["append", "cmd"]);
     }),
@@ -350,15 +351,15 @@ it.prop(
   { c: RefusalCases },
   ({ c }) => {
     const { body, ...want } = c;
-    refusal({ _tag: "refused", ...want }, want);
+    refusal(Sent.cases.refused.make({ ...want }), want);
     unchanged({ log: [], model: empty, patches: [], cmds: [] }, { log: [], model: empty, patches: [], cmds: [] });
 
     for (const part of ["log", "patches", "cmds"] as const) {
       expect(() => unchanged({ [part]: [] }, { [part]: ["planted"] })).toThrow();
     }
 
-    expect(() => refusal({ _tag: "refused", reason: "bad_msg", now: 4097 }, want)).toThrow();
-    expect(() => failedAs(Exit.succeed({ _tag: "refused", reason: "step" }), "step")).toThrow();
+    expect(() => refusal(Sent.cases.refused.make({ reason: "bad_msg", now: 4097 }), want)).toThrow();
+    expect(() => failedAs(Exit.succeed(Sent.cases.refused.make({ reason: "step" })), "step")).toThrow();
     expect(() => unchanged({ body, version: 1 }, empty)).toThrow();
   },
   opts,

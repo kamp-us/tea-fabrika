@@ -16,8 +16,9 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { BuildError } from "@kampus/libfabrika/build";
 import { runsFor } from "@kampus/vitest";
-import { Effect, FileSystem, Layer, type Path, PlatformError } from "effect";
+import { Effect, Exit, FileSystem, Layer, type Path, PlatformError, Result } from "effect";
 import * as fc from "fast-check";
 import { rolldown } from "rolldown";
 import { afterEach, describe, expect, it } from "vitest";
@@ -43,7 +44,15 @@ const discovery = (files: Array<string>, seen?: { calls: number }) =>
     })),
   );
 
-const refused = (reason: string) => ({ _tag: "Failure", failure: { _tag: "BuildError", reason } });
+/** The build failed with a `BuildError` of this reason. */
+const refused = (result: Result.Result<unknown, unknown>, reason: string, message?: string) => {
+  expect(Result.isFailure(result), message).toBe(true);
+
+  if (Result.isFailure(result)) {
+    expect(result.failure, message).toBeInstanceOf(BuildError);
+    expect(result.failure, message).toMatchObject({ reason });
+  }
+};
 
 afterEach(() => {
   for (const h of homes.splice(0)) {
@@ -122,7 +131,7 @@ describe("P12 Rolldown build", () => {
       const before = snapshot(out);
       writeFileSync(file, source);
       const failed = await runNode(Effect.result(build(options)));
-      expect(failed, "reachable input is checked even with files: []").toMatchObject(refused("compiler"));
+      refused(failed, "compiler", "reachable input is checked even with files: []");
       expect(snapshot(out)).toEqual(before);
     });
   }
@@ -142,7 +151,7 @@ describe("P12 Rolldown build", () => {
         }),
       ).pipe(Effect.provide(discovery([path]))),
     );
-    expect(result).toMatchObject({ _tag: "Success" });
+    expect(Exit.isSuccess(result)).toBe(true);
   });
   law(
     "default discovery checks a view without publishing siblings and custom modules export program",
@@ -178,7 +187,7 @@ describe("P12 Rolldown build", () => {
             Effect.provide(discovery([relative(resolve(import.meta.dirname, "../../../.."), view)])),
           ),
         );
-        expect(failed, "default discovery must check its TSX inputs").toMatchObject(refused("compiler"));
+        refused(failed, "compiler", "default discovery must check its TSX inputs");
         expect(snapshot(out)).toEqual(before);
       } finally {
         chmodSync(parent, 0o700);
@@ -200,7 +209,7 @@ describe("P12 Rolldown build", () => {
     for (const [name, source] of plants) {
       writeFileSync(file, source);
       const failed = await runNode(Effect.result(build(options)));
-      expect(failed, name).toMatchObject(refused("compiler"));
+      refused(failed, "compiler", name);
       expect(snapshot(out), name).toEqual(before);
     }
   });
@@ -223,7 +232,7 @@ describe("P12 Rolldown build", () => {
           }),
         ),
       );
-      expect(result).toMatchObject(refused("compiler"));
+      refused(result, "compiler");
       expect(snapshot(out)).toEqual(before);
     }
   });
@@ -294,7 +303,7 @@ describe("P12 Rolldown build", () => {
     const failed = await runNode(
       Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(discovery([relative(root, good)]))),
     );
-    expect(failed).toMatchObject(refused("compiler"));
+    refused(failed, "compiler");
   });
   law("discovery plant: a disk failure is a typed BuildError and preserves the last good file", async ({ label }) => {
     const { build } = await import("./build.ts");
@@ -324,7 +333,7 @@ describe("P12 Rolldown build", () => {
     // Effect.result catches typed failures only. A defect escapes this law.
     const result = await runNode(Effect.result(build({ out, ledger: [] })).pipe(Effect.provide(failing)));
     expect(calls).toBeGreaterThan(0);
-    expect(result).toMatchObject(refused("read"));
+    refused(result, "read");
     expect(snapshot(out)).toEqual(before);
   });
 });
@@ -400,10 +409,11 @@ describe("P14 slice 2, L18: the app's build carries the tab", () => {
                         : build({ out, ledger: [] }).pipe(Effect.provide(failing(move)));
                     const result = yield* Effect.result(attempt);
                     seen.failed++;
-                    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "BuildError" } });
+                    expect(Result.isFailure(result)).toBe(true);
+                    expect(Result.isFailure(result) ? result.failure : undefined).toBeInstanceOf(BuildError);
 
                     if (move === "compiler") {
-                      expect(result).toMatchObject(refused("compiler"));
+                      refused(result, "compiler");
                     }
 
                     expect(snapshot(out), `a ${move} failure changed the published output`).toEqual(good);

@@ -11,6 +11,7 @@
 // `next-visual` project runs it one file at a time, on the schedule or a `visual` pull request.
 import { NodeServices } from "@effect/platform-node";
 import { build } from "@kampus/libfabrika/build";
+import { Swapped } from "@kampus/libfabrika/runtime/Runner";
 import { runsFor } from "@kampus/vitest";
 import { Effect, FileSystem, type Layer, Path, Schedule, Schema, type Scope, Stream } from "effect";
 import { SecureRandom } from "effect/crypto";
@@ -32,6 +33,9 @@ import {
   ROOT,
   spanOutputs,
 } from "./reload.test-support.ts";
+
+/** A reload that did not reach a swap: its failure's reason, as the answer reports it. */
+const Failed = Schema.TaggedStruct("failed", { reason: Schema.Unknown });
 
 /** What the driver leaves on the page for later calls. */
 declare global {
@@ -226,7 +230,7 @@ const outcome = (answer: unknown) => {
     (p) => p.name === "counter:1",
   );
   const failed = objects(answer).find((o) => o._tag === "failed");
-  return row?.outcome ?? (failed === undefined ? { _tag: "same" } : { _tag: "failed", reason: failed.reason });
+  return row?.outcome ?? (failed === undefined ? Swapped.cases.same.make({}) : Failed.make({ reason: failed.reason }));
 };
 
 /** A session on the instance: a granted browser key, the counter's process and its reads. */
@@ -344,7 +348,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
         const copy = yield* fixture;
         const run = yield* instance(copy);
         // The watcher's first build is the boot's own bytes: nothing to swap.
-        expect(outcome(yield* nextAnswer(run.answers))).toEqual({ _tag: "same" });
+        expect(outcome(yield* nextAnswer(run.answers))).toEqual(Swapped.cases.same.make({}));
         // L2 permits late notifications of unchanged bytes. They do not answer the next distinct save.
         const changed = () => nextAnswer(run.answers, 60_000, (answer) => outcome(answer)._tag !== "same");
         const s = yield* session(run.url, run.founder.key);
@@ -357,7 +361,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
         // A save that fits: inc adds 2. The count stays, and the next press runs the new code.
         yield* copy.write(edited(source, 2));
-        expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
+        expect(outcome(yield* changed())._tag).toBe("swapped");
         expect(yield* s.view()).toEqual({ count: 3 });
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 5 });
@@ -372,17 +376,18 @@ describe("P15 slice 1: hot reload on the real instance", () => {
             s.replace("Schema.Struct({ count: Schema.Int })", "Schema.Struct({ count: Schema.Int, step: Schema.Int })"),
           ),
         );
-        expect(outcome(yield* changed())).toEqual({
-          _tag: "refused",
-          was: swapped[0].body.hash,
-          reason: "shape",
-        });
+        expect(outcome(yield* changed())).toEqual(
+          Swapped.cases.refused.make({
+            was: swapped[0].body.hash,
+            reason: "shape",
+          }),
+        );
         yield* s.press("inc");
         expect(yield* s.view(), "the old code keeps running it").toEqual({ count: 7 });
 
         // A syntax error: nothing reaches the process; the brain records where.
         yield* copy.write(`${source}\nexport const broken = ;\n`);
-        expect(outcome(yield* changed())).toMatchObject({ _tag: "failed", reason: "bundle" });
+        expect(outcome(yield* changed())).toMatchObject(Failed.make({ reason: "bundle" }));
         const failed = (yield* s.read("gateway/code")).filter((e) => e._tag === "code.failed").at(-1);
         expect(failed?.body).toMatchObject({ program: PROGRAM, hash: null, reason: "bundle", path: copy.relative });
         expect(typeof failed?.body.line).toBe("number");
@@ -391,7 +396,7 @@ describe("P15 slice 1: hot reload on the real instance", () => {
 
         // Its fix: inc adds 3, and it swaps.
         yield* copy.write(edited(source, 3));
-        expect(outcome(yield* changed())).toMatchObject({ _tag: "swapped" });
+        expect(outcome(yield* changed())._tag).toBe("swapped");
         yield* s.press("inc");
         expect(yield* s.view()).toEqual({ count: 12 });
       }),

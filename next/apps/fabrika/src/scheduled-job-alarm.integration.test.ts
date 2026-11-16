@@ -3,6 +3,7 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Start } from "@kampus/libfabrika/processes/Process";
 import { Clock, Effect, FileSystem, Path, Schema } from "effect";
 import { SecureRandom } from "effect/crypto";
 import { expect, it } from "vitest";
@@ -41,8 +42,7 @@ const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: 
     return yield* Effect.die(new Error(`${label}: timed out; last observed ${JSON.stringify(last)}`));
   });
 
-const Beat = Schema.Struct({
-  _tag: Schema.Literal("beat"),
+const Beat = Schema.TaggedStruct("beat", {
   body: Schema.Struct({ due: Schema.Number, period: Schema.Int }),
 });
 
@@ -133,7 +133,7 @@ it("scenario: L5 real local alarms write three beats and save the idle model's n
         };
         const started = yield* Effect.promise(() =>
           Reflect.get(instance.project(PROJECT), "start")(
-            { _tag: "first", id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } },
+            Start.cases.first.make({ id: "start-beat", name: NAME, code: { program: PROGRAM, hash: code!.hash } }),
             from,
           ),
         );
