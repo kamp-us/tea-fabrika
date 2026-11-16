@@ -1475,9 +1475,11 @@ describe("the end-to-end legs", () => {
     // setup file and no `passWithNoTests`, so a leg with no file fails; `Shards` is the root's
     // sequencer, which every project shares. Plants, each run once on vitest.config.ts and restored:
     // the project's `testTimeout` 60_000 (red); its include `next/apps/fabrika/e2e/*.visual.test.ts`
-    // (red, here and in E8).
+    // (red, here and in E8). It extends nothing from the root, so it carries the host-only guard
+    // itself (0178, caps.test.ts holds what the guard does).
     expect(projects.find((project) => project.test.name === "next-visual")).toEqual({
       extends: false,
+      plugins: [expect.objectContaining({ name: "fabrika-local-host-only" })],
       test: {
         name: "next-visual",
         root: ROOT,

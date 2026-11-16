@@ -96,8 +96,12 @@ if (!Number.isInteger(workers) || workers < 1) {
   throw new Error("FABRIKA_MAX_WORKERS must be a positive integer");
 }
 
+// A person's or an agent's `vitest` command. Stryker and other programs that load this config go
+// their own way.
+const cliRun = () => /^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""));
+
 const localLimits = () => {
-  if (!/^vitest(?:\.[cm]?js)?$/.test(basename(process.argv[1] ?? ""))) {
+  if (!cliRun()) {
     return;
   }
 
@@ -153,6 +157,56 @@ const localLimits = () => {
   return { test: { maxWorkers: requested } };
 };
 
+// A test that drives a real resource or a real window runs on CI, never on the laptop by accident
+// (0178, 0536): twice on 2026-11-15 an agent started a real-Worker `.integration.` law here, once
+// through `--changed`. The include globs cannot say which files a run reaches, since `--changed`,
+// `--related`, `--project` and path filters narrow them later, so this asks Vitest itself. Vitest
+// 5.0.5 awaits every project's `configureVitest` hook once its projects and its git provider are
+// set up, and before `run` or `list` resolves a file (`_attachProjectServers` in its cli-api
+// chunk). `getRelevantTestSpecifications` is the public call both commands make next: the include
+// globs, the path filters, then `--changed`'s import graph, so the files it returns are the files
+// the run would start.
+//
+// The one way in is HOST_RUN, set to `1` for one command, and only once 0178 has been met: the lead
+// has read every line the test can reach that signals a process or calls launchd, and the owner
+// has said yes to this run. Every other proof of such a law is a full run of scheduled.yaml on its
+// branch: `gh workflow run scheduled.yaml --ref <branch>`.
+//
+// CI is read from `CI`, which GitHub's runners set and nothing on the laptop does. Nothing stops a
+// shell from setting `CI=1` or HOST_RUN itself: this guards against an accident, not against an
+// agent that means to get around it.
+const HOST_ONLY = /\.(?:integration|visual)\.test\.[cm]?[jt]sx?$/;
+const HOST_RUN = "FABRIKA_HOST_RUN_OWNER_APPROVED";
+const checked = new WeakSet<object>();
+
+const hostOnly: Plugin = {
+  name: "fabrika-local-host-only",
+  async configureVitest({ vitest }) {
+    // Each project runs this hook; the files are the whole run's, so one look is enough.
+    if (!cliRun() || process.env.CI || process.env[HOST_RUN] === "1" || checked.has(vitest)) {
+      return;
+    }
+
+    checked.add(vitest);
+    const { filter } = parseCLI(["vitest", ...process.argv.slice(2)], { allowUnknownOptions: true });
+    const reached = (await vitest.getRelevantTestSpecifications(filter))
+      .map((spec) => relative(process.cwd(), spec.moduleId))
+      .filter((path, index, all) => HOST_ONLY.test(path) && all.indexOf(path) === index);
+
+    if (reached.length > 0) {
+      throw new Error(
+        [
+          `Local host-only test run refused (decision 0178). This run reaches ${reached.length} real-resource file(s):`,
+          ...reached.slice(0, 5).map((path) => `  ${path}`),
+          ...(reached.length > 5 ? [`  and ${reached.length - 5} more`] : []),
+          "Prove the law with a full run on its branch instead: gh workflow run scheduled.yaml --ref <branch>.",
+          `Only after the lead's read and the owner's yes (0178), run it with ${HOST_RUN}=1.`,
+        ].join("\n"),
+      );
+    }
+  },
+};
+
 const root = import.meta.dirname;
 
 // A lead-script test starts its scripts as child processes, which Vitest's import graph cannot see.
@@ -193,6 +247,9 @@ export const projects = [
   { extends: true, test: { name: "next-integration", include: [...INTEGRATION], exclude: [...EXCLUDE] } },
   {
     extends: false,
+    // A project that does not extend the root gets none of its plugins, so `--project next-visual`
+    // alone would skip the host-only guard.
+    plugins: [hostOnly],
     test: {
       name: "next-visual",
       root: import.meta.dirname,
@@ -264,6 +321,7 @@ export default defineConfig({
   // Vite runs this hook only while resolving a run. Importers can merge or spread the object.
   plugins: [
     { name: "fabrika-local-test-limits", enforce: "post", config: localLimits },
+    hostOnly,
     scriptReads,
     githubReads,
     shardTable,
