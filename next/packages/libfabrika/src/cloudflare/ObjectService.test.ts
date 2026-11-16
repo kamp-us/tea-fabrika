@@ -26,10 +26,9 @@ import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import { Context, Effect, Layer, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
-import { vi } from "vitest";
 import { Writer } from "../access/SessionManager.ts";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { Activity } from "../processes/Process.ts";
@@ -41,26 +40,7 @@ import { SpanSink } from "../telemetry/Sink.ts";
 import type { ProcessShape } from "./objects.ts";
 import * as ObjectService from "./ObjectService.ts";
 import * as ProcessObject from "./ProcessObject.ts";
-import { recordedLayer, settings, type Env } from "./runtime.ts";
-
-// The Process shell is Alchemy's Effect object: keep only what its Layer hands to Alchemy's `make`,
-// so law 3 can construct it and call it on Node, as law A2 in alarm.laws.test.ts does. Every other
-// name in objects.ts stays as it is.
-const made = vi.hoisted((): { value?: object } => ({}));
-
-vi.mock("./objects.ts", async (original) => {
-  const actual = await original<typeof import("./objects.ts")>();
-  const { Layer } = await import("effect");
-  return {
-    ...actual,
-    Process: {
-      make: (implementation: object) => {
-        made.value = implementation;
-        return Layer.empty;
-      },
-    },
-  };
-});
+import { recordedLayer, RunnerLayer, settings, SinkLayer, type Env } from "./runtime.ts";
 
 class Probe extends Context.Service<Probe, { readonly port: number }>()(
   "@kampus/libfabrika/cloudflare/ObjectService.test.Probe",
@@ -287,44 +267,40 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           },
           transactionSync: unexpected,
         };
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            vi.spyOn(SpanSink, "layer").mockReturnValue(
-              Layer.succeed(SpanSink, {
-                batch: (work) => work,
-                flush: Effect.succeed({ sent: 0 }),
-                check: Effect.void,
-                summaries: unexpected,
-                sums: unexpected,
+        // The law hands in the Process object's two parts, through the References a live object
+        // leaves at their defaults: a sink that writes nothing, and a runner that only opens.
+        // Plant, run once (mock sweep slice 2): `recordingLayer` names `SpanSink.layer` again, past
+        // `SinkLayer`: the fake SQL refuses the sink's tables, and the good build fails, red.
+        const parts = Layer.merge(
+          Layer.succeed(SinkLayer, () =>
+            Layer.succeed(SpanSink, {
+              batch: (work) => work,
+              flush: Effect.succeed({ sent: 0 }),
+              check: Effect.void,
+              summaries: unexpected,
+              sums: unexpected,
+            }),
+          ),
+          Layer.succeed(RunnerLayer, () =>
+            Layer.succeed(
+              ProgramRunner,
+              ProgramRunner.of({
+                init: () => Effect.void,
+                msg: unexpected,
+                open: () => Effect.succeed({ rev: 0, view: {} }),
+                due: unexpected,
+                mailed: Effect.void,
+                restart: unexpected,
+                swap: unexpected,
               }),
             ),
           ),
-          (spy) => Effect.sync(() => spy.mockRestore()),
-        );
-        yield* Effect.acquireRelease(
-          Effect.sync(() =>
-            vi.spyOn(ProgramRunner, "withLoader").mockImplementation(() =>
-              Layer.succeed(
-                ProgramRunner,
-                ProgramRunner.of({
-                  init: () => Effect.void,
-                  msg: unexpected,
-                  open: () => Effect.succeed({ rev: 0, view: {} }),
-                  due: unexpected,
-                  mailed: Effect.void,
-                  restart: unexpected,
-                  swap: unexpected,
-                }),
-              ),
-            ),
-          ),
-          (spy) => Effect.sync(() => spy.mockRestore()),
         );
         const project = new Proxy(
           {},
           { get: (_target, key) => (key === "settingsStart" ? async () => StartsTest.reply(good) : unexpected()) },
         );
-        ProcessObject.layer({
+        const constructor: ProcessConstructor = ProcessObject.implementation({
           programs: {},
           // The app's checked read, as next/apps/fabrika/src/runtime.ts hands it in, of the law's text.
           input: () =>
@@ -333,7 +309,6 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
               return settings({ INSTANCE: text });
             }).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause }))),
         });
-        const constructor = fake<ProcessConstructor>(Option.getOrThrow(Option.fromUndefinedOr(made.value)));
         const state = fromDurableObjectState(
           fake<Parameters<typeof fromDurableObjectState>[0]>({
             id: { name: JSON.stringify([good.name, descriptor.name]) },
@@ -354,6 +329,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
           Effect.provideService(WorkerEnvironment, environment),
           Effect.provideService(ObjectState, state),
           Effect.provideService(RuntimeContext, context),
+          Effect.provide(parts),
         );
         yield* Effect.yieldNow;
         expect(reads, "nothing is built before the first call").toBe(0);

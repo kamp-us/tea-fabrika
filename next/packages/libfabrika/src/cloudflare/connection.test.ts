@@ -19,6 +19,7 @@ import { ProjectClient } from "./platform.ts";
 import type { BrainOptions, Env } from "./runtime.ts";
 import * as SettingsRecorded from "./SettingsRecorded.ts";
 import * as SettingsStartsLedger from "./SettingsStartsLedger.ts";
+import { Waits } from "./Waits.ts";
 
 import { runsFor } from "@kampus/vitest";
 import { Arbitrary, Cause, Clock, Context, Exit, Layer, Scope, Stream } from "effect";
@@ -179,7 +180,11 @@ const world = (db: DatabaseSync, archiveFailure: "unreachable" | "mismatch" = "u
     answer: (value: typeof Answer.Type) => {
       answer = value;
     },
-    layer: connectionLayer(state, env, config).pipe(Layer.provide(recorded), Layer.provide(Digest.layerWebCrypto)),
+    layer: connectionLayer(state, env, config).pipe(
+      Layer.provide(recorded),
+      Layer.provide(Digest.layerWebCrypto),
+      Layer.provide(Waits.layer),
+    ),
   };
 };
 

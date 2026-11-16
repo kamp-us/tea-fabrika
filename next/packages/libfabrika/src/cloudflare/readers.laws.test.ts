@@ -8,9 +8,8 @@ import {
   fromDurableObjectState,
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
-import { runsFor } from "@kampus/vitest";
-import type { Scope } from "effect";
-import { Cause, Effect, Exit, Option, Redacted, Schema } from "effect";
+import { Recorder, runsFor } from "@kampus/vitest";
+import { Cause, Effect, Exit, Layer, Redacted, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
@@ -19,50 +18,21 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
-import { ConnectionService, connectionRuntime } from "./connection.ts";
+import { ConnectionService, connectionLayer, connectionRuntime } from "./connection.ts";
 import { control } from "./control.ts";
+import { Dispatcher } from "./Dispatcher.ts";
 import { fetch } from "./fetch.ts";
-import type { RecordShape } from "./objects.ts";
-import { recordRead, recordWrite } from "./record.ts";
+import { recordPartImplementation, recordRead, recordWrite } from "./record.ts";
 import {
   ProcessService,
   ProjectService,
   processDescriptor,
   processRuntime,
   projectRuntime,
+  SettingsRuntime,
   type Env,
 } from "./runtime.ts";
-
-const recordConstructor = vi.hoisted(() => {
-  const slot: {
-    value?: Effect.Effect<
-      Effect.Effect<RecordShape, unknown, Scope.Scope>,
-      unknown,
-      ObjectState | WorkerEnvironment | Scope.Scope
-    >;
-  } = {};
-  return slot;
-});
-
-// Capture only Alchemy's constructor registration. The actual RecordPart implementation runs below.
-vi.mock("./objects.ts", async (original) => {
-  const actual = await original<typeof import("./objects.ts")>();
-  const { Layer } = await import("effect");
-  return {
-    ...actual,
-    RecordPart: {
-      make: (implementation: NonNullable<typeof recordConstructor.value>) => {
-        recordConstructor.value = implementation;
-        return Layer.empty;
-      },
-    },
-  };
-});
-
-vi.mock("effect", async (original) => {
-  const actual = await original<typeof import("effect")>();
-  return { ...actual, Effect: { ...actual.Effect } };
-});
+import { Waits } from "./Waits.ts";
 
 const config = instanceFixture({
   name: "parse-test",
@@ -194,10 +164,9 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
                 ),
               );
             } else if (path === "RecordPart") {
-              const constructor = Option.getOrThrow(Option.fromUndefinedOr(recordConstructor.value));
               exit = yield* Effect.exit(
                 Effect.gen(function* () {
-                  const build = yield* constructor;
+                  const build = yield* recordPartImplementation;
                   const part = yield* build;
                   return yield* part.read(Chain.cases.spans.make({}), 0, 0);
                 }).pipe(
@@ -414,24 +383,31 @@ for (const method of ["message", "close", "ring", "probe", "notify"] as const) {
   });
 }
 
+// The live members the two Recorder laws below wrap, read once from each service's own layer.
+const liveWaits = Effect.runSync(
+  Effect.gen(function* () {
+    return yield* Waits;
+  }).pipe(Effect.provide(Waits.layer)),
+);
+
+const liveDispatcher = Effect.runSync(
+  Effect.gen(function* () {
+    return yield* Dispatcher;
+  }).pipe(Effect.provide(Dispatcher.layer)),
+);
+
+// M1 (mock sweep slice 2). The wait asks the `Waits` service for the ready decode once, with the
+// raw answer the project gave, and the live decode fails in the typed channel. The Recorder holds
+// the call; the live member run on the recorded value holds the typed exit.
+// Plants: in `Waits.layer`'s `ready`, `Effect.orDie` in place of the `mapError` to `LedgerError`
+// (red on the typed exit); `wait` decodes the answer inline, past `Waits` (red: no recorded call).
 it("Connection ready RPC decoding fails in the typed channel before the wait refusal is sent", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Struct({ rev: Schema.Int })), async (raw) => {
       const w = world(),
-        runtime = connectionRuntime(w.ctx, w.env, config);
-      const original = Effect.result;
-      const attempts: Array<Exit.Exit<unknown, unknown>> = [];
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                attempts.push(exit);
-              }),
-            ),
-          ),
-        ),
-      );
+        runtime = SettingsRuntime.runtime(
+          connectionLayer(w.ctx, w.env, config).pipe(Layer.provideMerge(Recorder.layer(Waits, liveWaits))),
+        );
 
       try {
         const gateway = await runtime.runPromise(ConnectionService);
@@ -449,8 +425,10 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
             )
             .pipe(Effect.exit),
         );
-        expect(attempts).toHaveLength(1);
-        typed(attempts[0]!);
+        const calls = await runtime.runPromise(Recorder.calls(Waits, "ready"));
+        expect(calls, "the wait asks for the decode once").toHaveLength(1);
+        expect(calls[0]?.[0], "with exactly the project's raw answer").toBe(raw);
+        typed(await Effect.runPromiseExit(liveWaits.ready(raw)));
         expect(w.ws.send.mock.calls.map(([text]) => JSON.parse(text))).toContainEqual(
           expect.objectContaining({
             id: "wait",
@@ -458,7 +436,6 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
           }),
         );
       } finally {
-        inspect.mockRestore();
         await runtime.dispose();
         w.db.close();
       }
@@ -467,45 +444,57 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
   );
 });
 
+/**
+ * Sends one control request with the `Dispatcher` recorded, and answers the response with the
+ * dispatch calls the request path made.
+ */
+const recordedControl = (body: unknown, headers: Record<string, string>, env: Env) =>
+  Effect.gen(function* () {
+    const request = new Request("http://local/", {
+      method: "POST",
+      headers: { authorization: "Bearer test", ...headers },
+      body: JSON.stringify(body),
+    });
+    const response = yield* parserControl(request, env);
+    return { response, calls: yield* Recorder.calls(Dispatcher, "dispatch") };
+  }).pipe(Effect.provide(Recorder.layer(Dispatcher, liveDispatcher)));
+
+/** The one recorded dispatch is the law's own request, and the live dispatch on it fails typed. */
+const dispatchedOnce = async (
+  calls: ReadonlyArray<Recorder.Args<Dispatcher["Service"], "dispatch">>,
+  body: unknown,
+  env: Env,
+) => {
+  expect(calls, "the request path dispatches once").toHaveLength(1);
+  const [call] = calls;
+  expect(call?.[0], "with the Worker's own bindings").toBe(env);
+  expect(call?.[2], "and exactly the request the law sent").toEqual(JSON.parse(JSON.stringify(body)));
+  typed(await Effect.runPromiseExit(liveDispatcher.dispatch(...calls[0]!)));
+};
+
+// M2 (mock sweep slice 2). Plants: in the live `dispatch`, decode the bucket bytes with
+// `Schema.decodeUnknownSync`, so a bad value dies (red); `control.ts` calls the dispatch body
+// inline, past `Dispatcher` (red: no recorded call).
 it("control bucket bytes fail as a typed parse error before its HTTP error response", async () => {
   await fc.assert(
     fc.asyncProperty(malformed(Schema.Array(Schema.Number)), async (raw) => {
-      const w = world(),
-        attempts: Array<Exit.Exit<unknown, unknown>> = [];
-      const original = Effect.result;
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-        original(
-          work.pipe(
-            Effect.onExit((exit) =>
-              Effect.sync(() => {
-                attempts.push(exit);
-              }),
-            ),
-          ),
-        ),
-      );
+      const w = world();
 
       try {
-        const request = new Request("http://local/", {
-          method: "POST",
-          headers: { authorization: "Bearer test", "content-type": "application/json" },
-          body: JSON.stringify({
-            target: "bucket",
-            project: "parse-test",
-            name: "",
-            method: "put",
-            args: ["key", raw, "checksum"],
-          }),
-        });
-        const exit = await Effect.runPromiseExit(parserControl(request, w.env));
+        const body = {
+          target: "bucket",
+          project: "parse-test",
+          name: "",
+          method: "put",
+          args: ["key", raw, "checksum"],
+        };
+        const exit = await Effect.runPromiseExit(recordedControl(body, { "content-type": "application/json" }, w.env));
         expect(Exit.isSuccess(exit)).toBe(true);
-        expect(attempts).toHaveLength(1);
-        typed(attempts[0]!);
-        const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+        const { response, calls } = Exit.isSuccess(exit) ? exit.value : { response: new Response(null), calls: [] };
+        await dispatchedOnce(calls, body, w.env);
         expect(response.status).toBe(500);
         expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
       } finally {
-        inspect.mockRestore();
         w.db.close();
       }
     }),
@@ -513,25 +502,14 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
   );
 });
 
+// M2, per field. Plant: coerce the field with `String(raw)` before the check (red: the dispatch
+// succeeds); `control.ts` calls the dispatch body inline, past `Dispatcher` (red: no recorded call).
 for (const field of ["put key", "put checksum", "head key"] as const) {
   it(`control checks outside ${field} as text instead of coercing it or throwing`, async () => {
     const input: fc.Arbitrary<unknown> = fc.oneof(malformed(Schema.String), fc.record({ toString: fc.jsonValue() }));
     await fc.assert(
       fc.asyncProperty(input, async (raw) => {
-        const w = world(),
-          attempts: Array<Exit.Exit<unknown, unknown>> = [];
-        const original = Effect.result;
-        const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
-          original(
-            work.pipe(
-              Effect.onExit((exit) =>
-                Effect.sync(() => {
-                  attempts.push(exit);
-                }),
-              ),
-            ),
-          ),
-        );
+        const w = world();
 
         try {
           const args: Array<unknown> =
@@ -545,26 +523,20 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
             args[2] = raw;
           }
 
-          const request = new Request("http://local/", {
-            method: "POST",
-            headers: { authorization: "Bearer test" },
-            body: JSON.stringify({
-              target: "bucket",
-              project: "parse-test",
-              name: "",
-              method: field === "head key" ? "head" : "put",
-              args,
-            }),
-          });
-          const exit = await Effect.runPromiseExit(parserControl(request, w.env));
-          expect(attempts).toHaveLength(1);
-          typed(attempts[0]!);
+          const body = {
+            target: "bucket",
+            project: "parse-test",
+            name: "",
+            method: field === "head key" ? "head" : "put",
+            args,
+          };
+          const exit = await Effect.runPromiseExit(recordedControl(body, {}, w.env));
           expect(exit).toMatchObject({ _tag: "Success" });
-          const response = Exit.isSuccess(exit) ? exit.value : new Response(null);
+          const { response, calls } = Exit.isSuccess(exit) ? exit.value : { response: new Response(null), calls: [] };
+          await dispatchedOnce(calls, body, w.env);
           expect(response.status).toBe(500);
           expect(await response.json()).toEqual({ error: { reason: "bad_row" } });
         } finally {
-          inspect.mockRestore();
           w.db.close();
         }
       }),

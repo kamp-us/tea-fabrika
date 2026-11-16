@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-mock-cloudflare-s2-tests",
+  "ticket": "1067",
+  "pr": null,
+  "started": "2026-11-15T23:38:36-08:00",
+  "ended": "2026-11-16T00:12:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice 2 of docs/plan/quests/mock-cloudflare-PLAN.md (approved at 14e9b3134), in next/, on main's control.ts and test files (slice 2 goes before reflect slice 10, by the lead's order). Written: M1 (the ready law reads Recorder.calls(Waits, \"ready\") and the live ready's typed exit), M2 (the four control laws read Recorder.calls(Dispatcher, \"dispatch\") and the live dispatch's typed exit), M8 (A1 and A2 hand in SinkLayer and RunnerLayer), M9 (law 3 on the Process shell hands in the two References), M10 (C1 hands in a rejecting crypto through Effect's WebCrypto.layer). The three Effect.result spies, the vi.mock(\"effect\"), the six SpanSink.layer and ProgramRunner.withLoader spies, the crypto.subtle spy and the four ./objects.ts mocks are gone; the four laws import recordPartImplementation from record.ts and ProcessObject.implementation instead. Test-side fixes the build's product edits need: connection.test.ts and error-cause.test.ts provide Waits.layer under connectionLayer, and reload.laws.test.ts L12 provides Dispatcher.layer under control. Red now, against main: readers.laws, error-cause, connection and reload.laws fail to load (Cannot find module ./Dispatcher.ts or ./Waits.ts); alarm.laws A1 and A2, ObjectService law 3 and entry-flows' RecordPart path fail because SinkLayer, RunnerLayer, ProcessObject.implementation and recordPartImplementation are not exported yet. M11 (the folder's vi lock) is out of this sweep by the laptop lead's ruling, so no lock block, no plant line and no oxlint-plugins/README.md row was written.",
+  "plants": [
+    {
+      "law": "readers.laws.test.ts: Connection ready RPC decoding fails in the typed channel before the wait refusal is sent (M1)",
+      "plant": "Waits.layer's ready uses Effect.orDie in place of the mapError to LedgerError",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: Connection ready RPC decoding fails in the typed channel before the wait refusal is sent (M1)",
+      "plant": "wait decodes the answer inline, past Waits",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: control bucket bytes fail as a typed parse error before its HTTP error response (M2)",
+      "plant": "the live dispatch decodes the bucket bytes with Schema.decodeUnknownSync",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: control checks outside head key as text instead of coercing it or throwing (M2)",
+      "plant": "the live dispatch coerces the head key with String(raw) before its check",
+      "result": "red"
+    },
+    {
+      "law": "readers.laws.test.ts: the four control laws (M2)",
+      "plant": "control.ts runs the dispatch body inline under its own Dispatcher.layer, past the provided Dispatcher",
+      "result": "red"
+    },
+    {
+      "law": "alarm.laws.test.ts: A1 and A2 (M8)",
+      "plant": "processLogic names ProgramRunner.withLoader again, past RunnerLayer",
+      "result": "red"
+    },
+    {
+      "law": "ObjectService.test.ts: law 3, the Process shell (M9)",
+      "plant": "recordingLayer names SpanSink.layer again, past SinkLayer",
+      "result": "red"
+    },
+    {
+      "law": "error-cause.test.ts: C1 (M10)",
+      "plant": "checkedPut calls globalThis.crypto.subtle.digest, past the WebCrypto reference",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 34,
+  "note": "The plants needed product names that do not exist on main, so they ran on a scratch build written only to run them: Waits.ts, Dispatcher.ts, the two References and the WebCrypto reads in runtime.ts, the exports in record.ts and ProcessObject.ts, and the wiring in connection.ts, control.ts and ConnectionObject.ts. Every law above was green on that build first (readers.laws 39, alarm.laws 2, ObjectService 3, error-cause 12, entry-flows.laws 6, connection 11, reload.laws L12), and libfabrika's own tsc --noEmit passed on it with no cast or disable in a law. Each plant broke one line of a saved copy, ran the one law, and was restored by copy; the scratch build was then removed and the product files restored from copies of main, and git status shows only the seven test files and this row. The review reruns the plants on the real build. pnpm format, pnpm lint (lint:promise-types failed once with EPIPE under the parallel run's load and passed alone with 0 findings) and the list ratchet pass. No .integration. law is reached by these files except door.integration.test.ts in next/apps/fabrika, not run (see the gap in the report).",
+  "step": "tests"
+}
