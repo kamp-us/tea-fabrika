@@ -37,8 +37,9 @@ name: scheduled
 #
 # 10 machines at most, half of the organization's 20 runners, so pull requests keep theirs:
 # `max-parallel` on each matrix, which workflow-lint.ts adds up. The legs are check.yaml's full
-# matrix, so their measured split (vitest.shards.ts) holds here too; workflow-lint.ts keeps the two
-# the same.
+# matrix, and workflow-lint.ts keeps the two the same. Their split is not check.yaml's: at full
+# depth a file takes longer, so `Shards` splits and orders these legs by the seconds measured here,
+# vitest.shards.full.json (vitest.shards.ts). Refresh its rows from a leg's `results-next-N` report.
 on:
   # Every 3 hours, at minute 17: GitHub delays runs queued on the hour, when most schedules start
   # (its docs, "Events that trigger workflows", schedule). The interval is a setting (0534, 0069):
