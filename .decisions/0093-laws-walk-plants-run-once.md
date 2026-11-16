@@ -146,3 +146,4 @@ this file.
 ## Amendments
 
 - 2026-11-11: the second check ran as [experiment 257](../experiments/257-second-check-blind-laws.md). A law file written from the plan alone, blind to the old tests, killed 98 of 144 mutants of `gateway/internal/waiting.ts`; the old file killed the same 98. By the rule above ("at least as many"), the trial ends and this stays the rule. One small file, so the write-up says what it cannot tell us.
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) drops `fc.assert(fc.property(...))` and `fc.assert(fc.asyncProperty(...))` as ways to write a law in `next/` and our tooling. A law is `it.prop` or `it.effect.prop`, and the lint rule's list of property shapes follows with the sweep.

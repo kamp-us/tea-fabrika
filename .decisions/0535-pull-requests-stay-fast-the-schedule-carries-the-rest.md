@@ -68,3 +68,7 @@ schedule.**
 - The case counts per depth and the floor are settings ([0069](0069-choices-are-settings.md)).
 - Not decided here: which other services get an in-memory layer next. Each one follows the git
   pattern when its laws show up as slow.
+
+## Amendments
+
+- 2026-11-15: [0579](0579-property-laws-use-it-prop.md) replaces the `fc.assert(property, { numRuns })` shape in the sketch above with `it.prop` or `it.effect.prop` and a seed set once in the package setup. The fast and full depths still hold.
