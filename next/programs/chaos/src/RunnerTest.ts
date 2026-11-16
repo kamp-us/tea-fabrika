@@ -82,7 +82,7 @@ const uncertainExperiments = Arbitrary.flatMap(experiments, (input) =>
   Arbitrary.map(bounded(1, input.most + 1), (ordinal) => ({ ...input, most: input.most + 1, ordinal })),
 );
 
-const experimentId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
+const experimentId = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000000");
 
 const fireRequest = Schema.toType(Chaos.Fire);
 const now = () => Effect.succeed(Outcome.ok(100));
@@ -528,7 +528,7 @@ export const suite = (open: Open, checklist: unknown) =>
             const release = yield* Deferred.make<void>();
             const nextEntered = yield* Deferred.make<void>();
             const nextRelease = yield* Deferred.make<void>();
-            const nextId = Schema.decodeUnknownSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
+            const nextId = Schema.decodeSync(Chaos.ExperimentId)("chaos_0000000000e008000000000001");
             const calls: Array<Chaos.Fire> = [];
             const fire: Handler<never> = (raw) =>
               Effect.gen(function* () {
@@ -844,7 +844,7 @@ export const suite = (open: Open, checklist: unknown) =>
               const answers = letters.filter(
                 (l) =>
                   Schema.is(Schema.Struct({ type: Schema.String }))(l.m) &&
-                  /_(ok|err)$/.test(Schema.decodeUnknownSync(Schema.Struct({ type: Schema.String }))(l.m).type),
+                  /_(ok|err)$/.test(Schema.decodeSync(Schema.Struct({ type: Schema.String }))(l.m).type),
               );
               expect(answers.length).toBeGreaterThanOrEqual(3);
 

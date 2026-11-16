@@ -4,6 +4,21 @@
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A `decodeUnknown...` call on a value that is already typed throws its type away: the
+        // typed decoder keeps it (E5, `preferTypedSchemaDecoder`). On for the whole package.
+        "overrides": [
+          {
+            "include": ["**/*.ts"],
+            "options": { "diagnosticSeverity": { "preferTypedSchemaDecoder": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",

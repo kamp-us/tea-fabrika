@@ -287,7 +287,7 @@ const online = (world: World, i: number) => {
  *  boot list's `checklist:1`, every other tile a process tezgah started. */
 const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean }>, focus: number): TezgahView => {
   const first = typeId("tile", 1) as TileId;
-  let w: Workspace = Schema.decodeUnknownSync(Workspace)({
+  let w: Workspace = Schema.decodeSync(Workspace)({
     id: typeId("workspace", 1),
     n: 1,
     layout: first,

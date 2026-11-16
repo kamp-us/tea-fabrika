@@ -54,7 +54,7 @@ type Space = {
 /** The workspace as the wire shows it: what every client reads. */
 const encode = (w: unknown): Space => Schema.encodeUnknownSync(Workspace)(w) as Space;
 const decode = (w: Space) => Schema.decodeUnknownSync(Workspace)(w);
-const tileId = (id: string) => Schema.decodeUnknownSync(TileId)(id);
+const tileId = (id: string) => Schema.decodeSync(TileId)(id);
 
 /** Reading order, written here: a container's parts in order, depth first. */
 const order = (node: Node): ReadonlyArray<string> =>

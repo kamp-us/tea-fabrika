@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e5-tests",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-16T04:00:00Z",
+  "ended": "2026-11-16T04:25:00Z",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Tests step for slice E5 (preferTypedSchemaDecoder), in next/ and our tooling. Recounted 336 hits on main (200 in the E5 folders, 136 in the E63 folders that wait on pull request 1366). Locked the E5 folders in the package tsconfigs (libfabrika, tuval, the app, the five programs, .agents), 200 errors red. Fixed the 164 hits in exam paths by hand with the Edit tool, one hit at a time (no script, no checkerfix); 36 hits remain in 26 product files for the build.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 25,
+  "note": "Errors after the tests step: 36, all in product files (.agents 18, libfabrika 14, tuval 2, app 2). Messages (not locked) 136 in lib:cloudflare, gateway, processes, runtime, settings. lint:dead needs NODE_OPTIONS=--max-old-space-size=8000 in this box; pnpm lint passes with it. Narrow tests: namespace-imports, Id, Passkey, Link.laws, Change, counter and checklist program laws pass.",
+  "plants": [
+    {
+      "law": "L1",
+      "plant": "one decodeUnknownSync on a string in next/programs/counter/src (locked): effect(preferTypedSchemaDecoder) error",
+      "result": "red"
+    },
+    {
+      "law": "L1",
+      "plant": "src/node/** dropped from libfabrika's entry: libfabrika's errors fall from 14 to 5; put back, 14",
+      "result": "red"
+    }
+  ],
+  "step": "tests"
+}

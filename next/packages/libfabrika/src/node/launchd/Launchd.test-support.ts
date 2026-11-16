@@ -72,7 +72,7 @@ export const open = Effect.fn("LaunchdTest.open")(function* (
   const events: Array<string> = [],
     seen: Array<Seen> = [],
     jobs: Array<unknown> = [];
-  const spec = yield* Schema.decodeUnknownEffect(BrainSpec)({
+  const spec = yield* Schema.decodeEffect(BrainSpec)({
     home,
     executable: path.join(home, "Electron"),
     args: [path.join(home, "brain.mjs"), "spaces & <angles> 雪"],

@@ -6,7 +6,20 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
     // The package commands use plain Node, which strips types without transforming them.
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A `decodeUnknown...` call on a value that is already typed throws its type away: the
+        // typed decoder keeps it (E5, `preferTypedSchemaDecoder`). On for the folders at zero.
+        "overrides": [
+          {
+            "include": ["**/*.ts", "**/*.tsx"],
+            "options": { "diagnosticSeverity": { "preferTypedSchemaDecoder": "error" } }
+          }
+        ]
+      }
+    ]
   },
   // The P19 host check bundles this fixture as the small brain that exits normally, so it is checked
   // here with the code that runs it. The root tsconfig is for editors only and no typecheck reads it.

@@ -548,7 +548,7 @@ describe("P34 door recovery", () => {
                         r.msg({
                           id: letter,
                           envelope: {
-                            id: Schema.decodeUnknownSync(A.Id.InputId)(old),
+                            id: Schema.decodeSync(A.Id.InputId)(old),
                             by: Writer.cases.person.make({ key: w.window.fingerprint, for: PERSON }),
                             arrivedAt: 0,
                             input: { type: "press", poison: false },

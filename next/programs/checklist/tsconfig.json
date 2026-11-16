@@ -3,7 +3,20 @@
   "compilerOptions": {
     // The window export is React in a browser tab; the program entry reaches neither.
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A `decodeUnknown...` call on a value that is already typed throws its type away: the
+        // typed decoder keeps it (E5, `preferTypedSchemaDecoder`). On for the whole package.
+        "overrides": [
+          {
+            "include": ["src/**/*.ts", "src/**/*.tsx"],
+            "options": { "diagnosticSeverity": { "preferTypedSchemaDecoder": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

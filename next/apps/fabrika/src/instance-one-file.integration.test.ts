@@ -936,7 +936,7 @@ describe("P16 copied-file real instance, serial", () => {
       return;
     }
 
-    const bar = Schema.decodeUnknownSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
+    const bar = Schema.decodeSync(Schema.fromJsonString(Bar))(readFileSync(path, "utf8"));
     const brain = process.env.P16_BRAIN;
     assert(brain, "final brain path missing");
     const digest = createHash("sha256").update(readFileSync(brain)).digest("hex");

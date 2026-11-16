@@ -134,7 +134,7 @@ const scan = (
             // and for every credential.
             if (name === "gateway_state" && /^(?:changePending|change)\//.test(String(row.name))) {
               const value = Schema.decodeUnknownSync(Schema.String)(row.value);
-              const { armored, ...rest } = Schema.decodeUnknownSync(
+              const { armored, ...rest } = Schema.decodeSync(
                 Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
               )(value);
 

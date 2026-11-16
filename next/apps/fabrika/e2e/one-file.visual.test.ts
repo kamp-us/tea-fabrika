@@ -236,7 +236,7 @@ const Fault = Schema.Struct({
 const fault =
   process.env.P14_E2E_FAULT === undefined
     ? undefined
-    : Schema.decodeUnknownSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
+    : Schema.decodeSync(Schema.fromJsonString(Fault))(process.env.P14_E2E_FAULT);
 
 const trace = process.env.P14_E2E_TRACE;
 

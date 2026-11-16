@@ -260,9 +260,7 @@ const flow = Effect.fnUntraced(
         const one = yield* launcher(script, app, hands, lines, stderr);
         const waiting = yield* one.next("waiting");
         expect(waiting._tag).toBe("waiting");
-        const stored = Schema.decodeUnknownSync(Stored)(
-          yield* fs.readFileString(path.join(hands, "hands", "key.json")),
-        );
+        const stored = Schema.decodeSync(Stored)(yield* fs.readFileString(path.join(hands, "hands", "key.json")));
         expect(keyFingerprint(stored.jwk.x), "E2: the waiting line names the key file's own key").toBe(
           waiting.fingerprint,
         );

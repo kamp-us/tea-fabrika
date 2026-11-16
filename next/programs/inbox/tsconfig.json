@@ -1,4 +1,19 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A `decodeUnknown...` call on a value that is already typed throws its type away: the
+        // typed decoder keeps it (E5, `preferTypedSchemaDecoder`). On for the whole package.
+        "overrides": [
+          {
+            "include": ["src/**/*.ts"],
+            "options": { "diagnosticSeverity": { "preferTypedSchemaDecoder": "error" } }
+          }
+        ]
+      }
+    ]
+  },
   "include": ["src"]
 }

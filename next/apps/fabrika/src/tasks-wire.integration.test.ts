@@ -90,7 +90,7 @@ const socket = Effect.fnUntraced(function* (
     Effect.sync(() => {
       const ws = new WebSocket(`${url.replace(/^http/, "ws")}/client/${encodeURIComponent(key.fingerprint)}/${tab}`);
       ws.addEventListener("message", (event) => {
-        const f = Schema.decodeUnknownSync(Schema.fromJsonString(Frame))(String(event.data));
+        const f = Schema.decodeSync(Schema.fromJsonString(Frame))(String(event.data));
         frames.push(f);
         Queue.offerUnsafe(inbox, f);
       });

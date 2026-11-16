@@ -3,7 +3,39 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A `decodeUnknown...` call on a value that is already typed throws its type away: the
+        // typed decoder keeps it (E5, `preferTypedSchemaDecoder`). On for the folders at zero.
+        "overrides": [
+          {
+            "include": [
+              "src/*.ts",
+              "src/access/**/*.ts",
+              "src/ci/**/*.ts",
+              "src/client/**/*.ts",
+              "src/codehost/**/*.ts",
+              "src/coordination/**/*.ts",
+              "src/desktop/**/*.ts",
+              "src/ledger/**/*.ts",
+              "src/node/**/*.ts",
+              "src/packs/**/*.ts",
+              "src/permissions/**/*.ts",
+              "src/presence/**/*.ts",
+              "src/repositories/**/*.ts",
+              "src/schedules/**/*.ts",
+              "src/tasks/**/*.ts",
+              "src/telemetry/**/*.ts",
+              "src/tezgah/**/*.ts",
+              "src/transport/**/*.ts"
+            ],
+            "options": { "diagnosticSeverity": { "preferTypedSchemaDecoder": "error" } }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }
