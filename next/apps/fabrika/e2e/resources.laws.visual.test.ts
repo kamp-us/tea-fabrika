@@ -173,11 +173,14 @@ const leftBehind = (trace: ReadonlyArray<Row>) =>
     return left;
   });
 
-/** Wait for the child to note that it holds `at`, then signal it. */
+/** Wait for the child to note that it holds `at`, then signal it. The look is every 10 ms, so the
+ *  signal can land in the first 100 ms of a test, while Vitest still owes its worker a batched task
+ *  update: the worker then exits at that send, in the middle of its releases (scheduled run
+ *  43798557082, a `fw.` home left behind). The fixture undoes what an exit leaves on that exit. */
 const interrupt = (child: ChildProcess, trace: string, signal: NodeJS.Signals) =>
   Effect.gen(function* () {
     while (!rows(trace).some((r) => r.holding !== undefined)) {
-      yield* Effect.sleep("200 millis");
+      yield* Effect.sleep("10 millis");
     }
 
     child.kill(signal);
@@ -304,6 +307,9 @@ describe("P14 slice 2, L16: the first-window suite's resources close and its chi
 
   it("pinned: an acquisition trace failure releases the home whose release used to be registered after logging", (context) =>
     scopedSuite(run({ at: "home", kind: "trace" }, "SIGTERM", FIRST_WINDOW), context));
+
+  it("pinned: an interruption just after the port is held leaves no home, though the worker exits mid-release", (context) =>
+    scopedSuite(run({ at: "port", kind: "hold" }, "SIGINT", FIRST_WINDOW), context));
 
   it(
     "generated fault walks over the first-window suite: success, setup failure, test failure and interruption after each reached acquisition",
