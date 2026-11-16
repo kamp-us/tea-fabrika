@@ -767,10 +767,10 @@ describe("the Data.TaggedError entry, which stands beside fabrika/no-data-tagged
  * `src/*.tsx`, keeps its plain name for both.
  */
 const viFiles = (globs: ReadonlyArray<{ readonly glob: string }>, n: number) => {
-  const plain = globs.map(({ glob }) => plantPath(glob));
-  const laws = plain.map((file) => file.replace(/\.ts$/, `-vi-${n}.test.ts`));
+  const files = globs.map(({ glob }) => plantPath(glob));
+  const laws = files.map((file) => file.replace(/\.ts$/, `-vi-${n}.test.ts`));
 
-  return { plain, laws, files: [...new Set([...plain, ...laws])] };
+  return { files, laws, all: [...new Set([...files, ...laws])] };
 };
 
 /** The vi ban globs every vi law must find: libfabrika's top files, both extensions, and the gateway and telemetry folders. */
@@ -818,12 +818,12 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
         expect(globs.every(({ level }) => level === "deny")).toBe(true);
 
         const { text, want } = textOf(p);
-        const { plain, laws, files } = viFiles(globs, n);
-        expect(new Set(plain).size, "each glob gets a file of its own").toBe(plain.length);
+        const { files, laws, all } = viFiles(globs, n);
+        expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
         expect(new Set(laws).size, "each glob gets a law file of its own").toBe(laws.length);
-        const diagnostics = lint(text, files);
+        const diagnostics = lint(text, all);
 
-        for (const file of files) {
+        for (const file of all) {
           expect(refusedIn(diagnostics, file, p.code), `${p.code} in ${file}`).toEqual(want);
         }
       });
@@ -845,16 +845,16 @@ describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's m
       expect(globs.map(({ glob }) => glob)).toEqual(expect.arrayContaining(VI_FOLDERS));
 
       const { text, want } = textOf(VI_PROPERTIES);
-      const { plain, laws, files } = viFiles(globs, VI_METHODS.length);
-      expect(new Set(plain).size, "each glob gets a file of its own").toBe(plain.length);
+      const { files, laws, all } = viFiles(globs, VI_METHODS.length);
+      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
       expect(new Set(laws).size, "each glob gets a law file of its own").toBe(laws.length);
-      const diagnostics = lint(text, files);
+      const diagnostics = lint(text, all);
 
-      for (const file of files) {
+      for (const file of all) {
         expect(refusedIn(diagnostics, file, VI_PROPERTIES.code), file).toEqual(want);
       }
 
-      const vi = diagnostics.filter((d) => files.includes(d.filename) && d.code === VI_PROPERTIES.code);
+      const vi = diagnostics.filter((d) => all.includes(d.filename) && d.code === VI_PROPERTIES.code);
       // Coverage: the rule is at warn in a locked folder, so the blocking check meets a warning.
       expect(vi.some(({ severity }) => severity === "warning")).toBe(true);
       expect(vi.filter((d) => advises(d))).toEqual([]);
