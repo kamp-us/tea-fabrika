@@ -2419,6 +2419,7 @@
       "files": [
         "next/apps/fabrika/src/exam/**",
         "next/packages/libfabrika/src/*",
+        "next/packages/libfabrika/src/cloudflare/**",
         "next/packages/libfabrika/src/gateway/**",
         "next/packages/libfabrika/src/tasks/**",
         "next/packages/libfabrika/src/ledger/**",
