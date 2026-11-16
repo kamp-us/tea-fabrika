@@ -11,7 +11,9 @@ import type * as Scope from "effect/Scope";
 import * as Formatter from "effect/Formatter";
 import * as Schema from "effect/Schema";
 import * as Clock from "effect/Clock";
+import * as Layer from "effect/Layer";
 import { Array as Arr, String as Str, pipe } from "effect";
+import { Digest } from "effect/crypto";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -29,9 +31,9 @@ import {
 } from "./host.ts";
 import * as Step from "./Step.ts";
 
-const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Scope.Scope>) =>
+const ran = <A, E>(law: Effect.Effect<A, E, NodeServices.NodeServices | Digest.Digest | Scope.Scope>) =>
   // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Vitest awaits the Promise a test hands back
-  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+  Effect.runPromise(law.pipe(Effect.scoped, Effect.provide(Layer.merge(NodeServices.layer, Digest.layerWebCrypto))));
 
 const options = { seed: 119120, numRuns: 200 };
 

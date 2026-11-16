@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
 import * as Effect from "effect/Effect";
@@ -1255,7 +1256,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
       yield* Stream.runDrain(agentsDraft(env, agents, boxed)(sub as never));
 
       return rows;
-    });
+    }).pipe(Effect.provide(NodeServices.layer));
 
   // The harness closes everything beside the folder a turn names (packages/fabrika/src/agents/acp/
   // harness.test.ts, "the folder's siblings closed"), so the folder drive names is what keeps an
@@ -1712,8 +1713,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         report: existsSync(report) ? readFileSync(report, "utf8") : null,
         saved: readFileSync(prompt, "utf8"),
       };
-    });
-
+    }).pipe(Effect.provide(NodeServices.layer));
   // What the reads find after such a step: the box untouched, no commit, no report of an agent's.
   const readNothing = {
     head: ask.base,
