@@ -40,16 +40,16 @@ export const layer = (repo: string, cwd: string): Layer.Layer<Alerts, never, Chi
         const ran = yield* run("gh", [...args, "--json", "number,title,createdAt", "-L", String(LIMIT)], cwd);
 
         if (ran.code !== 0) {
-          return yield* new AlertsError({ reason: `gh issue list exited ${ran.code}: ${lastLine(ran)}` });
+          return yield* AlertsError.make({ reason: `gh issue list exited ${ran.code}: ${lastLine(ran)}` });
         }
 
         return yield* alertsIn(ran.out).pipe(
-          Effect.mapError(() => new AlertsError({ reason: "gh issue list answered a shape we do not read" })),
+          Effect.mapError(() => AlertsError.make({ reason: "gh issue list answered a shape we do not read" })),
         );
       }).pipe(
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         Effect.catchTag("PlatformError", (e) =>
-          Effect.fail(new AlertsError({ reason: `gh could not start: ${e.message}` })),
+          Effect.fail(AlertsError.make({ reason: `gh could not start: ${e.message}` })),
         ),
       );
 

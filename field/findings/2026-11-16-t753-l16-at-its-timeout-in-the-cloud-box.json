@@ -1,0 +1,18 @@
+{
+  "_tag": "finding",
+  "id": "2026-11-16-t753-l16-at-its-timeout-in-the-cloud-box",
+  "date": "2026-11-16",
+  "by": "review",
+  "model": "claude-opus-5-5",
+  "rule": "flaky_test",
+  "location": {
+    "path": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts",
+    "line": 1143
+  },
+  "says": "In next/, the law 'T753 L16 real first/later process steps, recovery and successors keep the shared instance gate' runs at its 60 s limit in the 4-core cloud box even alone and even on main, so a whole-file run times out on changes that cannot reach it. This is the second sighting after 2026-11-14-t753-l16-times-out-on-a-loaded-ci-machine.",
+  "proof": "Whole file with no override at d8710f755: 'Error: Test timed out in 60000ms' for T753 L16, 13 passed and 1 failed of 14. Alone with -t \"T753 L16\": 61.3 s and 60.7 s at d8710f755, and 60.8 s and 60.1 s from origin/main's copy of the file, which differs only by a no-op hook the law never sets.",
+  "cost": "Every review or proof run of this file in a cloud box can go red for no fault of the change, and a reviewer must rerun and compare against main to tell.",
+  "head": "d8710f7551b4c77a92384110385bdb560fe092a4",
+  "ticket": null,
+  "pr": null
+}

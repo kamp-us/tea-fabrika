@@ -4,7 +4,8 @@
 // our own laptop; it is not product.
 //
 //   add      the pull request is open, ready and into main -> leak grep on its net change, on each
-//            of its commits and on its title and description, each failing closed -> `ci-required`
+//            of its commits and on its title and description, each failing closed -> each new
+//            exported name is named under `## New names` (Names.ts, 0587) -> `ci-required`
 //            is green on its head (read once; a quest may wait for it to end, within a limit) -> one
 //            squash pinned to that head, which adds it to the queue
 //   settle   later, one read of the pull request and no wait: merged -> close each ticket its
@@ -15,6 +16,7 @@
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import { Checks, type Job } from "../ci/Checks.ts";
 import * as Leaks from "./Leaks.ts";
+import * as Names from "./Names.ts";
 import { Detail, PullRequests, type PullRequestsError } from "./PullRequests.ts";
 import { Sweeps } from "./Sweeps.ts";
 import { Tickets } from "./Tickets.ts";
@@ -63,7 +65,7 @@ const requiredAt = Effect.fn("Queue.requiredAt")(function* (oid: string, wait: W
     ),
     Effect.filterOrFail(
       (found) => Option.isSome(found) && found.value.status === "completed",
-      () => new Pending(),
+      () => Pending.make(),
     ),
     Effect.retry({ schedule: Schedule.spaced(Duration.seconds(wait.every)) }),
     Effect.catchTag("Pending", () => Effect.sync(() => last)),
@@ -102,17 +104,23 @@ export const add = Effect.fn("Queue.add")(function* (a: Ask) {
   const refused = refusal(found);
 
   if (refused !== null) {
-    return yield* new NotQueued({ reason: `pr ${found.number}: ${refused}` });
+    return yield* NotQueued.make({ reason: `pr ${found.number}: ${refused}` });
   }
 
   yield* Leaks.gate(a.dir, found);
+  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+
+  if (unnamed !== null) {
+    return yield* NotQueued.make({ reason: `pr ${found.number}: ${unnamed}` });
+  }
+
   // With a queue on, a merge call on a head that is not green yet arms auto-merge (0162). So the
   // required check is read first, and anything but a finished success asks nothing.
   const required = yield* requiredAt(found.oid, a.wait);
   const stands = required._tag === "None" ? "missing" : (required.value.conclusion ?? required.value.status);
 
   if (required._tag === "None" || required.value.status !== "completed" || required.value.conclusion !== "success") {
-    return yield* new NotQueued({
+    return yield* NotQueued.make({
       reason: `pr ${found.number}: ${REQUIRED} is ${stands} at ${found.oid}, not a success; not added to the queue`,
     });
   }

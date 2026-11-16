@@ -2,25 +2,35 @@
 // way it is turned on. Today's lead tooling, run on our own laptop; it is not product.
 //
 //   arm   the pull request is open, into main, and no plan -> the leak gate (./Leaks.ts) passes on
-//         its change, its commits and its words -> the full run (scheduled.yaml) on its branch is
-//         read at its head -> green on every job: marked ready if a draft, then merge when ready on,
-//         as a squash pinned to that head
+//         its change, its commits and its words -> each new exported name is named under
+//         `## New names` (Names.ts, 0587) -> the proof run (scheduled.yaml) on its branch is read at
+//         its head -> green on every job: marked ready if a draft, then merge when ready on, as a
+//         squash pinned to that head
 //
-// A full run that ended `cancelled` is not a run someone stopped: in scheduled.yaml a red leg's last
-// step, `stop the run`, cancels its own run, so every leg reads `cancelled` and only the steps show
-// which one failed (field/notes/2026-11-15-quotas-merged-on-a-red-branch-run-and-came-back-out.json).
-// So the command judges each job, never the run's top line, and on a refusal prints each job that is
-// not green, its failed steps and the failing test lines of its log.
+// A branch's proof run tests the full set or, since 0590, the changed set: the tests its change
+// reaches against origin/main. Its jobs' names say which (`kind`): a full run has `tests (<leg>)`
+// legs, a changed-set run has `changed (<leg>)` legs or, for a set of zero files, no leg. Either one
+// green at the head arms. A changed set is the set of one diff, so a changed-set run at an older head
+// proves nothing about this head's change and refuses; a full run at an older head still arms with
+// 0544's note.
 //
-// No full run at the head arms, as 0544 lets a reviewed pull request be armed with no full run
-// first, and says so in one line with how to start one. A full run at the head that is red or has not
-// ended refuses. With none at the head, the branch's newest run at an older head counts: green arms
-// with the note, red or not ended refuses. Read through its module: `Arm.arm(...)`.
+// A run that ended `cancelled` was once not a run someone stopped: a red leg's old last step,
+// `stop the run`, canceled its own run, so every leg read `cancelled` and only the steps showed which
+// one failed (field/notes/2026-11-15-quotas-merged-on-a-red-branch-run-and-came-back-out.json). So the
+// command judges each job, never the run's top line, and on a refusal prints each job that is not
+// green, its failed steps and the failing test lines of its log.
+//
+// No run at the head arms, as 0544 lets a reviewed pull request be armed with no full run first, and
+// says so in one line with how to start one. A run at the head that is red or has not ended refuses.
+// With none at the head, the branch's newest run at an older head counts: a green full run arms with
+// the note; a changed-set run, or one red or not ended, refuses. Read through its module:
+// `Arm.arm(...)`.
 import { Effect, Option, Schema } from "effect";
 import { Checks } from "../ci/Checks.ts";
 import { Job, type Run, Runs } from "../ci/Runs.ts";
 import { logText } from "../ci/typecheck.ts";
 import * as Leaks from "./Leaks.ts";
+import * as Names from "./Names.ts";
 import { type Detail, PullRequests } from "./PullRequests.ts";
 
 /** The full run's workflow file: the whole suite, which a pull request's own checks never run (0534, 0536). */
@@ -32,16 +42,31 @@ export const DOCS = [".decisions/", "docs/", "field/", ".glossary/", ".runbooks/
 export const isDocs = (path: string): boolean => DOCS.some((folder) => path.startsWith(folder));
 
 /**
- * The jobs a branch's full run skips by design. scheduled.yaml's `report` job runs only on main
- * (`if: always() && github.ref == 'refs/heads/main'`), so every green branch run skips it. Every
- * other job has no `if` of its own: skipped there means something went wrong.
+ * The jobs a branch's proof run skips by design (0590): `select` on a hand start on main, the test
+ * matrix `select` did not choose, and both matrices on a changed set of zero files. GitHub lists a
+ * skipped matrix as one job with no leg in its name. The `report` job is never one: it runs on every
+ * run a hand start begins (pull request 1404) and fails unless the run is green by what `select`
+ * chose (scheduled.mjs's `skippable`), so a skip that was not meant shows as a red report.
  */
-export const SKIPPED_BY_DESIGN: ReadonlyArray<string> = ["report"];
+export const SKIPPED_BY_DESIGN: ReadonlyArray<string> = ["select", "tests", "changed"];
 
 /** Whether a job counts as green: ended `success`, or ended `skipped` where the workflow skips it. */
 export const passes = (job: Job): boolean =>
   job.status === "completed" &&
   (job.conclusion === "success" || (job.conclusion === "skipped" && SKIPPED_BY_DESIGN.includes(job.name)));
+
+/** What a proof run tested: every test, or the changed set of its head's diff (0590). */
+const Kind = Schema.Literals(["full", "changed"]);
+type Kind = typeof Kind.Type;
+
+/**
+ * A run's kind from its jobs' names: `full` when a leg of the full set's matrix ran, `tests (<leg>)`,
+ * or `next (<leg>)` and `tooling (<leg>)` from before the two were one matrix, as scheduled.mjs's
+ * `isFull` reads main's runs; else `changed`, whose legs are `changed (<leg>)`, or none at all for a
+ * changed set of zero files.
+ */
+export const kind = (jobs: ReadonlyArray<Job>): Kind =>
+  jobs.some((job) => /^(tests|next|tooling) \(.+\)$/.test(job.name)) ? "full" : "changed";
 
 /** The steps of a job that failed or ran out of time, by name. */
 export const failedSteps = (job: Job): ReadonlyArray<string> =>
@@ -49,8 +74,8 @@ export const failedSteps = (job: Job): ReadonlyArray<string> =>
 
 /** How one full run stands, judged job by job. */
 export const Verdict = Schema.TaggedUnion({
-  /** Every job green. */
-  green: { run: Schema.Number },
+  /** Every job green, and what the run tested. */
+  green: { run: Schema.Number, kind: Kind },
   /** Not ended yet. */
   unfinished: { run: Schema.Number, status: Schema.String },
   /** Ended, and these jobs are not green. */
@@ -88,7 +113,7 @@ const judge = Effect.fn("Arm.judge")(function* (run: Run) {
   const bad = jobs.filter((job) => !passes(job));
   // A run with no jobs at all (a workflow file GitHub could not read) is not green either.
   return jobs.length > 0 && bad.length === 0
-    ? Verdict.cases.green.make({ run: run.id })
+    ? Verdict.cases.green.make({ run: run.id, kind: kind(jobs) })
     : Verdict.cases.red.make({ run: run.id, jobs: bad });
 });
 
@@ -228,13 +253,23 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   // Merge when ready merges later with no one watching, so the leak gate runs before it is turned on.
   yield* Leaks.gate(a.dir, found);
 
+  const unnamed = Names.refusal(found.body, yield* prs.patches(found.number));
+
+  if (unnamed !== null) {
+    return yield* refuse(unnamed);
+  }
+
   const files = yield* prs.files(found.number);
   const docsOnly = files.length > 0 && files.every(isDocs);
   const note = (seen: string) => unrunNote(seen, found.oid, found.head, docsOnly);
   // A green run arms with its line; any other refuses, at the head or, with none there, at the older head.
-  const judged = (verdict: Verdict, place: string, green: (run: number) => string) =>
+  const judged = (
+    verdict: Verdict,
+    place: string,
+    green: (run: number, kind: Kind) => Effect.Effect<string, NotArmed>,
+  ) =>
     Verdict.match(verdict, {
-      green: ({ run }) => Effect.succeed(green(run)),
+      green: ({ run, kind }) => green(run, kind),
       unfinished: ({ run, status }) =>
         Effect.fail(
           refuse(`${place}: the full run ${runUrl(a.repo, run)} is ${status}, not ended; arm it once it is green`),
@@ -246,11 +281,25 @@ export const arm = Effect.fn("Arm.arm")(function* (a: Ask) {
   const said = yield* FullRun.match(full, {
     none: () => Effect.succeed(note("")),
     at: ({ verdict }) =>
-      judged(verdict, "at this head", (run) => `full run ${run} green on every job at ${found.oid.slice(0, 12)}`),
-    older: ({ head, verdict }) =>
-      judged(verdict, `no full run at this head, and at the older head ${head.slice(0, 12)}`, (run) =>
-        note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`),
+      judged(verdict, "at this head", (run, kind) =>
+        Effect.succeed(
+          kind === "full"
+            ? `full run ${run} green on every job at ${found.oid.slice(0, 12)}`
+            : `changed-set run ${run} green on every job at ${found.oid.slice(0, 12)}, the tests this change reaches (0590)`,
+        ),
       ),
+    older: ({ head, verdict }) => {
+      const place = `no full run at this head, and at the older head ${head.slice(0, 12)}`;
+      return judged(verdict, place, (run, kind) =>
+        kind === "full"
+          ? Effect.succeed(note(`, and the newest one, ${run} at the older head ${head.slice(0, 12)}, was green`))
+          : Effect.fail(
+              refuse(
+                `${place}: the changed-set run ${runUrl(a.repo, run)} tested that head's change, not this one (0590); start one at this head: gh workflow run ${WORKFLOW} --ref ${found.head}`,
+              ),
+            ),
+      );
+    },
   });
 
   if (found.draft) {
