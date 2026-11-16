@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-reflect-ban-s8-tests2",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T20:50:00-08:00",
+  "ended": "2026-11-15T21:05:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Short tests round on slice 8 of the Reflect ban (0554, ticket 1056), on the fold branch. The review found that Stub.make reads own with Predicate.hasProperty, which uses in, so an Object.prototype name such as toString answers the prototype's member and rest is never asked. L6's name generator was fc.string(), which never reaches those names. It now draws from fc.oneof of the twelve prototype names and fc.string(), with then kept out. L6 is red on the built Stub.ts: expected '[object Object]' to deeply equal { name: 'toString', given: [] }. The build must read own with an own-key check such as Object.hasOwn.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": null,
+  "plants": [
+    {
+      "law": "L6",
+      "plant": "the built Stub.ts as it is, which reads own with Predicate.hasProperty: the rest law fails for toString",
+      "result": "red"
+    },
+    {
+      "law": "L6",
+      "plant": "temporary fix to Object.hasOwn(members, key) in Stub.ts: all three laws pass; Stub.ts restored unchanged",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}
