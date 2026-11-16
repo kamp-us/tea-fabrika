@@ -119,11 +119,7 @@ describe("L1, a Setting remains a Config", () => {
         expect(Config.isConfig(setting)).toBe(true);
         const provider = ConfigProvider.fromUnknown(value._tag === "absent" ? {} : nest(path, value.value));
         const parsed = await run(setting.parse(provider));
-        const yielded = await run(
-          Effect.gen(function* () {
-            return yield* setting;
-          }).pipe(Effect.provide(ConfigProvider.layer(provider))),
-        );
+        const yielded = await run(setting.pipe(Effect.provide(ConfigProvider.layer(provider))));
         expect(Exit.isSuccess(yielded)).toBe(Exit.isSuccess(parsed));
 
         if (Exit.isSuccess(parsed) && Exit.isSuccess(yielded)) {

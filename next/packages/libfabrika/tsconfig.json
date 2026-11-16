@@ -7,13 +7,15 @@
         // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
-          // Whole package: unnecessaryArrowBlock (E8), preferUnsafeConstructor (E16).
+          // Whole package: unnecessaryArrowBlock (E8), preferUnsafeConstructor (E16),
+          // unnecessaryEffectGen (E17).
           {
             "include": ["**/*.ts"],
             "options": {
               "diagnosticSeverity": {
                 "unnecessaryArrowBlock": "error",
-                "preferUnsafeConstructor": "error"
+                "preferUnsafeConstructor": "error",
+                "unnecessaryEffectGen": "error"
               }
             }
           },
