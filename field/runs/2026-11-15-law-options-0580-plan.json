@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-law-options-0580-plan",
+  "ticket": null,
+  "pr": null,
+  "started": null,
+  "ended": "2026-11-15T21:33:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "plan",
+  "step": "plan",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The plan for decision 0580 in next/ and our tooling (docs/plan/quests/law-options-0580-PLAN.md): a law's plant and label become options of the package's it, carried in vitest's task meta; a script records each plant run from the law's own options; a new CI plant check in the field step holds each changed law's plant against the run rows the pull request adds, advising until measured; law-shape reads the option label in files on the package's it; and it.effect.prop, with a fast-check input path in the package, replaces the shared property runner's 23 calls in 14 files over three slices, the last after pull request 1366. Based on origin/main, not stacked on the kalfa-config branch, since nothing here needs the kalfa folder or its settings. plancheck --draft passes. Two open questions go to the owner: advise or block first, and 0579's same-first-failing-case rule across engines.",
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "The start time was not read at the start, so it stays unknown. Read only: no test, typecheck or product edit; one pnpm install --frozen-lockfile to read installed sources. Measured on main d3a444edf: 362 plants in 61 run rows, 260 naming their law with no path and 12 matching a title in an existing file."
+}
