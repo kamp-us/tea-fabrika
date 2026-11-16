@@ -796,7 +796,7 @@ const wire = Effect.fnUntraced(function* (
     PROJECT: {
       getByName: () => ({
         settingsStart: async () => StartsTest.reply(input),
-        route: (_client: string, method: string, params: unknown) =>
+        route: (_client: string, method: string, params: Schema.Json | undefined) =>
           Effect.runPromise(d.route(client, method, params).pipe(Effect.provideContext(projectContext))),
       }),
     },
@@ -1478,7 +1478,7 @@ const rawRows = (db: DatabaseSync, stream: string) =>
     ? db.prepare("SELECT * FROM entries WHERE stream=? ORDER BY rev").all(stream)
     : [];
 
-const request = (letter: string, m: unknown = comment()) => ({
+const request = (letter: string, m: Schema.Json = comment()) => ({
   pid: PROCESS,
   letter,
   m,
@@ -3459,7 +3459,7 @@ describe("P10 inputs, retries and signer", () => {
       missing: {},
       junk: { reason: Schema.Literals(["wrong", "missing"]) },
     });
-    type MessageState = { readonly schema: typeof schema; readonly m: Readonly<Record<string, unknown>> };
+    type MessageState = { readonly schema: typeof schema; readonly m: Schema.JsonObject };
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
       const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
       const fields = Object.entries(state.schema.fields).filter(
@@ -3473,7 +3473,8 @@ describe("P10 inputs, retries and signer", () => {
           const field = fields.find(([name]) => name === key)![1];
           const replacement = missing
             ? Arbitrary.Constant(undefined)
-            : Arbitrary.schema(SpoofedWrite.fields.value).pipe(
+            : // A wrong value is one the door's JSON params can carry; a missing one is the edit above.
+              Arbitrary.schema(Schema.Json).pipe(
                 Arbitrary.filter((value) => Schema.decodeUnknownResult(field)(value)._tag === "Failure"),
               );
           const junk =
@@ -3494,7 +3495,8 @@ describe("P10 inputs, retries and signer", () => {
             Arbitrary.map(({ value, junk }) => {
               const m = { ...state.m };
 
-              if (missing) {
+              // Only a missing edit draws no value, since a wrong one is JSON.
+              if (value === undefined) {
                 delete m[key];
               } else {
                 m[key] = value;
@@ -3511,7 +3513,8 @@ describe("P10 inputs, retries and signer", () => {
       edits: Arbitrary.array(Arbitrary.schema(Broken), { minLength: 1, maxLength: Object.keys(schema.fields).length }),
       key: Arbitrary.schema(SpoofedWrite.fields.key),
       inner: Arbitrary.schema(SpoofedWrite.fields.inner),
-      value: Arbitrary.schema(SpoofedWrite.fields.value),
+      // The stamp is a JSON value, as the door's params are (ticket 1057): JSON has no undefined.
+      value: Arbitrary.schema(Schema.Json),
     }).pipe(
       Arbitrary.flatMap(({ m, edits, ...stamp }) =>
         edits
