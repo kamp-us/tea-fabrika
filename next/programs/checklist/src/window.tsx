@@ -1,5 +1,6 @@
 import { defineWindow, type TileProps, type WindowProps } from "@kampus/libfabrika";
 import { Button, Checkbox, Input } from "@manti-ui/react";
+import { Array as Arr } from "effect";
 import { useId } from "react";
 import { checklist, checklistView } from "./program.ts";
 import { tile } from "./tile.ts";
@@ -16,7 +17,7 @@ const ChecklistWindow = ({ data, press, tile: own, send, refusal }: Props) => {
         <p>Nothing on the list yet.</p>
       ) : (
         <ul className="checklist-items">
-          {data.items.map((item) => (
+          {Arr.map(data.items, (item) => (
             // The row's cursor key: a return to the tile lands DOM focus back on this row (0165).
             <li className="checklist-row" key={item.name} data-cursor={`item:${item.name}`}>
               <Checkbox

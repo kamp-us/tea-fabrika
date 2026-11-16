@@ -27,6 +27,8 @@ import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
 import { Effect, Option, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -108,9 +110,9 @@ const TileBody = ({
   readonly tile: TezgahTile;
   readonly windowFor: PageProps["windowFor"];
 }) => {
-  const [row, send] = useRuntime(run, (m) => m.tiles.find((t) => t.id === tile.id));
+  const [row, send] = useRuntime(run, (m) => Option.getOrUndefined(Arr.findFirst(m.tiles, (t) => t.id === tile.id)));
   const [shown] = useRuntime(run, (m) => {
-    const t = m.tiles.find((t) => t.id === tile.id);
+    const t = Option.getOrUndefined(Arr.findFirst(m.tiles, (t) => t.id === tile.id));
     return t?.last ? m.client.views[t.last] : undefined;
   });
   const registration = windowFor(tile.program);
@@ -149,12 +151,14 @@ const PRINTED: Readonly<Record<string, string>> = { arrowleft: "←", arrowright
 /** The prefix line's hints: each key after the prefix and what it does, from the one table. The way
  *  out, `Esc cancel`, is the line's own right end. */
 const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
-  table.rows.flatMap((row) => {
-    const keys = row.keys
-      .filter((k) => k.startsWith("<prefix>"))
-      .map((k) => k.slice("<prefix>".length))
-      .map((k) => PRINTED[k] ?? k);
-    return keys.length === 0 ? [] : [`${keys.join(" ")} ${row.word}`];
+  Arr.flatMap(table.rows, (row) => {
+    const keys = Function.pipe(
+      row.keys,
+      Arr.filter((k) => k.startsWith("<prefix>")),
+      Arr.map((k) => k.slice("<prefix>".length)),
+      Arr.map((k) => PRINTED[k] ?? k),
+    );
+    return keys.length === 0 ? [] : [`${Arr.join(keys, " ")} ${row.word}`];
   });
 
 /** The prefix line, one line at every size (the tile guidelines; modes M3): the mode's word at the
@@ -165,7 +169,7 @@ const PrefixLine = ({ table }: { readonly table: Keys.Table }) => (
   <>
     <span className="mode">prefix</span>
     <span className="hints">
-      {prefixHints(table).map((hint) => (
+      {Arr.map(prefixHints(table), (hint) => (
         <span key={hint} className="hint">
           {hint}
         </span>
@@ -301,23 +305,28 @@ const Desk = (props: PageProps) => {
   const [size] = useRuntime(props.run, pickSize);
   const [tie] = useRuntime(props.run, pickTie);
   const view = none || client === null ? null : optimisticState(client);
-  const space = view?.workspaces.find((w) => w.n === client?.workspace);
+  const space =
+    view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === client?.workspace));
   const area = useSize(send);
-  const roomless = polite === null ? undefined : view?.tiles.find((t) => t.id === polite.tile);
-  const focused = view?.tiles.find((t) => t.id === space?.focus);
+  const roomless =
+    polite === null || view === null
+      ? undefined
+      : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === polite.tile));
+  const focused =
+    view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === space?.focus));
   /** Where DOM focus last sat in a tile: the one answer both landings read (0165). */
   const cursor = (t: TezgahTile) => lastCursor(tie, t);
   useFocusIn(send);
   useFollow(area, {
     focus: focused?.id ?? null,
     cursor: focused === undefined ? null : cursor(focused),
-    live: tileState(
-      link,
-      rows.find((r) => r.id === focused?.id),
-    ).live,
+    live: tileState(link, Option.getOrUndefined(Arr.findFirst(rows, (r) => r.id === focused?.id))).live,
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
-  const asked = prefix._tag === "asking" ? view?.tiles.find((t) => t.id === prefix.tile) : undefined;
+  const asked =
+    prefix._tag === "asking" && view !== null
+      ? Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === prefix.tile))
+      : undefined;
   const line = none ? (
     NO_TEZGAH
   ) : asked !== undefined ? (
@@ -344,12 +353,7 @@ const Desk = (props: PageProps) => {
           <Layout
             workspace={space}
             tiles={view.tiles}
-            state={(t) =>
-              tileState(
-                link,
-                rows.find((r) => r.id === t.id),
-              )
-            }
+            state={(t) => tileState(link, Option.getOrUndefined(Arr.findFirst(rows, (r) => r.id === t.id)))}
             asking={asked?.id ?? null}
             cursor={cursor}
             size={size}
@@ -377,7 +381,8 @@ const Page = (props: PageProps) => {
   const [said] = useRuntime(props.run, (m) => m.said);
   useKeys(props.run, props.machine, props.keys, send);
   const view = client === null ? null : optimisticState(client);
-  const named = (id: string) => view?.tiles.find((t) => t.id === id);
+  const named = (id: string) =>
+    view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === id));
   // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus
   // whose process ended. A refusal's words are those of the program its tile shows.
   const burst = spoken(
@@ -386,12 +391,15 @@ const Page = (props: PageProps) => {
     (tile) => props.windowFor(tile.program),
   );
   const roomless = polite === null ? undefined : named(polite.tile);
-  const words = [
-    ...(none ? [NO_TEZGAH] : []),
-    ...(burst === "" ? [] : [burst]),
-    ...(prefix._tag === "armed" ? ["prefix"] : []),
-    ...(roomless === undefined ? [] : [noRoom(roomless)]),
-  ].join(" ");
+  const words = Arr.join(
+    [
+      ...(none ? [NO_TEZGAH] : []),
+      ...(burst === "" ? [] : [burst]),
+      ...(prefix._tag === "armed" ? ["prefix"] : []),
+      ...(roomless === undefined ? [] : [noRoom(roomless)]),
+    ],
+    " ",
+  );
   const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
   const content =
     link._tag === "waiting_grant" ? (

@@ -21,6 +21,10 @@
 import { lengths, STRIP, shut } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP, order } from "@kampus/libfabrika/tezgah/Layout";
 import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
+import * as Arr from "effect/Array";
+import * as Function from "effect/Function";
+import * as Option from "effect/Option";
+import * as Tuple from "effect/Tuple";
 import type { ReactElement } from "react";
 
 /**
@@ -79,9 +83,11 @@ const FOCUSABLE =
 export const landing = (region: HTMLElement, cursor: string | null): HTMLElement => {
   const row =
     cursor === null
-      ? undefined
-      : [...region.querySelectorAll("[data-cursor]")].find((e) => e.getAttribute("data-cursor") === cursor);
-  return (row ?? region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region;
+      ? Option.none()
+      : Arr.findFirst([...region.querySelectorAll("[data-cursor]")], (e) => e.getAttribute("data-cursor") === cursor);
+  return (
+    Option.getOrElse(row, () => region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region
+  );
 };
 
 const LIVE: State = { word: "", live: true };
@@ -113,7 +119,11 @@ const TileRegion = ({
   readonly children: ReactElement;
 }) => (
   <section
-    className={["tile", focused ? "focused" : "", state.live ? "" : "disconnected"].filter((c) => c !== "").join(" ")}
+    className={Function.pipe(
+      ["tile", focused ? "focused" : "", state.live ? "" : "disconnected"],
+      Arr.filter((c) => c !== ""),
+      Arr.join(" "),
+    )}
     aria-label={tileName(tile)}
     aria-current={focused ? "true" : undefined}
     data-tile={tile.id}
@@ -183,7 +193,7 @@ export const Layout = ({
   strips = NONE,
   open,
 }: Props) => {
-  const byId = new Map(tiles.map((t) => [t.id, t]));
+  const byId = new Map(Arr.map(tiles, (t) => Tuple.make(t.id, t)));
   const divider = (i: number) => (
     <div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />
   );
@@ -221,7 +231,7 @@ export const Layout = ({
 
     const row = node.dir === "row";
     const shares = box === null ? null : lengths(node, row ? box.width : box.height, strips, workspace.focus);
-    return node.parts.flatMap((part, i) => {
+    return Arr.flatMap(node.parts, (part, i) => {
       const share = shares?.[i];
       const inner =
         box === null || share === undefined
@@ -239,7 +249,7 @@ export const Layout = ({
       // A band: every tile of a folded container lies along it, one strip each, sharing its length.
       const body =
         folded && typeof part.inner !== "string"
-          ? order(part.inner).flatMap((t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
+          ? Arr.flatMap(order(part.inner), (t, k) => [...(k === 0 ? [] : [divider(k)]), ...strip(t, node.dir)])
           : draw(part.inner, node.dir, inner);
       const flows =
         folded && typeof part.inner !== "string"
