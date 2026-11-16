@@ -25,8 +25,9 @@ import {
 import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
+import { Link } from "@kampus/libfabrika/transport/Link";
 import { Button, useClipboard } from "@manti-ui/react";
-import { Effect, Match, Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -387,27 +388,30 @@ const Page = (props: PageProps) => {
   ].join(" ");
   const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
   // The screen a link shows in place of the frame while it waits for a grant, was removed or is blocked.
-  const screen = Match.value(link).pipe(
-    Match.tag("waiting_grant", (waiting) => (
-      <Waiting code={waiting.code} fingerprint={waiting.fingerprint} origin={props.origin} />
-    )),
-    Match.tag("removed", () => (
-      <main className="screen">
-        <h1>Removed</h1>
-        <p>This window was removed</p>
-        <p>Ask again to make a new key and wait for a new grant.</p>
-        <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
-          Ask again
-        </Button>
-      </main>
-    )),
-    Match.tag("blocked", (blocked) => (
-      <main className="screen">
-        <h1>Blocked</h1>
-        <p>The browser could not keep or use this window's key. {blocked.reason}</p>
-      </main>
-    )),
-    Match.orElse(() => null),
+  const screen = Link.matchOrElse(
+    link,
+    {
+      waiting_grant: (waiting) => (
+        <Waiting code={waiting.code} fingerprint={waiting.fingerprint} origin={props.origin} />
+      ),
+      removed: () => (
+        <main className="screen">
+          <h1>Removed</h1>
+          <p>This window was removed</p>
+          <p>Ask again to make a new key and wait for a new grant.</p>
+          <Button variant="primary" onClick={() => send({ type: "ask_again", dial: dials + 1 })}>
+            Ask again
+          </Button>
+        </main>
+      ),
+      blocked: (blocked) => (
+        <main className="screen">
+          <h1>Blocked</h1>
+          <p>The browser could not keep or use this window's key. {blocked.reason}</p>
+        </main>
+      ),
+    },
+    () => null,
   );
   const content =
     screen ??

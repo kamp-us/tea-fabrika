@@ -1617,11 +1617,12 @@ export const providers = (
  * rest. `--claude` wins a step both name.
  */
 export const stepAgent = (step: StepName, claude: ReadonlySet<StepName>, exec: ReadonlySet<StepName>): AgentName => {
-  if (step === "mutation") {
-    return MUTATION_AGENT;
-  }
-
-  return claude.has(step) ? "claude" : exec.has(step) ? "codex-exec" : "codex";
+  // Each flag's steps and the agent it names, in the order they win.
+  const flags: readonly (readonly [ReadonlySet<StepName>, AgentName])[] = [
+    [claude, "claude"],
+    [exec, "codex-exec"],
+  ];
+  return step === "mutation" ? MUTATION_AGENT : (flags.find(([named]) => named.has(step))?.[1] ?? "codex");
 };
 
 /** One table row per step the quest ran, with its list-price dollars from the rows file. */
