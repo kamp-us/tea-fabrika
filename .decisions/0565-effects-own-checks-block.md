@@ -1,7 +1,7 @@
 ---
 id: 0565
 title: In next/ and our tooling, every check in the Effect checker, all 135, is on as an error at zero hits, turned on one check and one folder at a time
-status: accepted
+status: amended-in-part by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md)
 date: 2026-11-15
 tags: [effect, tsgo, typecheck, checks, array, string, record, schema, sweep, next, tooling]
 ---
@@ -285,7 +285,7 @@ too.
     ```
 
     Set to `error` with no package named, it is on and can never fire.
-  - **`unstableApiUsage` (16,281) against our doc tags**
+  - **RULED on 2026-11-15 by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md): clash 1, `unstableApiUsage` (16,281) against our doc tags**
     ([0118](0118-no-since-tag-before-a-release.md)). Every public export of ours carries
     `@stability unstable`, so 12,933 of the hits are our own exports used by our own code. About
     3,350 point at Effect's packages, 1,632 of them `it` from `@effect/vitest`.
@@ -301,7 +301,7 @@ too.
 
     The checker has an `allowedUnstableApis` setting. Whether that is a list in the sense of 0524
     is part of the question.
-  - **`apiStabilityLeak` (235), the same root.** It flags an export whose type shows a less
+  - **RULED on 2026-11-15 by [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md): clash 2, `apiStabilityLeak` (235), the same root.** It flags an export whose type shows a less
     stable type. With every export unstable, and Effect's `Path` and `FileSystem` unstable too, it
     fires on almost any export.
   - **`schemaSync` (632) against a ledger step that is a plain function**
@@ -332,3 +332,4 @@ too.
 ## Amendments
 
 - 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) names which of our rules give way to a check of the Effect checker or another trusted rule, and which stay. `fabrika/no-node-imports`, `fabrika/no-effect-run-outside-edge` and `fabrika/no-hand-tag` go to trusted rules; `fabrika/no-promises` stays, since theirs is narrower. It leaves `deterministicKeys` and `service-id` as an unruled clash.
+- 2026-11-15: [0574](0574-no-stability-tag-and-unstable-api-is-an-error.md) rules clashes 1 and 2. `unstableApiUsage`: `@stability` is dropped until the first release and the check is an error, with `allowedUnstableApis` naming each unstable Effect part we use. `apiStabilityLeak`: recounted after the tags go; an error if zero, off if hits remain from Effect's unstable types, which we use on purpose.
