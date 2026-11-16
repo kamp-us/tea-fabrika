@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e61-build1",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:09:47-08:00",
+  "ended": "2026-11-15T22:14:00-08:00",
+  "parent": "2026-11-15-t1075-e61-tests2",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send_back",
+  "why": "Build step of slice E61 (ticket 1075, check preferNamespaceImport), in our tooling, sent back to the tests step. The brief asked for one config edit in .oxlintrc.json: \"!effect/**\" to \"!effect/*\" in the SettingsRuntime group and the settings contracts group, the merge session's ruling, so effect/unstable/** stays closed. The edit works: with it, oxlint-plugins/plants.test.ts passed whole (261 rows, the 6 red rows of \"T753 L15 settings files import only Effect, one subpath deep\" included), pnpm format and pnpm lint (NODE_OPTIONS=--max-old-space-size=6144) were green and the ratchet exited 0. But stepcommit.sh refused the commit with \"a build may not commit exam paths; answer send to tests\": exam-paths.json lists .oxlintrc.json as the lint rules, and docs/direction/nobody-writes-their-own-exam.md says the builder never changes what it is checked against. The step rules say to obey such a refusal, so the edit was undone and not committed, and no plain git commit was used around the check. The tests step owns this edit: it is a tightening of the exam, and its own dry run already showed it turns all 25 rows green. No product file holds a hit for this slice, so no build is left after it. The three hits kept for a new seam (cloudflare/control.ts:9, cloudflare/readers.laws.test.ts:13, cloudflare/SettingsRuntime.ts:8) were not touched. Hits: met 1 (the config), fixed 0, left 1 for the tests step, waiting on 1366 0. Tests ran at head 6d5dcfc plus the uncommitted edit.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 4,
+  "note": "The brief gave a build an exam-path job. The box's step check caught it before a commit; a brief for a lint-config ruling should go to the tests step.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "step": "build"
+}
