@@ -1,7 +1,7 @@
 ---
 id: 0588
 title: No script or program edits files for a sweep, except the Effect language server's own quick fix, applied one hit at a time exactly as the server sends it
-status: accepted
+status: superseded by [0589](0589-agents-edit-files-with-any-tool.md)
 date: 2026-11-15
 tags: [sweep, edits, scripts, quick-fix, language-server, effect, review]
 ---
