@@ -29,8 +29,10 @@ it("L10: report times advise exactly for stale rows, including unmeasured files"
             endTime: value.start + value.real * 1000,
           })),
         };
+
         const rows: Row[] = Rec.toEntries(entries).map(([path, value]) => ({ path, seconds: value.real }));
         expect(reportRows(report, root)).toEqual(rows);
+
         const table = Rec.fromEntries(
           Rec.toEntries(entries).flatMap(([path, value]) => (value.row === undefined ? [] : [[path, value.row]])),
         );

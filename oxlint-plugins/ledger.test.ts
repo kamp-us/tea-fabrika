@@ -1,7 +1,7 @@
+import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { it } from "@effect/vitest";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -106,6 +106,7 @@ describe("agents-ledger.json and next-ledger.json, 0033", () => {
 describe("`.agents/` code is held to next/'s rules, 0033", () => {
   const script = ".agents/skills/x/scripts/a.ts";
   const test = ".agents/skills/x/scripts/a.test.ts";
+
   const body = Arr.join(
     [
       'import {readFileSync} from "node:fs";',
@@ -120,12 +121,12 @@ describe("`.agents/` code is held to next/'s rules, 0033", () => {
   it.live("scenario: the rules fire in a script, and its test keeps the edge rules on", () =>
     Effect.gen(function* () {
       const fires = yield* promised(() => plant({ [script]: body, [test]: body }));
-    expect(fires("fabrika(no-node-imports)", script)).toEqual([1]);
-    expect(fires("fabrika(no-promises)", script).length).toBeGreaterThan(0);
-    expect(fires("fabrika(no-of)", script)).toEqual([3]);
-    expect(fires("fabrika(no-promises)", test).length).toBeGreaterThan(0);
-    expect(fires("fabrika(no-node-imports)", test)).toEqual([]);
-    expect(fires("fabrika(no-of)", test)).toEqual([3]);
+      expect(fires("fabrika(no-node-imports)", script)).toEqual([1]);
+      expect(fires("fabrika(no-promises)", script).length).toBeGreaterThan(0);
+      expect(fires("fabrika(no-of)", script)).toEqual([3]);
+      expect(fires("fabrika(no-promises)", test).length).toBeGreaterThan(0);
+      expect(fires("fabrika(no-node-imports)", test)).toEqual([]);
+      expect(fires("fabrika(no-of)", test)).toEqual([3]);
     }),
   );
 });

@@ -14,12 +14,13 @@
  * The code is pure but for WebCrypto, so a browser tab runs it as Node does. Base64 goes through
  * Effect's encoding, never Node's `Buffer`.
  */
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import { pipe, String as Str } from "effect";
+import * as Str from "effect/String";
 import { armor, type Bytes, field, holds, join, reader, same, subtle, u32, utf8 } from "./internal/binary.ts";
 import { checkPasskey, passkeyBlob } from "./Webauthn.ts";
 
@@ -189,10 +190,10 @@ export const verifySshsig = Effect.fn("transport.verifySshsig")(function* (a: {
     Option.gen(function* () {
       const sig = yield* read(a.armored);
       const signer = yield* Arr.findFirst(a.signers, (line) =>
-          Option.exists(
-            Option.orElse(keyBlob(line), () => passkeyBlob(line)),
-            (blob) => same(blob, sig.key),
-          ),
+        Option.exists(
+          Option.orElse(keyBlob(line), () => passkeyBlob(line)),
+          (blob) => same(blob, sig.key),
+        ),
       );
 
       yield* holds(same(sig.space, utf8(a.space)));

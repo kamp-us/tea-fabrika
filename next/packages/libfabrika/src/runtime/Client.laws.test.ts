@@ -661,8 +661,7 @@ describe("L5: client views (p3)", () => {
           if (changed) {
             seen.installed++;
             seen.removed +=
-              Arr.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") === true
-                ? 1 : 0;
+              Arr.isArray(note.patch) && note.patch.some((op: { op?: unknown }) => op.op === "remove") === true ? 1 : 0;
             expect(shown).toBeDefined();
             expect(note.base).toBe(shown!.rev);
             expect(note.rev).toBe(shown!.rev + 1);

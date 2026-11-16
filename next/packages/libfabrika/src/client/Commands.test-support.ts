@@ -1,3 +1,4 @@
+import * as Arr from "effect/Array";
 // P39 slice 4a, next/: the hands client's fake `Commands`, the only `Commands` layer in 4a, and the
 // cut points the laws put around `Commands` and `Journal`. A cut fails, stops or pauses a call
 // before or after it delegates: before, the command never ran or the entry was never saved; after,
@@ -10,7 +11,6 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import { Command, Result } from "../tasks/Task.ts";
 import { Commands } from "./Commands.ts";
 import { fakeResult } from "./HandsDoor.test-support.ts";

@@ -1,10 +1,10 @@
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
 // oxlint's own `import/no-default-export`, as `.oxlintrc.json` sets it (0058): on for our source,
 // off for the tooling and config a tool loads by its default, and a platform default passes only
 // under an inline edge comment on the line above it.
 import { it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -88,26 +88,28 @@ it("an inline edge comment lets the default on the next line through, and no lin
 
 it.live("scenario: tooling and config files, and files outside our source, keep their default export", () =>
   Effect.gen(function* () {
-  // A tool loads these by their default, so 0058 leaves them out by glob.
-  const files = Rec.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
-  const result = yield* promised(() => plant(files));
+    // A tool loads these by their default, so 0058 leaves them out by glob.
+    const files = Rec.fromEntries(Arr.map([...TOOLING, ...OUTSIDE], (file) => [file, "export default {};\n"]));
+    const result = yield* promised(() => plant(files));
 
-  for (const file of Rec.keys(files)) {
-    expect(result(CODE, file)).toEqual([]);
-  }
+    for (const file of Rec.keys(files)) {
+      expect(result(CODE, file)).toEqual([]);
+    }
   }),
 );
 
 it.live("scenario: a declare module block that types a loader's default is not an export of ours", () =>
   Effect.gen(function* () {
-  // apps/fabrika/src/window/wasm.d.ts types what esbuild's binary loader gives; the rule reads it as
-  // a type, not as a module's own default.
-  const file = "apps/fabrika/src/window/bytes.d.ts";
+    // apps/fabrika/src/window/wasm.d.ts types what esbuild's binary loader gives; the rule reads it as
+    // a type, not as a module's own default.
+    const file = "apps/fabrika/src/window/bytes.d.ts";
+
     const result = yield* promised(() =>
       plant({
-    [file]: 'declare module "*.wasm" {\n  const bytes: Uint8Array;\n  export default bytes;\n}\n',
+        [file]: 'declare module "*.wasm" {\n  const bytes: Uint8Array;\n  export default bytes;\n}\n',
       }),
     );
-  expect(result(CODE, file)).toEqual([]);
+
+    expect(result(CODE, file)).toEqual([]);
   }),
 );

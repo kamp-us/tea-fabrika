@@ -5,7 +5,7 @@
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Schema from "effect/Schema";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import { field, join, subtle } from "./internal/binary.ts";
 import { KeyLine } from "./Sshsig.ts";
 

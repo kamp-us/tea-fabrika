@@ -40,15 +40,15 @@ const PERSON = "~/.fabrika/fabrika.toml";
 
 /** Both files parsed and validated whole, as the instance does at start. */
 const validation = (repo: string, person: string, version: string) =>
-    Effect.gen(function* () {
-      const toml = yield* Toml;
+  Effect.gen(function* () {
+    const toml = yield* Toml;
 
-      const files = {
-        repo: { file: REPO, document: yield* toml.parse(repo) },
-        person: { file: PERSON, document: yield* toml.parse(person) },
-      };
+    const files = {
+      repo: { file: REPO, document: yield* toml.parse(repo) },
+      person: { file: PERSON, document: yield* toml.parse(person) },
+    };
 
-      return yield* Files.validate(Declarations.all, files, { version });
+    return yield* Files.validate(Declarations.all, files, { version });
   }).pipe(Effect.provide(TomlParser.layer));
 
 const validate = (repo: string, person: string, version: string) =>
@@ -305,40 +305,40 @@ describe("L10, the three S5 messages, word for word", () => {
 
   it.live("format: a port out of range names the file, line, key, value and the rule, and stops", () =>
     Effect.gen(function* () {
-    // format: settings.md S5 gives these words, and a person reads them at start.
+      // format: settings.md S5 gives these words, and a person reads them at start.
       const exit = yield* Effect.exit(validation("", person("port = 70000"), "0.0.0"));
-    expect(failure(exit)).toMatchObject({
-      reason: "invalid",
-      message:
-        "~/.fabrika/fabrika.toml, line 5: instance.port = 70000 is not a port.\n" +
-        "  A port is a whole number from 1 to 65535. The instance did not start.",
-    });
+      expect(failure(exit)).toMatchObject({
+        reason: "invalid",
+        message:
+          "~/.fabrika/fabrika.toml, line 5: instance.port = 70000 is not a port.\n" +
+          "  A port is a whole number from 1 to 65535. The instance did not start.",
+      });
     }),
   );
 
   it.live("format: a typo names the key and offers the key it meant, and stops", () =>
     Effect.gen(function* () {
-    // format: settings.md S5 gives these words, and a person reads them at start.
+      // format: settings.md S5 gives these words, and a person reads them at start.
       const exit = yield* Effect.exit(validation("", person("prot = 18800"), "0.0.0"));
-    expect(failure(exit)).toMatchObject({
-      reason: "unknown",
-      message:
-        "~/.fabrika/fabrika.toml, line 5: there is no setting instance.prot. Did you mean instance.port?\n" +
-        "  fabrika settings lists every setting. The instance did not start.",
-    });
+      expect(failure(exit)).toMatchObject({
+        reason: "unknown",
+        message:
+          "~/.fabrika/fabrika.toml, line 5: there is no setting instance.prot. Did you mean instance.port?\n" +
+          "  fabrika settings lists every setting. The instance did not start.",
+      });
     }),
   );
 
   it.live("format: a person's setting in the repo's file says where it may be set, and stops", () =>
     Effect.gen(function* () {
-    // format: settings.md S5 gives these words, and a person reads them at start.
+      // format: settings.md S5 gives these words, and a person reads them at start.
       const exit = yield* Effect.exit(validation("[instance]\nport = 18800\n", "", "0.0.0"));
-    expect(failure(exit)).toMatchObject({
-      reason: "scope",
-      message:
-        ".fabrika/fabrika.toml, line 2: instance.port is a person's setting, so a repo's file may not set it.\n" +
-        "  Set it in ~/.fabrika/fabrika.toml, as FABRIKA_INSTANCE_PORT, or with --instance.port. The instance did not start.",
-    });
+      expect(failure(exit)).toMatchObject({
+        reason: "scope",
+        message:
+          ".fabrika/fabrika.toml, line 2: instance.port is a person's setting, so a repo's file may not set it.\n" +
+          "  Set it in ~/.fabrika/fabrika.toml, as FABRIKA_INSTANCE_PORT, or with --instance.port. The instance did not start.",
+      });
     }),
   );
 

@@ -22,6 +22,7 @@ export const responseIn = (out: string): Response => {
   const lines = head.split(/\r?\n/);
   const status = Number(/^HTTP\/\S+ (\d{3})\b/.exec(lines[0] ?? "")?.[1] ?? Number.NaN);
   const etag = Arr.findFirst(lines, (line) => Option.fromUndefinedOr(/^etag:\s*(\S.*)$/i.exec(line)?.[1]?.trim()));
+
   return { status, etag: Option.getOrNull(etag), body: Arr.join(rest, "\n\n") };
 };
 
@@ -42,6 +43,7 @@ const Runs = Schema.fromJsonString(
 export const latestIn = (body: string): Effect.Effect<Option.Option<Job>, Schema.SchemaError> =>
   Effect.map(Schema.decodeEffect(Runs)(body), ({ check_runs }) => {
     const ours = Arr.filter(check_runs, (run) => run.app?.slug === "github-actions");
+
     const latest = Arr.reduce<(typeof ours)[number], (typeof ours)[number] | undefined>(ours, undefined, (max, run) =>
       max === undefined || run.id > max.id ? run : max,
     );
@@ -86,10 +88,12 @@ export const layer = (repo: string): Layer.Layer<Checks, never, ChildProcessSpaw
       /** Any exit but 0 is a failure, with gh's own last line. */
       const exited = (args: ReadonlyArray<string>, ran: { readonly err: string; readonly code: number }) => {
         const last = ran.err.trim().split("\n").at(-1) ?? "";
+
         const path = Option.getOrElse(
           Arr.findFirst(args, (a) => !a.startsWith("-")),
           () => "",
         );
+
         return ChecksError.make({ reason: `gh api ${path} exited ${ran.code}: ${last}` });
       };
 

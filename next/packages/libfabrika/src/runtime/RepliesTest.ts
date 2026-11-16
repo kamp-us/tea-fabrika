@@ -120,11 +120,11 @@ export const capture = () => {
 
   const write = (span: Tracer.NativeSpan) =>
     Arr.join(
-    [
-      span.name,
-      JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
-      span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
+      [
+        span.name,
+        JSON.stringify([...span.attributes], (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+        JSON.stringify(span.events, (_, value) => (typeof value === "bigint" ? value.toString() : value)),
+        span.status._tag === "Ended" && Exit.isFailure(span.status.exit) ? Cause.pretty(span.status.exit.cause) : "",
       ],
       "\n",
     );

@@ -136,6 +136,7 @@ export const packageImports: CreateRule = {
         Arr.map((name) => `"${name}"`),
         Arr.join(", "),
       );
+
     const none = `imports none of ${table.scope}*`;
 
     const { who, takes, allowed } =

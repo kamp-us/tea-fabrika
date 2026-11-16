@@ -7,10 +7,10 @@
  * a container of one part gives way to its part, and a container left inside one of its own
  * direction merges into it (AeroSpace's normalization, read through 0505 and 0277).
  */
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { type Container, Dir, type Layout, type Part, type TileId, type Workspace } from "./Workspace.ts";
 
 /** How far a container's percents may drift from 100 by float rounding before it is untidy. */
@@ -138,7 +138,9 @@ const settled = (dir: Dir, parts: ReadonlyArray<Part>): Layout | null => {
       ? Arr.map(p.inner.parts, (q) => ({ percent: (q.percent * p.percent) / 100, inner: q.inner }))
       : [p],
   );
+
   const rest = Arr.reduce(merged.slice(0, -1), 0, (total, p) => total + p.percent);
+
   return { dir, parts: Arr.map(merged, (p, i) => (i === merged.length - 1 ? { ...p, percent: 100 - rest } : p)) };
 };
 
@@ -292,7 +294,9 @@ export const neighbor = (layout: Layout, from: TileId, side: Side): TileId | nul
 
     return share > 0 ? [{ t, share }] : [];
   });
+
   const most = Math.max(0, ...Arr.map(shares, (x) => x.share));
+
   // Float rounding may split a tie by a hair: anything this close to the most is the most.
   return Option.getOrNull(
     Option.map(
@@ -305,6 +309,7 @@ export const neighbor = (layout: Layout, from: TileId, side: Side): TileId | nul
 /** Every way one container and the containers in it are untidy. */
 const untidy = (node: Container, parent: Dir | null): ReadonlyArray<Violation> => {
   const total = Arr.reduce(node.parts, 0, (sum, p) => sum + p.percent);
+
   return [
     ...(node.parts.length < 2 ? [V.one_part.make({ dir: node.dir })] : []),
     ...(parent === node.dir ? [V.same_direction.make({ dir: node.dir })] : []),
@@ -328,6 +333,7 @@ export const check = (w: Workspace): ReadonlyArray<Violation> => {
   const live = new Set<string>(tiles);
   const twice = Arr.filter(tiles, (t, i) => tiles.indexOf(t) !== i);
   const again = Arr.filter(w.recent, (t, i) => w.recent.indexOf(t) !== i);
+
   return [
     ...(isTile(w.layout) ? [] : untidy(w.layout, null)),
     ...Arr.map([...new Set(twice)], (tile) => V.twice.make({ tile })),

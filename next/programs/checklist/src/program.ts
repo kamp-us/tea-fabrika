@@ -128,6 +128,7 @@ const wake = (m: Model): number | null => {
   }
 
   const since = Arr.flatMap(m.items, (i) => (i.state._tag === "open" ? [i.state.since] : []));
+
   return since.length === 0 ? null : Math.min(...since) + LATE;
 };
 

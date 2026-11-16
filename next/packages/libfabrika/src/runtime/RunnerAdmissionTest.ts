@@ -125,7 +125,7 @@ const texts = (value: Schema.Json, cache: Map<string, ReadonlyArray<string>>): R
   // An array's values are its items, in order, so one branch reads arrays and objects alike.
   return value !== null && typeof value === "object"
     ? Arr.flatMap(Object.values(value), (part) => texts(part, cache))
-      : [];
+    : [];
 };
 
 const journalWalk = Effect.fnUntraced(function* (harness: Harness, tape: ReadonlyArray<Cell>, reached: Set<string>) {

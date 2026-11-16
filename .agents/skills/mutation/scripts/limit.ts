@@ -59,8 +59,10 @@ export const slowest = (report: typeof Report.Type): number =>
       const tests = Arr.flatMap(file.assertionResults, (test) =>
         typeof test.duration === "number" ? [test.duration] : [],
       );
+
       const span = file.startTime === undefined || file.endTime === undefined ? 0 : file.endTime - file.startTime;
       const setup = span - Arr.reduce(tests, 0, (sum, ms) => sum + ms);
+
       return [...tests, setup];
     }),
   );

@@ -8,12 +8,13 @@
  * so any other local file a stylesheet names stops the build instead of answering 404 later.
  * Every file is found and read through Effect's `FileSystem` and `Path`, which the caller provides.
  */
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import * as Path from "effect/Path";
+import * as Str from "effect/String";
 import { bundleAsync, transform } from "lightningcss";
 import { BuildError } from "../../runtime/Built.ts";
 
@@ -29,6 +30,7 @@ const decode = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 // lightningcss names the bad token in its message; the build's errors name what is broken.
 const refusal = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error);
+
   const known = pipe(
     message,
     Str.match(/(?:unsupported @import condition|stylesheet [^:]*)$/),
@@ -155,6 +157,7 @@ const cyclic = (edges: ReadonlyMap<string, ReadonlySet<string>>) => {
 
     return found;
   };
+
   return Arr.some([...edges.keys()], visit);
 };
 

@@ -3,10 +3,10 @@
  */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Formatter from "effect/Formatter";
 import { REFUSED } from "../SpanTag.ts";
 import type { Admission, Who } from "./Wire.ts";
 import { Answer, Attached, RateCountFailure } from "./Wire.ts";

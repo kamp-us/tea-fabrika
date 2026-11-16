@@ -114,6 +114,7 @@ export const layer = (
         const rows = yield* Schema.decodeEffect(Listed)(out.trim() || "[]").pipe(
           Effect.mapError(() => PullRequestsError.make({ reason: "gh pr list answered a shape we do not read" })),
         );
+
         return Arr.map(rows, (r): PullRequest => ({
           number: r.number,
           head: r.headRefName,
@@ -187,6 +188,7 @@ export const layer = (
       // REST, paged: `gh pr view --json files` stops at 100 files.
       const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
         const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
+
         return Arr.filter(out.split("\n"), (path) => path !== "");
       });
 

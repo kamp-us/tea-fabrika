@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { RuntimeLifecycle } from "@alchemy.run/cloudflare-runtime/core/Runtime";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -12,16 +13,15 @@ import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { FetchHttpClient } from "effect/http";
 import * as fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -62,6 +62,7 @@ for (const mode of ["offline", "unreachable", "json", "schema", "remote"] as con
         const home = mkdtempSync(join(tmpdir(), "p12-err-"));
         vi.stubEnv("FABRIKA_HOME", home);
         const reason = mode === "json" || mode === "schema" ? "bad_row" : mode === "remote" ? `remote-${id}` : mode;
+
         const fetch = vi.fn<typeof globalThis.fetch>(async () => {
           if (mode === "unreachable") {
             throw new Error(id);
@@ -179,6 +180,7 @@ for (const mode of ["exit", "spawn"] as const) {
             return span;
           },
         });
+
         const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
           const call = JSON.parse(bodyText(options));
 

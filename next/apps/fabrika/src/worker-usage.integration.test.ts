@@ -5,16 +5,16 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
+import { Array as Arr, String as Str } from "effect";
 import * as Context from "effect/Context";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import { Array as Arr, String as Str } from "effect";
-import { SecureRandom } from "effect/crypto";
 import { expect } from "vitest";
 import { build } from "./build.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -184,12 +184,12 @@ const wire = Effect.fnUntraced(function* (url: string, key: ReturnType<typeof id
 
 const spinSource = Arr.join(
   [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model=Schema.Struct({checksum: Schema.Int});",
-  'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
-  "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
-  'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model=Schema.Struct({checksum: Schema.Int});",
+    'const Msg=Schema.Struct({type: Schema.Literals(["idle","spin"])});',
+    "const machine=Machine.make({model: Model, msg: Msg, cmds: [], init: (s)=>[s??{checksum:0},[]], update: {idle:s=>[s,[]], spin:s=>{let checksum=s.checksum;for(let i=0;i<40000000;i++){checksum=(checksum+i)|0;}return [{checksum},[]];}}});",
+    'export const program={name:"usage/spin",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{idle:{_tag:"write",schema:Msg,description:"Idle",personOnly:false},spin:{_tag:"write",schema:Msg,description:"Spin",personOnly:false}},outputs:{},writes:{},wake:()=>null};',
   ],
   "\n",
 );

@@ -4,16 +4,17 @@ import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
@@ -214,6 +215,7 @@ const service = Effect.fnUntraced(function* (
   const ledger = yield* reader(sql);
   const failure = options.failure;
   const lower = failure === undefined ? undefined : LedgerError.make({ reason: failure.reason, cause: failure.cause });
+
   const affected =
     failure !== undefined && pipe(failure.part, Str.startsWith("inbox")) ? inbox(name) : `processes/${name}`;
 
@@ -224,7 +226,9 @@ const service = Effect.fnUntraced(function* (
         expect(after, "capture uses the nonblocking wait from zero").toBe(0);
 
         if (
-          lower !== undefined && stream === affected && failure !== undefined &&
+          lower !== undefined &&
+          stream === affected &&
+          failure !== undefined &&
           pipe(failure.part, Str.endsWith("wait") === true)
         ) {
           return yield* lower;
@@ -249,7 +253,10 @@ const service = Effect.fnUntraced(function* (
         return captured;
       }),
     read: (stream, after) =>
-      lower !== undefined && stream === affected && failure !== undefined && pipe(failure.part, Str.endsWith("read")) === true
+      lower !== undefined &&
+      stream === affected &&
+      failure !== undefined &&
+      pipe(failure.part, Str.endsWith("read")) === true
         ? ledger.read(stream, after).pipe(Stream.take(1), Stream.concat(Stream.fail(lower)))
         : ledger.read(stream, after),
   };
@@ -285,10 +292,12 @@ NemesisTest.suite({
         const rows = yield* RecordManager.use((manager) =>
           Stream.runCollect(manager.read(Chain.cases.job.make({ process }))),
         ).pipe(Effect.provide(records));
+
         const health = Arr.filter(
           sql.exec("SELECT * FROM measurements"),
           (row) => typeof row["piece"] === "string" && /nemesis/i.test(row["piece"]),
         );
+
         return { rows, health };
       }).pipe(Effect.orDie),
     };

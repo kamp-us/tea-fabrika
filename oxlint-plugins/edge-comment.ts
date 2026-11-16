@@ -44,6 +44,7 @@ const problem = (comment: string): string | null => {
 
   const [, form = "", rest = ""] = found;
   const at = rest.search(REASON);
+
   const rules = pipe(
     (at < 0 ? rest : rest.slice(0, at)).split(","),
     Arr.map((rule) => rule.trim()),

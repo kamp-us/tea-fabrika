@@ -1,3 +1,5 @@
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 // P39 slice 4a, next/: the brain as the hands client's laws see it, as a script. It keeps tasks the
 // way slice 1's task machine does (requested, assigned, started, finished) and answers the five
 // tasks calls a hands key may make, `tasks.list`, `tasks.wait`, `tasks.take`, `tasks.started` and
@@ -10,11 +12,10 @@
 // frame the client wrote as it was sent (`MemorySocket.sent`), not only what the door kept of it.
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import type { Request } from "../tasks/Task.ts";
 import { Command, Task, Result, State } from "../tasks/Task.ts";
 import { MemorySocket } from "./WindowStart.test-support.ts";
@@ -143,6 +144,7 @@ export const brain = () => {
   /** Answers one call by `key`, and changes what the call changes. `finish` says how a finish is answered. */
   const call = (key: string, method: string, params: unknown, finish: FinishMode = "ok"): Outcome => {
     const p = typeof params === "object" && params !== null ? new Map(Rec.toEntries(params)) : new Map();
+
     const text = (name: string) => {
       const value = p.get(name);
 
@@ -151,6 +153,7 @@ export const brain = () => {
 
     if (method === "tasks.list") {
       const mine = Arr.filter([...tasks.values()], (s) => s.request.target === key && open(s));
+
       return Outcome.cases.result.make({
         result: { tasks: Arr.map(mine, (s) => ({ id: s.request.id, process: s.request.process })), rev: rev(key) },
       });

@@ -18,11 +18,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { rolldown, type Plugin, type RolldownBuild } from "rolldown";
 
@@ -203,7 +203,7 @@ const exportAt = (map: ReadonlyMap<string, string | undefined>, subpath: string)
 };
 
 const ownerAt = (packages: ReadonlyArray<Package>, file: string): Package | undefined =>
-  Option.getOrUndefined(Arr.findFirst(packages, (pkg) => pipe(file, Str.startsWith(`${pkg.dir}${sep}`)));
+  Option.getOrUndefined(Arr.findFirst(packages, (pkg) => pipe(file, Str.startsWith(`${pkg.dir}${sep}`))));
 
 /** A path as the messages show it: relative to `from`, with `/`. */
 const shown = (from: string, file: string): string => Arr.join(Str.split(relative(from, file), sep), "/");
@@ -271,7 +271,9 @@ const manifestFaults = (next: string): ReadonlyArray<string> => {
       ...(m.scripts?.["typecheck"] === undefined ? [`${location}: no typecheck script`] : []),
       ...Arr.flatMap([...listed(m)], ([name, range]) => [
         ...(pipe(name, Str.endsWith("-old")) ? [`${location}: depends on ${name}, today's version`] : []),
-        ...(pipe(range, Str.startsWith("workspace:")) && !ours.has(name) && !(name === DESIGN && DESIGN_TAKERS.has(m.name))
+        ...(pipe(range, Str.startsWith("workspace:")) &&
+        !ours.has(name) &&
+        !(name === DESIGN && DESIGN_TAKERS.has(m.name))
           ? [`${location}: depends on ${name}, a workspace package outside next/`]
           : []),
       ]),
@@ -465,7 +467,7 @@ const reach = Effect.fnUntraced(function* (next: string, label: string, file: st
 const bundleFaults = Effect.fnUntraced(function* (next: string) {
   const all = yield* Effect.forEach(browserEntries(packagesIn(next)), ({ label, file }) => reach(next, label, file), {
     concurrency: "unbounded",
-    });
+  });
   return all.flat();
 });
 
@@ -504,11 +506,11 @@ describe("the real next/", () => {
       const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
       expect(Option.isSome(found)).toBe(true);
       const library = Option.getOrThrow(found);
-    const entry = exportAt(exportMap(library), "./gateway/Gateway");
-    expect(entry.kind, "P17a exports the library gateway front").toBe("file");
+      const entry = exportAt(exportMap(library), "./gateway/Gateway");
+      expect(entry.kind, "P17a exports the library gateway front").toBe("file");
       expect(yield* reach(NEXT, "@kampus/libfabrika/gateway/Gateway", entry.kind === "file" ? entry.file : "")).toEqual(
-      [],
-    );
+        [],
+      );
     }),
   );
   it.live("P11: libfabrika exports its required browser entry instead of silently skipping it", () =>
@@ -516,8 +518,8 @@ describe("the real next/", () => {
       const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
       expect(Option.isSome(found)).toBe(true);
       const library = Option.getOrThrow(found);
-    const entry = exportMap(library).get(".");
-    expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
+      const entry = exportMap(library).get(".");
+      expect(entry, "P11 adds libfabrika's browser-safe app entry").toBeDefined();
       expect(yield* reach(NEXT, "@kampus/libfabrika", entry!)).toEqual([]);
     }),
   );
@@ -540,13 +542,13 @@ describe("the real next/", () => {
       const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
       expect(Option.isSome(found)).toBe(true);
       const library = Option.getOrThrow(found);
-    const entry = exportAt(exportMap(library), "./ledger/Ledger");
-    expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
-    const file = entry.kind === "file" ? entry.file : "";
-    expect(existsSync(file), "the Ledger contract file exists").toBe(true);
+      const entry = exportAt(exportMap(library), "./ledger/Ledger");
+      expect(entry.kind, "libfabrika exports the Ledger contract").toBe("file");
+      const file = entry.kind === "file" ? entry.file : "";
+      expect(existsSync(file), "the Ledger contract file exists").toBe(true);
       const { loaded, output } = yield* bundleContents(NEXT, file);
-    expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
-    expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
+      expect(loaded, "the bundle loaded its entry").toContain(shown(NEXT, file));
+      expect(output, "the bundle kept its entry").toContain(shown(NEXT, file));
       expect(Arr.filter(loaded, (id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
       expect(Arr.filter(output, (id) => LEDGER_IMPLEMENTATION.includes(id))).toEqual([]);
     }),
@@ -857,24 +859,24 @@ describe("a module's front files and its internal/ in the exports map", () => {
 
 it.live("format: L12 desktop contracts bundle for a browser without their implementations", () =>
   Effect.gen(function* () {
-  // The three public contracts are a client import protocol. Loading one must not load its driver.
-  // After build plant: route a contract through BrainServiceManaged; this must fail even if all
-  // platform imports were tree-shaken from the emitted bytes.
-  const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
-  expect(Option.isSome(found)).toBe(true);
-  const library = Option.getOrThrow(found);
-  const implementation =
-    /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
+    // The three public contracts are a client import protocol. Loading one must not load its driver.
+    // After build plant: route a contract through BrainServiceManaged; this must fail even if all
+    // platform imports were tree-shaken from the emitted bytes.
+    const found = Arr.findFirst(packagesIn(NEXT), (pkg) => pkg.manifest.name === "@kampus/libfabrika");
+    expect(Option.isSome(found)).toBe(true);
+    const library = Option.getOrThrow(found);
+    const implementation =
+      /packages\/libfabrika\/src\/(?:desktop\/(?:BrainServiceManaged|internal\/)|node\/launchd\/|cloudflare\/)/;
 
-  for (const name of ["BrainService", "BrainControl", "BrainProbe"]) {
-    const entry = exportAt(exportMap(library), `./desktop/${name}`);
-    expect(entry.kind).toBe("file");
-    const file = entry.kind === "file" ? entry.file : "";
-    expect(existsSync(file)).toBe(true);
+    for (const name of ["BrainService", "BrainControl", "BrainProbe"]) {
+      const entry = exportAt(exportMap(library), `./desktop/${name}`);
+      expect(entry.kind).toBe("file");
+      const file = entry.kind === "file" ? entry.file : "";
+      expect(existsSync(file)).toBe(true);
       const { loaded, output } = yield* bundleContents(NEXT, file);
-    expect(loaded).toContain(shown(NEXT, file));
-    expect(Arr.filter(loaded, (path) => implementation.test(path))).toEqual([]);
-    expect(Arr.filter(output, (path) => implementation.test(path))).toEqual([]);
-  }
+      expect(loaded).toContain(shown(NEXT, file));
+      expect(Arr.filter(loaded, (path) => implementation.test(path))).toEqual([]);
+      expect(Arr.filter(output, (path) => implementation.test(path))).toEqual([]);
+    }
   }),
 );

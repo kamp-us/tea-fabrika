@@ -16,12 +16,12 @@
 // tuples are the brain's rows folded in the referee's order, and a permission's holders are the least
 // fixed point of its unions, so a loop alone holds nothing.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Result from "effect/Result";
 import * as Rec from "effect/Record";
-import * as Arr from "effect/Array";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { LedgerTransaction, type LedgerTurn } from "../ledger/LedgerTransaction.ts";
 import { type Entry, lineFor } from "../ledger/Log.ts";
@@ -156,6 +156,7 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
  */
 const walkHistory = (cells: ReadonlyArray<Cell>): ReadonlyArray<Written> => {
   const live: Array<{ subject: string; relation: string; object: string }> = [];
+
   return Arr.map(cells, (cell) => {
     const thing = choose(OBJECTS, cell.thing);
 

@@ -23,17 +23,17 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
-import * as Formatter from "effect/Formatter";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { String as Str } from "effect";
 import * as fc from "fast-check";
 import { processId } from "../Id.test-support.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -191,6 +191,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
+
 const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const granted = (
@@ -732,6 +733,7 @@ describe("p96, the stolen sheet race", () => {
               ],
               { concurrency: "unbounded" },
             ).pipe(Effect.provideService(References.MaxOpsBeforeYield, 3));
+
             expect(Arr.filter(answers, (a) => a._tag === "applied").length, `round ${round}`).toBe(1);
             const lost = Option.getOrUndefined(Arr.findFirst(answers, (a) => a._tag !== "applied"));
             expect(lost?._tag === "ignored" || lost?._tag === "refused", `round ${round}`).toBe(true);
@@ -806,59 +808,60 @@ const event: fc.Arbitrary<() => MemberEvent> = fc.oneof(
 describe("p96, write tells the truth over any history", () => {
   it.live("refused writes nothing and the fold skips it; an event that changes who belongs is applied", () =>
     Effect.gen(function* () {
-    let applied = 0;
-    let refused = 0;
+      let applied = 0;
+      let refused = 0;
       yield* promised(() =>
         fc.assert(
-      fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
-        Effect.runPromise(
-          Effect.gen(function* () {
-            const kept: Array<MemberEvent> = [FOUNDED];
-            yield* members;
+          fc.asyncProperty(fc.array(event, { minLength: 1, maxLength: 20 }), (makes) =>
+            Effect.runPromise(
+              Effect.gen(function* () {
+                const kept: Array<MemberEvent> = [FOUNDED];
+                yield* members;
 
-            for (const make of makes) {
-              const next = make();
-              const before = yield* entries;
-              const head = before.at(-1)?.rev ?? 0;
-              const answer = yield* write(next);
-              const after = yield* entries;
+                for (const make of makes) {
+                  const next = make();
+                  const before = yield* entries;
+                  const head = before.at(-1)?.rev ?? 0;
+                  const answer = yield* write(next);
+                  const after = yield* entries;
 
-              const changes =
-                Formatter.formatJson(view(foldAccess([...kept, next]))) !==
-                Formatter.formatJson(view(foldAccess(kept)));
-              expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
+                  const changes =
+                    Formatter.formatJson(view(foldAccess([...kept, next]))) !==
+                    Formatter.formatJson(view(foldAccess(kept)));
 
-              if (changes) {
-                expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
-              }
+                  expect(answer._tag, "no race, so nothing is ignored").not.toBe("ignored");
 
-              if (answer._tag === "refused") {
-                refused++;
-                expect(after.length, next._tag).toBe(before.length);
-                expect(changes, next._tag).toBe(false);
-              }
+                  if (changes) {
+                    expect(answer, next._tag).toEqual({ _tag: "applied", rev: expect.any(Number) });
+                  }
 
-              if (answer._tag === "applied") {
-                applied++;
-                const placed = Option.getOrUndefined(Arr.findFirst(after, (e) => e.rev === answer.rev));
-                expect(placed?.id, next._tag).toBe(eventId(next));
+                  if (answer._tag === "refused") {
+                    refused++;
+                    expect(after.length, next._tag).toBe(before.length);
+                    expect(changes, next._tag).toBe(false);
+                  }
 
-                if (answer.rev > head) {
-                  kept.push(next);
+                  if (answer._tag === "applied") {
+                    applied++;
+                    const placed = Option.getOrUndefined(Arr.findFirst(after, (e) => e.rev === answer.rev));
+                    expect(placed?.id, next._tag).toBe(eventId(next));
+
+                    if (answer.rev > head) {
+                      kept.push(next);
+                    }
+                  }
                 }
-              }
-            }
 
-            expect(view(yield* members)).toEqual(view(foldAccess(kept)));
-          }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
+                expect(view(yield* members)).toEqual(view(foldAccess(kept)));
+              }).pipe(Effect.provide(fresh().pipe(onSql, clientsOn))),
+            ),
+          ),
+          // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
+          { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
         ),
-      ),
-      // The law counts more than 60 applied and 60 refused writes, so a pull request runs all 60.
-      { seed: SEED, numRuns: runsFor({ fast: 60, full: 60 }) },
-        ),
-    );
-    expect(applied).toBeGreaterThan(60);
-    expect(refused).toBeGreaterThan(60);
+      );
+      expect(applied).toBeGreaterThan(60);
+      expect(refused).toBeGreaterThan(60);
     }),
   );
 });

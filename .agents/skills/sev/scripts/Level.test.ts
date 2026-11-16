@@ -81,6 +81,7 @@ describe("fold", () => {
       }
 
       const folded = Level.fold(entries);
+
       return (
         Result.isSuccess(folded) &&
         folded.success._tag === "open" &&

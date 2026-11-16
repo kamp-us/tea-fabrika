@@ -21,70 +21,70 @@ describe("P11 real counter laws", () => {
   it.live("Program.make keeps the exported machine and uses its own schemas", () =>
     Effect.gen(function* () {
       const { counter, counterMachine } = yield* Effect.promise(() => import("./program.ts"));
-    fc.assert(
-      fc.property(fc.integer(), fc.constantFrom("inc", "dec", "reset"), (count, type) => {
-        expect(counter.machine).toBe(counterMachine);
-        expect(counter.state.schema).toBe(counterMachine.model);
-        expect(counter.msg).toBe(counterMachine.msg);
-        expect(counter.view.data).toBe(Schema.Json);
-        expectTypeOf(counter.view.select({ count }).count).toEqualTypeOf<number>();
-        expect(counter.view.select({ count })).toEqual({ count });
-        expect(counter.wake({ count })).toBeNull();
-        const port = counter.inputs[type];
-        expect(port.personOnly).toBe(false);
-        expect(Str.trim(port.description).length).toBeGreaterThan(0);
-        expect(Schema.decodeSync(port.schema)({ type })).toEqual({ type });
-      }),
-      { seed: SEED, numRuns: 100 },
-    );
+      fc.assert(
+        fc.property(fc.integer(), fc.constantFrom("inc", "dec", "reset"), (count, type) => {
+          expect(counter.machine).toBe(counterMachine);
+          expect(counter.state.schema).toBe(counterMachine.model);
+          expect(counter.msg).toBe(counterMachine.msg);
+          expect(counter.view.data).toBe(Schema.Json);
+          expectTypeOf(counter.view.select({ count }).count).toEqualTypeOf<number>();
+          expect(counter.view.select({ count })).toEqual({ count });
+          expect(counter.wake({ count })).toBeNull();
+          const port = counter.inputs[type];
+          expect(port.personOnly).toBe(false);
+          expect(Str.trim(port.description).length).toBeGreaterThan(0);
+          expect(Schema.decodeSync(port.schema)({ type })).toEqual({ type });
+        }),
+        { seed: SEED, numRuns: 100 },
+      );
     }),
   );
   it.live("S2 plant, lose saved count: every JSON cut preserves every later model and Cmd", () =>
     Effect.gen(function* () {
       const { counter } = yield* Effect.promise(() => import("./program.ts"));
       const { syncTest }: typeof import("@kampus/libfabrika/testing") = yield* Effect.promise(() => import(TESTING));
-    fc.assert(
-      fc.property(msgs, (list) => {
-        syncTest(
-          counter.machine,
-          {},
-          {
-            msgs: list,
-            encode: Schema.encodeSync(counter.state.schema),
-            decode: Schema.decodeUnknownSync(counter.state.schema),
-            equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
-            seed: SEED,
-          },
-        );
-      }),
-      { seed: SEED, numRuns: 100 },
-    );
+      fc.assert(
+        fc.property(msgs, (list) => {
+          syncTest(
+            counter.machine,
+            {},
+            {
+              msgs: list,
+              encode: Schema.encodeSync(counter.state.schema),
+              decode: Schema.decodeUnknownSync(counter.state.schema),
+              equals: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
+              seed: SEED,
+            },
+          );
+        }),
+        { seed: SEED, numRuns: 100 },
+      );
     }),
   );
   it.live("plant, break an update: inc, dec and reset obey arithmetic at every tea step", () =>
     Effect.gen(function* () {
       const { counter } = yield* Effect.promise(() => import("./program.ts"));
-    propertyInvariant(
-      counter.machine,
-      {},
-      msgs,
-      ({
-        prev,
-        msg,
-        next,
-        cmds,
-      }: {
-        prev: { count: number };
-        msg: { type: string };
-        next: { count: number };
-        cmds: ReadonlyArray<unknown>;
-      }) => {
-        const expected = msg.type === "inc" ? prev.count + 1 : msg.type === "dec" ? prev.count - 1 : 0;
+      propertyInvariant(
+        counter.machine,
+        {},
+        msgs,
+        ({
+          prev,
+          msg,
+          next,
+          cmds,
+        }: {
+          prev: { count: number };
+          msg: { type: string };
+          next: { count: number };
+          cmds: ReadonlyArray<unknown>;
+        }) => {
+          const expected = msg.type === "inc" ? prev.count + 1 : msg.type === "dec" ? prev.count - 1 : 0;
 
-        return next.count === expected && cmds.length === 0;
-      },
-      { seed: SEED, numRuns: 100 },
-    );
+          return next.count === expected && cmds.length === 0;
+        },
+        { seed: SEED, numRuns: 100 },
+      );
     }),
   );
   it.effect.prop(
@@ -96,18 +96,22 @@ describe("P11 real counter laws", () => {
         (value) =>
           Effect.gen(function* () {
             const { counter } = yield* Effect.promise(() => import("./program.ts"));
+
             const { Program, ProgramLoader }: typeof import("@kampus/libfabrika") = yield* Effect.promise(
               () => import(LIBRARY),
             );
+
             // P40: the core pack is `fabrika`, so the counter's identity is `fabrika/counter` (0083).
             expect(Schema.decodeSync(Program.schema)(counter)).toMatchObject({
               name: "fabrika/counter",
               state: { v: 1 },
               writes: {},
             });
+
             const p = yield* Effect.gen(function* () {
-                return (yield* (yield* ProgramLoader).load("fabrika/counter")).stepper;
+              return (yield* (yield* ProgramLoader).load("fabrika/counter")).stepper;
             }).pipe(Effect.provide(ProgramLoader.layer({ "fabrika/counter": counter }, {})));
+
             const boot = p.init(null);
             expect(boot).toMatchObject({ _tag: "stepped", view: { count: 0 }, cmds: [] });
 

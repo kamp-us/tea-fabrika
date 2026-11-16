@@ -1,13 +1,14 @@
 // next/, ticket 887, P21 slice 1. Each plant named here runs after Menu.ts exists.
 import { arbGuidedSequence, foldEvents, propertyInvariant, propertyTrace } from "@demlik/tea/pbt";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
-import { pipe, String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Declarations from "../settings/Declarations.ts";
 import * as Test from "./Menu.test-support.ts";
@@ -28,11 +29,13 @@ const waiting = (s: Test.Model) =>
   Arr.filter(Menu.view(s), (i): i is Extract<typeof Menu.Item.Type, { _tag: "waiting" }> => i._tag === "waiting");
 
 const safe = (s: string) => Str.replace(/[\p{Cc}\p{Cf}]/gu, "")(s);
+
 // pinned: amendment A-Lint uses the existing brain-line text cap, in UTF-16 code units.
 const labelLimit = 256;
 
 const displayed = (raw: string) => {
   const cut = Str.slice(0, labelLimit)(safe(raw));
+
   return /[\uD800-\uDBFF]$/.test(cut) ? Str.slice(0, -1)(cut) : cut;
 };
 
@@ -40,6 +43,7 @@ const hasLabel = (words: string, raw: string) => {
   const clean = safe(raw);
   const shown = displayed(raw);
   const next = Str.codePointAt(clean, shown.length);
+
   return (
     !/[\uD800-\uDFFF]/u.test(words) &&
     Str.includes(shown)(words) &&
@@ -129,6 +133,7 @@ it("L2: the signature keeps the clicked row, capabilities and act across later r
           msg.type === "approve"
             ? Option.getOrUndefined(Arr.findFirst(prev.rows, (r) => r.key === msg.key))
             : Option.getOrUndefined(Arr.findFirst(prev.clients, (c) => c.key === msg.key && !c.own));
+
         return (
           shown === undefined ||
           (next._tag === "checking" &&
@@ -389,6 +394,7 @@ it.effect.prop(
         Arr.map(bytes, (b) => Str.padStart(2, "0")(b.toString(16))),
         "",
       )}`;
+
       const raw = new TextEncoder().encode(secret);
       const digest = yield* Digest.Digest;
       const hash = yield* digest.digestHex(Digest.sha256, raw);
@@ -452,6 +458,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         }
 
         const rank = { status: 0, empty: 1, waiting: 1, client: 2, action: 3 };
+
         const keys = Arr.map(items, (i) =>
           i._tag === "action" ? `action:${i.id}` : i._tag === "waiting" || i._tag === "client" ? i.key : i._tag,
         );
@@ -475,6 +482,7 @@ it("L8: equal models give ordered unique items, empty is explicit, and state is 
         }
 
         const status = Option.getOrUndefined(Arr.findFirst(items, (i) => i._tag === "status"));
+
         const statusWords = {
           connecting: /connect|starting/i,
           online: /running|online|connected/i,

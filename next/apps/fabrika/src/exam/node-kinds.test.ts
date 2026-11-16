@@ -7,9 +7,9 @@
 // and exam-paths.json class them.
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, matchesGlob } from "node:path";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 

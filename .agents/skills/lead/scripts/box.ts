@@ -38,7 +38,9 @@ const services = (main: string) =>
   ).pipe(Layer.provideMerge(NodeServices.layer));
 
 const [command, ...rest] = process.argv.slice(2);
+
 const name = rest[0] ?? "";
+
 const { MAIN: main, BOXES: boxes } = process.env;
 
 const program =

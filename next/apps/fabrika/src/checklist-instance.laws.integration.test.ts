@@ -37,13 +37,13 @@ import {
 } from "@kampus/libfabrika/workers/runtime";
 import { tezgah } from "@kampus/tezgah";
 import { runsFor } from "@kampus/vitest";
+import { Array as Arr, String as Str } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { Array as Arr, String as Str } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { programs as built } from "virtual:fabrika-built";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -731,7 +731,7 @@ describe("L13: notices name their process", () => {
                         seen: 0,
                       }),
                     );
-                    const refused = Str.includes('"refused"')(JSON.stringify(answer));
+                    const refused = Str.includes('"refused"')(Formatter.formatJson(answer));
                     seen.refused += refused ? 1 : 0;
 
                     if (!refused) {
@@ -761,7 +761,7 @@ describe("L13: notices name their process", () => {
                     without(Object(theirs[i]!.news)),
                   );
                   seen[news.method === "view.whole" ? "whole" : "patch"]++;
-                  seen.arrays += Str.includes('"/items/')(JSON.stringify(news.params)) ? 1 : 0;
+                  seen.arrays += Str.includes('"/items/')(Formatter.formatJson(news.params)) ? 1 : 0;
                 }
               }),
             ),

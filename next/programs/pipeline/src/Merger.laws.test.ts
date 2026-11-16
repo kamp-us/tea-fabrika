@@ -6,12 +6,12 @@ import * as CiTest from "@kampus/libfabrika/ci/CiTest";
 import { Change, Commit, Merged, Tree, Updated } from "@kampus/libfabrika/codehost/CodeHost";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { Saved } from "@kampus/libfabrika/runtime/State";
+import { Array as Arr, Record as Rec, String as Str } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { Array as Arr, Record as Rec, String as Str } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as ChangeKind from "./Change.ts";
 import * as Mail from "./Mail.ts";
@@ -84,6 +84,7 @@ const settingsFor = (w: World) =>
   );
 
 const id = (w: World, char: string) => Schema.decodeSync(Commit)(Str.repeat(w.size)(char));
+
 const tree = (w: World, char: string) => Schema.decodeSync(Tree)(Str.repeat(w.size)(char));
 
 const land = (w: World) => Mail.Land.make({ type: "land", ref: w.ref, change: 1, head: id(w, "a"), reply: "queue" });
@@ -684,9 +685,11 @@ describe("the merger, next/", () => {
                 check: () => true,
                 run: (m, { p, w }) => {
                   const prev = m.model;
+
                   const active = Option.getOrUndefined(
                     Arr.findFirst(m.current, (c) => service(c) && "attempt" in c && c.attempt === prev.attempt),
                   );
+
                   const late = Arr.filter(
                     m.history,
                     (c) =>

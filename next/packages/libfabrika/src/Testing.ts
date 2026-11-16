@@ -4,8 +4,8 @@
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
 import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
-import * as Result from "effect/Result";
 import * as Arr from "effect/Array";
+import * as Result from "effect/Result";
 
 type Options<S, M> = {
   readonly msgs: ReadonlyArray<M>;
@@ -102,6 +102,7 @@ export const senderTest = ({ inputs, expected, writes, owner, seed }: SenderOpti
   const fail = (message: string): never => {
     throw new Error(`senderTest (seed ${seed}): ${message}`);
   };
+
   const senders = new Map(Arr.map(inputs, (input) => [input.parent, input.by]));
   const ids = new Set(Arr.map(expected, (e) => e.id));
 

@@ -7,6 +7,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -16,7 +17,6 @@ import * as Scope from "effect/Scope";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
 import * as SessionSenders from "../access/SessionSenders.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -107,6 +107,7 @@ export const databases = Effect.gen(function* () {
     discard: true,
     concurrency: 1,
   });
+
   const open = () => Arr.filter([...held.values()], (ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
 
   const data = (sql: Sql) =>

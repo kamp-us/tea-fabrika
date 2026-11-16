@@ -1,17 +1,18 @@
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
 import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Rec from "effect/Record";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 
 type Format = "sha1" | "sha256";
 
@@ -463,6 +464,7 @@ export const make = Effect.fnUntraced(function* () {
       const store = Option.getOrUndefined(
         Arr.findFirst([...stores.values()], (s) => path.join(s.directory, "objects") === objects),
       );
+
       // A borrowed object store in a throwaway bare folder: no refs, no config of its own.
       return store === undefined
         ? null
@@ -515,6 +517,7 @@ export const make = Effect.fnUntraced(function* () {
           Arr.findFirst([...worktrees.values()], (w) => w.store === store),
           { onNone: () => store.head, onSome: (w) => w.head },
         );
+
   /** A remote's configured address; a name with none is read as a path, as git reads it. */
   const resolveRemote = (place: Place | null, remote: string) => place?.config.get(`remote.${remote}.url`) ?? remote;
 
@@ -543,6 +546,7 @@ export const make = Effect.fnUntraced(function* () {
 
   const unsupported = (args: ReadonlyArray<string>) =>
     Effect.die(new Error(`git memory: unsupported command: git ${Arr.join(args, " ")}`));
+
   const signature = (env: Record<string, string | undefined>, role: "AUTHOR" | "COMMITTER") =>
     `${env[`GIT_${role}_NAME`] ?? "fixture"} <${env[`GIT_${role}_EMAIL`] ?? "fixture@example.invalid"}> ${clock} +0000`;
 
@@ -576,16 +580,19 @@ export const make = Effect.fnUntraced(function* () {
   const commands: Record<string, Run> = {
     init: Effect.fnUntraced(function* (args, cwd) {
       const { set, rest } = flags(args, ["--bare", "-q", "--quiet"]);
+
       const format = pipe(
         Arr.findFirst(rest, (a) => pipe(a, Str.startsWith("--object-format="))),
         Option.map(Str.slice(16)),
         Option.getOrElse(() => "sha1"),
       );
+
       const branch = pipe(
         Arr.findFirst(rest, (a) => pipe(a, Str.startsWith("--initial-branch="))),
         Option.map(Str.slice(17)),
         Option.getOrElse(() => "master"),
       );
+
       const target = Arr.filter(rest, (a) => !pipe(a, Str.startsWith("--")));
 
       if (!set.has("--bare") || target.length !== 1 || (format !== "sha1" && format !== "sha256")) {
@@ -786,8 +793,10 @@ export const make = Effect.fnUntraced(function* () {
 
       const id = yield* commitNow(worktree.store, tree, parent === null ? [] : [parent], rest[1] ?? "", env);
       advance(worktree, id);
+
       const name =
         "ref" in worktree.head ? pipe(worktree.head.ref, Str.replace(/^refs\/heads\//, "")) : "detached HEAD";
+
       return answer(0, set.has("-q") ? "" : `[${name} ${pipe(id, Str.slice(0, 7))}] ${rest[1] ?? ""}\n`);
     }),
     revert: Effect.fnUntraced(function* (args, _cwd, env, here) {
@@ -853,6 +862,7 @@ export const make = Effect.fnUntraced(function* () {
       );
 
       advance(worktree, id);
+
       return answer(0, `[${pipe(id, Str.slice(0, 7))}] Revert "${subject}"\n`);
     }),
     checkout: Effect.fnUntraced(function* (args, _cwd, _env, here) {
@@ -953,6 +963,7 @@ export const make = Effect.fnUntraced(function* () {
       const linked: Worktree = { root, store: worktree.store, head: { commit: target }, index: new Map() };
       worktrees.set(root, linked);
       yield* switchTree(linked, flatten(worktree.store, readCommit(worktree.store, target)?.tree ?? ""), true);
+
       return answer(0, "", `Preparing worktree (detached HEAD ${pipe(target, Str.slice(0, 7))})\n`);
     }),
     push: Effect.fnUntraced(function* (args, cwd, _env, here) {
@@ -1215,6 +1226,7 @@ export const make = Effect.fnUntraced(function* () {
 
   const run = Effect.fnUntraced(function* (command: ChildProcess.StandardCommand) {
     const words = Arr.filter(command.args, Predicate.isString);
+
     const env = Rec.fromEntries(
       Arr.filter(
         Rec.toEntries(command.options.env ?? {}),

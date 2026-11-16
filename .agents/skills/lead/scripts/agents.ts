@@ -22,17 +22,17 @@
 import type { NodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
+import { Array as Arr, String as Str, pipe } from "effect";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, String as Str, pipe } from "effect";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
 
@@ -188,6 +188,7 @@ const pnpmInstall: Install = (folder) =>
       ],
       { concurrency: 3 },
     );
+
     return { code: Number(code), said: Arr.join(pipe(`${out}${err}`, Str.trim, Str.split("\n")).slice(-5), " | ") };
   }).pipe(
     Effect.scoped,
@@ -205,6 +206,7 @@ export const adaptersReady = (modules: string = ADAPTERS, install: Install = pnp
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = pipe(modules, Str.replace(/\/$/, ""));
+
     const missing = Effect.filter(ADAPTER_SCRIPTS, (s) =>
       fs.exists(`${root}/${s}`).pipe(
         Effect.map((here) => !here),
@@ -312,6 +314,7 @@ const ALONE = /^\{[\s\S]*\}$/;
  */
 export const closingWords = (closing: readonly string[]): string => {
   const last = closing.at(-1) ?? "";
+
   return ALONE.test(Str.trim(last)) ? Arr.join(closing, "\n\n") : last;
 };
 
@@ -592,6 +595,7 @@ export const stepRow = (r: RowAsk): string => {
     const sign = offset >= 0 ? "+" : "-";
     const pad = (n: number) => pipe(String(Math.abs(n)), Str.padStart(2, "0"));
     const shifted = pipe(DateTime.formatIso(DateTime.makeUnsafe(d.getTime() + offset * 60_000)), Str.slice(0, 19));
+
     return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
   };
 

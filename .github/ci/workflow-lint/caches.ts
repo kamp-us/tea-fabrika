@@ -51,6 +51,7 @@ export const lintCaches = (files: CacheFiles): string[] => {
       errors.push(reason);
     }
   };
+
   const parsed = Result.try(() => ({
     action: map(parse(files.action)),
     workspace: map(parse(files.workspace)),

@@ -3,14 +3,15 @@
 // `.integration.` and runs on main's full run only (0584).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -82,6 +83,7 @@ const session = (
               [Stream.mkString(Stream.decodeText(child.stdout)), Stream.runDrain(child.stderr), child.exitCode],
               { concurrency: "unbounded" },
             );
+
             return { code, out: pipe(out, Str.replaceAll(root, "<root>")) };
           }),
         );
@@ -219,6 +221,7 @@ describe("0535 memory git contract", () => {
     "every generated session answers alike on memory git and real git: codes, ids, trees and the files on disk",
     () => {
       const [memory, real] = GitLaws.gits;
+
       return fc.assert(
         fc.asyncProperty(
           fc.constantFrom("sha1" as const, "sha256" as const),

@@ -1,13 +1,13 @@
 import { posix } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { layer } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
-import { layer } from "@effect/vitest";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { load, reached, scriptReads } from "./script-reads.mjs";
@@ -47,6 +47,7 @@ const build = ({ skills, tests, form }: Model) => {
   const files = Arr.flatMap(skills, (scripts, s) =>
     Arr.map(scripts, (edges, i) => ({ path: `.agents/skills/s${s}/scripts/s${s}file${i}.sh`, edges })),
   );
+
   const edges = Arr.map(files, (f) => [...new Set(Arr.map(f.edges, (n) => n % files.length))]);
   const tree = new Map<string, string>();
   Arr.forEach(files, (file, i) => {
@@ -176,6 +177,7 @@ describe("reached", () => {
           // From the top a path starts with a name; a relative one starts with `./` or `../`.
           const text = top ? Arr.join(["x", ...segments], "/") : `${ups === 0 ? "./" : ""}${Arr.join(segments, "/")}`;
           const stack = top ? walk([], ["x", ...segments]) : walk(posix.dirname(script).split("/"), segments);
+
           return { text, path: Arr.join(stack, "/"), file: name !== null, above: stack[0] === ".." };
         });
 
@@ -199,12 +201,15 @@ describe("reached", () => {
             Arr.map(({ path }) => path),
           ),
         );
+
         const got = reached(new Map(tree).set(test, `"${posix.basename(script)}"`), (path) => files.has(path), test);
+
         const want = pipe(
           named,
           Arr.filter(({ file, above }) => file && !above),
           Arr.map(({ path }) => path),
         );
+
         expect(new Set(got.keys())).toEqual(new Set([script, ...want]));
       }),
       options,
@@ -239,6 +244,7 @@ describe("reached", () => {
       [".agents/skills/a/scripts/box.ts", ""],
       [".agents/skills/a/scripts/box.test.ts", 'const box = join(import.meta.dirname, "box.sh");'],
     ]);
+
     expect(Rec.fromEntries(reached(tree, none, ".agents/skills/a/scripts/box.test.ts"))).toEqual({
       ".agents/skills/a/scripts/box.sh": ".agents/skills/a/scripts/box.test.ts",
       ".agents/skills/a/scripts/env.sh": ".agents/skills/a/scripts/box.sh",
@@ -275,6 +281,7 @@ describe("reached", () => {
       [".agents/skills/a/scripts/b.sh", 'sh "$(dirname "$0")/a.sh"'],
       [".agents/skills/a/scripts/a.test.ts", '"a.sh"'],
     ]);
+
     expect(Rec.fromEntries(reached(tree, none, ".agents/skills/a/scripts/a.test.ts"))).toEqual({
       ".agents/skills/a/scripts/a.sh": ".agents/skills/a/scripts/a.test.ts",
       ".agents/skills/a/scripts/b.sh": ".agents/skills/a/scripts/a.sh",
@@ -348,6 +355,7 @@ describe("scriptReads", () => {
       fc.property(fc.array(line, { maxLength: 6 }), (lines) => {
         const targets = ["./run.sh", "../../b/scripts/env.sh", "../../../../exam-paths.json", "./sub/x.ts"];
         const test = ".agents/skills/a/scripts/run.test.ts";
+
         const source = pipe(
           lines,
           Arr.map(({ target, form, fixture }, n) => {
@@ -357,11 +365,13 @@ describe("scriptReads", () => {
           }),
           Arr.join("\n"),
         );
+
         const want = pipe(
           lines,
           Arr.filter(({ form, fixture }) => form < 2 && fixture === null),
           Arr.map(({ target }) => ({ test, path: posix.join(posix.dirname(test), targets[target]!) })),
         );
+
         expect(scriptReads(new Map([[test, source]]), none, () => "").raw).toEqual(want);
       }),
       options,
@@ -373,6 +383,7 @@ describe("scriptReads", () => {
       fc.property(model, fc.array(fc.nat({ max: 19 }), { maxLength: 4 }), (input, named) => {
         const { files, tree, expected } = build(input);
         const tools = new Set(Arr.map(named, (n) => files[n % files.length]!.path));
+
         // Each skill's tool table, plus a basename inside a longer word, which names no tool.
         const prose = (skill: string) =>
           pipe(
@@ -383,12 +394,15 @@ describe("scriptReads", () => {
             ),
             Arr.join("\n"),
           );
+
         const reach = new Set(Arr.flatMap([...expected.values()], (paths) => [...paths]));
+
         const want = pipe(
           files,
           Arr.map((f) => f.path),
           Arr.filter((path) => !reach.has(path) && !tools.has(path)),
         );
+
         expect(scriptReads(tree, none, prose).unreached).toEqual(want);
       }),
       options,

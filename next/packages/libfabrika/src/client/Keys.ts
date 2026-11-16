@@ -12,10 +12,11 @@
  * row writes `mod` for the backend's command key (Cmd on a Mac, Ctrl elsewhere) and `<prefix>` for
  * a key pressed after the prefix.
  */
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import type { Binding } from "../runtime/Program.ts";
 import type { Hello } from "../transport/Wire.ts";
 import type { Prefix } from "./Prefix.ts";
@@ -226,5 +227,6 @@ export const spell = (e: {
   // itself, lower case, and Shift is said.
   const shift = e.shiftKey && (named !== null || mods.length > 0) ? ["shift"] : [];
   const base = named ?? (mods.length > 0 ? Str.toLowerCase(e.key) : e.key);
+
   return Arr.join([...mods, ...shift, base], "+");
 };

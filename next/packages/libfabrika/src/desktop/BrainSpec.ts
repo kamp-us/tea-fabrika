@@ -13,7 +13,8 @@ const Home = Absolute.check(
   Schema.makeFilter(
     (value) =>
       value === "/" ||
-      (!Str.endsWith("/")(value) && !Arr.some(Str.split("/")(value).slice(1), (s) => s === "" || s === "." || s === "..")),
+      (!Str.endsWith("/")(value) &&
+        !Arr.some(Str.split("/")(value).slice(1), (s) => s === "" || s === "." || s === "..")),
     { expected: "a canonical absolute home" },
   ),
 );

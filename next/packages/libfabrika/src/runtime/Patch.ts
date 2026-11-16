@@ -2,11 +2,11 @@
  * View patches: the RFC 6902 operations that turn one JSON view into the next. A watcher gets the
  * whole view once, then a patch per step. Pure, and it never changes its inputs.
  */
+import { pipe } from "effect";
+import * as Arr from "effect/Array";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import { pipe } from "effect";
 
 /**
  * One RFC 6902 operation. `add`, `remove` and `replace` are all a view diff needs.

@@ -55,20 +55,13 @@ const at = (name: string) => `next/packages/libfabrika/src/data/${name}.ts`;
 const UNUSED = at("unused");
 
 const all = await plant({
-    ...Rec.fromEntries(
-      Arr.map(Rec.toEntries(CASES), ([name, [comment, line]]) => [
-        at(name),
-        Arr.join([...PRELUDE, comment, line], "\n"),
-      ]),
-    ),
-    [UNUSED]: Arr.join(
-      [
-        ...PRELUDE,
-        "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below",
-        "export const a = 1;",
-  ],
-      "\n",
-    ),
+  ...Rec.fromEntries(
+    Arr.map(Rec.toEntries(CASES), ([name, [comment, line]]) => [at(name), Arr.join([...PRELUDE, comment, line], "\n")]),
+  ),
+  [UNUSED]: Arr.join(
+    [...PRELUDE, "// oxlint-disable-next-line fabrika/no-promises -- edge: nothing fires below", "export const a = 1;"],
+    "\n",
+  ),
 });
 
 describe("edge-comment", () => {
@@ -110,4 +103,3 @@ describe("edge-comment", () => {
     expect(all(CODE, UNUSED)).toEqual([]);
   });
 });
-

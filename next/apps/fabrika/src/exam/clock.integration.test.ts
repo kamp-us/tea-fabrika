@@ -48,10 +48,10 @@ const clean = Arr.join(
 );
 
 const all = await plant({
-    [VIEW]: view,
-    [CLEAN]: clean,
-    [PLAIN]: "export const now = () => Date.now();",
-    "next/packages/tuval/src/window/view.test.tsx": view,
+  [VIEW]: view,
+  [CLEAN]: clean,
+  [PLAIN]: "export const now = () => Date.now();",
+  "next/packages/tuval/src/window/view.test.tsx": view,
 });
 
 describe("the clock in a view", () => {

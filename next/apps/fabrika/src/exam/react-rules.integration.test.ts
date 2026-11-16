@@ -41,9 +41,9 @@ const passes = Arr.join(
 );
 
 const all = await plant({
-    [FIRES]: fires,
-    [PASSES]: passes,
-    "next/packages/tuval/src/window/fires.test.tsx": fires,
+  [FIRES]: fires,
+  [PASSES]: passes,
+  "next/packages/tuval/src/window/fires.test.tsx": fires,
 });
 
 describe("React's rules in next/", () => {

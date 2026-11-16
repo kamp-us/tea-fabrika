@@ -1,7 +1,7 @@
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
 import { Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
 // Desk S4, next/ (the desk program fabrika/tezgah, ticket named by its title): law L33 of the approved
 // plan (docs/plan/quests/desk-PLAN.md), and the slice's shots. Written before a window folds. Starts the
 // real `dev.ts` in its own temp home on its own port and drives headless Chromium: a 1440x900 tab

@@ -5,15 +5,15 @@ import { Outcome } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import { Chaos, type Handler, type Incoming, Nemesis, type ProgramRunner, type Update } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
+import { Array as Arr, String as Str } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Formatter from "effect/Formatter";
-import { Array as Arr, String as Str } from "effect";
 import { chaos } from "./program.ts";
 
 const SEED = 119120;
@@ -190,6 +190,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.due(deadline);
                 const allowed = registered === chaos.name;
                 expect(calls).toHaveLength(allowed ? 1 : 0);
+
                 const answers = Arr.filter(yield* world.letters(NAME), (letter) =>
                   Schema.is(Schema.Struct({ type: Schema.Literals(["fire_ok", "fire_err"]) }))(letter.m),
                 );
@@ -276,9 +277,11 @@ export const suite = (open: Open, checklist: unknown) =>
               Effect.gen(function* () {
                 const request = Schema.decodeUnknownSync(fireRequest)(raw);
                 const saved = yield* world.snapshot(NAME);
+
                 const installed = Option.getOrUndefined(
                   Arr.findFirst(yield* world.letters(NAME), (letter) => letter.rev === saved.after),
                 );
+
                 observations.push({
                   request,
                   model: phase(saved.model),
@@ -381,9 +384,11 @@ export const suite = (open: Open, checklist: unknown) =>
               Array.from({ length: input.most }, (_, i) => [experimentId, i + 1]),
             );
             const letters = yield* world.letters(NAME);
+
             const answers = Arr.filter(letters, (l) =>
               Schema.is(Schema.Struct({ type: Schema.Literal("fire_ok") }))(l.m),
             );
+
             expect(answers).toHaveLength(input.most);
             const timers = Arr.filter(letters, (l) => Schema.is(Schema.Struct({ type: Schema.Literal("timer") }))(l.m));
             expect(timers).toHaveLength(input.most);
@@ -518,6 +523,7 @@ export const suite = (open: Open, checklist: unknown) =>
               Arr.filter(calls, (ordinal) => !uncertain || ordinal !== input.ordinal),
             );
             const letters = yield* world.letters(NAME);
+
             const result = Arr.filter(
               Arr.map(letters, (l) => l.m),
               (m) => Schema.is(Schema.Struct({ cmd: Schema.Struct({ ordinal: Schema.Literal(input.ordinal) }) }))(m),
@@ -721,9 +727,11 @@ export const suite = (open: Open, checklist: unknown) =>
                   expect(after.phase.experiment.asked).toEqual(current.phase.experiment.asked);
                   expect(after.phase.experiment.schedule).toEqual(current.phase.experiment.schedule);
                   expect(after.phase.experiment.answers).toHaveLength(current.phase.experiment.answers.length + 1);
+
                   const answer = Option.getOrUndefined(
                     Arr.findFirst(after.phase.experiment.answers, (a) => a.ordinal === input.ordinal),
                   );
+
                   expect(answer?.result._tag).toBe(outcome === "off" || outcome === "failed" ? "failed" : "answered");
                 }
 
@@ -756,6 +764,7 @@ export const suite = (open: Open, checklist: unknown) =>
                 (c) => c.ordinal,
               ),
             ).toEqual(Array.from({ length: delivery === "replaced" ? input.most : 0 }, (_, n) => n + 1));
+
             const late = Arr.filter(yield* world.letters(NAME), (letter) =>
               Schema.is(
                 Schema.Struct({
@@ -899,6 +908,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
               yield* runner.due(deadline);
               const letters = yield* world.letters(NAME);
+
               const answers = Arr.filter(
                 letters,
                 (l) =>
@@ -910,6 +920,7 @@ export const suite = (open: Open, checklist: unknown) =>
 
               const view = (yield* runner.open("shown")).view;
               const report = yield* world.check(binding);
+
               const reasons = Arr.map(
                 answers,
                 (a) =>

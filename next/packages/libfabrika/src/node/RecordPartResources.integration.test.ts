@@ -2,15 +2,15 @@
 // folder they acquire (0061). The laws watch the real handles, files and finalizer order.
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
 import type { Sql } from "../Sql.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 import * as RecordPartSupport from "./RecordPart.test-support.ts";
@@ -46,6 +46,7 @@ const watched = () => {
   const opened = () => Arr.flatMap(events, (e) => (e.step === "opened" ? [e.db] : []));
   const closes = (db: unknown) => Arr.filter(events, (e) => e.step === "closed" && e.db === db).length;
   const folders = () => Arr.flatMap(events, (e) => (e.step === "folder" ? [e.path] : []));
+
   const released = Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
 

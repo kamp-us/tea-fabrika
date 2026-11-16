@@ -34,11 +34,12 @@
 // answer, whoever it names.
 import { applyCell, type Cmd } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { fcTypeId } from "../tasks/TasksTest.ts";
 import {
@@ -428,6 +429,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
 
     if (forge !== null) {
       const theirs = Option.getOrUndefined(Arr.findFirst(w.door.all(), (j) => j.request.target === OTHER));
+
       const forged =
         forge === "other" && theirs !== undefined
           ? rpc({ id: call.id, result: w.door.assignedTo(theirs.request.id, OTHER) })
@@ -498,6 +500,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 8,
         run: () => {
           w.waiting = Arr.filter(w.waiting, (x) => x !== c);
+
           return c === undefined ? null : settle(c, cell);
         },
       });
@@ -522,6 +525,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
           }
 
           w.wire = Arr.filter(w.wire, (x) => x !== call);
+
           return null;
         },
       });
@@ -532,6 +536,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     if (moves.forge && take !== undefined) {
       // Another key's assignment is offered only once the brain holds a task for that key.
       const theirs = Arr.some(w.door.all(), (j) => j.request.target === OTHER);
+
       const forges = theirs
         ? (["other", "idle", "refused", "not_allowed", "lacks_capability"] as const)
         : (["idle", "refused", "lacks_capability"] as const);
@@ -549,6 +554,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
         weight: 8,
         run: () => {
           w.parked = Arr.filter(w.parked, (x) => x !== call);
+
           return call === undefined ? null : frame(call.dial, rpc({ id: call.id, result: { rev: w.door.rev(KEY) } }));
         },
       });
@@ -763,6 +769,7 @@ const walk = (tape: Tape, moves: Moves, done: Set<string>) => {
     // with a `tasks.wait` after the list's rev, never a take that cannot succeed and never a poll:
     // a process with two open tasks, a task refused for good on this link at this rev, a held task.
     const listed = answered.get("tasks");
+
     const pointers = Arr.isArray(listed)
       ? Arr.map(listed, (p) => ({ id: text(record(p).get("id")), process: text(record(p).get("process")) }))
       : [];

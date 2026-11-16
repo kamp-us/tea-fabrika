@@ -223,15 +223,15 @@ describe("L3, absence gives the default, and an invalid present value never does
 
   it.live("vector: an empty environment and no files give every declared default", () =>
     Effect.gen(function* () {
-    // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
+      // vector: settings.md S3, "an empty file works": the empty provider decodes to every default.
       const exit = yield* promised(() => run(Declarations.all.parse(ConfigProvider.fromUnknown({}))));
-    expect(Exit.isSuccess(exit)).toBe(true);
+      expect(Exit.isSuccess(exit)).toBe(true);
 
-    if (Exit.isSuccess(exit)) {
-      expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
-    }
+      if (Exit.isSuccess(exit)) {
+        expect(Object.values(exit.value)).toEqual(Declarations.all.declarations.map((d) => d.default));
+      }
 
-    expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
+      expect(Declarations.all.declarations.map((d) => d.path)).toContain("instance.port");
     }),
   );
 });

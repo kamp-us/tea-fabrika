@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { it } from "@effect/vitest";
+import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 // P40 slice 1, next/. A program's identity is `pack/program`: exactly two segments, each in the
 // builder's segment alphabet, at most 256 characters in all (0083). Builder contract:
 // `packs/ProgramName.ts` exports the `ProgramName` schema, pure and platform-free.
@@ -11,10 +15,7 @@ import { pathToFileURL } from "node:url";
 // one way and must be refused. Shrinking a tape recomputes every move from the shortened prefix.
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Effect from "effect/Effect";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
-import { it } from "@effect/vitest";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { describe, expect, vi } from "vitest";
 
@@ -74,10 +75,12 @@ const grow = (name: Name, n: number): { name: Name; move: string } => {
   if (space > 0 && n % 3 !== 0) {
     // Fill to the bound now and then, so the 256th character is reached, not only approached.
     const add = n % 5 === 0 ? space : 1 + (n % Math.min(space, 4));
+
     const tail = Arr.join(
       Array.from({ length: add }, (_, i) => pick([...REST], n + i)),
       "",
     );
+
     return { name: { ...name, [key]: name[key] + tail }, move: `grow ${key} by ${add}` };
   }
 
@@ -114,6 +117,7 @@ const breaks = (name: Name): ReadonlyArray<(n: number) => string> => {
       const key = side(n);
       const at = n % (name[key].length + 1);
       const broken = pipe(name[key], Str.slice(0, at)) + pick(FOREIGN, n) + pipe(name[key], Str.slice(at));
+
       return key === "pack" ? `${broken}/${program}` : `${pack}/${broken}`;
     },
     (n) =>
@@ -147,43 +151,43 @@ describe("P40 qualified program names", () => {
   it.live("L1: a name is accepted exactly when it has one pack and one program segment within the bound", () =>
     Effect.gen(function* () {
       const { ProgramName } = yield* promised(() => load());
-    const decode = Schema.decodeUnknownOption(ProgramName);
+      const decode = Schema.decodeUnknownOption(ProgramName);
       yield* promised(() =>
         fc.assert(
-      fc.asyncProperty(tape, async (tape) => {
-        const steps = walk(tape);
-        // The walk took both kinds of move, so a schema that accepts or refuses everything fails.
-        expect(Arr.some(steps, (s) => s.accepted && s.move !== "start")).toBe(true);
-        expect(Arr.some(steps, (s) => !s.accepted)).toBe(true);
+          fc.asyncProperty(tape, async (tape) => {
+            const steps = walk(tape);
+            // The walk took both kinds of move, so a schema that accepts or refuses everything fails.
+            expect(Arr.some(steps, (s) => s.accepted && s.move !== "start")).toBe(true);
+            expect(Arr.some(steps, (s) => !s.accepted)).toBe(true);
 
-        for (const step of steps) {
-          const decoded = decode(step.name);
+            for (const step of steps) {
+              const decoded = decode(step.name);
 
-          if (step.accepted) {
-            expect(step.name.length).toBeLessThanOrEqual(MAX);
-            expect(decoded, `${step.move}: ${JSON.stringify(step.name)}`).toEqual(Option.some(step.name));
-          } else {
-            expect(Option.isNone(decoded), `${step.move}: ${JSON.stringify(step.name)}`).toBe(true);
-          }
-        }
-      }),
-      { seed: 119120, numRuns: 200 },
+              if (step.accepted) {
+                expect(step.name.length).toBeLessThanOrEqual(MAX);
+                expect(decoded, `${step.move}: ${JSON.stringify(step.name)}`).toEqual(Option.some(step.name));
+              } else {
+                expect(Option.isNone(decoded), `${step.move}: ${JSON.stringify(step.name)}`).toBe(true);
+              }
+            }
+          }),
+          { seed: 119120, numRuns: 200 },
         ),
-    );
+      );
     }),
   );
   it.live("L1: values that are not text are refused", () =>
     Effect.gen(function* () {
       const { ProgramName } = yield* promised(() => load());
       fc.assert(
-      fc.property(
-        fc.oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string()), fc.object()),
-        (raw) => {
-          expect(Schema.is(ProgramName)(raw)).toBe(false);
-        },
-      ),
-      { seed: 119120, numRuns: 50 },
-    );
+        fc.property(
+          fc.oneof(fc.integer(), fc.boolean(), fc.constant(null), fc.array(fc.string()), fc.object()),
+          (raw) => {
+            expect(Schema.is(ProgramName)(raw)).toBe(false);
+          },
+        ),
+        { seed: 119120, numRuns: 50 },
+      );
     }),
   );
 });

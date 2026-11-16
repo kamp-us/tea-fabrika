@@ -26,13 +26,13 @@ import type { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Array as Arr } from "effect";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
-import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
@@ -160,18 +160,18 @@ const rollup = (spans: ReadonlyArray<Raw & { readonly lag: number | null }>) => 
 
   return Arr.map([...groups.values()], (group) => {
     const ms = Arr.map(group, (s) => s.ms).sort((x, y) => x - y);
-      const n = ms.length;
+    const n = ms.length;
     const lags = Arr.flatMap(group, (s) => (s.lag === null ? [] : [s.lag]));
-      return {
-        _tag: "metric",
-        piece: group[0]?.piece,
-        hour: group[0]?.hour,
-        count: n,
+    return {
+      _tag: "metric",
+      piece: group[0]?.piece,
+      hour: group[0]?.hour,
+      count: n,
       errors: Arr.filter(group, (s) => !s.ok).length,
-        // Nearest rank, in integers so no float rounding moves a rank.
-        ms: { p50: ms[Math.ceil(n / 2) - 1], p95: ms[Math.ceil((95 * n) / 100) - 1], max: ms[n - 1] },
-        lag: lags.length === 0 ? null : Math.max(...lags),
-      };
+      // Nearest rank, in integers so no float rounding moves a rank.
+      ms: { p50: ms[Math.ceil(n / 2) - 1], p95: ms[Math.ceil((95 * n) / 100) - 1], max: ms[n - 1] },
+      lag: lags.length === 0 ? null : Math.max(...lags),
+    };
   }).sort(bySummary);
 };
 
@@ -813,10 +813,10 @@ describe("p101, a sink.archive row's time, duration and span", () => {
 
               const rows = () =>
                 Arr.map(
-                db
-                  .prepare(
-                    `SELECT ok, error, at, ms, "spanId" FROM measurements WHERE piece = '${ARCHIVE}' ORDER BY rowid`,
-                  )
+                  db
+                    .prepare(
+                      `SELECT ok, error, at, ms, "spanId" FROM measurements WHERE piece = '${ARCHIVE}' ORDER BY rowid`,
+                    )
                     .all(),
                   (row) => ({ ...row }),
                 );

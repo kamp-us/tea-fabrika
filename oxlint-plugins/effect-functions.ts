@@ -48,6 +48,7 @@ export const effectFunctions: CreateRule = {
 
     const isSpan = (node: Node): boolean => {
       const name = dotted(node);
+
       return Arr.some([...effects], (effect) => name === `${effect}.withSpan`);
     };
 

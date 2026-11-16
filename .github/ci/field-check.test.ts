@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Arbitrary from "effect/Arbitrary";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
-import * as Struct from "effect/Struct";
 import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Struct from "effect/Struct";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import * as checker from "./field-check.ts";
@@ -154,6 +154,7 @@ it("added rows preserve occurrence counts and head line numbers", () => {
 
         return [];
       });
+
       expect(checker.selectAdded(base.length > 0 ? `${base.join("\n")}\n` : "", `${head.join("\n")}\n`)).toEqual(
         expected,
       );
@@ -634,6 +635,7 @@ it("a finding or rated row passes whole, and each core field blocks when wrong o
         Arbitrary.map(Arbitrary.schema(schema), (row) => ("id" in row ? own(row, "id") : row)),
         (row) => {
           const good = errorsOf({ ...row, extra: { future: true } });
+
           const each = Struct.keys(schema.fields).every((field) => {
             const bad = errorsOf({ ...row, [field]: { bad: true } });
             const gone = errorsOf(without(row, field));

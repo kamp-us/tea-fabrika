@@ -24,10 +24,10 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import * as Arr from "effect/Array";
+import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import { handshakeMachine } from "./Handshake.ts";
 
 const SEED = 119120;
@@ -306,7 +306,7 @@ describe("P18 L2: the handshake answers only its own request", () => {
       }
 
       expect(
-        Arr.every(Object.values(seen), (n) => n > 0),
+        Arr.every(Rec.values(seen), (n) => n > 0),
         JSON.stringify(seen),
       ).toBe(true);
 

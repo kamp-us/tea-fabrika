@@ -807,15 +807,15 @@ describe("P34c slice 2: one saved recovery journal", () => {
           [
             Schema.decodeUnknownSync(Policy)(policy),
             Arr.map(
-            [
-              { move: 4, gap: 0 },
-              { move: 1, gap: 0 },
-              { move: 0, gap: 0 },
-              { move: 0, gap: policy.backoff.minMs },
-              { move: 1, gap: 0 },
-              { move: 0, gap: 0 },
-              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
-              { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+              [
+                { move: 4, gap: 0 },
+                { move: 1, gap: 0 },
+                { move: 0, gap: 0 },
+                { move: 0, gap: policy.backoff.minMs },
+                { move: 1, gap: 0 },
+                { move: 0, gap: 0 },
+                { move: 6, gap: policy.backoff.resetAfterMs / 2 },
+                { move: 6, gap: policy.backoff.resetAfterMs / 2 },
               ],
               (cell) => ({ ...cell, pick: 0, error: "TypeError" }),
             ),

@@ -16,9 +16,9 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import { clientMachineFor, diff } from "@kampus/libfabrika";
+import { Array as Arr, String as Str } from "effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { checklist, checklistMachine, checklistView } from "./program.ts";
 import { checklistWindow } from "./window.tsx";

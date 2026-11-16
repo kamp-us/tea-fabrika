@@ -3,7 +3,8 @@ import * as Arr from "effect/Array";
 // union. A permission holds when some relation its unions reach holds for the subject on the object.
 // The visited set ends a loop of permissions, so no depth needs a number, and a loop alone holds
 // nothing.
-import { Option, String as Str } from "effect";
+import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import type { Tuples } from "../Relation.ts";
 import { holds, tupleKey } from "./relationsTable.ts";
 
@@ -55,6 +56,7 @@ export const evaluate = (
     }
 
     visited.add(name);
+
     return Arr.some(declared.permissions.get(name) ?? [], reaches);
   };
 

@@ -19,9 +19,9 @@
 // reasons, other words, free text or none.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
 import { Array as Arr, pipe, Record as Rec, String as Str } from "effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -71,6 +71,7 @@ const byId = (html: string, id: string): string | null => {
 
   const rest = Str.slice(open.index + open[0].length)(html);
   const end = Str.indexOf(`</${open[1]}>`)(rest);
+
   return Str.trim(text(Option.match(end, { onNone: () => rest, onSome: (at) => Str.slice(0, at)(rest) })));
 };
 
@@ -96,6 +97,7 @@ const named = (html: string, tag: string): string | null => {
 
   const id = attr(tag, "id");
   const forLabel = id === null ? null : new RegExp(`<label[^>]*\\sfor="${id}"[^>]*>([\\s\\S]*?)</label>`).exec(html);
+
   return forLabel === null ? null : Str.trim(text(forLabel[1]!));
 };
 
@@ -248,6 +250,7 @@ describe("L24: the checklist window's markup", () => {
         expect(named(html, field)).toBe(checklist.inputs.add.description);
         expect(attr(field, "maxLength") ?? attr(field, "maxlength")).toBe("80");
         expect(attr(field, "value") ?? "").toBe(draft);
+
         const described = Str.trim(
           pipe(
             Str.split(attr(field, "aria-describedby") ?? "", /\s+/),

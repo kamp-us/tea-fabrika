@@ -2,16 +2,16 @@
 // Raw process failure text may be content. It must never become tags or measurements data.
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as DateTime from "effect/DateTime";
 import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
+import * as Tracer from "effect/Tracer";
 import * as Id from "../Id.ts";
 import { Archive } from "../telemetry/Archive.ts";
 import { RecordManager } from "../telemetry/Records.ts";

@@ -7,17 +7,18 @@
  * Disk and paths go through Effect's `FileSystem` and `Path`, which the caller provides.
  */
 import { unreachableChunksPlugin } from "alchemy/Bundle/UnreachableChunksPlugin";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import type { OutputAsset, OutputChunk, Plugin } from "rolldown";
 import { ProgramName } from "../../packs/ProgramName.ts";
 import { Asset, type AssetType, Built as Tables, BuildError, type BuiltProgram, hash } from "../../runtime/Built.ts";
@@ -122,6 +123,7 @@ const findWindow = Effect.fn("build.manifest")(function* (from: string, selected
         );
 
       const exports = manifest.exports;
+
       return typeof exports === "object" && Rec.has(exports, "./window")
         ? Option.some(`${selected}/window`)
         : Option.none<string>();
@@ -196,16 +198,20 @@ const stylesheets = (
 const embed = (tables: Tables): Plugin => {
   const texts: Array<string> = [];
   const text = (body: string) => `t${texts.push(body) - 1}`;
+
   const programs = Arr.map(
     Rec.toEntries(tables.programs),
     ([name, p]) => `${JSON.stringify(name)}: {hash: ${JSON.stringify(p.hash)}, source: ${text(p.source)}}`,
   );
+
   const assets = Arr.map(
     Rec.toEntries(tables.assets),
     ([route, a]) =>
       `${JSON.stringify(route)}: {hash: ${JSON.stringify(a.hash)}, type: ${JSON.stringify(a.type)}, body: ${text(a.body)}}`,
   );
+
   const imports = Arr.map(texts, (_, n) => `import t${n} from ${JSON.stringify(`${TEXT}${n}`)};`);
+
   const code = Arr.join(
     [
       ...imports,
@@ -214,6 +220,7 @@ const embed = (tables: Tables): Plugin => {
     ],
     "\n",
   );
+
   return {
     name: "fabrika-built",
     resolveId(id) {
@@ -346,6 +353,7 @@ const tabAssets = Effect.fn("build.tab")(function* (
     define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
     minify: true,
   });
+
   const html = Arr.findFirst(output.output, (o): o is OutputAsset => o.type === "asset" && o.fileName === PAGE);
 
   if (Option.isNone(html) || typeof html.value.source !== "string") {
@@ -606,6 +614,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   // A segment holds no `.`, so `pack.program` names one generated file per qualified name. The
   // window's entry keeps the whole name, so it is emitted at `/pack/program.js`.
   const generated = (name: string) => path.join(from, `window.${pipe(name, Str.replace("/", "."))}.generated.ts`);
+
   const entries: Plugin = {
     name: "fabrika-window",
     resolveId(id) {
@@ -621,18 +630,20 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
       }
     },
   };
-  const assets: Record<string, Asset> = Rec.keys(windows).length > 0
-    ? yield* bundle(
-        Rec.fromEntries(Arr.map(Rec.keys(windows), (name) => [name, `${WINDOW}${name}`])),
-        [entries, compiler, stylesheets(context, path)],
-        {
-          phase: "window",
-          cwd: root,
-          split: true,
-          define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
-        },
-      ).pipe(Effect.flatMap((o) => collect(o.output)))
-    : {};
+
+  const assets: Record<string, Asset> =
+    Rec.keys(windows).length > 0
+      ? yield* bundle(
+          Rec.fromEntries(Arr.map(Rec.keys(windows), (name) => [name, `${WINDOW}${name}`])),
+          [entries, compiler, stylesheets(context, path)],
+          {
+            phase: "window",
+            cwd: root,
+            split: true,
+            define: { "process.env.NODE_ENV": Formatter.formatJson("production") },
+          },
+        ).pipe(Effect.flatMap((o) => collect(o.output)))
+      : {};
 
   if (options.tab !== undefined) {
     for (const [route, file] of Rec.toEntries(yield* tabAssets(options.tab, [compiler], root))) {
@@ -651,6 +662,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
     cwd: root,
     define: { "globalThis.__ALCHEMY_RUNTIME__": "true" },
   });
+
   const brain = Arr.join(
     Arr.map(
       Arr.filter(output.output, (o) => o.type === "chunk"),
@@ -665,6 +677,7 @@ export const build = Effect.fn("build.build")(function* (options: Options) {
   }
 
   const size = (bodies: ReadonlyArray<string>) => Arr.reduce(bodies, 0, (total, body) => total + bytes(body));
+
   const digest = yield* publish(options.out, brain, {
     programs: size(Arr.map(Rec.values(programs), (p) => p.source)),
     window: size(Arr.map(Rec.values(assets), (a) => a.body)),

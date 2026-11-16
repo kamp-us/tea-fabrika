@@ -6,9 +6,9 @@
  * A layout is a tile, or a container that runs in one of two directions and holds its parts in
  * order, each with its own `percent` of the container (0277, from AeroSpace's tree in 0505).
  */
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as Id from "../Id.ts";
 import { ProcessName } from "../processes/Process.ts";
 
@@ -198,5 +198,6 @@ export const childName = (program: string, tile: TileId): string => {
     onNone: () => program,
     onSome: (slash) => Str.slice(slash + 1)(program),
   });
+
   return `${own}:${body(tile, "tile")}`;
 };

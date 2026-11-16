@@ -16,11 +16,11 @@
 // claim. The browser, each context and each page are acquired in a scope (0061).
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import * as Effect from "effect/Effect";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
 import * as Function from "effect/Function";
 import * as Rec from "effect/Record";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { type Browser, chromium, type Page } from "playwright";
 import { rolldown } from "rolldown";
@@ -154,6 +154,7 @@ const stored = (page: Page) =>
   Effect.promise(() =>
     page.evaluate(async () => {
       const out: Array<{ kind: string; extractable?: boolean; exported?: boolean; bytes?: Array<number> }> = [];
+
       const walk = async (v: unknown): Promise<void> => {
         if (v instanceof CryptoKey) {
           const exported = await crypto.subtle.exportKey("pkcs8", v).then(
@@ -275,6 +276,7 @@ describe("L3: the browser key store", () => {
                         const first = yield* Effect.forEach(pages, (p) => current(p, null), {
                           concurrency: "unbounded",
                         });
+
                         const prints = new Set(Arr.map(first, (a) => a.ok?.fingerprint));
                         expect(prints.size, "racing tabs made more than one key").toBe(1);
                         expect(Arr.filter(first, (a) => a.ok?.found === "created")).toHaveLength(1);

@@ -1,11 +1,11 @@
 // p23/p82: answerFrame(text, attachment, admit, route). A failed route stays retryable; a parked
 // wait is data. Plants: answer a notification; route before initialize; turn a failure into err.
 import { assert, describe, expect, it, vi } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
 import * as fc from "fast-check";
 import { answerFrame } from "./Answer.ts";
 import { Answer, Attached, type Who } from "./Wire.ts";

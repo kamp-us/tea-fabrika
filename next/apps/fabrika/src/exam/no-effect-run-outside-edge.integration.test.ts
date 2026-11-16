@@ -97,11 +97,11 @@ const OLD_EDGES = [
 ];
 
 const all = await plant({
-    [FIRES]: runs,
-    [PASSES]: passes,
-    [EDGE]: edges,
-    ...Rec.fromEntries(Arr.map(OLD_EDGES, (path) => [path, runs])),
-    "next/packages/libfabrika/src/app/process.test.ts": runs,
+  [FIRES]: runs,
+  [PASSES]: passes,
+  [EDGE]: edges,
+  ...Rec.fromEntries(Arr.map(OLD_EDGES, (path) => [path, runs])),
+  "next/packages/libfabrika/src/app/process.test.ts": runs,
 });
 
 describe("no-effect-run-outside-edge", () => {

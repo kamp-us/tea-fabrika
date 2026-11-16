@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import * as Option from "effect/Option";
 import { Array as Arr, pipe, String as Str } from "effect";
+import * as Option from "effect/Option";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -59,6 +59,7 @@ describe("nextNumber", () => {
     fc.assert(
       fc.property(fc.array(fc.nat({ max: 500 }), { minLength: 1 }), (ns) => {
         const paths = Arr.map(ns, (n) => `experiments/${n}-x.md`);
+
         const noise = [
           "experiments/README.md",
           "experiments/open-questions.md",
@@ -131,17 +132,18 @@ describe("readTop", () => {
   it("format: a decision's plain frontmatter reads as written, a bracketed status included", () => {
     const text = Arr.join(
       [
-      "---",
-      "id: 0008",
-      "title: Decision discovery is the AGENTS.md contract alone",
-      "status: amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)",
-      "tags: [decisions, discovery]",
-      "---",
-      "",
-      "# 0008: Decision discovery is the AGENTS.md contract alone",
+        "---",
+        "id: 0008",
+        "title: Decision discovery is the AGENTS.md contract alone",
+        "status: amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)",
+        "tags: [decisions, discovery]",
+        "---",
+        "",
+        "# 0008: Decision discovery is the AGENTS.md contract alone",
       ],
       "\n",
     );
+
     const top = readTop(text);
     expect(top.fields.get("title")).toBe("Decision discovery is the AGENTS.md contract alone");
     expect(top.fields.get("status")).toBe("amended-in-part by [0522](0522-no-folder-keeps-an-index-table.md)");
@@ -213,11 +215,13 @@ describe("batchTexts", () => {
     fc.assert(
       fc.property(fc.array(fc.string()), (texts) => {
         const encoder = new TextEncoder();
+
         const parts = Arr.flatMap(texts, (text) => {
           const bytes = encoder.encode(text);
 
           return [encoder.encode(`abc123 blob ${bytes.length}\n`), bytes, encoder.encode("\n")];
         });
+
         const all = new Uint8Array(Arr.reduce(parts, 0, (n, p) => n + p.length));
         Arr.reduce(parts, 0, (at, p) => {
           all.set(p, at);
@@ -361,13 +365,13 @@ const note = (path: string, title: string, summary: string) =>
 const glossary = [
   ".glossary/TERMS.md",
   Arr.join(
-  [
-    "# Terms",
-    "",
-    "| Term | Definition | Not |",
-    "|---|---|---|",
-    "| upgrade (saved state) | One named step that moves saved state to the next shape. | Not a migration tool. |",
-    "| ledger | The log every fact goes to. | |",
+    [
+      "# Terms",
+      "",
+      "| Term | Definition | Not |",
+      "|---|---|---|",
+      "| upgrade (saved state) | One named step that moves saved state to the next shape. | Not a migration tool. |",
+      "| ledger | The log every fact goes to. | |",
     ],
     "\n",
   ),
@@ -427,8 +431,8 @@ describe("readEntries", () => {
       ),
     ).toEqual(
       Option.some({
-      id: "0004",
-      status: Status.cases.superseded.make({ by: ["0011"] }),
+        id: "0004",
+        status: Status.cases.superseded.make({ by: ["0011"] }),
       }),
     );
     expect(readEntries("experiments/README.md", "# Log\n")).toEqual([]);
@@ -462,12 +466,14 @@ describe("find", () => {
         }));
 
         const hits = shortlist(find("alpha beta filler", made, { limit: 100, all: false }));
+
         const score = (word: string) =>
           pipe(
             Arr.findFirst(hits, (h) => h.words.includes(word) && h.words.length === 1),
             Option.map((h) => h.score),
             Option.getOrElse(() => 0),
           );
+
         expect(score("alpha")).toBeGreaterThan(score("beta"));
         expect(Arr.every(hits, (h) => !h.words.includes("filler"))).toBe(true);
         expect(score("alpha")).toBeCloseTo(Math.log(made.length / rare), 2);
@@ -500,6 +506,7 @@ describe("find", () => {
   it("scenario: a proposed decision is in force nowhere, so only --all finds it", () => {
     const paths = (all: boolean) =>
       Arr.map(shortlist(find("proposed rule", entries, { limit: 8, all })), (h) => h.path);
+
     expect(paths(false)).toEqual([]);
     expect(paths(true)).toEqual([".decisions/0007-x.md"]);
   });

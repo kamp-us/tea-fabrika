@@ -277,6 +277,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   // judged red. It, the gate's step and the time tables are the steps that get the token.
   const report = map(jobs[VERDICT]),
     others = Rec.keys(jobs).filter((name) => name !== VERDICT);
+
   const needed = Array.isArray(report["needs"]) ? report["needs"] : [];
   require(needed.length === others.length &&
     others.every((name) => needed.includes(name)) &&
@@ -298,6 +299,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
       ]),
     ),
   };
+
   require(Rec.values(jobs).every(
     (job) => !("name" in map(job)),
   ), "SC5: no job sets a name, so a leg's name is its job's id and its shard");

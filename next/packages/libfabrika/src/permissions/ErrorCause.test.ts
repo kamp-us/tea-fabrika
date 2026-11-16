@@ -9,11 +9,11 @@
 // encoded Error stays a plain object.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Exit from "effect/Exit";
 import * as Match from "effect/Match";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import * as Arr from "effect/Array";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { SendersError } from "./Senders.ts";
 

@@ -4,11 +4,11 @@ import { spawn, execFileSync, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import { String as Str, Array as Arr } from "effect";
 import { it } from "@effect/vitest";
+import { String as Str, Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
+import * as Option from "effect/Option";
 import { chromium, type Browser, type Page } from "playwright";
 import { afterEach, describe, expect } from "vitest";
 import { heldPort } from "../src/port.test-support.ts";
@@ -118,8 +118,8 @@ const start = async () => {
     );
 
     if (ok) {
-        break;
-      }
+      break;
+    }
 
     await pause();
   }
@@ -326,91 +326,91 @@ describe("P12 real browser protocol", () => {
           b = yield* Effect.promise(() => s.context.newPage());
         const first = yield* Effect.promise(() => driver(a, s.url, "tab-a")),
           second = yield* Effect.promise(() => driver(b, s.url, "tab-b"));
-    expect(first.extractable).toBe(false);
-    expect(first.fingerprint).toBe(second.fingerprint);
-    expect(first.first.error.data.reason).toBe("not_granted");
-    expect(second.first.error.data.reason).toBe("not_granted");
+        expect(first.extractable).toBe(false);
+        expect(first.fingerprint).toBe(second.fingerprint);
+        expect(first.first.error.data.reason).toBe("not_granted");
+        expect(second.first.error.data.reason).toBe("not_granted");
         const firstKnock = yield* Effect.promise(() => rpc(a, "gateway.knock", { label: "Chromium" }));
         const secondKnock = yield* Effect.promise(() => rpc(b, "gateway.knock", { label: "Chromium" }));
-    const code = firstKnock.result.code;
-    expect(secondKnock.result.code).toBe(code);
+        const code = firstKnock.result.code;
+        expect(secondKnock.result.code).toBe(code);
 
-    const output = execFileSync(
-      process.execPath,
-      [
-        join(APP, "grant.ts"),
-        "client",
-        s.url,
-        first.fingerprint,
-        `--code=${code}`,
-        "--label=Chromium",
-        `--key=${s.key}`,
-      ],
-      { env: s.env, cwd: APP, encoding: "utf8" },
-    );
+        const output = execFileSync(
+          process.execPath,
+          [
+            join(APP, "grant.ts"),
+            "client",
+            s.url,
+            first.fingerprint,
+            `--code=${code}`,
+            "--label=Chromium",
+            `--key=${s.key}`,
+          ],
+          { env: s.env, cwd: APP, encoding: "utf8" },
+        );
 
-    expect(output).not.toContain("PRIVATE KEY");
+        expect(output).not.toContain("PRIVATE KEY");
 
-    for (const page of [a, b]) {
+        for (const page of [a, b]) {
           yield* Effect.promise(() =>
             page.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "reinitialized")),
           );
           const reinitialized = Option.getOrUndefined(
             Arr.findFirst(yield* Effect.promise(() => state(page)), (f: any) => f.method === "reinitialized"),
           );
-      expect(reinitialized.result.error).toBeUndefined();
+          expect(reinitialized.result.error).toBeUndefined();
           expect(yield* Effect.promise(() => page.evaluate(() => window.p12.connections()))).toBe(1);
-    }
+        }
 
         const processes = yield* Effect.promise(() =>
           rpc(a, "ledger.read", { stream: "processes/counter:1", after: 0 }),
         );
-    const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
-    // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
-    expect(started.body.program).toBe("fabrika/counter");
-    const pid = started.body.process;
+        const started = processes.result.entries.find((r: any) => r._tag === "started" && r.body.name === "counter:1");
+        // P40: the registered name stays `counter:1`; the code it runs is the core pack's `fabrika/counter`.
+        expect(started.body.program).toBe("fabrika/counter");
+        const pid = started.body.process;
         expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result).toEqual({
           rev: 0,
           view: { count: 0 },
         });
-    // W8 scenario: only a real clock can let the local runtime evict an idle Process.
+        // W8 scenario: only a real clock can let the local runtime evict an idle Process.
         yield* Effect.promise(() => a.waitForTimeout(15_000));
-    const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
+        const waiting = rpc(b, "ledger.wait", { stream: "counter:1/inbox", after: 0 });
         const accepted = yield* Effect.promise(() =>
           rpc(a, "process.send", {
-      pid,
-      letter: "browser-once",
-      m: { type: "inc" },
-      sentAt: "2026-11-08T04:00:00.000Z",
-      seen: 0,
+            pid,
+            letter: "browser-once",
+            m: { type: "inc" },
+            sentAt: "2026-11-08T04:00:00.000Z",
+            seen: 0,
           }),
         );
-    expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
+        expect(accepted.result).toMatchObject({ _tag: "accepted", pos: 1 });
         expect((yield* Effect.promise(() => waiting)).result).toMatchObject({ rev: accepted.result.rev });
-    // The original connection must receive the patch before a reload or another view.open.
+        // The original connection must receive the patch before a reload or another view.open.
         yield* Effect.promise(() =>
           a.waitForFunction(() => window.p12.frames.some((f: any) => f.method === "view.patch")),
         );
         const idlePatch = Option.getOrUndefined(
           Arr.findFirst(yield* Effect.promise(() => state(a)), (f: any) => f.method === "view.patch"),
         );
-    expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
+        expect(idlePatch.params).toMatchObject({ base: 0, rev: accepted.result.pos });
         expect(yield* Effect.promise(() => a.evaluate(() => window.p12.connections()))).toBe(1);
         const reloaded = yield* Effect.promise(() => driver(a, s.url, "tab-a"));
-    expect(reloaded.fingerprint).toBe(first.fingerprint);
-    expect(reloaded.first.error).toBeUndefined();
+        expect(reloaded.fingerprint).toBe(first.fingerprint);
+        expect(reloaded.first.error).toBeUndefined();
         const retry = yield* Effect.promise(() =>
           rpc(a, "process.send", {
-      pid,
-      letter: "browser-once",
-      m: { type: "inc" },
-      sentAt: "2026-11-08T04:00:00.000Z",
-      seen: 0,
+            pid,
+            letter: "browser-once",
+            m: { type: "inc" },
+            sentAt: "2026-11-08T04:00:00.000Z",
+            seen: 0,
           }),
         );
-    expect(retry.result).toEqual(accepted.result);
+        expect(retry.result).toEqual(accepted.result);
         expect((yield* Effect.promise(() => rpc(a, "view.open", { pid }))).result.view).toEqual({ count: 1 });
-    expect(s.output()).not.toContain("PRIVATE KEY");
+        expect(s.output()).not.toContain("PRIVATE KEY");
       }),
   );
 });

@@ -12,13 +12,13 @@
 // workspace, whose first tile tezgah starts itself. Every move is picked from tezgah's view as it
 // stands: a split from a live tile, a close of a live tile.
 import { describe, expect, it } from "@effect/vitest";
+import { Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Formatter from "effect/Formatter";
-import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 
 const SEED = 119120;

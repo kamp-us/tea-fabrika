@@ -8,17 +8,17 @@ import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
@@ -455,6 +455,7 @@ describe("P17a, appendAdmitted", () => {
                 expect(Result.isSuccess(result)).toBe(outcome === "placed");
                 yield* SpanSink.use((sink) => sink.flush);
                 const rows = yield* RecordManager.use((records) => Stream.runCollect(records.read({ _tag: "spans" })));
+
                 const operations = Arr.filter(
                   rows,
                   (row) =>

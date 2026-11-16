@@ -2,8 +2,8 @@
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import { createVitest } from "vitest/node";
 import { projects } from "../../vitest.config.ts";
 import { full, measured } from "../../vitest.shards.ts";
@@ -14,6 +14,7 @@ import { full, measured } from "../../vitest.shards.ts";
  */
 export const stale = (table: Readonly<Record<string, number>>, files: readonly string[]): string[] => {
   const selected = new Set(files);
+
   return Rec.keys(table)
     .filter((path) => path.startsWith("next/") && !selected.has(path))
     .toSorted();
@@ -39,6 +40,7 @@ const selected = Effect.fnUntraced(function* (root: string, name: string) {
   }
 
   const { include, exclude } = project.test;
+
   return yield* Effect.acquireUseRelease(
     vitestCall(() => createVitest("test", { root, config: false, watch: false, include, exclude })),
     (vitest) =>

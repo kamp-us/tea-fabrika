@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it, afterEach } from "@effect/vitest";
+import { Array as Arr, String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { Array as Arr, String as Str } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 const homes: Array<string> = [];

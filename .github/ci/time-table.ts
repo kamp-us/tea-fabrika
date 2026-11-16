@@ -12,10 +12,10 @@ import { fileURLToPath } from "node:url";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
+import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
 /** The step's name in every test leg; it times the steps before it. workflow-lint.ts holds both. */
 export const STEP = "time table";
@@ -284,7 +284,7 @@ if (
     // Any answer but a 2xx, a network failure or no answer within 5 s is the same Unread.
     job: (id) =>
       HttpClient.get(`${api}/repos/${env["GITHUB_REPOSITORY"]}/actions/jobs/${id}`, {
-            headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
+        headers: { authorization: `Bearer ${env["GITHUB_TOKEN"] ?? ""}`, accept: "application/vnd.github+json" },
       }).pipe(
         Effect.flatMap(HttpClientResponse.filterStatusOk),
         Effect.flatMap((answer) => answer.json),

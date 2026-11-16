@@ -4,19 +4,19 @@
  * it, the signal it sends, and the durable outbox for its lifecycle events.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
-import * as Arr from "effect/Array";
-import * as Formatter from "effect/Formatter";
-import { String as Str } from "effect";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { devLife, type DevState } from "./DevLife.ts";
 
@@ -303,6 +303,7 @@ export const brainOutbox = Effect.fn("brain.outbox")(function* (home: string) {
         "\n",
       ) + (rows.length > 0 ? "\n" : ""),
     );
+
   const last = Effect.fnUntraced(function* () {
     const pending = Arr.last(Arr.filter(yield* read, (event) => event._tag === "started"));
 

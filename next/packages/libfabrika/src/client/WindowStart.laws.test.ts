@@ -25,23 +25,24 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Function from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Random from "effect/Random";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { ClientKey, ClientKeyError } from "../transport/ClientKey.ts";
@@ -141,6 +142,7 @@ const peer = (script: Script, pong: () => void = () => {}, nonce = (n: number) =
   const owed = new Map<MemorySocket, number>();
   let waiting: Deferred.Deferred<void> | null = null;
   const settled = () => Arr.every([...owed.values()], (n) => n === 0);
+
   const wake = () => {
     if (waiting !== null && settled()) {
       Deferred.doneUnsafe(waiting, Effect.void);
@@ -450,16 +452,16 @@ describe("L2: retry jitter in the dial", () => {
     "L2 scenario: a retry dial opens no earlier than backoff(tries), no later than the jitter bound, and never past 30 s",
     () =>
       Effect.gen(function* () {
-    const seen = new Map<number, Set<number>>();
+        const seen = new Map<number, Set<number>>();
         yield* promised(() =>
           fc.assert(
-      fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
-        await Effect.runPromise(retryTiming(list, seed, seen));
-      }),
-      { seed: SEED, numRuns: 100 },
+            fc.asyncProperty(fc.array(choice, { minLength: 1, maxLength: 40 }), fc.integer(), async (list, seed) => {
+              await Effect.runPromise(retryTiming(list, seed, seen));
+            }),
+            { seed: SEED, numRuns: 100 },
           ),
-    );
-    expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
+        );
+        expect(seen.get(1)?.size ?? 0, "Random spreads the first retry's wait").toBeGreaterThan(1);
       }),
   );
 });
@@ -798,12 +800,14 @@ describe("L12: wire formats are refused as typed values", () => {
         }
 
         expect(run.getState().link._tag).toBe("online");
+
         const opened = Option.getOrUndefined(
           Arr.findFirst(
             Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t))),
             (f) => f.method === "view.open",
           ),
         );
+
         expect(opened, "the page opened its tile").toBeDefined();
         const beforeMalformed = run.getState();
         // The open's answer arrives malformed: an empty struct, then a view of the wrong type.
@@ -827,10 +831,12 @@ describe("L12: wire formats are refused as typed values", () => {
         script.send = false;
         yield* run.dispatch(press);
         yield* door.tick(500);
+
         const sends = Arr.filter(
           Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t))),
           (f) => f.method === "process.send",
         );
+
         expect(sends.length, "the press went out").toBeGreaterThan(0);
         const id = sends.at(-1)!.id;
         door.message({ jsonrpc: "2.0", id, result: { _tag: "refused" } });
@@ -1103,10 +1109,12 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           } else if (act._tag === "answer" && ws?.readyState === 1) {
             const done = replied.get(ws) ?? new Set<number>();
             replied.set(ws, done);
+
             const ids = Arr.filter(
               Arr.flatMap(ws.sent, (text) => Arr.map(Option.toArray(callId(text)), (c) => c.id)),
               (id) => !done.has(id),
             );
+
             const replyAll = () => {
               for (const id of ids) {
                 ws.receive(JSON.stringify({ jsonrpc: "2.0", id, result: null }));
@@ -1163,6 +1171,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
           if (probe !== null) {
             const timed = (list: ReadonlyArray<FrameMsg>) =>
               Arr.map(list, (f) => [Option.getOrUndefined(callId(f.text))?.id, f.ms !== undefined]);
+
             expect(timed(probe.first), "each first answer is timed from its write").toEqual(
               Arr.map(probe.ids, (id) => [id, true]),
             );
@@ -1175,6 +1184,7 @@ describe("P18 L4: one dial is one constructed socket, one reader and one writer"
             const connect = Arr.filter(rows, (r) => r.record._tag === "connect" && r.record.dial === closed.dial).at(
               -1,
             );
+
             expect(connect?.record, `close ${closed.code} on dial ${closed.dial}`).toMatchObject({
               _tag: "connect",
               result: closed.code === 4003 ? "removed" : "closed",
@@ -1336,12 +1346,14 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
         door.message({ jsonrpc: "2.0", method: "view.patch", params: { pid: PID, type: "patch", note: s.frame } });
         yield* door.tick(0);
         yield* Scope.close(scope, Exit.void);
+
         const hello = Option.getOrUndefined(
           Arr.findFirst(
             Arr.flatMap(door.sent, (t) => Option.toArray(decodeFrame(t))),
             (f) => f.method === "initialize",
           ),
         );
+
         const signed = String(Reflect.get(Object(hello?.params), "signed") ?? "");
         const tab = String(Reflect.get(Object(hello?.params), "tab") ?? "");
         expect(signed.length, "the hello was signed").toBeGreaterThan(0);
@@ -1365,6 +1377,7 @@ describe("P18 L5 [secrets]: no row, span, URL or failure holds a secret", () => 
           ),
           urls: Formatter.formatJson([...urls, ...Arr.map(urls, (u) => decodeURIComponent(u))]),
         };
+
         const secrets = [...Arr.flatMap(Rec.values(s), forms), ...forms(signed), ...forms(key.raw)];
 
         for (const [output, text] of Rec.toEntries(outputs)) {
@@ -1414,6 +1427,7 @@ const recorded = (writes: Array<ReturnType<typeof write>>): typeof window => {
   const step = (s: WindowModel, m: WindowMsg): readonly [WindowModel, ReadonlyArray<WindowCmd>] => {
     const [next, cmds] = applyCell<WindowModel, WindowMsg, WindowCmd>(window, s, m);
     writes.push(...Arr.filter(cmds, (c): c is ReturnType<typeof write> => c.type === "write"));
+
     return [next, cmds];
   };
 
@@ -1479,8 +1493,10 @@ describe("P18 slice 2: the start's wire for wait and monitor", () => {
         ).toContain(`client:${tab}/inbox`);
         const monitored = Arr.findFirstIndex(frames, (f) => f.method === "process.monitor");
         const opened = Arr.findFirstIndex(frames, (f) => f.method === "view.open");
+
         const paramsAt = (at: Option.Option<number>) =>
           Object(Option.getOrUndefined(Option.flatMapNullishOr(at, (i) => frames[i]?.params)));
+
         expect(Reflect.get(paramsAt(monitored), "pid"), "the monitor names the read's pid").toBe(pid);
         expect(Option.isSome(opened), "the open went out").toBe(true);
         expect(Option.getOrThrow(monitored), "the monitor goes before the open").toBeLessThan(
@@ -1528,6 +1544,7 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
 
         yield* door.tick(500);
         expect(run.getState().link._tag, "the window went online").toBe("online");
+
         const streams = Arr.map(
           Arr.filter(
             Arr.flatMap(door.sent, (text) => Option.toArray(decodeFrame(text))),
@@ -1535,6 +1552,7 @@ describe("Desk S2a L10: a start with the tezgah option", () => {
           ),
           (frame) => String(Reflect.get(Object(frame.params), "stream")),
         );
+
         expect(streams[0], "L10: the first read is the person's tezgah").toMatch(/^processes\/tezgah:/);
         expect(streams, "L10: a window with the tezgah option reads none of the given tiles").not.toContain(
           "processes/checklist:1",

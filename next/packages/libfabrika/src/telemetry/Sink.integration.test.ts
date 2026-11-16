@@ -26,22 +26,22 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Formatter from "effect/Formatter";
-import * as Arr from "effect/Array";
 import * as Str from "effect/String";
-import { Array as Arr } from "effect";
 import { TestClock } from "effect/testing";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
@@ -413,7 +413,8 @@ describe("p98, a span that ends is never dropped", () => {
         const outside = yield* recorded(spans);
         expect(outside).toHaveLength(2);
         expect(
-          Arr.map(outside, (r) => r.resource).sort((x, y) => Str.localeCompare(String(y.attributes["fab.object"]))(String(x.attributes["fab.object"])),
+          Arr.map(outside, (r) => r.resource).sort((x, y) =>
+            Str.localeCompare(String(y.attributes["fab.object"]))(String(x.attributes["fab.object"])),
           ),
         ).toEqual([{ attributes: { "fab.object": OBJECT } }, { attributes: { "fab.object": P2 } }]);
 
@@ -912,10 +913,10 @@ const storedStack = Effect.fnUntraced(function* (
       errors,
       undefined,
       (cause, { message, stack }) => {
-      const error = cause === undefined ? new Error(message) : new Error(message, { cause });
-      error.stack = stack;
+        const error = cause === undefined ? new Error(message) : new Error(message, { cause });
+        error.stack = stack;
 
-      return error;
+        return error;
       },
     );
     const fail = Effect.fn("sink.frames")(function* () {
@@ -964,7 +965,7 @@ describe("A-Sink, stored error frames keep no machine folders", () => {
 
         for (const root of [
           sample.root,
-          Str.slice(1, -1)(JSON.stringify(sample.root)),
+          Str.slice(1, -1)(Formatter.formatJson(sample.root)),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
@@ -1085,7 +1086,7 @@ const strayCases = Arbitrary.schema(StrayInput).pipe(
       errors: Arr.map(
         ["outer message C:\\message\\path stays", "inner message /message/path stays", "innermost message stays"],
         (message) => ({
-        message,
+          message,
           stack: `${Arr.join([`Error: ${message}`, ...Arr.map(generated, ({ raw }) => `    ${raw}`)], ending)}${tail}`,
         }),
       ),
@@ -1106,7 +1107,7 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
 
         for (const root of [
           sample.root,
-          Str.slice(1, -1)(JSON.stringify(sample.root)),
+          Str.slice(1, -1)(Formatter.formatJson(sample.root)),
           encodeURI(sample.root),
           encodeURIComponent(sample.root),
         ]) {
@@ -1169,18 +1170,18 @@ describe("A-Sink S4 and S5, stray parentheses and CRLF stacks", () => {
           message: "m",
           stack: Arr.join(
             [
-            "Error: m",
-            "    at fn (/root/a)b/c.ts:1:2)",
-            "    at fn (/root/a(b/c.ts:1:2)",
-            "    at eval (eval at g (/root/a)b/c.ts:3:4), <anonymous>:1:1)",
-            "    at /root/a(b/c.ts:5:6",
-            // A relative location: its start is a word and a separator, not a scheme or a "/".
-            "    at fn (src/a (b/c.ts:1:2)",
-            "    at fn (./a (b/c.ts:1:2)",
-            "    at fn (../a (b/c.ts:1:2)",
-            "    at fn (~/a (b/c.ts:1:2)",
-            "    at fn (.\\a (b\\c.ts:1:2)",
-            "    at eval (eval at g (src/a (b/c.ts:3:4), <anonymous>:1:1)",
+              "Error: m",
+              "    at fn (/root/a)b/c.ts:1:2)",
+              "    at fn (/root/a(b/c.ts:1:2)",
+              "    at eval (eval at g (/root/a)b/c.ts:3:4), <anonymous>:1:1)",
+              "    at /root/a(b/c.ts:5:6",
+              // A relative location: its start is a word and a separator, not a scheme or a "/".
+              "    at fn (src/a (b/c.ts:1:2)",
+              "    at fn (./a (b/c.ts:1:2)",
+              "    at fn (../a (b/c.ts:1:2)",
+              "    at fn (~/a (b/c.ts:1:2)",
+              "    at fn (.\\a (b\\c.ts:1:2)",
+              "    at eval (eval at g (src/a (b/c.ts:3:4), <anonymous>:1:1)",
             ],
             "\n",
           ),
@@ -1687,7 +1688,8 @@ describe("A-Sink S3, a typed failure through nested Effect.fn spans stores no ma
       Effect.gen(function* () {
         const { sql } = yield* walkHome;
         yield* Effect.gen(function* () {
-          class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, { reason: Schema.String,
+          class Typed extends Schema.TaggedError<Typed, { readonly brand: unique symbol }>()(sample.tag, {
+            reason: Schema.String,
           }) {}
           const names = Arr.map(sample.names, (name, depth) => `typed.${name}.${depth}`);
 

@@ -4,10 +4,10 @@
  */
 import { BuildError, build as buildOne, type Selection } from "@kampus/libfabrika/build";
 import type { Row } from "@kampus/libfabrika/compiler";
+import { Array as Arr, String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { Array as Arr, String as Str } from "effect";
 import { programs as selected } from "./table.ts";
 
 export type {

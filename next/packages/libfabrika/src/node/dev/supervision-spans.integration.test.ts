@@ -2,15 +2,16 @@
 // Only this file owns content deletion and trace attribution; other laws inspect lifecycle events.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
-import * as Arr from "effect/Array";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import { programBox } from "../../cloudflare/box.ts";
@@ -281,6 +282,7 @@ const located = (location: string): { file: string; folder: boolean } => {
   }
 
   const folder = !pipe(location, Str.startsWith("node:")) && /[/\\]/.test(location);
+
   return {
     file: folder ? Arr.lastNonEmpty(Str.split(location, /[/\\]/)) : location,
     folder,
@@ -344,11 +346,13 @@ for (const adapter of ["node", "worker"] as const) {
               const contents = yield* Effect.forEach(rows, (row) => r.content(chain, row.spanId), {
                 concurrency: 1,
               });
+
               const kept = Arr.flatMap(contents, (c) => (Option.isSome(c) && c.value._tag === "kept" ? [c.value] : []));
               expect(kept.length).toBeGreaterThan(0);
 
               // A-Sink stores each frame with its folders cut, so the law asks for the frames, not the raw stack.
               const thrown = sample.value instanceof Error ? frames(sample.value.stack ?? "") : [];
+
               const lost = Arr.map(kept, (c) => [
                 ...(sample.message === null || pipe(c.message, Str.includes(sample.message)) ? [] : [sample.message]),
                 ...lostFrames(
@@ -401,7 +405,9 @@ for (const adapter of ["node", "worker"] as const) {
                   measurements,
                   w.sink.sql.exec("SELECT * FROM summary"),
                 ]) {
-                  expect(Formatter.formatJson(permanent)).not.toContain(pipe(Formatter.formatJson(text), Str.slice(1, -1)));
+                  expect(Formatter.formatJson(permanent)).not.toContain(
+                    pipe(Formatter.formatJson(text), Str.slice(1, -1)),
+                  );
                 }
               }
 
@@ -496,14 +502,15 @@ describe("P34 supervision recording", () => {
                 (row) => r.content({ _tag: "job", process: A }, row.spanId),
                 { concurrency: 1 },
               );
+
               const at = Arr.findFirstIndex(contents, (content) =>
                 Option.match(content, {
                   onNone: () => false,
                   onSome: (c) => c._tag === "kept" && pipe(c.message, Str.includes(secret)),
                 }),
               );
-              expect(Option.isSome(at),
-                "the original throw must reach deletable content before guards erase it").toBe(
+
+              expect(Option.isSome(at), "the original throw must reach deletable content before guards erase it").toBe(
                 true,
               );
               expect(Formatter.formatJson(rows)).not.toContain(secret);
@@ -517,7 +524,9 @@ describe("P34 supervision recording", () => {
                 yield* read(`processes/${NAME}`),
                 yield* read(`${A}/dead`),
               ]) {
-                expect(Formatter.formatJson(output)).not.toContain(pipe(Formatter.formatJson(secret), Str.slice(1, -1)));
+                expect(Formatter.formatJson(output)).not.toContain(
+                  pipe(Formatter.formatJson(secret), Str.slice(1, -1)),
+                );
               }
 
               const span = rows[Option.getOrThrow(at)]!;

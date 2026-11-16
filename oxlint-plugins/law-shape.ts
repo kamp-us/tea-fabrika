@@ -44,7 +44,9 @@ type Label = (typeof LABELS)[number];
 
 /** One leading ticket or law id, `T652 ` or `R3.1 `, may stand before the label (lead, 2026-11-11). */
 const ID = /^[A-Za-z0-9.]+ /;
+
 const LABELED = new RegExp(`^(?:${ID.source.slice(1)})?(${Arr.join(LABELS, "|")}):\\s*\\S`);
+
 const RUNNERS = new Set(["propertyTrace", "propertyInvariant", "propertyTerminates"]);
 
 /** The shared runner's module, by its last path segment: `../Testing.test-support.ts`, and its one export. */
@@ -120,6 +122,7 @@ const chainOf = (callee: Node): readonly string[] | null => {
 /** The label a text starts with, after one optional id, when its reason follows: `type` for `T652 type: x`. */
 const leading = (text: string): Label | "none" => {
   const found = LABELED.exec(text)?.[1];
+
   return Option.getOrElse(
     Arr.findFirst(LABELS, (label) => label === found),
     () => "none",
@@ -339,6 +342,7 @@ export const lawShape: CreateRule = {
 
           const title = node.arguments[0];
           const label = labelOf(title);
+
           const bodies = Arr.flatMap(node.arguments, (arg): Fn[] =>
             isFn(arg) ? [arg] : arg.type === "Identifier" ? (local.get(arg.name) ?? []) : [],
           );

@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
+import { Array as Arr, String as Str, pipe } from "effect";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, String as Str, pipe } from "effect";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
@@ -264,18 +264,18 @@ describe("T341 the judgment agent's answer, today's tooling", () => {
 describe("T341 the quest brief is cut into one brief per step, today's tooling", () => {
   const questBrief = Arr.join(
     [
-    "Shared: ticket 7, today's tooling.",
-    "## tests",
-    "Write the laws.",
-    "## build",
-    "Make them green.",
-    "## mutation",
-    "Run stryker.",
-    "## review",
-    "Sweep.",
-    "## pr",
-    "# T7 the title",
-    "What changed.",
+      "Shared: ticket 7, today's tooling.",
+      "## tests",
+      "Write the laws.",
+      "## build",
+      "Make them green.",
+      "## mutation",
+      "Run stryker.",
+      "## review",
+      "Sweep.",
+      "## pr",
+      "# T7 the title",
+      "What changed.",
     ],
     "\n",
   );
@@ -350,6 +350,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
           host: null,
           plants: null,
         });
+
         expect(pipe(text, Str.includes("No step has committed yet."))).toBe(commits.length === 0);
         expect(text).not.toContain("could not be read");
 
@@ -1071,10 +1072,12 @@ describe("T341 the pull request's steps table, today's tooling", () => {
     fc.assert(
       fc.property(fc.subarray([...STEPS]), fc.subarray([...STEPS]), fc.subarray([...STEPS]), (ran, claude, exec) => {
         const text = providers(ran, new Set(claude), new Set(exec));
+
         const onExec = Arr.filter(
           STEPS,
           (s) => s !== "mutation" && ran.includes(s) && exec.includes(s) && !claude.includes(s),
         );
+
         expect(pipe(text, Str.includes("plain codex exec"))).toBe(onExec.length > 0);
       }),
       options,
@@ -1257,6 +1260,7 @@ describe("T341 a turn runs through the agents package on the fake adapter, today
       Effect.gen(function* () {
         const plants = [{ law: "a.test.ts:3", plant: "a.ts:9 drops the row", result: "red" }];
         const said = `The laws are green.\n${Formatter.formatJson({ verb: "done", to: null, reason: "all green", laws: null, plants })}`;
+
         const { turned, fake, events, report } = yield* turn({
           raws: [
             { _tag: "tool", id: "t1", title: "pnpm test", status: "in_progress" },
@@ -1533,6 +1537,7 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
 
         const trips = (i: number) =>
           Arr.filter(marks.slice(Math.max(0, i - 4), i + 1), (k) => k === "send" || k === "work").length >= 3;
+
         const expected = Arr.findFirstIndex(steps, (_, i) => {
           marks[i] = steps[i]?.mark ?? "pass";
 

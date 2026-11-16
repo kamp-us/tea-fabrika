@@ -9,24 +9,25 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Rec from "effect/Record";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Id from "../../Id.ts";
@@ -163,6 +164,7 @@ describe("T878 composed repository opening", () => {
                 invalidPerson = c.move % 2 !== 0 && reasons[index] === null;
                 const padding = c.move % 6;
                 const body = docs[index] === null ? null : pipe("\n", Str.repeat(padding)) + docs[index]!;
+
                 const result = yield* OpenRepository.prepare("selected-repo", options).pipe(
                   Effect.provide([reader(body, touches), fs, counted]),
                   Effect.exit,

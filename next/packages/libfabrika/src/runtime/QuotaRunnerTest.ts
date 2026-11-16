@@ -303,7 +303,9 @@ export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Sc
                   e._tag === "demonitored" && Schema.is(Schema.Struct({ ref: Schema.Literal("outbound") }))(e.body),
               ),
             ).toBe(true);
-            expect(Arr.some(entries, (e) => typeof e.stream === "string" && Str.endsWith("/dead")(e.stream))).toBe(true);
+            expect(Arr.some(entries, (e) => typeof e.stream === "string" && Str.endsWith("/dead")(e.stream))).toBe(
+              true,
+            );
             expect(yield* w.checkpoint(name)).not.toBeNull();
             expect(yield* w.input("beta:1", "other", { type: "inc" })).toHaveProperty("_tag", "placed");
             yield* w.drain("beta:1");

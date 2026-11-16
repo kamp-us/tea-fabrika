@@ -4,11 +4,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { it } from "@effect/vitest";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -82,6 +82,7 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
   fc.assert(
     fc.property(fc.array(fc.constantFrom(...PIECES), { minLength: 1, maxLength: 6 }), (pieces) => {
       let seen = 0;
+
       const errors = Arr.flatMap(pieces, (p, i) => {
         const at: ErrorAt[] = [];
 
@@ -93,6 +94,7 @@ it("L1: exactly the reached calls after the first fire, in source order", () => 
 
         return at;
       });
+
       check(Arr.join([TEA, ...Arr.map(pieces, (p, i) => p.text(i))], "\n"), errors);
     }),
     { ...RUNS, numRuns: 200 },
@@ -141,6 +143,7 @@ it("L2: only a part whose value is an import or imported member fires", () => {
       }),
       (parts) => {
         const lines = Arr.map(Rec.toEntries(parts), ([key, value]) => `${key}: ${value},`);
+
         const errors = Arr.flatMap(Rec.toEntries(parts), ([key, value], i) =>
           [
             "Imported",
@@ -410,20 +413,21 @@ const DOUBLE = `${TEA}\nexport const first = Machine.make({});\nexport const sec
 
 it.live("pinned: L4 the two product blocks enforce the rule; the five test globs leave fixture machines alone", () =>
   Effect.gen(function* () {
-  // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
-  const paths = [
-    "next/example.ts",
-    ".agents/skills/example.ts",
-    "next/example.test.ts",
-    "next/example.test.tsx",
-    "next/ExampleTest.ts",
-    "next/example.test-support.ts",
-    ".agents/example.test.ts",
-  ];
-  const result = yield* promised(() => plant(Rec.fromEntries(Arr.map(paths, (p) => [p, DOUBLE]))));
-  Arr.forEach(paths, (p, i) => {
-    expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
-  });
+    // These paths exercise the exact globs in the approved scope, including RuntimeCauseTest's form.
+    const paths = [
+      "next/example.ts",
+      ".agents/skills/example.ts",
+      "next/example.test.ts",
+      "next/example.test.tsx",
+      "next/ExampleTest.ts",
+      "next/example.test-support.ts",
+      ".agents/example.test.ts",
+    ];
+
+    const result = yield* promised(() => plant(Rec.fromEntries(Arr.map(paths, (p) => [p, DOUBLE]))));
+    Arr.forEach(paths, (p, i) => {
+      expect([p, result(CODE, p)]).toEqual([p, i < 2 ? [3] : []]);
+    });
   }),
 );
 
@@ -445,37 +449,39 @@ const REAL = [
 
 it.live("scenario: L5 the 13 measured machine file copies have zero hits", () =>
   Effect.gen(function* () {
-  // These are the plan's measured inputs, including both factory forms.
-  const originals = Rec.fromEntries(
+    // These are the plan's measured inputs, including both factory forms.
+    const originals = Rec.fromEntries(
       Arr.map(REAL, (p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
     );
-  const clean = yield* promised(() => plant(originals));
 
-  for (const p of REAL) {
-    expect([p, clean(CODE, p)]).toEqual([p, []]);
-  }
+    const clean = yield* promised(() => plant(originals));
+
+    for (const p of REAL) {
+      expect([p, clean(CODE, p)]).toEqual([p, []]);
+    }
   }),
 );
 
 it.live("scenario: L5 each real file copy refuses one added second export", () =>
   Effect.gen(function* () {
-  // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
+    // Compare with the unchanged copy, so an existing hit cannot hide the planted count failure.
     const originals = Rec.fromEntries(
       Arr.map(REAL, (p) => [p, readFileSync(new URL(`../${p}`, import.meta.url), "utf8")]),
     );
+
     const clean = yield* promised(() => plant(originals));
 
     const broken = yield* promised(() =>
       plant(
-    Rec.fromEntries(
-      Arr.map(Rec.toEntries(originals), ([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
-    ),
+        Rec.fromEntries(
+          Arr.map(Rec.toEntries(originals), ([p, s]) => [p, `${s}\nexport const plantedSecond = Machine.make({});\n`]),
+        ),
       ),
-  );
+    );
 
-  for (const [p, s] of Rec.toEntries(originals)) {
-    expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
-  }
+    for (const [p, s] of Rec.toEntries(originals)) {
+      expect([p, broken(CODE, p)]).toEqual([p, [...clean(CODE, p), s.split("\n").length + 1]]);
+    }
   }),
 );
 

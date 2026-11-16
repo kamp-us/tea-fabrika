@@ -24,17 +24,18 @@
  * - A test of an in-scope file is in, and a test of an out-of-scope file is out.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
-import { Array as Arr, String as Str, pipe } from "effect";
 
 const LEAD = ".agents/skills/lead/scripts/";
 
 /** The quest code's own files and tests (0089's table); the flow runner is a folder. */
 const QUEST = Arr.flatMap(["chain", "drive"], (stem) => Arr.map([".ts", ".test.ts"], (end) => `${LEAD}${stem}${end}`));
+
 const FLOW = `${LEAD}flow/`;
 
 /**
@@ -81,6 +82,7 @@ export const related = (changed: ReadonlyArray<string>) => {
     if (product(path)) {
       const dot = Option.getOrElse(pipe(path, Str.lastIndexOf(".")), () => -1);
       const stem = pipe(path, Str.slice(0, dot));
+
       return Arr.map(TESTS, (extension) => `${stem}${extension}`);
     }
 

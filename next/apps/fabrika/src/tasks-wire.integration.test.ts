@@ -7,14 +7,14 @@ import { it, expect } from "@effect/vitest";
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { build } from "@kampus/libfabrika/build";
 import { Task, Result } from "@kampus/libfabrika/tasks/Task";
+import { Array as Arr, String as Str } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
-import { SecureRandom } from "effect/crypto";
 import { localInstance } from "./local-instance.ts";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -215,8 +215,8 @@ it.live(
       yield* fs.writeFileString(
         entry,
         Arr.join(
-        [
-          // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
+          [
+            // Every entrypoint brain.ts exports: a Process is configured only with its IsolateTail.
             `export { default, Connection, Process, RecordPart, IsolateTail, Control } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
             `import { Project as SeededProject } from ${Formatter.formatJson(path.join(app, "src/tasks-wire.test-support.ts"))};`,
             `export class Project extends SeededProject { static selected = ${Formatter.formatJson(selected)}; }`,
@@ -314,7 +314,9 @@ it.live(
       yield* grant(hands, "hands");
       yield* grant(other, "other");
       const first = yield* socket(url, hands, "first");
-      expect(Arr.filter(first.frames, (f) => f.method !== undefined && Str.startsWith("tasks.")(f.method) === true)).toEqual([]);
+      expect(
+        Arr.filter(first.frames, (f) => f.method !== undefined && Str.startsWith("tasks.")(f.method) === true),
+      ).toEqual([]);
       const taken = Schema.decodeUnknownSync(Schema.TaggedStruct("assigned", { task: Task }))(
         ok(yield* first.call("tasks.take", { process: PROCESS, sentAt: SENT, seen: 0 })),
       );

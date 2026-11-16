@@ -26,13 +26,13 @@ import { fold } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP } from "@kampus/libfabrika/tezgah/Layout";
 import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Workspace";
 import { Button, useClipboard } from "@manti-ui/react";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
 import * as Function from "effect/Function";
+import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";
@@ -123,12 +123,15 @@ const TileBody = ({
   readonly windowFor: PageProps["windowFor"];
 }) => {
   const [row, send] = useRuntime(run, (m) => Option.getOrUndefined(Arr.findFirst(m.tiles, (t) => t.id === tile.id)));
+
   const [shown] = useRuntime(run, (m) => {
     const t = Option.getOrUndefined(Arr.findFirst(m.tiles, (t) => t.id === tile.id));
+
     return t?.last !== undefined && t.last !== null && t.last !== "" ? m.client.views[t.last] : undefined;
   });
 
   const registration = windowFor(tile.program);
+
   const data =
     registration !== null && shown !== undefined
       ? Option.getOrNull(Schema.decodeOption(registration.data)(shown.view))
@@ -173,6 +176,7 @@ const prefixHints = (table: Keys.Table): ReadonlyArray<string> =>
       Arr.map(Str.slice("<prefix>".length)),
       Arr.map((k) => PRINTED[k] ?? k),
     );
+
     return keys.length === 0 ? [] : [`${Arr.join(keys, " ")} ${row.word}`];
   });
 
@@ -329,15 +333,20 @@ const Desk = (props: PageProps) => {
   const [size] = useRuntime(props.run, pickSize);
   const [tie] = useRuntime(props.run, pickTie);
   const view = none || client === null ? null : optimisticState(client);
+
   const space =
     view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === client?.workspace));
+
   const area = useSize(send);
+
   const roomless =
     polite === null || view === null
       ? undefined
       : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === polite.tile));
+
   const focused =
     view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === space?.focus));
+
   /** Where DOM focus last sat in a tile: the one answer both landings read (0165). */
   const cursor = (t: TezgahTile) => lastCursor(tie, t);
   useFocusIn(send);
@@ -347,10 +356,12 @@ const Desk = (props: PageProps) => {
     live: tileState(link, Option.getOrUndefined(Arr.findFirst(rows, (r) => r.id === focused?.id))).live,
     layout: space === undefined ? "" : JSON.stringify(space.layout),
   });
+
   const asked =
     prefix._tag === "asking" && view !== null
       ? Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === prefix.tile))
       : undefined;
+
   const line = none ? (
     NO_TEZGAH
   ) : asked !== undefined ? (
@@ -407,8 +418,10 @@ const Page = (props: PageProps) => {
   const [said] = useRuntime(props.run, (m) => m.said);
   useKeys(props.run, props.machine, props.keys, send);
   const view = client === null ? null : optimisticState(client);
+
   const named = (id: string) =>
     view === null ? undefined : Option.getOrUndefined(Arr.findFirst(view.tiles, (t) => t.id === id));
+
   // The status messages of the current burst, as one line (0504): a refusal, or a tile without focus
   // whose process ended. A refusal's words are those of the program its tile shows.
   const burst = spoken(
@@ -418,6 +431,7 @@ const Page = (props: PageProps) => {
   );
 
   const roomless = polite === null ? undefined : named(polite.tile);
+
   const words = Arr.join(
     [
       ...(none ? [NO_TEZGAH] : []),
@@ -427,6 +441,7 @@ const Page = (props: PageProps) => {
     ],
     " ",
   );
+
   const asked = prefix._tag === "asking" ? named(prefix.tile) : undefined;
 
   const content =

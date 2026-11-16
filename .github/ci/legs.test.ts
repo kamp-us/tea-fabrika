@@ -3,10 +3,10 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { beforeAll } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expect, it } from "vitest";
 import { readers } from "./changes.mjs";
@@ -102,6 +102,7 @@ const picked = () =>
 const total = (files: readonly string[], table: Readonly<Record<string, number>>) => {
   const rows = Rec.values(table).toSorted((a, b) => a - b);
   const unmeasured = rows[Math.floor((rows.length - 1) / 2)] ?? 1;
+
   return files.reduce((sum, path) => sum + (Rec.has(table, path) ? table[path]! : unmeasured), 0);
 };
 
@@ -135,6 +136,7 @@ it("property: a selection whose seconds fit the budget gives one leg", () => {
       const pool = kind === "vitest" ? vitest : e2e;
       const most = (kind === "vitest" ? limit.vitest : limit.e2e) / 6;
       const files = Array.from(new Set(Array.from({ length: count }, (_, i) => pool[(at + i * 7) % pool.length]!)));
+
       const table = Rec.fromEntries(
         files.flatMap((path, i) => (shares[i] === undefined ? [] : [[path, shares[i] * most]])),
       );
@@ -308,6 +310,7 @@ const budgeted = () =>
           .map(([at, shares]) => {
             const files = at.map((i) => vitest[i]!);
             const table = Rec.fromEntries(files.map((path, i) => [path, (shares[i]! / 100) * budget.limit]));
+
             return { selected: { vitest: files, e2e: [] }, table };
           }),
       ),

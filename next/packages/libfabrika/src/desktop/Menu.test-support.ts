@@ -3,7 +3,7 @@ import { applyCell } from "@demlik/tea";
 import { arbGuidedSequence, stubCtxThrowingProxy } from "@demlik/tea/pbt";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Access from "../access/Access.ts";
 import * as Id from "../Id.ts";
@@ -28,7 +28,9 @@ export type Row = typeof Menu.Row.Type;
 type Client = typeof Menu.Client.Type;
 
 export const same = (a: unknown, b: unknown) => Equal.equals(a, b);
+
 export const cmdId = (n: number) => Id.Cmd.make(`cmd_0000000000e008${Str.padStart(12, "0")(n.toString(16))}`);
+
 export const command = fc.nat({ max: 0xfffffff }).map(cmdId);
 
 const stale = cmdId(0xffffffffff);
@@ -40,7 +42,9 @@ const Tabs = Schema.TaggedUnion({ known: { online: Schema.Int }, unknown: {} });
 const Link = Schema.TaggedUnion({ connecting: {}, online: {}, lost: {} });
 
 export const label = fc.stringMatching(/^[A-Za-z][A-Za-z0-9 ]{0,23}$/);
+
 const code = fc.integer({ min: 0, max: 999999 }).map((n) => Str.padStart(6, "0")(String(n)));
+
 const digest = fc.constantFrom("digest-a", "digest-b", "digest-c");
 
 // Waiting and admitted snapshots arrive independently, so either can still hold the same key.

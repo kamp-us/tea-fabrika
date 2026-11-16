@@ -809,7 +809,7 @@ export class ProgramRunner extends Context.Service<
                 const receipt = Option.getOrUndefined(
                   Arr.findFirst(
                     s.receipts,
-                  (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
+                    (r) => r.letter === failure.letter && r.process === failure.process && r.result !== null,
                   ),
                 );
 

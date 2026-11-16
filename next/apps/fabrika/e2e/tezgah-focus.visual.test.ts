@@ -1,6 +1,6 @@
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
 // Desk S3, next/ (the desk program fabrika/tezgah, ticket named by its title): laws L28 and L30 of the
 // approved plan, and the slice's shots. Written before a tab moves focus. Starts the real `dev.ts` in
 // its own temp home on its own port and drives headless Chromium; every resource is acquired in one

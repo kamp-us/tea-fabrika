@@ -1,11 +1,11 @@
 /**
  * The relation store in memory, for tests: the same fold as the ledger's, over the changes it holds.
  */
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import * as Arr from "effect/Array";
 import { fold } from "./internal/relationsTable.ts";
 import type { Change } from "./Relation.ts";
 import { Relations, RelationsError } from "./Relations.ts";

@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { scanner } from "./twin.ts";
@@ -277,7 +277,9 @@ describe("P12 local twin lint", () => {
       [`RECORD:${binding}`, `${alias}.Workers.Worker("Other", {main:"other.mjs", env:{RecordPart:${binding}}});`],
     ]) {
       expect(
-        Arr.some(scan("binding.ts", source(bindings!, other)), (f) => pipe(f.reason, Str.includes("class-name binding"))),
+        Arr.some(scan("binding.ts", source(bindings!, other)), (f) =>
+          pipe(f.reason, Str.includes("class-name binding")),
+        ),
       ).toBe(true);
     }
   });

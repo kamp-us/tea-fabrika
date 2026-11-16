@@ -12,17 +12,17 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Array as Arr } from "effect";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
-import { Array as Arr } from "effect";
-import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Str from "effect/String";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -436,8 +436,8 @@ describe("P12, door laws retained after the library move", () => {
   it.live("the view.open law catches a bypassed pid check", () =>
     Effect.gen(function* () {
       const result = yield* promised(() => fc.check(viewOpen(true), { ...checks, endOnFailure: true }));
-    expect(result.failed).toBe(true);
-    expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+      expect(result.failed).toBe(true);
+      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
     }),
   );
   const grantTarget = (plant?: "fingerprint" | "code") =>
@@ -484,8 +484,8 @@ describe("P12, door laws retained after the library move", () => {
     it.live(`pinned: P12 grant-target bypass, the law catches an ignored ${field}`, () =>
       Effect.gen(function* () {
         const result = yield* promised(() => fc.check(grantTarget(field), { ...checks, endOnFailure: true }));
-      expect(result.failed).toBe(true);
-      expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
+        expect(result.failed).toBe(true);
+        expect(result.errorInstance).toMatchObject({ name: "AssertionError" });
       }),
     );
   }

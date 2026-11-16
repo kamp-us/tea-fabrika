@@ -2,9 +2,9 @@
  * Checks that a key belongs, then writes, in one synchronous ledger transaction.
  */
 import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import { Appended, type Line, valueFor } from "../ledger/Log.ts";
@@ -14,6 +14,7 @@ import { foldAccess } from "./AccessFold.ts";
 import { NotGranted } from "./SessionManager.ts";
 
 const known: ReadonlySet<string> = new Set(Rec.keys(MemberEvent.cases));
+
 const decodeEventResult = Schema.decodeUnknownResult(MemberEvent);
 
 /**

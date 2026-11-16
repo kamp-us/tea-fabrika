@@ -17,6 +17,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Recorder } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Cli from "effect/cli/Command";
 import * as ConfigProvider from "effect/ConfigProvider";
@@ -24,16 +25,16 @@ import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as PlatformError from "effect/PlatformError";
+import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Sink from "effect/Sink";
+import * as Str from "effect/String";
 import * as TestConsole from "effect/testing/TestConsole";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import * as Print from "../../settings/Print.ts";
@@ -174,6 +175,7 @@ const spans = () => {
       ),
       "\n",
     );
+
   return { tracer, text };
 };
 
@@ -219,6 +221,7 @@ const run = (input: Input) => {
       Effect.withTracer(traced.tracer),
       Effect.exit,
     );
+
     const stdout = Arr.map(yield* TestConsole.logLines, String);
     const stderr = Arr.map(yield* TestConsole.errorLines, String);
     const counts = yield* counted(at, sunk);
@@ -235,7 +238,7 @@ const run = (input: Input) => {
         logged.layer,
         ConfigProvider.layer(ConfigProvider.fromEnv({ env: { ...input.env } })),
       ).pipe(Layer.provideMerge(NodeServices.layer)),
-      ),
+    ),
     Effect.runPromise,
   );
 };
@@ -243,6 +246,7 @@ const run = (input: Input) => {
 /** The oracle: the library's own load and report for the same inputs. */
 const expected = (input: Input, flags: Readonly<Record<string, string>>, all: boolean) => {
   const at = place(input.env);
+
   const env = Rec.fromEntries(
     Arr.flatMap(Declarations.all.declarations, (d) =>
       input.env[d.env] === undefined ? [] : [[d.env, input.env[d.env]!]],
@@ -328,7 +332,9 @@ const shape = (g: Generated) => {
     ...(g.envPort === undefined ? {} : { [Declarations.port.env]: g.envPort }),
     ...(g.envVersion === undefined ? {} : { [Declarations.version.env]: g.envVersion }),
   };
+
   const args = [...(g.all ? ["--all"] : []), ...Arr.map(Rec.toEntries(flags), ([path, v]) => `--${path}=${v}`)];
+
   return { input: { args, env, person: g.person }, flags };
 };
 

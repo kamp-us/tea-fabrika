@@ -5,15 +5,16 @@
 // its moment and what the state said as it went out. No law here reaches the real `process.kill`:
 // the signals are a stand-in, and L6's `signal` runs against a spy.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import { pipe } from "effect/Function";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import * as TestClock from "effect/testing/TestClock";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
 import { vi } from "vitest";
 import { lifeCell, signal, terminate } from "./local-dev.ts";
 
@@ -264,10 +265,12 @@ describe("the memory restart's bounded stop, next/", () => {
         // SIGTERM alone when the process went before the `killed` fold, else both.
         const sent =
           stale || point === "before" ? 0 : pipe(point, Str.startsWith("killed")) || point === "after-SIGKILL" ? 2 : 1;
+
         const steps = [
           ["replacing", "SIGTERM"],
           ["killed", "SIGKILL"],
         ];
+
         expect(Arr.map(w.log, ({ step }) => step)).toEqual(steps.slice(0, sent).flat());
         // No signal went out on a pid the state had stopped vouching for.
         expect(Arr.filter(w.log, ({ vouched }) => !vouched)).toEqual([]);

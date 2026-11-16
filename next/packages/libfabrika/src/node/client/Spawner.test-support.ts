@@ -4,6 +4,7 @@
 // It also reads the real git lines C4's runs saved (`fixtures/next/hands/git-version.json`).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import * as Arr from "effect/Array";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,7 +14,6 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
 
 /** One child as a script: what it prints, in order, on which stream, how it ends, and whether it starts. */
 export type Child = {
@@ -63,6 +63,7 @@ export const spawner = (child: Child, seen: Seen) =>
               (c) => c.bytes,
             ),
           ).pipe(Stream.concat(tail));
+
         return yield* Effect.acquireRelease(
           Effect.sync(() => {
             seen.spawns++;

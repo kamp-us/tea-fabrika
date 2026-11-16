@@ -1,5 +1,5 @@
-import * as Option from "effect/Option";
 import { Array as Arr, String as Str, pipe } from "effect";
+import * as Option from "effect/Option";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { inScope, pick, PRODUCT, related } from "./scope.ts";
@@ -14,6 +14,7 @@ const options = { seed: 119120, numRuns: 200 };
 const skill = (name: string, stem: string, end = ".ts") => `.agents/skills/${name}/scripts/${stem}${end}`;
 
 const lead = (stem: string, end = ".ts") => skill("lead", stem, end);
+
 const QUEST = Arr.flatMap(["chain", "drive"], (stem) => [lead(stem), lead(stem, ".test.ts")]);
 
 const segment = fc.stringMatching(/^[a-z][a-z0-9-]{0,7}$/);
@@ -81,6 +82,7 @@ const before = (changed: ReadonlyArray<string>) => {
     /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/.test(path) &&
     !pipe(path, Str.includes(".test.")) &&
     !/\.d\.[mc]?ts$/.test(path);
+
   const tests = Arr.flatMap(changed, (path) =>
     code(path)
       ? Arr.map([".test.ts", ".test.tsx"], (end) => `${pipe(path, Str.slice(0, dot(path)))}${end}`)

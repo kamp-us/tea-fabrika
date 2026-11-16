@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 907, slice A1. `fabrika/no-cause-squash` refuses every use of Effect's `Cause.squash` in
 // next/'s product code (docs/direction/effect-code-guidelines.md, E2). Law 2 runs generated files in
 // process through oxlint's RuleTester: an import spelling, some uses and some neighbors that must
@@ -6,10 +7,9 @@ import { join } from "node:path";
 // says which paths are tests.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
-import { it } from "@effect/vitest";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -129,6 +129,7 @@ it("law 2: reports exactly the uses of Effect's squash, through every import spe
 
       const filename = "next/packages/libfabrika/src/runtime/Case.ts";
       const errors = Arr.flatMap(lines, ([, fires], i) => (fires ? [{ line: i + 1, message: REFUSED }] : []));
+
       // The same file with every firing line taken out.
       const valid = pipe(
         lines,
@@ -190,22 +191,24 @@ const LEFT_OUT = [
 
 it.live("scenario: one real lint run per path kind, since only the real config holds which paths are tests", () =>
   Effect.gen(function* () {
-  const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY]))));
+    const linted = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([...HELD, ...LEFT_OUT], (path) => [path, BODY]))),
+    );
 
-  // Product code: the bare call fires, and the call under its edge comment passes.
-  for (const path of HELD) {
-    expect([path, linted(CODE, path)]).toEqual([path, [2]]);
-  }
+    // Product code: the bare call fires, and the call under its edge comment passes.
+    for (const path of HELD) {
+      expect([path, linted(CODE, path)]).toEqual([path, [2]]);
+    }
 
-  // An edge comment over a line with no squash is an unused directive, which oxlint reports with no
-  // rule code (`reportUnusedDisableDirectives`).
-  for (const path of HELD) {
-    expect([path, linted("", path)]).toEqual([path, [5]]);
-  }
+    // An edge comment over a line with no squash is an unused directive, which oxlint reports with no
+    // rule code (`reportUnusedDisableDirectives`).
+    for (const path of HELD) {
+      expect([path, linted("", path)]).toEqual([path, [5]]);
+    }
 
-  // Tests, shared suites, test support and today's version: nothing fires.
-  for (const path of LEFT_OUT) {
-    expect([path, linted(CODE, path)]).toEqual([path, []]);
-  }
+    // Tests, shared suites, test support and today's version: nothing fires.
+    for (const path of LEFT_OUT) {
+      expect([path, linted(CODE, path)]).toEqual([path, []]);
+    }
   }),
 );

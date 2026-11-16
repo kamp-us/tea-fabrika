@@ -15,13 +15,13 @@
 //
 // What each exit code means is a pure function below, so a test reads it without running a script.
 
+import { Array as Arr, String as Str, pipe } from "effect";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Array as Arr, String as Str, pipe } from "effect";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import * as ChecksGh from "../ci/ChecksGh.ts";
 import * as PullRequestsGh from "../pr/PullRequestsGh.ts";
 import { LeakGrepRefused } from "../pr/Pushes.ts";
@@ -116,6 +116,7 @@ export const queueRefused = (e: { readonly reason: string }): Outcome.Outcome =>
 /** The pull request number in `gh pr list --json number -q .[0].number`'s answer, or `null`. */
 export const listedPr = (ran: Ran): number | null => {
   const n = Number(Str.trim(ran.output));
+
   return ran.code === 0 && Number.isInteger(n) && n > 0 ? n : null;
 };
 

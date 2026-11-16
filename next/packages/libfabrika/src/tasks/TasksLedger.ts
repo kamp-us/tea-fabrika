@@ -4,14 +4,15 @@
  * when the machine accepts it. A repeat answers the first event's receipt; a refusal writes nothing.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as Id from "../Id.ts";
 import type { LedgerError } from "../ledger/Ledger.ts";
 import { LedgerStreams } from "../ledger/LedgerStreams.ts";
@@ -110,9 +111,11 @@ const translated = (cause: LedgerError) =>
 /** One task as its stream holds it, read inside a turn: its state and its events. */
 const saved = (turn: LedgerTurn, id: string): Task => {
   const entries = Arr.map([...turn.read(stream(id), 0)], (entry) => ({ entry, stored: decodeStored(valueFor(entry)) }));
+
   const events = Arr.map(entries, ({ entry, stored }) =>
     decodeEvent({ ...entry, ...stored.recorded, event: entry._tag }),
   );
+
   return { state: fold(Arr.map(entries, ({ stored }) => stored)).state, events };
 };
 
@@ -230,10 +233,12 @@ export const layer = Layer.effect(
         return yield* ledger
           .transact((turn) => {
             const index = targetStream(key);
+
             const tasks = Arr.filter(
               Arr.map([...turn.read(index, 0)], (entry) => saved(turn, decodePointer(valueFor(entry)).id)),
               (found) => OPEN.has(found.state._tag),
             );
+
             return { tasks, rev: turn.head(index) };
           })
           .pipe(Effect.mapError(translated));

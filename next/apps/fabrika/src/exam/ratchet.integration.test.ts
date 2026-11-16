@@ -6,10 +6,10 @@ import { mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Formatter from "effect/Formatter";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
 import { ROWS, text } from "./ratchet.test-support.ts";
 
 import { LISTS } from "./ratchet.ts";

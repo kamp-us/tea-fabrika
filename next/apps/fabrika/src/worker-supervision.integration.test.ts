@@ -8,13 +8,13 @@ import { join, resolve } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { From } from "@kampus/libfabrika/processes/Mailbox";
+import { Array as Arr, String as Str } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { Array as Arr, String as Str } from "effect";
-import { SecureRandom } from "effect/crypto";
+import * as Schema from "effect/Schema";
 import { describe, expect } from "vitest";
 import { heldPort } from "./port.test-support.ts";
 import * as RecordWireTest from "./record-wire.test-support.ts";
@@ -92,12 +92,12 @@ type Key = ReturnType<typeof identity>;
 // maxDeliveries, so the box's declaration must carry the program's own limit.
 const poisonSource = Arr.join(
   [
-  'import {Machine} from "@demlik/tea/effect";',
-  'import {Schema} from "effect";',
-  "const Model = Schema.Struct({count: Schema.Int});",
-  'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
-  'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
-  `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
+    'import {Machine} from "@demlik/tea/effect";',
+    'import {Schema} from "effect";',
+    "const Model = Schema.Struct({count: Schema.Int});",
+    'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("inc")})]);',
+    'const machine = Machine.make({model: Model, msg: Msg, cmds: [], init: (loaded) => [loaded ?? {count: 0}, []], update: {throw: () => {throw new TypeError("private failure P34");}, inc: (s) => [{count: s.count + 1}, []]}});',
+    `export const program = {name: ${JSON.stringify(PROGRAM)}, maxDeliveries: ${LIMIT}, machine, state: {v: 1, schema: Model, upgrades: []}, msg: Msg, view: {data: Model, select: (s) => s}, refuse: () => null, inputs: {throw: {_tag: "write", schema: Msg, description: "Fail", personOnly: false}, inc: {_tag: "write", schema: Msg, description: "Count", personOnly: false}}, outputs: {}, writes: {}, wake: () => null};`,
   ],
   "\n",
 );
@@ -455,7 +455,7 @@ const restartedAfter = (c: Awaited<ReturnType<typeof wire>>, name: string, after
       const found = Option.getOrUndefined(
         Arr.findFirst(
           read.result.entries as Array<any>,
-        (entry) => entry._tag === "restarted" && entry.body.after === after,
+          (entry) => entry._tag === "restarted" && entry.body.after === after,
         ),
       );
 

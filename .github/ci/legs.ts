@@ -108,6 +108,7 @@ export const split = (files: readonly string[], count: number, table = measured)
 /** The seconds of a leg's files, a file with no row at the table's median. */
 export const seconds = (files: readonly string[], table: Readonly<Record<string, number>>) => {
   const unmeasured = median(Rec.values(table));
+
   return files.reduce((sum, path) => sum + (rowOf(table, path) ?? unmeasured), 0);
 };
 

@@ -24,8 +24,8 @@ import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfa
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
+import * as Str from "effect/String";
 import * as Tuple from "effect/Tuple";
-import { String as Str } from "effect";
 import type { ReactElement } from "react";
 
 /**
@@ -90,6 +90,7 @@ export const landing = (region: HTMLElement, cursor: string | null): HTMLElement
     cursor === null
       ? Option.none()
       : Arr.findFirst([...region.querySelectorAll("[data-cursor]")], (e) => e.getAttribute("data-cursor") === cursor);
+
   return (
     Option.getOrElse(row, () => region.querySelector(".tile-body"))?.querySelector<HTMLElement>(FOCUSABLE) ?? region
   );
@@ -199,6 +200,7 @@ export const Layout = ({
   open,
 }: Props) => {
   const byId = new Map(Arr.map(tiles, (t) => Tuple.make(t.id, t)));
+
   const divider = (i: number) => (
     <div key={`divider-${i}`} className="divider" style={{ flexBasis: GAP }} aria-hidden="true" />
   );
@@ -239,6 +241,7 @@ export const Layout = ({
 
     const row = node.dir === "row";
     const shares = box === null ? null : lengths(node, row ? box.width : box.height, strips, workspace.focus);
+
     return Arr.flatMap(node.parts, (part, i) => {
       const share = shares?.[i];
 

@@ -3,9 +3,9 @@
  * commits each write whole or not at all, so a crash or a power cut never leaves a torn entry.
  */
 import { DatabaseSync } from "node:sqlite"; // edge: no Effect SQL client for Node's SQLite is installed; the repo's node:sqlite handle is the existing one
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Arr from "effect/Array";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as Predicate from "effect/Predicate";
 import { nodeSql } from "../../ledger/NodeSqlite.ts";

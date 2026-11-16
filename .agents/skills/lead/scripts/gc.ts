@@ -38,11 +38,11 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { Array as Arr, pipe, String as Str } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, pipe, String as Str } from "effect";
 import { GC_SECONDS } from "./mutbox.ts";
 import { type PgrepAnswer, pgrepAnswer } from "./pgrep.ts";
 import { boxTree, boxTrees, IDLE, oldBoxTree, pinsFolder, wipOf } from "./quest.ts";
@@ -92,6 +92,7 @@ export type PinVerdict = typeof PinVerdict.Type;
 export const backupsOf = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
   const wip = branch === null ? null : wipOf(branch);
+
   return wip !== null && pipe(wip, Str.startsWith("fabrikalfa/")) === true && wip !== own ? [wip, own] : [own];
 };
 
@@ -257,6 +258,7 @@ const loadEnv = (): Env => {
     '. "$0" && printf "%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO"',
     join(import.meta.dirname, "env.sh"),
   ]);
+
   const [MAIN = "", BOXES = "", GH_REPO = ""] = Str.split(r.out, "\n");
 
   if (r.code !== 0 || MAIN === "" || BOXES === "") {
@@ -338,6 +340,7 @@ export const lastLogged = (log: string): number => {
 
   const last = pipe(readFileSync(log, "utf8"), Str.trimEnd, Str.split("\n")).at(-1) ?? "";
   const m = / (\d+) [+-]\d{4}\t/.exec(last);
+
   return m?.[1] !== undefined && m[1] !== "" ? Number(m[1]) * 1000 : 0;
 };
 
@@ -498,6 +501,7 @@ const main = () => {
       Arr.map(([r]) => r),
     ),
   );
+
   const busyIn = cwds();
   const kept = keptByDrive(env.BOXES);
   const now = DateTime.toEpochMillis(DateTime.nowUnsafe());
@@ -518,20 +522,19 @@ const main = () => {
     ...Arr.map(
       foldersIn(boxTrees(env.BOXES), (n) => pipe(n, Str.endsWith("-view"))),
       (name) => ({
-      name,
-      box: boxTree(env.BOXES, name),
+        name,
+        box: boxTree(env.BOXES, name),
       }),
     ),
     ...Arr.map(
-      foldersIn(
-        env.BOXES,
-        (n) => n === "state" || n === "box" || n === "pins" || pipe(n, Str.endsWith("-gitdata")),
-      ),
+      foldersIn(env.BOXES, (n) => n === "state" || n === "box" || n === "pins" || pipe(n, Str.endsWith("-gitdata"))),
       (name) => ({
         name,
         box: oldBoxTree(env.BOXES, name),
-    })),
+      }),
+    ),
   ].sort((a, b) => pipe(a.name, Str.localeCompare(b.name)));
+
   // The boxes this run removed, or would remove: boxfiles.ts sweeps only a box whose tree is gone.
   const gone: string[] = [];
 
@@ -545,6 +548,7 @@ const main = () => {
             const g = (...a: string[]) => sh("git", [...SAFE, `--git-dir=${gitDir}`, ...a]);
             const head = Str.trim(g("rev-parse", "--verify", "-q", "HEAD^{commit}").out) || null;
             const branch = Str.trim(g("symbolic-ref", "-q", "--short", "HEAD").out) || null;
+
             return { head, branch };
           })();
 
@@ -553,7 +557,9 @@ const main = () => {
 
     const onRemote =
       inMain && Str.trim(repo("for-each-ref", "--count=1", "--contains", head, "refs/remotes/origin").out) !== "";
+
     const branch = git?.branch == null ? null : pipe(git.branch, Str.replace(/(-wip)+$/, ""));
+
     const seen: Seen = {
       name,
       git,
@@ -736,6 +742,7 @@ const main = () => {
   for (const block of blocks.slice(1)) {
     const lines = Str.split(block, "\n");
     const field = (start: string) => Arr.findFirst(lines, (l) => pipe(l, Str.startsWith(start)));
+
     const path = pipe(
       field("worktree "),
       Option.map((l) => pipe(l, Str.slice(9))),
@@ -750,13 +757,16 @@ const main = () => {
       field("branch "),
       Option.map((l) => pipe(l, Str.slice("branch refs/heads/".length))),
     );
+
     const gitDir = gitDirOf(path);
     const branch = Option.getOrNull(ref);
+
     const head = pipe(
       field("HEAD "),
       Option.map((l) => pipe(l, Str.slice(5))),
       Option.getOrNull,
     );
+
     const tips =
       head === null
         ? []
@@ -767,6 +777,7 @@ const main = () => {
             ),
             Boolean,
           );
+
     const verdict = decideWorktree({
       branch,
       locked: Arr.some(lines, (l) => l === "locked" || pipe(l, Str.startsWith("locked "))),

@@ -16,16 +16,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
-import * as Arr from "effect/Array";
-import { String as Str } from "effect";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
@@ -152,7 +152,9 @@ const capture = () => {
       return span;
     },
   });
+
   const ended = (name: string) => Arr.filter(spans, (s) => s.name === name && s.status._tag === "Ended");
+
   return { tracer, spans, ended };
 };
 
@@ -160,7 +162,7 @@ const tags = (span: Tracer.NativeSpan): Record<string, unknown> => Rec.fromEntri
 
 /** The tag whose key is `word` or ends in `.word`. */
 const tagged = (span: Tracer.NativeSpan, word: string): unknown =>
-  Arr.findFirst(Object.entries(tags(span)), ([key]) => key === word || Str.endsWith(`.${word}`)(key)).pipe(
+  Arr.findFirst(Rec.toEntries(tags(span)), ([key]) => key === word || Str.endsWith(`.${word}`)(key)).pipe(
     Option.map(([, value]) => value),
     Option.getOrUndefined,
   );
@@ -201,6 +203,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
+
 const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const granted = (signer: string, key: string): MemberEvent => ({
@@ -506,6 +509,7 @@ describe("p97, member spans", () => {
             ended("access.write"),
             (span) => `${String(tagged(span, "answer"))} ${String(tagged(span, "reason") ?? "")}`,
           ).sort();
+
           expect(answers).toEqual(["applied ", "applied ", "ignored used"]);
           yield* clients.members;
           const read = ended("access.read").at(-1);
@@ -533,6 +537,7 @@ describe("p97, names and numbers only", () => {
       const long = (letter: string) => Str.repeat(length)(letter);
       // Process texts stay under their 256-character cap and still pass the 128 tag cut.
       const capped = (letter: string) => Str.repeat(cap)(letter);
+
       return Effect.gen(function* () {
         const mailbox = yield* Mailbox;
         const manager = yield* ProcessManager;
@@ -655,6 +660,7 @@ describe("p97, the tags hold the right names and numbers", () => {
         return Effect.gen(function* () {
           yield* write(sheet);
           expect(yield* write(macC)).toEqual({ _tag: "ignored", rev: 4, reason: "used" });
+
           const ignored = Option.getOrUndefined(
             Arr.findFirst(ended("access.write"), (span) => tagged(span, "answer") === "ignored"),
           );

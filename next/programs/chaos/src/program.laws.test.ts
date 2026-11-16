@@ -6,9 +6,9 @@ import { arbGuidedSequence, arbMsgSequence, propertyInvariant } from "@demlik/te
 import { expect, it } from "@effect/vitest";
 import * as Fabrika from "@kampus/libfabrika";
 import { syncTest } from "@kampus/libfabrika/testing";
+import { Array as Arr, String as Str } from "effect";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { chaos } from "./program.ts";
@@ -265,6 +265,7 @@ it("stop wins at every reached cut and late, duplicate or unrelated replies emit
         expect(out).toEqual([]);
         expect(chaos.wake(stopped)).toBeNull();
         const replies = Arr.filter(run.msgs, (m) => Str.endsWith("_ok")(m.type) || Str.endsWith("_err")(m.type));
+
         const tail = arbMsgSequence(
           fc.constantFrom<Msg>({ type: "timer", at: 10_000_000 }, { type: "stop" }, ...replies),
           { minLength: 10, maxLength: 20 },

@@ -124,8 +124,11 @@ const cli = (cases: ReadonlyMap<string, Case>) => {
   const files = [...cases.keys()];
   const found = firesIn(files);
   expect(Rec.fromEntries(found)).toEqual(Rec.fromEntries(Arr.map([...cases], ([f, c]) => [f, c.expected])));
-  spawnSync(OXLINT, [`--config=${ours}`, "--disable-nested-config", "--fix", ...Arr.map(files, (f) => relative(ROOT, f))], { cwd: ROOT, encoding: "utf8",
-  });
+  spawnSync(
+    OXLINT,
+    [`--config=${ours}`, "--disable-nested-config", "--fix", ...Arr.map(files, (f) => relative(ROOT, f))],
+    { cwd: ROOT, encoding: "utf8" },
+  );
   expect(Rec.fromEntries(Arr.map(files, (f) => [f, readFileSync(f, "utf8")]))).toEqual(
     Rec.fromEntries(Arr.map([...cases], ([f, c]) => [f, c.fixed])),
   );

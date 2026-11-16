@@ -14,16 +14,16 @@
 // list grew or no longer reads as a list, 0 when none did or there is no base, 2 when the base is
 // not a sha, git fails, or the base's own file does not read (main is broken, so it fails closed).
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
+import { ChildProcess } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import type * as PlatformError from "effect/PlatformError";
-import { String as Str, pipe, Array as Arr } from "effect";
-import { ChildProcess } from "effect/process";
 
 const ZEROS = pipe("0", Str.repeat(40));
 const Sha = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));

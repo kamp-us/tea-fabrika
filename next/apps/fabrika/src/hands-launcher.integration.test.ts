@@ -31,17 +31,17 @@ import { build } from "@kampus/libfabrika/build";
 import { Task } from "@kampus/libfabrika/tasks/Task";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Array as Arr, String as Str } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import { ChildProcess } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import { Array as Arr, String as Str } from "effect";
-import { SecureRandom } from "effect/crypto";
-import { ChildProcess } from "effect/process";
 import * as fc from "fast-check";
 import type { Project as LauncherProject } from "./hands-launcher.test-support.ts";
 import { localInstance } from "./local-instance.ts";
@@ -222,9 +222,9 @@ const flow = Effect.fnUntraced(
     yield* fs.writeFileString(
       entry,
       Arr.join(
-      [
-        `export { default, Connection, Process, RecordPart, IsolateTail } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
-        // The fixture's Control lets the three test calls past the control door's closed list.
+        [
+          `export { default, Connection, Process, RecordPart, IsolateTail } from ${Formatter.formatJson(path.join(app, "src/brain.ts"))};`,
+          // The fixture's Control lets the three test calls past the control door's closed list.
           `export { Project, Control } from ${Formatter.formatJson(path.join(app, "src/hands-launcher.test-support.ts"))};`,
         ],
         "\n",
@@ -378,7 +378,8 @@ const flow = Effect.fnUntraced(
         const db = yield* TestDatabase.open(path.join(hands, "hands", "journal.sqlite"), { readOnly: true }).pipe(
           Effect.orDie,
         );
-    const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) => String(row["name"]),
+        const tables = Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(), (row) =>
+          String(row["name"]),
         );
         return Object.fromEntries(
           Arr.map(tables, (t) => [t, db.prepare(`SELECT * FROM "${Str.replace(/"/g, '""')(t)}"`).all()]),

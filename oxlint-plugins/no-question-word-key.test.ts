@@ -184,6 +184,7 @@ it("real config holds generated next/, exam, test and skill paths, and leaves to
       ),
       async ([name, extension, word, skill]) => {
         const source = (spelling: string) => Arr.join(declarations(spelling, 0), "\n");
+
         const held = [
           `next/${name}.${extension}`,
           `next/${name}.test.${extension}`,
@@ -228,6 +229,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
       fc.record({ value: unicodeKey, dynamic: identifier, near: neighbor, word: fc.constantFrom(...WORDS) }),
       async ({ value, dynamic, near, word }) => {
         const text = JSON.stringify(value);
+
         const source = Arr.join(
           [
             `import { ${word} as imported } from "./outside.ts";`,
@@ -247,6 +249,7 @@ it("generated values, dynamic keys, external reads, comments, SQL and neighborin
           ],
           "\n",
         );
+
         const result = await plant({ [PATH]: source });
         expect(result(NATIVE, PATH)).toEqual([]);
         expect(result(CUSTOM, PATH)).toEqual([]);
@@ -261,26 +264,26 @@ it.live("format: quoted, escaped, shorthand and computed spellings", () =>
     const result = yield* promised(() =>
       plant({
         [PATH]: Arr.join(
-      [
-        "const why = 1;",
-        "const a = {why};",
-        'const b = {"where": 1};',
-        'const c = {"\\u0077hat": 1};',
-        'const d = {["who"]: 1};',
-        "const e = {[`how`]: 1};",
-        "const f = {[why]: 1};",
-        'interface G {readonly "\\u0077here": string}',
-        'type H = {["who"](): void};',
-        "class I {readonly [`what`] = 1;}",
-        "const j = {\\u0077ho: 1};",
-        ],
-      "\n",
-    ),
+          [
+            "const why = 1;",
+            "const a = {why};",
+            'const b = {"where": 1};',
+            'const c = {"\\u0077hat": 1};',
+            'const d = {["who"]: 1};',
+            "const e = {[`how`]: 1};",
+            "const f = {[why]: 1};",
+            'interface G {readonly "\\u0077here": string}',
+            'type H = {["who"](): void};',
+            "class I {readonly [`what`] = 1;}",
+            "const j = {\\u0077ho: 1};",
+          ],
+          "\n",
+        ),
       }),
     );
 
-  expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
-  expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
+    expect([...new Set(result(NATIVE, PATH))]).toEqual([1, 2, 7, 11]);
+    expect(result(CUSTOM, PATH)).toEqual([3, 4, 5, 6, 8, 9, 10]);
   }),
 );
 

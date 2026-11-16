@@ -6,9 +6,9 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import * as RateLimiter from "effect/persistence/RateLimiter";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as TestClock from "effect/testing/TestClock";
 import * as fc from "fast-check";
@@ -81,13 +81,13 @@ const register = <A>(
       Effect.gen(function* () {
         yield* promised(() =>
           fc.assert(
-        fc.asyncProperty(tape, (cells: Array<A>) =>
-          Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
-        ),
-        options,
+            fc.asyncProperty(tape, (cells: Array<A>) =>
+              Effect.runPromise(Effect.scoped(check(cells)).pipe(Effect.provide(TestClock.layer()))),
+            ),
+            options,
           ),
-      );
-      expect([...reached]).toEqual(expect.arrayContaining([...required]));
+        );
+        expect([...reached]).toEqual(expect.arrayContaining([...required]));
       }),
     600_000,
   );

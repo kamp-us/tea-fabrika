@@ -59,6 +59,7 @@ describe("classify", () => {
             mark === "fixtures" || mark === "e2e"
               ? Arr.join([root, ...inner, mark, `${name}${ext}`], "/")
               : Arr.join([root, ...inner, `${name}.${mark}${ext}`], "/");
+
           expect(classify(path, false)).toBe("test");
         },
       ),
@@ -96,6 +97,7 @@ describe("classify", () => {
             ...Arr.filter(inner, (part) => !["e2e", "fixtures", "docs"].includes(part)),
             `${subject}Test${ext}`,
           ];
+
           expect(classify(Arr.join([root, ...below], "/"), false)).toBe("product");
           expect(classify(Arr.join([other, ...below], "/"), false)).toBe("other");
         },
@@ -112,6 +114,7 @@ describe("classify", () => {
         fc.constantFrom("lower", "bare", "folder", "style", "data"),
         (inner, subject, shape) => {
           const kept = Arr.filter(inner, (part) => !["e2e", "fixtures", "docs"].includes(part));
+
           const below = {
             lower: [...kept, `${subject}test.ts`],
             bare: [...kept, "Test.ts"],
@@ -119,6 +122,7 @@ describe("classify", () => {
             style: [...kept, `${subject}Test.css`],
             data: [...kept, `${subject}Test.json`],
           }[shape];
+
           const path = Arr.join(["next", ...(below ?? [])], "/");
           expect(isSharedSuite(path)).toBe(false);
           expect(classify(path, false)).toBe("product");
@@ -193,6 +197,7 @@ describe("parseNumstat", () => {
           ),
           Arr.join(""),
         );
+
         const rows = parseNumstat(out);
         expect(Arr.map(rows, (row) => row.path)).toEqual(Arr.map(entries, (entry) => entry.path));
         Arr.forEach(rows, (row, at) => {
@@ -218,10 +223,12 @@ describe("countLines and diffLine", () => {
         (files, advice) => {
           const rows: Array<Row> = Arr.map(files, ([[inner, name, ext], lines, binary], at) => {
             const path = Arr.join([at % 2 === 0 ? "next" : ".agents", ...inner, `${name}${at}${ext}`], "/");
+
             return binary ? Row.cases.binary.make({ path }) : Row.cases.text.make({ path, lines });
           });
 
           const tally = countLines(rows, new Set());
+
           const product = Arr.reduce(
             rows,
             0,
@@ -242,9 +249,9 @@ describe("countLines and diffLine", () => {
 
 const table = (cells: ReadonlyArray<string>) =>
   Arr.join(
-  [
-    "| File | Product lines expected | Owner |",
-    "|---|---:|---|",
+    [
+      "| File | Product lines expected | Owner |",
+      "|---|---:|---|",
       ...Arr.map(cells, (cell, at) => `| \`f${at}.ts\` | ${cell} | build |`),
     ],
     "\n",
@@ -252,16 +259,16 @@ const table = (cells: ReadonlyArray<string>) =>
 
 const sizeSection = (slices: ReadonlyArray<number | null>) =>
   Arr.join(
-  [
-    "## Size",
-    "",
-    "Seven pull requests, each one landing whole.",
-    "",
+    [
+      "## Size",
+      "",
+      "Seven pull requests, each one landing whole.",
+      "",
       ...Arr.map(slices, (lines, at) =>
-      lines === null
-        ? `${at + 1}. **Slice ${at + 1}.** No estimate yet.`
-        : `${at + 1}. **Slice ${at + 1}: ${lines} lines.** Some words.`,
-    ),
+        lines === null
+          ? `${at + 1}. **Slice ${at + 1}.** No estimate yet.`
+          : `${at + 1}. **Slice ${at + 1}: ${lines} lines.** Some words.`,
+      ),
     ],
     "\n",
   );
@@ -281,18 +288,19 @@ describe("readPlan and advise", () => {
         (cells, slices) => {
           const plan = Arr.join(
             [
-            "## Files",
-            "",
+              "## Files",
+              "",
               table(Arr.map(cells, (c) => c.text)),
-            "",
-            sizeSection(slices),
-            "",
-            "## Records",
-            "",
-            "1. not a slice: 9000 lines",
+              "",
+              sizeSection(slices),
+              "",
+              "## Records",
+              "",
+              "1. not a slice: 9000 lines",
             ],
             "\n",
           );
+
           const size = readPlan(plan);
           expect(size.table).toBe(Arr.reduce(cells, 0, (sum, c) => sum + c.lines));
           expect(Arr.map(size.slices, (slice) => slice.lines)).toEqual(slices);
@@ -324,16 +332,17 @@ describe("readPlan and advise", () => {
   it("scenario: a table in a fence is an example, an escaped pipe stays in its cell, and no column is unknown", () => {
     const fenced = Arr.join(
       [
-      "```md",
-      table(["900"]),
-      "```",
-      "",
-      "| File \\| path | Product lines expected |",
-      "|---|---|",
-      "| a \\| b | 700 |",
+        "```md",
+        table(["900"]),
+        "```",
+        "",
+        "| File \\| path | Product lines expected |",
+        "|---|---|",
+        "| a \\| b | 700 |",
       ],
       "\n",
     );
+
     expect(readPlan(fenced)).toEqual({ table: 700, slices: [] });
     expect(Arr.map(advise(readPlan("## Files\n\n| File | Owner |\n|---|---|\n| a | build |")), (a) => a._tag)).toEqual([
       "unknown",
@@ -381,6 +390,7 @@ describe("the command", () => {
         );
 
         expect(got.status, got.stderr).toBe(0);
+
         return Str.trim(got.stdout);
       };
 
@@ -394,6 +404,7 @@ describe("the command", () => {
           Array.from({ length: n }, (_, at) => `line ${tag} ${at}`),
           "\n",
         )}\n`;
+
       git("init", "-q", "-b", "main");
       write(".fabrika/fabrika.toml", "[review]\nlines = 50\n");
       write("next/src/old name.ts", lines(40, "kept"));

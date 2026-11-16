@@ -15,9 +15,9 @@ import {
 import { dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
-import * as Result from "effect/Result";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterEach, describe, expect, it } from "vitest";
@@ -183,6 +183,7 @@ const cli = (plants: readonly Plant[]): Finding[][] => {
     const findings = Arr.filter(report.diagnostics, (d) => d.code === CODE);
     // Every finding sits in one plant's home; the rest of the scratch folder holds no source.
     expect(Arr.filter(findings, (d) => !/^\d+\//.test(d.filename))).toEqual([]);
+
     return Arr.map(plants, (_, i) => Arr.filter(findings, (d) => d.filename.startsWith(`${i}/`)));
   } finally {
     rmSync(scratch, { recursive: true, force: true });
@@ -195,6 +196,7 @@ let seen: { readonly plant: Plant; readonly found: readonly Finding[] }[] = [];
 const lint = (plants: readonly Plant[]): Finding[][] => {
   const found = inProcess(plants);
   seen.push(...Arr.map(plants, (plant, i) => ({ plant, found: found[i]! })));
+
   return found;
 };
 
@@ -839,9 +841,7 @@ describe("fabrika/program-package-layout", () => {
               "array condition": [workerKey, { [workerKey]: { [condition]: [worker] } }],
               "array dot": [".", { ".": { [condition]: [worker], [beside]: "./src/program.ts" } }],
               "fixed pattern": [`${workerKey}/*`, { [`${workerKey}/*`]: worker }],
-              "null pattern": [
-                "./*", { "./*": "./src/*.ts", ...Rec.fromEntries(Arr.map(shut, (key) => [key, null])) },
-              ],
+              "null pattern": ["./*", { "./*": "./src/*.ts", ...Rec.fromEntries(Arr.map(shut, (key) => [key, null])) }],
               window: ["./window", { "./window": worker }],
               "window tsx": ["./window", { "./window": worker }],
             },
@@ -908,7 +908,7 @@ describe("fabrika/program-package-layout", () => {
                       manifest: (fields) => ({
                         ...manifests[manifest](fields),
                         ...declared,
-                    ...(Rec.keys(aliases).length === 0 ? {} : { imports: aliases }),
+                        ...(Rec.keys(aliases).length === 0 ? {} : { imports: aliases }),
                       }),
                       links: symlinks,
                     },
@@ -917,6 +917,7 @@ describe("fabrika/program-package-layout", () => {
               ),
               (findings) => Arr.map(findings, (d) => d.message).sort(),
             );
+
           // A pure extra export and a window at './window' are fine; an unexported .ts is not judged.
           expect(atBase).toEqual(stray);
           // At './window' the Worker takes the real window's place, which nobody exports then.
@@ -1233,6 +1234,7 @@ describe("fabrika/program-package-layout", () => {
                 run(name, exports, files, { manifest: (fields) => ({ ...fields, ...declared }) }),
                 (d) => d.message,
               ).sort();
+
           expect(messages(as("./src/program.ts"))).toEqual([]);
           expect(messages(as("./src/worker.ts"))).toEqual(
             [

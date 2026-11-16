@@ -64,18 +64,23 @@ export const verdict = (
 
   const matches = (c: typeof Check.Type, r: typeof Ci.CheckRun.Type) =>
     c.name === r.name && (c.source === undefined || c.source === r.source);
+
   const selected = Arr.filter(current, (r) => Arr.some(asked, (c) => matches(c, r)));
+
   const red = Arr.filter(
     selected,
     (r) => r.status._tag === "done" && (r.status.conclusion === "failure" || r.status.conclusion === "timed_out"),
   );
+
   const lost = Arr.filter(
     selected,
     (r) =>
       r.status._tag === "done" && (r.status.conclusion === "cancelled" || r.status.conclusion === "startup_failure"),
   );
+
   const pending = Arr.filter(asked, (c) => {
     const runs = Arr.filter(selected, (r) => matches(c, r));
+
     return runs.length === 0 || Arr.some(runs, (r) => r.status._tag !== "done");
   });
 

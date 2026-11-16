@@ -17,13 +17,13 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { CommitReply, SigningReply } from "@kampus/libfabrika/workers/bindings";
+import { Array as Arr, String as Str } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Array as Arr, String as Str } from "effect";
-import { SecureRandom } from "effect/crypto";
 import { rolldown } from "rolldown";
 import { describe, expect, it } from "vitest";
 import { heldPort } from "./port.test-support.ts";
@@ -167,14 +167,14 @@ const world = async (
       sealed = join(home, "sealed.ts");
     const common = Arr.join(
       [
-      'import {Machine, Cmd} from "@demlik/tea/effect";',
-      'import {Schema} from "effect";',
-      'const noted = Schema.TaggedStruct("noted", {n: Schema.Int});',
-      "const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
-      'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("prepare")}), Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
-      'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
-      'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
-      'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
+        'import {Machine, Cmd} from "@demlik/tea/effect";',
+        'import {Schema} from "effect";',
+        'const noted = Schema.TaggedStruct("noted", {n: Schema.Int});',
+        "const Model = Schema.Struct({count: Schema.Int, replies: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
+        'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("throw")}), Schema.Struct({type: Schema.Literal("prepare")}), Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+        'const write = Cmd.make("write", {input: Schema.Struct({stream: Schema.String, write: Schema.Json}), ok: Schema.Json, err: ["not_delivered"]});',
+        'const machine = Machine.make({model: Model, msg: Msg, cmds: [write], init: (loaded) => [loaded ?? {count:0,replies:0,wake:null}, []], update: {throw: () => {throw new Error("private failure P12");}, prepare: s => [s,[]], schedule: (s,m) => [{...s,wake:m.at},[]], timer: (s,m) => [{...s,count:s.count+1,wake:m.at+10},[write({stream:"timer-events",write:{_tag:"own",event:{_tag:"noted",n:s.count+1}}})]], write_ok: s => [{...s,replies:s.replies+1},[]], write_err: s => [{...s,replies:s.replies+1},[]]}});',
+        'const declaration = {machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{throw:{_tag:"write",schema:Msg,description:"Fail",personOnly:false},prepare:{_tag:"write",schema:Msg,description:"Prepare",personOnly:false},schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false}},outputs:{},writes:{noted:{schema:noted,personOnly:false}},wake:s=>s.wake};',
       ],
       "\n",
     );
@@ -183,15 +183,15 @@ const world = async (
     writeFileSync(
       sealed,
       Arr.join(
-      [
-        'import {env} from "cloudflare:workers";',
-        'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
-        'let outbound = "blocked";',
-        `try { await fetch("http://127.0.0.1:${destination.port}"); outbound = "allowed"; } catch {}`,
-        "const Model = Schema.Struct({bindings: Schema.Array(Schema.String), outbound: Schema.String});",
-        'const Msg = Schema.Struct({type: Schema.Literal("read")});',
-        "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
-        'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
+        [
+          'import {env} from "cloudflare:workers";',
+          'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
+          'let outbound = "blocked";',
+          `try { await fetch("http://127.0.0.1:${destination.port}"); outbound = "allowed"; } catch {}`,
+          "const Model = Schema.Struct({bindings: Schema.Array(Schema.String), outbound: Schema.String});",
+          'const Msg = Schema.Struct({type: Schema.Literal("read")});',
+          "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{bindings:Object.keys(env),outbound},[]],update:{read:s=>[s,[]]}});",
+          'export const program = {name:"p12/sealed-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{},outputs:{},writes:{},wake:()=>null};',
         ],
         "\n",
       ),
@@ -202,12 +202,12 @@ const world = async (
     writeFileSync(
       alarm,
       Arr.join(
-      [
-        'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
-        "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
-        'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
-        "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
-        'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
+        [
+          'import {Machine} from "@demlik/tea/effect"; import {Schema} from "effect";',
+          "const Model = Schema.Struct({fired: Schema.Int, wake: Schema.NullOr(Schema.Number)});",
+          'const Msg = Schema.Union([Schema.Struct({type: Schema.Literal("schedule"), at: Schema.Number}), Schema.Struct({type: Schema.Literal("cancel")}), Schema.Struct({type: Schema.Literal("timer"), at: Schema.Number})]);',
+          "const machine = Machine.make({model:Model,msg:Msg,cmds:[],init:loaded=>[loaded??{fired:0,wake:null},[]],update:{schedule:(s,m)=>[{...s,wake:m.at},[]],cancel:s=>[{...s,wake:null},[]],timer:s=>[{fired:s.fired+1,wake:null},[]]}});",
+          'export const program = {name:"p12/alarm-fixture",machine,state:{v:1,schema:Model,upgrades:[]},msg:Msg,view:{data:Model,select:s=>s},refuse:()=>null,inputs:{schedule:{_tag:"write",schema:Msg,description:"Schedule",personOnly:false},cancel:{_tag:"write",schema:Msg,description:"Cancel",personOnly:false}},outputs:{},writes:{},wake:s=>s.wake};',
         ],
         "\n",
       ),

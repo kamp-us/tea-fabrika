@@ -165,6 +165,7 @@ it("the verdict passes exactly when every job passes on its own", () => {
             top.changes === "success" &&
             outputs[name] === "false" &&
             (name !== "check" || top.field === "false"));
+
         expect(judge(needs).pass).toBe(Rec.keys(needs).every(passes));
       },
     ),

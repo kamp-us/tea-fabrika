@@ -46,9 +46,9 @@ const MAX_CELL = 300;
 
 const rowCells = (line: string) =>
   Arr.map(
-  line
-    .trim()
-    .replace(/^\||\|$/g, "")
+    line
+      .trim()
+      .replace(/^\||\|$/g, "")
       .split("|"),
     (c) => c.trim(),
   );
@@ -92,10 +92,12 @@ export const failuresIn = (report: string, law: string): string[] => {
  */
 export const records = (steps: ReadonlyArray<unknown>, read: (path: string) => string | null): LawRecord[] => {
   const lastBuild = Arr.findLastIndex(steps, Schema.is(BuildEntry));
+
   const buildHead = Option.match(lastBuild, {
     onNone: () => null,
     onSome: (at) => (steps[at] as typeof BuildEntry.Type).head,
   });
+
   const byLaw = new Map<string, LawRecord>();
 
   Arr.forEach(steps, (step, at) => {

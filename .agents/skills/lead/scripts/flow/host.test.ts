@@ -2,18 +2,18 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
+import * as Clock from "effect/Clock";
+import { Digest } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
-import type * as Scope from "effect/Scope";
-import * as Formatter from "effect/Formatter";
 import * as Schema from "effect/Schema";
-import * as Clock from "effect/Clock";
-import * as Layer from "effect/Layer";
-import { Array as Arr, String as Str, pipe } from "effect";
-import { Digest } from "effect/crypto";
+import type * as Scope from "effect/Scope";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -44,6 +44,7 @@ const temp = Effect.gen(function* () {
 });
 
 const command = fc.stringMatching(/^[a-z][a-z0-9 ./=-]{0,40}$/).filter((c) => c === Str.trim(c));
+
 const sha = pipe("a", Str.repeat(40));
 
 /** The quest's state file read back: each step's name and outcome typed, and every other key kept. */
@@ -127,6 +128,7 @@ describe("the quest brief's host commands", () => {
           Effect.gen(function* () {
             const dir = yield* temp;
             yield* fs.writeFileString(`${dir}/package.json`, Formatter.formatJson(pkg));
+
             return yield* repoNode(dir);
           });
 
@@ -291,6 +293,7 @@ describe("the quest's state file", () => {
           head: sha,
           steps: [{ step: "build", outcome: "done", head: sha }],
         };
+
         yield* fs.writeFileString(state, Formatter.formatJson(before));
         const at = { boxes, quest: "quest", name: "quest-host3", head: sha };
         const sent = { _tag: "send", to: "build", reason: "red" } as const;
@@ -330,6 +333,7 @@ describe("the quest's state file", () => {
           head: sha,
           steps: [{ step: "build", box: "t9-build1", outcome: "done", head: sha }],
         };
+
         yield* fs.writeFileString(state, `${Formatter.formatJson(before, { space: "\t" })}\n`);
         const done = { _tag: "done", reason: "ok" } as const;
         yield* recordInQuest(

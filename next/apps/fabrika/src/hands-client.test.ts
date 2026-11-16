@@ -36,6 +36,7 @@ import { ClientKey, ClientKeyError } from "@kampus/libfabrika/transport/ClientKe
 import { connection } from "@kampus/libfabrika/transport/Connection";
 import { KeyLine, writeSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
+import { Array as Arr, String as Str } from "effect";
 // P39 slice 4a, next/: E1 and S1, the hands client end to end in one process. The real hands start
 // (`client/HandsStart.ts`) dials over the in-memory socket the window laws use
 // (`client/WindowStart.test-support.ts`) into the real transport driver (`transport/Connection.ts`)
@@ -59,19 +60,18 @@ import { Answer, Attached } from "@kampus/libfabrika/transport/Wire";
 // a frame the client writes, a journal value, a ledger row or a span. Plant (after build): put the
 // private key's armored text in the hello's `build`.
 import * as Effect from "effect/Effect";
+import { Base64, Base64Url } from "effect/encoding";
 import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import { KeyValueStore, RateLimiter } from "effect/persistence";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import * as Tracer from "effect/Tracer";
-import { Array as Arr, String as Str } from "effect";
-import { Base64, Base64Url } from "effect/encoding";
-import { KeyValueStore, RateLimiter } from "effect/persistence";
 import { Socket } from "effect/socket";
 import { TestClock } from "effect/testing";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { type ConnectionId, Gateway } from "./door.ts";
 

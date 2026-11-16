@@ -5,21 +5,22 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import * as ScopedRef from "effect/ScopedRef";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
 import * as fc from "fast-check";
 import { ProcessReplies } from "../cloudflare/bindings.ts";
 import { workerLoader } from "../cloudflare/index.ts";
@@ -384,6 +385,7 @@ for (const accepted of [true, false]) {
               getByName: () => ({
                 write: (_chain: unknown, _part: number, sent: ReadonlyArray<{ span: SpanRow }>) => {
                   written.push(...Arr.map(sent, ({ span }) => span));
+
                   return Promise.resolve(Written.cases.written.make({}));
                 },
               }),
@@ -399,6 +401,7 @@ for (const accepted of [true, false]) {
           yield* Effect.promise(() => runtime.runPromise(ProcessService));
           written.length = 0;
           const input = accepted ? batch : Arr.map(batch, (row) => ({ ...row, cpuMs: -row.cpuMs - 1 }));
+
           const result = yield* Effect.promise(() =>
             runtime.runPromise(ProcessService.use((service) => Effect.exit(service.usage(input)))),
           );
@@ -419,6 +422,7 @@ for (const accepted of [true, false]) {
 it.effect("U3 batched refused spans keep only hourly counts, including batches with no accepted span", () =>
   Effect.gen(function* () {
     const services = yield* Effect.context<never>();
+
     const once = (batches: ReadonlyArray<{ refused: ReadonlyArray<string>; accepted: number }>) =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -479,6 +483,7 @@ it.effect("U3 batched refused spans keep only hourly counts, including batches w
       }),
       { minLength: 1, maxLength: 12 },
     );
+
     const property = fc.asyncProperty(batches, (tape) => Effect.runPromiseWith(services)(once(tape)));
     yield* Effect.promise(() => fc.assert(property, { seed: 119120, numRuns: runsFor({ fast: 4, full: 40 }) }));
   }),
@@ -493,6 +498,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const services = yield* Effect.context<never>();
+
       const once = (tape: ReadonlyArray<boolean>) =>
         Effect.scoped(
           Effect.gen(function* () {
@@ -529,6 +535,7 @@ it.effect(
               )
               .pipe(Effect.provideContext(context));
             const rpc = <A, E>(work: Effect.Effect<A, E>) => Effect.runPromiseWith(context)(work);
+
             const ok = <A, E>(work: Effect.Effect<A, E>) =>
               rpc(Effect.map(work, (value) => ProcessReplies.cases.ok.make({ value })));
 
@@ -784,15 +791,19 @@ it.effect(
             const restored = yield* Layer.build(projectLayer(projectCtx, projectEnv, projectOptions));
             expect(yield* Context.get(restored, ProjectService).info).toEqual(live);
             const restoredLoads = seen.slice(beforeRestore);
+
             const bootstrapLoads = Arr.filter(restoredLoads, (load) =>
               pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
             );
+
             expect(bootstrapLoads).toHaveLength(1);
             expect(bootstrapLoads[0]?.tails).toBeUndefined();
+
             const programLoads = Arr.filter(
               restoredLoads,
               (load) => !pipe(load.key, Str.startsWith(`${CODE.hash}/project:`)),
             );
+
             expect(Arr.map(programLoads, (load) => load.key).sort()).toEqual(
               Arr.map(live, (process) => `${CODE.hash}/${process.process}`).sort(),
             );
@@ -801,6 +812,7 @@ it.effect(
               const load = Option.getOrUndefined(
                 Arr.findFirst(programLoads, (load) => load.key === `${CODE.hash}/${process.process}`),
               );
+
               expect(load?.tails).toHaveLength(1);
               expect(Arr.map(load?.tails ?? [], (tail) => bound.get(tail))).toEqual([
                 { project: "project-test", name: process.name, process: process.process },

@@ -1,3 +1,5 @@
+import { Array as Arr, pipe, String as Str } from "effect";
+import * as DateTime from "effect/DateTime";
 // Remove: the box rm command, which removes one box (its work folder and its git data folder) only
 // when every commit and file it saved is somewhere MAIN keeps. Deletion needs proof for every saved
 // state, so anything unknown keeps the pair. Today's lead tooling, run on our own laptop.
@@ -15,8 +17,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, pipe, String as Str } from "effect";
 import { BoxGit, type Inspection } from "./BoxGit.ts";
 import { Runs } from "./Runs.ts";
 
@@ -73,7 +73,9 @@ const joined = (base: string, rest: string) => normal(pipe(rest, Str.startsWith(
 
 // Where the last slash sits, or -1 with none, as the native lastIndexOf answered.
 const lastSlash = (path: string) => Option.getOrElse(pipe(path, Str.lastIndexOf("/")), () => -1);
+
 const above = (path: string) => (path === "/" ? "/" : normal(pipe(path, Str.slice(0, lastSlash(path)))));
+
 const last = (path: string) => pipe(path, Str.slice(lastSlash(path) + 1));
 
 const lineage = (path: string) => {
@@ -107,12 +109,14 @@ const utf8 = (bytes: Uint8Array) =>
 /** bytes.splitlines(): \n, \r and \r\n. */
 const byteLines = (text: string) => {
   const out = Str.split(text, /\r\n|\n|\r/);
+
   return out.at(-1) === "" ? out.slice(0, -1) : out;
 };
 
 /** str.splitlines(), with every separator Python's has. */
 const textLines = (text: string) => {
   const out = Str.split(text, SEPARATORS);
+
   return out.at(-1) === "" ? out.slice(0, -1) : out;
 };
 
@@ -121,6 +125,7 @@ const hex = (code: number, width: number) => pipe(code.toString(16), Str.padStar
 /** A name as Python's repr() showed it: quoted, with control characters escaped. */
 const pythonRepr = (name: string) => {
   const quote = pipe(name, Str.includes("'")) && !pipe(name, Str.includes('"')) ? '"' : "'";
+
   const escapes: Record<string, string> = {
     "\\": "\\\\",
     "\t": "\\t",
@@ -179,6 +184,7 @@ const LINE_CHARS = "[^\\x00\\r\\n]";
 /** Every line break Python's str.splitlines() knows. */
 // oxlint-disable-next-line eslint/no-control-regex -- str.splitlines() breaks at these control characters too
 const SEPARATORS = /\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/;
+
 const ZERO = pipe("0", Str.repeat(40));
 
 /** Following links by hand ends after this many, as Python's recursion limit ended it. */

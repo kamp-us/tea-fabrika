@@ -47,6 +47,7 @@ const namesItsFile = (from: string, written: string): boolean => {
   }
 
   const stem = target.slice(0, -extname(target).length);
+
   return !Arr.some(EXTENSIONS, (extension) => isFile(target + extension) || isFile(stem + extension));
 };
 

@@ -1,12 +1,13 @@
 // L3, next/. launchctl print is deliberately decoded narrowly; unknown text never means absent.
 import { expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 
@@ -219,6 +220,7 @@ it("L3 missing, duplicate, nested, ambiguous and wrong-target fields fail Unsupp
                     : mutation === "duplicate-pid"
                       ? pipe(text, Str.replace("\tpid = 81", "\tpid = 82\n\tpid = 81"))
                       : pipe(text, Str.slice(0, -3));
+
         const exit = Effect.runSync(decode(0, broken).pipe(Effect.exit));
         expect(error(exit)).toMatchObject({
           _tag: "BrainControlError",

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 // p32 and p65, strict layers: the law of `fabrika/package-imports`, the names of our own packages
 // each part of next/ may import (ticket 987, moved from the exam's `layers.test.ts`). Each generated
 // file sits at a path in one part, or in no part, and imports names drawn from every part's list and
@@ -7,10 +8,9 @@ import { join } from "node:path";
 // same table at the same paths.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
-import { it } from "@effect/vitest";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -336,41 +336,44 @@ const numbered = (path: string, n: number) => path.replace(/\/([^/]+)$/, `/N${n}
 // to `src/**`; make the rule skip every test again. Each turns this law red.
 it.live("each part fires on exactly the names of ours its table refuses, wherever its file sits", () =>
   Effect.gen(function* () {
-  let n = 0;
-  const cases = new Map<string, Case>();
-  const places = new Set<string>();
-  fc.assert(
-    fc.property(
-      fc.oneof(...Arr.map(PLACES, ([place, path]) => fc.tuple(fc.constant(place), path, imports))),
-      ([place, path, names]) => {
-        const one = caseFor(place, names);
-        check(path, one);
-        cases.set(numbered(path, n), one);
-        places.add(place);
-        n++;
+    let n = 0;
+    const cases = new Map<string, Case>();
+    const places = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.oneof(...Arr.map(PLACES, ([place, path]) => fc.tuple(fc.constant(place), path, imports))),
+        ([place, path, names]) => {
+          const one = caseFor(place, names);
+          check(path, one);
+          cases.set(numbered(path, n), one);
+          places.add(place);
+          n++;
+        },
+      ),
+      {
+        seed: 119120,
+        numRuns: 1000,
+        examples: [
+          // pinned: the review of PR 1251 found three library files the wall missed: a top-level
+          // test, a test in a folder whose row claims one file, and a file outside `src/`.
+          [["library test", "next/packages/libfabrika/src/Id.test.ts", [["@kampus/counter", 0]]]],
+          [["library test", "next/packages/libfabrika/src/coordination/Plant.test.ts", [["@kampus/tuval", 0]]]],
+          [["library", "next/packages/libfabrika/scripts/Plant.ts", [["@kampus/tuval", 0]]]],
+        ],
       },
-    ),
-    {
-      seed: 119120,
-      numRuns: 1000,
-      examples: [
-        // pinned: the review of PR 1251 found three library files the wall missed: a top-level
-        // test, a test in a folder whose row claims one file, and a file outside `src/`.
-        [["library test", "next/packages/libfabrika/src/Id.test.ts", [["@kampus/counter", 0]]]],
-        [["library test", "next/packages/libfabrika/src/coordination/Plant.test.ts", [["@kampus/tuval", 0]]]],
-        [["library", "next/packages/libfabrika/scripts/Plant.ts", [["@kampus/tuval", 0]]]],
-      ],
-    },
-  );
-  // Every place was drawn, and both fires and passes.
-  expect([...places].sort()).toEqual(Arr.map(PLACES, ([place]) => place).sort());
-  expect(Arr.some([...cases.values()], (one) => one.lines.length > 0)).toBe(true);
-  expect(Arr.some([...cases.values()], (one) => one.lines.length === 0)).toBe(true);
+    );
+    // Every place was drawn, and both fires and passes.
+    expect([...places].sort()).toEqual(Arr.map(PLACES, ([place]) => place).sort());
+    expect(Arr.some([...cases.values()], (one) => one.lines.length > 0)).toBe(true);
+    expect(Arr.some([...cases.values()], (one) => one.lines.length === 0)).toBe(true);
 
-  const result = yield* promised(() => plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
-  expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-    Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
-  );
+    const result = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))),
+    );
+
+    expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+      Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+    );
   }),
 );
 
@@ -387,48 +390,53 @@ const pathAt = new Map(PLACES);
 // "program suites" `may` in `.oxlintrc.json` (red: a program suite's import of it fired).
 it.live("the library's and a program's code may not import the test primitives, and their shared suites may", () =>
   Effect.gen(function* () {
-  let n = 0;
-  const cases = new Map<string, Case>();
-  const seen = new Set<string>();
-  fc.assert(
-    fc.property(
-      fc.oneof(
-        ...Arr.map([...CODE_PLACES, ...SUITE_PLACES], (place) =>
-          fc.tuple(
-            fc.constant(place), pathAt.get(place)!, fc.nat({ max: FORMS.length - 1 }),
-            fc.constantFrom(VITEST, TEST_DATABASE),
+    let n = 0;
+    const cases = new Map<string, Case>();
+    const seen = new Set<string>();
+    fc.assert(
+      fc.property(
+        fc.oneof(
+          ...Arr.map([...CODE_PLACES, ...SUITE_PLACES], (place) =>
+            fc.tuple(
+              fc.constant(place),
+              pathAt.get(place)!,
+              fc.nat({ max: FORMS.length - 1 }),
+              fc.constantFrom(VITEST, TEST_DATABASE),
+            ),
           ),
         ),
+        ([place, path, form, name]) => {
+          const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
+          const one: Case = { text: `${FORMS[form]!(name, 0)}\n`, lines: refused ? [1] : [] };
+          check(path, one);
+          cases.set(numbered(path, n), one);
+          seen.add(place);
+          n++;
+        },
       ),
-      ([place, path, form, name]) => {
-        const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
-        const one: Case = { text: `${FORMS[form]!(name, 0)}\n`, lines: refused ? [1] : [] };
-        check(path, one);
-        cases.set(numbered(path, n), one);
-        seen.add(place);
-        n++;
+      {
+        seed: 119120,
+        numRuns: 200,
+        examples: [
+          // pinned: the review of PR 1274 named this file, which lint let import the test package.
+          [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0, VITEST]],
+          [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0, VITEST]],
+          [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, VITEST]],
+          // Ticket 1029 moves this test kit onto the SQLite module, so its suites' part must take it.
+          [["library suites", "next/packages/libfabrika/src/node/RecordPart.test-support.ts", 0, TEST_DATABASE]],
+          [["library", "next/packages/libfabrika/src/node/NodeSqlite.ts", 0, TEST_DATABASE]],
+          [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, TEST_DATABASE]],
+        ],
       },
-    ),
-    {
-      seed: 119120,
-      numRuns: 200,
-      examples: [
-        // pinned: the review of PR 1274 named this file, which lint let import the test package.
-        [["library", "next/packages/libfabrika/src/tasks/Task.ts", 0, VITEST]],
-        [["library suites", "next/packages/libfabrika/src/tasks/TasksTest.ts", 0, VITEST]],
-        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, VITEST]],
-        // Ticket 1029 moves this test kit onto the SQLite module, so its suites' part must take it.
-        [["library suites", "next/packages/libfabrika/src/node/RecordPart.test-support.ts", 0, TEST_DATABASE]],
-        [["library", "next/packages/libfabrika/src/node/NodeSqlite.ts", 0, TEST_DATABASE]],
-        [["program suites", "next/programs/pipeline/src/RunnerTest.ts", 0, TEST_DATABASE]],
-      ],
-    },
-  );
-  expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
+    );
+    expect([...seen].sort()).toEqual([...CODE_PLACES, ...SUITE_PLACES].sort());
 
-  const result = yield* promised(() => plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))));
-  expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
-    Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
-  );
+    const result = yield* promised(() =>
+      plant(Rec.fromEntries(Arr.map([...cases], ([path, { text }]) => [path, text]))),
+    );
+
+    expect(Rec.fromEntries(Arr.map([...cases.keys()], (path) => [path, result(CODE, path)]))).toEqual(
+      Rec.fromEntries(Arr.map([...cases], ([path, { lines }]) => [path, lines])),
+    );
   }),
 );

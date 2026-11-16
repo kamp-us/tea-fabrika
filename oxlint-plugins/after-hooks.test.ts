@@ -43,9 +43,7 @@ it("refuses an after-hook in any next/ file, test or helper, and keeps the setup
         ];
 
         const free = [`packages/fabrika/src/${file}.test.ts`, `.agents/skills/x/scripts/${file}.test.ts`];
-        const result = await plant(
-          Rec.fromEntries(Arr.map([...held, ...free], (path) => [path, body(after, before)])),
-        );
+        const result = await plant(Rec.fromEntries(Arr.map([...held, ...free], (path) => [path, body(after, before)])));
 
         for (const path of held) {
           expect([path, result(CODE, path)]).toEqual([path, [2, 5]]);

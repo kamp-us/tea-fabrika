@@ -7,13 +7,14 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace } from "../processes/Process.ts";
 import * as C from "../runtime/Client.ts";
@@ -232,6 +233,7 @@ export const lastCursor = (
   tile: { readonly id: string; readonly cursor: string | null },
 ): string | null => {
   const notes = tezgah?.cursors ?? {};
+
   return Rec.has(notes, tile.id) ? (notes[tile.id] ?? null) : tile.cursor;
 };
 
@@ -434,6 +436,7 @@ type SocketSub = Sub<"socket", { readonly dial: number; readonly rejected: strin
 
 const wrote = (s: WindowModel, dial: number, calls: ReadonlyArray<Call>): Step => {
   const out = Arr.map(calls, (call, i) => write({ call, id: s.serial + i, dial }));
+
   return [
     {
       ...s,
@@ -462,6 +465,7 @@ const flush = (s: WindowModel): Step => {
         ...(p.traceId === undefined ? {} : { traceId: p.traceId }),
       }),
   );
+
   const attempts = { ...s.attempts };
 
   for (const call of calls) {
@@ -478,6 +482,7 @@ const answered = (s: WindowModel, m: On, tag: Call["_tag"]) => {
   const found = Option.getOrUndefined(
     Arr.findFirst(s.flight, (f) => f.id === m.id && f.dial === m.dial && f.call._tag === tag),
   );
+
   return found === undefined ? null : { call: found.call, rest: Arr.filter(s.flight, (f) => f !== found) };
 };
 
@@ -520,6 +525,7 @@ const tellEnded = (s: WindowModel, tile: TileRow, pid: string, reason: ExitReaso
   }
 
   const noted: WindowModel = { ...s, tiles: Arr.map(s.tiles, (t) => (t.id === tile.id ? { ...t, told: pid } : t)) };
+
   return drawnSpace(s.tezgah)?.space.focus === tile.id
     ? noted
     : say(noted, StatusMessage.cases.ended.make({ tile: tile.id, reason }));
@@ -531,6 +537,7 @@ const resolveAgain = (s: WindowModel, dial: number, ids: ReadonlySet<string>): S
   const reads = Arr.map(picked, (t) => Call.cases.read.make({ stream: nameStream(t.name), after: 0 }));
   const [written, out] = wrote(s, dial, reads);
   const flights = new Map(Arr.map(picked, (t, i) => [t.id, s.serial + i]));
+
   const tiles = Arr.map(written.tiles, (t) => {
     const id = flights.get(t.id);
 
@@ -619,9 +626,11 @@ const downFor = (s: WindowModel, raw: unknown) => {
   const tile = Option.getOrUndefined(
     Arr.findFirst(s.tiles, (t) => {
       const watch = held(t.reach);
+
       return watch !== null && watch.ref === down.ref && watch.pid === down.process;
     }),
   );
+
   return tile === undefined ? null : { tile, down, rev: letter.rev };
 };
 
@@ -633,11 +642,13 @@ const downFor = (s: WindowModel, raw: unknown) => {
 const inboxRead = (s: WindowModel, dial: number, page: ReadonlyArray<unknown>): Step => {
   const downs = Arr.flatMap(page, (letter) => Arr.fromNullishOr(downFor(s, letter)));
   const revs = Arr.flatMap(page, (letter) => Arr.map(Option.toArray(decodeRev(letter)), ({ rev }) => rev));
+
   const rows = Arr.map(downs, ({ tile, down, rev }) =>
     record({
       record: ClientRecord.cases.down.make({ name: tile.name, pid: down.process, reason: down.reason._tag, rev }),
     }),
   );
+
   const [again, reads] = resolveAgain(s, dial, new Set(Arr.map(downs, ({ tile }) => tile.id)));
   const [waited, waits] = waitInbox(again, dial, Math.max(s.inbox.after, ...revs));
 
@@ -654,6 +665,7 @@ const monitorAnswered = (s: WindowModel, m: On, result: "watching" | "refused"):
 
   const { pid, tile } = found.call;
   const asker = Option.getOrUndefined(Arr.findFirst(s.tiles, (t) => t.id === tile));
+
   const rows =
     asker === undefined ? [] : [record({ record: ClientRecord.cases.monitor.make({ name: asker.name, pid, result }) })];
 
@@ -685,6 +697,7 @@ const waitAnswered = (s: WindowModel, m: On, woke: boolean): Step => {
   }
 
   const tile = Option.getOrUndefined(Arr.findFirst(s.tiles, (t) => t.reach._tag === "ended" && t.reach.id === m.id));
+
   return tile === undefined ? [next, []] : resolveAgain(next, m.dial, new Set([tile.id]));
 };
 
@@ -715,10 +728,12 @@ const noticed = (
   note: unknown,
 ): readonly [WindowModel, Out, ReadonlyArray<string>] => {
   const [client, requested] = step(s.client, { type: "notice", pid, note });
+
   const asks = Arr.filter(
     requested,
     (p) => !Arr.some(s.tiles, (t) => held(t.reach)?.pid === p && t.recovery === "asked"),
   );
+
   const shown = client.views[pid];
   const changed = shown !== undefined && shown !== s.client.views[pid];
   const patch = Predicate.isObject(note) && Predicate.hasProperty(note, "type") && note.type === "patch";
@@ -799,10 +814,12 @@ const pressed = (s: WindowModel, step: ClientStep, tile: string, m: Schema.Json,
  *  it shows. */
 const tezgahTiles = (link: TezgahLink): ReadonlyArray<Shown> => {
   const view = optimisticState(link.client);
+
   const space =
     view === null
       ? undefined
       : Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === link.client.workspace));
+
   return view === null || space === undefined
     ? []
     : Arr.flatMap(order(space.layout), (id) =>
@@ -851,6 +868,7 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
   const asks = Arr.filter(cmds, (c) => c.type === "ask");
   const view = client.serverState;
   const due = link.attach === "waiting" && view !== null && !Arr.some(view.workspaces, (w) => w.n === client.workspace);
+
   const [after, reads] = followed(
     {
       ...s,
@@ -869,6 +887,7 @@ const tezgahTook = (s: WindowModel, pid: string, msg: TezgahMsg, fresh: (t: Show
     asks.length > 0 &&
     after.link._tag === "online" &&
     !Arr.some(after.flight, (f) => f.call._tag === "open" && f.call.pid === pid);
+
   const [written, writes] =
     reopen && after.link._tag === "online"
       ? wrote(after, after.link.dial, [Call.cases.open.make({ pid })])
@@ -905,10 +924,12 @@ const DIRS: Readonly<Record<(typeof Split.Type)["does"], Dir>> = {
 /** The workspace a tezgah window draws, in its drawn state, with that state's tiles. */
 const drawnSpace = (link: TezgahLink | null) => {
   const view = link === null ? null : optimisticState(link.client);
+
   const space =
     view === null
       ? undefined
       : Option.getOrUndefined(Arr.findFirst(view.workspaces, (w) => w.n === link?.client.workspace));
+
   return view === null || space === undefined ? null : { view, space };
 };
 
@@ -946,6 +967,7 @@ const PROBE = Schema.decodeSync(TileId)("tile_0000000000e008000000000000");
 const roomFor = (space: Workspace, at: TileId, dir: Dir, size: typeof Size.Type): boolean => {
   const here = focusOn(space, at);
   const before = fold(here, size);
+
   return Arr.every([...fold(split(here, at, dir, PROBE), size)], (t) => before.has(t));
 };
 
@@ -1051,6 +1073,7 @@ const moved = (
 const focusedIn = (s: WindowModel, step: ClientStep, tile: string, cursor: string | null): Step => {
   const link = s.tezgah;
   const drawn = drawnSpace(link);
+
   const at =
     drawn === null ? undefined : Option.getOrUndefined(Arr.findFirst(order(drawn.space.layout), (t) => t === tile));
 
@@ -1172,6 +1195,7 @@ const dated = (
   const slot = Option.getOrUndefined(Arr.findFirst(client.pending, (p) => p.n === n));
   const owner = s.from[n];
   const tile = Option.getOrUndefined(Arr.findFirst(s.tiles, (t) => t.id === owner?.tile));
+
   const type =
     slot !== undefined &&
     Predicate.isObject(slot.m) &&
@@ -1180,7 +1204,9 @@ const dated = (
     /^[a-z_]{1,40}$/.test(slot.m.type)
       ? slot.m.type
       : "other";
+
   const command = owner?.does ?? `${tile === undefined ? "program" : Str.split(tile.name, ":")[0]}.${type}`;
+
   const rows =
     before?._tag === "dating" && slot?._tag === "ready" && owner !== undefined
       ? [
@@ -1233,11 +1259,14 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     rejected: link._tag === "removed" ? link.fingerprint : s.rejected,
     flight: Arr.filter(s.flight, (f) => f.dial === open),
   };
+
   const out: Array<Out[number]> = Arr.filter(cmds, (c): c is ReturnType<typeof ping> => c.type === "ping");
+
   const knocks = Arr.map(
     Arr.filter(cmds, (c) => c.type === "knock"),
     () => Call.cases.knock.make({}),
   );
+
   const [knocked, writes] = wrote(next, open ?? 0, knocks);
   next = knocked;
   out.push(...writes);
@@ -1311,6 +1340,7 @@ const linked = (s: WindowModel, m: LinkMsg): Step => {
     asked.tezgah === null || first.length === 0
       ? asked.tezgah
       : { ...asked.tezgah, reach: TezgahReach.cases.resolving.make({ id: next.serial }) };
+
   const [reading, reads] = resolveAgain({ ...asked, tezgah }, link.dial, new Set(Arr.map(s.tiles, (t) => t.id)));
   const [waiting, waits] = waitInbox(reading, link.dial, reading.inbox.after);
   next = { ...waiting, trouble: null };
@@ -1529,8 +1559,10 @@ const frameIn = (s: WindowModel, m: Frame, own: (s: WindowModel, msg: OwnerMsg) 
                   : CallError.cases.unknown.make({}),
             },
           ];
+
     return Arr.reduce(msgs, [s, []], ([acc, cmds]: Step, msg): Step => {
       const [next, more] = own(acc, msg);
+
       return [next, [...cmds, ...more]];
     });
   }
@@ -1587,6 +1619,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
 
   const step: ClientStep = (s, m) => {
     const [next, cmds] = applyCell<C.Client, C.ClientMsg, ReturnType<typeof client.init>[1][number]>(client, s, m);
+
     return [next, Arr.map(cmds, (c) => c.pid)];
   };
 
@@ -1851,6 +1884,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
             ),
             (p) => Call.cases.open.make({ pid: p }),
           );
+
           const [written, writes] = wrote({ ...next, trouble: "Bad view" }, s.link.dial, calls);
 
           return [written, [...rows, ...writes]];
@@ -1874,9 +1908,11 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
         }
 
         const letter = found.call.letter;
+
         const slot = Option.getOrUndefined(
           Arr.findFirst(s.client.pending, (p) => p._tag === "ready" && p.letter === letter),
         );
+
         const [client] = step(s.client, { type: "reply", letter, answer: m.value });
         const owner = slot && s.from[slot.n]?.tile;
 
@@ -2005,6 +2041,7 @@ export const windowMachineFor = <P extends AnyProgram = AnyProgram>(checks: Wind
           flushed.link._tag === "online" && flushed.inbox._tag === "idle"
             ? waitInbox(flushed, flushed.link.dial, flushed.inbox.after)
             : [flushed, []];
+
         return [next, [...Arr.map(s.redate, (n) => now({ n })), ...out, ...waits]];
       },
       persist_ok: (s, m): Step => [

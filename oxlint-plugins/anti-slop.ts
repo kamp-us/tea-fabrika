@@ -17,11 +17,11 @@ import { tmpdir } from "node:os";
 import { join, matchesGlob, relative, resolve } from "node:path";
 import * as Arr from "effect/Array";
 import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
+import * as Schema from "effect/Schema";
 import { verify } from "./vendored.ts";
 
 /**
@@ -206,7 +206,9 @@ export const strays = (root: string, printed: string): ReadonlyArray<string> => 
     const pinned = Predicate.isString(plugin)
       ? Option.none()
       : Arr.findFirst(PLUGINS, ({ name }) => name === plugin.name);
+
     const from = Predicate.isString(plugin) ? "" : relative(root, resolve(root, plugin.specifier));
+
     return Option.isNone(pinned) || from === pinned.value.specifier
       ? []
       : [
@@ -255,6 +257,7 @@ export const audit = (root: string, printed: string): ReadonlyArray<string> => {
   }
 
   const scope = folders(root);
+
   const unlocked = Arr.flatMap(TAKEN, (rule) => {
     const { add, refused } = lock(
       scope,

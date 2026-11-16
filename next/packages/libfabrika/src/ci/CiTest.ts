@@ -105,7 +105,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                   const group = Option.getOrUndefined(
                     Arr.findFirst(
                       groups,
-                    (g) => g[0]?.run.name === report.run.name && g[0]?.run.source === report.run.source,
+                      (g) => g[0]?.run.name === report.run.name && g[0]?.run.source === report.run.source,
                     ),
                   );
 
@@ -119,6 +119,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
                 return Arr.map(groups, (group) => {
                   const unplaced = Arr.filter(group, (r) => r.order === null);
                   const candidates = unplaced.length > 0 ? unplaced : group;
+
                   const selected = Arr.reduce(Arr.drop(candidates, 1), item(candidates, 0), (a, b) => {
                     if (unplaced.length === 0 && a.order !== b.order) {
                       return (a.order ?? 0) > (b.order ?? 0) ? a : b;
@@ -186,17 +187,21 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
       r.commit === commit &&
       !Arr.some(reports.slice(i + 1), (later) => later.commit === commit && later.run.id === r.run.id),
   );
+
   const keys = Arr.filter(
     latest,
     (r, i) => !Arr.some(latest.slice(0, i), (p) => p.run.name === r.run.name && p.run.source === r.run.source),
   );
+
   return Arr.map(keys, ({ run: key }) => {
     const group = Arr.filter(latest, (r) => r.run.name === key.name && r.run.source === key.source);
     const unknown = Arr.filter(group, (r) => r.order === null);
+
     const pool =
       unknown.length > 0
         ? unknown
         : Arr.filter(group, (r) => r.order === Math.max(...Arr.map(group, (p) => p.order ?? -Infinity)));
+
     const priority = (r: typeof CheckRun.Type) =>
       r.status._tag !== "done"
         ? 4
@@ -210,7 +215,9 @@ const expected = (reports: ReadonlyArray<Report>, commit: string) => {
       unknown.length > 0
         ? pool
         : Arr.filter(pool, (r) => priority(r.run) === Math.max(...Arr.map(pool, (p) => priority(p.run))));
+
     const winner = item(Arr.sort(worst, Order.flip(Order.mapInput(Order.String, (r: Report) => r.run.id))), 0);
+
     return unknown.length > 0 ? { ...winner.run, status: Status.cases.queued.make({}) } : winner.run;
   });
 };
@@ -275,48 +282,49 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
 
       fc.assert(
         fc.property(fc.commands([command], { maxCommands: 45 }), run, (commands, first) => {
-              Effect.gen(function* () {
-                const context = yield* Layer.build(testLayer);
-                const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
-                expect(yield* real.ci.at("empty")).toEqual([]);
-                const reports: Array<Report> = [];
+          Effect.gen(function* () {
+            const context = yield* Layer.build(testLayer);
+            const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
+            expect(yield* real.ci.at("empty")).toEqual([]);
+            const reports: Array<Report> = [];
 
-                for (const [index, [name, source]] of (
-                  [
-                    ["a\u0000b", "c"],
-                    ["a", "b\u0000c"],
-                  ] as const
-                ).entries()) {
-                  const report = {
-                    commit: "commit",
-                    order: 0,
-                    run: { ...first, id: String(index), name, source },
-                  };
+            for (const [index, [name, source]] of (
+              [
+                ["a\u0000b", "c"],
+                ["a", "b\u0000c"],
+              ] as const
+            ).entries()) {
+              const report = {
+                commit: "commit",
+                order: 0,
+                run: { ...first, id: String(index), name, source },
+              };
 
-                  reports.push(report);
-                  yield* real.control.report(report);
-                }
+              reports.push(report);
+              yield* real.control.report(report);
+            }
 
-                fc.modelRun(
-                  () => ({ model: { reports, commits: ["commit", "empty"], starts: new Set<string>() }, real }),
-                  commands,
-                );
-                expect(Schema.is(Checks)(yield* real.ci.at("commit"))).toBe(true);
-                const latest = Arr.filter(
-                  reports,
-                  (r, i) => !Arr.some(reports.slice(i + 1), (p) => p.commit === r.commit && p.run.id === r.run.id),
-                );
+            fc.modelRun(
+              () => ({ model: { reports, commits: ["commit", "empty"], starts: new Set<string>() }, real }),
+              commands,
+            );
+            expect(Schema.is(Checks)(yield* real.ci.at("commit"))).toBe(true);
 
-                const second = yield* Layer.build(testLayer);
-                const control = Context.get(second, Control);
+            const latest = Arr.filter(
+              reports,
+              (r, i) => !Arr.some(reports.slice(i + 1), (p) => p.commit === r.commit && p.run.id === r.run.id),
+            );
 
-                for (const report of Arr.reverse(latest)) {
-                  yield* control.report(report);
-                }
+            const second = yield* Layer.build(testLayer);
+            const control = Context.get(second, Control);
 
-                for (const commit of new Set(Arr.map(reports, (r) => r.commit))) {
-                  expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
-                }
+            for (const report of Arr.reverse(latest)) {
+              yield* control.report(report);
+            }
+
+            for (const commit of new Set(Arr.map(reports, (r) => r.commit))) {
+              expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
+            }
           }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 200 },

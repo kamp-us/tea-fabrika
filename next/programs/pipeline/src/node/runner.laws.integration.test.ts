@@ -37,11 +37,11 @@ import { mailChunk } from "@kampus/libfabrika/settings/Declarations";
 import type { Sql } from "@kampus/libfabrika/Sql";
 import { nodeSql } from "@kampus/libfabrika/sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
 import { Array as Arr, String as Str } from "effect";
 import type { Redacted } from "effect";
 import { Clock, ConfigProvider, Context, Effect, Exit, Layer, Result, Schema, Scope, Stream } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
 import { handlers } from "../handlers.ts";
 import * as Mail from "../Mail.ts";
@@ -86,7 +86,9 @@ const from = {
 };
 
 const head = CodeHostTest.commit(Str.repeat(40)("a"));
+
 const base = CodeHostTest.commit(Str.repeat(40)("d"));
+
 const checked = CodeHostTest.tree(Str.repeat(40)("e"));
 
 const settings = Effect.runSync(

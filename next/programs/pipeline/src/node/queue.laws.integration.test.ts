@@ -81,6 +81,7 @@ const from = {
 };
 
 const base = CodeHostTest.commit(Str.repeat(40)("d"));
+
 const moved = CodeHostTest.commit(Str.repeat(40)("c"));
 
 const settings = Effect.runSync(
@@ -391,15 +392,18 @@ const open = Effect.fnUntraced(function* (
   // and one call for each name was half of S2's time, which ran out on a busy CI machine.
   const statuses = Effect.gen(function* () {
     const rows = yield* Ledger.use((ledger) => Stream.runCollect(ledger.read("processes", 0)));
+
     const registrations = Arr.map(
       Arr.filter(rows, (row) => row._tag === "registered"),
       (row) => Schema.decodeUnknownSync(Schema.Struct({ name: Schema.String, program: Schema.String }))(row.body),
     );
+
     const processes = yield* ProcessManager;
 
     const answers = yield* LedgerTransaction.use((tx) =>
       tx.transact((turn) => {
         const table = processes.table(turn);
+
         return Arr.map(registrations, (entry) => ({ entry, status: table.status(entry.name, brain) }));
       }),
     );
@@ -449,6 +453,7 @@ const open = Effect.fnUntraced(function* (
 
     // Read the queue checkpoint by its process, including its last model after exit.
     const queueInfo = Option.getOrThrow(Arr.findFirst(info, (i) => i.name === NAME));
+
     const checkpoint = yield* ProcessStore.use((s) => s.load).pipe(
       Effect.provide(
         ProcessStore.layer(store.sql(`model:${queueInfo.state.process}`), { process: queueInfo.state.process }),

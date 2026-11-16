@@ -8,20 +8,21 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import * as Tracer from "effect/Tracer";
-import * as Option from "effect/Option";
-import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import type { RolldownOutput, RolldownOptions, OutputOptions } from "rolldown";
@@ -113,6 +114,7 @@ const cssImport = (
   continuation: string,
 ) => {
   const quote = pipe(form, Str.startsWith("single")) ? "'" : form === "url" ? "" : '"';
+
   const ref = Arr.join(
     Arr.map([...path], (char) => {
       const required = char === "\\" || (quote === "" ? /[\s'"()]/.test(char) : char === quote);
@@ -125,7 +127,9 @@ const cssImport = (
     }),
     "",
   );
+
   const target = `${quote}${quote !== "" && continuation !== "" ? `\\${continuation}` : ""}${ref}${quote}`;
+
   return `@${keyword} ${pipe(form, Str.endsWith("string")) ? target : `${url}(${target})`}${media !== "" ? ` ${media}` : ""};`;
 };
 
@@ -301,7 +305,7 @@ describe("P16 assets and Compiler", () => {
         }),
         runs,
       ),
-      );
+  );
   it("asset byte buffers decode as UTF-8 and keep their body and hash", { timeout: buildTimeout() }, () =>
     fc.assert(
       fc.asyncProperty(graphs, async ({ name, value }) => {
@@ -354,7 +358,7 @@ describe("P16 assets and Compiler", () => {
       }),
       runs,
     ),
-    );
+  );
 
   for (const form of cssForms) {
     it(
@@ -413,6 +417,7 @@ describe("P16 assets and Compiler", () => {
             const stylesheet = Option.getOrUndefined(
               Arr.findFirst(Rec.toEntries(built.assets), ([, a]) => pipe(a.type, Str.startsWith("text/css"))),
             );
+
             assert(stylesheet, "window stylesheet must be emitted");
             await expect(
               verify({
@@ -479,10 +484,12 @@ describe("P16 assets and Compiler", () => {
             writeFileSync(join(pkg, "window.css"), `${remote}\n@import "./local${id}.css" ${condition};\n${last}`);
             const built = await run(f.options);
             const local = condition === "" ? body : `@media ${condition} {\n${body}\n}`;
+
             const stylesheets = Arr.filter(
               Rec.values(built.assets),
               (asset) => asset.type === "text/css; charset=utf-8",
             );
+
             expect(stylesheets).toHaveLength(1);
             const rules = cssRules(stylesheets[0]!.body);
 
@@ -522,46 +529,46 @@ describe("P16 assets and Compiler", () => {
           ],
         },
       ),
-      );
+  );
   it("Compiler: reachable refused TSX fails before replacing the last good brain", { timeout: buildTimeout(8) }, () =>
     fc.assert(
-        fc.asyncProperty(
-          names,
-          values,
-          fc.constantFrom("ref", "clock", "directive", "stale"),
-          async (name, value, kind) => {
-            const f = fixture(name, value),
-              good = `last-good-${value}`;
+      fc.asyncProperty(
+        names,
+        values,
+        fc.constantFrom("ref", "clock", "directive", "stale"),
+        async (name, value, kind) => {
+          const f = fixture(name, value),
+            good = `last-good-${value}`;
 
-            previous(f, good);
+          previous(f, good);
 
-            const source =
-              kind === "ref"
-                ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
-                : kind === "clock"
-                  ? `export const ${name}=()=> <b>{Date.now()}</b>`
-                  : kind === "directive"
-                    ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
-                    : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
+          const source =
+            kind === "ref"
+              ? `import {useRef} from 'react'; export const ${name}=()=>{const r=useRef(1);return <b>{r.current}</b>}`
+              : kind === "clock"
+                ? `export const ${name}=()=> <b>{Date.now()}</b>`
+                : kind === "directive"
+                  ? `export const ${name}=()=>{'use no memo';return <b>{${JSON.stringify(value)}}</b>}`
+                  : `export const ${name}=()=> <b>{${JSON.stringify(value)}}</b>`;
 
-            const path = "programs/compiler/window.tsx",
-              ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
+          const path = "programs/compiler/window.tsx",
+            ledger = kind === "stale" ? [{ file: path, fn: name, reason: "planted stale row" }] : [];
 
-            expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
-            writeFileSync(f.file, source);
+          expect(check(new Map([[path, source]]), ledger).length).toBeGreaterThan(0);
+          writeFileSync(f.file, source);
 
-            const result = await Effect.runPromise(
-              Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
-            );
+          const result = await Effect.runPromise(
+            Effect.result((await load()).build({ ...f.options, ledger })).pipe(Effect.provide(NodeServices.layer)),
+          );
 
-            expect(result).toMatchObject({
-              _tag: "Failure",
-              failure: { _tag: "BuildError", reason: "compiler" },
-            });
-            expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
-          },
-        ),
-        { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "BuildError", reason: "compiler" },
+          });
+          expect(readFileSync(join(f.options.out, "brain.mjs"), "utf8")).toBe(good);
+        },
+      ),
+      { ...runs, numRuns: runsFor({ fast: 3, full: 8 }) },
     ),
   );
   it("Compiler plants run independently against the moved real check for every refusal", () => {
@@ -984,7 +991,10 @@ describe("P16 cleanup and recording", () => {
                 ...handle,
                 generate: async (o: OutputOptions) => {
                   const out = await handle.generate(o);
-                  const css = Option.getOrUndefined(Arr.findFirst(out.output, (f) => pipe(f.fileName, Str.endsWith(".css")));
+
+                  const css = Option.getOrUndefined(
+                    Arr.findFirst(out.output, (f) => pipe(f.fileName, Str.endsWith(".css"))),
+                  );
 
                   if (css === undefined) {
                     return out;
@@ -1018,6 +1028,7 @@ describe("P16 cleanup and recording", () => {
     { timeout: buildTimeout() },
     () => {
       const versions = { rolldown: installed("rolldown"), effect: installed("effect") };
+
       return fc.assert(
         fc.asyncProperty(values, async (value) => {
           for (const phase of ["success", "program", "window", "brain"] as const) {
@@ -1052,6 +1063,7 @@ describe("P16 cleanup and recording", () => {
             expect(result._tag).toBe(fail ? "Failure" : "Success");
             const phases = Arr.filter(spans, (s) => ["build.bundle", "build.emit"].includes(s.name));
             expect(Arr.some(phases, (s) => s.name === "build.bundle")).toBe(true);
+
             const data = Arr.map(phases, (s) => ({
               name: s.name,
               attributes: Rec.fromEntries(s.attributes),

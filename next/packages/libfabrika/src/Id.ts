@@ -1,15 +1,15 @@
+import * as Arr from "effect/Array";
 // next/: TypeIDs with UUIDv7 suffixes. No platform or other libfabrika layer is needed.
 import type * as Brand from "effect/Brand";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ordering from "effect/Order";
 import * as Result from "effect/Result";
 import * as S from "effect/Schema";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 
 const alphabet = "0123456789abcdefghjkmnpqrstvwxyz";
 
@@ -63,7 +63,8 @@ const valid = (id: string): boolean => {
 
   return Option.exists(Option.all(Arr.map([...suffix], (char) => Str.indexOf(char)(alphabet))), (digits) => {
     const uuid = Arr.reduce(digits, 0n, (bits, digit) => (bits << 5n) | BigInt(digit));
-  return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
+
+    return ((uuid >> 76n) & 15n) === 7n && ((uuid >> 62n) & 3n) === 2n;
   });
 };
 

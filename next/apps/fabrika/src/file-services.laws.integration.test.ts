@@ -427,7 +427,7 @@ for (const failed of [false, true]) {
           const ledgerRead = Option.getOrThrow(
             Arr.findFirstIndex(
               w.calls,
-            ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
+              ([call, file]) => call === "read" && file === join(root, "compiler-ledger.json"),
             ),
           );
 
@@ -932,7 +932,7 @@ it.effect.prop(
           );
 
           for (const entry of entries) {
-            for (const form of [secret, Str.slice(1, -1)(JSON.stringify(secret)), encodeURIComponent(secret)]) {
+            for (const form of [secret, Str.slice(1, -1)(Formatter.formatJson(secret)), encodeURIComponent(secret)]) {
               expect(entry.text).not.toContain(form);
             }
           }

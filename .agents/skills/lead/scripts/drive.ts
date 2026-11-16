@@ -105,21 +105,21 @@ import { Cmd, run } from "@demlik/tea/effect";
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import { layer as nodeServices, type NodeServices } from "@effect/platform-node/NodeServices";
 import { nameOf, outcomesOf } from "@kampus/pipeline/stages/outcome";
+import { Array as Arr, pipe, String as Str } from "effect";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import { ChildProcess, type ChildProcessSpawner } from "effect/process";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Order from "effect/Order";
-import * as Formatter from "effect/Formatter";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import * as Rec from "effect/Record";
-import { Array as Arr, pipe, String as Str } from "effect";
-import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 import {
   type Agents,
   Answer,
@@ -286,6 +286,7 @@ export const faultFrom = (outcome: string, reason: string): Fault | null => {
       pipe(reason, Str.replace(/^commits check: /, ""), Str.split("; ")),
       (h) => !/^and \d+ more$/.test(h),
     );
+
     return held.length > 0 && Arr.every(held, (h) => /^stale_link\b/.test(h)) ? "tool" : "work";
   }
 
@@ -524,6 +525,7 @@ const readAnswer = (report: string): typeof Said.Type => {
 
   const verb = Str.toLowerCase(Str.split(m[1] ?? "", /\s+/)[0]);
   const reason = pipe(m[3] ?? "", Str.replace(/^[`*\s]+|[`*\s]+$/g, ""));
+
   return Said.cases.one.make({ verb, to: Str.toLowerCase(m[2] ?? ""), reason });
 };
 
@@ -543,6 +545,7 @@ const verdictText = (report: string) =>
 /** A review is merge-ready only when its first line says so and no line says `changes: <n>`, n above 0. */
 const mergeReady = (report: string) => {
   const lines = Arr.map(outsideFences(verdictText(report)), (l) => pipe(l, Str.replace(/^[`*#\s]+/, "")));
+
   return /^merge-ready\b/i.test(lines[0] ?? "") && !Arr.some(lines, (l) => /^changes:\s*0*[1-9]/i.test(l));
 };
 
@@ -724,6 +727,7 @@ const recordIt = (
 ): Step => {
   const kept = j.outcome.kind === "stuck" || left.length > 0;
   const reason = left.length > 0 ? `${j.reason} (box kept: ${Arr.join(left, ", ")})` : j.reason;
+
   const entry = record({
     ask,
     outcome: endName(j.outcome),
@@ -910,6 +914,7 @@ export const loadEnv = (): Env => {
     '. "$0" && printf "%s\\n%s\\n%s\\n%s\\n%s\\n" "$MAIN" "$BOXES" "$GH_REPO" "$CODEX_MODEL" "$CODEX_EFFORT"',
     join(HERE, "env.sh"),
   ]);
+
   const [MAIN = "", BOXES = "", GH_REPO = "", CODEX_MODEL = "", CODEX_EFFORT = ""] = Str.split(r.out, "\n");
 
   if (r.code !== 0 || MAIN === "") {
@@ -1113,6 +1118,7 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
 
   const moved = caseRenames(boxTree(env.BOXES, box), Arr.filter(Str.split(listed.out, "\0"), Boolean));
   const old = new Set(Arr.map(moved, (m) => m.from));
+
   const changes: Change[] = [
     ...Arr.filter(changedFiles(status.out), (c) => !old.has(c.path)),
     ...Arr.map(moved, (m) => ({ xy: "R ", ...m })),
@@ -1128,6 +1134,7 @@ export const boxChanges = (env: Pick<Env, "BOXES">, box: string) => {
 export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string): string => {
   const lines = Arr.map(Str.split(report, "\n"), (l) => pipe(l, Str.replace(/^[#*`\s]+|[*`\s]+$/g, "")));
   const prose = Arr.findFirst(lines, (l) => l.length > 0 && !pipe(l, Str.startsWith("{")));
+
   const reason = pipe(
     lines,
     Arr.filter((l) => pipe(l, Str.startsWith("{"))),
@@ -1139,11 +1146,13 @@ export const commitSubject = (ask: Pick<Ask, "ticket" | "step">, report: string)
       ),
     ),
   );
+
   const subject = pipe(
     prose,
     Option.orElse(() => reason),
     Option.getOrElse(() => "the step's work"),
   );
+
   return `T${ask.ticket} ${ask.step}: ${pipe(subject, Str.slice(0, 72))}`;
 };
 
@@ -1230,6 +1239,7 @@ const collect = (env: Env, ask: Ask, changes: readonly Change[]) => {
     }
 
     const head = Str.trim(sh("git", ["-C", wt, "rev-parse", "HEAD"]).out);
+
     return git("update-ref", `refs/heads/${ask.branch}`, head);
   } finally {
     git("worktree", "remove", "--force", wt);
@@ -1267,6 +1277,7 @@ export const startedOf = (code: number, err: string): typeof Started.Type => {
     Arr.reverse,
     Arr.findFirst((l) => Option.fromNullishOr(/^refused ([a-z_]+): ?(.*)$/.exec(Str.trim(l)))),
   );
+
   const check = pipe(
     line,
     Option.flatMap((m) => Arr.findFirst(BOX_CHECKS, (c) => c === m[1])),
@@ -1375,6 +1386,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const head = ask.step === "review" ? ask.base : Str.trim(git("rev-parse", ref).out);
+
         const failed = (message: string, r: { code: number; err: string }) => ({
           ...empty,
           head,
@@ -1396,6 +1408,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         }
 
         const names = [...new Set(Arr.filter(Str.split(touched.out, "\n"), Boolean))];
+
         const at = (rev: string, path: string) => {
           const r = git("show", `${rev}:${path}`);
 
@@ -1431,6 +1444,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           Arr.filter(Boolean),
           Arr.map((l) => Str.split(l, "\t")[0] ?? l),
         );
+
         // Each commit's own added lines, so nothing a later commit removed slips past.
         const diff = git("log", "-p", "-U0", "--no-color", "--format=", `${ask.base}..${head}`);
 
@@ -1480,6 +1494,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
 
         const { ask } = cmd;
         const text = { title: `T${ask.ticket} ${ask.quest}: the quest's steps are running`, body: Publish.DRAFT_BODY };
+
         return yield* Publish.publish({ dir: env.MAIN, branch: ask.branch, head: cmd.head, text }).pipe(
           Effect.map((p) => ({ ok: true, detail: `${tail(r.out, 1)}; ${Publish.line(ask.branch, p)}` })),
           Effect.catch((e) => Effect.succeed({ ok: false, detail: `publish ${ask.branch}: ${e.reason}` })),
@@ -1532,6 +1547,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           !pipe(outcome, Str.startsWith("stuck")) &&
           !pipe(outcome, Str.startsWith("refused")) &&
           outcome !== "send:tests:exam_paths";
+
         const state = join(env.BOXES, "state", `${ask.quest}.json`);
         const saved = savedQuest(state) ?? { quest: ask.quest, steps: [] };
         // From the box made to the agent's first event: the harness and the model starting.
@@ -1565,6 +1581,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
           head: accepted ? e.head : (saved.head ?? ask.base),
           steps: [...saved.steps, entry],
         };
+
         writeFileSync(`${state}.tmp`, `${Formatter.formatJson(quest, { space: "\t" })}\n`);
         renameSync(`${state}.tmp`, state);
         appendFileSync(
@@ -1635,6 +1652,7 @@ const planOwners = (env: Env, plan: string) => {
   }
 
   const r = sh("sh", [join(HERE, "../../plan/scripts/plancheck.sh"), "--owners-json", plan], env.MAIN);
+
   return r.code === 0 ? Option.getOrNull(Schema.decodeOption(Owners)(Str.trim(r.out))) : null;
 };
 
@@ -1654,6 +1672,7 @@ export const ownedHead = (step: StepName, owners: Readonly<Record<string, string
     Arr.filter(Rec.keys(owners), (p) => owners[p] === step || (step === "mutation" && owners[p] === "tests")),
     Order.String,
   );
+
   const other =
     "If your work needs any other path (a test helper, an e2e file, a fixture), do not change it: " +
     "answer ask, naming each path and why, so the lead amends the plan. Before you answer, read " +
@@ -1685,7 +1704,9 @@ export const mutationTail = (step: StepName, steps: Quest["steps"], read: (path:
     Option.flatMapNullishOr((s) => s.report),
     Option.filter((r) => r !== ""),
   );
+
   const text = Option.isSome(report) ? read(report.value) : null;
+
   return text === null || Option.isNone(report)
     ? "\n\n---\nThis quest has no mutation report drive can read. Since decision 0066 a quest runs no mutation step, so review without one, and do not look for one outside your box.\n"
     : `\n\n---\nThe quest's newest mutation report (${report.value}), whole. Your box cannot read outside itself, so read it here:\n\n${Str.trim(text)}\n`;
@@ -1733,6 +1754,7 @@ export const MUTATION_AGENT: AgentName = "claude";
 /** The related test paths a mutation brief names, on a line of its own: `RELATED=a.test.ts,b.test.ts`. */
 export const relatedIn = (brief: string): string | undefined => {
   const related = /^RELATED=(\S.*)$/m.exec(brief)?.[1];
+
   return related === undefined ? undefined : Str.trim(related);
 };
 
@@ -1928,6 +1950,7 @@ export const firstEventAt = (events: string): number | null => {
     onNone: () => events,
     onSome: (end) => pipe(events, Str.slice(0, end)),
   });
+
   const first = Schema.decodeOption(FirstEvent)(firstLine);
   const at = first._tag === "Some" ? Date.parse(first.value.at) : Number.NaN;
 
@@ -1939,6 +1962,7 @@ const freeGb = (path: string): number | null => {
   const r = sh("df", ["-k", path]);
   const last = pipe(r.out, Str.trim, Str.split("\n")).at(-1);
   const kb = Number(last === undefined ? undefined : pipe(last, Str.trim, Str.split(/\s+/))[3]);
+
   return r.code === 0 && Number.isFinite(kb) ? Math.floor(kb / 1024 / 1024) : null;
 };
 
@@ -1971,6 +1995,7 @@ const holderOf = (porcelain: string, branch: string): string | null => {
  */
 export const dockerHolder = (lock: string | null, alive: (pid: number) => boolean): number | null => {
   const pid = Number(lock === null ? undefined : Str.trim(lock));
+
   return lock !== null && Number.isInteger(pid) && pid > 0 && alive(pid) ? pid : null;
 };
 
@@ -2200,6 +2225,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
     ),
     Arr.filter(Boolean),
   );
+
   const isAncestor = (a: string, b: string) =>
     sh("git", ["-C", env.MAIN, "merge-base", "--is-ancestor", a, b]).code === 0;
 
@@ -2255,6 +2281,7 @@ export const prepare = (env: Env, p: StepArgs): Prepared | Refusal => {
 
     return pgrepAnswer(r.code, r.out);
   });
+
   const refused = Arr.some(counts, (c) => c._tag === "refused");
   const agents = Arr.reduce(counts, 0, (sum, c) => sum + (c._tag === "listed" ? c.count : 0));
 
@@ -2555,6 +2582,7 @@ const main = () => {
       }),
     ),
   );
+
   NodeRuntime.runMain(
     program.pipe(
       Effect.provide(

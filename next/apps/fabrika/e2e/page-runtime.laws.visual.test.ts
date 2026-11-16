@@ -18,12 +18,12 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { it, beforeAll } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Formatter from "effect/Formatter";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
-import { String as Str, pipe, Array as Arr } from "effect";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { type Browser, type BrowserContext, chromium, type LaunchOptions, type Page } from "playwright";
 import { describe, expect } from "vitest";
@@ -86,16 +86,16 @@ beforeAll(
   () =>
     Effect.gen(function* () {
       assets = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const folder = yield* Effect.acquireRelease(
-          Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
-          (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
-        );
+        Effect.gen(function* () {
+          const folder = yield* Effect.acquireRelease(
+            Effect.sync(() => mkdtempSync(join(tmpdir(), "page-runtime-"))),
+            (folder) => Effect.sync(() => rmSync(folder, { recursive: true, force: true })),
+          );
 
-        const built = yield* build({ out: join(folder, "dist"), ledger: [] });
+          const built = yield* build({ out: join(folder, "dist"), ledger: [] });
 
-        return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
-      }),
+          return { page: built.assets["/index.html"]!.body, script: built.assets["/window.js"]!.body };
+        }),
       ).pipe(Effect.provide(NodeServices.layer));
     }),
   120_000,
@@ -295,7 +295,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
         }),
       ),
     300_000,
-    );
+  );
 
   it.live(
     "L3 scenario: one real back/forward cache round trip keeps the window mounted, and it dials again; Chromium hands the listener the same persisted event on every trip, so more trips add no case",
@@ -334,7 +334,7 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
         }),
       ),
     120_000,
-    );
+  );
 
   it.live(
     "L4: a generated failure of the page program is reported on the console",
@@ -369,5 +369,5 @@ describe("Tuval's page runs on Effect's browser runtime", () => {
         }),
       ),
     300_000,
-    );
+  );
 });

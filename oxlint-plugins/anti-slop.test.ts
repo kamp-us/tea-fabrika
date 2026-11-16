@@ -16,12 +16,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -51,12 +51,15 @@ const rootRules = (): ReadonlyArray<string> => {
   const top = statement?.type === "ExpressionStatement" ? statement.expression : undefined;
   const config = top?.type === "ParenthesizedExpression" ? top.expression : top;
   const properties = config?.type === "ObjectExpression" ? config.properties : [];
+
   const rules = Arr.findFirst(
     properties,
     (property) => property.type === "Property" && property.key.type === "Literal" && property.key.value === "rules",
   );
+
   const value = Option.isSome(rules) && rules.value.type === "Property" ? rules.value.value : undefined;
   const named = value?.type === "ObjectExpression" ? value.properties : [];
+
   return Arr.flatMap(named, (property) =>
     property.type === "Property" && property.key.type === "Literal" ? [String(property.key.value)] : [],
   );
@@ -193,6 +196,7 @@ const unlisted = (rule: string): Option.Option<string> => {
   const covered = (folder: string) =>
     on.includes(folder) ||
     Arr.some(on, (glob) => WHOLE.includes(glob) && folder.startsWith(glob.slice(0, -"**".length)));
+
   return Arr.findFirst(["oxlint-plugins/**", ...folders(ROOT)], (folder) => tree(folder) && !covered(folder));
 };
 
@@ -226,6 +230,7 @@ const plant = ({ rule, glob }: Site): string => {
   made.push(folder);
   const file = join(folder, `${rule.replace("/", "-")}.ts`);
   writeFileSync(file, `${Arr.join(PLANTS[rule] ?? [], "\n")}\n`);
+
   return relative(ROOT, file);
 };
 
@@ -234,6 +239,7 @@ let fires: ReadonlyMap<Site, ReadonlyArray<number>> = new Map();
 beforeAll(() => {
   const sites = [...ON, ...OFF];
   const files = Arr.map(sites, plant);
+
   // One oxlint run for every plant, through the repository's own config.
   const ran = spawnSync(OXLINT, ["--disable-nested-config", "--format=json", ...files], {
     cwd: ROOT,
@@ -280,11 +286,13 @@ describe("L3 a taken rule holds only where its block lists the folder", () => {
     // The root holds many rules: none read means the text was not read, never that it is clean.
     expect(root.length).toBeGreaterThan(0);
     expect(Arr.filter(root, ofThePlugins)).toEqual([]);
+
     const named = pipe(
       printed.overrides,
       Arr.flatMap((block) => Rec.keys(block.rules)),
       Arr.filter(ofThePlugins),
     );
+
     expect(Arr.filter(named, (rule) => !TAKEN.includes(rule))).toEqual([]);
   });
 });
@@ -308,10 +316,12 @@ describe("L4 the zero lock names exactly the folders with no hit that are not li
         ({ names, onList, hits, strays, whole }) => {
           const scope = Arr.map(names, glob);
           const counted = Arr.map(names, (name, i) => ({ folder: glob(name), name, hits: hits[i] ?? 0 }));
+
           // A folder with no hit is often left out of the map, as a real run leaves it.
           const map = new Map(
             Arr.flatMap(counted, ({ folder, hits }) => (hits === 0 ? [] : [[folder, hits] as const])),
           );
+
           const gone = Arr.map(strays, (name) => `next/gone/${name}/**`);
           const result = lock(scope, [...Arr.map(onList, glob), ...gone, ...whole], map);
           const everything = whole.includes("next/**");
@@ -388,6 +398,7 @@ describe("L7 the config loads the fork's two plugins only from vendor/anti-slop/
           ignorePatterns: [],
           overrides: [],
         });
+
         expect(strays(ROOT, config).length).toBe(Arr.filter(entries, ({ stray }) => stray).length);
       }),
       { seed: 119120, numRuns: 100 },

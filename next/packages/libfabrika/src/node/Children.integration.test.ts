@@ -5,11 +5,11 @@
 import type { DatabaseSync } from "node:sqlite";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ScopedRef from "effect/ScopedRef";
-import * as Arr from "effect/Array";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as ChildrenTest from "../processes/ChildrenTest.ts";
 import type { Sql } from "../Sql.ts";
@@ -39,7 +39,9 @@ const store = Effect.gen(function* () {
     transaction: (step) => ScopedRef.getUnsafe(held).transaction(step),
     size: () => ScopedRef.getUnsafe(held).size(),
   };
+
   const open = () => Arr.filter(handles, (db) => db.isOpen).length;
+
   return { sql, reopen: ScopedRef.set(held, connect), probe: { open } } satisfies ChildrenTest.Store;
 });
 

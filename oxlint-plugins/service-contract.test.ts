@@ -1,10 +1,10 @@
 // L12, next/. The lint rule owns contract shape; behavior lives in the desktop laws.
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { it } from "@effect/vitest";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -86,15 +86,16 @@ it("vector: schemas and errors pass; platform imports and running code fail", ()
 
 it.live("scenario: L12 the repo config rejects a static Layer at every new contract path", () =>
   Effect.gen(function* () {
-  // The config, not RuleTester, must activate this rule at each approved contract.
+    // The config, not RuleTester, must activate this rule at each approved contract.
     const paths = Arr.map(["BrainService", "BrainControl", "BrainProbe"], (name) => `${top}${name}.ts`);
+
     const result = yield* promised(() =>
       plant(Rec.fromEntries(Arr.map(paths, (file) => [file, `${headers}${shape} { static layer = Layer.empty; }\n`]))),
-  );
+    );
 
-  for (const file of paths) {
-    expect(result("fabrika(service-contract)", file)).toEqual([2]);
-  }
+    for (const file of paths) {
+      expect(result("fabrika(service-contract)", file)).toEqual([2]);
+    }
   }),
 );
 

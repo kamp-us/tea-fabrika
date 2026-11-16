@@ -5,12 +5,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as ScopedRef from "effect/ScopedRef";
-import * as Arr from "effect/Array";
-import type { DatabaseSync } from "node:sqlite";
 import { nodeSql } from "../ledger/NodeSqlite.ts";
 import type * as ProcessesProgramMailTest from "../processes/ProgramMailTest.ts";
 import type * as RuntimeProgramMailTest from "../runtime/ProgramMailTest.ts";
@@ -71,6 +71,7 @@ const databases = Effect.gen(function* () {
     discard: true,
     concurrency: 1,
   });
+
   const open = () => Arr.filter([...held.values()], (ref) => ScopedRef.getUnsafe(ref).db.isOpen).length;
 
   return { sql, reopen, open };

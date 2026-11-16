@@ -14,17 +14,18 @@
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Declarations from "../../settings/Declarations.ts";
 import { SettingsError } from "../../settings/Files.ts";
@@ -116,6 +117,7 @@ const reason = (exit: Exit.Exit<unknown, unknown>) => {
   }
 
   const fail = Option.getOrUndefined(Arr.findFirst(exit.cause.reasons, (r) => r._tag === "Fail"));
+
   return fail?._tag === "Fail" && Schema.is(SettingsError)(fail.error) ? fail.error.reason : "not a SettingsError";
 };
 
@@ -189,6 +191,7 @@ describe("L11, no failed load reaches build, Alchemy startup or the settings-sta
       fc.constant(text("")),
       port.map((p) => text(`# the person's\n\n[instance]\nport = ${p}\n`)),
     );
+
     return fc.assert(
       fc.asyncProperty(
         file,
@@ -301,6 +304,7 @@ it("T753 L8 one load reads each source once, checks the repo first and reports s
 describe("T730, a load keeps the repo file's own minimum, and invents none without a repo", () => {
   const part = fc.oneof(fc.integer({ min: 0, max: 12 }), fc.integer({ min: 90, max: 110 }));
   const release = fc.tuple(part, part, part).map((t) => Arr.join(Arr.map(t, String), "."));
+
   const repoFile = fc.oneof(
     fc.constant({ _tag: "none" as const }),
     fc.constant({ _tag: "missing" as const }),

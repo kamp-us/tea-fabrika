@@ -32,6 +32,7 @@ export const lintCiSpeed = (text: string): string[] => {
       errors.push(`ci-speed.yaml: ${reason}`);
     }
   };
+
   const parsed = Result.try(() => map(parse(text)));
 
   if (Result.isFailure(parsed)) {

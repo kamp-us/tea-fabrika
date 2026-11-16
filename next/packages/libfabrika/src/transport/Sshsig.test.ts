@@ -12,12 +12,13 @@
 // p44, which runs the real `ssh-keygen`, is in Sshsig.integration.test.ts: it drives a process, so
 // it runs on the schedule (0536). These laws run on the saved vectors and WebCrypto keys alone.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
-import { pipe, String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import {
   SPACE,
@@ -626,33 +627,33 @@ describe("properties", () => {
 
   it.live("any change to the text refuses", () =>
     Effect.gen(function* () {
-    // Plant: accept even when Ed25519 verification is false. The changed-text refusal must fail.
+      // Plant: accept even when Ed25519 verification is false. The changed-text refusal must fail.
       const key = yield* freshKey();
       yield* promised(() =>
         fc.assert(
-      fc.asyncProperty(
-        fc.string({ unit: "binary", minLength: 1 }),
-        fc.nat(),
-        fc.string({ unit: "binary", minLength: 1, maxLength: 1 }),
-        (body, place, swap) => {
-          const chars = [...body];
-          const i = place % chars.length;
-          const changed = Arr.join([...chars.slice(0, i), swap, ...chars.slice(i + 1)], "");
-          fc.pre(Buffer.compare(Buffer.from(utf8(changed)), Buffer.from(utf8(body))) !== 0);
+          fc.asyncProperty(
+            fc.string({ unit: "binary", minLength: 1 }),
+            fc.nat(),
+            fc.string({ unit: "binary", minLength: 1, maxLength: 1 }),
+            (body, place, swap) => {
+              const chars = [...body];
+              const i = place % chars.length;
+              const changed = Arr.join([...chars.slice(0, i), swap, ...chars.slice(i + 1)], "");
+              fc.pre(Buffer.compare(Buffer.from(utf8(changed)), Buffer.from(utf8(body))) !== 0);
 
-          return Effect.runPromise(
-            Effect.gen(function* () {
-              const armored = yield* write(key, body);
-              expect(yield* check(armored, [key.line], changed)).toStrictEqual(refused);
-            }),
-          );
-        },
-      ),
-      { ...runs, numRuns: 60 },
+              return Effect.runPromise(
+                Effect.gen(function* () {
+                  const armored = yield* write(key, body);
+                  expect(yield* check(armored, [key.line], changed)).toStrictEqual(refused);
+                }),
+              );
+            },
+          ),
+          { ...runs, numRuns: 60 },
         ),
       );
     }),
-    );
+  );
 
   it("any one changed base64 character that changes the blob refuses", () => {
     // Plant: accept even when Ed25519 verification is false. The changed-blob refusal must fail.
@@ -701,33 +702,33 @@ describe("properties", () => {
 
   it.live("total: any armored text or bytes gets an answer, never a failure or a defect", () =>
     Effect.gen(function* () {
-    // Plant: return a key on parser failure. The malformed-input refusal must fail.
-    const answers = (armored: string) =>
-      Effect.runPromise(
-        Effect.gen(function* () {
-          const exit = yield* Effect.exit(check(armored, [signer, other, ecdsa, "garbage"]));
-          expect(Exit.isSuccess(exit)).toBe(true);
-          expect(Exit.isSuccess(exit) ? exit.value : undefined).toStrictEqual(refused);
-        }),
-      );
+      // Plant: return a key on parser failure. The malformed-input refusal must fail.
+      const answers = (armored: string) =>
+        Effect.runPromise(
+          Effect.gen(function* () {
+            const exit = yield* Effect.exit(check(armored, [signer, other, ecdsa, "garbage"]));
+            expect(Exit.isSuccess(exit)).toBe(true);
+            expect(Exit.isSuccess(exit) ? exit.value : undefined).toStrictEqual(refused);
+          }),
+        );
       yield* promised(() =>
         fc.assert(fc.asyncProperty(fc.string({ unit: "binary" }), answers), {
-      ...runs,
-      numRuns: 150,
+          ...runs,
+          numRuns: 150,
         }),
       );
       yield* promised(() =>
         fc.assert(
-      fc.asyncProperty(fc.uint8Array({ maxLength: 300 }), (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: 150 },
+          fc.asyncProperty(fc.uint8Array({ maxLength: 300 }), (bytes) => answers(armor(bytes))),
+          { ...runs, numRuns: 150 },
         ),
-    );
+      );
       yield* promised(() =>
         fc.assert(
-      fc.asyncProperty(nearBlob, (bytes) => answers(armor(bytes))),
-      { ...runs, numRuns: 300 },
+          fc.asyncProperty(nearBlob, (bytes) => answers(armor(bytes))),
+          { ...runs, numRuns: 300 },
         ),
       );
     }),
-    );
+  );
 });

@@ -3,8 +3,8 @@
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
 import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
 import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Str from "effect/String";
 import * as Access from "../access/Access.ts";
@@ -150,6 +150,7 @@ const safe = (text: string) =>
 // The brain-line text cap is 256 UTF-16 units. Keep a pair whole at its boundary.
 const label = (text: string) => {
   const cut = Str.slice(0, 256)(safe(text));
+
   return /[\uD800-\uDBFF]$/.test(cut) ? Str.slice(0, -1)(cut) : cut;
 };
 
@@ -216,6 +217,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         const clients = unique(m.clients);
         // Snapshots arrive separately. The latest list decides a shared key's row.
         const rows = Arr.filter(s.rows, (row) => !Arr.some(clients, (client) => client.key === row.key));
+
         return [{ ...s, rows, clients }, []];
       },
       rows: (s, m) => {
@@ -231,6 +233,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
         }
 
         const clients = Arr.filter(s.clients, (client) => !Arr.some(rows, (row) => row.key === client.key));
+
         return [{ ...s, rows, clients, passes }, commands];
       },
       approve: (s, m) => {
@@ -279,6 +282,7 @@ export const machine = (options: { readonly linkTtl: number; readonly browserLin
       },
       deny: (s, m) => {
         const row = Option.getOrUndefined(Arr.findFirst(s.rows, (r) => r.key === m.key));
+
         return [s, row === undefined ? [] : [deny({ key: row.key, saw: saw(row, "compare", "none") })]];
       },
       checked: (s, m) => {

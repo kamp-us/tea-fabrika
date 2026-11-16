@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
+import { String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
@@ -10,7 +11,6 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import { String as Str } from "effect";
 import { heldPort } from "./port.test-support.ts";
 
 // Sets one env value for the scope; the release puts the old value back, or deletes it when it was unset.

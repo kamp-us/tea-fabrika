@@ -17,8 +17,8 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, matchesGlob } from "node:path";
 import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { advises, type Fire, stale, type WarnLine, warnLines } from "./advice.ts";
@@ -149,6 +149,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
         ),
         ({ lines, fires }) => {
           const warn: WarnLine[] = Arr.map(lines, ({ folder, kind, rule }) => ({ rule, glob: globOf(folder, kind) }));
+
           const advice: Fire[] = Arr.map(fires, ({ folder, place, rule }) => ({
             code: rule,
             severity: "warning",
@@ -159,6 +160,7 @@ describe("T930 L3 a warn line is stale when no advice fire of its rule is in its
                   ? `next/${folder}/sub/b.ts`
                   : `next/${folder}x/b.ts`,
           }));
+
           const want = Arr.flatMap(lines, ({ folder, kind, rule }, i) => {
             const line = warn[i]!;
 
@@ -453,10 +455,12 @@ const jsdocsWarnFolders = ({ at, done }: { readonly at: string; readonly done: (
 
     const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
       JSON.parse(printed.stdout);
+
     return pipe(
       overrides,
       Arr.filter(({ rules }) => {
         const setting = rules["fabrika/jsdocs"];
+
         return (Arr.isArray(setting) ? setting[0] : setting) === "warn";
       }),
       Arr.flatMap(({ files }) => files),
@@ -577,6 +581,7 @@ describe("T930 L10 the five stop saying they only advise", () => {
           readonly severity: string;
         }>;
       } = JSON.parse(ran.stdout);
+
       const fires = Arr.filter(report.diagnostics, (d) => Arr.some(FIVE, (code) => code === d.code));
       expect([...new Set(Arr.map(fires, (d) => d.code))].sort()).toEqual([...FIVE].sort());
 
@@ -722,8 +727,10 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
 
       const { overrides }: { readonly overrides: ReadonlyArray<{ files: string[]; rules: Record<string, unknown> }> } =
         JSON.parse(printed.stdout);
+
       const settings = Arr.flatMap(overrides, ({ files, rules }) => {
         const setting = rules["no-restricted-properties"];
+
         return Arr.isArray(setting) && Arr.isArray(setting[1])
           ? [{ files, level: setting[0], names: Arr.map(setting[1], nameOf) }]
           : [];
@@ -735,6 +742,7 @@ describe("Reflect ban L4 each ban block under next/ keeps what the rule held the
         Arr.filter(({ level, names }) => level === "warn" && !names.includes("Reflect.get")),
         Arr.flatMap(({ files }) => files),
       );
+
       const blocks = Arr.filter(
         settings,
         ({ files, names }) => names.includes("Reflect.get") && Arr.some(files, (glob) => glob.startsWith("next/")),

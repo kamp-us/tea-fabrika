@@ -1,14 +1,14 @@
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 737, G2. `fabrika/service-id` asks a libfabrika service ID for the package, its file's path,
 // then `.Name` when the service is named otherwise (decision 0023). The fixtures are the rule's own
 // inputs (0093), planted at real libfabrika paths with the repo's config; the replay reads the tree.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
-import { it } from "@effect/vitest";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -142,6 +142,7 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
               ['export class Old extends Context.Service<Old, {}>()("old/Old") {}', false],
             ]),
           };
+
           const linted = await plant(Rec.fromEntries(Arr.map(Rec.toEntries(files), ([path, f]) => [path, f.text])));
 
           for (const [path, f] of Rec.toEntries(files)) {
@@ -198,37 +199,37 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
 
   it.live("vector: the plan's mapping is what the rule asks for, and every old spelling but Id.Generator fires", () =>
     Effect.gen(function* () {
-    const files = new Map<string, Array<readonly [string, boolean]>>();
+      const files = new Map<string, Array<readonly [string, boolean]>>();
 
-    for (const [path, name, old, next] of mapping) {
-      const lines = files.get(path) ?? [['import { Context } from "effect";', false]];
+      for (const [path, name, old, next] of mapping) {
+        const lines = files.get(path) ?? [['import { Context } from "effect";', false]];
 
-      const declare = (id: string, n: number) =>
-        name === null
-          ? `export const notes${n} = () => Context.Reference<number>("${id}", { defaultValue: () => 0 });`
-          : `export class ${name}${n === 0 ? "" : "Old"} extends Context.Service<${name}, {}>()("${id}") {}`;
+        const declare = (id: string, n: number) =>
+          name === null
+            ? `export const notes${n} = () => Context.Reference<number>("${id}", { defaultValue: () => 0 });`
+            : `export class ${name}${n === 0 ? "" : "Old"} extends Context.Service<${name}, {}>()("${id}") {}`;
 
-      lines.push([declare(`${P}/${next}`, 0), false]);
+        lines.push([declare(`${P}/${next}`, 0), false]);
 
-      // The old spelling, as a second class of the same name in its file, so the expected ID is the same.
-      if (name !== null) {
-        lines.push([
-          `export const ${name}Old = class ${name} extends Context.Service<${name}, {}>()("${written(old)}") {};`,
-          written(old) !== `${P}/${next}`,
-        ]);
-      } else {
-        lines.push([declare(written(old), 1), true]);
+        // The old spelling, as a second class of the same name in its file, so the expected ID is the same.
+        if (name !== null) {
+          lines.push([
+            `export const ${name}Old = class ${name} extends Context.Service<${name}, {}>()("${written(old)}") {};`,
+            written(old) !== `${P}/${next}`,
+          ]);
+        } else {
+          lines.push([declare(written(old), 1), true]);
+        }
+
+        files.set(path, lines);
       }
 
-      files.set(path, lines);
-    }
+      const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
+      const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text]))));
 
-    const planted = Arr.map([...files], ([path, lines]) => [`${SRC}/${path}`, file(lines)] as const);
-    const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map(planted, ([path, f]) => [path, f.text]))));
-
-    for (const [path, f] of planted) {
-      expect(linted(CODE, path), path).toEqual(f.fires);
-    }
+      for (const [path, f] of planted) {
+        expect(linted(CODE, path), path).toEqual(f.fires);
+      }
     }),
   );
 
@@ -243,11 +244,13 @@ describe("T737 G2 service IDs carry the package and the file's path", () => {
 
     const report: { readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }> } =
       JSON.parse(ran.stdout);
+
     const hits = pipe(
       report.diagnostics,
       Arr.filter((d) => d.code === CODE),
       Arr.map((d) => d.filename),
     );
+
     expect(hits).toEqual([]);
   });
 });

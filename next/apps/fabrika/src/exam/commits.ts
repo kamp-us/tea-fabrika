@@ -18,19 +18,19 @@
 // imports no product code, so a builder cannot weaken it by changing one (p84). Exit 1 on any `stuck`,
 // 0 on `done` and `ask`, 2 when the run fails: a keys file p87 refuses, or something it could not read.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
+import { ChildProcess } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import type * as PlatformError from "effect/PlatformError";
-import { String as Str, pipe, Array as Arr } from "effect";
-import { ChildProcess } from "effect/process";
 
 export const ROLES = ["tests", "build", "lead"] as const;
 
@@ -228,7 +228,8 @@ const globRegex = (glob: string) =>
 /** p85: an exam path is on the list, or holds a control character, which never passes quietly. */
 export const examMatcher = (list: ExamList) => {
   const res = Arr.map(list, (row) => globRegex(row.glob));
-  const control = (path: string) => Arr.some([...path], (ch) =>
+  const control = (path: string) =>
+    Arr.some([...path], (ch) =>
       pipe(
         ch,
         Str.charCodeAt(0),

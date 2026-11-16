@@ -32,19 +32,17 @@ const source = Arr.join(
 );
 
 const all = await plant({
-    [FILE]: source,
-    "next/packages/libfabrika/src/data/tracing.test.ts": source,
-    "packages/fabrika/src/tracing.ts": source,
+  [FILE]: source,
+  "next/packages/libfabrika/src/data/tracing.test.ts": source,
+  "packages/fabrika/src/tracing.ts": source,
   "next/packages/libfabrika/src/data/alias.ts": Arr.join(
-      ['import {Effect as E} from "effect";',
-    'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
-      "\n",
-    ),
+    ['import {Effect as E} from "effect";', 'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
+    "\n",
+  ),
   "next/packages/libfabrika/src/data/namespace.ts": Arr.join(
-      ['import * as E from "effect/Effect";',
-    'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
-      "\n",
-    ),
+    ['import * as E from "effect/Effect";', 'const append = () => E.void.pipe(E.withSpan("ledger.append"));'],
+    "\n",
+  ),
 });
 
 describe("effect-functions", () => {

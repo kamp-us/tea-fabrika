@@ -33,12 +33,13 @@
 // commands land. Each step answers only what really waits: the calls in flight and the Cmds handed out.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";
@@ -207,6 +208,7 @@ const pending: Array<readonly [number, WindowMsg]> = [];
 const drain = (world: World, i: number) => {
   for (let guard = 0; guard < 2_000; guard++) {
     const w = world.wins[i]!;
+
     const flight = Option.getOrUndefined(
       Arr.findFirst(w.s.flight, (f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`)),
     );
@@ -325,6 +327,7 @@ const desk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boolean 
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+
   return { workspaces: [{ ...w, focus: on, recent: [on, ...Arr.filter(w.recent, (t) => t !== on)] }], tiles };
 };
 
@@ -372,6 +375,7 @@ const prefix = (s: WindowModel) => (s as WindowModel & { readonly prefix: Prefix
 const polite = (s: WindowModel) => (s as WindowModel & { readonly polite: unknown }).polite;
 
 const focused = (w: World) => w.view.workspaces[0]!.focus;
+
 const dids = (sent: World["sent"]) => Arr.map(sent, (x) => x.m as Did);
 
 /** The gap the frame draws between two parts, and its padding: 0492's 4px divider (plan amendment 7). */
@@ -444,6 +448,7 @@ const foldedAt = (w: Workspace, size: Size) => {
       open,
       ([, r]) => Math.abs(r.width - SMALLEST.width) <= 0.5 || Math.abs(r.height - SMALLEST.height) <= 0.5,
     );
+
     const due = Arr.map(
       Arr.filter(open, ([, r]) => r.width < SMALLEST.width || r.height < SMALLEST.height),
       ([t]) => t,
@@ -465,6 +470,7 @@ const splitRoom = (view: TezgahView, at: TileId, dir: Dir, size: Size) => {
   const space = Layout.focus(view.workspaces[0]!, at);
   const before = foldedAt(space, size);
   const after = foldedAt(Layout.split(space, at, dir, FRESH), size);
+
   return { fits: Arr.every([...after.strips], (t) => before.strips.has(t)), close: before.close || after.close };
 };
 
@@ -504,8 +510,10 @@ describe("L13: the prefix arms only the window it was pressed in", () => {
 
             const split = SPLITS[e.key];
             const closing = e.key === "x";
+
             const child =
               Option.getOrUndefined(Arr.findFirst(shownBefore.tiles, (t) => t.id === focus))?.child === true;
+
             const several = Layout.order(shownBefore.workspaces[0]!.layout).length > 1;
 
             // A close of a workspace's last tile is tezgah's to refuse (`last_tile`); whether the window

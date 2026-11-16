@@ -181,7 +181,7 @@ export const oneMachinePerFile: CreateRule = {
 
             const variable = resolve(node);
 
-            if (variable === undefined || !Arr.some(variable.references, (ref) => ref.identifier === node) !== true) {
+            if (variable === undefined || !Arr.some(variable.references, (ref) => ref.identifier === node)) {
               continue;
             }
 
@@ -255,10 +255,12 @@ export const oneMachinePerFile: CreateRule = {
           }
 
           const from = statement.source.value;
+
           const values = Arr.filter(
             statement.specifiers,
             (s) => s.type !== "ImportSpecifier" || s.importKind !== "type",
           );
+
           const io =
             (Arr.some(IO_MODULES, (pattern) => pattern.test(from)) &&
               (statement.specifiers.length === 0 || values.length > 0)) ||

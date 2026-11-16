@@ -16,12 +16,13 @@ import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -147,6 +148,7 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         ],
         onWire,
       );
+
       const [fresh] = tezgahMachine.init(null, { workspace: 1 });
       let [m] = both(fresh, { type: "server", rev: start, view: wires[0] });
       let shown = wires[0];
@@ -397,6 +399,7 @@ const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: bool
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+
   return { workspaces: [{ ...w, focus: on, recent: [on, ...Arr.filter(w.recent, (t) => t !== on)] }], tiles };
 };
 
@@ -404,6 +407,7 @@ const makeDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: bool
 const drawnSpace = (s: WindowModel) => {
   const client = s.tezgah?.client;
   const view = client === undefined ? null : optimisticState(client);
+
   return Option.getOrNull(
     Option.flatMap(Option.fromNullishOr(view), (v) => Arr.findFirst(v.workspaces, (w) => w.n === client?.workspace)),
   );
@@ -516,6 +520,7 @@ const stepWin = (world: World, i: number, m: WindowMsg, each: (e: Event) => void
 const housekeep = (world: World, i: number, each: (e: Event) => void) => {
   for (let guard = 0; guard < 200; guard++) {
     const w = world.wins[i]!;
+
     const cmd = Option.getOrUndefined(
       Arr.findFirst(w.waiting, (c) => ["record", "write", "ping", "persist"].includes(c.type)),
     );
@@ -593,6 +598,7 @@ const reply = (world: World, i: number, each: (e: Event) => void) => {
   const flight = Option.getOrUndefined(
     Arr.findFirst(w.s.flight, (f) => f.id === r.id && f.dial === r.dial && f.call._tag === "send"),
   );
+
   const letter = flight?.call._tag === "send" ? flight.call.letter : null;
 
   if (letter !== null && r.pos >= 0) {
@@ -728,6 +734,7 @@ const online = (world: World, i: number, each: (e: Event) => void) => {
 
   for (let guard = 0; guard < 200; guard++) {
     housekeep(world, i, each);
+
     const flight = Option.getOrUndefined(
       Arr.findFirst(w.s.flight, (f) => f.call._tag !== "send" && !w.answered.has(`${f.dial} ${f.id}`)),
     );
@@ -1064,9 +1071,11 @@ describe("Desk S3 L24: two windows' moves and the server's answers, in any order
               readonly via?: { readonly _tag: string };
               readonly cursor?: string | null;
             };
+
             const move = Option.getOrUndefined(
               Arr.findFirst(world.wins[win]!.moves, (x) => x.letter === call["letter"]),
             );
+
             expect(move, `L24: window ${win}'s letter ${String(call["letter"])} is one of its moves`).toBeDefined();
             checked += move!.cursor === null ? 0 : 1;
             long += (move!.cursor?.length ?? 0) > 80 ? 1 : 0;
@@ -1175,12 +1184,14 @@ describe("Desk S3 L29: a move the server overrode is recorded", () => {
 
         const world = walk(makeDesk(d.cuts, d.focus), picks, ({ win, m, prev, next, cmds, world: at }) => {
           const w = at.wins[win]!;
+
           const focusRows = Arr.flatMap(cmds, (c) => {
             const record =
               c.type === "record" ? (c["record"] as { readonly _tag: string; readonly [k: string]: unknown }) : null;
 
             return record?._tag === "focus" ? [record] : [];
           });
+
           const before = new Set(Arr.map(waitingMoves(prev), letterIn));
           const after = new Set(Arr.map(waitingMoves(next), letterIn));
           const dropped = Arr.filter(w.moves, (x) => x.letter !== null && before.has(x.letter) && !after.has(x.letter));

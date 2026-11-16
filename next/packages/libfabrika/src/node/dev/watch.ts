@@ -6,14 +6,15 @@ import { run } from "@demlik/tea/effect";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import { watch, type RolldownWatcherEvent } from "rolldown";
 import * as Id from "../../Id.ts";
 import { hash } from "../../runtime/Built.ts";
@@ -167,6 +168,7 @@ export const watchPrograms = (options: {
 
           // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: Rolldown awaits its listener before END
           watcher.on("event", (event) => Effect.runPromiseWith(context)(received(event)));
+
           return watcher;
         }),
         (watcher) =>
@@ -229,7 +231,10 @@ export const watchPrograms = (options: {
             const built = yield* Effect.result(
               buildPrograms({ root, entry: options.entry, programs: [selected] }, undefined, inputs),
             );
-            const digest = yield* hash(Formatter.formatJson([...inputs].sort(([a], [b]) => pipe(a, Str.localeCompare(b)))));
+
+            const digest = yield* hash(
+              Formatter.formatJson([...inputs].sort(([a], [b]) => pipe(a, Str.localeCompare(b)))),
+            );
 
             if (built._tag === "Failure" && phase.getState().failedInputs === digest) {
               return yield* finish(Option.none());

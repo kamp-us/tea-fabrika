@@ -111,6 +111,7 @@ const withSince = (found: ReadonlyArray<JSDocDiagnostic>, block: JSDocBlock, sin
           found,
           (d) => d.code !== "invalid-since" && !(d.code === "missing-tag" && d.message.endsWith("@since")),
         );
+
   const messages = Arr.map(kept, (d) => d.message);
 
   if (since === "absent" && Arr.some(block.tags, (tag) => tag.name === "since")) {

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 911, B1.0. `fabrika/no-static-layer` refuses every static member of a class that extends
 // `Context.Service` (0095; owner, 2026-11-13). Law 2 runs generated classes in process through
 // oxlint's RuleTester. Laws 3 and 6 read the repo's own `.oxlintrc.json`: one real lint run over a
@@ -7,10 +8,9 @@ import { join } from "node:path";
 // the day the rule landed, which may only grow.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
-import { it } from "@effect/vitest";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
@@ -152,6 +152,7 @@ it("fires exactly on the static members of a class that extends Context.Service,
 
         return { text: `  ${text(`${name}${i === 0 ? "" : i}`)}`, fires: fires && base === "service" };
       });
+
       const code = Arr.join([...head, ...Arr.map(body, (b) => b.text), expression ? "};" : "}", ""], "\n");
       const lines = Arr.flatMap(body, (b, i) => (b.fires ? [head.length + i + 1] : []));
       const filename = "next/packages/libfabrika/src/tasks/Retries.ts";
@@ -218,6 +219,7 @@ const configured = (): readonly string[] => {
   const config = toValue(tree.body[0].declaration) as {
     readonly overrides: ReadonlyArray<{ readonly files: readonly string[]; readonly rules: Record<string, unknown> }>;
   };
+
   return pipe(
     config.overrides,
     Arr.filter((o) => o.rules[RULE] === "error"),
@@ -251,19 +253,21 @@ it.live(
   "scenario: the real config holds a static layer in each listed folder, and leaves tests and today's version out",
   () =>
     Effect.gen(function* () {
-  // Only the real config holds the list, so one real lint run reads one planted file per listed
-  // folder, saved or added since, and per left-out kind.
-  const folders = Arr.filter([...new Set([...LISTED, ...configured()])], (f) => f !== "next/**");
-  const on = Arr.map(folders, (folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
-  const off = [
-    "next/packages/libfabrika/src/tasks/Planted.test.ts",
-    "next/packages/libfabrika/src/tasks/Planted.test.tsx",
-    "next/packages/libfabrika/src/tasks/PlantedTest.ts",
-    "next/packages/libfabrika/src/tasks/Planted.test-support.ts",
-    "next/apps/fabrika/src/Planted.test.ts",
-    "packages/fabrika/src/Planted.ts",
-  ];
-  const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map([...on, ...off], (path) => [path, SERVICE]))));
+      // Only the real config holds the list, so one real lint run reads one planted file per listed
+      // folder, saved or added since, and per left-out kind.
+      const folders = Arr.filter([...new Set([...LISTED, ...configured()])], (f) => f !== "next/**");
+      const on = Arr.map(folders, (folder) => folder.replace(/\*\*$/, "planted/Planted.ts"));
+
+      const off = [
+        "next/packages/libfabrika/src/tasks/Planted.test.ts",
+        "next/packages/libfabrika/src/tasks/Planted.test.tsx",
+        "next/packages/libfabrika/src/tasks/PlantedTest.ts",
+        "next/packages/libfabrika/src/tasks/Planted.test-support.ts",
+        "next/apps/fabrika/src/Planted.test.ts",
+        "packages/fabrika/src/Planted.ts",
+      ];
+
+      const linted = yield* promised(() => plant(Rec.fromEntries(Arr.map([...on, ...off], (path) => [path, SERVICE]))));
 
       expect(Arr.map(on, (path) => [path, linted(CODE, path)])).toEqual(Arr.map(on, (path) => [path, [4]]));
       expect(Arr.map(off, (path) => [path, linted(CODE, path)])).toEqual(Arr.map(off, (path) => [path, []]));

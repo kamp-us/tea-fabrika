@@ -17,8 +17,8 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import * as Effect from "effect/Effect";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
 
@@ -41,8 +41,9 @@ const codeFiles = (dir: string): ReadonlyArray<string> =>
 
 /** The names a file imports from, read from lines that start with `import` and name a `from`. */
 const importsInFile = (file: string): ReadonlyArray<string> =>
-  Arr.flatMap([...pipe(readFileSync(file, "utf8"), Str.matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm))], (m) =>
-    m[1] === undefined ? [] : [m[1]],
+  Arr.flatMap(
+    [...pipe(readFileSync(file, "utf8"), Str.matchAll(/^[ \t]*import\b[^;]*?\bfrom\s*["']([^"']+)["']/gm))],
+    (m) => (m[1] === undefined ? [] : [m[1]]),
   );
 
 /** Each machine under `next`, with the laws files beside it: `<name>.laws.test.ts` and the like. */
@@ -51,7 +52,9 @@ const machines = (next: string): ReadonlyArray<{ readonly path: string; readonly
 
   return pipe(
     files,
-    Arr.filter((file) => !/\.test\.tsx?$/.test(file) && pipe(readFileSync(file, "utf8"), Str.includes("defineMachine("))),
+    Arr.filter(
+      (file) => !/\.test\.tsx?$/.test(file) && pipe(readFileSync(file, "utf8"), Str.includes("defineMachine(")),
+    ),
     Arr.map((machine) => {
       const stem = pipe(basename(machine), Str.replace(/\.tsx?$/, ""));
       const laws = Arr.filter(

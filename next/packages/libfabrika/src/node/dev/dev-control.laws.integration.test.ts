@@ -7,6 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -14,15 +15,15 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
-import * as Arr from "effect/Array";
-import * as Layer from "effect/Layer";
-import { String as Str, pipe } from "effect";
 import { vi, type Mock } from "vitest";
-import { FetchHttpClient } from "effect/http";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
 import type { BrainEvent } from "../../runtime/BrainEvent.ts";
 import { ControlPlugin } from "./ControlPlugin.ts";
@@ -309,32 +310,32 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
   });
 
   fetch.mockImplementation(async (url, options) => {
-        const body = JSON.parse(bodyText(options)) as Call["body"];
-        // The address as `fetch` parses it, given as a string or as the client's URL object.
-        sent.push({ url: new URL(String(url)).href, body });
+    const body = JSON.parse(bodyText(options)) as Call["body"];
+    // The address as `fetch` parses it, given as a string or as the client's URL object.
+    sent.push({ url: new URL(String(url)).href, body });
 
-        if (mode === "startup") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
+    if (mode === "startup") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
 
-        if (body.method === "brain") {
-          // Keep lifecycle rows in the real outbox so the walk can read every one.
-          return Response.json({ error: { reason: "offline" } });
-        }
+    if (body.method === "brain") {
+      // Keep lifecycle rows in the real outbox so the walk can read every one.
+      return Response.json({ error: { reason: "offline" } });
+    }
 
-        if (body.target === "record") {
-          return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
-        }
+    if (body.target === "record") {
+      return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    }
 
-        if (world.phase !== "up") {
-          throw new Error("connection refused");
-        }
+    if (world.phase !== "up") {
+      throw new Error("connection refused");
+    }
 
-        const answer = answers.get(body.name) ?? "value";
+    const answer = answers.get(body.name) ?? "value";
 
-        return Response.json(
-          answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
-        );
+    return Response.json(
+      answer === "value" ? { value: { echo: body.name } } : { error: { reason: `remote-${body.name}` } },
+    );
   });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -358,6 +359,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
       const dev = yield* startDev({ name: NAME, port: 18787, build: "test", home, ...BRAIN }, (local) =>
         Effect.gen(function* () {
           observe = Context.get(local, RuntimeLifecycle);
+
           const plugin = Option.getOrUndefined(
             Arr.findFirst(
               [...local.mapUnsafe.values()],
@@ -374,6 +376,7 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
       // The startup flush delivered the first started row; its brain call keeps what it said.
       const startup = Option.getOrThrow(Arr.findFirst(sent, (call) => call.body.method === "brain")).body
         .args[0] as Row;
+
       facts.push({ _tag: "started", at: walk.base, pid: walk.pid, cause: { reason: "open" } });
       world.cause = { reason: "crash" };
       mode = "walk";
@@ -593,12 +596,14 @@ const run = Effect.fnUntraced(function* (walk: Walk, fetch: Mock<typeof globalTh
 
   const writes = Arr.filter(sent, (call) => call.body.target === "record" && call.body.method === "write");
   const spans = Arr.flatMap(writes, (call) => (call.body.args[2] as ReadonlyArray<Span> | undefined) ?? []);
+
   return { startup, rows, facts, calls, restartReads, spans, world, kills };
 });
 
 // Each run gets its own clock, file system, process ids, secrets and platform stand-in.
 const walked = (walk: Walk) => {
   const fetch = vi.fn<typeof globalThis.fetch>();
+
   return run(walk, fetch).pipe(
     Effect.provide(
       FetchHttpClient.layer.pipe(

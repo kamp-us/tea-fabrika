@@ -101,6 +101,7 @@ describe("the flow machine", () => {
         if (Option.isNone(found)) {
           expect(model._tag).toBe("done");
           expect(ran).toEqual(Arr.map(flow.steps, (_, i) => i));
+
           return;
         }
 

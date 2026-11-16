@@ -18,11 +18,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative } from "node:path";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
+import * as Schema from "effect/Schema";
 import fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { afterAll, describe, expect, it } from "vitest";
@@ -213,12 +213,15 @@ const extended = (config: string): ReadonlyArray<string> => {
   const top = statement?.type === "ExpressionStatement" ? statement.expression : undefined;
   const object = top?.type === "ParenthesizedExpression" ? top.expression : top;
   const properties = object?.type === "ObjectExpression" ? object.properties : [];
+
   const named = Arr.findFirst(
     properties,
     (property) => property.type === "Property" && property.key.type === "Literal" && property.key.value === "extends",
   );
+
   const value = Option.isSome(named) && named.value.type === "Property" ? named.value.value : undefined;
   const items = value?.type === "ArrayExpression" ? value.elements : [value];
+
   return Arr.flatMap(items, (item) =>
     item?.type === "Literal" && Predicate.isString(item.value)
       ? [relative(ROOT, join(ROOT, dirname(config), item.value))]
@@ -273,6 +276,7 @@ describe("L6 nothing of this repo's runs or checks the vendored files", () => {
       const shown = spawnSync(TSC, ["--showConfig", "-p", config], { cwd: ROOT, encoding: "utf8" });
       expect(shown.status, `${config}: ${shown.stderr}`).toBe(0);
       const files = Schema.decodeUnknownSync(Shown)(shown.stdout).files ?? [];
+
       return pipe(
         files,
         Arr.map((file) => relative(ROOT, join(ROOT, dirname(config), file))),

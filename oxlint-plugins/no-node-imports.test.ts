@@ -1,11 +1,11 @@
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 // Each generated case runs in process through oxlint's RuleTester, at its next/ path; one oxlint run
 // over every case's files then proves the repo's own .oxlintrc.json wires the rule at those paths.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { it } from "@effect/vitest";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -58,126 +58,136 @@ const numbered = (path: string, n: number) => path.replace(/native/, `native${n}
 
 it.live("every native import form needs a nonempty reason on its own line, in product and exam code", () =>
   Effect.gen(function* () {
-  let n = 0;
-  const cases = new Map<string, Case>();
-  fc.assert(
-    fc.property(
-      fc.constantFrom(
-        "fs",
-        "fs/promises",
-        "path",
-        "child_process",
-        "util",
-        "os",
-        "crypto",
-        "sqlite",
-        "url",
-        "stream/web",
-        "test",
-        "module",
+    let n = 0;
+    const cases = new Map<string, Case>();
+    fc.assert(
+      fc.property(
+        fc.constantFrom(
+          "fs",
+          "fs/promises",
+          "path",
+          "child_process",
+          "util",
+          "os",
+          "crypto",
+          "sqlite",
+          "url",
+          "stream/web",
+          "test",
+          "module",
+        ),
+        fc.boolean(),
+        fc.uuid(),
+        (name, prefix, reason) => {
+          const module = `${prefix ? "node:" : ""}${name}`;
+          // Node's prefix-only modules are not bare builtins.
+          const native = prefix || !["test", "sqlite"].includes(name);
+          const from = JSON.stringify(module);
+
+          const forms = [
+            `import * as a from ${from};`,
+            `import a from ${from};`,
+            `import {x as a} from ${from};`,
+            `import ${from};`,
+            `import type {X} from ${from};`,
+            `import {type X} from ${from};`,
+            `export * from ${from};`,
+            `export {x} from ${from};`,
+            `export type {X} from ${from};`,
+            `const a = import(${from});`,
+            `const a = import(\`${module}\`);`,
+            `const a = require(${from});`,
+            `const a = require(\`${module}\`);`,
+            `const a = module.require(${from});`,
+            `import a = require(${from});`,
+            `type A = import(${from}).X;`,
+          ];
+
+          const paths = [
+            "next/packages/libfabrika/src/native.ts",
+            "next/apps/fabrika/src/exam/native.ts",
+            "next/native.d.ts",
+            "next/native.test.ts",
+            "next/native.test-support.ts",
+            "next/e2e/native.ts",
+            "packages/fabrika/src/native.ts",
+          ];
+
+          const lines = Arr.flatMap(forms, (form, i) =>
+            Arr.map(
+              [
+                "",
+                ` // edge: ${reason}`,
+                " // edge:   ",
+                "before",
+                ` /* edge: ${reason} */`,
+                ` // not edge: ${reason}`,
+              ],
+              (mark, j) => {
+                const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
+
+                return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
+              },
+            ),
+          );
+
+          const body = Arr.join(lines, "\n");
+          const expected: number[] = [];
+          let line = 1;
+
+          for (const _ of forms) {
+            expected.push(line, line + 2, line + 4, line + 5, line + 6);
+            line += 7;
+          }
+
+          for (const [i, path] of paths.entries()) {
+            const one = { text: body, lines: native && i < 3 ? expected : [] };
+            check(path, one);
+            cases.set(numbered(path, n), one);
+          }
+
+          n++;
+        },
       ),
-      fc.boolean(),
-      fc.uuid(),
-      (name, prefix, reason) => {
-        const module = `${prefix ? "node:" : ""}${name}`;
-        // Node's prefix-only modules are not bare builtins.
-        const native = prefix || !["test", "sqlite"].includes(name);
-        const from = JSON.stringify(module);
-
-        const forms = [
-          `import * as a from ${from};`,
-          `import a from ${from};`,
-          `import {x as a} from ${from};`,
-          `import ${from};`,
-          `import type {X} from ${from};`,
-          `import {type X} from ${from};`,
-          `export * from ${from};`,
-          `export {x} from ${from};`,
-          `export type {X} from ${from};`,
-          `const a = import(${from});`,
-          `const a = import(\`${module}\`);`,
-          `const a = require(${from});`,
-          `const a = require(\`${module}\`);`,
-          `const a = module.require(${from});`,
-          `import a = require(${from});`,
-          `type A = import(${from}).X;`,
-        ];
-
-        const paths = [
-          "next/packages/libfabrika/src/native.ts",
-          "next/apps/fabrika/src/exam/native.ts",
-          "next/native.d.ts",
-          "next/native.test.ts",
-          "next/native.test-support.ts",
-          "next/e2e/native.ts",
-          "packages/fabrika/src/native.ts",
-        ];
-        const lines = Arr.flatMap(forms, (form, i) =>
-          Arr.map(
-            ["", ` // edge: ${reason}`, " // edge:   ", "before", ` /* edge: ${reason} */`, ` // not edge: ${reason}`],
-            (mark, j) => {
-              const unique = form.replace(/\b(a|A|X|x)\b/g, (name) => `${name}${i}_${j}`);
-              return mark === "before" ? `// edge: ${reason}\n${unique}` : unique + mark;
-            },
-          ),
-        );
-        const body = Arr.join(lines, "\n");
-        const expected: number[] = [];
-        let line = 1;
-
-        for (const _ of forms) {
-          expected.push(line, line + 2, line + 4, line + 5, line + 6);
-          line += 7;
-        }
-
-        for (const [i, path] of paths.entries()) {
-          const one = { text: body, lines: native && i < 3 ? expected : [] };
-          check(path, one);
-          cases.set(numbered(path, n), one);
-        }
-
-        n++;
-      },
-    ),
-    { seed: 119120, numRuns: 12 },
-  );
+      { seed: 119120, numRuns: 12 },
+    );
     yield* cli(cases);
   }),
 );
 
 it.live("multiline imports use the module string's line; strings and neighboring marks grant nothing", () =>
   Effect.gen(function* () {
-  let n = 0;
-  const cases = new Map<string, Case>();
-  fc.assert(
-    fc.property(fc.uuid(), (reason) => {
-      const path = "next/apps/fabrika/src/exam/native.ts";
-      const product = "next/packages/libfabrika/src/native.ts";
+    let n = 0;
+    const cases = new Map<string, Case>();
+    fc.assert(
+      fc.property(fc.uuid(), (reason) => {
+        const path = "next/apps/fabrika/src/exam/native.ts";
+        const product = "next/packages/libfabrika/src/native.ts";
 
-      const exam = {
-        text: Arr.join(
-          [
-            `import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
-            `import { // edge: ${reason}\n writeFile\n} from "node:fs";`,
-            `const fake = "// edge: ${reason}"; const a = require("node:fs");`,
-            'import {Effect} from "effect";',
-            'import a from "some-package";',
-            'import b from "./fs.ts";',
-          ],
-          "\n",
-        ),
-        lines: [6, 7],
-      };
+        const exam = {
+          text: Arr.join(
+            [
+              `import {\n readFile\n} from "node:fs"; // edge: ${reason}`,
+              `import { // edge: ${reason}\n writeFile\n} from "node:fs";`,
+              `const fake = "// edge: ${reason}"; const a = require("node:fs");`,
+              'import {Effect} from "effect";',
+              'import a from "some-package";',
+              'import b from "./fs.ts";',
+            ],
+            "\n",
+          ),
+          lines: [6, 7],
+        };
 
-      const blessed = { text: `import {readFile} from "node:fs"; // edge: ${reason}`, lines: [] };
-      check(path, exam);
-      check(product, blessed);
-      cases.set(numbered(path, n), exam);
-      cases.set(numbered(product, n), blessed);
-      n++;
-    }),
-    { seed: 119120, numRuns: 5 },
-  );
+        const blessed = { text: `import {readFile} from "node:fs"; // edge: ${reason}`, lines: [] };
+        check(path, exam);
+        check(product, blessed);
+        cases.set(numbered(path, n), exam);
+        cases.set(numbered(product, n), blessed);
+        n++;
+      }),
+      { seed: 119120, numRuns: 5 },
+    );
     yield* cli(cases);
   }),
 );

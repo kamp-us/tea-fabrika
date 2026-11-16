@@ -19,12 +19,12 @@
 // builds the error without its `cause`. The other stores keep the ledger's error until their slices.
 import { Machine } from "@demlik/tea/effect";
 import { describe, expect } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import { MemberEvent } from "../access/Access.ts";
 import { appendAdmitted } from "../access/Authorization.ts";

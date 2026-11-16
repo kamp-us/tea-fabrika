@@ -20,16 +20,17 @@
 // toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
 // an execute bit.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Arr from "effect/Array";
 import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
-import * as DateTime from "effect/DateTime";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
@@ -101,6 +102,7 @@ const cut = (bytes: Uint8Array, at: ReadonlyArray<number>): Array<Uint8Array> =>
     [...new Set(Arr.map(at, (n) => (bytes.length === 0 ? 0 : n % bytes.length)))],
     (n) => n > 0,
   );
+
   points.sort((a, b) => a - b);
   const chunks: Array<Uint8Array> = [];
   let from = 0;
@@ -365,6 +367,7 @@ describe("P39 slice 4b: the real command layer", () => {
                 }
               });
               const runnable = Arr.some(folders, (f) => f.kind === "file" && (f.mode & 0o111) !== 0);
+
               const has = yield* Commands.use((commands) => Effect.succeed(commands.has)).pipe(
                 Effect.provide(
                   layers(

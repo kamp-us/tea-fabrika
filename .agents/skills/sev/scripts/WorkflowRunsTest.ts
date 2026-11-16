@@ -35,6 +35,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<WorkflowRuns
     }
 
     w.runs[at.value] = { ...found.value, ...to };
+
     return Effect.void;
   };
 

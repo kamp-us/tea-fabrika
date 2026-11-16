@@ -4,17 +4,17 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
 import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, String as Str, pipe } from "effect";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
@@ -360,9 +360,12 @@ describe("mutbox, the pure parts", () => {
               : Arr.filter(Rec.keys(map), (k) => pipe(k, Str.endsWith("/")) && pipe(file, Str.startsWith(k))).sort(
                   (x, y) => y.length - x.length,
                 )[0];
+
           return key !== undefined && map[key] === "build";
         };
+
         const owned = Arr.filter(files ?? [], (f) => f.total > 0 && owns(f.file));
+
         const stuck =
           base !== null && base.kept > 0 && (base.a === null || ![0, 124].includes(base.a.exit))
             ? "arm_a_failed"
@@ -418,6 +421,7 @@ describe("mutbox, the pure parts", () => {
         fc.string({ minLength: 1, maxLength: 8 }),
         (onBase, passes, name) => {
           const kept = Arr.filter(onBase, (p) => passes(p));
+
           const baseline = {
             testResults: Arr.map(onBase, (p) => ({
               name: `/repo/${p}`,
@@ -568,6 +572,7 @@ const run = (setup: Setup = {}) => {
     );
 
     expect(ran.status, ran.stderr).toBe(0);
+
     return Str.trim(ran.stdout);
   };
 
@@ -618,6 +623,7 @@ const run = (setup: Setup = {}) => {
   }
 
   const started = DateTime.toEpochMillis(DateTime.nowUnsafe());
+
   const ran = spawnSync(
     process.execPath,
     [
@@ -650,10 +656,13 @@ const run = (setup: Setup = {}) => {
       },
     },
   );
+
   const calls: string[] = existsSync(join(fake, "calls.log"))
     ? pipe(readFileSync(join(fake, "calls.log"), "utf8"), Str.trim, Str.split("\n"))
     : [];
+
   const line = pipe(ran.stdout, Str.trim, Str.split("\n")).at(-1) ?? "";
+
   return {
     code: ran.status,
     text: ran.stdout + ran.stderr,
@@ -766,7 +775,9 @@ describe("mutbox, the run against a stand-in docker", () => {
     const got = run({ node: "20.0.0", image: false });
     expect(got.code, got.text).toBe(30);
     expect(got.summary).toMatchObject({ outcome: "stuck", reason: "node_mismatch" });
-    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")) || pipe(c, Str.startsWith("run ")))).toBe(false);
+    expect(Arr.some(got.calls, (c) => pipe(c, Str.startsWith("build ")) || pipe(c, Str.startsWith("run ")))).toBe(
+      false,
+    );
   });
 
   // Plant: wait for the container for ever, or leave it running after the limit.
@@ -1066,6 +1077,7 @@ describe("a call past its bound is stopped, and its child with it", () => {
     Effect.sync(() => (existsSync(file) ? Number(Str.trim(readFileSync(file, "utf8"))) : 0)).pipe(
       Effect.map((pid) => (Number.isNaN(pid) ? 0 : pid)),
     );
+
   /** The line on stdin, at `delay` ms on the test clock, however late the child asked for it. */
   const lineAt = (delay: number) =>
     Stream.fromEffect(
@@ -1132,8 +1144,8 @@ describe("a call past its bound is stopped, and its child with it", () => {
       const started = yield* Clock.currentTimeMillis;
       const { exit, pid } = yield* called(2 * limit, `trap '' TERM; ${waits}`);
       const ended = yield* Clock.currentTimeMillis;
-          expect(Exit.isFailure(exit)).toBe(true);
-          expect(alive(pid)).toBe(false);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(alive(pid)).toBe(false);
       expect(ended - started).toBeGreaterThanOrEqual(KILL_GRACE_SECONDS * 1000);
     }).pipe(Effect.runPromise));
 
@@ -1186,6 +1198,7 @@ const server = net.createServer((s) => s.end("hello")).listen(() => {
     const left = spawnSync("docker", ["ps", "-aq", "--filter", `name=fabrika-mutbox-probe-${process.pid}`], {
       encoding: "utf8",
     });
+
     expect(Str.trim(left.stdout)).toBe("");
   });
 });

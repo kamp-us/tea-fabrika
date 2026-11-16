@@ -6,8 +6,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
@@ -67,6 +67,7 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
           // Not under `oxlint-plugins/`: the planted folder links that one to the real folder.
           "scripts/probe.ts": body(false),
         };
+
         const linted = await plant(Rec.fromEntries(Arr.map(Rec.toEntries(files), ([path, f]) => [path, f.text])));
 
         for (const [path, f] of Rec.toEntries(files)) {
@@ -93,6 +94,7 @@ describe("T737 G1 a bare JSON.parse in next/ is reported", () => {
     const report: {
       readonly diagnostics: ReadonlyArray<{ readonly code?: string; readonly filename: string }>;
     } = JSON.parse(ran.stdout);
+
     expect(
       pipe(
         report.diagnostics,

@@ -46,13 +46,14 @@ import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -72,6 +73,7 @@ const SEED = 119120;
 const opts = { seed: SEED, numRuns: 300 };
 
 const NAMES = ["checklist:1", "tally:1", "plain:1"] as const;
+
 const TILES = Arr.map(NAMES, (name, i) => ({ id: `tile_${i + 1}`, name }));
 
 /** A list view, the checklist's own shape cut to what a parent law reads. */
@@ -184,6 +186,7 @@ const listEdit = (v: ListView, aux: number, word: string): ListView => {
       : aux % 3 === 1
         ? Arr.filter(v.items, (_, j) => j !== i)
         : Arr.map(v.items, (it, j) => (j === i ? { ...it, state: "checked" as const } : it));
+
   return { items, left: Arr.filter(items, (it) => it.state === "open").length };
 };
 
@@ -367,6 +370,7 @@ const moves = (w: World, c: Choice, reply?: Answer): ReadonlyArray<() => WindowM
     const unsettled = Arr.filter(w.flights, (f) =>
       Arr.some(s.flight, (live) => live.id === f.id && live.dial === f.dial),
     );
+
     const letters = Arr.filter(unsettled, (f) => f.call._tag === "send");
     const available = c.aux % 4 !== 0 && letters.length > 0 ? letters : w.flights;
     const f = available[c.pick % available.length]!;
@@ -577,6 +581,7 @@ const walk = <W extends World, C extends Choice>(
 
     if ("id" in m && typeof m.id === "number" && "dial" in m) {
       const answer = m;
+
       const answered = Option.getOrUndefined(
         Arr.findFirst(w.flights, (f) => f.id === answer.id && f.dial === answer.dial),
       );
@@ -867,6 +872,7 @@ describe("L8: the window parent's connection", () => {
               const flight = Option.getOrUndefined(
                 Arr.findFirst(state.flight, (f) => f.call._tag === "open" && f.call.pid === pid),
               );
+
               const index = c.aux % 3;
 
               const view = (
@@ -1173,6 +1179,7 @@ describe("L9: the records the window emits", () => {
           const rows = Arr.filter(Arr.map(cmds, recordIn), (r): r is Row => r !== null);
           const keys = Arr.filter(rows, (r) => r._tag === "key");
           const connects = Arr.filter(rows, (r) => r._tag === "connect");
+
           const persists = Arr.filter(
             rows,
             (r) => r._tag === "persist" || (r._tag === "failure" && r["op"] === "persist"),
@@ -1241,6 +1248,7 @@ describe("L9: the records the window emits", () => {
             Arr.filter(pressRows, (l) => sends.has(l)),
             "a press row came after its letter's send",
           ).toEqual([]);
+
           const sent = Arr.flatMap(cmds, (c, i) =>
             isWrite(c) && c.call._tag === "send" ? [{ letter: String(c.call["letter"]), at: i }] : [],
           );
@@ -1309,6 +1317,7 @@ describe("L9: the records the window emits", () => {
         const run = new Map<string, number>(); // installed patches per pid since the last view row
         fold(list, ({ prev, m, next, cmds }) => {
           const rows = Arr.filter(Arr.map(cmds, recordIn), (r): r is Row => r?._tag === "view");
+
           const ended = new Map(
             Arr.map(
               Arr.filter(rows, (r) => r["result"] === "patch"),
@@ -1335,6 +1344,7 @@ describe("L9: the records the window emits", () => {
           for (const pid of changed) {
             const whole =
               m.type === "open_ok" || (m.type === "view" && (m.note as { type?: unknown }).type === "whole");
+
             expect(Arr.filter(rows, (r) => r["pid"] === pid && r["result"] === "whole")).toHaveLength(whole ? 1 : 0);
 
             if (!whole) {
@@ -1879,6 +1889,7 @@ describe("P18 L3: each frame reaches exactly one owner", () => {
       for (const walk of list) {
         foldFrames(walk, ({ prev, m, next, cmds, expect: e }) => {
           const named = m.type === "frame" ? Option.getOrUndefined(answerId(m.text))?.id : undefined;
+
           const call = Option.getOrUndefined(
             Arr.findFirst(prev.flight, (f) => m.type === "frame" && f.id === named && f.dial === m.dial),
           )?.call._tag;
@@ -1941,6 +1952,7 @@ describe("P18 L6: a cut Model continues as the uncut run", () => {
       expect(Arr.some(list, (walk) => Arr.some(foldFrames(walk), (e) => handshakeIn(e.next).id !== undefined))).toBe(
         true,
       );
+
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 200 } },
@@ -2020,6 +2032,7 @@ const door = {
   boot: (): WindowModel => {
     const [s, cmds] = machine.init(null, ctx);
     const key = Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "key"));
+
     return step(s, { type: "key_ok", cmd: key, value: { found: "created", fingerprint: "SHA256:fp" } } as WindowMsg)[0];
   },
   frame: (s: WindowModel, text: string, ms?: number) =>
@@ -2058,6 +2071,7 @@ const door = {
     const [shown] = door.frame(s, rpc({ id: open.id, result: { rev: 1, view: EMPTY } }), 1);
     const [pressed, cmds] = step(shown, { type: "press", tile: "tile_1", m: { type: "add", name: "milk" } });
     const now = Option.getOrUndefined(Arr.findFirst(cmds, (c) => c.type === "now"));
+
     return step(pressed, {
       type: "now_ok",
       cmd: now,
@@ -2297,7 +2311,9 @@ const INBOX = clientInbox(TAB);
 const BRAIN_BY = "brain:p18";
 
 const PERSON_BY = "SHA256:person";
+
 const trusted = (by: unknown) => typeof by === "string" && (by === "brain" || pipe(by, Str.startsWith("brain:")));
+
 /** Real process ids, one per life the brain places, so a DOWN for one decodes as `Down`. */
 const processAt = (n: number) => `process_0000000000e00800${pipe(String(n), Str.padStart(10, "0"))}`;
 
@@ -2375,6 +2391,7 @@ const msgKey = (m: WindowMsg) => ({
 
 const answeredFlight = (s: WindowModel, m: WindowMsg) => {
   const on = msgKey(m);
+
   return Option.getOrUndefined(Arr.findFirst(s.flight, (f) => f.id === on.id && f.dial === on.dial));
 };
 
@@ -2408,6 +2425,7 @@ const lastLife = (w: Follow, name: string): string | null => {
     lifeFacts(w, name),
     (f) => trusted(f.by) && (f._tag === "started" || f._tag === "restarted"),
   );
+
   const body = lives.at(-1)?.body;
 
   return body === undefined ? null : String(Reflect.get(body, "process"));
@@ -2563,6 +2581,7 @@ const followAnswer =
     const call = f.call;
     const stream = String(streamIn(call) ?? "");
     const after = Number(call["after"] ?? 0);
+
     const all =
       stream === INBOX
         ? w.inbox
@@ -2726,9 +2745,11 @@ const takenOn = (s: WindowModel, letter: unknown) => {
   const tile = Option.getOrUndefined(
     Arr.findFirst(s.tiles, (t) => {
       const r: ReachView = t.reach;
+
       return holds(r) && m.to._tag === "client" && m.to.client === TAB && r.ref === m.ref && r.pid === m.process;
     }),
   );
+
   return tile === undefined ? null : { tile, down: m, rev: Number(Reflect.get(entry, "rev")) };
 };
 
@@ -2810,10 +2831,12 @@ const pageBook = () => {
 const readsOn = (e: Event, tile: WindowModel["tiles"][number], page: ReadonlyArray<unknown>) => {
   const last = Reflect.get(Object(page.at(-1)), "rev");
   const stream = `processes/${tile.name}`;
+
   const mine = Arr.filter(
     Arr.filter(e.cmds, isWrite),
     (c) => streamIn(c.call) === stream || c.call._tag === "monitor" || c.call._tag === "open",
   );
+
   expect(
     Arr.map(mine, (c) => [c.call._tag, streamIn(c.call), c.call["after"]]),
     `${tile.name}'s full page`,
@@ -2829,6 +2852,7 @@ const decides = (e: Event, tile: WindowModel["tiles"][number], pages: ReadonlyAr
   const want = readName(pages, tile.name);
   const now = reachIn(e.next, tile.id);
   const stream = `processes/${tile.name}`;
+
   const mine = Arr.filter(
     Arr.filter(e.cmds, isWrite),
     (c) => streamIn(c.call) === stream || (want.live !== null && c.call["pid"] === want.live),
@@ -2907,10 +2931,12 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               if (was._tag === "resolving" && now._tag === "opening") {
                 seen.resolved++;
                 seen.redial += onlines > 1 ? 1 : 0;
+
                 const order = Arr.filter(
                   Arr.filter(cmds, isWrite),
                   (c) => (c.call._tag === "monitor" || c.call._tag === "open") && c.call["pid"] === now.pid,
                 );
+
                 expect(
                   Arr.map(order, (c) => [c.call._tag, c.dial]),
                   `${t.id} resolved ${now.pid}`,
@@ -2954,6 +2980,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
 
             return taken === null ? [] : [taken];
           });
+
           const moved = new Set(Arr.map(takes, (t) => t.tile.id));
 
           for (const t of e.next.tiles) {
@@ -3014,9 +3041,11 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           }
 
           const answer = msgKey(e.m);
+
           const waiting = Option.getOrUndefined(
             Arr.findFirst(e.prev.tiles, (t) => {
               const r = reachIn(e.prev, t.id);
+
               return r._tag === "ended" && r.id === answer.id;
             }),
           );
@@ -3068,10 +3097,12 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           const now = inboxIn(next);
           const answer = msgKey(m);
           const current = answeredFlight(prev, m) !== undefined;
+
           const calls = Arr.map(
             Arr.filter(Arr.filter(cmds, isWrite), (c) => streamIn(c.call) === INBOX),
             (c) => [c.call._tag, c.call["after"], c.id],
           );
+
           expect(now.after, `${m.type} moved the inbox cursor back`).toBeGreaterThanOrEqual(was.after);
           expect(
             Arr.filter(next.flight, (f) => streamIn(f.call) === INBOX).length,
@@ -3085,7 +3116,9 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             (m.type === "write_err" &&
               m.cmd.id === was.id &&
               Arr.some(prev.flight, (f) => f.id === m.cmd.id && f.dial === m.cmd.dial && streamIn(f.call) === INBOX));
+
           const top = Math.max(was.after, ...Arr.map(page ?? [], (l) => Number(Reflect.get(Object(l), "rev"))));
+
           const [want, label]: readonly [unknown, string] =
             prev.link._tag !== "online" && next.link._tag === "online"
               ? [
@@ -3320,6 +3353,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           reading,
           answerMsg({ type: "read_ok", id: inboxRead[0]!.id, dial, value: [letter], ms: 0 }),
         );
+
         const again = Arr.filter(writes(cmds, "read"), (c) => streamIn(c.call) === `processes/${watch.name}`);
         expect(
           Arr.map(again, (c) => c.call["after"]),
@@ -3351,6 +3385,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
           list,
           ({ prev, m, next, world }) => {
             const was = prev.said;
+
             const ended = Arr.flatMap(next.tiles, (t) => {
               const r = t.reach;
               const before = reachIn(prev, t.id);
@@ -3363,9 +3398,11 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
             // A refused answer to a letter in flight, whose press a tile of this window made.
             const flight = answeredFlight(prev, m)?.call;
             const letter = flight?._tag === "send" ? flight.letter : null;
+
             const slot = Option.getOrUndefined(
               Arr.findFirst(prev.client.pending, (p) => p._tag === "ready" && p.letter === letter),
             );
+
             const owner = slot === undefined ? undefined : prev.from[slot.n]?.tile;
 
             const refused =
@@ -3375,6 +3412,7 @@ describe("P18 slice 2: a tile monitors its process and follows the restart", () 
               Arr.some(prev.tiles, (t) => t.id === owner)
                 ? [{ _tag: "refused", tile: owner, m: slot.m, reason: m.value.reason }]
                 : [];
+
             const messages = [...Arr.map(ended, ({ tile, reason }) => ({ _tag: "ended", tile, reason })), ...refused];
             const tick = m.type === "resend";
             seen.cleared += tick && was.messages.length > 0 ? 1 : 0;
@@ -3455,6 +3493,7 @@ const typeId = (prefix: string, n: number): string => {
 /** The tiles a start is given, named by processes tezgah never shows, so a read of one of their
  *  streams can only come from the given list, never from tezgah's view. */
 const GIVEN = Arr.map(["given:1", "given:2", "given:3"], (name, i) => ({ id: `given_${i + 1}`, name }));
+
 const DESK_PERSON = typeId("person", 41);
 
 const TEZGAH_PID = "process_of_tezgah";
@@ -3603,6 +3642,7 @@ const deskMoves = (w: DeskWorld, c: DeskPick): ReadonlyArray<() => WindowMsg | n
         const process = pipe(name, Str.startsWith("tezgah:")) ? TEZGAH_PID : `process_of_${name}`;
         // A stream no process was ever started on reads as the brain sends it: no entries.
         const none = pipe(name, Str.startsWith("tezgah:")) && !w.up;
+
         return {
           type: "read_ok",
           ...on,
@@ -3946,6 +3986,7 @@ const FOCUS_PRESSES: ReadonlyArray<{ readonly keys: ReadonlyArray<string>; reado
 const drawnHere = (s: WindowModel) => {
   const client = s.tezgah?.client;
   const view = client === undefined ? null : optimisticState(client);
+
   return Option.getOrNull(
     Option.flatMap(Option.fromNullishOr(view), (v) => Arr.findFirst(v.workspaces, (w) => w.n === client?.workspace)),
   );
@@ -4019,6 +4060,7 @@ const focusDesk = (cuts: ReadonlyArray<{ readonly at: number; readonly down: boo
   }
 
   const on = Layout.order(w.layout)[focus % Layout.order(w.layout).length]!;
+
   return { workspaces: [{ ...w, focus: on, recent: [on, ...Arr.filter(w.recent, (t) => t !== on)] }], tiles };
 };
 
@@ -4288,6 +4330,7 @@ describe("Desk S3: the window's focus moves, walked through the link's life", ()
             const answers =
               answerable.length +
               Arr.filter(w.waiting, (x) => ["now", "record", "persist", "write", "ping"].includes(x.type)).length;
+
             // Online with nothing left to answer or deliver, and only a call the door holds: no move
             // of this world will ever settle it.
             const stuck = s.link._tag === "online" && answers === 0 && w.notices.length === 0 && unanswered.length > 0;
@@ -4498,7 +4541,8 @@ const foldDrawn = (w: Workspace, size: Extent, strips: ReadonlySet<string>): Rea
       const at = lead.value;
       const rest = total - node.parts[at]!.percent;
       shares = Arr.map(node.parts, (p, i) =>
-        i === at ? least
+        i === at
+          ? least
           : fixed[i] === true
             ? FOLD_ACROSS[node.dir]
             : rest > 0
@@ -4566,6 +4610,7 @@ const msgCase = (t: string) =>
   Option.getOrUndefined(
     Arr.findFirst(objectsIn(focusWindow.msg.ast), (o) => {
       const ty = fieldIn(o, "type");
+
       return ty?._tag === "Literal" && ty.literal === t;
     }),
   );
@@ -4700,6 +4745,7 @@ describe("Desk S4: a window folds at its own size, records each change of its fo
           foldWalk(cuts, focus, picks, ({ prev, m, next, cmds }) => {
             const before = stripsNow(prev);
             const after = stripsNow(next);
+
             const rows = Arr.flatMap(cmds, (c) => {
               const r = recordIn(c);
 

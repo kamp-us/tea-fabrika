@@ -116,20 +116,20 @@ import { join } from "node:path";
 import { defineMachine } from "@demlik/tea";
 import { Cmd, run } from "@demlik/tea/effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Array as Arr, pipe, String as Str } from "effect";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import { Digest } from "effect/crypto";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import * as Clock from "effect/Clock";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, pipe, String as Str } from "effect";
-import { Digest } from "effect/crypto";
 import { type Agents, Judgment, listUsd, makeStepAgents, runTurn, stepRow } from "./agents.ts";
 import * as ChecksGh from "./ci/ChecksGh.ts";
 import * as Typecheck from "./ci/typecheck.ts";
@@ -244,6 +244,7 @@ export class RetriesExhausted extends Schema.TaggedError<RetriesExhausted, { rea
 /** Whether a drive outcome is a slot refusal, the one kind the schedule retries. */
 export const slotRefusal = (outcome: string): string | null => {
   const [verb, check = ""] = Str.split(outcome, ":");
+
   return verb === "refused" && (check === "agent_cap" || check === "low_disk") ? check : null;
 };
 
@@ -464,7 +465,10 @@ export const sectionsOf = (text: string): { head: string; sections: Record<strin
  * `## mutation` is needed only to start at mutation; an older brief that has one is still accepted.
  */
 export const lacks = (quest: ReturnType<typeof sectionsOf>, start: StepName): string[] =>
-  Arr.filter([...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"], (k) => (quest.sections[k] ?? "") === "");
+  Arr.filter(
+    [...QUEST_STEPS, ...(start === "mutation" ? ["mutation"] : []), "pr"],
+    (k) => (quest.sections[k] ?? "") === "",
+  );
 
 /** What one step is told about the quest: the brief's shared head, its section and the facts. */
 export type Facts = {
@@ -503,6 +507,7 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
   }
 
   const steps = [...new Set(Arr.map(commits, (c) => c.step))];
+
   const by = Arr.map(
     steps,
     (s) =>
@@ -513,17 +518,20 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
         Arr.join(" "),
       )}`,
   );
+
   return `Step commits since the quest left main, oldest first: ${Arr.join(by, "; ")}.`;
 };
 
 // The parameter keeps the name `lane`: agents-ledger.json holds this line word for word.
 export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
   const short = (s: string) => pipe(s, Str.slice(0, 8));
+
   const heads = pipe(
     STEPS,
     Arr.filter((s) => (f.heads[s] ?? "") !== ""),
     Arr.map((s) => `${s} ${short(f.heads[s] ?? "")}`),
   );
+
   const lines = [
     lane.head,
     "",
@@ -573,6 +581,7 @@ export type Mark = (typeof MARKS)[number];
 
 export const markFrom = (line: Line): Mark => {
   const [verb] = Str.split(line.outcome, ":");
+
   return verb === "send" ? "send" : verb === "stuck" ? (line.fault ?? "work") : "pass";
 };
 
@@ -638,6 +647,7 @@ export const stopReason = (stop: Stop): string => {
   if (stop._tag === "intensity") {
     const { sends, work } = counted(stop.window);
     const tools = Arr.filter(stop.window, (m) => m === "tool").length;
+
     return `intensity: ${sends + work} of the last ${stop.window.length} steps were sent back or stuck on the work (${sends} sent back, ${work} stuck on the work; ${tools} stuck on a tool, not counted; the limit is ${stop.count} in ${stop.within}). ${spent} ${ask}`;
   }
 
@@ -1078,6 +1088,7 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const said = `CI's typecheck job at ${pipe(quest.head, Str.slice(0, 8))} (PR ${s.pr}) answered send:${verdict.to}`;
+
         return next(quest, verdict.to, `${said}:\n${Arr.join(verdict.lines, "\n")}`, limits);
       },
       typecheck_read_err: (s): Step =>
@@ -1243,6 +1254,7 @@ const handlers = (s: Setup) => {
   const md = join(env.BOXES, "state", `${s.quest}.md`);
   const chainState = join(env.BOXES, "state", `${s.quest}-chain.json`);
   const note = (text: string) => appendFileSync(md, `- ${DateTime.formatIso(DateTime.nowUnsafe())} chain: ${text}\n`);
+
   const saved = (): {
     head?: string;
     root?: string;
@@ -1256,6 +1268,7 @@ const handlers = (s: Setup) => {
   /** Replace this round's record (one per round), or add it. */
   const saveStep = (entry: StepRecord) => {
     const r = readRecord();
+
     const steps = Arr.some(r.steps, (e) => e.round === entry.round)
       ? Arr.map(r.steps, (e) => (e.round === entry.round ? entry : e))
       : [...r.steps, entry];
@@ -1447,7 +1460,9 @@ const handlers = (s: Setup) => {
             reason: e.reason,
           })),
         );
+
         saveStep({ ...entry, endedAt: DateTime.formatIso(yield* DateTime.now), line });
+
         return line;
       }),
     judge: (cmd: { step: StepName; line: Line; round: number }) =>
@@ -1457,6 +1472,7 @@ const handlers = (s: Setup) => {
         note(`round ${earlier + cmd.round}: ${cmd.step} ${cmd.line.outcome}; asking a judgment agent (${box})`);
         s.beats.enter("judge", at(".jsonl"));
         const started = yield* DateTime.nowAsDate;
+
         // One turn in the main checkout on the row that only reads (Codex's read-only profile):
         // the judgment cannot change the checkout, by the harness and not by a promise. That row
         // reads nothing beside the checkout, so the state file and the report ride in the prompt.
@@ -1532,19 +1548,20 @@ const handlers = (s: Setup) => {
         const body = Arr.join(
           [
             Str.trim(Arr.join(Str.split(s.brief.sections.pr ?? "", "\n").slice(1), "\n")),
-          "",
-          "## Steps",
-          "",
-          `Ran end to end by \`chain.ts ${s.quest}\`: no lead agent held the quest. Each step was its own agent through the fabrika agents package on ACP (${providers(
+            "",
+            "## Steps",
+            "",
+            `Ran end to end by \`chain.ts ${s.quest}\`: no lead agent held the quest. Each step was its own agent through the fabrika agents package on ACP (${providers(
               Arr.map(saved().steps, (e) => e.step),
-            s.claude,
-            s.exec,
-          )}); the lead agent wrote no step's work. Steps and dollars:`,
-          "",
-          ...stepsTable(join(env.BOXES, `${s.quest}-rows.jsonl`), saved().steps),
+              s.claude,
+              s.exec,
+            )}); the lead agent wrote no step's work. Steps and dollars:`,
+            "",
+            ...stepsTable(join(env.BOXES, `${s.quest}-rows.jsonl`), saved().steps),
           ],
           "\n",
         );
+
         // The draft opened at the quest's first commit (drive's pushing phase, 0134) takes the brief's
         // words and is marked ready; a quest started before that gets its pull request here.
         note(
@@ -1593,13 +1610,13 @@ const handlers = (s: Setup) => {
         writeFileSync(
           bodyFile,
           Arr.join(
-          [
-            `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.quest}\` after review and before the merge queue (exit ${ran.code}):`,
-            "",
-            "```text",
-            text || "(no output)",
-            "```",
-            "",
+            [
+              `\`loosening.sh ${from} ${cmd.head}\`, run by \`chain.ts ${s.quest}\` after review and before the merge queue (exit ${ran.code}):`,
+              "",
+              "```text",
+              text || "(no output)",
+              "```",
+              "",
             ],
             "\n",
           ),
@@ -1631,6 +1648,7 @@ const handlers = (s: Setup) => {
         s.beats.enter("host", null);
         const name = RunId.next(s.quest, "host", runNames(env.BOXES, s.quest));
         note(`round ${round}: starting host ${name} at ${pipe(head, Str.slice(0, 8))} (${s.host.length} commands)`);
+
         const args = {
           main: env.MAIN,
           boxes: env.BOXES,
@@ -1649,6 +1667,7 @@ const handlers = (s: Setup) => {
             Effect.succeed({ outcome: Outcome.stuck(e.reason), head, log: null } satisfies Host.Hosted),
           ),
         );
+
         const ended = DateTime.formatIso(yield* DateTime.now);
         yield* Host.recordInQuest(args, hosted, ended).pipe(
           Effect.catch((e) => Effect.sync(() => note(`round ${round}: host could not write the state file: ${e}`))),
@@ -1670,6 +1689,7 @@ const handlers = (s: Setup) => {
         note(
           `round ${round}: host ${line.outcome}, head ${pipe(hosted.head, Str.slice(0, 8))}: ${pipe(line.reason, Str.slice(0, 200))}`,
         );
+
         return { outcome: hosted.outcome._tag, head: hosted.head, reason: hosted.outcome.reason };
       }),
     // The reviewed head enters GitHub's merge queue (./pr/Queue.ts, 0162). The wait is for
@@ -1679,6 +1699,7 @@ const handlers = (s: Setup) => {
         const minutes = yield* QueueMinutes;
         note(`queue: PR ${cmd.pr}, waiting up to ${minutes} minutes for ${Queue.REQUIRED}`);
         s.beats.enter("land", null);
+
         const added = yield* Queue.add({
           dir: env.MAIN,
           pr: cmd.pr,
@@ -1713,9 +1734,10 @@ export const providers = (
   const on = (agent: AgentName) => Arr.filter(STEPS, (s) => ran.includes(s) && stepAgent(s, claude, exec) === agent);
   const onExec = on("codex-exec");
   const onClaude = on("claude");
+
   return Arr.join(
     [
-    "Codex in a box",
+      "Codex in a box",
       ...(onExec.length === 0 ? [] : [`plain codex exec for ${Arr.join(onExec, ", ")}`]),
       ...(onClaude.length === 0 ? [] : [`or Claude for ${Arr.join(onClaude, ", ")}`]),
     ],
@@ -1750,6 +1772,7 @@ export const stepsTable = (
   }
 
   const total = Arr.reduce(steps, 0, (sum, e) => sum + (dollars.get(e.run ?? "") ?? 0));
+
   return [
     "| Step | Box | Outcome | List $ |",
     "|---|---|---|---|",
@@ -1812,11 +1835,13 @@ export const chainMain = (args: string[], env: Env, pin: Pin.Pinned | null) =>
     }
 
     const statePath = join(env.BOXES, "state", `${quest}.json`);
+
     const saved: typeof SavedQuest.Type = existsSync(statePath)
       ? yield* Schema.decodeUnknownEffect(SavedQuest)(readFileSync(statePath, "utf8")).pipe(
           Effect.catch((error) =>
             Effect.sync(() => {
               console.error(`chain.ts: the quest's state file ${statePath} does not read: ${error.message}`);
+
               return process.exit(2);
             }),
           ),
@@ -1951,6 +1976,7 @@ const backstopFor = (plan: string, brief: string) =>
   Effect.gen(function* () {
     const times = yield* BackstopTimes;
     const maxSteps = yield* MaxSteps;
+
     const found = Arr.flatMap([plan, brief], (path) => {
       const estimate = existsSync(path) ? estimateIn(readFileSync(path, "utf8")) : null;
 

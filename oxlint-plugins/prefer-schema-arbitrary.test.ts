@@ -6,8 +6,8 @@ import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
 import fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
@@ -106,6 +106,7 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
       Arr.filter(report.diagnostics, (d) => d.code.includes("parse")),
       ran.stderr,
     ).toEqual([]);
+
     return { ran, hits: Arr.filter(report.diagnostics, (d) => d.code === code) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -139,6 +140,7 @@ const cases = () => {
   const cli = () => {
     const files = Arr.map(all, (_, i) => `next/case${i}.test.ts`);
     const { hits } = lint(Rec.fromEntries(Arr.map(all, ({ text }, i) => [files[i]!, text])));
+
     const found = Arr.map(files, (file) =>
       pipe(
         hits,
@@ -260,6 +262,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
           const data = named
             ? [`${alias}({x: ${alias}({})})`]
             : Arr.map(constructors, (ctor) => `${alias}.${ctor}(${ctor === "record" ? `{x: ${alias}.string()}` : ""})`);
+
           const lines = Arr.map(data, (expr, i) =>
             evidence === "type"
               ? `export const g${i}: ${named ? "import('fast-check')" : alias}.Arbitrary<typeof S.Type> = ${expr};`
@@ -271,6 +274,7 @@ ${alias}.assert(${alias}.property(${alias}.array(${alias}.record({x: ${alias}.st
             named && evidence === "type"
               ? Arr.map(data, (expr, i) => `export const g${i} = ${expr}.map(S.make);`)
               : lines;
+
           // Each message holds the schema's name, S, and the nearby reason that excuses one.
           want(
             prefix + Arr.join(body, "\n"),

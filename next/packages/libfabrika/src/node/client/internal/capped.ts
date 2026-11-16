@@ -1,11 +1,12 @@
+import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import { Result } from "../../../tasks/Task.ts";
 
 /** What one child has printed so far: its stdout's chunks in order, and each stream's byte count. */
@@ -27,6 +28,7 @@ const joined = (chunks: ReadonlyArray<Uint8Array>): Uint8Array => {
 
     return at + c.length;
   });
+
   return out;
 };
 

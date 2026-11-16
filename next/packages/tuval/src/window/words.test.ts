@@ -5,9 +5,9 @@
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import * as Arbitrary from "effect/Arbitrary";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
-import { String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { bodyWord, stateWord } from "./words.ts";
 
 const SEED = 119120;
@@ -55,6 +55,7 @@ describe("an ended tile shows one word where its view was", () => {
     ({ list }) => {
       expect(Arr.some(list, ([reach, drawn]) => reach._tag === "ended" && drawn)).toBe(true);
       expect(Arr.some(list, ([reach, drawn]) => reach._tag === "ended" && !drawn)).toBe(true);
+
       return true;
     },
     { arbitrary: { seed: SEED, runs: 3, size: 30 } },

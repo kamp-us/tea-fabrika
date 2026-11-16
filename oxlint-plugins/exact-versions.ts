@@ -11,9 +11,9 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import * as Arr from "effect/Array";
-import * as Result from "effect/Result";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** `catalog:` holds its version in pnpm-workspace.yaml, which is checked too. `workspace:*` is the
@@ -125,6 +125,7 @@ const attempt = (file: string): { readonly lines: readonly string[]; readonly br
   );
 
 const results = Arr.map(files, attempt);
+
 const lines = Arr.flatMap(results, (result) => result.lines);
 
 for (const line of lines) {

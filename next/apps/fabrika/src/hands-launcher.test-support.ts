@@ -10,12 +10,12 @@
 // Every other request goes to the real `Control` untouched. The product's list gains nothing.
 import { Command } from "@kampus/libfabrika/tasks/Task";
 import { Tasks } from "@kampus/libfabrika/tasks/Tasks";
+import { Array as Arr, String as Str } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import { Control as RealControl, Project as RealProject } from "./brain.ts";
 import { projectTasksLayer } from "./runtime.ts";
 
@@ -101,15 +101,15 @@ export class Project extends RealProject {
       Arr.map(tables, (table) => [
         table,
         Arr.map(sql.exec(`SELECT * FROM "${Str.replace(/"/g, '""')(table)}"`).toArray(), (row) =>
-            Object.fromEntries(
+          Object.fromEntries(
             Arr.map(Object.entries(row), ([column, value]) => [
-                column,
-                value instanceof ArrayBuffer
-                  ? { hex: hex(new Uint8Array(value)), text: new TextDecoder().decode(value) }
-                  : value,
-              ]),
-            ),
+              column,
+              value instanceof ArrayBuffer
+                ? { hex: hex(new Uint8Array(value)), text: new TextDecoder().decode(value) }
+                : value,
+            ]),
           ),
+        ),
       ]),
     );
   }

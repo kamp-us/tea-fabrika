@@ -45,17 +45,17 @@
 //   - A transcript with no model calls is refused for a row, and prints no line for `--turns`.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
+import { Argument, Command, Flag } from "effect/cli";
 import * as Console from "effect/Console";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Order from "effect/Order";
-import { Array as Arr, String as Str, pipe } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
 
 export const SOURCE = "https://platform.claude.com/docs/en/about-claude/pricing";
 
@@ -330,6 +330,7 @@ const instant = (at: string | null): Result.Result<DateTime.Utc, Refused> => {
 /** An instant as that zone's clock reads it, to the second: `2026-11-10T00:12:15-08:00`. */
 const local = (zone: DateTime.TimeZone, at: DateTime.Utc): string => {
   const zoned = DateTime.setZone(at, zone);
+
   return `${pipe(DateTime.formatIsoOffset(zoned), Str.slice(0, 19))}${DateTime.zonedOffsetIso(zoned)}`;
 };
 
@@ -445,13 +446,14 @@ export const row = Effect.fn("clauderow.row")(function* (path: string, ask: Ask)
   const cached = sum((call) => call.tokens.read);
   const output = sum((call) => call.tokens.output);
   const { tokens } = final;
+
   const reason = Arr.join(
     [
-    ask.reason,
-    ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,
-    ` ${grouped(write5m)} 5-minute and ${grouped(write1h)} 1-hour cache writes, ${grouped(cached)} cache reads;`,
+      ask.reason,
+      ` Claude Code subagent transcript: ${calls.length} model calls; tokens in ${grouped(input)} uncached,`,
+      ` ${grouped(write5m)} 5-minute and ${grouped(write1h)} 1-hour cache writes, ${grouped(cached)} cache reads;`,
       ` out ${grouped(output)}. Dollars are list price (${SOURCE}, read ${Arr.join(reads, ", ")}).`,
-    open ? " Still running when read, so `ended` is null and the numbers are a floor." : "",
+      open ? " Still running when read, so `ended` is null and the numbers are a floor." : "",
       ask.billing === null
         ? ""
         : ` Billing \`${ask.billing}\` as the caller gave it; the transcript does not record it.`,

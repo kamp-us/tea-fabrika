@@ -122,9 +122,9 @@ const FALLBACKS = /^fromJSON\(needs\.changes\.outputs\.shards\|\|\((.*)&&'(.*)'\
 const parsed = (text: string | undefined): unknown[] =>
   Result.getOrElse(
     Result.try((): unknown[] => {
-    const value: unknown = JSON.parse(text ?? "");
+      const value: unknown = JSON.parse(text ?? "");
 
-    return Array.isArray(value) ? value : [];
+      return Array.isArray(value) ? value : [];
     }),
     (): unknown[] => [],
   );

@@ -8,8 +8,8 @@ import { mkdtempSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
@@ -273,6 +273,7 @@ describe("law 4: tags pass only in the order of case 29, with @stability optiona
 
           const order = Arr.map(tags, (tag) => TAGS.indexOf(tag));
           const ordered = Arr.every(order, (rank, i) => i === 0 || (order[i - 1] ?? rank) < rank);
+
           const passes =
             ordered &&
             tags.includes("category") &&
@@ -482,58 +483,60 @@ describe("law 8: on Effect 4.1.3's own source, with since required", () => {
 });
 
 const SRC = "next/packages/libfabrika/src";
+
 const body = "export const planted = 1;\n";
 
 // Each jsdocs warn line of the config today, read from oxlint's own `--print-config`, so a fill
 // that deletes its line changes nothing here. A `/**` line covers its subfolders too.
 const printed = spawnSync(
-    join(ROOT, "node_modules", ".bin", "oxlint"),
-    [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
-    { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
+  join(ROOT, "node_modules", ".bin", "oxlint"),
+  [`--config=${join(ROOT, ".oxlintrc.json")}`, "--print-config"],
+  { cwd: ROOT, encoding: "utf8", timeout: 60_000 },
 );
 
 const config = JSON.parse(printed.stdout) as {
-    readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
+  readonly overrides: ReadonlyArray<{ readonly files: string[]; readonly rules: Record<string, unknown> }>;
 };
 
 const warn = pipe(
-    config.overrides,
-    Arr.filter(({ rules }) => {
-      const setting = rules["fabrika/jsdocs"];
+  config.overrides,
+  Arr.filter(({ rules }) => {
+    const setting = rules["fabrika/jsdocs"];
+
     return (Arr.isArray(setting) ? setting[0] : setting) === "warn";
   }),
-    Arr.flatMap(({ files }) => files),
-    Arr.map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") })),
-  );
+  Arr.flatMap(({ files }) => files),
+  Arr.map((glob) => ({ folder: glob.replace(/\/\*\*?$/, ""), deep: glob.endsWith("/**") })),
+);
 
 const on = [
-    `${SRC}/ci/Planted.ts`,
-    `${SRC}/codehost/Planted.ts`,
-    // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
-    `${SRC}/tasks/Planted.ts`,
-    ...Arr.map(warn, ({ folder }) => `${folder}/Planted.ts`),
-    "next/packages/planted/src/Planted.ts",
+  `${SRC}/ci/Planted.ts`,
+  `${SRC}/codehost/Planted.ts`,
+  // A folder 1186's list left out, at zero now; each folder that still advises; and a new package.
+  `${SRC}/tasks/Planted.ts`,
+  ...Arr.map(warn, ({ folder }) => `${folder}/Planted.ts`),
+  "next/packages/planted/src/Planted.ts",
 ];
 
 const off = [
-    // Five of the six kinds that are not public. The sixth, `fixtures/`, is also in the config's
-    // `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no file there is ever linted.
-    `${SRC}/ci/internal/planted.ts`,
-    `${SRC}/codehost/internal/deep/planted.ts`,
-    `${SRC}/ci/Planted.test.ts`,
-    `${SRC}/codehost/Planted.test.tsx`,
-    `${SRC}/ci/Planted.test-support.ts`,
-    `${SRC}/codehost/PlantedTest.ts`,
-    `${SRC}/codehost/Planted.d.ts`,
-    // The same kinds in each folder with a warn line: the off override comes after it.
-    ...Arr.flatMap(warn, ({ folder, deep }) => [
-      ...(deep ? [`${folder}/internal/planted.ts`] : []),
-      `${folder}/Planted.test.ts`,
-      `${folder}/PlantedTest.ts`,
-      `${folder}/Planted.d.ts`,
-    ]),
-    // An app (case 4).
-    "next/apps/fabrika/src/Planted.ts",
+  // Five of the six kinds that are not public. The sixth, `fixtures/`, is also in the config's
+  // `ignorePatterns`, which oxlint obeys even with `--no-ignore`, so no file there is ever linted.
+  `${SRC}/ci/internal/planted.ts`,
+  `${SRC}/codehost/internal/deep/planted.ts`,
+  `${SRC}/ci/Planted.test.ts`,
+  `${SRC}/codehost/Planted.test.tsx`,
+  `${SRC}/ci/Planted.test-support.ts`,
+  `${SRC}/codehost/PlantedTest.ts`,
+  `${SRC}/codehost/Planted.d.ts`,
+  // The same kinds in each folder with a warn line: the off override comes after it.
+  ...Arr.flatMap(warn, ({ folder, deep }) => [
+    ...(deep ? [`${folder}/internal/planted.ts`] : []),
+    `${folder}/Planted.test.ts`,
+    `${folder}/PlantedTest.ts`,
+    `${folder}/Planted.d.ts`,
+  ]),
+  // An app (case 4).
+  "next/apps/fabrika/src/Planted.ts",
 ];
 
 const linted = await plant(Object.fromEntries([...on, ...off].map((path) => [path, body])));

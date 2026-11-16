@@ -7,16 +7,16 @@
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Order from "effect/Order";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
 import * as Ref from "effect/Ref";
-import * as Order from "effect/Order";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe, Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { stored } from "./stored.test-support.ts";
@@ -205,7 +205,8 @@ describe("stored", () => {
                 expect(
                   Arr.some(
                     disk.outputs,
-                    ([label, text]) => label === "home (running) /brain.records.sqlite-wal" && pipe(text, Str.includes(sentinel)),
+                    ([label, text]) =>
+                      label === "home (running) /brain.records.sqlite-wal" && pipe(text, Str.includes(sentinel)),
                   ),
                   "the WAL's deleted row is an output",
                 ).toBe(true);

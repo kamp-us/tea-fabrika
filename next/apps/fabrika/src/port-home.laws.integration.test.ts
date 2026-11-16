@@ -44,18 +44,18 @@ import { describe, expect, it } from "@effect/vitest";
 import { Activity } from "@kampus/libfabrika/processes/Process";
 import { tezgahName } from "@kampus/libfabrika/tezgah/Workspace";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Array as Arr, String as Str } from "effect";
 import * as Clock from "effect/Clock";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Order from "effect/Order";
 import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
-import * as Formatter from "effect/Formatter";
-import * as Option from "effect/Option";
-import * as Order from "effect/Order";
-import { Array as Arr, String as Str } from "effect";
-import { SecureRandom } from "effect/crypto";
 import { build } from "./build.ts";
 import { localInstance } from "./local-instance.ts";
 import { machinePaths } from "./port-home.test-support.ts";
@@ -768,10 +768,10 @@ const reopenedOnItsCode = Effect.gen(function* () {
   );
   const added = Arr.flatMap(
     yield* rowsUnder(
-    home,
-    "entries",
-    `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
-    Lines,
+      home,
+      "entries",
+      `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
+      Lines,
     ),
     (found) => found.rows,
   );
@@ -896,10 +896,10 @@ const upgradedOnItsCode = Effect.gen(function* () {
   );
   const added = Arr.flatMap(
     yield* rowsUnder(
-    home,
-    "entries",
-    `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
-    Lines,
+      home,
+      "entries",
+      `SELECT rev, stream, _tag, build, body FROM entries WHERE rev > ${after} ORDER BY rev`,
+      Lines,
     ),
     (found) => found.rows,
   );

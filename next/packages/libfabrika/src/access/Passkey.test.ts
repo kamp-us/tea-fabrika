@@ -1,9 +1,9 @@
 // P9's additive schema extension: metadata is durable, not caller authority. Existing P9 tests
 // still own root equality and recovery folds. Plants: strip the extension; lose enrollment proof.
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { Add, Adds, Signed } from "./Access.ts";
 

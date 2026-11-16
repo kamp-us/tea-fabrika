@@ -2,12 +2,13 @@
  * Source folders for an opened repository: a path from a settings file, resolved to the commit or
  * to disk.
  */
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import type { ObjectId } from "../../repositories/Repositories.ts";
 import {
   MissingPath,
@@ -180,7 +181,10 @@ export const resolver = Effect.fn("repositorySources.resolver")(function* (optio
     }
 
     if (located.committed) {
-      const bytes = yield* options.read(Arr.join(Str.split(path.relative(options.root, located.location), path.sep), "/"));
+      const bytes = yield* options.read(
+        Arr.join(Str.split(path.relative(options.root, located.location), path.sep), "/"),
+      );
+
       return bytes === null ? null : { ...SourceMetadata.cases.committed.make({ commit: options.commit }), bytes };
     }
 

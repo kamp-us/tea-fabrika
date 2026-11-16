@@ -38,6 +38,7 @@ export const devRecording = Effect.fn("brain.devRecording")(function* <E>(
     path = yield* Path.Path,
     // The services the archive binding's Promise calls run on.
     context = yield* Effect.context<never>();
+
   yield* fs.makeDirectory(home, { recursive: true });
 
   const db = yield* Effect.acquireRelease(

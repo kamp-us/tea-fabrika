@@ -151,6 +151,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
       Schema.decodeEffect(Schema.String.check(Schema.isPattern(/^(?:0|[1-9][0-9]*)\n$/u))),
       Effect.mapError(unsupported),
     );
+
     return `gui/${Str.trimEnd(uid)}`;
   });
 
@@ -204,6 +205,7 @@ const make = Effect.fnUntraced(function* (spec: BrainSpec, settings: Snapshot.Sn
 
     const json = path.join(dir, "job.json"),
       xml = path.join(dir, "job.plist");
+
     yield* fs.writeFileString(json, Formatter.formatJson(job), { mode: 0o600 }).pipe(Effect.mapError(storage));
     yield* success("/usr/bin/plutil", ["-convert", "xml1", "-o", xml, json]);
     yield* fs.chmod(xml, 0o600).pipe(Effect.mapError(storage));

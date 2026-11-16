@@ -19,13 +19,13 @@ import * as Files from "@kampus/libfabrika/settings/Files";
 import * as JsonSchema from "@kampus/libfabrika/settings/JsonSchema";
 import * as Reference from "@kampus/libfabrika/settings/Reference";
 import * as Setting from "@kampus/libfabrika/settings/Setting";
+import { Array as Arr, String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import { plant } from "./exam/plant.ts";
 

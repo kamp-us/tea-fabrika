@@ -72,6 +72,7 @@ export const startHead = (
     Arr.findFirst(pushed, (p) => Arr.every(pushed, (q) => isAncestor(q, p))),
     () => pushed[0],
   );
+
   return newest !== undefined && newest !== "" && !(saved !== undefined && saved !== "" && isAncestor(newest, saved))
     ? newest
     : saved;
@@ -155,14 +156,16 @@ export const heldRules = (out: string, questSteps: ReadonlySet<string>): string[
       step?: unknown;
       paths?: unknown;
     };
+
     const paths = Arr.isArray(a.paths) ? Arr.map(a.paths.slice(0, 3), String) : [];
+
     return Arr.join(
       Arr.filter(
         [
-      typeof a.reason === "string" ? a.reason : "stuck",
-      typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
-      typeof a.step === "string" ? `step ${a.step}` : "",
-      ...paths,
+          typeof a.reason === "string" ? a.reason : "stuck",
+          typeof a.sha === "string" ? a.sha.slice(0, 8) : "",
+          typeof a.step === "string" ? `step ${a.step}` : "",
+          ...paths,
         ],
         Boolean,
       ),
@@ -243,9 +246,9 @@ const lockedPart = (text: string): string | null => {
 
   const json = read.value;
 
-    if (json === null || typeof json !== "object") {
-      return null;
-    }
+  if (json === null || typeof json !== "object") {
+    return null;
+  }
 
   return canon(Arr.map(LOCKED, (k) => (json as Record<string, unknown>)[k] ?? null));
 };

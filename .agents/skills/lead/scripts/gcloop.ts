@@ -229,6 +229,7 @@ export const says = (
     ...(skipped > 0 ? [`${skipped} skipped since`] : []),
     ...(going === null ? [] : [`one going for ${spoken(now - Date.parse(going.startedAt))} (pid ${going.pid})`]),
   ];
+
   return { late: isLate, text: `${head}${body}; ${Arr.join(tail, "; ")}` };
 };
 
@@ -512,6 +513,7 @@ export const sweep = Effect.fn("gcloop.sweep")(function* (ask: Ask) {
 export const sweeps = Effect.fn("gcloop.sweeps")(function* (state: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(`${state}/gc.jsonl`).pipe(Effect.orElseSucceed(() => ""));
+
   return Arr.flatMap(text.split("\n"), (line) => Option.toArray(Schema.decodeOption(SweepLine)(line)));
 });
 

@@ -2,14 +2,14 @@
  * The hands' real `Commands` on a laptop: each closed command is one child process with a pinned
  * environment and an output cap, run through Effect's `ChildProcessSpawner`.
  */
+import * as Arr from "effect/Array";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Arr from "effect/Array";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import { Commands } from "../../client/Commands.ts";
 import type { Command } from "../../tasks/Task.ts";
 import { capped } from "./internal/capped.ts";
@@ -32,6 +32,7 @@ const onPath = Effect.fnUntraced(function* (name: string, PATH: string) {
       Effect.map((info) => info.type === "File" && (info.mode & 0o111) !== 0),
       Effect.orElseSucceed(() => false),
     );
+
   const folders = Arr.filter(Str.split(PATH, ":"), (folder) => folder !== "");
   const found = yield* Effect.forEach(folders, runnable, { concurrency: "unbounded" });
 

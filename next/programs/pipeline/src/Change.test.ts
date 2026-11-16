@@ -39,22 +39,27 @@ const normalize = (values: ReadonlyArray<unknown>) => [...new Set(Arr.map(values
 
 const oracle = (checks: ReadonlyArray<typeof Change.Check.Type>, runs: typeof Checks.Type) => {
   const asked = Arr.filter(checks, (c, i) => !Arr.some(checks.slice(0, i), (p) => same(p, c)));
+
   const selected = Arr.filter(runs, (r) =>
     Arr.some(asked, (c) => c.name === r.name && (c.source === undefined || c.source === r.source)),
   );
+
   const red = Arr.filter(
     selected,
     (r) => r.status._tag === "done" && ["failure", "timed_out"].includes(r.status.conclusion),
   );
+
   const lost = Arr.filter(
     selected,
     (r) => r.status._tag === "done" && ["cancelled", "startup_failure"].includes(r.status.conclusion),
   );
+
   const pending = Arr.filter(asked, (c) => {
     const matching = Arr.filter(
       selected,
       (r) => r.name === c.name && (c.source === undefined || c.source === r.source),
     );
+
     return matching.length === 0 || Arr.some(matching, (r) => r.status._tag !== "done");
   });
 
@@ -102,6 +107,7 @@ describe("L5: the verdict", () => {
         const repeated = Change.verdict([...checks, ...checks], shuffled);
         expect(repeated._tag).toBe(answer._tag);
         expect(normalize(repeated._tag === "pending" ? repeated.checks : repeated.runs)).toEqual(normalize(values));
+
         const unused = {
           ...extra,
           name: `${Arr.join(
@@ -109,6 +115,7 @@ describe("L5: the verdict", () => {
             "",
           )}unused`,
         };
+
         const added = Change.verdict(checks, [...runs, unused]);
         expect(added._tag).toBe(answer._tag);
         expect(normalize(added._tag === "pending" ? added.checks : added.runs)).toEqual(normalize(values));
@@ -133,7 +140,9 @@ const segment = fc.oneof(
   fc.stringMatching(/^[a-z0-9_-]{1,12}$/),
 );
 
-const path = fc.array(segment, { minLength: 1, maxLength: 5 }).map((parts) => Schema.decodeSync(Path)(Arr.join(parts, "/")));
+const path = fc
+  .array(segment, { minLength: 1, maxLength: 5 })
+  .map((parts) => Schema.decodeSync(Path)(Arr.join(parts, "/")));
 
 const glob = fc
   .oneof(
@@ -164,6 +173,7 @@ describe("L6: kind is the heaviest", () => {
 
                   return weight[kind] > weight[heavy] ? kind : heavy;
                 });
+
           expect(Change.kind(kinds, paths)).toBe(expected);
           expect(Change.kind(kinds, null)).toBe("code");
           expect(Change.kind(kinds, [])).toBe("code");

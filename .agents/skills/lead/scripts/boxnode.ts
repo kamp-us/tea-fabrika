@@ -24,12 +24,12 @@
 // shell is never a login shell (the `codex-exec` rows), and `NODE_PROBE` asks the box's own shell which
 // Node it finds before a step starts: `holdsPin` reads the answer.
 
+import { Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import { Array as Arr } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 
 /** The repo's Node: the root package.json's `volta.node`, else its `engines.node`; `null` when neither. */
 export const repoNode = Effect.fn("boxnode.repoNode")(function* (dir: string) {
@@ -52,6 +52,7 @@ const Pins = Schema.Struct({
 export const firstOnPath = (path: string, dirs: readonly string[]): string => {
   const front = [...new Set(Arr.filter(dirs, (dir) => dir !== ""))];
   const rest = Arr.filter(path.split(":"), (dir) => dir !== "" && !front.includes(dir));
+
   return Arr.join([...front, ...rest], ":");
 };
 
@@ -89,6 +90,7 @@ export const NODE_PROBE = "node -v; pnpm exec node -v";
 /** Whether `NODE_PROBE` printed the pin on both lines, and nothing else: no line, no Node. */
 export const holdsPin = (said: string, pin: string): boolean => {
   const lines = said.trim().split("\n");
+
   return lines.length === 2 && Arr.every(lines, (line) => line.trim() === `v${pin}`);
 };
 

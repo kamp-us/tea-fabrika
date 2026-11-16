@@ -5,22 +5,23 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { Repositories } from "../../repositories/Repositories.ts";
 import * as GitLaws from "./GitLaws.test-support.ts";
@@ -440,11 +441,14 @@ it.effect.prop(
         const common = path.join(root, "common");
         yield* fs.makeDirectory(common);
         yield* fs.makeDirectory(path.join(repo, ".fabrika"), { recursive: true });
+
         const first = pipe("a", Str.repeat(width)),
           second = pipe("b", Str.repeat(width));
+
         const documentId = pipe("c", Str.repeat(width)),
           firstBlob = pipe("d", Str.repeat(width)),
           secondBlob = pipe("e", Str.repeat(width));
+
         let head = first;
         let fault: "fetch" | "tree" | "blob" | "type" | "absent" | null = null;
         let held = 0;
@@ -587,6 +591,7 @@ it.effect.prop(
                 const reason = Option.getOrUndefined(
                   Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
                 );
+
                 expect(reason?._tag === "Fail" && reason.error._tag).toBe("RepositoriesError");
               }
 

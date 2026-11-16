@@ -262,6 +262,7 @@ export const codexExecAdapter = (
                 Arr.findFirst(raws, (r) => r._tag === "ended"),
                 () => said.ended,
               );
+
               return Effect.succeed(Arr.filter(raws, (r) => r._tag !== "ended"));
             }),
             Stream.flattenIterable,

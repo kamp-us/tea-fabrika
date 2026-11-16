@@ -1,9 +1,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, join, relative } from "node:path";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
 import { it, beforeAll } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect } from "vitest";
 import { createVitest, type Vitest, type TestSpecification } from "vitest/node";
@@ -122,8 +122,8 @@ it("real script subsets select exactly their declaring tests, never an empty set
 // 42989306764). This walks every script, not a sample, at one walk per test.
 it.live.each(readScripts)("the real script %s alone selects exactly its declaring tests, never none", (path) =>
   Effect.gen(function* () {
-  const expected = declaring([path]);
-  expect(expected.length).toBeGreaterThan(0);
+    const expected = declaring([path]);
+    expect(expected.length).toBeGreaterThan(0);
     expect(yield* promised(() => affected([path]))).toEqual(expected);
   }),
 );
@@ -133,7 +133,7 @@ it.live.each(readScripts)("the real script %s alone selects exactly its declarin
 it.live.each(fixtures)("scenario: the fixture %s alone selects every test, as a lockfile change does", (path) =>
   Effect.gen(function* () {
     const every = yield* promised(() => affected(["pnpm-lock.yaml"]));
-  expect(every.length).toBeGreaterThan(tests.length);
+    expect(every.length).toBeGreaterThan(tests.length);
     expect(yield* promised(() => affected([path]))).toEqual(every);
   }),
 );
@@ -184,39 +184,40 @@ describe("next workflow coverage", () => {
     expect(kept.flat().toSorted()).toEqual(universe.toSorted());
     expect(new Set(kept.flat()).size).toBe(kept.flat().length);
   };
+
   beforeAll(() =>
     Effect.gen(function* () {
       const baseline = yield* made({ root, watch: false, maxWorkers: 1 });
-    contexts.push(baseline);
+      contexts.push(baseline);
       nextSpecs = (yield* promised(() => baseline.globTestSpecifications())).filter((spec) =>
         repoPath(spec).startsWith("next/"),
       );
 
-    for (const index of indices) {
+      for (const index of indices) {
         contexts.push(yield* made({ root, watch: false, maxWorkers: 1, shard: `${index}/${denominator}` }));
       }
-        }),
-      );
+    }),
+  );
 
   it.live("scenario: workflow shards partition every config-discovered next file exactly once", () =>
     Effect.gen(function* () {
-    // Real config discovery and each configured sequencer run without executing a test.
-    expect(Number.isInteger(denominator)).toBe(true);
-    expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
-      Array.from({ length: denominator }, (_, i) => String(i + 1)),
-    );
-    const universe = nextSpecs.map(repoPath);
-    expect(universe.length).toBeGreaterThan(0);
-    expect(new Set(universe).size).toBe(universe.length);
-    const kept: string[][] = [];
+      // Real config discovery and each configured sequencer run without executing a test.
+      expect(Number.isInteger(denominator)).toBe(true);
+      expect(indices.toSorted((a, b) => Number(a) - Number(b))).toEqual(
+        Array.from({ length: denominator }, (_, i) => String(i + 1)),
+      );
+      const universe = nextSpecs.map(repoPath);
+      expect(universe.length).toBeGreaterThan(0);
+      expect(new Set(universe).size).toBe(universe.length);
+      const kept: string[][] = [];
 
-    for (const context of contexts.slice(1)) {
+      for (const context of contexts.slice(1)) {
         const specs = yield* promised(() => Promise.resolve(context.globTestSpecifications(["next/"])));
-      const Sequencer = context.config.sequence.sequencer;
+        const Sequencer = context.config.sequence.sequencer;
         kept.push((yield* promised(() => Promise.resolve(new Sequencer(context).shard(specs)))).map(repoPath));
-    }
+      }
 
-    complete(kept, universe);
+      complete(kept, universe);
     }),
   );
 

@@ -50,22 +50,22 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Array as Arr, String as Str } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Order from "effect/Order";
+import { RateLimiter } from "effect/persistence";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import * as Order from "effect/Order";
-import { RateLimiter } from "effect/persistence";
-import { Array as Arr, String as Str } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -792,7 +792,11 @@ describe("P13 selected input recording", () => {
                 ];
 
                 for (const value of bodies) {
-                  for (const form of [value, Str.slice(1, -1)(JSON.stringify(value)), encodeURIComponent(value)]) {
+                  for (const form of [
+                    value,
+                    Str.slice(1, -1)(Formatter.formatJson(value)),
+                    encodeURIComponent(value),
+                  ]) {
                     for (const output of outputs) {
                       expect(output).not.toContain(form);
                     }
@@ -1542,8 +1546,8 @@ describe("T843 sender budget, next/", () => {
 
           for (const form of [
             markerValue,
-            Str.slice(1, -1)(JSON.stringify(markerValue)),
-            Str.slice(1, -1)(JSON.stringify(Str.slice(1, -1)(JSON.stringify(markerValue)))),
+            Str.slice(1, -1)(Formatter.formatJson(markerValue)),
+            Str.slice(1, -1)(Formatter.formatJson(Str.slice(1, -1)(Formatter.formatJson(markerValue)))),
             encodeURIComponent(markerValue),
             encodeURIComponent(Formatter.formatJson(markerValue)),
             Buffer.from(markerValue).toString("base64"),
@@ -1557,8 +1561,8 @@ describe("T843 sender budget, next/", () => {
           ]);
           expect(
             Arr.map(
-            c.db
-              .prepare("SELECT piece,hour,refused,count FROM sums WHERE refused='rate_limited' ORDER BY piece")
+              c.db
+                .prepare("SELECT piece,hour,refused,count FROM sums WHERE refused='rate_limited' ORDER BY piece")
                 .all(),
               (row) => ({ ...row }),
             ),
@@ -1654,7 +1658,7 @@ const allObjectRows = (db: DatabaseSync): Record<string, Array<Record<string, un
   Object.fromEntries(
     Arr.map(db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all(), ({ name }) => [
       String(name),
-        db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}"`).all(),
+      db.prepare(`SELECT * FROM "${Str.replaceAll('"', '""')(String(name))}"`).all(),
     ]),
   );
 
@@ -3675,9 +3679,9 @@ describe("P10 inputs, retries and signer", () => {
             expect(yield* stamped()).toEqual([]);
             const saved = Formatter.formatJson(Arr.map([...w.databases()], ([name, db]) => [name, allObjectRows(db)]));
             expect(saved).not.toContain(`t844-forged:${write.marker}`);
-            expect(saved).not.toContain(Str.slice(1, -1)(JSON.stringify(`t844-forged:${write.marker}`)));
+            expect(saved).not.toContain(Str.slice(1, -1)(Formatter.formatJson(`t844-forged:${write.marker}`)));
             expect(saved).not.toContain(forged);
-            expect(saved).not.toContain(Str.slice(1, -1)(JSON.stringify(forged)));
+            expect(saved).not.toContain(Str.slice(1, -1)(Formatter.formatJson(forged)));
           }
 
           yield* TestClock.adjust("16 days");
@@ -3690,7 +3694,7 @@ describe("P10 inputs, retries and signer", () => {
 
           for (const marker of [`t844-forged:${write.marker}`, forged]) {
             expect(saved).not.toContain(marker);
-            expect(saved).not.toContain(Str.slice(1, -1)(JSON.stringify(marker)));
+            expect(saved).not.toContain(Str.slice(1, -1)(Formatter.formatJson(marker)));
           }
         }).pipe(Effect.provide(Gateway.layer(w.settings).pipe(Layer.provideMerge(Layer.merge(w.env, archive)))));
       }),
@@ -3822,7 +3826,7 @@ describe("P10 inputs, retries and signer", () => {
           const had = Option.getOrUndefined(
             Arr.findFirst(
               beforeSums,
-            (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
+              (row) => row.piece === target.piece && row.hour === target.hour && row.refused === target.refused,
             ),
           );
 

@@ -1,8 +1,8 @@
+import { it } from "@effect/vitest";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { it } from "@effect/vitest";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -89,14 +89,16 @@ it("U11 passes comments, strings and ordinary exports; the app tail and usage on
 // scenario: only a CLI pass through the repository config proves activation and registration.
 it.live("scenario: U11 is enabled by the real config and leaves only cloudflare/ and today's version out", () =>
   Effect.gen(function* () {
-  const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
-  const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
-  const old = "packages/fabrika/src/usage.ts";
-  const result = yield* promised(() =>
+    const runtime = "next/packages/libfabrika/src/runtime/usage.ts";
+    const cloudflare = "next/packages/libfabrika/src/cloudflare/usage.ts";
+    const old = "packages/fabrika/src/usage.ts";
+
+    const result = yield* promised(() =>
       plant(Rec.fromEntries(Arr.map([runtime, cloudflare, old], (file) => [file, Arr.join(uses, "\n")]))),
     );
-  expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
-  expect(result(CODE, cloudflare)).toEqual([]);
-  expect(result(CODE, old)).toEqual([]);
+
+    expect(result(CODE, runtime)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(result(CODE, cloudflare)).toEqual([]);
+    expect(result(CODE, old)).toEqual([]);
   }),
 );

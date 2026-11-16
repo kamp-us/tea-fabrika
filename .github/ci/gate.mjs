@@ -210,6 +210,7 @@ export const read = async (env, io = {}) => {
       const starts = found.flatMap((job) =>
         job.start === null ? [] : [{ text: job.start, at: Date.parse(job.start) }],
       );
+
       const at = Math.min(...starts.map((start) => start.at));
       // No start, or one that does not parse, leaves `at` Infinity or NaN, so no start equals it.
       const first = starts.find((start) => start.at === at);
@@ -241,6 +242,7 @@ export const read = async (env, io = {}) => {
   }
 
   left();
+
   return { event, now: now(), gap: Number(env["GAP_MINUTES"]), last, tested, started };
 };
 
@@ -270,6 +272,7 @@ export const main = async (env, io = {}) => {
     seen.last === null
       ? "no full run on main before"
       : `the last full run on main, ${seen.last.id} at ${seen.last.sha.slice(0, 9)}, started ${seen.started}, ${Math.floor((seen.now - seen.last.at) / MINUTE)} minutes ago`;
+
   const line = `gate: ${seen.event} at ${(env["GITHUB_SHA"] ?? "").slice(0, 9)}: ${decision._tag}, ${decision.reason}; ${last}; the gap is ${seen.gap} minutes${seen.event === "workflow_dispatch" ? "" : `; the head ${seen.tested ? "has had" : "has had no"} full run`}`;
 
   return { code: 0, output: `start=${decision._tag === "start"}\n`, summary: `${line}\n`, line };

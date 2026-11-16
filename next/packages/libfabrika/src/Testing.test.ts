@@ -3,9 +3,9 @@
 // senderTest({inputs, expected, writes, owner, seed}) compares an independent expected-write table.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
-import * as Effect from "effect/Effect";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 
 /** A promise the test waits on rejected: the test's own failure, with the rejection as its cause. */
@@ -55,96 +55,100 @@ describe("S2 syncTest catches its plants", () => {
   it.live("plant, reject everything: a real tea machine passes generated lists without handlers", () =>
     Effect.gen(function* () {
       const { syncTest } = yield* promised(() => import("./Testing.ts"));
-    fc.assert(
-      fc.property(fc.array(fc.integer({ min: -10, max: 10 }), { maxLength: 12 }), (ns) => {
-        expect(() =>
-          syncTest(machine, {}, { msgs: Arr.map(ns, (n) => ({ type: "add", n })), encode, decode, equals, seed: SEED }),
-        ).not.toThrow();
-      }),
-      { seed: SEED, numRuns: 80 },
-    );
+      fc.assert(
+        fc.property(fc.array(fc.integer({ min: -10, max: 10 }), { maxLength: 12 }), (ns) => {
+          expect(() =>
+            syncTest(
+              machine,
+              {},
+              { msgs: Arr.map(ns, (n) => ({ type: "add", n })), encode, decode, equals, seed: SEED },
+            ),
+          ).not.toThrow();
+        }),
+        { seed: SEED, numRuns: 80 },
+      );
     }),
   );
   it.live("plant, lose a queued field: catches a model that agrees at the end but emits a wrong Cmd", () =>
     Effect.gen(function* () {
       const { syncTest } = yield* promised(() => import("./Testing.ts"));
-    const dropped = (s: typeof Model.Type) => ({ count: s.count });
+      const dropped = (s: typeof Model.Type) => ({ count: s.count });
 
-    const restored = (raw: unknown) => ({
-      count: Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(raw).count,
-      carry: 0,
-    });
+      const restored = (raw: unknown) => ({
+        count: Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Int }))(raw).count,
+        carry: 0,
+      });
 
-    expect(() => syncTest(machine, {}, { msgs, encode: dropped, decode: restored, equals, seed: SEED })).toThrow();
+      expect(() => syncTest(machine, {}, { msgs, encode: dropped, decode: restored, equals, seed: SEED })).toThrow();
     }),
   );
   it.live("plant, compare final model only: catches a Cmd difference even when all models match", () =>
     Effect.gen(function* () {
       const { syncTest } = yield* promised(() => import("./Testing.ts"));
-    let loaded = false;
+      let loaded = false;
 
-    const tricky = {
-      ...machine,
-      init: (saved: typeof Model.Type | null) => {
-        loaded = saved !== null;
+      const tricky = {
+        ...machine,
+        init: (saved: typeof Model.Type | null) => {
+          loaded = saved !== null;
 
-        return machine.init(saved, {});
-      },
-      update: {
-        ...machine.update,
-        add: (s: typeof Model.Type, m: typeof Msg.Type) =>
-          [{ count: s.count + m.n, carry: s.carry + 1 }, [report({ n: loaded ? 999 : s.carry })]] as const,
-      },
-    };
+          return machine.init(saved, {});
+        },
+        update: {
+          ...machine.update,
+          add: (s: typeof Model.Type, m: typeof Msg.Type) =>
+            [{ count: s.count + m.n, carry: s.carry + 1 }, [report({ n: loaded ? 999 : s.carry })]] as const,
+        },
+      };
 
-    expect(() => syncTest(tricky, {}, { msgs, encode, decode, equals, seed: SEED })).toThrow();
+      expect(() => syncTest(tricky, {}, { msgs, encode, decode, equals, seed: SEED })).toThrow();
     }),
   );
   it.live("plant, skip the first or last cut: boot and final saves are checked even for an empty list", () =>
     Effect.gen(function* () {
       const { syncTest } = yield* promised(() => import("./Testing.ts"));
 
-    for (const list of [[], msgs] as const) {
-      let saves = 0;
-      const cuts: number[] = [];
-      syncTest(
-        machine,
-        {},
-        {
-          msgs: list,
-          encode: (s: typeof Model.Type) => {
-            cuts.push(s.count);
-            saves++;
+      for (const list of [[], msgs] as const) {
+        let saves = 0;
+        const cuts: number[] = [];
+        syncTest(
+          machine,
+          {},
+          {
+            msgs: list,
+            encode: (s: typeof Model.Type) => {
+              cuts.push(s.count);
+              saves++;
 
-            return encode(s);
+              return encode(s);
+            },
+            decode,
+            equals,
+            seed: SEED,
           },
-          decode,
-          equals,
-          seed: SEED,
-        },
-      );
-      expect(saves).toBe(list.length + 1);
-      expect(cuts[0]).toBe(0);
-      expect(cuts.at(-1)).toBe(0);
-    }
+        );
+        expect(saves).toBe(list.length + 1);
+        expect(cuts[0]).toBe(0);
+        expect(cuts.at(-1)).toBe(0);
+      }
     }),
   );
   it.live("plant, skip JSON text: a value JSON cannot save must fail", () =>
     Effect.gen(function* () {
       const { syncTest } = yield* promised(() => import("./Testing.ts"));
-    expect(() =>
-      syncTest(
-        machine,
-        {},
-        {
-          msgs,
-          encode: (s: typeof Model.Type) => ({ ...s, carry: Number.NaN }),
-          decode,
-          equals,
-          seed: SEED,
-        },
-      ),
-    ).toThrow();
+      expect(() =>
+        syncTest(
+          machine,
+          {},
+          {
+            msgs,
+            encode: (s: typeof Model.Type) => ({ ...s, carry: Number.NaN }),
+            decode,
+            equals,
+            seed: SEED,
+          },
+        ),
+      ).toThrow();
     }),
   );
 });
@@ -170,24 +174,25 @@ describe("p69 senderTest catches its plants", () => {
     { id: "wb", parent: "pb", by: agent },
     { id: "background", parent: null, by: owner },
   ];
+
   it.live("plant, reject own: interleaved queued replies and explicit own agree with the input oracle", () =>
     Effect.gen(function* () {
       const { senderTest } = yield* promised(() => import("./Testing.ts"));
-    expect(() => senderTest({ inputs, expected, writes, owner, seed: SEED })).not.toThrow();
+      expect(() => senderTest({ inputs, expected, writes, owner, seed: SEED })).not.toThrow();
     }),
   );
   it.live("plant, latest Msg wins: a queued agent write cannot inherit the later person's reply", () =>
     Effect.gen(function* () {
       const { senderTest } = yield* promised(() => import("./Testing.ts"));
-    const wrong = [writes[0]!, { ...writes[1]!, parent: "pa", by: person }, writes[2]!];
-    expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
+      const wrong = [writes[0]!, { ...writes[1]!, parent: "pa", by: person }, writes[2]!];
+      expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
     }),
   );
   it.live("plant, drop parent and call it own: changing the observed parent must not change the oracle", () =>
     Effect.gen(function* () {
       const { senderTest } = yield* promised(() => import("./Testing.ts"));
-    const wrong = [writes[0]!, { ...writes[1]!, parent: null, by: owner }, writes[2]!];
-    expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
+      const wrong = [writes[0]!, { ...writes[1]!, parent: null, by: owner }, writes[2]!];
+      expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
     }),
   );
 
@@ -195,14 +200,15 @@ describe("p69 senderTest catches its plants", () => {
     it.live(`plant, ${fault} write: every expected write matches exactly once`, () =>
       Effect.gen(function* () {
         const { senderTest } = yield* promised(() => import("./Testing.ts"));
-      const wrong =
-        fault === "missing"
-          ? writes.slice(1)
-          : fault === "duplicate"
-            ? [...writes, writes[0]!]
-            : [...writes, { ...writes[0]!, id: "unexpected" }];
 
-      expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
+        const wrong =
+          fault === "missing"
+            ? writes.slice(1)
+            : fault === "duplicate"
+              ? [...writes, writes[0]!]
+              : [...writes, { ...writes[0]!, id: "unexpected" }];
+
+        expect(() => senderTest({ inputs, expected, writes: wrong, owner, seed: SEED })).toThrow();
       }),
     );
   }

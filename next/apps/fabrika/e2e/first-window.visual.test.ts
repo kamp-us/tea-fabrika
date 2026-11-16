@@ -19,11 +19,11 @@ import { MemberEvent } from "@kampus/libfabrika/access/Access";
 import { valueFor } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
+import { String as Str, pipe, Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
-import { String as Str, pipe, Array as Arr } from "effect";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import {
@@ -732,7 +732,12 @@ describe("L17: [secrets] no output copies a key, a signature or a credential", (
                 const copies = new Set<string>();
 
                 for (const s of [...credentials, ...signatures]) {
-                  for (const form of [s, encodeURIComponent(s), btoa(s), pipe(Formatter.formatJson(s), Str.slice(1, -1))]) {
+                  for (const form of [
+                    s,
+                    encodeURIComponent(s),
+                    btoa(s),
+                    pipe(Formatter.formatJson(s), Str.slice(1, -1)),
+                  ]) {
                     const checked = signatures.includes(s) ? checkedOutputs : credentialOutputs;
 
                     for (const [output, text] of checked) {

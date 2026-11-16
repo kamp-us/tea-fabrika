@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 // PullRequestsTest.layer: the PullRequests service in memory, on one list of pull requests that its
 // writes change as GitHub's would. It asks GitHub nothing. `calls` keeps every write, in order.
 import * as Effect from "effect/Effect";
@@ -5,7 +6,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { type Detail, type Patch, type PullRequest, PullRequests, PullRequestsError } from "./PullRequests.ts";
-import { Array as Arr } from "effect";
 
 /** One write the layer took, as the caller made it. */
 export const Call = Schema.TaggedUnion({
@@ -89,6 +89,7 @@ export const layer = (w: World, failing: Failing = {}): Layer.Layer<PullRequests
       view: (number) =>
         Effect.flatMap(fails("view"), () => {
           const pr = Option.getOrUndefined(Arr.findFirst(w.prs, (p) => p.number === number));
+
           return pr === undefined
             ? Effect.fail(PullRequestsError.make({ reason: `no pull request ${number}` }))
             : Effect.succeed({

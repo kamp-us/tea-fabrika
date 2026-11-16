@@ -30,9 +30,9 @@
 // decide the law, and so is a run whose strips and gaps alone overflow a container (an open point the
 // amendment does not settle; the law counts them).
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { drawn, fold, STRIP } from "./Fold.ts";
 import * as Layout from "./Layout.ts";
@@ -118,7 +118,13 @@ const rule = (w: Workspace, size: { readonly width: number; readonly height: num
       if (shares[lead.value]! < least) {
         const rest = total - node.parts[lead.value]!.percent;
         shares = Arr.map(node.parts, (p, i) =>
-          i === lead.value ? least : fixed[i] === true ? ACROSS[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
+          i === lead.value
+            ? least
+            : fixed[i] === true
+              ? ACROSS[node.dir]
+              : rest > 0
+                ? ((has - least) * p.percent) / rest
+                : 0,
         );
       }
     }
@@ -336,6 +342,7 @@ describe("Desk S4 L31: one drawn geometry; a window folds a tile under 220x120 i
 
   it("scenario: a 2x2 at 400x300 with t1 focused folds the bottom row whole: one band 20px tall across the area, its two strips lying along it apart, and t1 holds the rest beside c's 22px strip (amendment 13, point 3)", () => {
     const [t1, c, a, b] = Arr.map([1, 2, 3, 4], (n) => typeId("tile", n) as TileId);
+
     let w: Workspace = Schema.decodeUnknownSync(Workspace)({
       id: typeId("workspace", 1),
       n: 1,

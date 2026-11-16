@@ -4,8 +4,8 @@
 // merge of that shared file turns its check off, and nothing else says so.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import * as Schema from "effect/Schema";
 import { Array as Arr, pipe, Record as Rec } from "effect";
+import * as Schema from "effect/Schema";
 import { parseSync } from "oxc-parser";
 import { describe, expect, it } from "vitest";
 

@@ -23,11 +23,12 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
@@ -327,6 +328,7 @@ describe("P39 slice 4b: the hands key file", () => {
                   Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
                 ),
             });
+
             expect(checked._tag, `K2: the door admits the key file's hello: ${Formatter.format(checked)}`).toBe(
               "online",
             );

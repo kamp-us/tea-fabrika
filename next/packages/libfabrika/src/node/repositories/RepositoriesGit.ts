@@ -1,21 +1,22 @@
 /**
  * `Repositories` on Node, through the `git` command.
  */
+import * as Arr from "effect/Array";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Option from "effect/Option";
-import * as Arr from "effect/Array";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import {
   Branch,
   DefaultUnknown,
@@ -215,6 +216,7 @@ export const layer = (options: { readonly person: string }) =>
               Str.replace(/^(ssh:\/\/)[^/@]*@/i, "$1"),
               Str.replace(/^[^/@:]+@(?=[^/:]+:)/, ""),
             );
+
             const key = yield* hash(Formatter.formatJson([common, identity])).pipe(
               Effect.flatMap(Schema.decodeUnknownEffect(Hash)),
               Effect.mapError((cause) => failure("fingerprint", cause)),
@@ -224,7 +226,9 @@ export const layer = (options: { readonly person: string }) =>
               Effect.flatMap(decode),
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
+
             const lines = Str.split(Str.trim(advertised), "\n");
+
             const symbolic = Arr.filter(
               lines,
               (line) => pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
@@ -243,6 +247,7 @@ export const layer = (options: { readonly person: string }) =>
             const branch = yield* Schema.decodeEffect(Branch)(pipe(ref, Str.slice(11))).pipe(
               Effect.mapError((cause) => failure("default branch", cause, true)),
             );
+
             const heads = Arr.filter(
               lines,
               (line) => !pipe(line, Str.startsWith("ref: ")) && pipe(line, Str.endsWith("\tHEAD")),
@@ -252,9 +257,9 @@ export const layer = (options: { readonly person: string }) =>
               return yield* failure("default branch", "missing HEAD object", true);
             }
 
-            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(
-              pipe(heads[0] ?? "", Str.slice(0, -5)),
-            ).pipe(Effect.mapError((cause) => failure("default branch", cause, true)));
+            const advertisedCommit = yield* Schema.decodeEffect(ObjectId)(pipe(heads[0] ?? "", Str.slice(0, -5))).pipe(
+              Effect.mapError((cause) => failure("default branch", cause, true)),
+            );
 
             // Pin the advertised object. A branch move during fetch is a refusal, never a different selection.
             yield* isolated([
@@ -284,6 +289,7 @@ export const layer = (options: { readonly person: string }) =>
               const [record] = yield* Schema.decodeUnknownEffect(
                 Schema.Tuple([Schema.NonEmptyString, Schema.Literal("")]),
               )(Str.split(listed, "\0")).pipe(Effect.mapError((cause) => failure("tree", cause)));
+
               const tab = pipe(record, Str.indexOf("\t"));
 
               if (Option.isNone(tab) || pipe(record, Str.slice(tab.value + 1)) !== file) {

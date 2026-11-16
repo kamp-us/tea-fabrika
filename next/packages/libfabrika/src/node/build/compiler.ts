@@ -17,10 +17,11 @@
  * The one way out of a finding is `"use no memo"` in the function plus a row the owner adds, in a
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 
@@ -88,6 +89,7 @@ interface Fn {
 type Tree = any;
 
 const FUNCTIONS = new Set(["FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"]);
+
 const lineAt = (text: string, at: number) => pipe(text, Str.slice(0, at), Str.split("\n")).length;
 
 /** Whether a function body opens with `"use no memo"`, among its other directives. */
@@ -211,6 +213,7 @@ const checkFile = (file: string, text: string, rows: readonly Row[]): readonly F
       (f) => f.name,
     ),
   );
+
   const named = (fn: string) => Arr.some(rows, (r) => r.fn === fn);
   const said = new Set<string>();
 

@@ -4,17 +4,18 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { ObjectId, Repositories, SourceMetadata } from "../../repositories/Repositories.ts";
 import type { RepositoriesError, Repository } from "../../repositories/Repositories.ts";
@@ -245,7 +246,8 @@ it.effect.prop(
           ),
           ...Arr.map(
             ["local-file", "outside-file", "absolute-local", "absolute-outside"],
-            (name) => [`inside space/${name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) }] as const,
+            (name) =>
+              [`inside space/${name}`, { mode: "120000", type: "blob", id: pipe("d", Str.repeat(40)) }] as const,
           ),
         ]);
 
@@ -362,6 +364,7 @@ it.effect.prop(
             (personResolve, base) => bases.check(personResolve, base === 1, index),
             { concurrency: 1 },
           );
+
           expect(Arr.map(baseReads, (read) => read.actual)).toEqual(Arr.map(baseReads, (read) => read.expected));
           checkRead(yield* (yield* resolve("./local", "repo")).read("entry.txt"), true, commit, "committed", root);
           yield* traversal.check(resolve, cell.traversal);
@@ -516,6 +519,7 @@ it.each(GitLaws.gits)(
                       const reason = Option.getOrUndefined(
                         Arr.findFirst(resolved.cause.reasons, (r) => r._tag === "Fail"),
                       );
+
                       expect(reason?._tag === "Fail" && reason.error.reason._tag).toBe("MissingPath");
                     }
 
@@ -548,6 +552,7 @@ it.each(GitLaws.gits)(
                       (personSelection, base) => bases.check(personSelection.resolve, base === 1, index),
                       { concurrency: 1 },
                     );
+
                     expect(Arr.map(baseReads, (read) => read.actual)).toEqual(
                       Arr.map(baseReads, (read) => read.expected),
                     );

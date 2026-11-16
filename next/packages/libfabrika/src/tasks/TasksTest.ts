@@ -17,16 +17,17 @@
 // build): append the `target:` line on a repeated request too.
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as R from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
-import * as Arr from "effect/Array";
-import * as DateTime from "effect/DateTime";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger } from "../ledger/Ledger.ts";
@@ -151,6 +152,7 @@ export const changedRequest = (request: Request, pick: number, other: Request): 
 
   if (field === "process") {
     const flipped = flipLast(request.process);
+
     return { ...request, process: differs(request.process, other.process, flipped) };
   }
 
@@ -476,6 +478,7 @@ const possible = (world: World, tape: Tape, moves: ReadonlyArray<Move>): Readonl
     collect_other: done,
     collect_early: requested || assigned || started,
   };
+
   return Arr.filter(moves, (move) => can[move]);
 };
 
@@ -531,6 +534,7 @@ const walk = (
           `${message}: each line points at its task`,
         ).toMatchObject(wanted);
         const answer = success(yield* tasks((j) => j.forTarget(key)), `${message}: forTarget`);
+
         const open = Arr.filter(
           [...world.tasks.values()],
           (s) => s.request.target === key && ["requested", "assigned", "started"].includes(s.phase),
@@ -538,6 +542,7 @@ const walk = (
 
         const ids = (all: ReadonlyArray<Task>) =>
           Arr.map(all, (j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+
         expect(ids(answer.tasks), `${message}: forTarget answers exactly the key's open tasks`).toEqual(
           Arr.map(open, (s) => s.request.id).sort(),
         );
@@ -1185,6 +1190,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
               measured.rows += work.rows - before.rows;
               measured.tasks += a.total;
               const rows = [...actual];
+
               const selected = Arr.filter(
                 [...expected.values()],
                 (j) => j.state._tag !== "absent" && j.state.request.process === process,
@@ -1192,6 +1198,7 @@ export const discoverySuite = (open: Effect.Effect<Store, never, Scope.Scope>) =
 
               const ids = (tasks: ReadonlyArray<Task>) =>
                 Arr.map(tasks, (j) => (j.state._tag === "absent" ? "" : j.state.request.id)).sort();
+
               expect(ids(rows)).toEqual(ids(selected));
               expect(new Set(ids(rows)).size).toBe(rows.length);
 

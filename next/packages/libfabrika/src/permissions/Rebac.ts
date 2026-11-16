@@ -14,13 +14,13 @@
  * are per permission, the store fails typed, `Denied` carries who, what and which object, and a
  * proof carries the object it checked.
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
-import * as Arr from "effect/Array";
 import { type Declared, evaluate } from "./internal/evaluate.ts";
 import { mint, type Proof, sealed } from "./internal/proof.ts";
 import type { Tuples } from "./Relation.ts";

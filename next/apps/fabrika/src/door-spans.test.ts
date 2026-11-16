@@ -20,19 +20,19 @@ import { RecordManager } from "@kampus/libfabrika/telemetry/Records";
 import { SpanSink } from "@kampus/libfabrika/telemetry/Sink";
 import { Chain } from "@kampus/libfabrika/telemetry/Trace";
 import { runsFor } from "@kampus/vitest";
+import { Array as Arr, String as Str } from "effect";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import { RateLimiter } from "effect/persistence";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Formatter from "effect/Formatter";
-import { RateLimiter } from "effect/persistence";
-import { Array as Arr, String as Str } from "effect";
 import { TestClock } from "effect/testing";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { Gateway } from "./door.ts";
@@ -478,16 +478,16 @@ it("A12 [secrets]: actual input rows, bindings, recording writes and span tags/e
                     replacer: (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v),
                   }),
                 )({
-                    spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),
-                    events: tracer.events,
-                  });
+                  spans: Arr.map(tracer.spans, (s) => ({ name: s.name, tags: [...s.attributes] })),
+                  events: tracer.events,
+                });
                 const outputs = Arr.flatMap(
                   [...w.writes, ...w.archived, Formatter.formatJson(cells), shown, ...errors],
                   (output) => texts(output, decoded),
                 );
 
                 for (const body of bodies) {
-                  for (const form of [body, Str.slice(1, -1)(JSON.stringify(body)), encodeURIComponent(body)]) {
+                  for (const form of [body, Str.slice(1, -1)(Formatter.formatJson(body)), encodeURIComponent(body)]) {
                     expect(Arr.filter(outputs, (output) => Str.includes(form)(output))).toEqual([]);
                   }
                 }

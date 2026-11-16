@@ -8,14 +8,15 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
-import type * as Path from "effect/Path";
-import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
+import type * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { bundle, bundleAsync, type Rule, transform } from "lightningcss";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -248,6 +249,7 @@ describe("P16 CSS tokens", () => {
   it("CSS refusals keep their exact reason and named span in root and imported files", () => {
     vi.resetModules();
     const read = inlineStylesheet;
+
     return fc.assert(
       fc.asyncProperty(
         ids,
@@ -382,6 +384,7 @@ describe("P16 CSS tokens", () => {
       expect(() => verifyImport(plant, id)).toThrow("imported rule");
     }
   };
+
   it("escaped at-keywords import the same file as their unescaped spelling", () =>
     fc.assert(
       fc.asyncProperty(
@@ -701,7 +704,9 @@ describe("P16 CSS tokens", () => {
       fc.asyncProperty(ids, fc.constantFrom("61", "000061", "62", "000062"), async (id, hex) => {
         const f = fixture(id),
           css = `a { --value: \\${hex}url(./file${id}.png); }`;
+
         const expected = cssRules(`a { --value: ${pipe(hex, Str.endsWith("61")) ? "a" : "b"}url(./file${id}.png); }`);
+
         const verify = (rules: readonly Rule[]) =>
           expect(meaning(rules), "the escaped function and its argument must remain").toEqual(meaning(expected));
 

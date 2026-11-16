@@ -13,7 +13,9 @@ type Declaration = Extract<Root["nodes"][number], { type: "decl" }>;
 const TOKENS = "packages/fabrika-design/src/tokens.css";
 
 export const WINDOW = "apps/fabrika/src/window/window.css";
+
 export const tokens = new Map(Arr.map(names.tokens, ({ name, owner }) => [name, owner]));
+
 export const steps = new Set(names.steps);
 
 export const parts: Readonly<Record<string, readonly string[]>> = names.parts;

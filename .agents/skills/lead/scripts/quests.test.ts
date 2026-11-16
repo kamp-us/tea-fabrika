@@ -2,14 +2,14 @@
 // `verdict` on fixed clocks; the read laws write a made-up BOXES folder in a temp folder and set
 // Effect's test clock: no real quest, box or process is read or touched.
 import { NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import type * as Scope from "effect/Scope";
 import * as Rec from "effect/Record";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, String as Str, pipe } from "effect";
+import type * as Scope from "effect/Scope";
 import { TestClock } from "effect/testing";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
@@ -21,7 +21,9 @@ const options = { seed: 119120, numRuns: 300 };
 const T0 = Date.parse("2026-11-12T14:00:00.000Z");
 
 const MIN = 60_000;
+
 const iso = (offset: number) => DateTime.formatIso(DateTime.makeUnsafe(T0 + offset));
+
 const at = (offset: number) => DateTime.toDateUtc(DateTime.makeUnsafe(T0 + offset));
 
 const beat = (phase: Beat.Phase, sinceMs: number, atMs: number, agentMs: number | null = null): Beat.Beat => ({
@@ -403,6 +405,7 @@ describe("Quests.read", () => {
           "state/t1-chain.json": whole,
           "state/t1.lock": "1\n",
         });
+
         expect(Arr.map(lines, (l) => [l.quest, l.state, l.text])).toEqual([
           ["half", "unknown", "the chain record does not read"],
           ["other", "unknown", "the chain record does not read"],
@@ -453,6 +456,7 @@ describe("Quests.read", () => {
           "state/t1.lock": "77\n",
           "t1-chain.out": ended("ask", "answered since"),
         });
+
         expect(Arr.map(lines, (l) => [l.state, l.step, l.phase, l.quietSeconds])).toEqual([
           ["running", "build", "wait", 2],
         ]);
@@ -471,6 +475,7 @@ describe("Quests.read", () => {
           },
           { outAt: { "a-chain.out": -MIN } },
         );
+
         expect(Arr.map(lines, (l) => [l.quest, l.state, l.box, l.text])).toEqual([
           ["a", "waits", "a-mutation2", "stuck: 3 stucks in a row"],
           ["b", "stuck", null, "build open for 1h50m, no beat in the record: stuck"],
@@ -488,6 +493,7 @@ describe("Quests.read", () => {
           "state/t2-chain.json": chain(record({ steps: [closed("review", "t2-review1")] })),
           "t2-chain.out": ended("done", "PR 10 landed"),
         };
+
         const states = (lines: ReadonlyArray<Quests.Line>) => Arr.map(lines, (l) => [l.quest, l.state]);
         expect(states(yield* linesAt(files))).toEqual([]);
         expect(states(yield* linesAt(files, { all: true }))).toEqual([

@@ -1,10 +1,10 @@
 import { relative, resolve } from "node:path";
+import { it } from "@effect/vitest";
+import * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import * as DateTime from "effect/DateTime";
-import { it } from "@effect/vitest";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expect } from "vitest";
 import {
@@ -237,39 +237,40 @@ it.live(
   "format: TT3: a leg's artifact holds the run, the event, the head, the leg, every step and every file, and no test output",
   () =>
     Effect.gen(function* () {
-  // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
+      // Plant: take the sha from GITHUB_SHA, a pull request's merge commit, instead of HEAD.
       const report = {
         testResults: [testFile("next/a.test.ts", 5000, 2500, 3), testFile("next/b.test.ts", 5000, 500, 1)],
       };
+
       const timings = yield* promised(() =>
         timingsOf(
-    { ...env, GITHUB_SHA: "m".repeat(40) },
-    io(
-      () => job,
-      () => JSON.stringify(report),
-    ),
+          { ...env, GITHUB_SHA: "m".repeat(40) },
+          io(
+            () => job,
+            () => JSON.stringify(report),
+          ),
         ),
-  );
+      );
 
-  expect(timings).toEqual({
-    run: "43633120187",
-    attempt: "1",
-    workflow: "check",
-    event: "pull_request",
-    sha: "a".repeat(40),
-    job: "next",
-    leg: "3",
-    steps: readSteps(job),
-    files: {
-      _tag: "read",
-      rows: [
-        { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
-        { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
-      ],
-    },
-  });
-  expect(JSON.stringify(timings)).not.toContain("test output");
-  expect(fileName(timings)).toBe("timings-next-3.json");
+      expect(timings).toEqual({
+        run: "43633120187",
+        attempt: "1",
+        workflow: "check",
+        event: "pull_request",
+        sha: "a".repeat(40),
+        job: "next",
+        leg: "3",
+        steps: readSteps(job),
+        files: {
+          _tag: "read",
+          rows: [
+            { path: "next/a.test.ts", seconds: 2.5, tests: 3, result: "passed" },
+            { path: "next/b.test.ts", seconds: 0.5, tests: 1, result: "passed" },
+          ],
+        },
+      });
+      expect(JSON.stringify(timings)).not.toContain("test output");
+      expect(fileName(timings)).toBe("timings-next-3.json");
     }),
 );
 
@@ -313,6 +314,7 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
 it("TT5: whatever the environment holds and whatever GitHub or the report file answer, the leg's timings come back", () => {
   // Plant: let a failed read escape collect as a defect, as a bare JSON.parse of a missing report would.
   const key = fc.constantFrom(...Rec.keys(env));
+
   return fc.assert(
     fc.asyncProperty(
       fc.uniqueArray(key),
@@ -322,6 +324,7 @@ it("TT5: whatever the environment holds and whatever GitHub or the report file a
       fc.boolean(),
       async (dropped, answer, apiThrows, report, readThrows) => {
         const partial = Rec.fromEntries(Rec.toEntries(env).filter(([name]) => !dropped.includes(name)));
+
         const timings = await timingsOf(partial, {
           job: () =>
             apiThrows ? Effect.fail(Unread.make({ cause: new Error("socket hang up") })) : Effect.succeed(answer),

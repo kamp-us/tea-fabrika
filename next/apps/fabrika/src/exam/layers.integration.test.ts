@@ -14,10 +14,10 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { Row } from "./rows.ts";
 
 const NEXT = resolve(import.meta.dirname, "../../../..");
@@ -230,7 +230,8 @@ describe("the real rule file on planted trees", () => {
         [`${LIB}/transport/Wire.ts`]: lines("export const wire = 1;"),
         ...Rec.fromEntries(
           Arr.map(lower, (module) => [
-            `${LIB}/${module}/Up.ts`, lines('import {Gateway} from "../gateway/Gateway.ts";'),
+            `${LIB}/${module}/Up.ts`,
+            lines('import {Gateway} from "../gateway/Gateway.ts";'),
           ]),
         ),
       });

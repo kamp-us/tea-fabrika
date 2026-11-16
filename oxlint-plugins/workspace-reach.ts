@@ -11,9 +11,9 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import * as Arr from "effect/Array";
-import * as Result from "effect/Result";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parse } from "yaml";
 
 /** Folders whose packages are starts: nothing depends on an app, a tutorial or a tool. */
@@ -49,6 +49,7 @@ const read = (file: string): Manifest => {
 
   const deps = Arr.flatMap(FIELDS, (field) => {
     const map = manifest[field];
+
     return isMap(map) ? Rec.keys(map) : [];
   });
 
@@ -73,18 +74,22 @@ if (tracked.status !== 0) {
 const run = (): { readonly unreached: readonly string[]; readonly total: number } => {
   const workspace: unknown = parse(readFileSync(join(root, "pnpm-workspace.yaml"), "utf8"));
   const globs = isMap(workspace) && Arr.isArray(workspace["packages"]) ? workspace["packages"] : [];
+
   const members = pipe(
     globs,
     Arr.filter((g): g is string => typeof g === "string"),
     Arr.map(matcher),
   );
+
   const starts = Arr.map(STARTS, matcher);
+
   const folders = pipe(
     tracked.stdout.split("\0"),
     Arr.filter((file) => file !== "" && file !== "package.json"),
     Arr.map((file) => dirname(file)),
     Arr.filter((folder) => !LEFT_OUT.test(folder) && Arr.some(members, (m) => m.test(folder))),
   );
+
   const byName = new Map<string, { readonly folder: string; readonly manifest: Manifest }>();
 
   for (const folder of folders) {
@@ -122,6 +127,7 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
     Arr.filter(([name]) => !reached.has(name)),
     Arr.map(([name, { folder }]) => `${folder} (${name})`),
   ).sort();
+
   return { unreached, total: byName.size };
 };
 

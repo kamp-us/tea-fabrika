@@ -6,10 +6,10 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import { asks } from "./edges.ts";
 
 const PRODUCT = "next/packages/libfabrika/src/data/project.ts";

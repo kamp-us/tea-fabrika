@@ -1,19 +1,19 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import { Array as Arr } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Formatter from "effect/Formatter";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type * as Tracer from "effect/Tracer";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
-import { Array as Arr } from "effect";
 import * as fc from "fast-check";
 import { vi } from "vitest";
 import * as Mail from "./Mail.ts";
@@ -229,9 +229,11 @@ export const suite = (driver: Driver) =>
             const queue = Option.getOrUndefined(Arr.findFirst(s.starts, (p) => p.name === "queue:1"));
             expect(queue).toBeDefined();
             const inbox = Arr.filter(s.letters, (l) => l.name === "queue:1");
+
             const requests = Arr.filter(inbox, (l) =>
               Schema.is(Schema.Struct({ type: Schema.Literals(["enqueue", "resume"]) }))(l.m),
             );
+
             const answers = Arr.filter(inbox, (l) =>
               Schema.is(Schema.Struct({ type: Schema.Literals(["start_child_ok", "start_child_err"]) }))(l.m),
             );
@@ -256,6 +258,7 @@ export const suite = (driver: Driver) =>
 
             expect(s.model?.attempt).toBe(attempts);
             expect(s.model?.late).toBe(0);
+
             return Arr.map(answers, (l) => l.id);
           };
 

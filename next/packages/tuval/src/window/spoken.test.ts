@@ -8,11 +8,11 @@
 import { describe, expect, it } from "@effect/vitest";
 import { WindowModel } from "@kampus/libfabrika/client/WindowMachine";
 import * as Arbitrary from "effect/Arbitrary";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
-import { String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { spoken } from "./spoken.ts";
 
 const SEED = 119120;
@@ -35,12 +35,15 @@ const Pick = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
  */
 const page = (tiles: typeof Tiles.Type, said: typeof Said.Type, pick: number) => {
   const rows = Arr.map(tiles, (t, i) => ({ ...t, id: `tile_${i + 1}`, name: `${NAMES[i]!}:1` }));
+
   const desk = Arr.map(rows, (t, i) => ({
     id: t.id,
     program: `${PACKS[(pick + i) % PACKS.length]!}/${NAMES[i]!}`,
     n: i + 1 + (pick % 40),
   }));
+
   const messages = Arr.map(said.messages, (x, i) => ({ ...x, tile: rows[(pick + i) % rows.length]!.id }));
+
   return { m: { tiles: rows, said: { ...said, messages } }, desk };
 };
 
@@ -67,6 +70,7 @@ describe("the polite region says the current burst as one line", () => {
     ({ tiles, said, pick }) => {
       const p = page(tiles, said, pick);
       const words = spoken(p.m, lookup(p), () => null);
+
       const ends = new Set(
         Function.pipe(
           p.m.said.messages,
@@ -89,6 +93,7 @@ describe("the polite region says the current burst as one line", () => {
       const parts = Arr.map(p.m.said.messages, (x) =>
         spoken({ ...p.m, said: { id: p.m.said.id, messages: [x] } }, lookup(p), () => null),
       );
+
       expect(words, "the burst as one line, in order").toBe(Arr.join(parts, ", "));
       expect(Str.includes("\n")(words), "the burst is one line").toBe(false);
 

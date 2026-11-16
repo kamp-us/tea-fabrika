@@ -20,9 +20,9 @@
 // The second property breaks a walked, tidy workspace in one named way and asks `check` to see it,
 // so `check` is itself a checked oracle, as 0505's "a check that refuses a broken tree" asks.
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import * as Layout from "./Layout.ts";
 import { TileId, Workspace } from "./Workspace.ts";
@@ -278,6 +278,7 @@ const extent = (node: Node, at: ReadonlyMap<string, Box>): Box => {
   const boxes = Arr.map(order(node), (t) => at.get(t)!);
   const x = Math.min(...Arr.map(boxes, (b) => b.x));
   const y = Math.min(...Arr.map(boxes, (b) => b.y));
+
   return {
     x,
     y,
@@ -477,6 +478,7 @@ describe("Desk S3 L26: neighbor picks the tile with the most overlap on that sid
               ),
               (x) => x.share > 0,
             );
+
             const most = Math.max(0, ...Arr.map(shares, (x) => x.share));
             const got = Layout.neighbor(real.w.layout, tileId(from), side);
 

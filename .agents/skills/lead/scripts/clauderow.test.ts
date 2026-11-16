@@ -7,16 +7,16 @@
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
+import { Array as Arr, pipe, String as Str } from "effect";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as PlatformError from "effect/PlatformError";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import { Array as Arr, pipe, String as Str } from "effect";
 import { type Ask, read, rounded, row, turns } from "./clauderow.ts";
 
 const tool = { type: "tool_use", id: "t", name: "Read", input: {} };
@@ -49,27 +49,27 @@ const FABLE = "claude-fable-5-2";
 // content that is plain text, and a first and a last line that are no model call.
 const plain = `${Arr.join(
   [
-  JSON.stringify({ type: "user", timestamp: "2026-11-10T07:59:58.250Z", message: { content: "made-up ask" } }),
-  assistant("2026-11-10T08:00:01.000Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [text]),
-  assistant("2026-11-10T08:00:01.500Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool]),
-  assistant("2026-11-10T08:00:01.900Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool, tool]),
-  "",
-  "{not json",
-  JSON.stringify({ type: "user", timestamp: "2026-11-10T08:00:09.000Z", message: { content: [tool] } }),
-  assistant(
-    "2026-11-10T08:03:30.000Z",
-    "msg_2",
-    OPUS,
-    usage(40, 0, 2500, 4200, 3100, { service_tier: "standard", inference_geo: "global", speed: "standard" }),
-    [tool],
-  ),
-  JSON.stringify({
-    type: "assistant",
-    timestamp: "2026-11-10T08:04:00.000Z",
-    message: { id: "msg_none", model: OPUS, content: [tool] },
-  }),
-  assistant("2026-11-10T08:07:45.999Z", "msg_3", OPUS, usage(7, 0, 0, 9900, 1_234_567), "plain text content"),
-  JSON.stringify({ type: "system", timestamp: "2026-11-10T08:12:15.400Z" }),
+    JSON.stringify({ type: "user", timestamp: "2026-11-10T07:59:58.250Z", message: { content: "made-up ask" } }),
+    assistant("2026-11-10T08:00:01.000Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [text]),
+    assistant("2026-11-10T08:00:01.500Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool]),
+    assistant("2026-11-10T08:00:01.900Z", "msg_1", OPUS, usage(1200, 3000, 0, 0, 150), [tool, tool]),
+    "",
+    "{not json",
+    JSON.stringify({ type: "user", timestamp: "2026-11-10T08:00:09.000Z", message: { content: [tool] } }),
+    assistant(
+      "2026-11-10T08:03:30.000Z",
+      "msg_2",
+      OPUS,
+      usage(40, 0, 2500, 4200, 3100, { service_tier: "standard", inference_geo: "global", speed: "standard" }),
+      [tool],
+    ),
+    JSON.stringify({
+      type: "assistant",
+      timestamp: "2026-11-10T08:04:00.000Z",
+      message: { id: "msg_none", model: OPUS, content: [tool] },
+    }),
+    assistant("2026-11-10T08:07:45.999Z", "msg_3", OPUS, usage(7, 0, 0, 9900, 1_234_567), "plain text content"),
+    JSON.stringify({ type: "system", timestamp: "2026-11-10T08:12:15.400Z" }),
   ],
   "\n",
 )}\n`;
@@ -78,28 +78,28 @@ const plain = `${Arr.join(
 // and a run that crosses the start of daylight time in Los Angeles. Its meta says it still runs.
 const open = Arr.join(
   [
-  assistant(
-    "2026-03-08T09:58:00.000Z",
-    "msg_a",
-    SONNET,
-    { input_tokens: 500, cache_creation_input_tokens: 800, cache_read_input_tokens: null, output_tokens: 60 },
-    [tool],
-  ),
-  assistant("2026-03-08T09:59:30.000Z", "msg_b", HAIKU, usage(90_000, 5000, 4000, 1000, 700)),
-  assistant("2026-03-08T10:01:00.000Z", "msg_c", HAIKU, usage(90_000, 5000, 4000, 1001, 700), [tool, text, "odd"]),
-  assistant(
-    "2026-03-08T10:02:10.000Z",
-    "msg_d",
-    SONNET,
-    {
-      input_tokens: 10,
-      cache_creation_input_tokens: 900,
-      cache_creation: { ephemeral_1h_input_tokens: 300 },
-      cache_read_input_tokens: 77,
-      output_tokens: 5,
-    },
-    null,
-  ),
+    assistant(
+      "2026-03-08T09:58:00.000Z",
+      "msg_a",
+      SONNET,
+      { input_tokens: 500, cache_creation_input_tokens: 800, cache_read_input_tokens: null, output_tokens: 60 },
+      [tool],
+    ),
+    assistant("2026-03-08T09:59:30.000Z", "msg_b", HAIKU, usage(90_000, 5000, 4000, 1000, 700)),
+    assistant("2026-03-08T10:01:00.000Z", "msg_c", HAIKU, usage(90_000, 5000, 4000, 1001, 700), [tool, text, "odd"]),
+    assistant(
+      "2026-03-08T10:02:10.000Z",
+      "msg_d",
+      SONNET,
+      {
+        input_tokens: 10,
+        cache_creation_input_tokens: 900,
+        cache_creation: { ephemeral_1h_input_tokens: 300 },
+        cache_read_input_tokens: 77,
+        output_tokens: 5,
+      },
+      null,
+    ),
   ],
   "\n",
 );
@@ -116,9 +116,9 @@ const unnamed = (at: string, uuid: string | undefined, said: unknown) =>
 // Two lines of one message keyed by uuid, timestamps with an offset, and a call of no tokens.
 const closed = `${Arr.join(
   [
-  unnamed("2026-11-10T20:15:00.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
-  unnamed("2026-11-10T20:15:01.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
-  assistant("2026-11-10T20:45:03.000Z", "msg_z", FABLE, usage(0, 0, 0, 0, 0)),
+    unnamed("2026-11-10T20:15:00.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
+    unnamed("2026-11-10T20:15:01.000+00:00", "only-uuid", usage(15_625, 0, 0, 0, 0)),
+    assistant("2026-11-10T20:45:03.000Z", "msg_z", FABLE, usage(0, 0, 0, 0, 0)),
   ],
   "\n",
 )}\n`;
@@ -333,6 +333,7 @@ describe("clauderow's edge cases, each a law", () => {
         const got = yield* printed(
           yield* row("agent.jsonl", ask()).pipe(on("UTC", { "agent.jsonl": transcript(FABLE, calls) })),
         );
+
         const dollars = Arr.reduce(
           calls,
           0,
@@ -401,6 +402,7 @@ describe("clauderow's edge cases, each a law", () => {
       const lines = Arr.map(calls, (call) =>
         unnamed("2026-11-10T08:00:00.000Z", undefined, usage(call.input, 0, 0, 0, call.output)),
       );
+
       const got = read(Arr.join(lines, "\n"));
       expect(Result.isSuccess(got) && Arr.map(got.success.calls, (call) => call.tokens.input)).toEqual(
         Arr.map(calls, (call) => call.input),

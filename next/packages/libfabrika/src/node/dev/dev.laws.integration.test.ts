@@ -7,6 +7,7 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { it as effectIt } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -15,16 +16,16 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
-import * as Arr from "effect/Array";
-import * as Formatter from "effect/Formatter";
-import * as Layer from "effect/Layer";
-import { String as Str, pipe } from "effect";
-import { FetchHttpClient } from "effect/http";
 import * as fc from "fast-check";
 import { expect, it, type Mock, vi } from "vitest";
 import { ProcessIdGenerator } from "../../processes/ProcessIdGenerator.ts";
@@ -142,6 +143,7 @@ it("every observed exit is durable once across restart or brake, with its reason
       const home = mkdtempSync(join(tmpdir(), "p12-exit-"));
       vi.stubEnv("FABRIKA_HOME", home);
       const kill = vi.spyOn(process, "kill").mockReturnValue(true);
+
       const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
         const call = JSON.parse(bodyText(options)) as { method: string };
 
@@ -248,9 +250,11 @@ it("every observed exit is durable once across restart or brake, with its reason
                 }
 
                 const rows = yield* outbox.pending;
+
                 // Startup may already be acknowledged; last remains durable in either case.
                 const start =
                   Arr.filter(rows, (event) => event._tag === "started").at(-1)?.start ?? (yield* outbox.last)!;
+
                 const exit = { exitCode: item.exitCode, signal: item.signal, stderr: "" };
                 expected.push({
                   start,
@@ -306,15 +310,15 @@ it("every observed exit is durable once across restart or brake, with its reason
                 Layer.provideMerge(ProcessIdGenerator.layer),
                 Layer.provideMerge(SecureRandom.layerWebCrypto),
                 Layer.provideMerge(
-              rssLayer(
-                () => {
-                  platform.samples++;
+                  rssLayer(
+                    () => {
+                      platform.samples++;
 
-                  return platform.rss;
-                },
-                (command, args) => spawned.push({ command, args }),
-              ),
-            ),
+                      return platform.rss;
+                    },
+                    (command, args) => spawned.push({ command, args }),
+                  ),
+                ),
                 Layer.provideMerge(NodeServices.layer),
                 Layer.provideMerge(TestClock.layer()),
               ),
@@ -329,6 +333,7 @@ it("every observed exit is durable once across restart or brake, with its reason
             Effect.provide(NodeServices.layer),
           ),
         );
+
         expect(Arr.filter(pending, (event) => event._tag === "stopped")).toMatchObject([{ reason: "stop" }]);
         // A braked brain reaches no runtime, so what it could not send waits in this home for the next
         // start, which delivers it. The next start's own platform answers every call.
@@ -384,6 +389,7 @@ it("every observed exit is durable once across restart or brake, with its reason
 
         // A stop while a replacement waits fails that replacement, and the failure is recorded.
         const writes = Arr.filter(calls, (call) => call.target === "record" && call.method === "write");
+
         const failed = Arr.filter(
           Arr.flatMap(
             writes,
@@ -394,6 +400,7 @@ it("every observed exit is durable once across restart or brake, with its reason
           ),
           ({ span }) => span.name === "brain.restart" && !span.ok && span.attributes["error.type"] === "ControlError",
         );
+
         expect(failed.length).toBeGreaterThan(0);
       } finally {
         kill.mockRestore();
@@ -462,10 +469,10 @@ const until = Effect.fnUntraced(function* <A>(label: string, look: Effect.Effect
 const replaceWorld = Effect.fnUntraced(function* (
   fetch: Mock<typeof globalThis.fetch>,
   c: {
-  readonly limit: number;
-  readonly kib: number;
-  readonly grace: number;
-  readonly honors: boolean;
+    readonly limit: number;
+    readonly kib: number;
+    readonly grace: number;
+    readonly honors: boolean;
   },
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -477,26 +484,26 @@ const replaceWorld = Effect.fnUntraced(function* (
 
   fetch.mockImplementation(async (url, options) => {
     const body = Schema.decodeSync(Body)(bodyText(options));
-        const port = Number(new URL(String(url)).port);
-        requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
+    const port = Number(new URL(String(url)).port);
+    requests.push({ port, method: body.method, at: clock.currentTimeMillisUnsafe() });
 
-        if (port === OLD.port && signals.length > 0) {
-          // The old workerd closed its control socket on the SIGTERM.
-          throw new TypeError("fetch failed", {
-            cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
-          });
-        }
+    if (port === OLD.port && signals.length > 0) {
+      // The old workerd closed its control socket on the SIGTERM.
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+      });
+    }
 
-        if (body.method === "brain" && !world.startup) {
-          // Keep lifecycle rows in the real outbox so the law reads every one.
-          return Response.json({ error: { reason: "offline" } });
-        }
+    if (body.method === "brain" && !world.startup) {
+      // Keep lifecycle rows in the real outbox so the law reads every one.
+      return Response.json({ error: { reason: "offline" } });
+    }
 
-        if (body.method === "codeInstall") {
-          return Response.json({ value: { _tag: "same" } });
-        }
+    if (body.method === "codeInstall") {
+      return Response.json({ value: { _tag: "same" } });
+    }
 
-        return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
+    return Response.json({ value: body.method === "write" ? { _tag: "written" } : null });
   });
   yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -590,6 +597,7 @@ const replaceWorld = Effect.fnUntraced(function* (
 // Each run gets its own platform stand-in, which the work answers through.
 const replaced = <A, E, R>(work: (fetch: Mock<typeof globalThis.fetch>) => Effect.Effect<A, E, R>) => {
   const fetch = vi.fn<typeof globalThis.fetch>();
+
   return work(fetch).pipe(
     Effect.scoped,
     Effect.provide(
@@ -873,7 +881,9 @@ effectIt.effect.prop(
             Effect.sync(() => vi.spyOn(process, "kill").mockReturnValue(true)),
             (spy) => Effect.sync(() => spy.mockRestore()),
           );
+
           fetch.mockImplementation(async () => Response.json({ value: null }));
+
           const exit = yield* startDev({ name: REPLACE, port: 18787, build: "test", home, ...BRAIN }, (local) =>
             Effect.gen(function* () {
               Context.get(local, RuntimeLifecycle)({ type: "start", worker: REPLACE, pid });
@@ -889,6 +899,7 @@ effectIt.effect.prop(
           expect(kill).not.toHaveBeenCalled();
           const rows = yield* (yield* brainOutbox(home)).pending;
           expect(Arr.filter(rows, (row) => row._tag === "started")).toEqual([]);
+
           return;
         }
 

@@ -61,19 +61,19 @@
 // file with zero mutants (ticket 655).
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Array as Arr, pipe, String as Str } from "effect";
+import { Command, Flag } from "effect/cli";
+import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import type * as PlatformError from "effect/PlatformError";
-import * as Clock from "effect/Clock";
-import { Array as Arr, pipe, String as Str } from "effect";
-import { Command, Flag } from "effect/cli";
 import { ChildProcess } from "effect/process";
 import * as Rec from "effect/Record";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import { parseSync, Visitor } from "oxc-parser";
 
 /** Docker's own label on every image and container this script makes, so cleanup finds them. */
@@ -135,10 +135,12 @@ export const parseRelated = (text: string): ReadonlyArray<string> | null => {
     Arr.map((p) => Str.trim(p)),
     Arr.filter((p) => p !== ""),
   );
+
   const plain = (p: string) =>
     /^[A-Za-z0-9_@.][A-Za-z0-9_@.+/ -]*\.test\.tsx?$/.test(p) &&
     !Str.split(p, "/").includes("..") &&
     !pipe(p, Str.startsWith("/"));
+
   return paths.length > 0 && Arr.every(paths, plain) ? paths : null;
 };
 
@@ -280,11 +282,13 @@ type FileReach = NonNullable<(typeof Sample.Type)["files"]>[number];
 /** The report's reach line: how many changed files got a mutant, and each one that got none. Pure. */
 export const reachLine = (files: ReadonlyArray<FileReach>): string => {
   const missed = Arr.filter(files, (f) => f.selected === 0);
+
   const reason = (f: FileReach) =>
     f.total === 0 ? "no mutant on its changed lines" : `${f.total} mutants on its changed lines, none selected`;
+
   return Arr.join(
     [
-    `the sample reached ${files.length - missed.length} of ${files.length} changed files`,
+      `the sample reached ${files.length - missed.length} of ${files.length} changed files`,
       ...(missed.length > 0
         ? [
             `; zero mutants in ${pipe(
@@ -304,7 +308,11 @@ export const reachLine = (files: ReadonlyArray<FileReach>): string => {
  * (`dir/`) above it, as the box's own owner check reads the same table. Pure.
  */
 export const buildOwns = (owners: Readonly<Record<string, string>>, file: string): boolean => {
-  const folders = Arr.filter(Rec.keys(owners), (key) => pipe(key, Str.endsWith("/")) && pipe(file, Str.startsWith(key)));
+  const folders = Arr.filter(
+    Rec.keys(owners),
+    (key) => pipe(key, Str.endsWith("/")) && pipe(file, Str.startsWith(key)),
+  );
+
   const key = file in owners ? file : folders.sort((a, b) => b.length - a.length)[0];
 
   return key !== undefined && owners[key] === "build";
@@ -446,6 +454,7 @@ export const narrowed = (a: ReadonlyArray<Row>, b: ReadonlyArray<Row>): Array<Ro
       Arr.map(mutantKey),
     ),
   );
+
   return Arr.filter(b, (r) => (r.status === "Survived" || r.status === "NoCoverage") && killed.has(mutantKey(r)));
 };
 
@@ -596,7 +605,9 @@ export const judge = (seen: {
         ]
       : []),
   ];
+
   const unknown = Arr.some(gaps, (g) => g.reason !== "capped");
+
   return {
     outcome: "done",
     reason: pipe(
@@ -607,7 +618,7 @@ export const judge = (seen: {
     detail: Arr.join(
       [
         ...Arr.map(gaps, (g) => g.detail),
-      ...(unknown ? ["narrowing is unknown: hand-check that no law got narrower"] : []),
+        ...(unknown ? ["narrowing is unknown: hand-check that no law got narrower"] : []),
       ],
       "; ",
     ),
@@ -639,6 +650,7 @@ export const droppedFromArmA = (
           ),
         ),
       );
+
       return {
         path: p,
         reason: !onBase.includes(p)
@@ -826,10 +838,12 @@ const readArm = Effect.fnUntraced(function* (box: string, name: "a" | "b", selec
 
   if (report !== null) {
     const rows = Arr.flatMap(Rec.toEntries(report.files), ([file, f]) => Arr.map(f.mutants, (m) => toRow(file, m)));
+
     return { arm: tally(exit, "report", rows, selected), rows };
   }
 
   const events = path.join(box, name, "events");
+
   const names = Arr.filter(yield* fs.readDirectory(events).pipe(Effect.orElseSucceed(() => [])), (n) =>
     /^\d+-onMutantTested\.json$/.test(n),
   );
@@ -962,6 +976,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   const resolve = Effect.fnUntraced(function* (ref: string) {
     const got = yield* sh("git", ["-C", ask.checkout, "rev-parse", "-q", "--verify", `${ref}^{commit}`]);
+
     return got.code === 0 ? Str.trim(got.out) : null;
   });
 
@@ -1063,6 +1078,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   }
 
   const ids = yield* git("rev-parse", "build:pnpm-lock.yaml", "build:pnpm-workspace.yaml", "build:patches");
+
   const hash = yield* sh(
     "git",
     ["hash-object", "--stdin"],
@@ -1080,10 +1096,12 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
 
   if ((yield* docker(["image", "inspect", "--format", "{{.Id}}", image])).code !== 0) {
     const context = yield* fs.makeTempDirectoryScoped({ prefix: "mutbox-" });
+
     const patches = Arr.filter(
       Str.split((yield* git("ls-tree", "-r", "--name-only", "build", "patches/")).out, "\n"),
       Boolean,
     );
+
     yield* fs.makeDirectory(path.join(context, "patches"), { recursive: true });
     yield* fs.writeFileString(path.join(context, "Dockerfile"), dockerfile);
     yield* fs.writeFileString(path.join(context, "mutbox-entry.sh"), entry);
@@ -1141,6 +1159,7 @@ const boxed = Effect.fnUntraced(function* (ask: Ask, started: number) {
   const b = yield* readArm(box, "b", sample?.selected ?? 0);
   const a = yield* readArm(box, "a", sample?.selected ?? 0);
   const baseline = yield* decoded(Baseline, yield* readOut(box, "baseline.json"));
+
   const tests = Arr.flatMap(baseline?.testResults ?? [], (file) =>
     Arr.map(file.assertionResults, (t) => ({
       name: `${pipe(file.name, Str.replace(/^\/repo\//, ""))}: ${t.fullName}`,
@@ -1209,6 +1228,7 @@ const run = Command.make(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const started = yield* Clock.currentTimeMillis;
+
     const summary = yield* boxed(ask, started).pipe(
       Effect.scoped,
       // Whatever went wrong, the answer is `stuck`: there is no other way to run the sample.
@@ -1263,6 +1283,7 @@ const gc = Command.make(
         ["image", "prune", "--all", "--force", "--filter", `label=${LABEL}`, "--filter", "until=168h"],
         DOCKER_SECONDS.prune,
       );
+
       const images = Arr.filter(Str.split(pruned.out, "\n"), (l) => pipe(l, Str.startsWith("untagged: "))).length;
       yield* Console.log(`mutbox gc: removed ${containers} containers and ${images} images`);
     },

@@ -1,6 +1,3 @@
-import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
 // Ticket 477, PR 0: the lint laws of libfabrika's modules (decision 0043), each seen to fire on a
 // planted file before a file moves. All of this is `next/`. Three rules carry them:
 //   - `fabrika/modules`, hand-written, since no existing rule says these four: no module re-exports
@@ -17,6 +14,9 @@ import { pipe } from "effect/Function";
 // planted file is a comment, so no statement shares a line with a whole-file report.
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, expect, it } from "vitest";
@@ -53,42 +53,44 @@ const restricted = "eslint(no-restricted-imports)";
 const fileCase = "unicorn(filename-case)";
 
 const file = (...lines: ReadonlyArray<string>): string => Arr.join(["// planted", ...lines, ""], "\n");
+
 const pascal = (name: string): string => `${name.slice(0, 1).toUpperCase()}${name.slice(1)}`;
 
 const own = "export const own = 1;";
 
 const pair = (module: string, other: string) => `${SRC}/${module}/From${pascal(other)}.ts`;
-  const reexportFiles = {
-    ...Rec.fromEntries(
-      Arr.map(PAIRS, ([module, other]) => [
-        pair(module, other),
-        file(
-          `export {a} from "../${other}/Front.ts";`, // 2
-          `export type {B} from "../${other}/Front.ts";`, // 3
-          `export * from "../${other}/Front.ts";`, // 4
-          `export * as other from "../${other}/Front.ts";`, // 5
-          `import {e} from "../${other}/Front.ts";`, // 6: an import is the layers' business
-          "export {e};", // 7: the same name, sent on in two steps
-          'export {f} from "./Own.ts";', // 8: the module's own name
-          `export const g = 1;`, // 9
-        ),
-      ]),
-    ),
-    // The plan's plant, with its real names.
-    [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
-    // A module's `internal/` file is a module file too.
-    [`${SRC}/gateway/internal/admit.ts`]: file(
-      "/** @internal */",
-      'export {Rev} from "../../ledger/Log.ts";', // 3
-      "/** @internal */",
-      'export {wait} from "./waiting.ts";', // 5
-    ),
-    // Not module files: the package's entry and the two platform folders put the modules together.
-    [`${SRC}/index.ts`]: file('export {Ledger} from "./ledger/Ledger.ts";'),
-    [`${SRC}/cloudflare/index.ts`]: file('export {cloudflareSql} from "../ledger/CloudflareSql.ts";'),
-    [`${SRC}/node/index.ts`]: file('export * from "../runtime/Runner.ts";'),
-    // Another package's folders are not libfabrika's modules.
-    "next/packages/tuval/src/door/Door.ts": file('export {a} from "../ledger/Log.ts";'),
+
+const reexportFiles = {
+  ...Rec.fromEntries(
+    Arr.map(PAIRS, ([module, other]) => [
+      pair(module, other),
+      file(
+        `export {a} from "../${other}/Front.ts";`, // 2
+        `export type {B} from "../${other}/Front.ts";`, // 3
+        `export * from "../${other}/Front.ts";`, // 4
+        `export * as other from "../${other}/Front.ts";`, // 5
+        `import {e} from "../${other}/Front.ts";`, // 6: an import is the layers' business
+        "export {e};", // 7: the same name, sent on in two steps
+        'export {f} from "./Own.ts";', // 8: the module's own name
+        `export const g = 1;`, // 9
+      ),
+    ]),
+  ),
+  // The plan's plant, with its real names.
+  [`${SRC}/processes/Mailbox.ts`]: file('export {Rev} from "../ledger/Log.ts";'),
+  // A module's `internal/` file is a module file too.
+  [`${SRC}/gateway/internal/admit.ts`]: file(
+    "/** @internal */",
+    'export {Rev} from "../../ledger/Log.ts";', // 3
+    "/** @internal */",
+    'export {wait} from "./waiting.ts";', // 5
+  ),
+  // Not module files: the package's entry and the two platform folders put the modules together.
+  [`${SRC}/index.ts`]: file('export {Ledger} from "./ledger/Ledger.ts";'),
+  [`${SRC}/cloudflare/index.ts`]: file('export {cloudflareSql} from "../ledger/CloudflareSql.ts";'),
+  [`${SRC}/node/index.ts`]: file('export * from "../runtime/Runner.ts";'),
+  // Another package's folders are not libfabrika's modules.
+  "next/packages/tuval/src/door/Door.ts": file('export {a} from "../ledger/Log.ts";'),
 };
 
 const reexports = await plant(reexportFiles);
@@ -117,33 +119,33 @@ describe("fabrika/modules: no module file re-exports another module's names", ()
 });
 
 const unlisted = [
-    `${SRC}/utils/x.ts`, // the plan's plant: a folder by kind
-    `${SRC}/sync/Merge.ts`,
-    `${SRC}/Ledger/Ledger.ts`, // a module's name in another case is another folder
-    `${SRC}/LedgerError.ts`, // the plan's plant: no shared error (0043, rule 12)
-    `${SRC}/Helpers.ts`,
-    `${SRC}/Helpers.test.ts`,
+  `${SRC}/utils/x.ts`, // the plan's plant: a folder by kind
+  `${SRC}/sync/Merge.ts`,
+  `${SRC}/Ledger/Ledger.ts`, // a module's name in another case is another folder
+  `${SRC}/LedgerError.ts`, // the plan's plant: no shared error (0043, rule 12)
+  `${SRC}/Helpers.ts`,
+  `${SRC}/Helpers.test.ts`,
 ];
 
 const listed = [
   ...Arr.map(MODULES, (module) => `${SRC}/${module}/Front.ts`),
   ...Arr.map(MODULES, (module) => `${SRC}/${module}/Front.test.ts`),
-    `${SRC}/node/brain.ts`,
-    `${SRC}/cloudflare/brain.ts`,
-    `${SRC}/index.ts`,
-    `${SRC}/Id.ts`,
-    `${SRC}/Id.test.ts`,
-    `${SRC}/Id.types.test.ts`,
-    `${SRC}/Id.test-support.ts`,
-    `${SRC}/Testing.ts`,
-    `${SRC}/Testing.test.ts`,
-    `${SRC}/ProcessId.ts`,
-    `${SRC}/Sql.ts`,
-    `${SRC}/Rev.ts`,
-    // Outside libfabrika's `src/` the list says nothing.
-    "next/packages/libfabrika/utils/x.ts",
-    "next/packages/tuval/src/utils/x.ts",
-    "next/apps/fabrika/src/utils/x.ts",
+  `${SRC}/node/brain.ts`,
+  `${SRC}/cloudflare/brain.ts`,
+  `${SRC}/index.ts`,
+  `${SRC}/Id.ts`,
+  `${SRC}/Id.test.ts`,
+  `${SRC}/Id.types.test.ts`,
+  `${SRC}/Id.test-support.ts`,
+  `${SRC}/Testing.ts`,
+  `${SRC}/Testing.test.ts`,
+  `${SRC}/ProcessId.ts`,
+  `${SRC}/Sql.ts`,
+  `${SRC}/Rev.ts`,
+  // Outside libfabrika's `src/` the list says nothing.
+  "next/packages/libfabrika/utils/x.ts",
+  "next/packages/tuval/src/utils/x.ts",
+  "next/apps/fabrika/src/utils/x.ts",
 ];
 
 const places = await plant(Object.fromEntries([...unlisted, ...listed].map((path) => [path, file(own)])));
@@ -164,48 +166,49 @@ describe("fabrika/modules: src/ holds only the listed modules and top files", ()
 });
 
 const internalBody = file(
-    "/** @internal */", // 2
-    "export const a = 1;", // 3
-    "", // 4
-    "export const b = 2;", // 5: no comment
-    "", // 6
-    "/**", // 7
-    " * Folds the rows.", // 8
-    " *", // 9
-    " * @internal", // 10
-    " */", // 11
-    "export function c() { return 1; }", // 12
-    "", // 13
-    "export function d() { return 1; }", // 14: no comment
-    "", // 15
-    "/** Says what it is and not who may use it. */", // 16
-    "export type E = number;", // 17: a comment with no tag
-    "", // 18
-    "/** @internal */", // 19
-    "export interface F { readonly n: number }", // 20
-    "", // 21
-    "const g = 1;", // 22: not exported
-    "", // 23
-    "/** @internal */", // 24
-    "export class H {}", // 25
-    "", // 26
-    "export class I {}", // 27: no comment
-    "", // 28
-    "/** @internal */", // 29
-    "export const j = g;", // 30
-    "", // 31
-    "// @internal", // 32: a line comment is not the tag a doc tool reads
-    "export const k = 3;", // 33
+  "/** @internal */", // 2
+  "export const a = 1;", // 3
+  "", // 4
+  "export const b = 2;", // 5: no comment
+  "", // 6
+  "/**", // 7
+  " * Folds the rows.", // 8
+  " *", // 9
+  " * @internal", // 10
+  " */", // 11
+  "export function c() { return 1; }", // 12
+  "", // 13
+  "export function d() { return 1; }", // 14: no comment
+  "", // 15
+  "/** Says what it is and not who may use it. */", // 16
+  "export type E = number;", // 17: a comment with no tag
+  "", // 18
+  "/** @internal */", // 19
+  "export interface F { readonly n: number }", // 20
+  "", // 21
+  "const g = 1;", // 22: not exported
+  "", // 23
+  "/** @internal */", // 24
+  "export class H {}", // 25
+  "", // 26
+  "export class I {}", // 27: no comment
+  "", // 28
+  "/** @internal */", // 29
+  "export const j = g;", // 30
+  "", // 31
+  "// @internal", // 32: a line comment is not the tag a doc tool reads
+  "export const k = 3;", // 33
 );
-  const internalFiles = {
-    ...Rec.fromEntries(Arr.map(MODULES, (module) => [`${SRC}/${module}/internal/part.ts`, internalBody])),
-    // The plan's real name, and a folder below `internal/`.
+
+const internalFiles = {
+  ...Rec.fromEntries(Arr.map(MODULES, (module) => [`${SRC}/${module}/internal/part.ts`, internalBody])),
+  // The plan's real name, and a folder below `internal/`.
   [`${SRC}/ledger/internal/ledgerStore.ts`]: internalBody,
   [`${SRC}/runtime/internal/holder/state.ts`]: internalBody,
-    // A front file's exports are the module's public names, and a test exports nothing.
+  // A front file's exports are the module's public names, and a test exports nothing.
   [`${SRC}/ledger/Ledger.ts`]: internalBody,
-    [`${SRC}/ledger/internal/ledgerStore.test.ts`]: file("const a = 1;", "void a;"),
-    // Another package's `internal/` is not a module's.
+  [`${SRC}/ledger/internal/ledgerStore.test.ts`]: file("const a = 1;", "void a;"),
+  // Another package's `internal/` is not a module's.
   "next/packages/tuval/src/desktop/internal/part.ts": internalBody,
 };
 
@@ -235,34 +238,34 @@ describe("fabrika/modules: every export in an internal/ file is @internal", () =
 });
 
 const topBody = file(
-    'import {Context, Schema} from "effect";', // 2
-    'export const Rev = Schema.Int.pipe(Schema.brand("Rev"));', // 3
-    "export type Rev = typeof Rev.Type;", // 4
-    'export class RevError extends Schema.TaggedError<RevError>()("RevError", {}) {}', // 5: an error
-    'export class Revs extends Context.Service<Revs, {readonly next: number}>()("libfabrika/Revs") {}', // 6: a service
-    'export class Point extends Schema.Class<Point>("Point")({n: Schema.Number}) {}', // 7: a value
-    "export const parse = (text: string): number => Number(text);", // 8
-    "export class Fault extends Error {}", // 9: an error
-    "export interface Sql { readonly run: (text: string) => void }", // 10: a shape
+  'import {Context, Schema} from "effect";', // 2
+  'export const Rev = Schema.Int.pipe(Schema.brand("Rev"));', // 3
+  "export type Rev = typeof Rev.Type;", // 4
+  'export class RevError extends Schema.TaggedError<RevError>()("RevError", {}) {}', // 5: an error
+  'export class Revs extends Context.Service<Revs, {readonly next: number}>()("libfabrika/Revs") {}', // 6: a service
+  'export class Point extends Schema.Class<Point>("Point")({n: Schema.Number}) {}', // 7: a value
+  "export const parse = (text: string): number => Number(text);", // 8
+  "export class Fault extends Error {}", // 9: an error
+  "export interface Sql { readonly run: (text: string) => void }", // 10: a shape
 );
 
 // The same two, reached by other spellings of the import (main's `id.ts` writes `Schema as S`).
 const topSpelled = file(
-    'import {Schema as S} from "effect";', // 2
-    'import * as Context from "effect/Context";', // 3
-    'export class SqlError extends S.TaggedError<SqlError>()("SqlError", {}) {}', // 4
-    'export class Sqls extends Context.Service<Sqls, {readonly n: number}>()("libfabrika/Sqls") {}', // 5
-    "export const SqlValue = S.Union([S.String, S.Number, S.Null]);", // 6
+  'import {Schema as S} from "effect";', // 2
+  'import * as Context from "effect/Context";', // 3
+  'export class SqlError extends S.TaggedError<SqlError>()("SqlError", {}) {}', // 4
+  'export class Sqls extends Context.Service<Sqls, {readonly n: number}>()("libfabrika/Sqls") {}', // 5
+  "export const SqlValue = S.Union([S.String, S.Number, S.Null]);", // 6
 );
 
 const topFiles = {
   [`${SRC}/Rev.ts`]: topBody,
   [`${SRC}/Sql.ts`]: topSpelled,
   [`${SRC}/ProcessId.ts`]: topBody,
-    // A module's front file is where its services and errors live.
+  // A module's front file is where its services and errors live.
   [`${SRC}/ledger/Ledger.ts`]: topBody,
-    // `Id.ts` is not on the list: main's `id.ts` exports `IdError` and the `Generator` service,
-    // and PR 2 only changes the case of its name.
+  // `Id.ts` is not on the list: main's `id.ts` exports `IdError` and the `Generator` service,
+  // and PR 2 only changes the case of its name.
   [`${SRC}/Id.ts`]: topBody,
   [`${SRC}/Testing.ts`]: topBody,
   "next/packages/tuval/src/Rev.ts": topBody,
@@ -291,67 +294,69 @@ describe("fabrika/modules: the shared top files hold values only", () => {
 });
 
 const front = (module: string, other: string) => `${SRC}/${module}/Into${pascal(other)}.ts`;
-  const inner = (module: string, other: string) => `${SRC}/${module}/internal/into${pascal(other)}.ts`;
-  const importFiles = {
-    ...Rec.fromEntries(
-      Arr.flatMap(PAIRS, ([module, other]) => [
-        [
-          front(module, other),
-          file(
-            `import {a} from "../${other}/internal/part.ts";`, // 2
-            `import type {B} from "../${other}/internal/part.ts";`, // 3
-            `export {c} from "../${other}/internal/part.ts";`, // 4
-            `export * from "../${other}/internal/part.ts";`, // 5
-            `import {e} from "./../${other}/internal/part.ts";`, // 6: the same file, spelled longer
-            `import {f} from "../${other}/internal/deep/part.ts";`, // 7
-            'import {g} from "./internal/part.ts";', // 8: the module's own
-            `import {h} from "../${other}/Front.ts";`, // 9: a front file
-            "export const all = [a, e, f, g, h];",
-          ),
-        ],
-        [
-          inner(module, other),
-          file(
-            `import {a} from "../../${other}/internal/part.ts";`, // 2
-            `import {b} from "./../../${other}/internal/part.ts";`, // 3
-            `export {c} from "../../${other}/internal/part.ts";`, // 4
-            'import {d} from "./part.ts";', // 5: the module's own
-            'import {e} from "../Front.ts";', // 6
-            `import {f} from "../../${other}/Front.ts";`, // 7
-            "/** @internal */",
-            "export const all = [a, b, d, e, f];",
-          ),
-        ],
-      ]),
-    ),
-    // The plan's two plants, with their real names.
-    [`${SRC}/gateway/Gateway.ts`]: file(
-      'import {ledgerStore} from "../ledger/internal/ledgerStore.ts";', // 2
-      'import {waiting} from "./internal/waiting.ts";', // 3
-      // The override repeats the base rule's Radix entry, so it still fires here.
-      'import {gray} from "@radix-ui/colors";', // 4
-      "export const all = [ledgerStore, waiting, gray];",
-    ),
-    [`${SRC}/cloudflare/runtime.ts`]: file(
-      'import {supervisor} from "../runtime/internal/supervisor.ts";', // 2
-      'import {Runner} from "../runtime/Runner.ts";', // 3
-      "export const all = [supervisor, Runner];",
-    ),
-    [`${SRC}/node/brain.ts`]: file(
-      'import {recovery} from "../runtime/internal/recovery.ts";', // 2
-      "export const all = [recovery];",
-    ),
-    // The top files are outside every module.
-    [`${SRC}/index.ts`]: file(
-      'export {ledgerStore} from "./ledger/internal/ledgerStore.ts";', // 2
-      'export {Ledger} from "./ledger/Ledger.ts";', // 3
-    ),
-    [`${SRC}/Testing.ts`]: file(
-      'import {supervisor} from "./runtime/internal/supervisor.ts";', // 2
-      'import {Runner} from "./runtime/Runner.ts";', // 3
-      "export const all = [supervisor, Runner];",
-    ),
-    // A module's own test reads its own `internal/`.
+
+const inner = (module: string, other: string) => `${SRC}/${module}/internal/into${pascal(other)}.ts`;
+
+const importFiles = {
+  ...Rec.fromEntries(
+    Arr.flatMap(PAIRS, ([module, other]) => [
+      [
+        front(module, other),
+        file(
+          `import {a} from "../${other}/internal/part.ts";`, // 2
+          `import type {B} from "../${other}/internal/part.ts";`, // 3
+          `export {c} from "../${other}/internal/part.ts";`, // 4
+          `export * from "../${other}/internal/part.ts";`, // 5
+          `import {e} from "./../${other}/internal/part.ts";`, // 6: the same file, spelled longer
+          `import {f} from "../${other}/internal/deep/part.ts";`, // 7
+          'import {g} from "./internal/part.ts";', // 8: the module's own
+          `import {h} from "../${other}/Front.ts";`, // 9: a front file
+          "export const all = [a, e, f, g, h];",
+        ),
+      ],
+      [
+        inner(module, other),
+        file(
+          `import {a} from "../../${other}/internal/part.ts";`, // 2
+          `import {b} from "./../../${other}/internal/part.ts";`, // 3
+          `export {c} from "../../${other}/internal/part.ts";`, // 4
+          'import {d} from "./part.ts";', // 5: the module's own
+          'import {e} from "../Front.ts";', // 6
+          `import {f} from "../../${other}/Front.ts";`, // 7
+          "/** @internal */",
+          "export const all = [a, b, d, e, f];",
+        ),
+      ],
+    ]),
+  ),
+  // The plan's two plants, with their real names.
+  [`${SRC}/gateway/Gateway.ts`]: file(
+    'import {ledgerStore} from "../ledger/internal/ledgerStore.ts";', // 2
+    'import {waiting} from "./internal/waiting.ts";', // 3
+    // The override repeats the base rule's Radix entry, so it still fires here.
+    'import {gray} from "@radix-ui/colors";', // 4
+    "export const all = [ledgerStore, waiting, gray];",
+  ),
+  [`${SRC}/cloudflare/runtime.ts`]: file(
+    'import {supervisor} from "../runtime/internal/supervisor.ts";', // 2
+    'import {Runner} from "../runtime/Runner.ts";', // 3
+    "export const all = [supervisor, Runner];",
+  ),
+  [`${SRC}/node/brain.ts`]: file(
+    'import {recovery} from "../runtime/internal/recovery.ts";', // 2
+    "export const all = [recovery];",
+  ),
+  // The top files are outside every module.
+  [`${SRC}/index.ts`]: file(
+    'export {ledgerStore} from "./ledger/internal/ledgerStore.ts";', // 2
+    'export {Ledger} from "./ledger/Ledger.ts";', // 3
+  ),
+  [`${SRC}/Testing.ts`]: file(
+    'import {supervisor} from "./runtime/internal/supervisor.ts";', // 2
+    'import {Runner} from "./runtime/Runner.ts";', // 3
+    "export const all = [supervisor, Runner];",
+  ),
+  // A module's own test reads its own `internal/`.
   [`${SRC}/ledger/Ledger.test.ts`]: file('import {ledgerStore} from "./internal/ledgerStore.ts";', "void ledgerStore;"),
 };
 
@@ -391,36 +396,36 @@ describe("eslint/no-restricted-imports: nobody outside a module imports its inte
 const FRESH = ["telemetry", "ledger", "processes", "presence", "tasks", "access", "runtime"] as const;
 
 const badNames = [
-    `${SRC}/ledger/log.ts`, // the plan's plant
-    `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
-    ...Arr.flatMap(FRESH, (module) => [
-      `${SRC}/${module}/kebab-case.ts`,
-      `${SRC}/${module}/camelCase.ts`,
-      `${SRC}/${module}/kebab-case.test.ts`,
-      `${SRC}/${module}/internal/PascalCase.ts`,
-      `${SRC}/${module}/internal/kebab-case.ts`,
-      `${SRC}/${module}/internal/PascalCase.test.ts`,
-    ]),
+  `${SRC}/ledger/log.ts`, // the plan's plant
+  `${SRC}/ledger/internal/LedgerStore.ts`, // the plan's plant
+  ...Arr.flatMap(FRESH, (module) => [
+    `${SRC}/${module}/kebab-case.ts`,
+    `${SRC}/${module}/camelCase.ts`,
+    `${SRC}/${module}/kebab-case.test.ts`,
+    `${SRC}/${module}/internal/PascalCase.ts`,
+    `${SRC}/${module}/internal/kebab-case.ts`,
+    `${SRC}/${module}/internal/PascalCase.test.ts`,
+  ]),
 ];
 
 const goodNames = [
   ...Arr.flatMap(FRESH, (module) => [
-      `${SRC}/${module}/PascalCase.ts`,
-      `${SRC}/${module}/PascalCase.test.ts`,
-      `${SRC}/${module}/internal/camelCase.ts`,
-      `${SRC}/${module}/internal/camelCase.test.ts`,
-    ]),
-    // The move's own names (the plan's files tables), with every suffix a file carries there.
-    `${SRC}/ledger/Log.ts`,
-    `${SRC}/ledger/NodeSqlite.ts`,
-    `${SRC}/ledger/internal/ledgerStore.ts`,
-    `${SRC}/runtime/Program.types.test.ts`,
-    `${SRC}/runtime/BrainLife.laws.test.ts`,
-    `${SRC}/runtime/internal/supervisor.laws.test.ts`,
-    `${SRC}/processes/Process.test-support.ts`,
-    `${SRC}/telemetry/P12Readers.laws.test.ts`,
-    `${SRC}/telemetry/internal/measurements.test.ts`,
-    `${SRC}/Id.test-support.ts`,
+    `${SRC}/${module}/PascalCase.ts`,
+    `${SRC}/${module}/PascalCase.test.ts`,
+    `${SRC}/${module}/internal/camelCase.ts`,
+    `${SRC}/${module}/internal/camelCase.test.ts`,
+  ]),
+  // The move's own names (the plan's files tables), with every suffix a file carries there.
+  `${SRC}/ledger/Log.ts`,
+  `${SRC}/ledger/NodeSqlite.ts`,
+  `${SRC}/ledger/internal/ledgerStore.ts`,
+  `${SRC}/runtime/Program.types.test.ts`,
+  `${SRC}/runtime/BrainLife.laws.test.ts`,
+  `${SRC}/runtime/internal/supervisor.laws.test.ts`,
+  `${SRC}/processes/Process.test-support.ts`,
+  `${SRC}/telemetry/P12Readers.laws.test.ts`,
+  `${SRC}/telemetry/internal/measurements.test.ts`,
+  `${SRC}/Id.test-support.ts`,
 ];
 
 const names = await plant(Object.fromEntries([...badNames, ...goodNames].map((path) => [path, file(own)])));
@@ -443,21 +448,21 @@ describe("unicorn/filename-case: a front file is PascalCase and an internal/ fil
 const ABOVE = ["runtime", "access", "gateway"] as const;
 
 const ledgerBody = (up: string) =>
-    file(
-      `import {Ledger} from "${up}ledger/Ledger.ts";`, // 2
-      `import type {LedgerError} from "${up}ledger/Ledger.ts";`, // 3
-      `export {Line} from "${up}ledger/Log.ts";`, // 4
-      `import {Sink} from "${up}telemetry/Sink.ts";`, // 5: telemetry is open to every module
-      `import {Mailbox} from "${up}processes/Mailbox.ts";`, // 6
-      `import {store} from "${up}processes/internal/store.ts";`, // 7: another module's internal/
-      'import {cyan} from "@radix-ui/colors";', // 8
-      `export const all = [Ledger, Line, Sink, Mailbox, store, cyan];`,
-    );
+  file(
+    `import {Ledger} from "${up}ledger/Ledger.ts";`, // 2
+    `import type {LedgerError} from "${up}ledger/Ledger.ts";`, // 3
+    `export {Line} from "${up}ledger/Log.ts";`, // 4
+    `import {Sink} from "${up}telemetry/Sink.ts";`, // 5: telemetry is open to every module
+    `import {Mailbox} from "${up}processes/Mailbox.ts";`, // 6
+    `import {store} from "${up}processes/internal/store.ts";`, // 7: another module's internal/
+    'import {cyan} from "@radix-ui/colors";', // 8
+    `export const all = [Ledger, Line, Sink, Mailbox, store, cyan];`,
+  );
 
 const ledgerRefused = Arr.flatMap(ABOVE, (module) => [
-    [`${SRC}/${module}/Front.ts`, "../"],
-    [`${SRC}/${module}/Front.test.ts`, "../"],
-    [`${SRC}/${module}/internal/front.ts`, "../../"],
+  [`${SRC}/${module}/Front.ts`, "../"],
+  [`${SRC}/${module}/Front.test.ts`, "../"],
+  [`${SRC}/${module}/internal/front.ts`, "../../"],
 ]);
 
 const ledgerTaken = (["processes", "presence"] as const).map((module) => [`${SRC}/${module}/Front.ts`, "../"]);

@@ -1,11 +1,11 @@
 /**
  * Which clients of a key are connected now, kept in the project's Sql.
  */
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProcessId } from "../ProcessId.ts";
 import type { Sql } from "../Sql.ts";

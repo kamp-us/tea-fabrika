@@ -10,6 +10,7 @@ import type { RecordShape } from "@kampus/libfabrika/workers/objects";
 import { recordWrite, recordRead, recordContent, recordDelete } from "@kampus/libfabrika/workers/record";
 import { runsFor } from "@kampus/vitest";
 import type { Scope } from "effect";
+import { Array as Arr, String as Str } from "effect";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Formatter from "effect/Formatter";
@@ -17,7 +18,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 
 import { recordCall, recordWire } from "./record-wire.test-support.ts";
 

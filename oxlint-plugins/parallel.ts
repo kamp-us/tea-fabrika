@@ -24,11 +24,11 @@ import * as Fiber from "effect/Fiber";
 import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import { ChildProcess } from "effect/process";
+import * as Rec from "effect/Record";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stdio from "effect/Stdio";
 import * as Stream from "effect/Stream";
-import * as Rec from "effect/Record";
 
 /** A piece of a part's output, and the stream it went to. */
 type Piece = { readonly to: "stdout" | "stderr"; readonly bytes: Uint8Array };
@@ -61,6 +61,7 @@ const passed = (end: End) => end._tag === "exited" && end.code === 0;
 /** A shell's exit code over 128 is 128 + the number of the signal that killed what it ran. */
 const ended = (code: number): End => {
   const signal = Arr.findFirst(Rec.toEntries(constants.signals), ([, n]) => code > 128 && n === code - 128);
+
   return Option.isNone(signal) ? { _tag: "exited", code } : { _tag: "killed", signal: signal.value[0], code };
 };
 
@@ -146,6 +147,7 @@ const lastLine = (output: ReadonlyArray<Piece>): string | undefined => {
         .split("\n"),
       (line) => line.trim() !== "",
     );
+
   return Option.getOrUndefined(Option.orElse(last("stderr"), () => last("stdout")));
 };
 
@@ -178,6 +180,7 @@ const parallel = Effect.fnUntraced(function* (commands: ReadonlyArray<string>) {
   yield* Console.error(
     `\nparallel: ${failed.length} of ${ran.length} parts failed in ${seconds(took)}:\n${pipe(failed, Arr.map(named), Arr.join("\n"))}`,
   );
+
   return yield* Failed.make({ parts: Arr.map(failed, (part) => part.command) });
 });
 

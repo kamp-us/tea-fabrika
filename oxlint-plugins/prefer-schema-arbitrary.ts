@@ -115,6 +115,7 @@ export const preferSchemaArbitrary: CreateRule = {
         const object = node.type === "TSQualifiedName" ? node.left : node.object;
         const name = node.type === "TSQualifiedName" ? node.right.name : node.property.name;
         const owner = moduleName(object);
+
         return owner !== undefined
           ? { from: owner.from, name: owner.name === "*" ? name : `${owner.name}.${name}` }
           : undefined;
@@ -160,6 +161,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
       if (node.type === "MemberExpression" || node.type === "TSQualifiedName") {
         const origin = moduleName(node);
+
         return origin !== undefined &&
           origin.from !== "fast-check" &&
           (origin.from !== "effect" || origin.name.startsWith("Schema.")) &&
@@ -343,6 +345,7 @@ export const preferSchemaArbitrary: CreateRule = {
 
             seen.add(variable);
             const init = initial(value);
+
             return init !== undefined ? arbitraryRoots(init, seen) : [];
           }
 

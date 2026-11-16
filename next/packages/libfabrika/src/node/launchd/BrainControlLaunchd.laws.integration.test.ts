@@ -2,6 +2,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -9,13 +10,13 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
-import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import * as TestClock from "effect/testing/TestClock";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
 import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import { pipe } from "effect/Function";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as TestClock from "effect/testing/TestClock";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
@@ -375,7 +376,11 @@ it.effect.prop(
         FABRIKA_BUILD: disk.spec.build,
       });
       expect(Arr.some(disk.seen, (call) => /(?:sh|bash|zsh)$/.test(call.executable))).toBe(false);
-      const compile = Option.getOrUndefined(Arr.findFirst(disk.seen, (call) => pipe(call.executable, Str.endsWith("plutil")));
+
+      const compile = Option.getOrUndefined(
+        Arr.findFirst(disk.seen, (call) => pipe(call.executable, Str.endsWith("plutil"))),
+      );
+
       expect(compile?.args).toContain("xml1");
       expect(compile?.options.shell).not.toBe(true);
       expect(Arr.every(disk.seen, (call) => call.options.extendEnv === false)).toBe(true);
@@ -613,6 +618,7 @@ it.effect.prop(
       const failed = yield* Context.get(context, BrainService).up.pipe(Effect.exit);
       expect(Exit.isFailure(failed)).toBe(true);
       const fs = yield* FileSystem.FileSystem;
+
       const outputs = [
         yield* disk.read,
         Formatter.formatJson(disk.jobs),

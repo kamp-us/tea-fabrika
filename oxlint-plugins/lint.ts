@@ -98,6 +98,7 @@ const read = (): readonly Diagnostic[] | null =>
         readonly diagnostics?: readonly Diagnostic[];
         readonly number_of_files?: number;
       } = JSON.parse(ran.stdout);
+
       return report.diagnostics !== undefined && report.number_of_files !== 0 ? report.diagnostics : null;
     }),
   );
@@ -152,6 +153,7 @@ const finding = (d: Diagnostic): Finding => {
 };
 
 const found = Arr.filter(diagnostics, (d) => !advises(d));
+
 const findings = Arr.map(found, finding);
 
 // Each ledger settles what the one before left blocking. A file sits in at most one ledger's folder,
@@ -174,6 +176,7 @@ const blocks = Arr.filter(found, (_, i) => {
 });
 
 const advised = Arr.filter(diagnostics, (d) => advises(d));
+
 // The hint oxlint keeps apart from the message, such as the JSON.parse rule's Schema hint.
 const text = (d: Diagnostic) => (d.help === undefined ? d.message : `${d.message} ${d.help}`);
 

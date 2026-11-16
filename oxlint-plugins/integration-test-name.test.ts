@@ -16,8 +16,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import * as Arr from "effect/Array";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
@@ -38,6 +38,7 @@ type Spelling = "named" | "renamed" | "namespace";
 /** One import in a spelling: its line, and how the code writes the dotted `name` after it. */
 const from = (module: string, name: string, spelling: Spelling, alias: string) => {
   const [head = name, ...rest] = name.split(".");
+
   const tail = pipe(
     rest,
     Arr.map((part) => `.${part}`),
@@ -128,6 +129,7 @@ const REAL: ReadonlyArray<{ readonly tag: Tag; readonly build: (spelling: Spelli
       build: (s: Spelling) => {
         const service = from("effect/process", "ChildProcessSpawner.ChildProcessSpawner", s, "P");
         const layer = from("@effect/platform-node", "NodeServices.layer", s, "PN");
+
         return {
           imports: [service.line, layer.line],
           line: `const run = Effect.gen(function* () { ${body(service.ref)}; }).pipe(Effect.provide(${layer.ref}));`,

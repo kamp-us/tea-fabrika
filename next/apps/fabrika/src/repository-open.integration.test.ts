@@ -6,37 +6,37 @@ import { NodeServices } from "@effect/platform-node";
 import { expect, it } from "@effect/vitest";
 import { Row } from "@kampus/libfabrika/ledger/Log";
 import type { Entry } from "@kampus/libfabrika/ledger/Log";
+import { Array as Arr, String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Formatter from "effect/Formatter";
 import * as Path from "effect/Path";
+import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Array as Arr, String as Str } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { instanceDatabase } from "./instance-database.test-support.ts";
 import { heldPort } from "./port.test-support.ts";
 
 const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   return Str.trim(
     yield* (yield* ChildProcessSpawner.ChildProcessSpawner).string(
-    ChildProcess.make("git", [...args], {
-      cwd,
-      extendEnv: false,
-      env: {
-        PATH: process.env.PATH,
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_AUTHOR_NAME: "fixture",
-        GIT_AUTHOR_EMAIL: "fixture@example.invalid",
-        GIT_COMMITTER_NAME: "fixture",
-        GIT_COMMITTER_EMAIL: "fixture@example.invalid",
-      },
-    }),
+      ChildProcess.make("git", [...args], {
+        cwd,
+        extendEnv: false,
+        env: {
+          PATH: process.env.PATH,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_AUTHOR_NAME: "fixture",
+          GIT_AUTHOR_EMAIL: "fixture@example.invalid",
+          GIT_COMMITTER_NAME: "fixture",
+          GIT_COMMITTER_EMAIL: "fixture@example.invalid",
+        },
+      }),
     ),
   );
 });
@@ -73,8 +73,8 @@ const jsonLines = (text: string) =>
   Arr.flatMap(Str.split(stripVTControlCharacters(text), /\r?\n/), (line) => {
     const result = Schema.decodeResult(Schema.fromJsonString(Schema.Unknown))(line);
 
-      return Result.isSuccess(result) ? [result.success] : [];
-    });
+    return Result.isSuccess(result) ? [result.success] : [];
+  });
 
 const reports = (text: string, commit: string, result: "ready" | "awaiting_trust") =>
   Arr.filter(jsonLines(text), (line) => {

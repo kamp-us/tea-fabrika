@@ -6,8 +6,9 @@
 // holds an entry the journal already said was saved, then writes until it is killed.
 import { NodeRuntime } from "@effect/platform-node";
 import * as Effect from "effect/Effect";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import { Entry, Journal } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
 import { Result } from "../../tasks/Task.ts";

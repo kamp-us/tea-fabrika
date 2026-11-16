@@ -23,7 +23,7 @@ export const layer = (model: Model): Layer.Layer<Branches> =>
       list:
         model.broken === true
           ? Effect.fail(BranchesError.make({ command: "for-each-ref", reason: "broken" }))
-        : Effect.succeed(model.branches),
+          : Effect.succeed(model.branches),
       ahead: (tip) => {
         const n = model.ahead[tip];
 

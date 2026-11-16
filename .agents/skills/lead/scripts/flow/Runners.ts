@@ -41,6 +41,7 @@ export const layer = <R>(table: Readonly<Record<string, Runner<R>>>): Layer.Laye
 
         return yield* runner(step).pipe(Effect.provideContext(services));
       });
+
       return Runners.of({ names: new Set(Rec.keys(table)), run });
     }),
   );

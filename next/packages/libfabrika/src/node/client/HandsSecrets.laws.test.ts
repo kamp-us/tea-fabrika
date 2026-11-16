@@ -23,28 +23,29 @@
 // Plants, each run once and undone (recorded in this round's field row): the hello carries `d` as
 // an extra field; a span attribute holds the JWK; an error message includes the JWK text.
 import { describe, expect, it, vi } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Hex from "effect/encoding/Hex";
 import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Arr from "effect/Array";
-import * as DateTime from "effect/DateTime";
-import { String as Str, pipe } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
+import * as Rec from "effect/Record";
 import * as References from "effect/References";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
-import * as Rec from "effect/Record";
 import * as fc from "fast-check";
 import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test-support.ts";
 import { start } from "../../client/HandsStart.ts";
@@ -81,6 +82,7 @@ const forms = (d: string): ReadonlyArray<string> => {
   }
 
   const padded = Base64.encode(bytes.success);
+
   return [d, Base64Url.encode(bytes.success), padded, pipe(padded, Str.replace(/=+$/, "")), Hex.encode(bytes.success)];
 };
 
@@ -319,6 +321,7 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
       done.add(`link:${link ?? "stopped"}`);
       const open = Arr.filter(b.all(), (t) => t.phase !== "finished");
       const free = Arr.filter(f.processes, (p) => !Arr.some(open, (t) => t.request.process === p));
+
       const options: ReadonlyArray<string> =
         live === null
           ? ["restart"]

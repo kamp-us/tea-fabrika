@@ -2,8 +2,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import * as DateTime from "effect/DateTime";
 import { Array as Arr, pipe, String as Str } from "effect";
+import * as DateTime from "effect/DateTime";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
@@ -235,6 +235,7 @@ describe("worktree gc, today's tooling", () => {
           const w = wip ? "-wip" : "";
           // One tip is always a branch some pull request has, so the lookup is exercised.
           const at = [...tips, ...Arr.map(refs.slice(0, 1), ([r]) => r)];
+
           const got = worktreePrs(
             { branch: branch === null ? null : branch + w, head, tips: Arr.map(at, (t) => t + w) },
             byRef,

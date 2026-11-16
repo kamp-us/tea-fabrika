@@ -172,10 +172,12 @@ export const verdict = (ended: Ended, errors: ReadonlyArray<Found>, exam: Readon
 
   const to = Arr.every(errors, (e) => exam.has(e.path)) ? "tests" : "build";
   const cut = (line: string) => (line.length > WIDTH ? `${line.slice(0, WIDTH - 3)}...` : line);
+
   const all = Arr.map(
     Arr.flatMap(errors, (e) => e.text.split("\n")),
     cut,
   );
+
   const more = `... and ${all.length - LINES + 1} more lines`;
   const lines = all.length > LINES ? [...all.slice(0, LINES - 1), more] : all;
 
@@ -203,6 +205,7 @@ const examIn = Effect.fn("typecheck.examIn")(function* (main: string, paths: Rea
   const ran = yield* exec(main, "python3", ["-I", script, list, ...paths]);
   // 0 is no exam path and 1 lists them; anything else read no list, so no error counts as exam.
   const listed = ran.code === 1 ? Arr.filter(ran.output.split("\n"), Boolean) : [];
+
   return new Set(Arr.map(listed, (l) => l.split("\t")[0] ?? l));
 });
 

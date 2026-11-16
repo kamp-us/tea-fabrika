@@ -1,6 +1,9 @@
+import * as Arr from "effect/Array";
 import * as ByteSize from "effect/ByteSize";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 // P39 slice 4b, next/: a file system in memory for the node client's merge-line laws (C1 to C3, K1,
 // K2), over Effect's own `FileSystem.layerNoop`. It keeps POSIX's facts the laws lean on: a mode
 // set only when a file is made, `wx` and `link` refuse a name that exists, a hard link shares its
@@ -10,9 +13,7 @@ import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import * as Arr from "effect/Array";
-import * as DateTime from "effect/DateTime";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
 
@@ -122,7 +123,9 @@ const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
 };
 
 const isWrite = (flag: FileSystem.OpenFlag): boolean => flag !== "r";
+
 const isExclusive = (flag: FileSystem.OpenFlag): boolean => pipe(flag, Str.includes("x"));
+
 const isTruncate = (flag: FileSystem.OpenFlag): boolean => pipe(flag, Str.startsWith("w"));
 
 /** Effect's `FileSystem` over the disk. Each call is recorded in `calls`. */

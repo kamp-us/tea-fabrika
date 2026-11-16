@@ -40,10 +40,10 @@ const passes = Arr.join(
 );
 
 const all = await plant({
-    [FIRES]: fires,
-    [PASSES]: passes,
-    [LOG]: fires,
-    "next/packages/libfabrika/src/coordination/fires.test.ts": fires,
+  [FIRES]: fires,
+  [PASSES]: passes,
+  [LOG]: fires,
+  "next/packages/libfabrika/src/coordination/fires.test.ts": fires,
 });
 
 describe("no-hand-tag", () => {

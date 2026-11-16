@@ -4,12 +4,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import { type Incoming, type ProgramRunner, Sent } from "@kampus/libfabrika";
 import { runsFor } from "@kampus/vitest";
+import { Array as Arr, String as Str } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import { Array as Arr, String as Str } from "effect";
 import type { Open as RunnerOpen } from "./RunnerTest.ts";
 
 type World = Effect.Success<RunnerOpen>;
@@ -68,6 +68,7 @@ const View = Schema.Struct({
 
 const shown = (raw: unknown) => {
   const view = Schema.decodeUnknownSync(View)(raw);
+
   return { ...view, items: [...view.items].sort((a, b) => Str.localeCompare(b.name)(a.name)) };
 };
 
@@ -89,7 +90,10 @@ export const suite = (open: Open, checklist: unknown) =>
             let serial = 0;
 
             const expected = () => ({
-              items: Arr.map([...items], ([name, kept]) => ({ name, state: kept === null ? "new" : "checked", note: kept,
+              items: Arr.map([...items], ([name, kept]) => ({
+                name,
+                state: kept === null ? "new" : "checked",
+                note: kept,
               })).sort((a, b) => Str.localeCompare(b.name)(a.name)),
               left: Arr.filter([...items.values()], (kept) => kept === null).length,
             });
@@ -116,9 +120,11 @@ export const suite = (open: Open, checklist: unknown) =>
                   (yield* send(runner, { type: "check", name: "first", note: "replacement" }, world.agent)).answer._tag,
                 ).toBe("accepted");
                 expect(shown((yield* runner.open("first-note")).view).items[0]?.note).toBe(note);
+
                 const kept = Option.getOrUndefined(
                   Arr.findFirst(yield* world.letters(NAME), (row) => row.id === checked.input.id),
                 );
+
                 expect(kept).toMatchObject({
                   by: world.agent.key,
                   parent: checked.input.envelope.id,
@@ -130,9 +136,11 @@ export const suite = (open: Open, checklist: unknown) =>
                 // This add is now legal, but the same identity must still receive its first refusal.
               }),
             );
+
             const refused = Option.getOrUndefined(
               Arr.findFirst(replies, (reply) => Schema.is(Schema.TaggedStruct("refused", {}))(reply.answer)),
             );
+
             expect(refused).toBeDefined();
 
             for (let offset = 0; offset < moves.length; offset += cut + 1) {
@@ -288,6 +296,7 @@ export const suite = (open: Open, checklist: unknown) =>
               expect(
                 Arr.some(restarts, (row) => Schema.is(Schema.Struct({ after: Schema.Literal(process) }))(row.body)),
               ).toBe(true);
+
               const exited = Arr.filter(
                 lives,
                 Schema.is(
@@ -299,6 +308,7 @@ export const suite = (open: Open, checklist: unknown) =>
                   }),
                 ),
               );
+
               expect(
                 Option.getOrUndefined(Arr.findFirst(exited, (exit) => exit.body.process === process))?.body.reason,
               ).toEqual(

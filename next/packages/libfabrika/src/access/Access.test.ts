@@ -20,11 +20,11 @@
 //   else is `{reason: "not_granted"}`.
 // Signatures are not checked here, so `signed` values are opaque text with the signer named.
 import { describe, expect, it } from "@effect/vitest";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
-import { String as Str } from "effect";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { admitted, type MemberEvent, type Access, members, Saw, Took } from "./Access.ts";
 import { allows, EMPTY, foldAccess } from "./AccessFold.ts";
@@ -72,6 +72,7 @@ const signed = (signer: string) => ({
 });
 
 let made = 0;
+
 const nextId = (prefix: string): string => `${prefix}_${Str.padStart(26, "0")(String(++made))}`;
 
 const founded = (keys: ReadonlyArray<string> = ["pA"], window: string | null = "wA"): MemberEvent => ({
@@ -605,10 +606,12 @@ describe("p28, grants", () => {
     fc.assert(
       fc.property(history, (events) => {
         const m = foldAccess(events);
+
         const weak = Arr.map(
           Arr.filter([...m.keys.entries()], ([key, k]) => k.rank !== "person" || m.spent.has(key)),
           ([key]) => key,
         );
+
         const target = Option.getOrElse(
           Arr.findFirst([...m.keys.keys()], (key) => isIn(m, key)),
           () => "pA",
@@ -833,10 +836,12 @@ describe("p28, devices are equal roots", () => {
 
         ran++;
         const by = devices[pick % devices.length] ?? "pA";
+
         const gone = Option.getOrElse(
           Arr.findFirst(devices, (key) => key !== by),
           () => "pB",
         );
+
         const [key, window] = FRESH_DEVICES[0];
         const drop = byAdd ? addedDevice(by, key, window, { drops: [gone] }) : revoked(by, gone);
         const after = foldAccess([...events, drop]);

@@ -111,42 +111,43 @@ it.live(
   "scenario: L3 the real config finds TSX and integration tests and excludes visual, plain e2e, node_modules and dist",
   () =>
     Effect.gen(function* () {
-  // This law is about the file set selected by today's real Vitest config. No .tsx test is left
-  // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
+      // This law is about the file set selected by today's real Vitest config. No .tsx test is left
+      // under next/ in the repo, so the scratch folder's view.test.tsx holds that case.
       const files = yield* promised(() => nextFiles(root));
-  expect(files.length).toBeGreaterThan(0);
-  expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
-  expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
-  expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
+      expect(files.length).toBeGreaterThan(0);
+      expect(files.every((path) => !/(?:^|\/)(?:node_modules|dist)\//.test(path))).toBe(true);
+      expect(files.filter((path) => /\.visual\.test\.tsx?$/.test(path))).toEqual([]);
+      expect(files.filter((path) => path.includes("/e2e/") && !/\.integration\.test\.tsx?$/.test(path))).toEqual([]);
       const folder = yield* scratch("t890-files-");
-  const selected = [
-    "next/apps/toy/e2e/stored.integration.test.ts",
-    "next/apps/toy/src/db.integration.test.ts",
-    "next/apps/toy/src/plain.test.ts",
-    "next/apps/toy/src/view.test.tsx",
-  ];
 
-  const excluded = [
-    "next/apps/toy/e2e/wire.test.ts",
-    "next/apps/toy/e2e/window.visual.test.ts",
-    "next/apps/toy/src/page.visual.test.tsx",
-    "next/apps/toy/src/node_modules/dependency.test.ts",
-    "next/apps/toy/src/dist/generated.test.ts",
-  ];
+      const selected = [
+        "next/apps/toy/e2e/stored.integration.test.ts",
+        "next/apps/toy/src/db.integration.test.ts",
+        "next/apps/toy/src/plain.test.ts",
+        "next/apps/toy/src/view.test.tsx",
+      ];
 
-    for (const path of [...selected, ...excluded]) {
-      mkdirSync(dirname(join(folder, path)), { recursive: true });
-      writeFileSync(join(folder, path), "");
-    }
+      const excluded = [
+        "next/apps/toy/e2e/wire.test.ts",
+        "next/apps/toy/e2e/window.visual.test.ts",
+        "next/apps/toy/src/page.visual.test.tsx",
+        "next/apps/toy/src/node_modules/dependency.test.ts",
+        "next/apps/toy/src/dist/generated.test.ts",
+      ];
+
+      for (const path of [...selected, ...excluded]) {
+        mkdirSync(dirname(join(folder, path)), { recursive: true });
+        writeFileSync(join(folder, path), "");
+      }
 
       const actual = yield* promised(() => selectedBy(folder, ["next", "next-integration"]));
       expect(yield* promised(() => nextFiles(folder))).toEqual(actual);
-    expect(actual).toEqual(selected);
+      expect(actual).toEqual(selected);
 
-    // New next/ globs in the config must be read on every call.
-    const added = "next/extra/fresh.test.tsx";
-    mkdirSync(dirname(join(folder, added)), { recursive: true });
-    writeFileSync(join(folder, added), "");
+      // New next/ globs in the config must be read on every call.
+      const added = "next/extra/fresh.test.tsx";
+      mkdirSync(dirname(join(folder, added)), { recursive: true });
+      writeFileSync(join(folder, added), "");
       yield* Effect.acquireUseRelease(
         Effect.sync(() => globsOf("next").include.push("next/extra/*.test.tsx")),
         () =>
@@ -163,24 +164,25 @@ it.live(
 // tests (0536), and no other file, whatever its folder.
 it.live("scenario: E8 the end-to-end files are next/'s visual tests and nothing else, on a scratch tree", () =>
   Effect.gen(function* () {
-  // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
-  // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
+    // A scratch tree, as L3's. Plant, run once on vitest.config.ts and restored: make the visual glob
+    // `next/apps/fabrika/e2e/*.visual.test.ts` (red: tuval's key laws and e2e/node/b lost).
     const folder = yield* scratch("t967-e2e-");
-  const selected = [
-    "next/apps/fabrika/e2e/a.visual.test.ts",
-    "next/apps/fabrika/e2e/node/b.visual.test.ts",
-    "next/apps/other/e2e/e.visual.test.tsx",
-    "next/packages/tuval/src/browser/key.laws.visual.test.ts",
-  ].toSorted();
 
-  const left = [
-    "next/apps/fabrika/e2e/stored.integration.test.ts",
-    "next/apps/fabrika/e2e/d.test.ts",
-    "next/apps/fabrika/src/c.test.ts",
-    "next/packages/tuval/src/browser/other.laws.test.ts",
-    "next/packages/tuval/dist/key.visual.test.ts",
-    "apps/fabrika/src/today.visual.test.ts",
-  ];
+    const selected = [
+      "next/apps/fabrika/e2e/a.visual.test.ts",
+      "next/apps/fabrika/e2e/node/b.visual.test.ts",
+      "next/apps/other/e2e/e.visual.test.tsx",
+      "next/packages/tuval/src/browser/key.laws.visual.test.ts",
+    ].toSorted();
+
+    const left = [
+      "next/apps/fabrika/e2e/stored.integration.test.ts",
+      "next/apps/fabrika/e2e/d.test.ts",
+      "next/apps/fabrika/src/c.test.ts",
+      "next/packages/tuval/src/browser/other.laws.test.ts",
+      "next/packages/tuval/dist/key.visual.test.ts",
+      "apps/fabrika/src/today.visual.test.ts",
+    ];
 
     for (const path of [...selected, ...left]) {
       mkdirSync(dirname(join(folder, path)), { recursive: true });
@@ -284,27 +286,27 @@ it("format: L4 one diagnostic naming each stale row, exit 1 for stale rows and 0
 
 it.live("scenario: L4 the Node entry passes the real table and file set to the reporter", () =>
   Effect.gen(function* () {
-  // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
-  // entry judges the vitest and end-to-end selections together, since one table holds both rows.
-  // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
-  // e2eFiles out of the entry (red: the entry printed 8 stale rows). The full-depth table,
-  // vitest.shards.full.json, is judged after it, against the same files.
+    // Spawn the real CLI so import.meta.main and its exit status are covered too. T967 (E9): the
+    // entry judges the vitest and end-to-end selections together, since one table holds both rows.
+    // Plant, run once on shard-rows.ts with the 8 end-to-end rows in the table, and restored: leave
+    // e2eFiles out of the entry (red: the entry printed 8 stale rows). The full-depth table,
+    // vitest.shards.full.json, is judged after it, against the same files.
     const files = [...(yield* promised(() => nextFiles(root))), ...(yield* promised(() => visualFiles(root)))];
-  const rows = stale(measured, files);
-  const fullRows = stale(full, files);
-  const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
-  expect(result.error).toBeUndefined();
-  expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
-  expect(result.stdout).toBe("");
+    const rows = stale(measured, files);
+    const fullRows = stale(full, files);
+    const result = spawnSync(process.execPath, [".github/ci/shard-rows.ts"], { cwd: root, encoding: "utf8" });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(rows.length + fullRows.length === 0 ? 0 : 1);
+    expect(result.stdout).toBe("");
 
-  const lines = (stale: readonly string[], table: string) =>
-    stale.map(
-      (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
+    const lines = (stale: readonly string[], table: string) =>
+      stale.map(
+        (path) => `stale shard row: ${path} is not a next/ test file Vitest selects; delete its row in ${table}\n`,
+      );
+
+    expect(result.stderr).toBe(
+      [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
     );
-
-  expect(result.stderr).toBe(
-    [...lines(rows, "vitest.shards.json"), ...lines(fullRows, "vitest.shards.full.json")].join(""),
-  );
   }),
 );
 
@@ -313,19 +315,20 @@ it.live("scenario: L4 the Node entry passes the real table and file set to the r
 // in two projects); narrow the visual glob to `next/apps/**` (red: tuval's key laws in none).
 it.live("scenario: every tracked next/ test file is in exactly one of next, next-integration and next-visual", () =>
   Effect.gen(function* () {
-  const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
-    .stdout.split("\0")
-    .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
+    const tracked = spawnSync("git", ["ls-files", "-z", "--", "next"], { cwd: root, encoding: "utf8" })
+      .stdout.split("\0")
+      .filter((path) => /\.test\.tsx?$/.test(path) && !/(?:^|\/)dist\//.test(path));
+
     const [memory, integration, visual] = yield* promised(() =>
       Promise.all(["next", "next-integration", "next-visual"].map((name) => selectedBy(root, [name]))),
-  );
+    );
 
-  const all = [...memory!, ...integration!, ...visual!];
-  expect(new Set(all).size, "a file in two projects").toBe(all.length);
-  expect(all.toSorted()).toEqual(tracked.toSorted());
-  expect(
-    integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
-  ).toBe(true);
-  expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
+    const all = [...memory!, ...integration!, ...visual!];
+    expect(new Set(all).size, "a file in two projects").toBe(all.length);
+    expect(all.toSorted()).toEqual(tracked.toSorted());
+    expect(
+      integration!.every((path) => path.endsWith(".integration.test.ts") || path.endsWith(".integration.test.tsx")),
+    ).toBe(true);
+    expect(visual!.every((path) => /\.visual\.test\.tsx?$/.test(path))).toBe(true);
   }),
 );

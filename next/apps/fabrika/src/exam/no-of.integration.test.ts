@@ -62,11 +62,11 @@ const lease = Arr.join(
 );
 
 const all = await plant({
-    [FIRES]: fires,
-    [PASSES]: passes,
-    [TEST]: "export const helperOf = 1;",
-    [LEASE]: lease,
-    "next/packages/tuval/src/desktop/old.ts": "export const nameOf = (x: number) => x;",
+  [FIRES]: fires,
+  [PASSES]: passes,
+  [TEST]: "export const helperOf = 1;",
+  [LEASE]: lease,
+  "next/packages/tuval/src/desktop/old.ts": "export const nameOf = (x: number) => x;",
 });
 
 describe("no-of", () => {

@@ -1,3 +1,4 @@
+import { Array as Arr, String as Str } from "effect";
 // WorkflowRunsGh.layer: the WorkflowRuns service on `gh run`, the one way the sev script reaches
 // GitHub Actions. Every call names the repo, so the checkout it runs in does not pick it.
 //
@@ -7,9 +8,8 @@
 // (GitHub's REST docs, "Rate limits for the REST API").
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import { ChildProcessSpawner } from "effect/process";
+import * as Schema from "effect/Schema";
 import { lastLine, run } from "../../lead/scripts/pr/command.ts";
 import { type Run, WorkflowRuns, WorkflowRunsError } from "./WorkflowRuns.ts";
 

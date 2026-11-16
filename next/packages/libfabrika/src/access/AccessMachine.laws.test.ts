@@ -17,9 +17,9 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import * as Result from "effect/Result";
-import * as Rec from "effect/Record";
 import * as Arr from "effect/Array";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";
@@ -178,6 +178,7 @@ const pickSigner = (model: Folded, c: Choice, n: number): string => {
     ),
     ([weight, keys]) => Array.from({ length: weight }, () => keys),
   );
+
   const pool = at([...pools, []], c.pool) ?? [];
 
   return at(pool, c.signer) ?? `stranger:${c.raw}#${n}`;
@@ -616,10 +617,12 @@ describe("ticket 706, the access machine walked from init", () => {
         }
 
         const signer = event.signed.signer;
+
         const changed = Arr.map(
           Arr.filter([...pre.keys], ([name, k]) => post.keys.get(name)?._tag !== k._tag),
           ([n]) => n,
         );
+
         const added = Arr.filter([...post.keys.keys()], (name) => !pre.keys.has(name));
 
         if (event._tag === "granted") {

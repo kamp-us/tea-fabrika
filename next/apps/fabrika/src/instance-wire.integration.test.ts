@@ -14,14 +14,14 @@ import { Id } from "@kampus/libfabrika";
 import { Entry } from "@kampus/libfabrika/ledger/Log";
 import { resolveName } from "@kampus/libfabrika/runtime/Client";
 import { PAGE } from "@kampus/libfabrika/transport/Wire";
+import { Array as Arr, String as Str } from "effect";
 import * as Clock from "effect/Clock";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Formatter from "effect/Formatter";
-import * as Schema from "effect/Schema";
 import * as Option from "effect/Option";
-import { Array as Arr, String as Str } from "effect";
+import * as Schema from "effect/Schema";
 import { afterEach, describe, expect } from "vitest";
 import { devServer, home, reader, suite } from "../e2e/p14.test-support.ts";
 import { instanceDatabase } from "./instance-database.test-support.ts";
@@ -83,8 +83,7 @@ it(
             Arr.filter(inbox, (row) => Str.startsWith("progress_")(row.id)),
             (row) => row.id,
           ),
-        ).toEqual(["progress_0",
-          "progress_1"]);
+        ).toEqual(["progress_0", "progress_1"]);
       }),
       context,
     ),

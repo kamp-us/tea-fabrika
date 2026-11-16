@@ -10,9 +10,9 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
 import { type Expression, parseSync } from "oxc-parser";
 import { expect, it } from "vitest";
 
@@ -60,6 +60,7 @@ const checker = (text: string): Record<string, unknown> => {
   }
 
   const plugins = list(record(record(value(statement.expression)).compilerOptions).plugins);
+
   return pipe(
     Arr.map(plugins, record),
     Arr.findFirst((plugin) => plugin.name === "@effect/language-service"),
@@ -70,6 +71,7 @@ const checker = (text: string): Record<string, unknown> => {
 it("format: E3, `@demlik/tea` may appear twice only in one checker override scoped to `.agents/**`, and nowhere else", () => {
   // format: the checker reads this setting by its exact key and place in tsconfig.base.json.
   const effect = checker(readFileSync(join(ROOT, "tsconfig.base.json"), "utf8"));
+
   const holders = pipe(
     list(effect.overrides),
     Arr.map(record),
@@ -88,6 +90,7 @@ it("format: E3, `@demlik/tea` may appear twice only in one checker override scop
     cwd: ROOT,
     encoding: "utf8",
   });
+
   const others = Arr.filter(tracked.stdout.split("\0"), (file) => file !== "" && file !== "tsconfig.base.json");
   expect(tracked.status).toBe(0);
   expect(others.length).toBeGreaterThan(0);

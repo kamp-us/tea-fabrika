@@ -1,8 +1,8 @@
 import { it, expect } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import { Array as Arr, Record as Rec } from "effect";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Array as Arr, Record as Rec } from "effect";
 import { rolldown } from "rolldown";
 
 const contract = new URL("../../../../packages/libfabrika/src/access/ClientManager.ts", import.meta.url).pathname;

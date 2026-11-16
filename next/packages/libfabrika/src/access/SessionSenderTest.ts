@@ -10,6 +10,7 @@
 // Two oracles: the walk's own model of what it recorded, delivered, ended and removed, and `signer`
 // itself, asked under a kind and an id no other call uses, so its answer is the one it would sign.
 import { describe, expect, it } from "@effect/vitest";
+import * as Arr from "effect/Array";
 import * as Brand from "effect/Brand";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -18,7 +19,6 @@ import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Arr from "effect/Array";
 import * as fc from "fast-check";
 import type * as Id from "../Id.ts";
 import type { Sql } from "../Sql.ts";
@@ -47,6 +47,7 @@ const CLIENTS = ["person", "agent"] as const;
 type Client = (typeof CLIENTS)[number];
 
 const inputId = Brand.nominal<Id.InputId>(); // The test plays the trusted door, never a public decoder.
+
 const PARENTS = Arr.map([1, 2, 3], (n) => inputId(`in-${START}-${n}`));
 
 const writer = (client: Client) =>

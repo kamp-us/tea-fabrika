@@ -3,17 +3,18 @@
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import { String as Str, pipe } from "effect";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import * as Id from "../Id.ts";
 import { Doorbell, Ledger, LedgerError } from "../ledger/Ledger.ts";
@@ -90,6 +91,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     it.effect("L5: reopening preserves exact location/person consent; another clone or destination gets none", () =>
       Effect.gen(function* () {
         const context = yield* Effect.context<never>();
+
         const property = fc.asyncProperty(
           repository,
           person,
@@ -151,12 +153,15 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(same).toContainEqual(accepted);
                     // Fingerprints distinguish another clone and a changed destination, even with the same safe label.
                     const otherKey = `${cell.move % 2 === 0 ? "c" : "d"}${pipe(key, Str.slice(1))}`;
+
                     const distinct =
                       otherKey === key
                         ? `${pipe(key, Str.slice(0, -1))}${pipe(key, Str.endsWith("0")) ? "1" : "0"}`
                         : otherKey;
+
                     const otherLocation = yield* trust.history(distinct, operator);
                     expect(otherLocation).toEqual([]);
+
                     const otherPerson = Schema.decodeSync(Id.make("person"))(
                       `${pipe(operator, Str.slice(0, -1))}${pipe(operator, Str.endsWith("0")) ? "1" : "0"}`,
                     );
@@ -165,6 +170,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                     expect(otherIdentity).toEqual([]);
                     // New commits do not change the lookup identity or rewrite the answered commit.
                     expect(Arr.filter(same, (event) => event._tag === "decision")).toEqual([accepted]);
+
                     const reopened = Schema.decodeSync(Id.InputId)(
                       `${pipe(selection, Str.slice(0, -1))}${pipe(selection, Str.endsWith("0")) ? "1" : "0"}`,
                     );
@@ -229,6 +235,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
       () =>
         Effect.gen(function* () {
           const context = yield* Effect.context<never>();
+
           const property = fc.asyncProperty(
             repository,
             person,
@@ -354,6 +361,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     it.effect("L6: failed/refused writes and corrupt known history fail explicitly", () =>
       Effect.gen(function* () {
         const context = yield* Effect.context<never>();
+
         const property = fc.asyncProperty(
           repository,
           person,
@@ -432,6 +440,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
                       const failure = Option.getOrUndefined(
                         Arr.findFirst(result.cause.reasons, (reason) => reason._tag === "Fail"),
                       );
+
                       expect(failure?._tag).toBe("Fail");
 
                       if (failure?._tag === "Fail") {

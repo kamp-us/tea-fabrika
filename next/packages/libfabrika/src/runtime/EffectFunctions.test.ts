@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
@@ -13,9 +14,8 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
 import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { ClientManager } from "../access/ClientManager.ts";
@@ -1348,7 +1348,10 @@ describe("T285, runner tracing keep-laws", () => {
                     ...(waiting ? [] : writing ? ["runner.write"] : []),
                     ...(!waiting && call.op === "step_throw" ? ["runner.throw"] : []),
                   ];
-                  const selected = Arr.filter(spans, (s) => Str.startsWith("runner.")(s.name) && !recovering.includes(s));
+                  const selected = Arr.filter(
+                    spans,
+                    (s) => Str.startsWith("runner.")(s.name) && !recovering.includes(s),
+                  );
                   expect(
                     Arr.map(selected, (s) => s.name),
                     call.op,
@@ -1424,7 +1427,7 @@ describe("T285, runner tracing keep-laws", () => {
                     const letter = Option.getOrThrow(
                       Arr.findFirst(
                         yield* Stream.runCollect((yield* Ledger).read(`${a.name}/inbox`, 0)),
-                      (entry) => entry.id === input.id,
+                        (entry) => entry.id === input.id,
                       ),
                     );
                     ended(cmd, !["handler_fail", "handler_die", "write_storage"].includes(call.op));
@@ -1467,8 +1470,7 @@ describe("T285, runner tracing keep-laws", () => {
                     rows.push(
                       ...Arr.filter(
                         yield* Stream.runCollect(records.read(Chain.cases.job.make({ process: id }))),
-                        (s) =>
-                        Str.startsWith("runner.")(s.name),
+                        (s) => Str.startsWith("runner.")(s.name),
                       ),
                     );
                   }

@@ -6,14 +6,14 @@ import { expect, it } from "@effect/vitest";
 import { build as buildOne, type Built } from "@kampus/libfabrika/build";
 import { bundle } from "@kampus/libfabrika/node/build";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
 import * as fc from "fast-check";
 import type { Plugin, RolldownPluginOption } from "rolldown";
 import { vi } from "vitest";
@@ -392,7 +392,9 @@ it.effect(
       const control = yield* windowBuild(`export const view = () => "p8-clean-window";`);
       const brain = checkBuild(control.observed, control.built);
       expect(Arr.filter(control.observed, isWindow)).toHaveLength(1);
-      expect(Arr.some(Rec.values(control.built.assets), (a) => pipe(a.body, Str.includes("p8-clean-window")))).toBe(true);
+      expect(Arr.some(Rec.values(control.built.assets), (a) => pipe(a.body, Str.includes("p8-clean-window")))).toBe(
+        true,
+      );
       expect(Arr.some(carried(brain), (t) => pipe(t, Str.includes("p8-clean-window")))).toBe(true);
 
       // Plant: the window imports the MCP SDK. The brain's own graph names only text modules, so

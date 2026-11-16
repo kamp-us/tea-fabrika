@@ -167,14 +167,14 @@ const loaded = (ds: Declared) => {
     }
   });
   return Sources.resolve(group, {
-      flags: Sources.flags(flags),
-      env: Sources.env(env),
-      repo: Sources.file(REPO, { value: {}, spans: [] }),
-      person: Sources.file(PERSON, { value: person, spans: [] }),
-    }).pipe(
-      Effect.flatMap((resolved) => Snapshot.make(group, resolved)),
+    flags: Sources.flags(flags),
+    env: Sources.env(env),
+    repo: Sources.file(REPO, { value: {}, spans: [] }),
+    person: Sources.file(PERSON, { value: person, spans: [] }),
+  }).pipe(
+    Effect.flatMap((resolved) => Snapshot.make(group, resolved)),
     Effect.map((snapshot) => ({ group, snapshot })),
-      Effect.provide(Digest.layerWebCrypto),
+    Effect.provide(Digest.layerWebCrypto),
   );
 };
 

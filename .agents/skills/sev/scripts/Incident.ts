@@ -36,6 +36,7 @@ export const latest = (entries: ReadonlyArray<Level.Entry>): ReadonlyArray<Level
 /** The open pull requests the latest sev0 canceled a run of, each once, by number. */
 export const owed = (entries: ReadonlyArray<Level.Entry>, prs: ReadonlyArray<PullRequest>) => {
   const hit = new Set(Arr.flatMap(latest(entries), (e) => (e._tag === "canceled" ? [e.run.branch] : [])));
+
   return Arr.sort(
     Arr.filter(prs, (pr) => pr.state === "OPEN" && hit.has(pr.head)),
     Order.mapInput(Order.Number, (pr: PullRequest) => pr.number),

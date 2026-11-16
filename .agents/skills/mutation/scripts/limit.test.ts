@@ -23,6 +23,7 @@ const file: fc.Arbitrary<File> = fc
   .tuple(tests, fc.double({ min: 0, max: 120_000, noNaN: true }), fc.boolean(), fc.integer({ min: 0, max: 2e12 }))
   .map(([assertionResults, setup, timed, start]) => {
     const sum = Arr.reduce(assertionResults, 0, (s, t) => s + (typeof t.duration === "number" ? t.duration : 0));
+
     return timed ? { startTime: start, endTime: start + sum + setup, assertionResults } : { assertionResults };
   });
 

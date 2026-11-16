@@ -135,6 +135,7 @@ export const make = ({ lead }: { readonly lead: boolean }) => {
 
         if (outcome._tag === "send") {
           const to = Arr.findFirstIndex(flow.steps, (step) => step.name === outcome.to);
+
           return Option.isNone(to)
             ? stay(
                 Model.cases.stuck.make({

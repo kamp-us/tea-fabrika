@@ -11,11 +11,12 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as DateTime from "effect/DateTime";
-import { String as Str, pipe } from "effect";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -564,6 +565,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
   // A grant wait's renewal knock goes on the dial it holds, with its own id `k<dial>.<n>`: its answer
   // renews the code the exchange shows.
   const renew = Arr.some(cmds, (c) => c.type === "knock");
+
   const next: HandsModel = {
     ...s,
     link,
@@ -571,6 +573,7 @@ const linked = (s: HandsModel, m: LinkMsg): Step => {
     tries: fresh && link._tag === "dialing" ? (link.tries ?? 0) : s.tries,
     sent: renew ? s.sent + 1 : s.sent,
   };
+
   const pings = Arr.filter(cmds, (c): c is ReturnType<typeof ping> => c.type === "ping");
   const knocks = renew ? [knock({ dial: open ?? 0, id: `k${open ?? 0}.${next.sent}` })] : [];
 

@@ -1143,14 +1143,14 @@ export const suite = (rig: Rig): void => {
 
               const { facts } = yield* agrees(w, a, base);
               const stepped = byTag(facts, "stepped");
-                expect(
-                  Option.getOrUndefined(Arr.findFirst(stepped, (f) => f.body.input === next.id))?.body.build,
-                  "the next letter's code",
-                ).toBe(hash);
+              expect(
+                Option.getOrUndefined(Arr.findFirst(stepped, (f) => f.body.input === next.id))?.body.build,
+                "the next letter's code",
+              ).toBe(hash);
 
               for (const id of a.accepted) {
                 expect(
-                    Arr.filter(stepped, (f) => f.body.input === id),
+                  Arr.filter(stepped, (f) => f.body.input === id),
                   `${id} steps once`,
                 ).toHaveLength(1);
               }

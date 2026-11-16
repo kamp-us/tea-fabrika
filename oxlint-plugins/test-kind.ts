@@ -202,11 +202,13 @@ const reach = (
 export const judge = (modules: ReadonlyMap<string, Module>): ReadonlyArray<Finding> => {
   const read = opener(modules);
   const tests = Arr.filter([...modules.keys()], (file) => TEST.test(file)).sort();
+
   const failures = pipe(
     tests,
     Arr.filter((file) => INTEGRATION.test(file) && reach(modules, file, (at) => read(at).any) === null),
     Arr.map((file): Finding => ({ _tag: "integration_opens_nothing", file })),
   );
+
   // A plain test whose own code opens something is the per-file rule's; this names the rest.
   const advice = pipe(
     tests,
@@ -219,6 +221,7 @@ export const judge = (modules: ReadonlyMap<string, Module>): ReadonlyArray<Findi
         : [{ _tag: "plain_opens", file, via: found.via, opens: { _tag: found.open._tag, call: found.open.call } }];
     }),
   );
+
   return [...failures, ...advice];
 };
 

@@ -11,7 +11,8 @@
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
 import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import { pipe } from "effect/Function";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { type Executor, type Request, Result, State } from "../Task.ts";
 import {
@@ -127,6 +128,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     collect_other: done,
     collect_early: !done,
   };
+
   return Arr.filter(moves, (move) => can[move]);
 };
 
@@ -229,6 +231,7 @@ const play = (world: World, tape: Tape, cell: Cell, move: Move): readonly [Msg, 
     case "take_lacking": {
       const missing = choose(request.needs, cell.variant);
       const executor = { ...able(request, cell, base), has: Arr.filter(CAPABILITIES, (c) => c !== missing) };
+
       return [{ type: "take", executor, execution: cell.execution }, world, refuse("lacks_capability")];
     }
 

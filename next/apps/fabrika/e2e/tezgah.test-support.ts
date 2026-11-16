@@ -12,12 +12,12 @@ import {
   TezgahView as View,
   tezgahName,
 } from "@kampus/libfabrika/tezgah/Workspace";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
-import * as DateTime from "effect/DateTime";
 import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import type { Page } from "playwright";
 import { expect } from "vitest";
 import { PERSON, type reader } from "./p14.test-support.ts";
@@ -450,7 +450,9 @@ const foldRule = (space: Space, area: Box, strips: ReadonlySet<string>) => {
     const has = left - Arr.filter(fixed, (f) => f).length * STRIP_ACROSS[node.dir];
     const total = Arr.reduce(node.parts, 0, (sum, p, i) => (fixed[i] === true ? sum : sum + p.percent));
     const lead = Arr.findFirstIndex(node.parts, (p) => tilesIn(p.inner).includes(space.focus));
-    let shares = Arr.map(node.parts, (p, i) => (fixed[i] === true ? STRIP_ACROSS[node.dir] : (has * p.percent) / total));
+    let shares = Arr.map(node.parts, (p, i) =>
+      fixed[i] === true ? STRIP_ACROSS[node.dir] : (has * p.percent) / total,
+    );
     const least = Math.min(row ? SMALLEST.width : SMALLEST.height, has);
 
     if (Option.isSome(lead) && (shares[lead.value] ?? 0) < least) {

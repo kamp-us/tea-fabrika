@@ -51,7 +51,7 @@ const startsWith = (bytes: Uint8Array, head: Uint8Array) =>
 const rootForms = Effect.fnUntraced(function* (root: string) {
   const path = yield* Path.Path;
   const url = yield* path.toFileUrl(root);
-  return Arr.map([...new Set([root, Str.slice(1, -1)(JSON.stringify(root)), url.href])], (text) => ({
+  return Arr.map([...new Set([root, Str.slice(1, -1)(Formatter.formatJson(root)), url.href])], (text) => ({
     text,
     bytes: encoder.encode(text),
   }));

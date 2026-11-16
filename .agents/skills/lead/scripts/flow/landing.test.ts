@@ -1,11 +1,11 @@
 // What the landing runners read from each script, and that they refuse args they cannot parse. No
 // script runs here.
 import { NodeServices } from "@effect/platform-node";
+import { Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
-import type * as Scope from "effect/Scope";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
-import { Array as Arr } from "effect";
+import type * as Scope from "effect/Scope";
 import { describe, expect, it } from "vitest";
 import { PullRequestsError } from "../pr/PullRequests.ts";
 import { LeakGrepRefused } from "../pr/Pushes.ts";

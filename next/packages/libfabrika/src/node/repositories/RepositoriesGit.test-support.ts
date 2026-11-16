@@ -6,7 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import * as RepositoryOpenTest from "../settings/RepositoryOpenTest.ts";
 import * as RepositoriesGit from "./RepositoriesGit.ts";
 
@@ -20,6 +20,7 @@ export const gitCommandBudget = 10;
 
 export const git = Effect.fnUntraced(function* (cwd: string, args: ReadonlyArray<string>) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+
   return Str.trim(
     yield* spawner.string(
       ChildProcess.make("git", [...args], {

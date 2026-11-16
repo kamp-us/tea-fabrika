@@ -1,6 +1,6 @@
 import { Machine } from "@demlik/tea/effect";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Schema from "effect/Schema";
 import { Attached, Wait, Who } from "../Wire.ts";
 
 const Online = {

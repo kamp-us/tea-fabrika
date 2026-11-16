@@ -6,8 +6,8 @@ import { join, relative } from "node:path";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import * as Result from "effect/Result";
 import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import stylelint from "stylelint";
 import type { CssResult } from "./css-support.ts";
 

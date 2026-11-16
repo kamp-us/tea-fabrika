@@ -6,11 +6,11 @@
  * rewrite. A tag holds a name, an id, a number or a boolean. A failed span's message is never a
  * tag, only its record part's `content`, the one thing a person may delete.
  */
-import * as Cause from "effect/Cause";
-import * as Schema from "effect/Schema";
-import * as Option from "effect/Option";
-import * as Str from "effect/String";
 import { Array as Arr } from "effect";
+import * as Cause from "effect/Cause";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { ProcessId } from "../ProcessId.ts";
 
 /**

@@ -5,18 +5,18 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import * as Public from "@kampus/libfabrika";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
+import * as Str from "effect/String";
 import * as TestClock from "effect/testing/TestClock";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import * as Layer from "effect/Layer";
-import { String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Front from "./Id.ts";
 import { ProcessId } from "./ProcessId.ts";
@@ -99,6 +99,7 @@ const referenceEncode = (bytes: Uint8Array): string => {
     Arr.map([...bytes], (byte) => Str.padStart(8, "0")(byte.toString(2))),
     "",
   )}`;
+
   return Arr.join(
     Array.from({ length: 26 }, (_, i) => alphabet[Number.parseInt(Str.slice(i * 5, i * 5 + 5)(bits), 2)] ?? ""),
     "",
@@ -112,6 +113,7 @@ const referenceDecode = (suffix: string): Uint8Array => {
       "",
     ),
   );
+
   return Uint8Array.from({ length: 16 }, (_, i) => Number.parseInt(Str.slice(i * 8, i * 8 + 8)(bits), 2));
 };
 
@@ -692,6 +694,7 @@ describe("T518 Id order and generation", () => {
             [...Arr.map(values, ([type, bytes]) => wire(type, bytes)), ...Arr.map(shapes, (type) => wire(type, tied))],
             (raw) => Id.Schema.make(raw),
           );
+
           const expected = [...ids].sort((left, right) => {
             const [lp, ls] = split(left),
               [rp, rs] = split(right);
@@ -1103,6 +1106,7 @@ describe("T518 shared Id generator", () => {
       decoding.mockRestore();
     }
   };
+
   it("shared fibers allocate unique, strictly increasing ids over generated schedules", () =>
     fc.assert(
       fc.asyncProperty(
@@ -1127,9 +1131,9 @@ describe("T518 shared Id generator", () => {
     Effect.gen(function* () {
       yield* promised(() =>
         checkSchedule({
-      type: "process",
-      entropy: 0,
-      batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
+          type: "process",
+          entropy: 0,
+          batches: [{ at: 1000, work: [2035, 2035, 2035, 2035] }],
         }),
       );
     }),

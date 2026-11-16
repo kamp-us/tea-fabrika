@@ -82,6 +82,7 @@ export const lengths = (
   }
 
   const rest = total - held.percent;
+
   return Arr.map(node.parts, (p, i) =>
     i === at ? least : fixed[i] === true ? STRIP[node.dir] : rest > 0 ? ((has - least) * p.percent) / rest : 0,
   );
@@ -150,6 +151,7 @@ export const fold = (w: Workspace, size: Size): ReadonlySet<TileId> => {
 
   for (;;) {
     const boxes = drawn(w, size, strips);
+
     const due = Arr.filter(order(w.layout), (t) => {
       const r = boxes.get(t);
 

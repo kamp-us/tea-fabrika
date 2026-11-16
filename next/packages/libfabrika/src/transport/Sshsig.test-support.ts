@@ -3,11 +3,11 @@
 // real `ssh-keygen` and so runs on the schedule (0536).
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";

@@ -2,18 +2,19 @@
 import { applyCell } from "@demlik/tea";
 import { NodeServices } from "@effect/platform-node";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import { pipe } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import * as Str from "effect/String";
 import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
 import { Writer } from "../access/SessionManager.ts";
 import * as Id from "../Id.ts";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -302,6 +303,7 @@ export const open = Effect.gen(function* () {
     Effect.scoped(
       Effect.gen(function* () {
         const sql = yield* files("manager");
+
         return Arr.map(sql.exec("SELECT * FROM entries WHERE stream=? ORDER BY rev", `processes/${name}`), (row) =>
           Schema.decodeUnknownSync(Row)(row),
         );
@@ -311,6 +313,7 @@ export const open = Effect.gen(function* () {
   const dead = Effect.scoped(
     Effect.gen(function* () {
       const sql = yield* files("manager");
+
       return Arr.map(sql.exec("SELECT * FROM entries WHERE _tag='dead' ORDER BY rev"), (row) =>
         Schema.decodeUnknownSync(Row)(row),
       );

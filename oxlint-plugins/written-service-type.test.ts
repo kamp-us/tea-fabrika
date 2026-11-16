@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 // Ticket 908, law 5 of docs/plan/effect-rules-small.md. `fabrika/written-service-type` fires exactly
 // when a service's type holds `ReturnType`, `Effect.Success` or a `typeof` query (decision 0095).
 // Each generated file runs in process through oxlint's RuleTester; one oxlint run over the first
@@ -6,9 +7,8 @@ import { join } from "node:path";
 // code and leaves tests out.
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Rec from "effect/Record";
-import { it } from "@effect/vitest";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect } from "vitest";
@@ -341,6 +341,7 @@ const file = (
 
   // Each import is written once: two services may ask for the same line.
   const head = [...new Set(imports)];
+
   return { text: `${Arr.join([...head, ...body], "\n")}\n`, fires: Arr.map(fires, (at) => head.length + at + 1) };
 };
 
@@ -355,55 +356,57 @@ const product = "next/packages/libfabrika/src/unit/Unit.ts";
 
 it.live("fires exactly on a read service whose type holds ReturnType, Effect.Success or a typeof query", () =>
   Effect.gen(function* () {
-  // The generated files with a fire: the first is for the oxlint run below.
-  const fired: Array<ReturnType<typeof file>> = [];
-  fc.assert(
-    fc.property(services, fc.boolean(), (drawn, own) => {
-      const made = file(drawn, own);
+    // The generated files with a fire: the first is for the oxlint run below.
+    const fired: Array<ReturnType<typeof file>> = [];
+    fc.assert(
+      fc.property(services, fc.boolean(), (drawn, own) => {
+        const made = file(drawn, own);
 
-      if (made.fires.length > 0) {
-        fired.push(made);
-      }
+        if (made.fires.length > 0) {
+          fired.push(made);
+        }
 
-      tester.run("written-service-type", writtenServiceType, {
-        valid: made.fires.length === 0 ? [{ code: made.text, filename: product }] : [],
-        invalid:
-          made.fires.length === 0
-            ? []
-            : [
-                {
-                  code: made.text,
-                  filename: product,
-                  errors: Arr.map(made.fires, (line) => ({ line, message: OURS })),
-                },
-              ],
-      });
-    }),
-    { seed: 119120, numRuns: 100 },
-  );
+        tester.run("written-service-type", writtenServiceType, {
+          valid: made.fires.length === 0 ? [{ code: made.text, filename: product }] : [],
+          invalid:
+            made.fires.length === 0
+              ? []
+              : [
+                  {
+                    code: made.text,
+                    filename: product,
+                    errors: Arr.map(made.fires, (line) => ({ line, message: OURS })),
+                  },
+                ],
+        });
+      }),
+      { seed: 119120, numRuns: 100 },
+    );
 
-  // Case 8, and the config's wiring: the same file fires in next/ product code and nowhere else.
-  expect(fired).not.toHaveLength(0);
-  const planted = fired[0]!;
+    // Case 8, and the config's wiring: the same file fires in next/ product code and nowhere else.
+    expect(fired).not.toHaveLength(0);
+    const planted = fired[0]!;
 
-  const off = [
-    "next/packages/libfabrika/src/unit/Unit.test.ts",
-    "next/apps/fabrika/src/unit/Unit.test.tsx",
-    "next/packages/libfabrika/src/unit/UnitTest.ts",
-    "next/packages/libfabrika/src/unit/Unit.test-support.ts",
-    "packages/fabrika/src/unit/Unit.ts",
-  ];
+    const off = [
+      "next/packages/libfabrika/src/unit/Unit.test.ts",
+      "next/apps/fabrika/src/unit/Unit.test.tsx",
+      "next/packages/libfabrika/src/unit/UnitTest.ts",
+      "next/packages/libfabrika/src/unit/Unit.test-support.ts",
+      "packages/fabrika/src/unit/Unit.ts",
+    ];
 
-  const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
-  const linted = yield* promised(() =>
+    const tsx = "next/apps/fabrika/src/unit/Unit.tsx";
+
+    const linted = yield* promised(() =>
       plant(Rec.fromEntries(Arr.map([product, tsx, ...off], (path) => [path, planted.text]))),
     );
-  expect(linted(CODE, product)).toEqual(planted.fires);
-  // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
-  expect(linted(CODE, tsx)).toEqual(planted.fires);
 
-  for (const path of off) {
-    expect(linted(CODE, path), path).toEqual([]);
-  }
+    expect(linted(CODE, product)).toEqual(planted.fires);
+    // The same text as a `.tsx` product file fires, so the `.test.tsx` path below is quiet by the config.
+    expect(linted(CODE, tsx)).toEqual(planted.fires);
+
+    for (const path of off) {
+      expect(linted(CODE, path), path).toEqual([]);
+    }
   }),
 );

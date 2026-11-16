@@ -2,7 +2,7 @@
 // strings catch omitted tags, saw fields or reordered signing text. No crypto belongs here.
 import { describe, expect, it } from "@effect/vitest";
 import * as Schema from "effect/Schema";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import { Adds, Grant } from "./Access.ts";
 import { grantText, revokeText, addText, enrollmentText } from "./Text.ts";
 

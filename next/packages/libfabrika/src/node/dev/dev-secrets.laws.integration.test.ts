@@ -10,20 +10,21 @@ import { RuntimeLifecycle, type RuntimeEvent } from "@alchemy.run/cloudflare-run
 import { NodeServices } from "@effect/platform-node";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import * as Arr from "effect/Array";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { pipe } from "effect/Function";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Redacted from "effect/Redacted";
-import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import { String as Str, pipe } from "effect";
-import { FetchHttpClient } from "effect/http";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { ConnectionService, connectionRuntime } from "../../cloudflare/connection.ts";
@@ -130,6 +131,7 @@ const flow = async (sample: Flow) => {
   const home = mkdtempSync(join(tmpdir(), "p12-sec-"));
   vi.stubEnv("FABRIKA_HOME", home);
   const material = pipe(`${sample.word}/"\\\n`, Str.padEnd(32, "!"));
+
   const random = Layer.succeed(
     SecureRandom.SecureRandom,
     SecureRandom.make((size) => {
@@ -174,6 +176,7 @@ const flow = async (sample: Flow) => {
   };
 
   let mode = "ok";
+
   const delivered = (name: string, args: ReadonlyArray<unknown>) => {
     const [chain, at, rows] = Schema.decodeUnknownSync(
       Schema.Tuple([
@@ -187,6 +190,7 @@ const flow = async (sample: Flow) => {
 
     return Effect.runPromise(store.write(rows));
   };
+
   const fetch = vi.fn<typeof globalThis.fetch>(async (_url, options) => {
     const call = Schema.decodeSync(
       Schema.fromJsonString(
@@ -254,6 +258,7 @@ const flow = async (sample: Flow) => {
 
     return Response.json({ value: [] });
   });
+
   const consoleSpies = Arr.map(["log", "info", "warn", "error", "debug"] as const, (name) =>
     vi.spyOn(console, name).mockImplementation((...args) => {
       outputs.logs.push({ name, args });
@@ -350,6 +355,7 @@ const flow = async (sample: Flow) => {
           const instance = yield* startDev({ ...config, home, memory: 500_000_000, grace: 5000 }, (local) =>
             Effect.gen(function* () {
               observe = Context.get(local, RuntimeLifecycle);
+
               const plugin = Option.getOrUndefined(
                 Arr.findFirst(
                   [...local.mapUnsafe.values()],

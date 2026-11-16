@@ -1,3 +1,4 @@
+import { Array as Arr } from "effect";
 // Health in two levels, over an object's own SQLite: a raw row per ended span, and an hourly summary
 // per piece, both kept forever. Raw rows stay local about two weeks, then leave for R2, one file per
 // object per UTC day, deleted here only after the stored file's hash matches. A row of the day that
@@ -12,9 +13,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Struct from "effect/Struct";
 import * as Str from "effect/String";
-import { Array as Arr } from "effect";
+import * as Struct from "effect/Struct";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
@@ -242,37 +242,37 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
   );
   return Arr.flatMap(days, (start) => {
     const day = Str.slice(0, 10)(DateTime.formatIso(DateTime.makeUnsafe(start)));
-      const [open] = sql.exec(
-        `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
+    const [open] = sql.exec(
+      `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
 				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`,
-        start,
-        start + DAY,
-      );
+      start,
+      start + DAY,
+    );
 
-      if (open !== undefined && decodeCount(open).n > 0) {
-        return [];
-      }
+    if (open !== undefined && decodeCount(open).n > 0) {
+      return [];
+    }
 
-      const read = sql.exec(
-        `SELECT rowid AS seq, * FROM measurements WHERE at >= ? AND at < ? ORDER BY at, rowid`,
-        start,
-        start + DAY,
-      );
+    const read = sql.exec(
+      `SELECT rowid AS seq, * FROM measurements WHERE at >= ? AND at < ? ORDER BY at, rowid`,
+      start,
+      start + DAY,
+    );
     const last = Arr.reduce(read, -Infinity, (max, row) => Math.max(max, decodeSeq(row).seq));
-      const [had] = sql.exec(`SELECT coalesce(max(part), 0) AS n FROM archived WHERE day = ?`, day);
-      const part = (had === undefined ? 0 : decodeCount(had).n) + 1;
+    const [had] = sql.exec(`SELECT coalesce(max(part), 0) AS n FROM archived WHERE day = ?`, day);
+    const part = (had === undefined ? 0 : decodeCount(had).n) + 1;
 
-      const body = encoder.encode(
+    const body = encoder.encode(
       `${Arr.join(
         Arr.map(Arr.map(read, toHealth), ({ piece, at, ms, ok, error, lag, spanId }) =>
           JSON.stringify({ piece, at, ms, ok, error, lag, spanId }),
         ),
         "\n",
       )}\n`,
-      );
+    );
 
-      return [{ start, day, part, key: partKey(object, day, part), body, rows: read.length, last }];
-    });
+    return [{ start, day, part, key: partKey(object, day, part), body, rows: read.length, last }];
+  });
 };
 
 /** Whether the day still holds exactly the rows read for `part`: none of them gone since. */

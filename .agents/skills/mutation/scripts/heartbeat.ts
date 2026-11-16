@@ -27,14 +27,14 @@
  * - A merge stamped in the future (a skewed clock): never late on its own.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import { ChildProcess } from "effect/process";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import * as DateTime from "effect/DateTime";
-import { Array as Arr, String as Str, pipe } from "effect";
-import { ChildProcess } from "effect/process";
 
 /** How long a merge may wait for a passing run, in ms. */
 export const LATE = 2 * 60 * 60 * 1000;
@@ -95,6 +95,7 @@ const gh = Effect.fn("heartbeat.gh")(function* (path: string) {
     ],
     { concurrency: 3 },
   );
+
   return Number(code) === 0 ? out : yield* ReadFailed.make({ path, reason: Str.trim(err) });
 }, Effect.scoped);
 

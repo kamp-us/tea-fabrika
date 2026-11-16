@@ -80,6 +80,7 @@ const level = (setting: unknown): unknown => (Arr.isArray(setting) ? setting[0] 
 /** The warn lines for the six, read from `oxlint --print-config`, oxlint's own reading of the config. */
 export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
   const overrides = isRecord(printed) && Arr.isArray(printed.overrides) ? printed.overrides : [];
+
   return Arr.flatMap(overrides, (override: unknown) => {
     if (!isRecord(override) || !isRecord(override.rules) || !Arr.isArray(override.files)) {
       return [];
@@ -89,8 +90,10 @@ export const warnLines = (printed: unknown): ReadonlyArray<WarnLine> => {
       override.files,
       (glob: unknown): glob is string => typeof glob === "string" && !FROZEN.has(glob),
     );
+
     return Arr.flatMap(Rec.toEntries(override.rules), ([key, setting]) => {
       const rule = CODES.get(key);
+
       return rule !== undefined && level(setting) === "warn" ? Arr.map(globs, (glob) => ({ rule, glob })) : [];
     });
   });

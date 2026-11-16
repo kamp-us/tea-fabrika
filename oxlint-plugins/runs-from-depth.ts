@@ -134,6 +134,7 @@ const overridden = (node: Node): boolean => {
   }
 
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
+
   return Arr.some(after, (property) => property.type === "Property" && keyName(property) === "numRuns");
 };
 
@@ -295,6 +296,7 @@ export const runsFromDepth: CreateRule = {
 
         const reaches = (root: Node): boolean => {
           const { through, direct } = usesOf(root);
+
           return direct || Arr.some([...through], (used) => reaching.has(used));
         };
 
@@ -353,8 +355,10 @@ export const runsFromDepth: CreateRule = {
           // function), or else the helper call it is handed to.
           const enclosing = Arr.filter([...declared], ([, node]) => around.includes(node));
           const call = Arr.findFirst(around, (node) => node.type === "CallExpression");
+
           const own =
             enclosing.length > 0 ? Arr.some(enclosing, ([, node]) => reaches(node)) : Option.exists(call, reaches);
+
           return (
             own ||
             Arr.some(

@@ -80,6 +80,7 @@ it("K3: in memory, an .integration. file fails exactly when no chain of value im
       ({ integration, hops, end: last, side }) => {
         const test = `next/apps/x/src/t.${integration ? "integration." : ""}test.ts`;
         const chain = [test, ...Arr.map(hops, (_, k) => `next/apps/x/src/m${k + 1}.ts`)];
+
         const modules = new Map<string, Module>(
           Arr.map(chain, (file, k) => {
             const hop = hops[k];
@@ -212,16 +213,19 @@ it("K3 and K4: through the real command and code-graph, every hop kind is follow
 
       try {
         const run = spawnSync(process.execPath, [COMMAND, root], { encoding: "utf8" });
+
         const fails = pipe(
           tests,
           Arr.filter(({ chain: c }) => c.integration && !reaches(c.end)),
           Arr.map(({ file }) => file),
         );
+
         const advised = pipe(
           tests,
           Arr.filter(({ chain: c }) => !c.integration && c.hops.length > 0 && alone(c.end)),
           Arr.map(({ file }) => file),
         );
+
         const named = (out: string, prefix: string) =>
           pipe(
             tests,

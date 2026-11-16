@@ -52,6 +52,7 @@ const shellCommands = (script: string) =>
  */
 const toolingJobs = (workflow: Record<string, unknown>): string[] => {
   const outer = { ...map(workflow["env"]) };
+
   return Rec.toEntries(map(workflow["jobs"]))
     .filter(([, job]) =>
       steps(map(job)).some((step) => {
@@ -99,6 +100,7 @@ export const lintNoTooling = (path: string, text: string): string[] => {
   const workflow = map(parse(text));
   const on = workflow["on"];
   const events = typeof on === "string" ? [on] : Array.isArray(on) ? on : Rec.keys(map(on));
+
   return events.includes("pull_request") || events.includes("merge_group")
     ? toolingJobs(workflow).map((job) => `${path}: T1: ${job} runs no tooling test (0539)`)
     : [];

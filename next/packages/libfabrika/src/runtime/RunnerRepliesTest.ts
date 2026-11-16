@@ -200,10 +200,10 @@ const replyRows = (sql: Sql, id: string) =>
     (table) =>
       Arr.flatMap(sql.exec(`SELECT * FROM "${table}"`), (row) =>
         Arr.flatMap(Object.entries(row), ([column, value]) =>
-            typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
-          ),
+          typeof value === "string" && parsed(value)?.["id"] === id ? [{ table, column, value }] : [],
         ),
-    );
+      ),
+  );
 
 /** The rows of every table main never had, as text. */
 const replyCells = (sql: Sql): ReadonlyArray<string> =>

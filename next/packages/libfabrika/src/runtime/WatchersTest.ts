@@ -234,7 +234,7 @@ export const suite = (database: Database) =>
               const column = Option.getOrUndefined(
                 Arr.findFirst(
                   Object.keys(row ?? {}),
-                (k) => typeof (row ?? {})[k] === "string" && Str.startsWith("{")(String((row ?? {})[k])),
+                  (k) => typeof (row ?? {})[k] === "string" && Str.startsWith("{")(String((row ?? {})[k])),
                 ),
               );
 

@@ -4,10 +4,10 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "n
 import { basename, dirname, join, relative, resolve } from "node:path";
 import type { CreateRule } from "@oxlint/plugins";
 import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
-import * as Result from "effect/Result";
-import * as Rec from "effect/Record";
 import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
+import * as Rec from "effect/Record";
+import * as Result from "effect/Result";
 import { parseSync, Visitor } from "oxc-parser";
 import { ResolverFactory } from "oxc-resolver";
 
@@ -563,14 +563,13 @@ export const programPackageLayout: CreateRule = {
         }),
       ),
     };
+
     const keys = map(raw) ? Rec.keys(raw) : [];
+
     // A string, an array, null, or an object of conditions is the '.' export alone.
     const exports: Record<string, unknown> =
-      map(raw) && Arr.some(Rec.keys(raw), (key) => key.startsWith("."))
-        ? raw
-        : raw === undefined
-          ? {}
-          : { ".": raw };
+      map(raw) && Arr.some(Rec.keys(raw), (key) => key.startsWith(".")) ? raw : raw === undefined ? {} : { ".": raw };
+
     // Every target one export key names under a runtime condition, each resolved; a target that
     // names nothing real comes back as `undefined`. A pattern key gives its targets once per
     // subpath the package's own exports still offer there.
@@ -589,6 +588,7 @@ export const programPackageLayout: CreateRule = {
       return Arr.flatMap(matchesOf(root, exportValue), (match) => {
         const own = Arr.map(targets, (path) => target(path.replaceAll("*", match)));
         const real = new Set(Arr.flatMap(own, (path) => (path === undefined ? [] : [realpathSync(path)])));
+
         // The subpath is this key's only if the package's exports answer with one of its own
         // targets: a null target or a more specific key takes it away. With no name to ask by,
         // it stays the key's.
@@ -605,6 +605,7 @@ export const programPackageLayout: CreateRule = {
     };
 
     const dotTargets = resolveKey(".");
+
     const entries = Arr.filter(
       [...new Set(Arr.flatMap(dotTargets, (path) => (path === undefined ? [] : [path])))],
       (path) => !declaration(path),
@@ -667,6 +668,7 @@ export const programPackageLayout: CreateRule = {
 
     const real = (paths: readonly (string | undefined)[]) =>
       Arr.flatMap(paths, (path) => (path === undefined || declaration(path) ? [] : [path]));
+
     // A window behind another key is reported there, so it does not count as unexported too.
     const exported = new Set<string>();
 

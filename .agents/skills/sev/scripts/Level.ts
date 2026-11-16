@@ -1,3 +1,4 @@
+import { Array as Arr, String as Str } from "effect";
 // Level: the level CI is in, as data (decision 0532 for sev0, 0542 for the two levels and sev1).
 // Today's lead tooling, run on our own laptop; it is not product.
 //
@@ -15,7 +16,6 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import { Run } from "./WorkflowRuns.ts";
 
 /** A command was refused: the level does not stand the way it needs. The reason says how it does. */
@@ -160,6 +160,7 @@ export const log = Effect.fn("Level.log")(function* (home: string) {
   }
 
   const lines = Arr.filter(Str.split(yield* fs.readFileString(at), "\n"), (line) => line !== "");
+
   return yield* Effect.forEach(
     lines,
     (line, index) =>

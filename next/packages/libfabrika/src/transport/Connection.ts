@@ -3,6 +3,7 @@
  * state around each JSON-RPC frame, tracks parked waits and answers them when a stream advances.
  */
 import { applyCell } from "@demlik/tea";
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
@@ -10,7 +11,6 @@ import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as Arr from "effect/Array";
 import { REFUSED } from "../SpanTag.ts";
 import * as State from "./internal/connection.ts";
 import { Answer, type Attached, RateCountFailure, RateRefusal, Wait } from "./Wire.ts";
@@ -295,10 +295,10 @@ export const connection = <E, ReadError = never>(options: Options<E, ReadError>)
 
         const next = Arr.reduce(
           Arr.filter(latest.waits, (wait) => wait.stream === stream),
-            undefined,
+          undefined,
           (first: typeof Wait.Type | undefined, wait) =>
             first === undefined || wait.after < first.after ? wait : first,
-          );
+        );
 
         if (next === undefined || (yield* register(next, onRefused))._tag === "parked") {
           return;

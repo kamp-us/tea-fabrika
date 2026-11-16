@@ -218,13 +218,16 @@ const check = (lines: readonly Line[]) => {
     Arr.map((l) => l.text),
     Arr.join("\n"),
   );
+
   const errors = Arr.flatMap(lines, (l, i) => Arr.map(l.fires, (m) => ({ line: i + 1, message: MESSAGES[m] })));
+
   const valid = pipe(
     lines,
     Arr.filter((l) => l.fires.length === 0),
     Arr.map((l) => l.text),
     Arr.join("\n"),
   );
+
   tester.run("no-of", noOf, {
     valid: [{ code: valid, filename: "case.ts" }],
     invalid: errors.length === 0 ? [] : [{ code, filename: "case.ts", errors }],
@@ -299,7 +302,9 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
       param: (n, i) => `  h${i}(${n}: number) { return ${n}; },`,
       const: (n, i) => `  h${i}: () => { const ${n} = ${i}; return ${n}; },`,
     };
+
     const body = Arr.map(inner, (p, i) => line(p, i, (n) => entry[p.kind](n, i)));
+
     return [{ text: "export const of = {", fires: [] }, ...body, { text: "};", fires: [] }];
   }
 
@@ -326,6 +331,7 @@ const inside = (outer: Outer, inner: readonly Inner[]): readonly Line[] => {
   }
 
   const params = Arr.flatMap(inner, (p, i) => (p.kind === "param" ? [line(p, i, (n) => `  ${n}: string,`)] : []));
+
   const body = Arr.flatMap(inner, (p, i) =>
     p.kind === "key"
       ? [line(p, i, (n) => `  const h${i} = { ${n}: ${i} };`)]

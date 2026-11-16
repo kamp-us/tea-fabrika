@@ -7,12 +7,12 @@
 import { grantText, revokeText } from "@kampus/libfabrika/access/Text";
 import { Recipient } from "@kampus/libfabrika/processes/Process";
 import { ProjectService } from "@kampus/libfabrika/workers/runtime";
+import { Array as Arr, String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import { Array as Arr, String as Str } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { childHome, childProject, type Key, letter, PROJECT, SENT } from "./start-child.test-support.ts";
 
@@ -193,7 +193,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
               const line = Option.getOrUndefined(
                 Arr.findFirst(
                   await rows(instance, "processes/child:1"),
-                (row) => row._tag === "started" && row.body.process === child,
+                  (row) => row._tag === "started" && row.body.process === child,
                 ),
               );
 

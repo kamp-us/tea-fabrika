@@ -1,9 +1,9 @@
+import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import * as Arr from "effect/Array";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 
 /** @internal */
 export type Bytes = Uint8Array<ArrayBuffer>;

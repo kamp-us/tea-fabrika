@@ -69,6 +69,7 @@ export const reached = (tree, exists, test) => {
     Arr.filter((path) => !isTest(path)),
     Arr.map((path) => ({ path, word: word(posix.basename(path)) })),
   );
+
   /** @type {Map<string, string>} */
   const via = new Map();
   const queue = [test];
@@ -138,6 +139,7 @@ const bare = (test, source) =>
 export const scriptReads = (tree, exists, prose) => {
   const tests = Arr.filter([...tree.keys()], isTest);
   const reach = new Set(Arr.flatMap(tests, (test) => [...reached(tree, exists, test).keys()]));
+
   /** @param {string} path */
   const tool = (path) => {
     const [folder = "", skill = ""] = SCRIPTS.exec(path) ?? [];

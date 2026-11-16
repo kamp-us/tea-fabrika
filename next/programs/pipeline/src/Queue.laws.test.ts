@@ -6,10 +6,10 @@ import { Commit, Tree } from "@kampus/libfabrika/codehost/CodeHost";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { Queued } from "@kampus/libfabrika/runtime/Send";
 import { StartRefusal } from "@kampus/libfabrika/runtime/StartChild";
+import { Array as Arr, String as Str } from "effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
-import { Array as Arr, String as Str } from "effect";
 import * as fc from "fast-check";
 import * as Mail from "./Mail.ts";
 import { queue } from "./Queue.ts";
@@ -42,7 +42,9 @@ type Oracle = {
 const ctx = stubCtxThrowingProxy<never>();
 
 const head = Schema.decodeSync(Commit)(Str.repeat(40)("a"));
+
 const tree = Schema.decodeSync(Tree)(Str.repeat(40)("b"));
+
 const other = Schema.decodeSync(Tree)(Str.repeat(40)("c"));
 
 const pid = "process_0000000000e008000000000001";

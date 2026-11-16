@@ -21,9 +21,10 @@
 //   (tmux's send-prefix) and for any other key while idle; and `dropped` for Escape or an unbound key
 //   while armed.
 import { describe, expect, it } from "@effect/vitest";
-import * as Result from "effect/Result";
 import * as Arr from "effect/Array";
-import { String as Str, pipe } from "effect";
+import { pipe } from "effect/Function";
+import * as Result from "effect/Result";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Keys from "./Keys.ts";

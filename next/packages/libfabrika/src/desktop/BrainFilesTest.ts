@@ -1,15 +1,15 @@
 // L6, next/. The driver owner supplies real files and the adapter; desktop imports no platform.
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Equivalence from "effect/Equivalence";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Arr from "effect/Array";
-import * as Equivalence from "effect/Equivalence";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import type { BrainControl, BrainControlError } from "./BrainControl.ts";
 import type { BrainSpec } from "./BrainSpec.ts";
 
@@ -149,7 +149,10 @@ export const suite = (open: Open) =>
             expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
             const swapped = yield* disk.swapped;
             const typed = { defect: false, error: "BrainControlError" };
-            const held = Effect.map(disk.entries, (names) => Arr.filter(names, (name) => Str.startsWith(".brain-")(name)));
+
+            const held = Effect.map(disk.entries, (names) =>
+              Arr.filter(names, (name) => Str.startsWith(".brain-")(name)),
+            );
 
             if (competing._tag === "copy") {
               // A 0600 file with our exact bytes is our plist: an existing matching file is reusable.
@@ -169,6 +172,7 @@ export const suite = (open: Open) =>
               }).toEqual({ refusal: null, dirent: null });
               expect(yield* held).toEqual([]);
               expect(Arr.filter(disk.events, (event) => event === `replace:${checkpoint}`)).toHaveLength(1);
+
               return;
             }
 
@@ -225,6 +229,7 @@ export const suite = (open: Open) =>
           // the target as text can only put a different link back: the link then stays where the
           // capture put it. `changed` is another entry at the path, `lost` is the link nowhere.
           const sameBytes = Arr.makeEquivalence(Equivalence.Number);
+
           const place = Effect.gen(function* () {
             const links = yield* disk.links;
 
@@ -304,6 +309,7 @@ export const suite = (open: Open) =>
             () => disk.control.install.pipe(Effect.exit),
             { concurrency: "unbounded" },
           );
+
           expect(Arr.every(exits, Exit.isSuccess)).toBe(true);
           const original = yield* disk.read;
           expect(original).not.toBeNull();

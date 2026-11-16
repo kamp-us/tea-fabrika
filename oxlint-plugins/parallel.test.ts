@@ -8,10 +8,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
-import { pipe } from "effect/Function";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -148,10 +148,12 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
           Arr.findFirstIndex(ran.err, (line) => line.startsWith("parallel: ")),
           { onNone: () => [], onSome: (start) => ran.err.slice(start) },
         );
+
         expect(summary[0]).toMatch(
           new RegExp(`^parallel: ${failed.length} of ${given.length} parts failed in [\\d.]+ s:$`),
         );
         const last = (i: number) => said[i]?.err.at(-1) ?? said[i]?.out.at(-1);
+
         const named = Arr.flatMap(failed, (i) => {
           const line = last(i);
           const ended = `  ${given[i]} (failed, exit ${generated[i]?.code})`;
@@ -173,11 +175,13 @@ describe("parallel.ts, the runner pnpm lint goes through", () => {
       fc.property(signal, word, word, (name, out, err) => {
         const command = `echo o-${out}; echo e-${err} >&2; kill -${name} $$`;
         const ran = run([command]);
+
         const n = pipe(
           Arr.findFirst(Rec.toEntries(constants.signals), ([signal]) => signal === `SIG${name}`),
           Option.map(([, number]) => number),
           Option.getOrElse(() => 0),
         );
+
         const code = 128 + n;
         expect(ran.status).toBe(1);
         expect(ran.out).toContain(`o-${out}`);

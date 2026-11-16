@@ -25,20 +25,21 @@ import { pathToFileURL } from "node:url";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
+import { pipe } from "effect/Function";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import type * as PlatformError from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
-import * as Schema from "effect/Schema";
-import * as Tracer from "effect/Tracer";
-import * as Arr from "effect/Array";
-import * as Option from "effect/Option";
 import * as Rec from "effect/Record";
-import * as Formatter from "effect/Formatter";
-import type * as PlatformError from "effect/PlatformError";
-import * as DateTime from "effect/DateTime";
-import { String as Str, pipe } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
+import * as Tracer from "effect/Tracer";
 import * as fc from "fast-check";
 import { type Rule, transform } from "lightningcss";
 import { parseSync } from "oxc-parser";
@@ -78,38 +79,38 @@ it(
   "A13: an actual built box exposes separate fresh, update and body-free audit calls",
   () =>
     fc.assert(
-    fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 6, maxLength: 16 }), (tape) =>
-      Effect.runPromise(
-        Effect.scoped(
-          Effect.gen(function* () {
-            const home = yield* p40Home();
-            yield* p40Module(home, "counter", "split-box");
-            const fs = yield* FileSystem.FileSystem;
-            const path = yield* Path.Path;
-            const builder = yield* Effect.promise(api);
+      fc.asyncProperty(fc.array(fc.noBias(fc.nat()), { minLength: 6, maxLength: 16 }), (tape) =>
+        Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const home = yield* p40Home();
+              yield* p40Module(home, "counter", "split-box");
+              const fs = yield* FileSystem.FileSystem;
+              const path = yield* Path.Path;
+              const builder = yield* Effect.promise(api);
 
-            const built = yield* builder.build({
-              out: path.join(home, "dist"),
-              root: home,
-              entry: path.join(home, "src/brain.ts"),
-              files: [],
-              ledger: [],
-              chaos: false,
-              programs: [{ name: "p13/counter", package: "@p40/counter", export: "program" }],
-            });
+              const built = yield* builder.build({
+                out: path.join(home, "dist"),
+                root: home,
+                entry: path.join(home, "src/brain.ts"),
+                files: [],
+                ledger: [],
+                chaos: false,
+                programs: [{ name: "p13/counter", package: "@p40/counter", export: "program" }],
+              });
 
-            const file = path.join(home, "checked-box.mjs");
-            yield* fs.writeFileString(file, built.programs["p13/counter"]!.source);
-            const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+              const file = path.join(home, "checked-box.mjs");
+              yield* fs.writeFileString(file, built.programs["p13/counter"]!.source);
+              const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
 
-            const output = yield* spawner.string(
-              ChildProcess.make(
-                process.execPath,
-                [
-                  "--experimental-vm-modules",
-                  "--input-type=module",
-                  "-e",
-                  `
+              const output = yield* spawner.string(
+                ChildProcess.make(
+                  process.execPath,
+                  [
+                    "--experimental-vm-modules",
+                    "--input-type=module",
+                    "-e",
+                    `
 import {readFileSync} from "node:fs";
 import {createContext,SourceTextModule,SyntheticModule} from "node:vm";
 const context=createContext({console,TextEncoder,TextDecoder,URL,crypto,fetch,Request,Response,Headers,AbortController,AbortSignal,setTimeout,clearTimeout,queueMicrotask,performance,Buffer,process:{env:{NODE_ENV:"test"}}});
@@ -120,39 +121,40 @@ let model=(await box.init(null)).model;const records=[];let updates=0;
 for(const n of JSON.parse(process.argv[2])){const type=model.count===0?"inc":n%2===0?"inc":"dec";const msg={type,body:"private \\"/雪"};const checked=await box.fresh(model,msg);if(checked._tag!=="admitted")throw Error("fresh did not admit");const selected=await box.audit(msg);records.push(selected);const prepared=await box.update(model,msg);if(prepared._tag!=="stepped")throw Error("update did not prepare");model=prepared.model;updates++;}
 process.stdout.write(JSON.stringify({model,records,updates}));
 `,
-                  file,
-                  Formatter.formatJson(tape),
-                ],
-                { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
-              ),
-            );
+                    file,
+                    Formatter.formatJson(tape),
+                  ],
+                  { env: { TYPESAFE_API_KEY: undefined }, extendEnv: true },
+                ),
+              );
 
-            const actual = Schema.decodeSync(
-              Schema.fromJsonString(
-                Schema.Struct({
-                  model: Schema.Struct({ count: Schema.Int }),
-                  records: Schema.Array(Schema.TaggedStruct("ok", { value: Schema.Struct({ type: Schema.String }) })),
-                  updates: Schema.Int,
-                }),
-              ),
-            )(output);
+              const actual = Schema.decodeSync(
+                Schema.fromJsonString(
+                  Schema.Struct({
+                    model: Schema.Struct({ count: Schema.Int }),
+                    records: Schema.Array(Schema.TaggedStruct("ok", { value: Schema.Struct({ type: Schema.String }) })),
+                    updates: Schema.Int,
+                  }),
+                ),
+              )(output);
 
-            let count = 0;
-            const types = Arr.map(tape, (n) => {
-              const type = count === 0 || n % 2 === 0 ? "inc" : "dec";
-              count += type === "inc" ? 1 : -1;
+              let count = 0;
 
-              return type;
-            });
+              const types = Arr.map(tape, (n) => {
+                const type = count === 0 || n % 2 === 0 ? "inc" : "dec";
+                count += type === "inc" ? 1 : -1;
 
-            expect(actual.model).toEqual({ count });
-            expect(actual.updates).toBe(tape.length);
-            expect(Arr.map(actual.records, (r) => r.value)).toEqual(Arr.map(types, (type) => ({ type })));
-          }),
-        ).pipe(Effect.provide(NodeServices.layer)),
+                return type;
+              });
+
+              expect(actual.model).toEqual({ count });
+              expect(actual.updates).toBe(tape.length);
+              expect(Arr.map(actual.records, (r) => r.value)).toEqual(Arr.map(types, (type) => ({ type })));
+            }),
+          ).pipe(Effect.provide(NodeServices.layer)),
+        ),
       ),
-    ),
-    { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) },
+      { seed: 119120, numRuns: runsFor({ fast: 3, full: 6 }) },
     ),
   120_000,
 );
@@ -411,15 +413,18 @@ describe("P16 p33 one-file build", () => {
         }),
         runs,
       ),
-      );
+  );
   it("same file: clean builds ignore time and checkout path for equal chaos", { timeout: buildTimeout() }, () =>
     fc.assert(
       fc.asyncProperty(graph, async ({ text, count, chaos }) => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2030-01-01")));
+
         const a = fixture(text, count),
           first = await build({ ...a.options, chaos });
+
         vi.setSystemTime(DateTime.toDateUtc(DateTime.makeUnsafe("2031-01-01")));
+
         const b = fixture(text, count),
           second = await build({ ...b.options, chaos });
 
@@ -449,7 +454,7 @@ describe("P16 p33 one-file build", () => {
       }),
       runs,
     ),
-    );
+  );
   it(
     "table: duplicate selections fail with a typed error and keep the last good file",
     { timeout: buildTimeout() },
@@ -513,6 +518,7 @@ describe("P16 p33 one-file build", () => {
       mkdirSync(f.options.out);
       writeFileSync(join(f.options.out, "brain.mjs"), previous);
       const selection = f.options.programs[0]!;
+
       return fc.assert(
         fc.asyncProperty(bad, async ([field, value]) => {
           const result = await Effect.runPromise(
@@ -627,6 +633,7 @@ const pageRules = (page: string): unknown =>
   );
 
 const count = (text: string, pattern: RegExp) => [...pipe(text, Str.matchAll(pattern))].length;
+
 // A style element ends at its first `</style`, as an HTML tokenizer reads raw text; what is left is markup.
 const STYLE = /<style\b[^>]*>[\s\S]*?<\/style\s*>/gi;
 
@@ -736,8 +743,9 @@ const tabHome = (value: string) => {
     writeFileSync(view, `export const Tip = () => <b>{${JSON.stringify(tab.label)}}</b>;`);
     writeFileSync(
       entry,
-      `import {Effect} from "effect"; import {Tip} from "./view.tsx"; export const mounted = [Tip, Effect.succeed(${JSON.stringify(tab.label)})];`,
+      ` import {Tip} from "./view.tsx"; export const mounted = [Tip, Effect.succeed(${JSON.stringify(tab.label)})];`,
     );
+
     return Arr.map(tab.styles, (style, n) => {
       const file = join(dir, `s${n}.css`);
 
@@ -764,7 +772,7 @@ const tabHome = (value: string) => {
 
     writeFileSync(
       entry,
-      `import {Effect} from "effect"; import {Tip} from "./view.tsx"; ${
+      ` import {Tip} from "./view.tsx"; ${
         depth === 0 ? line : 'export * from "./h1.ts";'
       } export const mounted = [Tip, Effect.succeed("boundary")];`,
     );
@@ -819,8 +827,10 @@ const checkCarried = (
     // The page comes out of the tab's own call: that one call emitted exactly the carried script and page.
     expect(tabCalls, "one Rolldown call built the tab").toHaveLength(1);
     const [tab] = tabCalls;
+
     const chunks = Arr.filter(tab!.files, (x) => x.type === "chunk"),
       pages = Arr.filter(tab!.files, (x) => x.type === "asset" && x.fileName === "index.html");
+
     expect(
       Arr.map(chunks, (c) => c.text),
       "the carried script is the tab call's one chunk",
@@ -889,103 +899,105 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
     "S1.1 generated build walks: a complete tab build carries exactly its emitted page, script and styles; hashes, types and bytes agree",
     () =>
       Effect.gen(function* () {
-      const reached = new Set<string>();
+        const reached = new Set<string>();
         yield* Effect.promise(() =>
           fc.assert(
-        fc.asyncProperty(word, choices, async (value, steps) => {
-          const calls = await observeCalls();
-          const f = tabHome(value);
-          let tab: Tab | null = null;
-          let last: string | null = null;
+            fc.asyncProperty(word, choices, async (value, steps) => {
+              const calls = await observeCalls();
+              const f = tabHome(value);
+              let tab: Tab | null = null;
+              let last: string | null = null;
 
-          for (const { move, word } of steps) {
-            // The moves this state allows: a tab can be added, or a present one edited, restyled,
-            // reordered, trapped, split behind a local `@import`, dropped or rebuilt unchanged.
-            const allowed: ReadonlyArray<TabMove> =
-              tab === null
-                ? ["add", "bare"]
-                : [
-                    "label",
-                    ...(tab.styles.length < 3 ? (["style"] as const) : []),
-                    ...(tab.styles.length > 1 ? (["reorder"] as const) : []),
-                    "trap",
-                    "split",
-                    "drop",
-                    "same",
-                  ];
+              for (const { move, word } of steps) {
+                // The moves this state allows: a tab can be added, or a present one edited, restyled,
+                // reordered, trapped, split behind a local `@import`, dropped or rebuilt unchanged.
+                const allowed: ReadonlyArray<TabMove> =
+                  tab === null
+                    ? ["add", "bare"]
+                    : [
+                        "label",
+                        ...(tab.styles.length < 3 ? (["style"] as const) : []),
+                        ...(tab.styles.length > 1 ? (["reorder"] as const) : []),
+                        "trap",
+                        "split",
+                        "drop",
+                        "same",
+                      ];
 
-            const chosen: TabMove = allowed[move % allowed.length]!;
-            reached.add(chosen);
-            const before = tab;
-            tab =
-              chosen === "add"
-                ? { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: move % 2 === 0 }] }
-                : chosen === "bare" || chosen === "drop"
-                  ? null
-                  : chosen === "label"
-                    ? { ...tab!, label: `p14-${word}-${tab!.label.length}` }
-                    : chosen === "style"
+                const chosen: TabMove = allowed[move % allowed.length]!;
+                reached.add(chosen);
+                const before = tab;
+                tab =
+                  chosen === "add"
+                    ? { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: move % 2 === 0 }] }
+                    : chosen === "bare" || chosen === "drop"
+                      ? null
+                      : chosen === "label"
+                        ? { ...tab!, label: `p14-${word}-${tab!.label.length}` }
+                        : chosen === "style"
                           ? {
                               ...tab!,
                               styles: [...tab!.styles, { mark: `s${tab!.styles.length}${word}`, trap: false }],
                             }
-                      : chosen === "reorder"
-                        ? { ...tab!, styles: [...tab!.styles.slice(1), tab!.styles[0]!] }
-                        : chosen === "trap" || chosen === "split"
-                          ? {
-                              ...tab!,
-                              styles: Arr.map(tab!.styles, (s, n) =>
-                                n !== move % tab!.styles.length
-                                  ? s
-                                  : chosen === "trap"
-                                    ? { ...s, trap: !s.trap }
-                                    : { ...s, split: s.split !== true },
-                              ),
-                            }
-                          : tab;
-            const styles = tab === null ? [] : f.write(tab);
+                          : chosen === "reorder"
+                            ? { ...tab!, styles: [...tab!.styles.slice(1), tab!.styles[0]!] }
+                            : chosen === "trap" || chosen === "split"
+                              ? {
+                                  ...tab!,
+                                  styles: Arr.map(tab!.styles, (s, n) =>
+                                    n !== move % tab!.styles.length
+                                      ? s
+                                      : chosen === "trap"
+                                        ? { ...s, trap: !s.trap }
+                                        : { ...s, split: s.split !== true },
+                                  ),
+                                }
+                              : tab;
+                const styles = tab === null ? [] : f.write(tab);
 
-            if (Arr.some(tab?.styles ?? [], (s) => s.trap)) {
-              reached.add("trapped");
-            }
+                if (Arr.some(tab?.styles ?? [], (s) => s.trap)) {
+                  reached.add("trapped");
+                }
 
-            if (Arr.some(tab?.styles ?? [], (s) => s.split === true)) {
-              reached.add("imported");
-            }
+                if (Arr.some(tab?.styles ?? [], (s) => s.split === true)) {
+                  reached.add("imported");
+                }
 
-            const { spans, tracer } = tracing();
-            const start = calls.length;
+                const { spans, tracer } = tracing();
+                const start = calls.length;
 
-            const result = await runBuild(
-              { ...f.options, ...(tab === null ? {} : { tab: { entry: f.entry, styles } }) },
-              tracer,
-            );
+                const result = await runBuild(
+                  { ...f.options, ...(tab === null ? {} : { tab: { entry: f.entry, styles } }) },
+                  tracer,
+                );
 
-            expect(result._tag, `${chosen} builds`).toBe("Success");
-            const built = (result as { readonly success: Built }).success;
-            checkCarried(built, { tab, entry: f.entry, styles }, calls.slice(start), spans, f.options.out);
+                expect(result._tag, `${chosen} builds`).toBe("Success");
+                const built = (result as { readonly success: Built }).success;
+                checkCarried(built, { tab, entry: f.entry, styles }, calls.slice(start), spans, f.options.out);
 
-            if (chosen === "same") {
-              expect(brainBytes(built.brain), "the same inputs build the same bytes").toBe(last);
-            }
+                if (chosen === "same") {
+                  expect(brainBytes(built.brain), "the same inputs build the same bytes").toBe(last);
+                }
 
-            if (chosen === "label" && before !== null) {
-              expect(built.assets[SCRIPT]?.body, "an edited view replaces the script").not.toContain(
-                JSON.stringify(before.label),
-              );
-            }
+                if (chosen === "label" && before !== null) {
+                  expect(built.assets[SCRIPT]?.body, "an edited view replaces the script").not.toContain(
+                    JSON.stringify(before.label),
+                  );
+                }
 
-            last = brainBytes(built.brain);
-          }
-        }),
-        walks,
+                last = brainBytes(built.brain);
+              }
+            }),
+            walks,
           ),
-      );
-      // A run that never reached a tab cannot claim this law.
-      expect(reached.has("add"), "the walks built a tab").toBe(true);
-      expect(reached.has("trapped"), "the walks built a stylesheet that tries to end its element").toBe(true);
-      expect(reached.has("imported"), "the walks built a stylesheet behind a local @import").toBe(true);
-        expect(Arr.filter([...reached], (m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(1);
+        );
+        // A run that never reached a tab cannot claim this law.
+        expect(reached.has("add"), "the walks built a tab").toBe(true);
+        expect(reached.has("trapped"), "the walks built a stylesheet that tries to end its element").toBe(true);
+        expect(reached.has("imported"), "the walks built a stylesheet behind a local @import").toBe(true);
+        expect(Arr.filter([...reached], (m) => m !== "add" && m !== "bare").length, "and changed it").toBeGreaterThan(
+          1,
+        );
       }),
     { timeout: walkTimeout },
   );
@@ -994,82 +1006,82 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
     "S1.2 generated failure walks: a failed compile, bundle or read keeps the last good brain and leaves no temporary output",
     () =>
       Effect.gen(function* () {
-      const reached = new Set<string>();
+        const reached = new Set<string>();
         yield* Effect.promise(() =>
           fc.assert(
-        fc.asyncProperty(word, choices, async (value, steps) => {
-          const f = tabHome(value);
-          // The walk's state: the tab files as written (with any fault they hold), and the last good output.
-          let tab: Tab | null = null;
-          let fault: "compiler" | "bundle" | "read" | null = null;
-          let good: Array<Array<string>> | null = null;
+            fc.asyncProperty(word, choices, async (value, steps) => {
+              const f = tabHome(value);
+              // The walk's state: the tab files as written (with any fault they hold), and the last good output.
+              let tab: Tab | null = null;
+              let fault: "compiler" | "bundle" | "read" | null = null;
+              let good: Array<Array<string>> | null = null;
 
-          for (const { move, word } of steps) {
-            // A fault targets a phase this build reaches: a tab's compile, bundle or stylesheet
-            // read only once a tab exists; a bad selection table always.
-            const allowed = [
-              "build",
-              ...(tab === null ? (["add"] as const) : (["compiler", "bundle", "read"] as const)),
-              "table",
-            ] as const;
+              for (const { move, word } of steps) {
+                // A fault targets a phase this build reaches: a tab's compile, bundle or stylesheet
+                // read only once a tab exists; a bad selection table always.
+                const allowed = [
+                  "build",
+                  ...(tab === null ? (["add"] as const) : (["compiler", "bundle", "read"] as const)),
+                  "table",
+                ] as const;
 
-            const chosen = allowed[move % allowed.length]!;
-            let styles: readonly string[] = [];
+                const chosen = allowed[move % allowed.length]!;
+                let styles: readonly string[] = [];
 
-            if (chosen === "add") {
-              tab = { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: false }] };
-            }
+                if (chosen === "add") {
+                  tab = { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: false }] };
+                }
 
-            if (tab !== null) {
-              styles = f.write(tab);
-              fault = chosen === "compiler" || chosen === "bundle" || chosen === "read" ? chosen : null;
+                if (tab !== null) {
+                  styles = f.write(tab);
+                  fault = chosen === "compiler" || chosen === "bundle" || chosen === "read" ? chosen : null;
 
-              if (fault === "compiler") {
-                // A purity error in the tab's TSX: the Compiler check finds it even with `files: []`.
-                writeFileSync(f.view, "export const Tip = () => <b>{Date.now()}</b>;");
+                  if (fault === "compiler") {
+                    // A purity error in the tab's TSX: the Compiler check finds it even with `files: []`.
+                    writeFileSync(f.view, "export const Tip = () => <b>{Date.now()}</b>;");
+                  }
+
+                  if (fault === "bundle") {
+                    writeFileSync(f.entry, 'import {gone} from "./nothing-here.ts"; export const x = gone; ((');
+                  }
+
+                  if (fault === "read") {
+                    styles = [...styles, join(f.dir, `missing-${word}.css`)];
+                  }
+                }
+
+                const options = {
+                  ...f.options,
+                  ...(chosen === "table" ? { programs: [f.options.programs[0]!, f.options.programs[0]!] } : {}),
+                  ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
+                };
+
+                const result = await runBuild(options);
+                const fails = chosen === "table" || fault !== null;
+                reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
+
+                if (fails) {
+                  expect(result, `${chosen} fails typed`).toMatchObject({
+                    _tag: "Failure",
+                    failure: { _tag: "BuildError", ...(chosen === "bundle" ? {} : { reason: chosen }) },
+                  });
+                  expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
+                } else {
+                  expect(result._tag, `${chosen} builds`).toBe("Success");
+                  good = outFiles(f.options.out);
+                  expect(Arr.map(good, ([name]) => name)).toEqual(["brain.mjs"]);
+                }
+
+                expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
               }
-
-              if (fault === "bundle") {
-                writeFileSync(f.entry, 'import {gone} from "./nothing-here.ts"; export const x = gone; ((');
-              }
-
-              if (fault === "read") {
-                styles = [...styles, join(f.dir, `missing-${word}.css`)];
-              }
-            }
-
-            const options = {
-              ...f.options,
-              ...(chosen === "table" ? { programs: [f.options.programs[0]!, f.options.programs[0]!] } : {}),
-              ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
-            };
-
-            const result = await runBuild(options);
-            const fails = chosen === "table" || fault !== null;
-            reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
-
-            if (fails) {
-              expect(result, `${chosen} fails typed`).toMatchObject({
-                _tag: "Failure",
-                failure: { _tag: "BuildError", ...(chosen === "bundle" ? {} : { reason: chosen }) },
-              });
-              expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
-            } else {
-              expect(result._tag, `${chosen} builds`).toBe("Success");
-              good = outFiles(f.options.out);
-              expect(Arr.map(good, ([name]) => name)).toEqual(["brain.mjs"]);
-            }
-
-            expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
-          }
-        }),
-        walks,
+            }),
+            walks,
           ),
-      );
-      expect(
-        Arr.some(["compiler", "bundle", "read"], (fault) => reached.has(`${fault}-after-good`)),
-        "a tab fault was reached after a good build",
-      ).toBe(true);
+        );
+        expect(
+          Arr.some(["compiler", "bundle", "read"], (fault) => reached.has(`${fault}-after-good`)),
+          "a tab fault was reached after a good build",
+        ).toBe(true);
       }),
     { timeout: walkTimeout },
   );
@@ -1078,92 +1090,92 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
     "S1.2 generated boundary walks: a tab that reaches a node: or cloudflare: module, or a stylesheet that names a local file, fails typed and keeps the last good brain",
     () =>
       Effect.gen(function* () {
-      const reached = new Set<string>();
+        const reached = new Set<string>();
         yield* Effect.promise(() =>
           fc.assert(
-        fc.asyncProperty(
-          word,
-          fc.array(fc.record({ move: fc.nat(), word }), { minLength: 3, maxLength: 6 }),
-          async (value, steps) => {
-            const f = tabHome(value);
-            // The walk's state: whether a tab exists, and the last good output (none before the first).
-            let tab: Tab | null = null;
-            let good: Array<Array<string>> | null = null;
+            fc.asyncProperty(
+              word,
+              fc.array(fc.record({ move: fc.nat(), word }), { minLength: 3, maxLength: 6 }),
+              async (value, steps) => {
+                const f = tabHome(value);
+                // The walk's state: whether a tab exists, and the last good output (none before the first).
+                let tab: Tab | null = null;
+                let good: Array<Array<string>> | null = null;
 
-            for (const { move, word } of steps) {
-              // A boundary fault needs a tab to reach; before one exists the walk adds it or builds plain.
-              const allowed = tab === null ? (["add", "plain"] as const) : (["build", "import", "url"] as const);
-              const chosen = allowed[move % allowed.length]!;
-              const detail = Math.floor(move / allowed.length);
+                for (const { move, word } of steps) {
+                  // A boundary fault needs a tab to reach; before one exists the walk adds it or builds plain.
+                  const allowed = tab === null ? (["add", "plain"] as const) : (["build", "import", "url"] as const);
+                  const chosen = allowed[move % allowed.length]!;
+                  const detail = Math.floor(move / allowed.length);
 
-              if (chosen === "add") {
-                tab = { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: false }] };
-              }
+                  if (chosen === "add") {
+                    tab = { label: `p14-${word}`, styles: [{ mark: `a${word}`, trap: false }] };
+                  }
 
-              let styles: readonly string[] = tab === null ? [] : f.write(tab);
-              let label: string = chosen;
+                  let styles: readonly string[] = tab === null ? [] : f.write(tab);
+                  let label: string = chosen;
 
-              if (chosen === "import") {
-                // The module named, how the tab names it, and how many local modules sit between.
-                const specifier = BOUNDARY[detail % BOUNDARY.length]!;
-                const form = NAMING[Math.floor(detail / BOUNDARY.length) % NAMING.length]!;
-                const depth = Math.floor(detail / (BOUNDARY.length * NAMING.length)) % 3;
-                f.chain(depth, form(specifier));
-                label = `import-${Str.split(specifier, ":")[0]}-${depth === 0 ? "direct" : "transitive"}`;
-              }
+                  if (chosen === "import") {
+                    // The module named, how the tab names it, and how many local modules sit between.
+                    const specifier = BOUNDARY[detail % BOUNDARY.length]!;
+                    const form = NAMING[Math.floor(detail / BOUNDARY.length) % NAMING.length]!;
+                    const depth = Math.floor(detail / (BOUNDARY.length * NAMING.length)) % 3;
+                    f.chain(depth, form(specifier));
+                    label = `import-${Str.split(specifier, ":")[0]}-${depth === 0 ? "direct" : "transitive"}`;
+                  }
 
-              if (chosen === "url") {
-                // A local file named by `url()`, in the listed stylesheet or in one it imports. The file exists.
-                const imported = detail % 2 === 1;
-                const ref = LOCAL_URL[Math.floor(detail / 2) % LOCAL_URL.length]!;
-                const first = tab!.styles[0]!;
-                styles = f.write({ ...tab!, styles: [{ ...first, split: imported }, ...tab!.styles.slice(1)] });
-                writeFileSync(join(f.dir, "img.png"), "not a picture");
-                writeFileSync(
-                  imported ? join(f.dir, "parts", "s0.css") : styles[0]!,
-                  `${styleText(first, 0)}.${first.mark}-u { background: url(${ref}); }\n`,
-                );
-                label = `url-${imported ? "imported" : "listed"}`;
-              }
+                  if (chosen === "url") {
+                    // A local file named by `url()`, in the listed stylesheet or in one it imports. The file exists.
+                    const imported = detail % 2 === 1;
+                    const ref = LOCAL_URL[Math.floor(detail / 2) % LOCAL_URL.length]!;
+                    const first = tab!.styles[0]!;
+                    styles = f.write({ ...tab!, styles: [{ ...first, split: imported }, ...tab!.styles.slice(1)] });
+                    writeFileSync(join(f.dir, "img.png"), "not a picture");
+                    writeFileSync(
+                      imported ? join(f.dir, "parts", "s0.css") : styles[0]!,
+                      `${styleText(first, 0)}.${first.mark}-u { background: url(${ref}); }\n`,
+                    );
+                    label = `url-${imported ? "imported" : "listed"}`;
+                  }
 
-              const result = await runBuild({
-                ...f.options,
-                ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
-              });
+                  const result = await runBuild({
+                    ...f.options,
+                    ...(tab === null ? {} : { tab: { entry: f.entry, styles } }),
+                  });
 
-              reached.add(label);
+                  reached.add(label);
 
-              if (chosen === "import" || chosen === "url") {
-                reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
-                expect(result._tag, `${label} fails`).toBe("Failure");
-                expect(result, `${label} fails typed`).toMatchObject({ failure: { _tag: "BuildError" } });
-                expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
-              } else {
-                expect(result._tag, `${label} builds`).toBe("Success");
-                good = outFiles(f.options.out);
-              }
+                  if (chosen === "import" || chosen === "url") {
+                    reached.add(`${chosen}${good === null ? "" : "-after-good"}`);
+                    expect(result._tag, `${label} fails`).toBe("Failure");
+                    expect(result, `${label} fails typed`).toMatchObject({ failure: { _tag: "BuildError" } });
+                    expect(outFiles(f.options.out), "the last good output, or none, is what stays").toEqual(good ?? []);
+                  } else {
+                    expect(result._tag, `${label} builds`).toBe("Success");
+                    good = outFiles(f.options.out);
+                  }
 
-              expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
-            }
-          },
-        ),
-        boundaryWalks,
+                  expect(leftovers(f.home), "no temporary folder outlives an attempt").toEqual([]);
+                }
+              },
+            ),
+            boundaryWalks,
           ),
-      );
+        );
 
-      // A run that never reached a case cannot claim it.
-      for (const label of [
-        "import-node-direct",
-        "import-node-transitive",
-        "import-cloudflare-direct",
-        "import-cloudflare-transitive",
-        "url-listed",
-        "url-imported",
-        "import-after-good",
-        "url-after-good",
-      ]) {
-        expect(reached.has(label), `the walks reached ${label}`).toBe(true);
-      }
+        // A run that never reached a case cannot claim it.
+        for (const label of [
+          "import-node-direct",
+          "import-node-transitive",
+          "import-cloudflare-direct",
+          "import-cloudflare-transitive",
+          "url-listed",
+          "url-imported",
+          "import-after-good",
+          "url-after-good",
+        ]) {
+          expect(reached.has(label), `the walks reached ${label}`).toBe(true);
+        }
       }),
     { timeout: buildTimeout(boundaryWalks.numRuns * 6) },
   );
@@ -1173,134 +1185,137 @@ describe("P14 slice 1: the tab's page and script ride in the one build", () => {
     () =>
       Effect.gen(function* () {
         const { fetch } = yield* promised(() => import("../../cloudflare/fetch.ts"));
-      const secrets = fc.record({
-        token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
-        name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
-      });
 
-      const reached = new Set<string>();
+        const secrets = fc.record({
+          token: fc.stringMatching(/^[A-Za-z0-9]{20,32}$/).map((s) => `sk-p14-${s}`),
+          name: fc.constantFrom("CLOUDFLARE_API_TOKEN", "GITHUB_TOKEN", "NPM_TOKEN", "FABRIKA_SECRET"),
+        });
+
+        const reached = new Set<string>();
         yield* promised(() =>
           fc.assert(
-        fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
-          const f = tabHome(value);
-          // The credentials sit where a build could pick them up: the environment, a token file in
-          // the root and a key file beside the tab's entry. Nothing imports them.
-          vi.stubEnv(name, token);
-          writeFileSync(join(f.home, ".npmrc"), `//registry.npmjs.org/:_authToken=${token}\n`);
-          writeFileSync(join(f.dir, "credentials.json"), JSON.stringify({ token }));
+            fc.asyncProperty(word, secrets, choices, async (value, { token, name }, steps) => {
+              const f = tabHome(value);
+              // The credentials sit where a build could pick them up: the environment, a token file in
+              // the root and a key file beside the tab's entry. Nothing imports them.
+              vi.stubEnv(name, token);
+              writeFileSync(join(f.home, ".npmrc"), `//registry.npmjs.org/:_authToken=${token}\n`);
+              writeFileSync(join(f.dir, "credentials.json"), JSON.stringify({ token }));
 
-          const forms = [
-            token,
-            encodeURIComponent(token),
-            Buffer.from(token).toString("base64"),
-            Buffer.from(token).toString("base64url"),
-            Buffer.from(token).toString("hex"),
-          ];
+              const forms = [
+                token,
+                encodeURIComponent(token),
+                Buffer.from(token).toString("base64"),
+                Buffer.from(token).toString("base64url"),
+                Buffer.from(token).toString("hex"),
+              ];
 
-          const clean = (output: string, label: string) => {
-            for (const form of forms) {
-              expect(pipe(output, Str.includes(form)), `${label} copies no credential`).toBe(false);
-            }
-          };
+              const clean = (output: string, label: string) => {
+                for (const form of forms) {
+                  expect(pipe(output, Str.includes(form)), `${label} copies no credential`).toBe(false);
+                }
+              };
 
-          const tab: Tab = { label: `p14-${value}`, styles: [{ mark: `a${value}`, trap: false }] };
+              const tab: Tab = { label: `p14-${value}`, styles: [{ mark: `a${value}`, trap: false }] };
 
-          for (const { move, word } of steps) {
-            // A failed attempt is possible from any state; a good one repairs the files first.
-            const fail = move % 3 === 0;
-            const styles = f.write(tab);
+              for (const { move, word } of steps) {
+                // A failed attempt is possible from any state; a good one repairs the files first.
+                const fail = move % 3 === 0;
+                const styles = f.write(tab);
 
-            if (fail) {
-              writeFileSync(f.view, `export const Tip = () => <b>{Date.now()} ${word}</b>;`);
-            }
+                if (fail) {
+                  writeFileSync(f.view, `export const Tip = () => <b>{Date.now()} ${word}</b>;`);
+                }
 
-            const { spans, tracer } = tracing();
-            const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
+                const { spans, tracer } = tracing();
+                const result = await runBuild({ ...f.options, tab: { entry: f.entry, styles } }, tracer);
 
-            const seen = JSON.stringify(
-              Arr.map(spans, (s) => ({
+                const seen = JSON.stringify(
+                  Arr.map(spans, (s) => ({
                     name: s.name,
                     attributes: [...s.attributes],
                     events: s.events,
                     status: s.status,
-              })),
-              (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
-            );
+                  })),
+                  (_key, v: unknown) => (typeof v === "bigint" ? String(v) : v),
+                );
 
-            if (result._tag === "Failure") {
-              reached.add("failure");
-              clean(JSON.stringify(result.failure), "an error");
-              clean(String(result.failure), "an error's text");
-              // Spans last: a span that holds a leaked output fails here too, after the output itself.
-              clean(seen, "a span");
-              continue;
-            }
+                if (result._tag === "Failure") {
+                  reached.add("failure");
+                  clean(JSON.stringify(result.failure), "an error");
+                  clean(String(result.failure), "an error's text");
+                  // Spans last: a span that holds a leaked output fails here too, after the output itself.
+                  clean(seen, "a span");
+                  continue;
+                }
 
-            const built = (result as { readonly success: Built }).success;
-            const page = built.assets[PAGE]?.body ?? "";
+                const built = (result as { readonly success: Built }).success;
+                const page = built.assets[PAGE]?.body ?? "";
 
-            for (const [, url] of pipe(page, Str.matchAll(/\b(?:src|href)="([^"]*)"/g))) {
-              clean(url!, "a page URL");
-              clean(decodeURIComponent(url!), "a decoded page URL");
-            }
+                for (const [, url] of pipe(page, Str.matchAll(/\b(?:src|href)="([^"]*)"/g))) {
+                  clean(url!, "a page URL");
+                  clean(decodeURIComponent(url!), "a decoded page URL");
+                }
 
-            for (const [route, asset] of Rec.toEntries(built.assets)) {
-              clean(route, "a route");
-              clean(asset.body, `${route}`);
-            }
+                for (const [route, asset] of Rec.toEntries(built.assets)) {
+                  clean(route, "a route");
+                  clean(asset.body, `${route}`);
+                }
 
-            clean(readFileSync(built.brain, "latin1"), "the brain");
+                clean(readFileSync(built.brain, "latin1"), "the brain");
 
-            // Every carried route as the brain answers it, by its plain and its encoded URL.
-            const port = 8787;
+                // Every carried route as the brain answers it, by its plain and its encoded URL.
+                const port = 8787;
 
-            // A file route reaches no object: each binding answers nothing but the name lookup.
-            const config = StartsTest.fixture(
-              { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
+                // A file route reaches no object: each binding answers nothing but the name lookup.
+                const config = StartsTest.fixture(
+                  { name: "p14", port, person: "p", founder: "f", window: null, build: built.build },
                   (algorithm, data) =>
                     createHash(pipe(algorithm.name, Str.replaceAll("-", ""), Str.toLowerCase))
-                  .update(data)
-                  .digest(),
-            );
+                      .update(data)
+                      .digest(),
+                );
+
                 const binding = {
                   getByName: () => ({ settingsStart: () => Promise.resolve(StartsTest.reply(config)) }),
                 };
-            // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
-            const env = {
-              INSTANCE: JSON.stringify(config),
-              PROJECT: binding,
-              CONNECTION: binding,
-              PROCESS: binding,
-              RECORD: binding,
-            } as unknown as Parameters<typeof fetch>[1];
 
-            for (const route of ["/", ...Rec.keys(built.assets)]) {
-              for (const url of [route, Arr.join(Arr.map(Str.split(route, "/"), encodeURIComponent), "/")]) {
-                const response = await Effect.runPromise(
-                  fetch(
-                    new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
-                    env,
-                    config,
-                    built.assets,
-                  ),
-                );
+                // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only what file routes touch
+                const env = {
+                  INSTANCE: JSON.stringify(config),
+                  PROJECT: binding,
+                  CONNECTION: binding,
+                  PROCESS: binding,
+                  RECORD: binding,
+                } as unknown as Parameters<typeof fetch>[1];
 
-                reached.add(route === "/" && response.headers.get("content-type") === HTML ? "page" : "file");
-                clean(response.url, "a response URL");
-                clean(JSON.stringify([...response.headers]), "response headers");
-                clean(await response.text(), `the answer at ${url}`);
+                for (const route of ["/", ...Rec.keys(built.assets)]) {
+                  for (const url of [route, Arr.join(Arr.map(Str.split(route, "/"), encodeURIComponent), "/")]) {
+                    const response = await Effect.runPromise(
+                      fetch(
+                        new Request(`http://127.0.0.1:${port}${url}`, { headers: { host: `127.0.0.1:${port}` } }),
+                        env,
+                        config,
+                        built.assets,
+                      ),
+                    );
+
+                    reached.add(route === "/" && response.headers.get("content-type") === HTML ? "page" : "file");
+                    clean(response.url, "a response URL");
+                    clean(JSON.stringify([...response.headers]), "response headers");
+                    clean(await response.text(), `the answer at ${url}`);
+                  }
+                }
+
+                clean(seen, "a span");
               }
-            }
-
-            clean(seen, "a span");
-          }
-        }),
-        walks,
+            }),
+            walks,
           ),
-      );
-      expect([...reached].sort(), "the walks reached a served page and a failed attempt").toEqual(
-        expect.arrayContaining(["failure", "page"]),
-      );
+        );
+        expect([...reached].sort(), "the walks reached a served page and a failed attempt").toEqual(
+          expect.arrayContaining(["failure", "page"]),
+        );
       }),
     { timeout: walkTimeout },
   );
@@ -1406,6 +1421,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
 
   const selections = (picks: ReadonlyArray<Pick>, exported = (_: Pick) => "program") =>
     Arr.map(picks, (p) => ({ name: p.name, package: `@p40/${p.module}`, export: exported(p) }));
+
   const onDisk = Effect.fnUntraced(function* () {
     // The digest of the brain's bytes stands for the bytes: any changed byte changes it.
     return (yield* fs.exists(brain)) ? sha(yield* fs.readFile(brain)) : undefined;
@@ -1472,6 +1488,7 @@ const p40Walk = Effect.fn("p40.walk")(function* (tape: ReadonlyArray<number>) {
 
     if (kind === 1) {
       const broken = nameBreaks[Math.floor(n / selected.length / 3) % nameBreaks.length]!(target.name);
+
       return yield* refused(selections(Arr.map(selected, (p) => (p === target ? { ...p, name: broken } : p))), "table");
     }
 

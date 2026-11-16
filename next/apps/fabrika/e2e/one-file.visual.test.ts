@@ -20,17 +20,17 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { BuildError } from "@kampus/libfabrika/runtime/Built";
 import { runsFor } from "@kampus/vitest";
+import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import type * as PlatformError from "effect/PlatformError";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
-import type * as PlatformError from "effect/PlatformError";
-import * as Layer from "effect/Layer";
-import { String as Str, pipe, Array as Arr, Record as Rec } from "effect";
-import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import { chromium } from "playwright";
 import { describe, expect } from "vitest";
@@ -486,80 +486,80 @@ describe("P14 slice 1: the typed counter view in a real tab", () => {
       Effect.gen(function* () {
         const { stepper } = yield* Effect.promise(() => import("@kampus/libfabrika"));
         const { counter } = yield* Effect.promise(() => import("@kampus/counter"));
-    const program = Result.getOrThrow(stepper(counter));
-    const inputs = Rec.keys(counter.inputs);
-    const pressedTypes = new Set<string>();
+        const program = Result.getOrThrow(stepper(counter));
+        const inputs = Rec.keys(counter.inputs);
+        const pressedTypes = new Set<string>();
         yield* Effect.scoped(
-        Effect.gen(function* () {
-          const { built, instance, page } = yield* servedCounter;
-          yield* Effect.promise(async () => {
-            if (fault?.kind === "test") {
-              expect.fail(`scenario: a test that fails after ${fault.at} was acquired`);
-            }
+          Effect.gen(function* () {
+            const { built, instance, page } = yield* servedCounter;
+            yield* Effect.promise(async () => {
+              if (fault?.kind === "test") {
+                expect.fail(`scenario: a test that fails after ${fault.at} was acquired`);
+              }
 
-            // The real root serves the carried page, and the page alone loads the carried script.
-            const root = await page.goto(`${instance.url}/`);
-            expect(root?.status()).toBe(200);
-            expect(root?.headers()["content-type"]).toBe("text/html; charset=utf-8");
-            expect(await root?.text(), "/ is the carried page").toBe(built.assets["/index.html"]?.body);
-            const script = await page.request.get(`${instance.url}/window.js`);
-            expect(await script.text(), "/window.js is the carried script").toBe(built.assets["/window.js"]?.body);
-            await page.waitForFunction(() => "__p14" in globalThis);
-            const count = page.getByRole("status");
+              // The real root serves the carried page, and the page alone loads the carried script.
+              const root = await page.goto(`${instance.url}/`);
+              expect(root?.status()).toBe(200);
+              expect(root?.headers()["content-type"]).toBe("text/html; charset=utf-8");
+              expect(await root?.text(), "/ is the carried page").toBe(built.assets["/index.html"]?.body);
+              const script = await page.request.get(`${instance.url}/window.js`);
+              expect(await script.text(), "/window.js is the carried script").toBe(built.assets["/window.js"]?.body);
+              await page.waitForFunction(() => "__p14" in globalThis);
+              const count = page.getByRole("status");
 
-            const button = (input: string) =>
-              page.getByRole("button", {
-                name: Option.getOrThrow(Arr.findFirst(Rec.toEntries(counter.inputs), ([name]) => name === input))[1]
-                  .description,
-              });
+              const button = (input: string) =>
+                page.getByRole("button", {
+                  name: Option.getOrThrow(Arr.findFirst(Rec.toEntries(counter.inputs), ([name]) => name === input))[1]
+                    .description,
+                });
 
-            const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
-            const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
+              const pressed = () => page.evaluate(() => globalThis.__p14?.pressed ?? []);
+              const render = (view: unknown) => page.evaluate((data) => globalThis.__p14?.render(data), view);
 
-            // Each walk starts at the program's real init; each step reads the folded model, picks an
-            // input the program accepts from it, presses its button, then installs the stepped view.
-            await fc.assert(
-              fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (picks) => {
-                let step = program.init(null);
-                assert(step._tag === "stepped");
-                await render(step.view);
-                const start = (await pressed()).length;
-                expect(await count.textContent()).toBe(String((step.view as { count: number }).count));
-                expect(await count.evaluate((e) => getComputedStyle(e).color), "the page's styles apply").toBe(
-                  "rgb(12, 34, 56)",
-                );
+              // Each walk starts at the program's real init; each step reads the folded model, picks an
+              // input the program accepts from it, presses its button, then installs the stepped view.
+              await fc.assert(
+                fc.asyncProperty(fc.array(fc.nat(), { minLength: 1, maxLength: 10 }), async (picks) => {
+                  let step = program.init(null);
+                  assert(step._tag === "stepped");
+                  await render(step.view);
+                  const start = (await pressed()).length;
+                  expect(await count.textContent()).toBe(String((step.view as { count: number }).count));
+                  expect(await count.evaluate((e) => getComputedStyle(e).color), "the page's styles apply").toBe(
+                    "rgb(12, 34, 56)",
+                  );
 
-                for (const [n, pick] of picks.entries()) {
-                  const model = step.model;
-                  const available = Arr.filter(inputs, (type) => program.step(model, { type })._tag === "stepped");
-                  const type = available[pick % available.length]!;
-                  pressedTypes.add(type);
-                  await button(type).click();
-                  const sent = (await pressed()).slice(start);
+                  for (const [n, pick] of picks.entries()) {
+                    const model = step.model;
+                    const available = Arr.filter(inputs, (type) => program.step(model, { type })._tag === "stepped");
+                    const type = available[pick % available.length]!;
+                    pressedTypes.add(type);
+                    await button(type).click();
+                    const sent = (await pressed()).slice(start);
                     expect(sent, "each press emits one Msg, the program's own").toEqual([
                       ...sent.slice(0, n),
                       { type },
                     ]);
                     expect(Arr.every(sent, (m) => Exit.isSuccess(Schema.decodeUnknownExit(counter.msg)(m)))).toBe(true);
-                  // The view never steps the program: until the next view arrives, the count stays.
-                  expect(await count.textContent(), "a press alone changes nothing shown").toBe(
-                    String((step.view as { count: number }).count),
-                  );
-                  step = program.step(model, { type });
-                  assert(step._tag === "stepped");
-                  await render(step.view);
-                  expect(await count.textContent(), "the shown count is the program's").toBe(
-                    String((step.view as { count: number }).count),
-                  );
-                }
-              }),
-              // Each step is a real click and render round trip in Chromium: 20 walks of up to 10 steps.
-              { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
-            );
-          });
-        }),
+                    // The view never steps the program: until the next view arrives, the count stays.
+                    expect(await count.textContent(), "a press alone changes nothing shown").toBe(
+                      String((step.view as { count: number }).count),
+                    );
+                    step = program.step(model, { type });
+                    assert(step._tag === "stepped");
+                    await render(step.view);
+                    expect(await count.textContent(), "the shown count is the program's").toBe(
+                      String((step.view as { count: number }).count),
+                    );
+                  }
+                }),
+                // Each step is a real click and render round trip in Chromium: 20 walks of up to 10 steps.
+                { seed: 119120, numRuns: runsFor({ fast: 3, full: 20 }) },
+              );
+            });
+          }),
         ).pipe(Effect.raceFirst(stopped));
-    expect([...pressedTypes].sort(), "the walks pressed every input").toEqual([...inputs].sort());
+        expect([...pressedTypes].sort(), "the walks pressed every input").toEqual([...inputs].sort());
       }),
   );
 });

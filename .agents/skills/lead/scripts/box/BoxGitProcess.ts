@@ -1,13 +1,13 @@
+import { Array as Arr, String as Str, pipe } from "effect";
 // BoxGitProcess.layer: the BoxGit service on real git, run from MAIN. Git sees neither inherited
 // settings nor the box's own config, hooks, fsmonitor or attributes: the caller passes an
 // environment with every GIT_ variable gone, and each call turns the box's programs off.
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
-import { Array as Arr, String as Str, pipe } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import * as Rec from "effect/Record";
+import * as Stream from "effect/Stream";
 import { BoxGit, BoxGitError, type Inspection } from "./BoxGit.ts";
 
 /** Settings no box config can turn back on, so inspection never runs a program from the box. */
@@ -98,6 +98,7 @@ export const layer = (
           Effect.map(git(at, ["for-each-ref", "--format=%(refname) %(objectname)"]), (out) =>
             Arr.map(lines(out), (line) => {
               const space = Option.getOrElse(pipe(line, Str.indexOf(" ")), () => -1);
+
               return { ref: pipe(line, Str.slice(0, space)), oid: pipe(line, Str.slice(space + 1)) };
             }),
           ),

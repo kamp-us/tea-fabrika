@@ -1855,9 +1855,9 @@ describe("p35 Cmd order, replay and recorded failures", () => {
           yield* r.due(40);
           expect(w.workCalls()).toBe(1);
           expect((yield* r.open("a")).view).toMatchObject({ count: 1, replies: 1, wake: 50 });
-          expect(Arr.filter(yield* inbox, (row) => Str.includes('"type":"timer"')(JSON.stringify(row.body)))).toHaveLength(
-            1,
-          );
+          expect(
+            Arr.filter(yield* inbox, (row) => Str.includes('"type":"timer"')(JSON.stringify(row.body))),
+          ).toHaveLength(1);
           expect(w.alarms.at(-1)).toBe(50);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -2974,8 +2974,8 @@ describe("P11 recovery gaps and durable installation", () => {
               ? undefined
               : Arr.filter(
                   saved.cmds,
-              (cmd) => typeof cmd === "object" && cmd !== null && "id" in cmd && cmd.id === `${PROCESS}/2/0`,
-            ),
+                  (cmd) => typeof cmd === "object" && cmd !== null && "id" in cmd && cmd.id === `${PROCESS}/2/0`,
+                ),
           ).toMatchObject([{ id: `${PROCESS}/2/0`, state: "dispatched", cmd: { type: "work", n: 73 } }]);
         }).pipe(Effect.provide(w.layer())),
       );
@@ -3421,7 +3421,8 @@ describe("P11 monitoring, content and storage failures", () => {
                   { concurrency: 1 },
                 );
                 expect(Formatter.formatJson(content)).toContain(marker);
-                const contentSpan = failed[
+                const contentSpan =
+                  failed[
                     Option.getOrElse(
                       Arr.findFirstIndex(content, (value) => Str.includes(marker)(JSON.stringify(value))),
                       () => -1,

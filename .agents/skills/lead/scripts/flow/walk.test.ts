@@ -1,12 +1,12 @@
 // runFlow on the real tea engine and tea's own file store, in a temp folder, with fake runners
 // through `Runners.layer`: no git, network or agent.
 import { NodeServices } from "@effect/platform-node";
+import { Array as Arr } from "effect";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Rec from "effect/Record";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Rec from "effect/Record";
-import { Array as Arr } from "effect";
 import { describe, expect, it } from "vitest";
 import * as Flow from "./Flow.ts";
 import { landDecision } from "./flows/land-decision.ts";
@@ -30,6 +30,7 @@ const fakes = (answers: Readonly<Record<string, (n: number) => Outcome.Outcome>>
       (step: Step.Step) =>
         Effect.sync(() => {
           calls.push(step.name);
+
           return Outcome.answer(answer(Arr.filter(calls, (c) => c === name).length));
         }),
     ]),

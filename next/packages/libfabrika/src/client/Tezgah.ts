@@ -17,10 +17,10 @@
  * superseded is kept. Moves dropped together are taken one at a time, oldest first.
  */
 import { Cmd, Machine } from "@demlik/tea/effect";
-import * as Result from "effect/Result";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
 import * as Option from "effect/Option";
+import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { apply } from "../runtime/Patch.ts";
 import { focus } from "../tezgah/Layout.ts";
 import { CursorKey, TezgahView, TileId } from "../tezgah/Workspace.ts";
@@ -131,6 +131,7 @@ const sentAs = (p: Mutation): string | null => (p.state._tag === "waiting" ? nul
 /** The focus the window draws on its workspace with `pending` over the server state. */
 const drawnFocus = (s: TezgahClient, pending: ReadonlyArray<Mutation>): string | null => {
   const view = optimisticState({ ...s, pendingMutations: pending });
+
   return view === null
     ? null
     : Arr.findFirst(view.workspaces, (w) => w.n === s.workspace).pipe(
@@ -241,6 +242,7 @@ export const tezgahMachine = Machine.make({
     // tezgah's state did not change, so the move is dropped now: the drawn focus goes back to the server's.
     refused: (s, m): Step => {
       const gone = Arr.filter(s.pendingMutations, (p) => sentAs(p) === m.letter);
+
       return [
         { ...s, pendingMutations: Arr.filter(s.pendingMutations, (p) => sentAs(p) !== m.letter) },
         Arr.map(gone, () => settled({ letter: m.letter, result: "overridden", ms: m.ms })),

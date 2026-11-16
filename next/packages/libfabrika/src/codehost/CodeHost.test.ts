@@ -14,6 +14,7 @@ it("L1: Path refuses a whole dot or parent segment at any position", () => {
   const segments = fc
     .array(fc.constantFrom("a b", "dir/[x]", ".dot"))
     .map((paths) => Arr.flatMap(paths, (path) => Str.split(path, "/")));
+
   const dotPaths = segments.chain((parts) =>
     fc.integer({ min: 0, max: parts.length }).map((index) => ({
       dot: Arr.join([...parts.slice(0, index), ".", ...parts.slice(index)], "/"),

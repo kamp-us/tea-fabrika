@@ -36,6 +36,7 @@ export const lintIssues = (workflows: Readonly<Record<string, string>>): string[
     const workflow = parsed.success;
 
     const top = touchesIssues(workflow["permissions"]) ? [`${path}: the workflow's token: ${ISSUES_RULE}`] : [];
+
     const jobs = Rec.toEntries(map(workflow["jobs"]))
       .filter(([name, job]) => {
         const grant = map(job)["permissions"];

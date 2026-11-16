@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import {
   SPACE,
   refused,

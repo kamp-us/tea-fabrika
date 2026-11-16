@@ -14,15 +14,15 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { Agent } from "@kampus/fabrika-old";
 import { nameOf } from "@kampus/pipeline/stages/outcome";
+import { Array as Arr, pipe, String as Str } from "effect";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
+import * as Formatter from "effect/Formatter";
+import * as Option from "effect/Option";
 import * as Order from "effect/Order";
 import * as Rec from "effect/Record";
-import * as Option from "effect/Option";
-import * as Formatter from "effect/Formatter";
-import { Array as Arr, pipe, String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { type Answer, answerFor, NO_SPENT, sendsFrom } from "./agents.ts";
@@ -68,6 +68,7 @@ import * as RunId from "./runid.ts";
 
 // Today's tooling. The machine is pure and stepped by hand here; nothing runs an agent.
 const options = { seed: 119120, numRuns: 300 };
+
 const byPath = Order.mapInput(Order.String, (c: { readonly path: string }) => c.path);
 
 const ask = {
@@ -431,6 +432,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
             "\tanswer: Schema.Json,",
             closed ? pipe(fence, Str.slice(0, 3)) : "",
           ];
+
           const cmd = ended(step, Arr.join(["merge-ready; findings: 0", ...block, own.text], "\n"));
           expect(cmd.outcome).toBe(closed && own.name !== null ? own.name : "stuck:no_answer");
         },
@@ -445,6 +447,7 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
     fc.assert(
       fc.property(verdict, lines, chatter, (first, said, between) => {
         const texts = Arr.map(said, ([l, w, f]) => `${w}${f(l.text)}${w}`);
+
         const read = {
           head: ask.base,
           commits: 0,
@@ -534,15 +537,16 @@ describe("T557 drive reads exactly one answer line, today's tooling", () => {
   it("pinned: p16b review7's two answer lines under changes: 1 are stuck, not done (2026-11-10)", () => {
     const report = Arr.join(
       [
-      "changes: 1; tickets: 2",
-      "",
-      "One thing blocks.",
-      "",
-      "answer: send tests the rule misses two cases",
-      "answer: done",
+        "changes: 1; tickets: 2",
+        "",
+        "One thing blocks.",
+        "",
+        "answer: send tests the rule misses two cases",
+        "answer: done",
       ],
       "\n",
     );
+
     const cmd = ended("review", report);
     expect(cmd.outcome).toBe("stuck:no_answer");
     expect(cmd.exit).toBe(30);
@@ -674,6 +678,7 @@ describe("T566 a mutation step while another Docker box runs is refused before i
 
           return alive;
         });
+
         const n = Number(text === null ? undefined : Str.trim(text));
         const named = text !== null && Number.isInteger(n) && n > 0;
         expect(holder).toBe(named && alive ? n : null);
@@ -749,7 +754,9 @@ describe("T429 drive names the commits check's rule and commit, today's tooling"
           Arr.map((a) => JSON.stringify({ _tag: "stuck", ...a })),
           Arr.join("\n"),
         );
+
         const said = commitsSaid({ code: 1, out, err: "commits: stuck ..." }, quest);
+
         const named = pipe(
           answers,
           Arr.filter(held),
@@ -1058,6 +1065,7 @@ describe("T341 a step commit's subject says what the step did, today's tooling",
           { ticket: "7", step: s },
           alone ? `${answer}\n` : `\n## ${prose}\n\nmore\n${answer}\n`,
         );
+
         expect(subject).toBe(`T7 ${s}: ${pipe(alone ? reason : prose, Str.slice(0, 72))}`);
         expect(subject).not.toContain("\n");
         expect(subject).not.toContain("{");
@@ -1217,6 +1225,7 @@ describe("T341 a step's agent runs in its own box, on the row its step allows, t
       const out = args[args.indexOf("--out") + 1] ?? "";
       mkdirSync(out, { recursive: true });
       writeFileSync(join(out, "mutbox.json"), "{}\n");
+
       return { code: 0, out: Formatter.formatJson({ outcome: "done", reason: "", detail: "" }) };
     });
 
@@ -1450,10 +1459,12 @@ describe("a step is told its owned paths first, today's tooling (ticket 430)", (
         }
 
         const listed = Arr.map([...pipe(head, Str.matchAll(/^- (\S+)$/gm))], (m) => m[1]);
+
         const allowed = Arr.filter(
           Rec.keys(given),
           (p) => given[p] === step || (step === "mutation" && given[p] === "tests"),
         );
+
         expect(listed).toEqual(Arr.sort(allowed, Order.String));
         expect(head).toContain("answer ask");
         expect(pipe(head, Str.endsWith("---\n\n"))).toBe(true);
@@ -1714,6 +1725,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         saved: readFileSync(prompt, "utf8"),
       };
     }).pipe(Effect.provide(NodeServices.layer));
+
   // What the reads find after such a step: the box untouched, no commit, no report of an agent's.
   const readNothing = {
     head: ask.base,
@@ -1840,6 +1852,7 @@ describe("drive runs a mutation step's Stryker in the container first, today's t
         (name, tests, base, root, summary, skip) => {
           const report = `${JSON.stringify({ outcome: skip ? "skip" : "done", ...summary })}\n`;
           const brief = `Use the mutation skill.\nRELATED=${Arr.join(tests, ",")}\nSeed 119120.\n`;
+
           return drafted(
             (args) =>
               Effect.sync(() => {
@@ -1945,6 +1958,7 @@ describe("T673 a step's start is timed, today's tooling", () => {
           Arr.map(([n, ms, junk]) => `${junk}\nphase ${n} ${ms}`),
           Arr.join("\n"),
         );
+
         expect(phasesIn(text)).toEqual(Arr.map(parts, ([n, ms]) => ({ name: n, ms })));
       }),
       options,

@@ -39,7 +39,10 @@ it("refuses each clock read in next/ product code, and passes what reads no cloc
         `next/apps/fabrika/${file}.ts`,
         `next/programs/counter/src/${file}.ts`,
       ];
-      const result = await plant(Rec.fromEntries(Arr.map(paths, (path) => [path, Arr.join([...reads(on), ...kept(at)], "\n")])));
+
+      const result = await plant(
+        Rec.fromEntries(Arr.map(paths, (path) => [path, Arr.join([...reads(on), ...kept(at)], "\n")])),
+      );
 
       for (const path of paths) {
         expect([path, result(CODE, path)]).toEqual([path, [1, 2, 3]]);
@@ -59,6 +62,7 @@ it("leaves tests, test helpers, .tsx views and today's paths to their own rules"
         `packages/fabrika/src/${file}.ts`,
         `.agents/skills/x/scripts/${file}.ts`,
       ];
+
       const result = await plant(Rec.fromEntries(Arr.map(paths, (path) => [path, Arr.join(reads(on), "\n")])));
 
       for (const path of paths) {

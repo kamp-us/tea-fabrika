@@ -1,11 +1,11 @@
 import { expect, it } from "@effect/vitest";
+import { Array as Arr, Record as Rec, String as Str } from "effect";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as SchemaIssue from "effect/SchemaIssue";
-import * as Option from "effect/Option";
-import { Array as Arr, Record as Rec, String as Str } from "effect";
 import * as fc from "fast-check";
 import { merger } from "./Merger.ts";
 import * as Settings from "./Settings.ts";
@@ -77,9 +77,11 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
           expect(empty.value).toEqual(defaults);
           // pinned: the approved settings table starts with five rounds and a 256-entry line.
           expect(empty.value).toMatchObject({ rounds: 5, most: 256 });
+
           const checksDeclaration = Option.getOrThrow(
             Arr.findFirst(Settings.all.declarations, (d) => d.path === "queue.checks"),
           );
+
           expect(checksDeclaration.default).toEqual({ rows: [], docs: [], code: [] });
         }
 
@@ -179,6 +181,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
       expect(declarations.length).toBeGreaterThan(0);
       const declaration = declarations[pick % declarations.length]!;
       const [group, key] = Str.split(declaration.path, ".") as [string, string];
+
       const parse = (value: unknown) =>
         Effect.runSyncExit(Settings.all.parse(ConfigProvider.fromUnknown({ [group]: { [key]: value } })));
 
@@ -197,6 +200,7 @@ it("L11: every declared numeric setting refuses zero, negatives and fractions at
                 )
               : [],
           );
+
           expect(Arr.some(paths, (path) => Str.includes(declaration.path)(path))).toBe(true);
         }
       }

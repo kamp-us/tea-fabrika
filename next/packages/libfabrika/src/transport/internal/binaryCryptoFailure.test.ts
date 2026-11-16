@@ -9,9 +9,9 @@ describe("a rejected WebCrypto Promise", () => {
     Effect.gen(function* () {
       const error = yield* Effect.flip(
         subtle("importKey", "raw", new Uint8Array(3), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]),
-    );
+      );
 
-    assert.strictEqual(error._tag, "WebCryptoError");
+      assert.strictEqual(error._tag, "WebCryptoError");
     }),
   );
 });

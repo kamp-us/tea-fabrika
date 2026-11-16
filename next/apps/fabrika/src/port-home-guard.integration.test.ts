@@ -12,14 +12,14 @@ import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
+import { Array as Arr, String as Str } from "effect";
 import * as Arbitrary from "effect/Arbitrary";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
-import { Array as Arr, String as Str } from "effect";
+import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { type Hit, machinePaths, Place } from "./port-home.test-support.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -82,7 +82,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
       : plant.form === "plain"
         ? planted.full
         : plant.form === "json"
-          ? Str.slice(1, -1)(JSON.stringify(planted.full))
+          ? Str.slice(1, -1)(Formatter.formatJson(planted.full))
           : (yield* path.toFileUrl(planted.full)).href;
 
   let expected: typeof Hit.Type | null = null;
@@ -118,7 +118,7 @@ const writeHome = Effect.fnUntraced(function* (home: string, base: string, input
     );
 
     if (hit) {
-      const at = Option.getOrElse(Str.indexOf(Str.slice(1, -1)(JSON.stringify(value)))(body), () => -1);
+      const at = Option.getOrElse(Str.indexOf(Str.slice(1, -1)(Formatter.formatJson(value)))(body), () => -1);
       expected = {
         file: name,
         place: Place.cases.byte.make({ offset: encoder.encode(Str.slice(0, at)(body)).length }),

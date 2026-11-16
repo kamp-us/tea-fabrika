@@ -16,11 +16,12 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
-import * as Schema from "effect/Schema";
 import * as Arr from "effect/Array";
+import { pipe } from "effect/Function";
 import * as Function from "effect/Function";
 import * as Option from "effect/Option";
-import { pipe, String as Str } from "effect";
+import * as Schema from "effect/Schema";
+import * as Str from "effect/String";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -459,6 +460,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
         const shown = Arr.filter(tiles, (t) => live.includes(t.id));
         const strips = stripsAt(w, { width, height });
         const byId = new Map(Arr.map(shown, (t) => [t.id, t]));
+
         const root = parse(
           renderToStaticMarkup(
             createElement(Desk, {
@@ -469,6 +471,7 @@ describe("Desk S4 L31: a strip in the markup is a real button named by its progr
             } as Parameters<typeof Desk>[0]),
           ),
         );
+
         const mains = Arr.filter(all(root), isMain);
         expect(mains, "L31: the markup has one main").toHaveLength(1);
         const open = Arr.filter(live, (t) => !strips.has(t));

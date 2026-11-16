@@ -4,16 +4,16 @@ import { join } from "node:path";
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Arr from "effect/Array";
-import * as Formatter from "effect/Formatter";
 import * as fc from "fast-check";
 import { processId } from "../../Id.test-support.ts";
 import { BrainEvent } from "../../runtime/BrainEvent.ts";
@@ -86,6 +86,7 @@ describe("P12 local brain life", () => {
     const atCap: [number, number, number] = [500_000_000, 417, 500_000_000];
     const aboveCap: [number, number, number] = [500_000_001, 417, 500_000_000];
     const limit = fc.integer({ min: 1, max: Number.MAX_SAFE_INTEGER });
+
     return fc.assert(
       fc.asyncProperty(fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER }), child, limit, (bytes, pid, limit) =>
         runNode(
@@ -157,6 +158,7 @@ describe("P12 durable brain outbox", () => {
   for (const reader of ["pending", "last"] as const) {
     it(`malformed saved ${reader} returns BrainError without a defect`, () => {
       const schema = reader === "pending" ? BrainEvent : Schema.NonEmptyString;
+
       return fc.assert(
         fc.asyncProperty(
           fc.jsonValue().filter((raw) => !Schema.is(schema)(raw)),
@@ -240,7 +242,9 @@ describe("P12 durable brain outbox", () => {
                   files.delete(from);
                 }),
             });
+
             const path = Effect.runSyncWith(context)(Path.Path.pipe(Effect.provide(Path.layer)));
+
             const paths = Layer.succeed(Path.Path, {
               ...path,
               join: (...parts) => {
@@ -269,6 +273,7 @@ describe("P12 durable brain outbox", () => {
                 Arr.map(rows, (row) => JSON.stringify(row)),
                 "\n",
               ) + (rows.length > 0 ? "\n" : "");
+
             yield* Effect.scoped(
               Effect.gen(function* () {
                 const outbox = yield* brainOutbox(folder);

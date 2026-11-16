@@ -8,15 +8,15 @@
 // driver and no ledger file (0043 rule 11, 0062).
 import { describe, expect, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Arr from "effect/Array";
 import * as Brand from "effect/Brand";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Formatter from "effect/Formatter";
-import * as Arr from "effect/Array";
-import { String as Str } from "effect";
+import * as Str from "effect/String";
 import * as Id from "../Id.ts";
 import { Recipient, inSignalSpace } from "../processes/Process.ts";
 import { signalId } from "../processes/Process.ts";

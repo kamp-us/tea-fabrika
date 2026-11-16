@@ -73,18 +73,18 @@
 //   - A plan with no "Product lines expected" column and no slices says so: it records no size.
 
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { Array as Arr, String as Str, pipe } from "effect";
+import { Argument, Command } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
-import * as Predicate from "effect/Predicate";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 import type * as PlatformError from "effect/PlatformError";
-import { Array as Arr, String as Str, pipe } from "effect";
-import { Argument, Command } from "effect/cli";
+import * as Predicate from "effect/Predicate";
 import { ChildProcess } from "effect/process";
+import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 /**
  * Past this many product lines, `diff` asks whether the pull request should have been sliced. Advice
@@ -254,6 +254,7 @@ const splitRow = (row: string): ReadonlyArray<string> => {
   }
 
   cells.push(pipe(row, Str.slice(start), Str.trim));
+
   return cells.slice(pipe(row, Str.startsWith("|")) ? 1 : 0, start === row.length ? -1 : undefined);
 };
 
@@ -264,6 +265,7 @@ const NUMBER = /^~?\s*(\d{1,3}(?:,\d{3})+|\d+)(?!\d)/;
 /** The whole number a cell starts with, or null when it starts with a word. */
 export const numberIn = (cell: string): number | null => {
   const found = NUMBER.exec(plain(cell));
+
   return found?.[1] === undefined ? null : Number(pipe(found[1], Str.replaceAll(",", "")));
 };
 
@@ -293,8 +295,8 @@ export const readPlan = (text: string): PlanSize => {
       inTable = true;
       column = Option.getOrNull(
         Arr.findFirstIndex(splitRow(trimmed), (cell) =>
-        pipe(plain(cell), Str.toLowerCase, Str.startsWith("product lines")),
-      ),
+          pipe(plain(cell), Str.toLowerCase, Str.startsWith("product lines")),
+        ),
       );
       table = column === null ? table : (table ?? 0);
     } else if (column !== null) {
@@ -322,6 +324,7 @@ export const readPlan = (text: string): PlanSize => {
     slices: Arr.map(slices, ({ order, text }) => {
       const estimate = LINES.exec(text)?.[1];
       const name = Str.trim(Str.split(plain(text), /[:.]/)[0]);
+
       return { order, name, lines: estimate === undefined ? null : Number(pipe(estimate, Str.replaceAll(",", ""))) };
     }),
   };

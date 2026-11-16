@@ -1,15 +1,16 @@
 /**
  * One Rolldown bundle as an Effect, and the program bundles built on it.
  */
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Arr from "effect/Array";
 import * as Formatter from "effect/Formatter";
-import { String as Str, pipe } from "effect";
+import { pipe } from "effect/Function";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
 import * as Rec from "effect/Record";
+import * as Str from "effect/String";
 import {
   rolldown,
   VERSION,
@@ -199,6 +200,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
 
   for (const [name, entry] of Rec.toEntries(options.programs)) {
     const code = `import {programBox} from "@kampus/libfabrika/box"; import {${entry.name} as program} from ${Formatter.formatJson(entry.module)}; export default programBox(program, ${Formatter.formatJson(name)});`;
+
     const output = yield* bundle(
       "fabrika:program",
       [
@@ -219,6 +221,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       ],
       { phase: "program", ...(options.cwd === undefined ? {} : { cwd: options.cwd }) },
     );
+
     const source = Arr.join(
       Arr.map(
         Arr.filter(output.output, (o) => o.type === "chunk"),
@@ -226,6 +229,7 @@ export const bundlePrograms = Effect.fn("build.bundlePrograms")(function* (optio
       ),
       "\n",
     );
+
     programs[name] = { hash: yield* hash(source), source };
   }
 

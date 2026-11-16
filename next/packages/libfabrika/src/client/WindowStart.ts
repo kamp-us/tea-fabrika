@@ -9,10 +9,10 @@ import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as Schema from "effect/Schema";
 import * as Socket from "effect/socket/Socket";
 import type * as Stream from "effect/Stream";
-import * as Formatter from "effect/Formatter";
 import * as Id from "../Id.ts";
 import { TileId } from "../tezgah/Workspace.ts";
 import { ClientKey, type Identity } from "../transport/ClientKey.ts";
@@ -200,6 +200,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
           sentAt: yield* sentAt,
           signed,
         };
+
         yield* send(cmd.dial, Formatter.formatJson({ jsonrpc: "2.0", id: cmd.id, method: "initialize", params })).pipe(
           Effect.mapError(() => F.closed.make({})),
         );
@@ -209,6 +210,7 @@ export const start = Effect.fn("WindowStart.start")(function* (options: StartOpt
       enroll: Effect.fn("Client.enroll")(function* (cmd) {
         const knock = { jsonrpc: "2.0", id: cmd.id, method: "gateway.knock", params: { label: options.client.label } };
         yield* send(cmd.dial, Formatter.formatJson(knock)).pipe(Effect.mapError(() => F.closed.make({})));
+
         return null;
       }),
       persist: Effect.fn("Client.persist")(function* () {
