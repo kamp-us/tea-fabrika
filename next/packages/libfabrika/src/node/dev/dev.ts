@@ -111,8 +111,9 @@ const bucketChecksum = Effect.fn(function* <E>(work: Effect.Effect<unknown, E>) 
  *
  * **Details**
  *
- * `deploy` gets a context that holds the runtime's lifecycle hook and the control plugin, and a
- * scope of its own for the runtime. The driver waits for the control socket to listen, for at most
+ * `deploy` gets a context that holds the runtime's lifecycle hook, the control plugin and the
+ * caller's `ChildProcessSpawner`, through which workerd is spawned, and a scope of its own for the
+ * runtime. The driver waits for the control socket to listen, for at most
  * 30 seconds, and for the first start. It saves every start, replace, kill, exit, restart wait,
  * brake and stop as a `BrainEvent` in a durable outbox under `home` and sends them to the project,
  * so an event outlives a crash on either side. Once a second it samples the runtime's memory, and
