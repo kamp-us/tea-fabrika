@@ -11,7 +11,6 @@
         // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
         // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
         "barrelImportPackages": ["effect"],
-        // preferSchemaTaggedError is named here too, as L3 of 0573 asks of a tsconfig with its own plugins.
         "diagnosticSeverity": { "preferBarrelImport": "error", "preferSchemaTaggedError": "error" },
         // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
         // The globs read from this folder. One entry per set of folders; its comment names its checks.

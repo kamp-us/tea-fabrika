@@ -6,7 +6,6 @@
         "name": "@effect/language-service",
         // A library imports each Effect module by its path (0577). All of tuval is at zero.
         "namespaceImportPackages": ["effect"],
-        // preferSchemaTaggedError is named here too, as L3 of 0573 asks of a tsconfig with its own plugins.
         "diagnosticSeverity": { "preferNamespaceImport": "error", "preferSchemaTaggedError": "error" },
         // Effect checks locked at error where they reached zero (ticket 1075, slices E4 to E25).
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
