@@ -19,6 +19,15 @@
               }
             }
           },
+          // These folders: effectSucceedWithVoid (E20).
+          {
+            "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/cloudflare/**/*.ts", "src/codehost/**/*.ts", "src/coordination/**/*.ts", "src/desktop/**/*.ts", "src/gateway/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/presence/**/*.ts", "src/processes/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/settings/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/tezgah/**/*.ts", "src/transport/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "effectSucceedWithVoid": "error"
+              }
+            }
+          },
           // These folders: schemaNumber (E4).
           {
             "include": ["src/*.ts", "src/access/**/*.ts", "src/ci/**/*.ts", "src/client/**/*.ts", "src/codehost/**/*.ts", "src/coordination/**/*.ts", "src/desktop/**/*.ts", "src/ledger/**/*.ts", "src/node/**/*.ts", "src/packs/**/*.ts", "src/permissions/**/*.ts", "src/presence/**/*.ts", "src/processes/**/*.ts", "src/repositories/**/*.ts", "src/schedules/**/*.ts", "src/settings/**/*.ts", "src/tasks/**/*.ts", "src/telemetry/**/*.ts", "src/tezgah/**/*.ts", "src/transport/**/*.ts"],

@@ -11,7 +11,7 @@
         // The globs read from this folder. One entry per set of folders; its comment names its checks.
         "overrides": [
           // Whole package: schemaNumber (E4), preferTypedSchemaDecoder (E5), unnecessaryArrowBlock
-          // (E8), preferUnsafeConstructor (E16).
+          // (E8), preferUnsafeConstructor (E16), effectSucceedWithVoid (E20).
           {
             "include": ["**/*.ts", "**/*.tsx"],
             "options": {
@@ -19,7 +19,8 @@
                 "schemaNumber": "error",
                 "preferTypedSchemaDecoder": "error",
                 "unnecessaryArrowBlock": "error",
-                "preferUnsafeConstructor": "error"
+                "preferUnsafeConstructor": "error",
+                "effectSucceedWithVoid": "error"
               }
             }
           },

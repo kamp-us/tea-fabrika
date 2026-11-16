@@ -56,13 +56,13 @@ const scan = (
 
       for (const name of yield* fs.readDirectory(dir, { recursive: true })) {
         const file = path.join(dir, name);
-        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+        const info = yield* fs.stat(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (info === undefined || info.type !== "File" || keys.includes(file)) {
           continue;
         }
 
-        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.succeed(undefined)));
+        const bytes = yield* fs.readFile(file).pipe(Effect.catchIf(gone, () => Effect.void));
 
         if (bytes !== undefined) {
           const label = `home${pass === "running" ? " (running)" : ""} ${file.slice(dir.length)}`;
