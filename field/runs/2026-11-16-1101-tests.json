@@ -1,0 +1,80 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-1101-tests",
+  "ticket": "1101",
+  "pr": null,
+  "started": "2026-11-16T01:51:42-08:00",
+  "ended": "2026-11-16T02:09:08-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Tests step for ticket 1101 (the box-memory ticket), lead tooling, fast-tracked, on branch fabrikalfa/ts-api-real-error at origin/main 358a7ea80. Three laws are written and red at the branch head. Law A (next/): lint:promise-types reports the kill, never the release's EPIPE. promise-types.ts has no seam to hand it a TypeScript API (main builds `new API` itself), so the law is written against the seam the build must add, `lintPromiseTypes({ open, root, configs })`, and is red now because that export is missing. Law B (tooling): our patched @demlik/code-graph reports the kill through its public entries `./resolve` and `./api`, with the sync TypeScript API replaced for code-graph's files by a Node module hook; red now with the EPIPE in place of the EOF, and with the server never killed. Part 2 is small (one argument of the lint script in package.json), so it has a law too: pnpm lint holds lint:kind, lint:dead and lint:promise-types in one runner part; red now with three parts. Each law was planted and each plant turned it red; each was also seen green once on a sketch of the fix, then every product and installed file was restored by copy.",
+  "laws": [
+    {
+      "law": "next/apps/fabrika/src/exam/promise-types.test.ts: a TypeScript API child killed mid-run fails lint:promise-types with the kill, never the release's EPIPE",
+      "kind": "test",
+      "red": "TypeError: (0 , __vite_ssr_import_3__.lintPromiseTypes) is not a function. The seam does not exist yet; nothing smaller is possible, since main() builds its own API and runs only as the process entry"
+    },
+    {
+      "law": "oxlint-plugins/code-graph-close.test.ts: a killed API child fails code-graph's ./resolve reads with the kill, and dispose still kills the server",
+      "kind": "test",
+      "red": "AssertionError: expected Error: EPIPE: broken pipe, write (release) to be null: graph.dispose() throws the dead child's EPIPE from the live snapshot's dispose (and, at the read kill point, the read reports that EPIPE in place of the EOF)"
+    },
+    {
+      "law": "oxlint-plugins/code-graph-close.test.ts: a killed API child fails code-graph's ./api read with the kill, and its close still kills the server",
+      "kind": "test",
+      "red": "AssertionError: expected Error: EPIPE: broken pipe, write (release) to be Error: Unexpected EOF while reading from child process (killed by signal SIGKILL): session.close disposes the live snapshot before killServer, so its EPIPE replaces the EOF and the server is never killed. This is the close lint:dead reaches through dist/index.js:9314"
+    },
+    {
+      "law": "oxlint-plugins/lint-parts.test.ts: scenario: pnpm lint runs its TypeScript API parts one after another, in one part of its runner",
+      "kind": "test",
+      "red": "AssertionError: expected [ 'pnpm -s lint:kind', …(2) ] to have a length of 1 but got 3"
+    }
+  ],
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/promise-types.test.ts: a TypeScript API child killed mid-run fails lint:promise-types with the kill, never the release's EPIPE",
+      "plant": "promise-types.ts given the seam lintPromiseTypes with the old nested try/finally (snapshot.dispose() and api.close() bare in finally blocks)",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/code-graph-close.test.ts: a killed API child fails code-graph's ./resolve reads with the kill, and dispose still kills the server",
+      "plant": "installed dist/chunk-3EVT6XKY.js with both closes guarded, then the program close's snapshot.dispose() put back bare",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/code-graph-close.test.ts: a killed API child fails code-graph's ./api read with the kill, and its close still kills the server",
+      "plant": "installed dist/chunk-3EVT6XKY.js with both closes guarded, then the session close's loop `for (const snapshot of live) snapshot.dispose();` put back bare before killServer",
+      "result": "red"
+    },
+    {
+      "law": "oxlint-plugins/lint-parts.test.ts: scenario: pnpm lint runs its TypeScript API parts one after another, in one part of its runner",
+      "plant": "package.json's lint script as it is at origin/main 358a7ea80: lint:kind, lint:dead and lint:promise-types as three runner arguments",
+      "result": "red"
+    }
+  ],
+  "upstream": {
+    "for": "kamp-us/demlik",
+    "status": "draft; the build completes it and files it the day the patch lands (0054, patch upstream locally)",
+    "title": "code-graph: when the tsgo API child dies, close's snapshot dispose replaces the real error with EPIPE",
+    "package": "@demlik/code-graph 0.15.0",
+    "repository": "git+https://github.com/kamp-us/demlik.git (directory packages/code-graph), from the installed package.json `repository`",
+    "uses": "@typescript/native-preview 7.0.0-dev.20260707.2",
+    "steps": [
+      "Run code-graph on any package with --unreachable (or call readPublishedApi from @demlik/code-graph/api, or loadInProcessGraph(...).resolveModuleExport from @demlik/code-graph/resolve).",
+      "While it runs, kill the tsgo API server child with SIGKILL (a memory cgroup's OOM killer does this on its own when the box is short of memory).",
+      "Read the error the run reports."
+    ],
+    "expected": "The run fails with the read's own error, `Unexpected EOF while reading from child process (killed by signal SIGKILL)`, and the server process is killed either way.",
+    "actual": "The run fails with `EPIPE: broken pipe, write` from Snapshot.dispose: openTypeSession's close (src/engine/tsgo.ts, dist/chunk-3EVT6XKY.js:84) disposes each live snapshot before killServer, and the program close (dist/chunk-3EVT6XKY.js:72-76) disposes and sends updateSnapshot({ closeProjects }), each a request to the dead child (native-preview dist/api/sync/api.js:196, write at dist/api/syncChannel.js:495). Called from a finally (TypeContext's ctx.close() at dist/index.js:9314, readNames, lazySession.withProgram), the EPIPE replaces the real error; in the session close it also skips killServer and api.close.",
+    "fix": "Release in close without letting a release's own failure escape over the first error: each snapshot dispose and the closeProjects update caught and reported as a warning, killServer and api.close run whatever happened before. Our pnpm patch (patches/@demlik__code-graph@0.15.0.patch) carries it until a release does."
+  },
+  "tokens": null,
+  "tools": null,
+  "minutes": 18,
+  "note": "Lint, type or test: all four are tests. Each holds an order of failures at run time (A, B) or a value in package.json (part 2), which no lint rule of ours reads and no type can see. Kinds (0584): promise-types.test.ts and lint-parts.test.ts read repository files and use in-memory stand-ins, so they are plain. code-graph-close.test.ts is in tooling (oxlint-plugins/), where there is no integration split; its ./api law spawns the real tsgo emit once per run into code-graph's own temp folder, on a one-file package planted in a temp folder, so it runs 3 cases (about 4 s here); its ./resolve law spawns nothing and runs 20. No law starts an API child or sends a signal: the stand-ins answer requests and record `child.kill` calls. Coverage: each case runs every kill point (2 for A, 4 for ./resolve, 5 for ./api) and each law fails if the child did not die at that many different requests, the last of them inside the read. The green checks: Law A passed on a sketch of the seam with Effect.acquireRelease for the API and the snapshot and each release's defect caught; Law B passed on a sketch of the installed chunk with each dispose, the closeProjects update and api.close wrapped in a catch that writes a warning to stderr; part 2 passed with the three parts joined as one argument `s=0; pnpm -s lint:kind || s=1; pnpm -s lint:dead || s=1; pnpm -s lint:promise-types || s=1; exit $s`. Each plant and sketch ran once on a saved copy and was restored by copy; the installed chunk is hard-linked into pnpm's store, so its link was broken with a copy first and the store was not changed. Part 2 makes pnpm lint slower: in this step's own pnpm lint here, lint:kind took 53.4 s, lint:dead 109.5 s and lint:promise-types 58.8 s, and the whole run 109.6 s, so one part holding all three would take about 222 s, twice the run. The build or lead may weigh that against the box's memory. The seam Law A needs, for the build: `export const lintPromiseTypes: (input: { readonly open: () => Session; readonly root: string; readonly configs: ReadonlyArray<string> }) => Effect.Effect<ReadonlyArray<PromiseFinding>, E, Path.Path>`, where Session is the part of the TypeScript API the lint uses, `{ updateSnapshot(params: { openProjects: Array<string> }): { getProjects(): readonly Project[]; dispose(): void }; close(): void }`, and `new API({ cwd: root })` fits it; main() then globs the configs, calls it with `() => new API({ cwd: root })`, and prints. Tests ran at 358a7ea80 with the new files only: each of the three files alone under nice -n 15 vitest --maxWorkers=1.",
+  "step": "tests"
+}
