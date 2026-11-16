@@ -19,7 +19,7 @@ import { nodeSql } from "../ledger/NodeSqlite.ts";
 import * as StartsTest from "../settings/StartsTest.ts";
 import { Chain } from "../telemetry/Trace.ts";
 import { Attached } from "../transport/Wire.ts";
-import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer } from "./connection.ts";
+import { ConnectionService, connectionRuntime, GatewayWaits, gatewayLayer, gatewayProject } from "./connection.ts";
 import { control } from "./control.ts";
 import { fetch } from "./fetch.ts";
 import type { RecordShape } from "./objects.ts";
@@ -436,9 +436,13 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
               ),
           });
         }),
-      ).pipe(Layer.provide(GatewayWaits.layer(w.env)));
+      ).pipe(Layer.provide(GatewayWaits.layer));
       const runtime = SettingsRuntime.runtime(
-        gatewayLayer(w.ctx, w.env).pipe(Layer.provideMerge(waits), Layer.provide(recordedLayer(w.env))),
+        gatewayLayer(w.ctx, w.env).pipe(
+          Layer.provideMerge(waits),
+          Layer.provide(gatewayProject(w.env)),
+          Layer.provide(recordedLayer(w.env)),
+        ),
       );
 
       try {

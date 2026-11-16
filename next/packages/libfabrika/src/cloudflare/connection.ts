@@ -71,8 +71,7 @@ const waitOn = (p: ProjectClient["Service"]) =>
 /**
  * The gateway's waits on its project: `wait(client, stream, after, reader)` asks the project for one
  * wait and answers `ready` at a rev or `parked`. A ready answer that does not decode fails with a
- * `LedgerError` of reason `bad_row`. `GatewayWaits.layer(env)` asks the project named by the
- * recorded start.
+ * `LedgerError` of reason `bad_row`. `GatewayWaits.layer` asks through the gateway's own `ProjectClient`.
  *
  * @category services
  */
@@ -87,21 +86,35 @@ export class GatewayWaits extends Context.Service<
     ) => Effect.Effect<Waited, LedgerError | SinkError | typeof Answer.cases.refused.Type>;
   }
 >()("@kampus/libfabrika/cloudflare/connection.GatewayWaits") {
-  static readonly layer = (env: Env) =>
-    Layer.effect(
-      GatewayWaits,
-      Effect.gen(function* () {
-        const checked = yield* RecordedStart;
-        return { wait: waitOn(ProjectClient.make(projectStub(env, checked.input.name))) };
-      }),
-    );
+  static readonly layer = Layer.effect(
+    GatewayWaits,
+    Effect.gen(function* () {
+      return { wait: waitOn(yield* ProjectClient) };
+    }),
+  );
 }
+
+/**
+ * The one `ProjectClient` a gateway and its waits share: a client over the stub of the project the
+ * recorded start names. Cloudflare keeps calls in order only within one stub, so every route the
+ * gateway sends, its waits included, goes through this one.
+ *
+ * @category layers
+ */
+export const gatewayProject = (env: Env) =>
+  Layer.effect(
+    ProjectClient,
+    Effect.gen(function* () {
+      const checked = yield* RecordedStart;
+      return ProjectClient.make(projectStub(env, checked.input.name));
+    }),
+  );
 
 const gatewayLogic = Effect.fnUntraced(function* (ctx: DurableObjectState, env: Env) {
   const checked = yield* RecordedStart;
   const port = checked.values.port;
   const config = checked.input;
-  const p = ProjectClient.make(projectStub(env, config.name)),
+  const p = yield* ProjectClient,
     ids = yield* ProcessIdGenerator,
     waits = yield* GatewayWaits;
   const gateway = yield* Schema.decodeUnknownEffect(Schema.String)(ctx.id.name).pipe(
@@ -369,8 +382,9 @@ export class ConnectionService extends Context.Service<
 >()("@kampus/libfabrika/cloudflare/connection.ConnectionService") {}
 
 /**
- * The gateway's `ConnectionService`, over the `GatewayWaits` and the recorded start its caller
- * provides. `connectionLayer` provides the real ones.
+ * The gateway's `ConnectionService`, over the `GatewayWaits`, the `ProjectClient` and the recorded
+ * start its caller provides. `connectionLayer` provides the real ones, with one `ProjectClient` for
+ * the gateway and its waits.
  *
  * @category layers
  */
@@ -384,7 +398,8 @@ export const connectionLayer = (
   input?: ProjectOptions["input"],
 ) =>
   gatewayLayer(ctx, env).pipe(
-    Layer.provide(GatewayWaits.layer(env)),
+    Layer.provide(GatewayWaits.layer),
+    Layer.provide(gatewayProject(env)),
     Layer.provide(input === undefined ? recordedLayer(env) : recordedLayer(env, input)),
   );
 
