@@ -3,7 +3,22 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"],
     // Node runs the build without a transpiler. https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html
-    "erasableSyntaxOnly": true
+    "erasableSyntaxOnly": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        // A nested `Effect.gen` yielded from a generator is inlined. On for the folders at zero, their
+        // tests too. The globs read from this folder. `src/processes` waits for the slice after 1366.
+        "overrides": [
+          {
+            "include": ["src/runtime/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": { "nestedEffectGenYield": "error" }
+            }
+          }
+        ]
+      }
+    ]
   },
   "include": ["src"]
 }

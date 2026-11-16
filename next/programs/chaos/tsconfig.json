@@ -1,4 +1,13 @@
 {
   "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    // A nested `Effect.gen` yielded from a generator is inlined. All of chaos is at zero.
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnosticSeverity": { "nestedEffectGenYield": "error" }
+      }
+    ]
+  },
   "include": ["src"]
 }

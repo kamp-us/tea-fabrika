@@ -633,23 +633,24 @@ export const suite = (open: Open, checklist: unknown) =>
                 yield* runner.open("before-callback");
                 expect(phase((yield* world.snapshot(NAME)).model)).toEqual(before);
 
-                const newer =
-                  delivery === "replaced"
-                    ? yield* Effect.gen(function* () {
-                        expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
-                        expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
-                        yield* advance(runner, input.ordinal - 1);
-                        const deadline = yield* nextDeadline(world);
+                let newer: Fiber.Fiber<
+                  Effect.Success<ReturnType<typeof runner.due>>,
+                  Effect.Error<ReturnType<typeof runner.due>>
+                > | null = null;
 
-                        if (deadline === null) {
-                          return yield* Effect.die(new Error("the new experiment lost its matching fault"));
-                        }
+                if (delivery === "replaced") {
+                  expect((yield* runner.msg(world.letter(2, { type: "stop" })))._tag).toBe("accepted");
+                  expect((yield* runner.msg(world.letter(3, start(nextId))))._tag).toBe("accepted");
+                  yield* advance(runner, input.ordinal - 1);
+                  const deadline = yield* nextDeadline(world);
 
-                        const pending = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
-                        yield* Deferred.await(nextEntered);
-                        return pending;
-                      })
-                    : null;
+                  if (deadline === null) {
+                    return yield* Effect.die(new Error("the new experiment lost its matching fault"));
+                  }
+
+                  newer = yield* runner.due(deadline + input.late).pipe(Effect.forkScoped);
+                  yield* Deferred.await(nextEntered);
+                }
 
                 const current = phase((yield* world.snapshot(NAME)).model);
                 const count = calls.length;
