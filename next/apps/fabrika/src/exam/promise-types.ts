@@ -1,10 +1,7 @@
 // The typed half of no-promises. Oxlint's JS plugins have no type checker. This lint
 // command uses the installed TypeScript 7.0.2 API, without emitting code or type diagnostics.
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import * as Console from "effect/Console";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
-import * as Path from "effect/Path";
+import { Console, Effect, FileSystem, Path } from "effect";
 import * as ts from "typescript/unstable/ast";
 import {
   API,

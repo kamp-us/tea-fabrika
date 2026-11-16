@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1075-e47-tests4",
+  "ticket": null,
+  "pr": null,
+  "started": "2026-11-15T22:18:16-08:00",
+  "ended": "2026-11-15T22:24:10-08:00",
+  "parent": "2026-11-15-t1075-e47-review2",
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Second fix round of the tests step of slice E47 of the Effect-checker sweep (ticket 1075), after review2 sent it back for decision 0577 and 0023's table row: next/apps/* import Effect from the effect barrel, and the merge-session subpath ruling covers tooling only. Three app files that tests3 had moved to subpaths are back on one import from \"effect\", Console included, exactly as at b0cae406: next/apps/fabrika/src/exam/promise-types.ts (Console, Effect, FileSystem, Path), next/apps/fabrika/src/instance-one-file.integration.test.ts (Console, Effect, Layer, Schema) and next/apps/fabrika/src/worker-mail.integration.test.ts (Console, Effect, Schema, Scope). Their effect/crypto imports stay. Each file now matches b0cae406 byte for byte; nothing else changed. Tool: git checkout of the three paths from b0cae406, since their only change since then was the import block. Count: effect-tsgo diagnostics on next/apps/fabrika/tsconfig.json with an --lspconfig setting preferBarrelImport at error and barrelImportPackages to effect, no tsconfig written: 21 hits at e250634b (4 in each of the three files), 9 now, none in the three files, the same 9 the plan's E13 row counts for the app. E47's own hits are unchanged: 99 met, 92 fixed by hand, 0 by quick fix, 7 left for the owner, 0 waiting on 1366.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "No law added or changed this round, so no plant. Ran on the uncommitted tree on e250634b: pnpm format exit 0; next/apps/fabrika/src/exam/no-promises.integration.test.ts under nice -n 15 --maxWorkers=3, 15 passed; pnpm lint with NODE_OPTIONS=--max-old-space-size=6144 exit 0 (17 parts passed); the ratchet exits 0. Not run: worker-mail.integration.test.ts and instance-one-file.integration.test.ts, which start real instances; their change is the import line only, back to b0cae406. No pnpm typecheck: the files are as at b0cae406, which typechecked. No pull request was opened (owner ruling: one per sweep).",
+  "plants": [],
+  "step": "tests"
+}
