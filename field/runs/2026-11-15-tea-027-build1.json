@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-build1",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1391",
+  "started": "2026-11-15T17:19:00-08:00",
+  "ended": "2026-11-15T17:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "build",
+  "model": "claude-sonnet-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Build for slice 1 of docs/plan/quests/tea-msg-tag-PLAN.md. Moved the 10 package.json files (12 entries) to catalog:old; pnpm install --frozen-lockfile then succeeded with no lockfile change. Fixed lines 52-53 of decision 0256 and added the one named-catalog line to docs/direction/pin-exact-versions.md. exact-versions.test.ts (58 tests) and node oxlint-plugins/exact-versions.ts pass, as do the two counter tests. pnpm format, pnpm lint and the list ratchet pass. Law E2 does not pass: pnpm typecheck fails in .agents only, with 89 warnings TS377051 (the effect duplicatePackage check) saying two versions of @demlik/tea are in one program, 0.25.0 and 0.27.0. The .agents scripts import @kampus/fabrika-old (today's version, tea 0.25.0 under catalog:old) and also the root's tea 0.27.0, so the plan's claim that our code needs no change is wrong for .agents. The other projects (packages/fabrika, oxlint-plugins, next/packages/libfabrika) pass one by one, though the full run killed them after the first failure. No type error, only the duplicate-package warning, which fails the check. The plant for E2 was not run because the baseline is red. The plan needs a decision on .agents.",
+  "plants": [],
+  "tokens": null,
+  "tools": null,
+  "minutes": 21,
+  "note": null,
+  "step": "build"
+}
