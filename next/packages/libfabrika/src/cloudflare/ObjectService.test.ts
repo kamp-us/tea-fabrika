@@ -26,7 +26,7 @@ import { makeRequestEffect } from "@alchemy.run/cloudflare/Workers/HttpServer";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import { describe, expect } from "@effect/vitest";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { Context, Effect, Layer, Option, type Scope, Struct } from "effect";
+import { Context, Effect, Layer, Option, type Schema, type Scope, Struct } from "effect";
 import { HttpClientRequest, HttpClientResponse } from "effect/http";
 import * as fc from "fast-check";
 import { vi } from "vitest";
@@ -110,7 +110,7 @@ const damage = fc.oneof(
 );
 
 const damaged = (
-  good: Readonly<Record<string, unknown>>,
+  good: Readonly<Record<string, Schema.Json>>,
   recipe: typeof damage extends fc.Arbitrary<infer A> ? A : never,
 ) => {
   if (recipe._tag === "broken") {

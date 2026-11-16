@@ -8,6 +8,7 @@ import * as fc from "fast-check";
 import * as Codec from "./Codec.ts";
 import * as Declarations from "./Declarations.ts";
 import * as Files from "./Files.ts";
+import type { Content } from "./internal/edit.ts";
 import * as Setting from "./Setting.ts";
 import { Toml, TomlError } from "./Toml.ts";
 import * as TomlParser from "./TomlParser.ts";
@@ -43,7 +44,18 @@ const Input = {
 };
 
 type Path = ReadonlyArray<string>;
-type Tree = Readonly<Record<string, unknown>>;
+/**
+ * One value the model holds: what TOML text holds (`internal/edit.ts`'s `Content`, the parsed
+ * document's own type), a JSON value as L9 generates it, which `writable` checks before a put, or a
+ * table of the model's own.
+ */
+type Member = Content | Schema.Json | ReadonlyArray<Member> | Tree;
+
+/** The model of a document, compared with what `parse` reads back. */
+interface Tree {
+  readonly [key: string]: Member;
+}
+
 type Hint = { readonly pick: number; readonly key: number; readonly deep: boolean };
 /** A value that holds itself, which no TOML text can write. */
 type Cycle = { self?: Cycle };
@@ -69,7 +81,7 @@ const pick = <A>(xs: ReadonlyArray<A>, hint: number): A => xs[hint % xs.length]!
 const same = (a: Path, b: Path) => a.length === b.length && a.every((s, i) => s === b[i]);
 const record = (v: unknown): v is Tree => typeof v === "object" && v !== null && !Array.isArray(v);
 
-const frozen = (value: unknown): unknown =>
+const frozen = (value: Member): Member =>
   Array.isArray(value)
     ? Object.freeze(value.map(frozen))
     : record(value)
@@ -84,10 +96,13 @@ const throwingRecord = (cause: Error) =>
     },
   });
 
-const get = (v: unknown, path: Path): unknown =>
-  path.reduce<unknown>((parent, key) => (record(parent) && Object.hasOwn(parent, key) ? parent[key] : undefined), v);
+const get = (v: Member, path: Path): Member | undefined =>
+  path.reduce<Member | undefined>(
+    (parent, key) => (record(parent) && Object.hasOwn(parent, key) ? parent[key] : undefined),
+    v,
+  );
 
-const put = (tree: Tree, path: Path, value: unknown): Tree => {
+const put = (tree: Tree, path: Path, value: Member): Tree => {
   const [key, ...rest] = path;
 
   if (key === undefined) {
@@ -319,7 +334,7 @@ describe("T877 public TOML edits, next/", () => {
         const suffix = `${l.eol}# last-雪${l.final ? l.eol : ""}`;
         const write = () => prefix + slots.map((s, i) => s.prefix + s.token + s.suffix + endings[i]).join("") + suffix;
         let text = write();
-        let model = (yield* toml.parse(text)).value;
+        let model: Tree = (yield* toml.parse(text)).value;
 
         for (const [i, hint] of l.hints.entries()) {
           const slot = hint.pick % slots.length;

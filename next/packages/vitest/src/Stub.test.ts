@@ -88,7 +88,7 @@ it("an own member answers as given, and rest is not asked for it", () => {
 it("then and every symbol key answer undefined, so awaiting a stub gives the stub back", async () => {
   await fc.assert(
     fc.asyncProperty(Members, fc.string(), async ({ keys }, description) => {
-      const stub = Stub.make<Record<string | symbol, unknown>>(() => () => "rest", ownMembers(keys));
+      const stub = Stub.make<Record<string | symbol, Method | undefined>>(() => () => "rest", ownMembers(keys));
       expect(stub["then"]).toBeUndefined();
       expect(stub[Symbol(description)]).toBeUndefined();
       expect(stub[Symbol.iterator]).toBeUndefined();

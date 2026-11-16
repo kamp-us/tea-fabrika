@@ -17,6 +17,7 @@ import {
   triggered,
   whole,
 } from "./proof.ts";
+import type { YamlMap } from "./workflow-lint/yaml.ts";
 
 // Today's CI, serving both versions. Covers proof.ts, which picks what a branch's proof run tests
 // (0590): the full set when the change touches a rerun trigger, else the tests Vitest's `--changed`
@@ -35,7 +36,7 @@ const seen = (changed: readonly string[]): Seen => ({
 });
 
 const workflow = parse(readFileSync(new URL("../workflows/scheduled.yaml", import.meta.url), "utf8")) as {
-  jobs: Record<string, { steps: Record<string, unknown>[]; strategy?: Record<string, unknown> }>;
+  jobs: Record<string, { steps: YamlMap[]; strategy?: YamlMap }>;
 };
 
 const setStep = workflow.jobs["select"]!.steps.find((s) => s["id"] === "set")! as { env: Record<string, number> };

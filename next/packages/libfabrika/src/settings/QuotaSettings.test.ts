@@ -34,6 +34,11 @@ const numeric = (value: unknown): unknown => {
   return value;
 };
 
+// One encoded recovery allowance, the shape a law breaks a field of: each count and size is
+// written as a number or a string, the wrong one included, so the decode is what refuses it.
+type Allowance = Record<"writes" | "bytes", number | string>;
+type Encoded = Record<"project" | "process", Allowance & { message: Allowance }>;
+
 const measured = {
   project: { writes: 160, bytes: 74_080, message: { writes: 10, bytes: 5_469 } },
   process: { writes: 290, bytes: 207_410, message: { writes: 50, bytes: 18_790 } },
@@ -195,13 +200,13 @@ describe("P34c Q11 settings", () => {
           expect(typeof encoded).toBe("object");
 
           // Mutate a schema-valid recovery value, rather than inventing another error schema.
-          for (const location of ["project", "process"]) {
-            for (const field of ["writes", "bytes"]) {
-              const bad = structuredClone(encoded) as Record<string, Record<string, any>>;
-              bad[location]![field] = field === "bytes" ? "0 B" : 0;
+          for (const location of ["project", "process"] as const) {
+            for (const field of ["writes", "bytes"] as const) {
+              const bad = structuredClone(encoded) as Encoded;
+              bad[location][field] = field === "bytes" ? "0 B" : 0;
               expect(Schema.decodeUnknownResult(recovery.schema)(bad)._tag).toBe("Failure");
-              const message = structuredClone(encoded) as Record<string, Record<string, any>>;
-              message[location]!.message[field] = field === "bytes" ? "0 B" : 0;
+              const message = structuredClone(encoded) as Encoded;
+              message[location].message[field] = field === "bytes" ? "0 B" : 0;
               expect(Schema.decodeUnknownResult(recovery.schema)(message)._tag).toBe("Failure");
             }
           }

@@ -75,14 +75,14 @@ it("L11: a person's nested table supplies values or defaults and refuses only ba
         expect(Exit.isSuccess(decoded)).toBe(true);
 
         if (Exit.isSuccess(decoded)) {
-          const actual: Readonly<Record<string, unknown>> = decoded.value;
+          const actual = new Map(Object.entries(decoded.value));
 
           for (const [key, setting] of Object.entries(Settings.all.settings)) {
             const from = setting.segments.reduce<unknown>(
               (value, segment) => (Predicate.hasProperty(value, segment) ? value[segment] : undefined),
               table,
             );
-            expect(actual[key]).toEqual(from ?? setting.default);
+            expect(actual.get(key)).toEqual(from ?? setting.default);
           }
 
           expect(merger(decoded.value).machine).toBeDefined();
