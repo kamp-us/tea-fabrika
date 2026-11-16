@@ -21,11 +21,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
-import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, NEXT_TSX_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
+import { plant as lintCopies } from "./plant.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const OXLINT = join(ROOT, "node_modules", ".bin", "oxlint");
@@ -354,8 +355,22 @@ describe("each rule refuses what it is there to refuse", () => {
     expect([...new Set(firesInPlanted(poll, "vitest(require-awaited-expect-poll)"))]).toEqual([2]);
   });
 
+  // The React rules on only in next/'s .tsx files, linted whole at their next/ paths (0591).
+  it.each(NEXT_TSX_PLANTS.map((p) => [Object.keys(p.fires).join(", "), p] as const))(
+    "built in, on in next/'s .tsx files: %s",
+    async (_codes, p) => {
+      const result = await lintCopies(p.files);
+
+      for (const [code, want] of Object.entries(p.fires)) {
+        for (const file of Object.keys(p.files)) {
+          expect([code, file, result(code, file)]).toEqual([code, file, want[file] ?? []]);
+        }
+      }
+    },
+  );
+
   it("each built-in rule is planted once", () => {
-    const codes = BUILTIN_PLANTS.map((p) => p.code);
+    const codes = [...BUILTIN_PLANTS.map((p) => p.code), ...NEXT_TSX_PLANTS.flatMap((p) => Object.keys(p.fires))];
     expect(new Set(codes).size).toBe(codes.length);
   });
 
@@ -384,7 +399,8 @@ describe("each rule refuses what it is there to refuse", () => {
       "one-id-module",
       // Generated files and their fix in padding-line-between-statements.test.ts.
       "padding-line-between-statements",
-      // next/'s exam rules, planted at next/ paths in next/apps/fabrika/src/exam/.
+      // next/'s exam rules, planted at next/ paths through plant.ts, each in its own <rule>.test.ts here
+      // (0591 moved them from next/apps/fabrika/src/exam/; no-of's path laws are in no-of.test.ts).
       "no-promises",
       "no-effect-run-outside-edge",
       "edge-comment",
@@ -465,6 +481,37 @@ it("scenario: T877 L10 only the TOML adapter imports the parser and serializer",
   }
 
   expect(result("eslint(no-restricted-imports)", adapter)).toEqual([]);
+});
+
+// T502 PR 2, next/: the exam's object-imports law (next/apps/fabrika/src/exam/object-imports.integration.test.ts),
+// moved here by 0591. The installed no-restricted-imports rule, in the `cloudflare/objects.ts` block of the
+// real config, refuses a value import and a side-effect import of anything but Alchemy, for each drawn
+// module, and passes erased types. Plant: drop the block's pattern group, and lines 1 and 6 pass.
+const OBJECT_MODULES = ["./runtime.ts", "./record.ts", "effect", "node:fs"] as const;
+
+it("object contracts load only Alchemy; erased types do not load services", async () => {
+  const drawn = new Set<string>();
+  await fc.assert(
+    fc.asyncProperty(fc.constantFrom(...OBJECT_MODULES), async (module) => {
+      drawn.add(module);
+      const file = "next/packages/libfabrika/src/cloudflare/objects.ts";
+      const fires = await lintCopies({
+        [file]: [
+          `import { value } from ${JSON.stringify(module)};`,
+          `import type { Shape } from ${JSON.stringify(module)};`,
+          'import * as Cloudflare from "@alchemy.run/cloudflare";',
+          'import type { Other } from "./runtime.ts";',
+          'import { type Mixed } from "./runtime.ts";',
+          'import "./runtime.ts";',
+          "export { value, Cloudflare }; export type { Shape, Other, Mixed };",
+        ].join("\n"),
+      });
+      expect([...new Set(fires("eslint(no-restricted-imports)", file))]).toEqual([1, 6]);
+    }),
+    // fast-check counts examples inside numRuns, so the four runs are the four modules, each once.
+    { seed: 119120, numRuns: 4, examples: OBJECT_MODULES.map((module) => [module] as [string]) },
+  );
+  expect([...drawn].sort()).toEqual([...OBJECT_MODULES].sort());
 });
 
 // scenario: U11 is path-scoped, so its planted line must run under next/ with the real config.

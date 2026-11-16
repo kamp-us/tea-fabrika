@@ -1,4 +1,6 @@
-// T730, P38 slice 2, next/: L1 of the approved plan. Written before the build.
+// T730, P38 slice 2, next/: L1 of the approved plan. Written before the build. L9 called `plant`,
+// which spawns oxlint in a temp folder, which made the file `.integration.` (0584); 0591 moved L9 to
+// oxlint-plugins/settings-imports.test.ts, so the file reaches no real thing and is plain again.
 //
 // The shape these tests hold the app and libfabrika to:
 // - The committed `next/apps/fabrika/person.json` and `repo.json` are, byte for byte,
@@ -8,9 +10,8 @@
 //   through those functions, so regenerating changes nothing.
 // - All three outputs depend on the declarations alone, never on their order, and a changed doc or
 //   default reaches every output that shows that declaration.
-// - L9 (only the start files take the TOML adapter, and only the adapter takes the parser) is
-//   oxlint's own `no-restricted-imports`; its plants are in oxlint-plugins/settings-imports.test.ts
-//   (0591).
+// - L9, that only the start files import the TOML adapter and only the adapter imports its parser, is
+//   oxlint's own `no-restricted-imports`; its law is oxlint-plugins/settings-imports.test.ts (0591).
 import { NodeServices } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import * as Declarations from "@kampus/libfabrika/settings/Declarations";

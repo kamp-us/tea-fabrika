@@ -272,6 +272,33 @@ describe("arm: merge when ready goes on over a green full run, or none at the he
         expect([...plan.github.calls, ...done.github.calls]).toEqual([]);
       }),
   );
+  // Plants: skip the names check, or run it after the arm.
+  it.effect(
+    "scenario: a green pull request whose diff exports a name its description does not name is refused with that name and arms nothing; with the line it arms (0587)",
+    () =>
+      Effect.gen(function* () {
+        const red = yield* fixture;
+        const patch = {
+          path: "next/apps/fabrika/src/worker-quotas.ts",
+          patch: "@@ -0,0 +1 @@\n+export const Quota = 1;",
+        };
+        const bare = memory({}, red);
+        bare.github.patches.set(1092, [patch]);
+        const refused = yield* Effect.flip(arm(bare));
+        expect(refused.reason).toContain(
+          "pr 1092: its diff exports new names its ## New names section does not name: Quota",
+        );
+        expect(bare.github.calls).toEqual([]);
+        const named = memory({}, red);
+        named.github.more.set(1092, {
+          ...named.github.more.get(1092),
+          body: "## New names\n\n- `Quota`: a quota (source).",
+        });
+        named.github.patches.set(1092, [patch]);
+        yield* arm(named);
+        expect(named.github.calls).toEqual(armedAt);
+      }),
+  );
 
   // Plants: turn merge when ready on before the leak gate, or past a refusal from it; skip the
   // grep of the commits or of the words. The hit on 2026-11-15 was in a description.

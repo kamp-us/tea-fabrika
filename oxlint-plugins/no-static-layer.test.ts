@@ -9,8 +9,8 @@ import * as fc from "fast-check";
 import { parseSync } from "oxc-parser";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noStaticLayer } from "./no-static-layer.ts";
+import { plant } from "./plant.ts";
 
 // RuleTester runs each case at once, so a failure throws into fast-check, which shrinks it.
 RuleTester.describe = (_name, fn) => fn();

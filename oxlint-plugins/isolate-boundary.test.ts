@@ -1,8 +1,8 @@
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { isolateBoundary } from "./isolate-boundary.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(isolate-boundary)";
 const stem = fc.stringMatching(/^[a-z]{1,8}$/);

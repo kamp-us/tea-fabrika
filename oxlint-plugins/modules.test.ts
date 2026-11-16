@@ -13,7 +13,7 @@
 // cases ask only whether the rule fired. A law about one statement names its line. Line 1 of every
 // planted file is a comment, so no statement shares a line with a whole-file report.
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const SRC = "next/packages/libfabrika/src";
 

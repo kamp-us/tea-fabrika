@@ -388,7 +388,7 @@ Count on 2026-11-10, on main at `33a282f8` with this change, in that day's words
 
 The old words do not come back as names in `next/`: oxlint's own `eslint/id-denylist` ([rule](https://oxc.rs/docs/guide/usage/linter/rules/eslint/id-denylist)), in a `next/**` override, refuses `room`, `rooms`, `floor` and `floors` in lower, title and upper case, and `otherRoom`, `floorsByName`, `floorRank`, `floored` and `unfloored`. Tests in `next/` are held too, and nothing outside `next/` is. It reads names only: a declaration, a reference to one, an object key and a type member. A property read (`row.floor`), a call through a member (`Math.floor`), a comment and a string pass, so the words' other meanings (a conversation room, a minimum, spare space) stay review work. A conversation room, which 0091 keeps, takes `// oxlint-disable-next-line eslint/id-denylist -- <why>` on its one line. `terminology.test.ts` plants each case at a real path with the repo's config. Count on 2026-11-11, on main at `0bb25969` after ticket 688's rename: 0 fires in `next/`, `.agents/` and `oxlint-plugins/`; the one fire before it, a local `room` meaning spare bytes in `transport/internal/connection.test.ts`, became `space`.
 
-Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests use `next/apps/fabrika/src/exam/plant.ts` and lint each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file.
+Nine rules apply to `next/` only, as Tier 1's exam (`docs/plan/tier-1-detail.md`, "The exam PR", items 1, 2, 4, 5 and 13, P35, and ticket 337). `.oxlintrc.json` turns them on in `next/**` and nowhere else, so today's code is untouched. Their planted tests sit beside each rule in this folder, one `<rule>.test.ts` each, and use `plant.ts`, which lints each planted file at the `next/` path it names, in a temp folder with this repo's config, so the edge paths and globs meet it as they meet a real file. They were the exam's tests in `next/apps/fabrika/src/exam/` until 0591 moved them here: no shape check stays in the exam folder.
 
 | Rule | Refuses | Edges | Tests |
 |---|---|---|---|
@@ -563,11 +563,11 @@ stays red until the builder removes those imports.
 It reads the installed providers, prints the finding count and exits nonzero for any
 finding. Its generated plants stay in `twin.test.ts`, with seed 119120.
 
-`pnpm lint:promise-types` adds types to `no-promises`. TypeScript 7.0.2's installed
+`pnpm lint:promise-types` (`promise-types.ts`, here) adds types to `no-promises`. TypeScript 7.0.2's installed
 sync API resolves every `next/` project. Calls, returns and function parameters may
 not carry a Promise or a function returning one outside a marked edge line. Type
 declarations, tests, test support files and today's code are left alone. The scanner does not emit code
-or run type diagnostics. `no-promises.test.ts` plants imported aliases, inferred
+or run type diagnostics. `promise-types.test.ts` plants imported aliases, inferred
 returns, generic thunks, object methods and line-local edge comments. An edge comment
 covers only the next physical line. History: the initial P12 head scan at `4577f6b0`
 found 103 lines. It recorded false alarms inside wrapped statements whose first line
@@ -657,7 +657,7 @@ The rule stays an **error**. The remaining finding is PR 1's red. It needs no
 advice exception in the lint runner. The seven advice diagnostics in this scan
 are from the existing advice rules.
 
-The planted exam is `next/apps/fabrika/src/exam/effect-functions.test.ts`.
+The planted test is `effect-functions.test.ts`, beside the rule.
 Nine rejected fixture sites are real violations. Seven allowed forms cover
 inner spans, consumed streams, named functions, untraced helpers, forwarding
 and one-use callbacks. Other fixtures check aliases, today's code and test span
@@ -951,49 +951,96 @@ fixes all 10.
 import spelling, uses and neighbors that must pass, 100 runs, seed 119120. Law 3 is one real oxlint
 run over one planted file per path kind, with the repo's config.
 
-## A test that drives a real resource says so in its name, decision 0536
+## A test's kind follows what it uses, decision 0584
 
-`integration-test-name` fires in a `next/` test file whose own code opens a real resource unless
-the file is named `*.integration.test.ts` (the `next-integration` Vitest project, which runs on the
-3-hour schedule) or `*.visual.test.ts` (`next-visual`, a browser or Electron). Pull requests and
-the merge queue run `--project next` alone, so the name is what keeps a real-resource law off the
-merge line ([0536](../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md)).
+A test that starts or reaches a real thing is named `*.integration.test.ts` (or `*.visual.test.ts`
+for a browser or Electron) and runs on main's full run only; every other test is plain and runs on
+each pull request and queue group its change reaches
+([0584](../.decisions/0584-a-tests-kind-follows-what-it-uses.md), after
+[0536](../.decisions/0536-real-resource-tests-run-only-on-the-schedule.md) and
+[0581](../.decisions/0581-main-full-run-starts-on-push-and-hourly.md)). Local disk counts as real: a
+test that writes a SQLite file or a temp folder is medium in Google's test sizes, so it is
+`.integration.`. Two checks hold the name, one each way, and both read one definition,
+`starters.ts`:
 
-It reads calls through the module each name was imported from, never words:
+- `fabrika/integration-test-name`, the per-file oxlint rule, fails a plain `next/` test file whose
+  own code calls a starter.
+- `pnpm lint:kind` (`test-kind.ts`) fails an `.integration.` file that reaches no starter at all,
+  through its own code or any chain of value imports. It reads the imports from
+  `code-graph next --graph --edges`, which resolves relative paths and our packages' `exports` maps,
+  `*` patterns included; a type-only import reaches nothing. A plain file that reaches a starter
+  only through helpers is printed as an `advice:` line, which never fails.
 
-| Drives | Calls |
+A call counts only through the module its name came from, in any spelling (`{ spawn }`,
+`{ spawn as run }`, `* as cp`, a default import):
+
+| Starts | Calls |
 |---|---|
-| a spawned process | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`, `fork` from `node:child_process` |
-| a socket | `createServer`, `createSecureServer`, `connect`, `createConnection` from `node:net`, `http`, `https`, `http2` |
-| a SQLite file | `new DatabaseSync(path)` from `node:sqlite`, unless the path is the literal `":memory:"` |
-| a bundler | `rolldown` and `build` from `rolldown` |
-| a browser or Electron | `launch…` on `chromium`, `firefox`, `webkit` or `_electron` from Playwright |
-| the local instance | `localInstance(…)` |
+| a spawned process | `spawn`, `spawnSync`, `exec`, `execSync`, `execFile`, `execFileSync`, `fork` from `node:child_process`; `ChildProcess.make` from `effect/process`, or `spawn` on the `ChildProcessSpawner` service, with Node's layer |
+| a socket | `createServer`, `createConnection`, `connect` and `new Server()` from `node:net`; `createServer`, `request` and `get` from `node:http` and `node:https`; `createServer`, `createSecureServer` and `connect` from `node:http2`; `createServer` and `connect` from `node:tls`; `createSocket` from `node:dgram` |
+| a browser or Electron | `launch`, `launchPersistentContext` or `launchServer` on `chromium`, `firefox`, `webkit` or `_electron` from Playwright |
+| the local instance or workerd | `localInstance(…)`; `killWorkerd(…)` from `workerd.test-support.ts` |
+| a signal | `process.kill(…)` |
+| the network | `fetch(…)` or `new WebSocket(…)` whose literal URL names a host other than this machine, unless the file stubs `fetch` with `vi.stubGlobal("fetch", …)`; a socket's client call (`https.get`, `request`, `connect`) to such a URL |
+| local disk | `new DatabaseSync(path)` from `node:sqlite` unless the path is `":memory:"`; `mkdtemp` and `mkdtempSync` from `node:fs`, `fs.promises` or `node:fs/promises`; `makeTempDirectory`, `makeTempFile` and their `Scoped` forms on the `FileSystem` service, with Node's layer |
 
-A fake with the same method names, a local function named `spawn`, `ChildProcessSpawner.make` and
-SQLite on `:memory:` (inside the process, 0536's own words) pass. A temp folder alone does not fire:
-the in-memory git laws stay on pull requests by the lead's call of 2026-11-14 and still make one
-through Effect's FileSystem, and whether a temp folder alone is a real resource is the owner's to
-rule. Effect's `ChildProcess.make` does not fire either: it only describes a command, and a fake
-spawner runs it in memory.
+"With Node's layer" means the call is real only on `NodeServices` (or `NodeChildProcessSpawner` for
+a process, `NodeFileSystem` for disk) from `@effect/platform-node`. In one file's own code it counts
+when that file imports the layer; across imports, `test-kind.ts` counts it wherever the layer comes
+from. A service method counts only on the service itself: a name bound by
+`yield* ChildProcessSpawner.ChildProcessSpawner` or `yield* FileSystem.FileSystem`, or that
+`yield*` written in place. `tmpdir()` does not count: it only names a folder, and the `mkdtemp`
+that writes there does. A spy, a fake with the same method names (even in a file that provides
+Node's layer), a `fetch` the file stubs, `readFileSync`, `chromium.name()`, `ChildProcessSpawner.make`, `FileSystem.layerNoop`,
+`MemoryFiles.test-support.ts`, SQLite on `:memory:`, a `fetch` to `localhost` and Rolldown in memory
+never count: reading the repository's own files in the process is plain (0584).
 
-**Measured** on experiment 292's classified tree (`origin/main` at `4120e0500`, 280 test files, 133
-of them real), one oxlint run with only this rule on, before any file was renamed: 73 files fired,
-72 of them drive a resource. The one false alarm is `exam/node-kinds.test.ts`, which reads the
-repository's own tracked list with `git ls-files`, a reader 0536 keeps on pull requests; it carries
-`// oxlint-disable-next-line fabrika/integration-test-name -- <why>`. That is 1 false alarm in 73
-fired files (1.4%). With that line the tree is at zero, so the rule blocks from the start (0523).
-Matching words in place of calls had marked 182 files (experiment 292).
+**Measured** on `next/` at main's `9ddc47e45`, before any file was renamed:
 
-**What it misses:** 61 of the 133 real files open their resource only in a helper they call (a
-`*.test-support.ts` file, a shared `*Test.ts` suite, `ChildProcess.make` run on the Node spawner, or
-an Effect temp folder). It sees the file's own code only, so those names are held by the review.
+- The rule fired on 4 of 197 plain test files, and all 4 start git or write a temp folder: 0 false
+  alarms. Three were renamed (`OpenRepository`, `RepositoriesGit`, `Sources`), and
+  `exam/node-kinds.test.ts`, which listed the tree with `git ls-files`, now reads it with
+  `readdirSync`, so its disable comment is gone.
+- `test-kind.ts` failed 1 of 148 `.integration.` files, `exam/client-manager-contract`, which reads
+  repository files and runs Rolldown in memory: 0 false alarms. It was renamed to plain.
+- After the renames, and again after merging main at `235a24582`, both are at zero, with 18
+  `advice:` lines, so both block from the start (0523).
+- Again after the review's fix round (the port, network and `fs.promises` starters added; a
+  method counted only on its service; a stubbed `fetch` and `tmpdir()` no longer counted), on the
+  branch merged with main at `2a1f1b91e`: the rule fires on 0 of 198 plain files, `test-kind.ts`
+  fails 0 of 153 `.integration.` files, and the advice lines stay at 18.
 
-`integration-test-name.test.ts` holds the laws: a property through oxlint's `RuleTester` over each
-real call, three folders and both extensions, that the call fires on a plain name at its line and
-never under either layer name; one over the in-process cases, which never fire; one real oxlint run
-over a planted folder with the repo's config; and one over the real `next/` tree, which must be at
-zero. Its three plants are named in its header.
+**What code cannot tell,** so the review names it:
+
+- A starter reached through a helper that the plain test imports but whose starter it never calls:
+  an import is not a use. The advice lines list these. Of the first 20, three were real and moved
+  (`ProcessManagerMemo`, `settings-generated`, and `Process.test-support.ts`'s temp folder, which
+  is now made on the first `storage()` call, not on import).
+- A call that needs Node's layer in a file that gets the layer from a helper: `Git.test.ts` and
+  `RepositoriesGit.identity.test.ts` start real git that way, and neither check fired on them. Both
+  were renamed by reading.
+- An `.integration.` file that passes only because it imports a module that could start something,
+  while the law runs that module on a stand-in. `build/error-cause.integration.test.ts` imported
+  `build.ts`, which makes a temp folder, but gives it a FileSystem of generated failures. It was
+  renamed to plain by reading.
+- A service reached another way than a `const` bound by `yield*` or that `yield*` in place:
+  a callback's parameter (`Effect.flatMap(ChildProcessSpawner.ChildProcessSpawner, (s) => s.spawn(…))`)
+  or a destructured method. The rule misses it; none is in `next/` today.
+- A write into `tmpdir()` with no `mkdtemp`, such as `writeFileSync(join(tmpdir(), "x"), …)`:
+  telling it from a `tmpdir()` that only names a path takes following the value into the write,
+  which a per-call reader does not do. Type information would not help, since both are strings.
+- A real thing started inside a dependency (`secret-types.integration.test.ts` reaches TypeScript's
+  sync API, which spawns the compiler), a command or URL built from a string at run time, and a spy
+  that stands in for a starter by its own name. Direction 2 errs toward passing, so these cost a
+  missed name, never a false block.
+
+`integration-test-name.test.ts` holds the rule's laws: K1, a property over every starter, each
+import spelling, three folders and both extensions, that fires on a plain name at the call's line and
+never under either named one; each starter runs on its own and the error must name what it drives and the `.integration.test.ts`
+name; K2, that every stand-in above never fires, each on its own; one real oxlint run over a
+planted folder with the repo's config; and one over the real `next/` tree, which must be at zero.
+`test-kind.test.ts` holds K3, on `judge` in memory and through the real command and code-graph on
+planted trees, and K4, that advice never changes the exit. Their plants are named in their headers.
 
 ## Which of our packages each part imports, ticket 987
 

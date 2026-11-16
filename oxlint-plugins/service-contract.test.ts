@@ -3,7 +3,7 @@ import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 import { serviceContract } from "./service-contract.ts";
 
 RuleTester.describe = (_name, fn) => fn();

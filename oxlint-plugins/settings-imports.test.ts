@@ -1,14 +1,14 @@
-// T730's L9, moved from next/apps/fabrika/src/settings-generated.test.ts (0591): the law is the plant
-// test of oxlint's own `no-restricted-imports` as `.oxlintrc.json` sets it. In next/apps only the start
-// files (`dev.ts`, `cli.ts` and `src/settings-start.integration.test.ts`) import the TOML adapter; in
-// libfabrika only the settings module and `node/settings/`; and only `settings/TomlParser.ts` imports
-// the parser. Each generated caller and spelling is planted at its path and linted with the real config.
-//
-// Plant, run once when the law moved: drop `src/settings-start.integration.test.ts` from the adapter's
-// allowed files in `.oxlintrc.json`, and the start test's import of the adapter fires: red.
+// T730, P38 slice 2, L9 of its approved plan: in next/apps only `dev.ts`, `cli.ts` and
+// `src/settings-start.integration.test.ts` import the TOML adapter; in libfabrika only the settings
+// module and `node/settings/`; and only `settings/TomlParser.ts` imports the parser. oxlint's own
+// `no-restricted-imports` says so, in `.oxlintrc.json`, so this law is that rule's plant test, through
+// the real config at generated next/ paths. It was in next/apps/fabrika/src/settings-generated.test.ts
+// until 0591 moved it here, beside the other lint rules' tests. Plant: drop
+// `src/settings-start.integration.test.ts` from the adapter's allowed files in `.oxlintrc.json`, and a
+// drawn start file is refused.
 import * as fc from "fast-check";
-import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { describe, expect, it } from "vitest";
+import { plant } from "./plant.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 
@@ -16,17 +16,18 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const ADAPTER = "next/packages/libfabrika/src/settings/TomlParser.ts";
 const RULE = "eslint(no-restricted-imports)";
 
+/** The exact start files: they choose the adapter. */
+const START = [
+  "next/apps/fabrika/dev.ts",
+  "next/apps/fabrika/cli.ts",
+  "next/apps/fabrika/src/settings-start.integration.test.ts",
+];
+
 const word = fc.stringMatching(/^[a-z][a-z0-9]{2,7}$/);
 
 const caller = fc.oneof(
   // The exact start files: they choose the adapter.
-  fc
-    .constantFrom(
-      "next/apps/fabrika/dev.ts",
-      "next/apps/fabrika/cli.ts",
-      "next/apps/fabrika/src/settings-start.integration.test.ts",
-    )
-    .map((file) => ({ file, adapter: true, parser: false })),
+  fc.constantFrom(...START).map((file) => ({ file, adapter: true, parser: false })),
   // Every other app file, the generation entry and sibling tests included.
   fc
     .constantFrom(
@@ -79,42 +80,55 @@ const relative = (from: string, to: string) => {
   return a.length === n ? `./${rest}` : `${"../".repeat(a.length - n)}${rest}`;
 };
 
-it("L9: oxlint refuses each import of the TOML adapter or its parser a caller may not make, in every spelling, and passes the rest", async () => {
-  // Each run plants a batch of generated imports and lints them in one oxlint process.
-  await fc.assert(
-    fc.asyncProperty(
-      fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
-      async (cases) => {
-        const planted = cases
-          .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
-          .map(([c, t]) => {
-            const spec =
-              t === "package"
-                ? "@kampus/libfabrika/settings/TomlParser"
-                : t === "relative"
-                  ? relative(c.file, ADAPTER)
-                  : t === "relative-bare"
-                    ? relative(c.file, ADAPTER).replace(/\.ts$/, "")
-                    : t === "parser"
-                      ? "toml-eslint-parser"
-                      : "toml-eslint-parser/lib/ast";
-            const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
-            return { file: c.file, spec, allowed };
-          });
-        fc.pre(planted.length > 0);
-        const result = await plant(
-          Object.fromEntries(planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`])),
-        );
+describe("L9, only the start files take the TOML adapter in next/apps, and only the adapter takes the parser", () => {
+  it("oxlint refuses each import a caller may not make, in every spelling, and passes the rest", async () => {
+    // Each run plants a batch of generated imports and lints them in one oxlint process.
+    // Coverage: each start file must be drawn taking the adapter, or a lost allowance would pass.
+    const started = new Set<string>();
+    await fc.assert(
+      fc.asyncProperty(
+        fc.uniqueArray(fc.tuple(caller, target), { minLength: 1, maxLength: 12, selector: ([c]) => c.file }),
+        async (cases) => {
+          const planted = cases
+            .filter(([c, t]) => !(c.file === ADAPTER && t !== "parser" && t !== "parser-subpath"))
+            .map(([c, t]) => {
+              const spec =
+                t === "package"
+                  ? "@kampus/libfabrika/settings/TomlParser"
+                  : t === "relative"
+                    ? relative(c.file, ADAPTER)
+                    : t === "relative-bare"
+                      ? relative(c.file, ADAPTER).replace(/\.ts$/, "")
+                      : t === "parser"
+                        ? "toml-eslint-parser"
+                        : "toml-eslint-parser/lib/ast";
+              const allowed = t === "parser" || t === "parser-subpath" ? c.parser : c.adapter;
+              return { file: c.file, spec, allowed };
+            });
+          fc.pre(planted.length > 0);
 
-        for (const p of planted) {
-          expect(result(RULE, p.file), `${p.file} imports ${p.spec}`).toEqual(p.allowed ? [] : [1]);
-        }
-      },
-    ),
-    // A lint property: each run starts one oxlint process over up to 12 planted files, so a red
-    // ends at its first counterexample rather than shrinking through more processes. 100 runs, the
-    // plan's count (0591, M8): at the old 10, seed 119120 draws the start test file only once, with a
-    // parser import, so the plant above stayed green; at 100 it first fails at run 17.
-    { seed: SEED, numRuns: 100, endOnFailure: true },
-  );
-}, 120_000);
+          for (const p of planted) {
+            if (START.includes(p.file) && p.allowed) {
+              started.add(p.file);
+            }
+          }
+
+          const result = await plant(
+            Object.fromEntries(
+              planted.map((p) => [p.file, `import * as T from "${p.spec}";\n\nexport const t = T;\n`]),
+            ),
+          );
+
+          for (const p of planted) {
+            expect(result(RULE, p.file), `${p.file} imports ${p.spec}`).toEqual(p.allowed ? [] : [1]);
+          }
+        },
+      ),
+      // A lint property: each run starts one oxlint process over up to 12 planted files, so a red
+      // ends at its first counterexample rather than shrinking through more processes.
+      // 0591's M8 count: at the old 10 runs this seed never drew a start file taking the adapter.
+      { seed: SEED, numRuns: 100, endOnFailure: true },
+    );
+    expect([...started].sort()).toEqual([...START].sort());
+  }, 120_000);
+});

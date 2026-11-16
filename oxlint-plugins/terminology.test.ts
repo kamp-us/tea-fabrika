@@ -8,7 +8,7 @@
 // (`Math.floor`), a comment or a string: those stay review work, since the word keeps other
 // meanings there (a conversation room, a minimum).
 import { describe, expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
+import { plant } from "./plant.ts";
 
 const denylist = "eslint(id-denylist)";
 

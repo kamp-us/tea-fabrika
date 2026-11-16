@@ -4,9 +4,9 @@ import { join } from "node:path";
 import * as fc from "fast-check";
 import { RuleTester } from "oxlint/plugins-dev";
 import { expect, it } from "vitest";
-import { plant } from "../next/apps/fabrika/src/exam/plant.ts";
 import { noNodeFilesystem } from "./no-node-filesystem.ts";
 import { noNodeImports } from "./no-node-imports.ts";
+import { plant } from "./plant.ts";
 
 const CODE = "fabrika(no-node-imports)";
 
