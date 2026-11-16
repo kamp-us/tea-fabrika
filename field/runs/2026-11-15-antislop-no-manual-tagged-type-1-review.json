@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-antislop-no-manual-tagged-type-1-review",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-15T22:13:20-08:00",
+  "ended": "2026-11-15T22:20:31-08:00",
+  "parent": "2026-11-15-antislop-no-manual-tagged-type-1-tests",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "The one review of anti-slop judgment slice AS-no-manual-tagged-type-1 (ticket 1057, decisions 0562, 0563 and its amendment, 0135, 0214, 0567), branch fabrikalfa/antislop-no-manual-tagged-type-1 at 215dac2d5, one tests commit over origin/main bcad0080d: merge-ready, findings 1. Every one of the 56 changed files was read line by line. Recount with anti-slop-effect/no-manual-tagged-type forced to error in a scratch config outside the repo, over next/, .agents/, .github/ci/ and oxlint-plugins/: 164 on bcad0080d, 11 at the head, which are the 2 listed hits in next/apps/fabrika/src/exam/agent-may.test.ts (:452, :466) and 9 in three files of PR 1366 (ledger/Log.ts 1, processes/internal/programMail.test.ts 3, runtime/Runner.integration.test.ts 5). So the tests row's 155 met, 153 fixed, 2 left, 9 waiting on 1366 hold. None of the 67 files of PR 1366 is in the diff. Fixes checked by class: Extract and Exclude over a tag became Types.ExtractTag and Types.ExcludeTag, which match Extract on single literal tags and are equal or stricter elsewhere (ExtractTag also takes a member whose tag is wider), so no toBeNever or not.toHaveProperty law is loosened; unions split into ExtractTag per tag (ExitReason.types, connection.test Unauthenticated, dev-control's exited or restarting) are the same type. Data.TaggedEnum conversions keep every field and every optional field: TaggedEnum maps each case with a homomorphic mapped type (node_modules/effect/src/Data.ts:146-152, effect 4.1.3), so `?` is kept (Client.laws Ready.traceId, watcher Model.failedInputs, reply.test answer.now and most) and both pins still use toEqualTypeOf; only `readonly` is added on a few test-only types (RecordPartTest Lookup), which no code writes to. Open shapes now take their tag from the product type with Pick<X, \"_tag\"> or use the product type whole; the narrowed casts (Built.test BuildError matches Built.ts:20, the Did via matches WindowMachine.ts:301-302 ByKeys and ByClick, tezgah result is checked by take's new return type) agree with the product. The two `Pick` to `Draw` renames only stop shadowing TypeScript's Pick. No assertion deleted or narrowed: per file, the count of expect, expectTypeOf, assert and it lines is the same before and after in all 56 files. No disable line, no lock line, no .oxlintrc.json or tsconfig change. The 2 left hits are truly unclear enough to list: the exam's Answer carries planted malformed answers (agent-may.test.ts:665 a refused answer with no reason) and controls whose tags widen to string (:690, :737), so typing it changes the exam's controls, a 0562 case for the plan or the owner. No product hit, so no build step is needed. The one finding is a moved comment, not blocking.",
+  "plants": [
+    {
+      "law": "next/packages/libfabrika/src/runtime/Client.laws.test.ts: Ready pinned to Pending's ready case",
+      "plant": "by reading: Data.TaggedEnum drops the `?` on traceId",
+      "result": "red: the homomorphic map keeps `?`, and making the product's traceId required makes the toEqualTypeOf pin differ"
+    },
+    {
+      "law": "next/packages/libfabrika/src/access/Access.types.test.ts: no service of access/ fails with an error tagged LedgerError",
+      "plant": "by reading: a SessionManager method gains an error tagged LedgerError",
+      "result": "red: Types.ExtractTag finds it, so the toBeNever check fails"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Program.types.test.ts: boot extends the stepped or refused cases",
+      "plant": "by reading: the stepper's init answer gains a third tag",
+      "result": "red: the member with the new tag extends neither case of the TaggedEnum union"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 7,
+  "note": "Read-only apart from this row. Node 26.13.0. The 36 plain test files the diff touches ran one at a time under nice -n 19 vitest --maxWorkers=1 at 215dac2d5: 36 files, 304 tests, all green. One pnpm typecheck at 215dac2d5: exit 0. Not run: the 12 touched .integration. files, which the 0178 guard refuses (tried on runtime/RecoveryStore.integration.test.ts: refused), and the 2 touched .visual. files; their changes are types only and the typecheck covers them. loosening.sh bcad0080d..HEAD: one 'unrecognized change' hit in each of the 56 files, at the first changed line (an import or a type); every line was read and no law is loosened. git merge-tree with origin/main 623e161f7: clean. governance.sh lists only word matches; none of the decisions it names is walked back. leakgrep on origin/main..HEAD: clean. Finding: next/packages/libfabrika/src/client/WindowMachine.laws.test.ts:1319, the `// not a frame` comment that described the `none` case now trails the whole Expect type.",
+  "step": "review"
+}
