@@ -1,11 +1,19 @@
 // P19 L13, next/. No native work occurs without explicit host opt-in.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, FileSystem, Path } from "effect";
+import { Config, Effect, FileSystem, Option, Path } from "effect";
 import { Digest } from "effect/crypto";
 import { expect, it } from "vitest";
 import * as Host from "./node/P19Launchd.test-support.ts";
 
-const enabled = process.platform === "darwin" && process.env.FABRIKA_P19_HOST === "1" && !process.env.CI;
+// The host's opt-in and CI's marker, read through Config: an empty CI reads as unset, as before.
+const host = Effect.runSync(
+  Config.all({
+    optIn: Config.String("FABRIKA_P19_HOST").pipe(Config.withDefault("")),
+    ci: Config.option(Config.String("CI")),
+  }),
+);
+
+const enabled = process.platform === "darwin" && host.optIn === "1" && Option.isNone(host.ci);
 
 it("pinned: L13 bundles keep native dependencies resolvable outside root node_modules", async () => {
   // Review found that pnpm's transitive native dependencies were absent from the root link.

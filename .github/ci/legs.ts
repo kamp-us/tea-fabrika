@@ -28,6 +28,7 @@ import { appendFileSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { Config, ConfigProvider, Effect, Option } from "effect";
 import { assign, measured, median } from "../../vitest.shards.ts";
 import { readers, validSha } from "./changes.mjs";
 import { e2eLegs, nextMinutes, vitestLegs } from "./workflow-lint.ts";
@@ -225,16 +226,30 @@ const list = (root: string, args: readonly string[]): string[] => {
 
 // Under Vitest `import.meta.main` is false, so a test that imports this file never lists or writes.
 if (import.meta.main) {
+  // The step's variables, read through Effect's Config. An empty variable stays empty, as a read of
+  // process.env gave it, so an empty FILTER still means the reader tests alone.
+  const text = (name: string) => Config.String(name).pipe(Config.option, Config.map(Option.getOrUndefined));
+  const env = Effect.runSync(
+    Config.all({
+      event: text("EVENT"),
+      filter: text("FILTER"),
+      base: text("BASE"),
+      visual: text("VISUAL"),
+      budget: text("BUDGET"),
+      output: text("GITHUB_OUTPUT"),
+      summary: text("GITHUB_STEP_SUMMARY"),
+    }).parse(ConfigProvider.fromEnv({ preserveEmptyStrings: true })),
+  );
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const workflow = readFileSync(join(root, ".github/workflows/check.yaml"), "utf8");
   const full = { vitest: vitestLegs(workflow).length, e2e: e2eLegs(workflow).length };
   const run: Run = {
-    event: process.env["EVENT"] ?? "",
-    scope: (process.env["FILTER"] ?? "next/") === "next/" ? "all" : "readers",
-    base: process.env["BASE"] ?? "",
-    visual: process.env["VISUAL"] === "true",
+    event: env.event ?? "",
+    scope: (env.filter ?? "next/") === "next/" ? "all" : "readers",
+    base: env.base ?? "",
+    visual: env.visual === "true",
   };
-  const limit = limits(nextMinutes(workflow), budgetOf(process.env["BUDGET"]));
+  const limit = limits(nextMinutes(workflow), budgetOf(env.budget));
   // `--changed` from the base on a run of all of next/; none on a run of the reader tests alone.
   const changed = run.scope === "all" ? [`--changed=${run.base}`] : [];
   const sized = sizes(run);
@@ -261,13 +276,13 @@ if (import.meta.main) {
     : `legs: the full matrix, on ${run.event || "an unknown event"} with all of next/${validSha(run.base) ? "" : " and no base commit"}`;
   console.log(note);
   console.log(lines.join("\n"));
-  const output = process.env["GITHUB_OUTPUT"];
+  const output = env.output;
 
   if (output !== undefined && output !== "") {
     appendFileSync(output, `${lines.join("\n")}\n`);
   }
 
-  const summary = process.env["GITHUB_STEP_SUMMARY"];
+  const summary = env.summary;
 
   if (summary !== undefined && summary !== "") {
     appendFileSync(summary, `${note}\n`);

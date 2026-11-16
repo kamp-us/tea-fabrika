@@ -4,7 +4,7 @@
 import { Outcome } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect";
+import { Config, Deferred, Effect, Exit, Fiber, Layer, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   Activity,
@@ -541,12 +541,15 @@ describe("P34 interrupted recovery", () => {
     );
   }
 
+  // The P12 driver's file URL, when the lead's machine sets one, read through Config.
+  const instanceDriver = Effect.runSync(Config.option(Config.String("P34_INSTANCE_DRIVER")));
+
   // P12 supplies its real local-instance test driver. This file stays in the tests role's paths.
   // Set P34_INSTANCE_DRIVER to that module's file URL on the lead's machine. Its open function
   // installs P34's trusted failure hook, never a public fault endpoint. waitForRecovery waits
   // for the real object's alarm; evict reconstructs the actual object with its durable storage.
   // scenario: the optional P12 driver runs real object alarms and reconstruction on the local instance.
-  it.skipIf(!process.env.P34_INSTANCE_DRIVER)(
+  it.skipIf(Option.isNone(instanceDriver))(
     "scenario: p80 real instance: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
       type Status = { process: string; state: string; until: number | null };
@@ -561,7 +564,7 @@ describe("P34 interrupted recovery", () => {
         executions: Effect.Effect<number, unknown>;
         close: Effect.Effect<void>;
       };
-      const modulePath = process.env.P34_INSTANCE_DRIVER!;
+      const modulePath = Option.getOrThrow(instanceDriver);
       const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
         modulePath
       );
