@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-watch-review3",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1341",
+  "started": "2026-11-15T17:41:33-08:00",
+  "ended": "2026-11-15T17:47:30-08:00",
+  "parent": "2026-11-15-watch-fix2",
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Watch quest recheck of 533f0dee8, in next/, standing in for the second reviewer: merge-ready, one finding row. The class review2 sent back is fixed: M16's stop case in next/apps/fabrika/src/worker-monitor.integration.test.ts sees the DOWN after stop_child from pushed frames alone, green in CI run 43783711030 at 63b089fbe and red in plant run 43784614754 (job 133033394775, 'no frame in 25000 ms' at line 500, plant diff deletes only the wake in stopChild). Every way a life ends on workerd reaches a wake: an exit, a crash and a restart all go through the Project's exit (Runner writing_exit and the normal exit call the remote ProcessManager's exit, which is processExit), and a child stop through stopChild. The amendment A-Recheck rows match the branch, and M15 requires overtake, settle, lose_after and noproc.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Read-only apart from this row. git diff --stat 63b089fbe HEAD: the plan's signature line and M16 row, and the fix2 row. M13 plant (b) checked by reading: watches fold in Map insertion order (Process.ts inbound), so the dropped watch's DOWN folds first and the exact toEqual fails. git merge-tree with origin/main 6f3c96c46: no conflict. loosening.sh: one hit, an import line, no law loosened. Not run by the reviewer: any .integration. file, workerd, pnpm typecheck, any unit file (the fix touched none).",
+  "step": "review"
+}

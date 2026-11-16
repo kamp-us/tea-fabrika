@@ -1,0 +1,24 @@
+2026-11-16T00:05:38.3828857Z 
+2026-11-16T00:05:38.4306550Z  [31m❯[39m [30m[43m next-integration [49m[39m next/apps/fabrika/src/worker-supervision.integration.test.ts [2m([22m[2m4 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 32018[2mms[22m[39m
+2026-11-16T00:05:38.4308140Z    [31m❯[39m ticket 402: P34 supervision on the real Worker path [2m(4)[22m
+2026-11-16T00:05:38.4314704Z      [33m[2m✓[22m[39m scenario: ticket 402 plant (ignore the marker, use a timer fiber, count one attempt twice): a saved stepping marker becomes one interrupted recovery after a platform abort[33m 9059[2mms[22m[39m
+2026-11-16T00:05:38.4316884Z [31m     [31m×[31m scenario: ticket 646 plant (ignore the marker, refuse a live name, count one attempt twice): workerd killed inside a step refuses one letter, restarts once and accepts its one resend[39m[33m 8670[2mms[22m[39m
+2026-11-16T00:05:47.1695491Z  [32m✓[39m [30m[43m next-integration [49m[39m next/apps/fabrika/src/sibling.laws.integration.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 8208[2mms[22m[39m
+2026-11-16T00:06:46.4259317Z 
+2026-11-16T00:06:50.3103678Z  [31m❯[39m [30m[43m next-integration [49m[39m next/apps/fabrika/src/worker-quotas.integration.test.ts [2m([22m[2m3 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 24571[2mms[22m[39m
+2026-11-16T00:06:50.3105515Z [31m   [31m×[31m scenario: Q13 writes, one program refuses or faults while another remains writable[39m[33m 12909[2mms[22m[39m
+2026-11-16T00:06:50.3106860Z    [33m[2m✓[22m[39m scenario: Q13 storage, one program refuses or faults while another remains writable[33m 5547[2mms[22m[39m
+2026-11-16T00:06:52.7906119Z [31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+2026-11-16T00:06:52.7906730Z 
+2026-11-16T00:06:52.7911451Z [41m[1m FAIL [22m[49m [30m[43m next-integration [49m[39m next/apps/fabrika/src/worker-quotas.integration.test.ts[2m > [22mscenario: Q13 writes, one program refuses or faults while another remains writable
+2026-11-16T00:06:52.8054668Z [41m[1m FAIL [22m[49m [30m[43m next-integration [49m[39m next/apps/fabrika/src/worker-supervision.integration.test.ts[2m > [22mticket 402: P34 supervision on the real Worker path[2m > [22mscenario: ticket 646 plant (ignore the marker, refuse a live name, count one attempt twice): workerd killed inside a step refuses one letter, restarts once and accepts its one resend
+2026-11-16T00:06:52.8056889Z [31m[1mAssertionError[22m: expected { _tag: 'between' } to deeply equal { _tag: 'inside', letter: 'k-10' }[39m
+2026-11-16T00:06:52.8057521Z 
+2026-11-16T00:06:52.8154381Z 
+2026-11-16T00:06:52.8154405Z 
+2026-11-16T00:06:52.8154772Z [2m Test Files [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m58 passed[39m[22m[90m (60)[39m
+2026-11-16T00:06:52.8157415Z [2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m530 passed[39m[22m[2m | [22m[33m1 skipped[39m[90m (533)[39m
+2026-11-16T00:06:52.8157982Z [2m   Start at [22m 23:59:12
+2026-11-16T00:06:52.8290298Z ##[error]{
+2026-11-16T00:06:52.8330125Z ##[error]AssertionError: expected { _tag: 'between' } to deeply equal { _tag: 'inside', letter: 'k-10' }
+2026-11-16T00:06:52.8658290Z ##[error]Process completed with exit code 1.

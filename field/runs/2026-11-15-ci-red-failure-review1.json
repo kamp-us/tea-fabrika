@@ -1,0 +1,20 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-ci-red-failure-review1",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1383",
+  "started": "2026-11-15T16:30:49-08:00",
+  "ended": "2026-11-15T16:36:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "review",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "send",
+  "why": "Review of 91f5ee5b1, today's CI tooling: changes 1. A red full run now ends failure as claimed, and the five probe runs back each row of the yaml's table. But the old stop step stopped every leg of the run, both jobs, within about 15 s (run 43776563690); GitHub's fail-fast stops only the legs of the red leg's own matrix (probe 43778347612: 16 s). A red tooling leg now leaves all 7 next legs running, up to about 59 runner-minutes more per red run at green run 43775455200's leg times, and a red next leg leaves the 2 tooling legs, up to about 14. That narrows a law's reach, the pull request body does not name it, and a loosening waits on the owner (0014). Separately, a merge with pull request 1380 conflicts in workflow-lint/scheduled.ts: both add an SC12; queue: max in scheduled.yaml merges clean.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 6,
+  "note": "Read-only. Ran alone with the pinned Node: workflow-lint/scheduled.test.ts (96 passed) and .github/ci/scheduled.test.ts (28 passed). Plants by reading: SC12's +BACKSTOP equality dropped (SC12 scenario red), ending's step time-out check moved after the failed return (new ending property red), SC4's cancels check dropped (SC4 stop-step test red). loosening.sh: six unrecognized-change hits, one per changed file, all read; the one real loosening is fail fast across jobs. git merge-tree with origin/main: clean; with origin/fabrikalfa/schedule-fires: conflict in scheduled.ts only. Read-only gh calls on the five probe runs, two green runs and red branch run 43776563690. No workflow run started or canceled.",
+  "step": "review"
+}
