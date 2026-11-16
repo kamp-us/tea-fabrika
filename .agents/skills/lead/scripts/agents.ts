@@ -22,7 +22,7 @@
 import { layer as nodeServices } from "@effect/platform-node/NodeServices";
 import { Agent } from "@kampus/fabrika-old";
 import { ADAPTERS, acpAdapter, psReaper } from "@kampus/fabrika-old/agents/acp";
-import { Clock, Context, Effect, FileSystem, Result, Schema, Stream } from "effect";
+import { Clock, Context, DateTime, Effect, FileSystem, Result, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 import { boxEnv, repoNode } from "./boxnode.ts";
 import { CAPACITY, codexExecAdapter } from "./codexexec.ts";
@@ -252,9 +252,8 @@ const spending = (spent: Spent, heard: Agent.Heard<unknown>): Spent => {
 const appendTo = (events: string, line: object) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    yield* fs
-      .writeFileString(events, `${JSON.stringify({ at: new Date().toISOString(), ...line })}\n`, { flag: "a" })
-      .pipe(Effect.ignore);
+    const at = DateTime.formatIso(yield* DateTime.now);
+    yield* fs.writeFileString(events, `${JSON.stringify({ at, ...line })}\n`, { flag: "a" }).pipe(Effect.ignore);
   });
 
 /**
@@ -559,7 +558,7 @@ export const stepRow = (r: RowAsk): string => {
     const offset = -d.getTimezoneOffset();
     const sign = offset >= 0 ? "+" : "-";
     const pad = (n: number) => String(Math.abs(n)).padStart(2, "0");
-    const shifted = new Date(d.getTime() + offset * 60_000).toISOString().slice(0, 19);
+    const shifted = DateTime.formatIso(DateTime.makeUnsafe(d.getTime() + offset * 60_000)).slice(0, 19);
     return `${shifted}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
   };
   const usd = listUsd(r.provider, r.model, r.spent);

@@ -10,7 +10,7 @@
 // The order of the checks is the contract: the first that fails names the reason. Paths are read the
 // way Python's pathlib read them before this port: "." parts drop, ".." stays, and a link is
 // followed by hand, so every link and its target count as MAIN's storage.
-import { Effect, FileSystem, Option, Path, Schema } from "effect";
+import { DateTime, Effect, FileSystem, Option, Path, Schema } from "effect";
 import { BoxGit, type Inspection } from "./BoxGit.ts";
 import { Runs } from "./Runs.ts";
 
@@ -595,7 +595,7 @@ const inspect = Effect.fn("Remove.inspect")(function* (
   // Keep Git's racy-index check: a fresh timestamp could hide a same-size edit. The copy's time is
   // never later than the original's (a Date holds milliseconds), so git only checks more.
   const stamp = yield* d.stat(joined(data, "index"));
-  const now = new Date(0);
+  const now = DateTime.toDateUtc(DateTime.makeUnsafe(0));
   yield* d.failed(
     fs.utimes(
       joined(into, "index"),

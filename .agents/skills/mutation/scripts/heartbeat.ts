@@ -27,7 +27,7 @@
  * - A merge stamped in the future (a skewed clock): never late on its own.
  */
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Console, Effect, Schema, Stream } from "effect";
+import { Clock, Console, DateTime, Effect, Schema, Stream } from "effect";
 import { ChildProcess } from "effect/process";
 
 /** How long a merge may wait for a passing run, in ms. */
@@ -47,7 +47,9 @@ export const beat = (now: number, lastPass: number | null, merges: ReadonlyArray
     : Beat.cases.ok.make({ lastPass, merges: merges.length });
 };
 
-const iso = (ms: number | null) => (ms === null ? "none" : new Date(ms).toISOString().replace(/\.\d{3}Z$/, "Z"));
+const iso = (ms: number | null) =>
+  ms === null ? "none" : DateTime.formatIso(DateTime.makeUnsafe(ms)).replace(/\.\d{3}Z$/, "Z");
+
 const hours = (ms: number) => `${(ms / 3_600_000).toFixed(1)} h`;
 
 /** The one line it prints. Pure. */

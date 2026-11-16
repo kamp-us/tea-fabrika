@@ -2,7 +2,7 @@
 // time limit, what a failed command answers, and the quest's state file. Commands here are plain
 // `sh` lines; no git, Electron, network or agent runs.
 import { NodeServices } from "@effect/platform-node";
-import { Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
+import { Clock, Effect, Fiber, FileSystem, Option, Ref, type Scope } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { repoNode } from "../boxnode.ts";
@@ -183,10 +183,10 @@ describe("the host step's outcomes", () => {
     ran(
       Effect.gen(function* () {
         const dir = yield* temp;
-        const started = Date.now();
+        const started = yield* Clock.currentTimeMillis;
         // 0.002 minutes is 120 ms.
         const outcome = yield* runCommands(dir, ["echo begun; sleep 30"], {}, `${dir}/log`, 0.002);
-        expect(Date.now() - started).toBeLessThan(10_000);
+        expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(10_000);
         expect(outcome).toMatchObject({ _tag: "send", to: "build" });
         expect(outcome?.reason).toContain("0.002-minute limit");
         expect(outcome?.reason).toContain("begun");

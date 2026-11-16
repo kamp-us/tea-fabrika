@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { DateTime, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import * as Beat from "./Beat.ts";
@@ -8,7 +8,7 @@ const options = { seed: 119120, numRuns: 300 };
 const T0 = Date.parse("2026-11-10T19:00:00.000Z");
 const phase = fc.constantFrom(...Beat.PHASES);
 const ms = (max: number) => fc.integer({ min: 0, max });
-const at = (offset: number) => new Date(T0 + offset);
+const at = (offset: number) => DateTime.toDateUtc(DateTime.makeUnsafe(T0 + offset));
 
 describe("Beat.enter and Beat.tick", () => {
   it("keeps `since` within one phase and restarts it on a new phase", () => {

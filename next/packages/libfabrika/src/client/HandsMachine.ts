@@ -13,7 +13,7 @@
  */
 import { applyCell, type Sub } from "@demlik/tea";
 import { Cmd, Machine } from "@demlik/tea/effect";
-import { Option, Schema } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import { ProcessId } from "../ProcessId.ts";
 import { Rev } from "../Rev.ts";
 import { Command, Task, Result } from "../tasks/Task.ts";
@@ -156,7 +156,7 @@ const assigned = (w: Assigned): Assigned => ({
 });
 
 /** A Msg's time as the journal keeps it: the client's own clock, in ISO text. */
-const iso = (at: number): string => new Date(at).toISOString();
+const iso = (at: number): string => DateTime.formatIso(DateTime.makeUnsafe(at));
 
 /** The start time to keep on an entry, when one is known. */
 const since = (startedAt: string | undefined) => (startedAt === undefined ? {} : { startedAt });

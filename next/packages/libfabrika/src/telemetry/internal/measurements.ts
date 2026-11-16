@@ -6,7 +6,7 @@
 // Every step here is plain code over the synchronous `Sql`; the sink runs the row, the rollup and
 // the size inside a span's `end`, and the archive inside `flush`. No alarm, no timer. Each archive
 // try writes its own health row, `sink.archive`, good or failed, so a day that cannot leave is seen.
-import { Clock, Effect, Option, Result, Schema, Struct } from "effect";
+import { Clock, DateTime, Effect, Option, Result, Schema, Struct } from "effect";
 import type { Sql } from "../../Sql.ts";
 import { Archive, sha256 } from "../Archive.ts";
 import { type Measurements, type SinkError, MetricPoint, sinkError, SumPoint } from "../Trace.ts";
@@ -221,7 +221,7 @@ const due = (sql: Sql, object: string, now: number): Array<Part> => {
     .exec(`SELECT DISTINCT (at / ${DAY}) * ${DAY} AS day FROM measurements WHERE at < ? ORDER BY day`, cutoff)
     .map((row) => decodeDay(row).day)
     .flatMap((start) => {
-      const day = new Date(start).toISOString().slice(0, 10);
+      const day = DateTime.formatIso(DateTime.makeUnsafe(start)).slice(0, 10);
       const [open] = sql.exec(
         `SELECT count(*) AS n FROM measurements WHERE at >= ? AND at < ?
 				AND (at / ${HOUR}) * ${HOUR} NOT IN (SELECT hour FROM aggregated)`,
