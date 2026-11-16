@@ -246,7 +246,8 @@ const brain = Effect.fnUntraced(function* (root: Key, hands: Key) {
 /** The door: one gateway connection and one transport driver per socket the client opens. */
 const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof brain>>) {
   const work = yield* Queue.unbounded<Effect.Effect<void>>();
-  const drivers = new Set<ReturnType<typeof connection>>();
+  // Each open socket's ring. A ring that fails is ignored.
+  const rings = new Set<(stream: string, rev: number) => Effect.Effect<void>>();
   const sockets: Array<MemorySocket> = [];
   const lose = { next: 0 };
   /** Each ring the referee sent, by the name it was sent to: only `READER` reaches a socket. */
@@ -261,7 +262,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         Effect.flatMap(({ to, stream, rev }) => {
           rung.push({ to, stream });
           return to === READER
-            ? Effect.forEach([...drivers], (c) => Effect.ignore(c.ring(stream, rev)), { discard: true, concurrency: 1 })
+            ? Effect.forEach([...rings], (ring) => ring(stream, rev), { discard: true, concurrency: 1 })
             : Effect.void;
         }),
       ),
@@ -354,7 +355,7 @@ const door = Effect.fnUntraced(function* (b: Effect.Success<ReturnType<typeof br
         client.id = id;
         const nonce = yield* b.d.challenge(id);
         attached = Attached.cases.new.make({ client: id, nonce });
-        drivers.add(c);
+        rings.add((stream, rev) => Effect.ignore(c.ring(stream, rev)));
         made.receive(JSON.stringify({ jsonrpc: "2.0", method: "challenge", params: { nonce } }));
       }).pipe(Effect.ignore),
     );

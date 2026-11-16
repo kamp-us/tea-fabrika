@@ -20,7 +20,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
+const law = <T, E>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, E, never>) =>
   it(name, () =>
     fc.assert(
       fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
@@ -248,12 +248,15 @@ describe("T695, a declaration that does not load keeps why", () => {
       Effect.gen(function* () {
         const expected = stepper(declared);
         expect(Result.isFailure(expected)).toBe(true);
-        const error = yield* Effect.flip<unknown, ProgramDown, never>(
+        // Both calls must fail; what either would have answered is of no interest here.
+        const error = yield* Effect.flip<void, ProgramDown, never>(
           call === "execution"
-            ? nodeExecution(declared).init(null)
-            : Effect.provide(
-                ProgramLoader.use((loader) => loader.load("broken")),
-                ProgramLoader.layer({ broken: declared }, {}),
+            ? Effect.asVoid(nodeExecution(declared).init(null))
+            : Effect.asVoid(
+                Effect.provide(
+                  ProgramLoader.use((loader) => loader.load("broken")),
+                  ProgramLoader.layer({ broken: declared }, {}),
+                ),
               ),
         );
         expect(error).toBeInstanceOf(ProgramDown);
@@ -305,7 +308,7 @@ law(
   }),
   ({ site, bad }) =>
     Effect.gen(function* () {
-      const error = yield* Effect.flip<unknown, ProgramDown, never>(causedAt[site](bad));
+      const error = yield* Effect.flip(Effect.asVoid<unknown, ProgramDown, never>(causedAt[site](bad)));
       expect(error).toBeInstanceOf(ProgramDown);
       expect(error.cause, "the site keeps a cause in memory").toBeDefined();
       const before = new ProgramDown({ reason: error.reason }).errorClass;
@@ -363,7 +366,9 @@ describe("T695, C7 [secrets]: an execution failure reply holds no input-bearing 
           const valueCore = `sntlv${value}`;
           const keyText = `${decor}${keyCore}${decor}`;
           const valueText = `${decor}${valueCore}${decor}`;
-          const error = yield* Effect.flip<unknown, ProgramDown, never>(feed(call, { [keyText]: valueText }));
+          const error = yield* Effect.flip(
+            Effect.asVoid<unknown, ProgramDown, never>(feed(call, { [keyText]: valueText })),
+          );
           expect(error).toBeInstanceOf(ProgramDown);
           const reply = JSON.stringify(executionFailure(error));
 

@@ -243,7 +243,8 @@ describe("P34 recovery storage", () => {
             disk.reopen();
             await Effect.runPromise(
               Effect.gen(function* () {
-                expect(yield* Effect.flip((yield* S).load)).toMatchObject({
+                // The load must fail; what it would have read is of no interest here.
+                expect(yield* Effect.flip(Effect.asVoid((yield* S).load))).toMatchObject({
                   _tag: "RecoveryStoreError",
                   reason: { _tag: "BadRow" },
                 });

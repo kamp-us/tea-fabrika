@@ -273,7 +273,7 @@ export const suite = (open: Effect.Effect<Sql, never, Scope.Scope>) =>
               };
               /** The twin's answer: a fresh store on the twin for this one call. */
               const fresh = (sql: Sql) => store(sql);
-              const both = Effect.fnUntraced(function* (saved: Journal, onA: Effect.Effect<void, unknown>) {
+              const both = Effect.fnUntraced(function* <E>(saved: Journal, onA: Effect.Effect<void, E>) {
                 const left = yield* Effect.exit(onA);
                 const right = yield* Effect.exit(fresh(twin).save(saved));
                 expect(

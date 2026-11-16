@@ -820,7 +820,7 @@ const wire = Effect.fnUntraced(function* (
   const context = yield* Layer.build(layer);
   const service = yield* ConnectionService.pipe(Effect.provideContext(context));
   let id = 0;
-  const send = (method: string, params: unknown): Effect.Effect<void, unknown> => {
+  const send = (method: string, params: unknown) => {
     const effect: ReturnType<typeof service.message> = Reflect.apply(service.message, service, [
       socket,
       JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params }),
@@ -1844,7 +1844,8 @@ describe("P10 review regressions", () => {
   type Edge = {
     readonly name: string;
     readonly spy: () => Spy;
-    readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, unknown>;
+    // What an edge's call fails with: the gateway's own failures, its ledger's, or an Error.
+    readonly fail: (w: World, armed: Armed) => Effect.Effect<unknown, Error | GatewayError | LedgerError>;
     readonly refused: (failure: unknown, thrown: unknown) => void;
   };
   const gatewayCrypto = (failure: unknown, thrown: unknown) => {
@@ -1949,7 +1950,7 @@ describe("P10 review regressions", () => {
                     restore = () => spy.mockRestore();
                     failOnce(spy, thrown, sync);
                   }).pipe(Effect.andThen(effect));
-                const failure = yield* Effect.flip(edge.fail(w, armed)).pipe(
+                const failure = yield* Effect.flip(Effect.asVoid(edge.fail(w, armed))).pipe(
                   Effect.ensuring(Effect.sync(() => restore())),
                 );
                 edge.refused(failure, thrown);

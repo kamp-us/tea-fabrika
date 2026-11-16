@@ -36,9 +36,9 @@ const chosen = {
   ids: Array.from({ length: 12 }, (_, n) => `${n}${"x".repeat(2000)}`),
 };
 
-const law = (
+const law = <E>(
   name: string,
-  check: (input: ReturnType<typeof generated.generate>["value"]) => Effect.Effect<void, unknown>,
+  check: (input: ReturnType<typeof generated.generate>["value"]) => Effect.Effect<void, E>,
 ) =>
   it(name, async () => {
     await fc.assert(
@@ -51,12 +51,10 @@ const law = (
     );
   });
 
-type Connection = {
-  frame: (text: string) => Effect.Effect<void, unknown>;
-  ring: ReturnType<typeof connection>["ring"];
-  wake: () => Effect.Effect<void, unknown>;
-  probe: (session: string) => Effect.Effect<number | null, unknown>;
-};
+// What a wait here fails with: the referee's own failures.
+type WaitFailure = LedgerError | typeof RateCountFailure.Type;
+
+type Connection = ReturnType<typeof connection<WaitFailure>>;
 
 const online = () =>
   Attached.cases.online.make({
@@ -73,10 +71,7 @@ const setup = Effect.fnUntraced(function* (
     stream: string,
     after: number,
     reader: string,
-  ) => Effect.Effect<
-    { readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" },
-    LedgerError | typeof RateCountFailure.Type
-  >,
+  ) => Effect.Effect<{ readonly _tag: "ready"; readonly rev: number } | { readonly _tag: "parked" }, WaitFailure>,
   call = () => Effect.succeed(Answer.cases.ok.make({ result: null })),
   session = "session-1",
   ping = 42,
@@ -85,7 +80,7 @@ const setup = Effect.fnUntraced(function* (
   let saved: typeof Attached.Type = online();
   const frames: Array<Record<string, unknown>> = [];
   const closes: Array<number> = [];
-  const c: Connection = connection({
+  const c: Connection = connection<WaitFailure>({
     reader: "gateway/session-1",
     session,
     ping: () => ping,

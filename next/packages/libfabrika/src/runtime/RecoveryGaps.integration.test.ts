@@ -281,6 +281,65 @@ const restart = (r: (typeof ProgramRunner)["Service"], id: string, build: string
     return yield* r.restart({ id, build });
   });
 
+type Status = { process: string; state: string; until: number | null };
+
+/** The real instance the P12 driver opens, failing with that driver's own error. */
+type Instance<E> = {
+  send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, E>;
+  status: Effect.Effect<Status, E>;
+  evict: Effect.Effect<void, E>;
+  waitForRecovery: Effect.Effect<void, E>;
+  duplicateAlarm: Effect.Effect<void, E>;
+  dead: Effect.Effect<ReadonlyArray<unknown>, E>;
+  input: (id: string) => Effect.Effect<unknown, E>;
+  executions: Effect.Effect<number, E>;
+  close: Effect.Effect<void>;
+};
+
+/** P80 on a driver: generic over the driver's error, which this law only sees as a failure. */
+const p80 = <E>(driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance<E>, E> }) =>
+  Effect.runPromise(
+    Effect.acquireUseRelease(
+      driver.open(["TypeError", "RangeError", "TypeError"]),
+      (s) =>
+        Effect.gen(function* () {
+          const original = { type: "poison" };
+
+          for (let n = 1; n <= 3; n++) {
+            const answer = yield* Effect.exit(s.send("poison", original));
+            expect(answer).toMatchObject(
+              n < 3 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", reason: "dead" } },
+            );
+            const down = yield* s.status;
+            // P34 amendment: three crashes stay inside the restart budget, so no down event.
+            expect(down.state).toBe("ended");
+            yield* Effect.exit(s.send("poison", original));
+            expect(yield* s.status).toEqual(down);
+            expect(yield* s.executions).toBe(n);
+            yield* s.evict;
+            expect(yield* s.status).toEqual(down);
+            yield* s.waitForRecovery;
+            const next = yield* s.status;
+            expect(next.process).not.toBe(down.process);
+            yield* s.duplicateAlarm;
+            expect(yield* s.status).toEqual(next);
+          }
+
+          expect(yield* s.send("poison", original)).toMatchObject({
+            _tag: "refused",
+            reason: "dead",
+          });
+          expect(yield* s.executions).toBe(3);
+          expect(yield* s.dead).toMatchObject([
+            { tries: 3, limit: 3, m: "poison", errors: ["TypeError", "RangeError", "TypeError"] },
+          ]);
+          expect(yield* s.input("poison")).toMatchObject({ envelope: { input: original } });
+          expect(yield* s.send("good", { type: "add", n: 1 })).toMatchObject({ _tag: "accepted" });
+        }),
+      (s) => s.close,
+    ),
+  );
+
 describe("P34 interrupted recovery", () => {
   for (const cut of [
     "after_observation",
@@ -549,63 +608,8 @@ describe("P34 interrupted recovery", () => {
   it.skipIf(!process.env.P34_INSTANCE_DRIVER)(
     "scenario: p80 real instance: durable poison, down resends and duplicate alarms survive object reconstruction",
     async () => {
-      type Status = { process: string; state: string; until: number | null };
-      type Instance = {
-        send: (id: string, m: unknown) => Effect.Effect<{ _tag: string; reason?: string }, unknown>;
-        status: Effect.Effect<Status, unknown>;
-        evict: Effect.Effect<void, unknown>;
-        waitForRecovery: Effect.Effect<void, unknown>;
-        duplicateAlarm: Effect.Effect<void, unknown>;
-        dead: Effect.Effect<ReadonlyArray<unknown>, unknown>;
-        input: (id: string) => Effect.Effect<unknown, unknown>;
-        executions: Effect.Effect<number, unknown>;
-        close: Effect.Effect<void>;
-      };
-      const modulePath = process.env.P34_INSTANCE_DRIVER!;
-      const driver: { open: (errors: ReadonlyArray<string>) => Effect.Effect<Instance, unknown> } = await import(
-        modulePath
-      );
-      await Effect.runPromise(
-        Effect.acquireUseRelease(
-          driver.open(["TypeError", "RangeError", "TypeError"]),
-          (s) =>
-            Effect.gen(function* () {
-              const original = { type: "poison" };
-
-              for (let n = 1; n <= 3; n++) {
-                const answer = yield* Effect.exit(s.send("poison", original));
-                expect(answer).toMatchObject(
-                  n < 3 ? { _tag: "Failure" } : { _tag: "Success", value: { _tag: "refused", reason: "dead" } },
-                );
-                const down = yield* s.status;
-                // P34 amendment: three crashes stay inside the restart budget, so no down event.
-                expect(down.state).toBe("ended");
-                yield* Effect.exit(s.send("poison", original));
-                expect(yield* s.status).toEqual(down);
-                expect(yield* s.executions).toBe(n);
-                yield* s.evict;
-                expect(yield* s.status).toEqual(down);
-                yield* s.waitForRecovery;
-                const next = yield* s.status;
-                expect(next.process).not.toBe(down.process);
-                yield* s.duplicateAlarm;
-                expect(yield* s.status).toEqual(next);
-              }
-
-              expect(yield* s.send("poison", original)).toMatchObject({
-                _tag: "refused",
-                reason: "dead",
-              });
-              expect(yield* s.executions).toBe(3);
-              expect(yield* s.dead).toMatchObject([
-                { tries: 3, limit: 3, m: "poison", errors: ["TypeError", "RangeError", "TypeError"] },
-              ]);
-              expect(yield* s.input("poison")).toMatchObject({ envelope: { input: original } });
-              expect(yield* s.send("good", { type: "add", n: 1 })).toMatchObject({ _tag: "accepted" });
-            }),
-          (s) => s.close,
-        ),
-      );
+      // The driver lives outside the repository, so its own error type is not known here.
+      await p80(await import(process.env.P34_INSTANCE_DRIVER!));
     },
   );
 });

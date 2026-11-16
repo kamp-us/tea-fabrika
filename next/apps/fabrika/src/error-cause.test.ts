@@ -16,7 +16,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
+const law = <T, E>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, E, never>) =>
   it(name, () =>
     fc.assert(
       fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),

@@ -34,25 +34,25 @@ export interface Counts {
   readonly consumers: number;
 }
 
-export interface Entry {
-  readonly enter: (choice: number) => Effect.Effect<unknown, unknown>;
+export interface Entry<E> {
+  readonly enter: (choice: number) => Effect.Effect<unknown, E>;
   readonly close: Effect.Effect<void>;
 }
 
-export interface Driver {
-  readonly deploy: (recipe: StartsTest.Recipe) => Effect.Effect<void, unknown>;
-  readonly open: (path: Path, corrupt?: number) => Effect.Effect<Entry, unknown, Scope.Scope>;
+export interface Driver<E> {
+  readonly deploy: (recipe: StartsTest.Recipe) => Effect.Effect<void, E>;
+  readonly open: (path: Path, corrupt?: number) => Effect.Effect<Entry<E>, E, Scope.Scope>;
   readonly fault: (fault: Fault) => void;
   readonly counts: () => Counts;
-  readonly outputs: Effect.Effect<Outputs, unknown>;
+  readonly outputs: Effect.Effect<Outputs, E>;
 }
 
-export type Open = (recipe: StartsTest.Recipe, secret: string) => Effect.Effect<Driver, unknown, Scope.Scope>;
+export type Open<E> = (recipe: StartsTest.Recipe, secret: string) => Effect.Effect<Driver<E>, E, Scope.Scope>;
 
 const pick = <A>(items: ReadonlyArray<A>, choice: number) =>
   Option.getOrThrow(Option.fromUndefinedOr(items[choice % items.length]));
 
-export const suite = (open: Open) =>
+export const suite = <E>(open: Open<E>) =>
   describe("L10 L16 entry flows, next/", () => {
     for (const path of paths) {
       StartsTest.law(
@@ -157,7 +157,7 @@ export const suite = (open: Open) =>
       ([recipe, secret, choices]) =>
         Effect.gen(function* () {
           const driver = yield* open(recipe, secret);
-          const owners = new Map<Path, Entry>();
+          const owners = new Map<Path, Entry<E>>();
           const ready = new Set<Path>();
 
           for (const choice of choices) {

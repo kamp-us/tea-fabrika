@@ -12,10 +12,10 @@ import { Origin } from "./Sources.ts";
 export const options = { arbitrary: { seed: 119120, runs: 100 } };
 
 // Stateful walks use fast-check because the plan requires fc.array move recipes.
-export const law = <A>(
+export const law = <A, E>(
   name: string,
   arbitrary: fc.Arbitrary<A>,
-  check: (value: A) => Effect.Effect<unknown, unknown, Scope.Scope | Digest.Digest>,
+  check: (value: A) => Effect.Effect<unknown, E, Scope.Scope | Digest.Digest>,
   examples?: Array<[A]>,
 ) => {
   const parameters = { numRuns: 100, ...(examples === undefined ? {} : { examples }) };
@@ -325,15 +325,15 @@ export const receipt = (input: Input): Saved => ({
 const Reply = Schema.TaggedStruct("ok", { value: Schema.Unknown });
 export const reply = (input: Input) => Reply.make({ value: receipt(input) });
 
-export interface Driver {
-  readonly record: (input: Input) => Effect.Effect<Saved, unknown>;
-  readonly read: (start: string) => Effect.Effect<Saved, unknown>;
-  readonly entries: Effect.Effect<ReadonlyArray<Saved>, unknown>;
-  readonly loseReply: (work: Effect.Effect<Saved, unknown>) => Effect.Effect<Saved, unknown>;
+export interface Driver<E> {
+  readonly record: (input: Input) => Effect.Effect<Saved, E>;
+  readonly read: (start: string) => Effect.Effect<Saved, E>;
+  readonly entries: Effect.Effect<ReadonlyArray<Saved>, E>;
+  readonly loseReply: (work: Effect.Effect<Saved, E>) => Effect.Effect<Saved, E>;
   readonly counts: () => { readonly reads: number; readonly appends: number; readonly consumers: number };
 }
 
-export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
+export const suite = <E>(open: Effect.Effect<Driver<E>, E, Scope.Scope>) =>
   describe("L5 L6 instance starts, next/", () => {
     law(
       "reachable deployments and lost replies retain immutable starts and original metadata",

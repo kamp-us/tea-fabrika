@@ -470,7 +470,7 @@ const origin: Parameters<ProjectService["Service"]["start"]>[1] = {
   build: BRAIN_BUILD,
 };
 
-const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, Scope.Scope>, runs: number) =>
+const law = <E>(body: (g: fc.GeneratorValue) => Effect.Effect<void, E, Scope.Scope>, runs: number) =>
   Effect.gen(function* () {
     // edge: fast-check owns the Promise callback; each generated run owns a fresh Effect scope.
     const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(Effect.scoped(body(g))));

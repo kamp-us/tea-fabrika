@@ -79,7 +79,7 @@ it.effect.prop(
           ];
 
           for (const operation of operations) {
-            const failure = yield* Effect.flip(operation);
+            const failure = yield* Effect.flip(Effect.asVoid(operation));
             expect(failure).toBeInstanceOf(SinkError);
             expect(failure.reason).toBe(typed ? reason : "unreachable");
             expect(failure.held).toBe(typed ? held : 0);

@@ -362,7 +362,7 @@ describe("T502 S1, the helpers every object shell uses, next/", () => {
         for (const [index, name] of calls.entries()) {
           // `flip` lets a defect through and fails on an answer, so a die or a fallback fails here.
           const call: Effect.Effect<unknown, LedgerError> = processCalls[name](object);
-          const failure: unknown = yield* Effect.flip(call);
+          const failure: unknown = yield* Effect.flip(Effect.asVoid(call));
           // The Process contract fails with LedgerError only, and the decoder's failure can quote
           // the setting, so the call fails with the reason alone.
           expect(failure).toBeInstanceOf(LedgerError);

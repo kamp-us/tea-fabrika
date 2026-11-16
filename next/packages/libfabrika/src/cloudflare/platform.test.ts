@@ -57,13 +57,15 @@ it.effect.prop(
     Effect.gen(function* () {
       const [client = "", method = ""] = call.split(".");
       const kind = faults.find((fault) => fault.name === name)!;
-      const service: Record<string, (request: Request) => Effect.Effect<unknown, unknown>> = Reflect.get(
+      const service: Record<string, (request: Request) => Effect.Effect<unknown, LedgerError>> = Reflect.get(
         clients(kind.make(text)),
         client,
       );
       // A real Request, so a client that hands `fetch` to a typed stub has one to read; the
       // rejecting stub ignores what every other method is given.
-      const error = yield* Effect.flip(service[method]!(new Request("http://127.0.0.1:8787/client/a/b")));
+      const error = yield* Effect.flip(
+        Effect.asVoid(service[method]!(new Request("http://127.0.0.1:8787/client/a/b"))),
+      );
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       expect(Reflect.get(Object(error), "message")).toContain(kind.name);
       expect(Reflect.get(Object(error), "message")).toContain(text);
@@ -92,11 +94,11 @@ it.effect.prop(
     Effect.gen(function* () {
       // The bridge answers a typed failure as data: Alchemy's error envelope around the encoded error.
       const envelope = { _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason, message: text })) };
-      const call: () => Effect.Effect<unknown, unknown> = Reflect.get(
+      const call: () => Effect.Effect<unknown, LedgerError> = Reflect.get(
         ProcessClient.make(answeringProcess(envelope)),
         method,
       );
-      const error = yield* Effect.flip(call());
+      const error = yield* Effect.flip(Effect.asVoid(call()));
       expect(error).toBeInstanceOf(LedgerError);
       expect(error).toMatchObject({ reason, message: text });
       expect(Reflect.get(Object(error), "cause")).toBeUndefined();
@@ -114,8 +116,8 @@ it.effect.prop(
   ({ method, name, text }) =>
     Effect.gen(function* () {
       const fault = faults.find((kind) => kind.name === name)!.make(text);
-      const call: () => Effect.Effect<unknown, unknown> = Reflect.get(ProcessClient.make(rejecting(fault)), method);
-      const error = yield* Effect.flip(call());
+      const call: () => Effect.Effect<unknown, LedgerError> = Reflect.get(ProcessClient.make(rejecting(fault)), method);
+      const error = yield* Effect.flip(Effect.asVoid(call()));
       expect(error).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });
       const cause = Reflect.get(Object(error), "cause");
       expect(cause).toBeInstanceOf(RpcCallError);
@@ -158,19 +160,19 @@ it.effect.prop(
   },
   ({ call, reason, name, text }) =>
     Effect.gen(function* () {
-      const method = (stub: Parameters<typeof GatewayClient.make>[0]): Effect.Effect<unknown, unknown> =>
+      const method = (stub: Parameters<typeof GatewayClient.make>[0]): Effect.Effect<unknown, LedgerError> =>
         Reflect.apply(Reflect.get(GatewayClient.make(stub), call), undefined, []);
 
       // The bridge answers a typed failure as this envelope (alchemy, Rpc.ts `encodeRpcError`).
       const typed = yield* Effect.flip(
-        method(answering({ _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) })),
+        Effect.asVoid(method(answering({ _tag: ErrorTag, error: encodeRpcError(new LedgerError({ reason })) }))),
       );
       expect(typed).toBeInstanceOf(LedgerError);
       expect(typed).toMatchObject({ reason });
       expect(Reflect.get(Object(typed), "cause"), "nothing was lost on the way, so no cause").toBeUndefined();
 
       const fault = faults.find((kind) => kind.name === name)!.make(text);
-      const lost = yield* Effect.flip(method(rejecting(fault)));
+      const lost = yield* Effect.flip(Effect.asVoid(method(rejecting(fault))));
       expect(lost).toBeInstanceOf(LedgerError);
       expect(lost).toMatchObject({ reason: "unreachable" });
       const cause: unknown = Reflect.get(Object(lost), "cause");
@@ -322,12 +324,12 @@ it.effect.prop(
       const [client = "", method = ""] = call.split(".");
       const service =
         client === "Gateway" ? GatewayClient.make(rejecting(thrown)) : ProcessClient.make(rejecting(thrown));
-      const lost: Effect.Effect<unknown, unknown> = Reflect.apply(
+      const lost: Effect.Effect<unknown, LedgerError> = Reflect.apply(
         Reflect.get(service, method),
         undefined,
         letter(call, secret),
       );
-      const failure = yield* Effect.flip(lost).pipe(Effect.withTracer(captured.tracer));
+      const failure = yield* Effect.flip(Effect.asVoid(lost)).pipe(Effect.withTracer(captured.tracer));
 
       // The text did go through: the caller gets the lost call, with what the platform threw inside.
       expect(failure).toMatchObject({ _tag: "LedgerError", reason: "unreachable" });

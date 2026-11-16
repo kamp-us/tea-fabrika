@@ -5,9 +5,10 @@ import { it as effectIt } from "@effect/vitest";
 // supervision test is. Needs ports and its own processes, so it runs in the step's container (0045).
 import type { Descriptor } from "@kampus/libfabrika";
 import { Writer } from "@kampus/libfabrika/access/SessionManager";
+import type { LedgerError } from "@kampus/libfabrika/ledger/Ledger";
 import { Started } from "@kampus/libfabrika/processes/Children";
 import { letterLine } from "@kampus/libfabrika/processes/Mailbox";
-import { Recipient } from "@kampus/libfabrika/processes/Process";
+import { type ProcessError, Recipient } from "@kampus/libfabrika/processes/Process";
 import * as StartChild from "@kampus/libfabrika/runtime/StartChild";
 import { SpanRow } from "@kampus/libfabrika/telemetry/Trace";
 import { configureProcess, ProcessService, ProjectService, savedAlarm } from "@kampus/libfabrika/workers/runtime";
@@ -237,8 +238,15 @@ const forms = (text: string) => [text, JSON.stringify(text).slice(1, -1), encode
 // Effect Arbitrary has no command-walk generator or fast-check adapter.
 const SecretPick = fc.record({ point: fc.nat(), encoding: fc.integer({ min: 0, max: 2 }) });
 type SecretPick = typeof SecretPick extends fc.Arbitrary<infer A> ? A : never;
-type SecretWalk = { step: (pick: SecretPick) => Effect.Effect<void, unknown> };
+// A step fails as the Project's calls do, or with the runtime's rejection as an Error.
+type SecretWalk = { step: (pick: SecretPick) => Effect.Effect<void, Error | LedgerError | ProcessError> };
 type ChildOutput = "reply" | "span" | "row" | "log";
+type ProjectCalls = (typeof ProjectService)["Service"];
+
+/** What any call of a service fails with: its methods' failures together. */
+type Failure<S> = {
+  [K in keyof S]: S[K] extends (...args: never) => Effect.Effect<unknown, infer E, unknown> ? E : never;
+}[keyof S];
 
 const ProjectTape = fc
   .commands(
@@ -305,10 +313,12 @@ const projectSecrets = Effect.fnUntraced(function* (
       try: () =>
         runtime.runPromise(
           ProjectService.use((p) => {
-            const request: Effect.Effect<unknown, unknown> =
-              path === "exit"
-                ? p.processExit(pid ?? "", { _tag: "normal" }, fixture.from)
-                : p.processChild(child, fixture.from);
+            const request: Effect.Effect<
+              unknown,
+              Effect.Error<ReturnType<ProjectCalls["processExit" | "processChild"]>>
+            > = path === "exit"
+              ? p.processExit(pid ?? "", { _tag: "normal" }, fixture.from)
+              : p.processChild(child, fixture.from);
             return request;
           }).pipe(Effect.provide(logging)),
         ),
@@ -491,13 +501,14 @@ const StoragePath = [
 type StoragePath = (typeof StoragePath)[number];
 type StorageCut = { path: StoragePath; operation: number; statement: string };
 
-const storageCall = Effect.fnUntraced(function* (
+const storageCall = Effect.fnUntraced(function* <E>(
   path: StoragePath,
   inspect: (
     fixture: Effect.Success<ReturnType<typeof childProject>>,
-    call: Effect.Effect<unknown, unknown>,
+    // The public call through the runtime's Promise: its rejection, as an Error.
+    call: Effect.Effect<unknown, Error>,
     reopen: Effect.Effect<void>,
-  ) => Effect.Effect<void, unknown, Scope.Scope>,
+  ) => Effect.Effect<void, E, Scope.Scope>,
 ) {
   const fixture = yield* childProject();
   let scope = yield* Scope.make();
@@ -576,7 +587,7 @@ const storageCall = Effect.fnUntraced(function* (
   }
 
   expect(prepared, `L11: ${path} begins in its required process state`).toBe(true);
-  const call = ProjectService.use((p): Effect.Effect<unknown, unknown> => {
+  const call = ProjectService.use((p): Effect.Effect<unknown, Failure<ProjectCalls>> => {
     switch (path) {
       case "status":
         return p.processStatus(child.name);

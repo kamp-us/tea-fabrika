@@ -49,6 +49,12 @@ vi.mock("virtual:fabrika-built", () => ({ ...table, assets: {} }));
 
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
+
+/** What any call of a service fails with: its methods' failures together. */
+type Failure<S> = {
+  [K in keyof S]: S[K] extends (...args: never) => Effect.Effect<unknown, infer E, unknown> ? E : never;
+}[keyof S];
+
 type Limits = QuotaRunnerTest.Limits;
 
 const PROJECT = "quota-laws";
@@ -367,7 +373,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
                           )
                         : method === "descriptor"
                           ? processDescriptor(current.ctx)
-                          : process(current, (p): Effect.Effect<unknown, unknown> => {
+                          : process(current, (p): Effect.Effect<unknown, Failure<ProcessCalls>> => {
                               const member = Reflect.get(p, method);
                               return typeof member === "function" ? Reflect.apply(member, p, args) : Effect.void;
                             }),
@@ -534,7 +540,7 @@ const world = Effect.fnUntraced(function* (limits: Limits) {
     return Schema.decodeUnknownSync(View)(yield* process(store, (p) => p.open("audit"))).view;
   });
   /** Fires each saved alarm that is due, as the platform would, until `done` holds and none is saved. */
-  const settle = Effect.fnUntraced(function* (done: Effect.Effect<boolean, unknown>) {
+  const settle = Effect.fnUntraced(function* <E>(done: Effect.Effect<boolean, E>) {
     for (let n = 0; n < 2_000; n++) {
       const now = yield* live(Clock.currentTimeMillis);
 

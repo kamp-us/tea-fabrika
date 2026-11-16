@@ -1243,12 +1243,12 @@ describe("T285, runner tracing keep-laws", () => {
 
                   const op =
                     call.op === "open" || call.op === "bad_client" ? "open" : call.op === "due" ? "due" : "step";
-                  const body: Effect.Effect<unknown, unknown> =
-                    op === "open"
-                      ? runner.open(call.op === "bad_client" ? "" : call.client)
-                      : op === "due"
-                        ? runner.due(call.value)
-                        : runner.msg(call.op === "bad_input" ? { value: call.value } : input);
+                  // Each runner call fails with the runner's own failures.
+                  const body: Effect.Effect<unknown, Effect.Error<ReturnType<typeof runner.msg>>> = op === "open"
+                    ? runner.open(call.op === "bad_client" ? "" : call.client)
+                    : op === "due"
+                      ? runner.due(call.value)
+                      : runner.msg(call.op === "bad_input" ? { value: call.value } : input);
                   const before = w.spans.length;
                   const flushes = w.flushes.length;
                   const exit = yield* Effect.exit(request(body));

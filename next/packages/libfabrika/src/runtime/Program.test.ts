@@ -460,7 +460,7 @@ describe("Program.make authoring laws, next/", () => {
           const make = Reflect.get(Program, "make");
           const makeEffect = Reflect.get(Program, "makeEffect");
           expect(() => Reflect.apply(make, Program, [raw])).toThrow();
-          let checked: Effect.Effect<unknown, unknown> = Effect.void;
+          let checked: Effect.Effect<unknown, SchemaIssue.Issue> = Effect.void;
           expect(() => {
             checked = Reflect.apply(makeEffect, Program, [raw]);
           }).not.toThrow();
@@ -595,7 +595,8 @@ describe("Program.make authoring laws, next/", () => {
         expect(() => {
           checked = stepper(raw);
         }).not.toThrow();
-        const isLoadEffect = (u: unknown): u is Effect.Effect<unknown, unknown> => Effect.isEffect(u);
+        // The checks below read the failure itself; the type names the one they expect.
+        const isLoadEffect = (u: unknown): u is Effect.Effect<unknown, SchemaIssue.Issue> => Effect.isEffect(u);
         let result: Result.Result<unknown, unknown>;
 
         if (Result.isResult(checked)) {

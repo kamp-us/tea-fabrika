@@ -30,21 +30,21 @@ export type Event = {
   readonly outcome: string;
 };
 
-export type Deliver = (
+export type Deliver = <E>(
   props: Props,
   events: ReadonlyArray<Event>,
-  receive: (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => Effect.Effect<void, unknown>,
+  receive: (object: string, rows: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => Effect.Effect<void, E>,
 ) => Effect.Effect<void>;
 
-export type World = {
-  readonly step: (id: string, n: number) => Effect.Effect<unknown, unknown>;
-  readonly snapshot: Effect.Effect<unknown, unknown>;
+export type World<E> = {
+  readonly step: (id: string, n: number) => Effect.Effect<unknown, E>;
+  readonly snapshot: Effect.Effect<unknown, E>;
   readonly executions: () => number;
 };
 
-export type Recording = {
+export type Recording<E> = {
   readonly record: (usage: ReadonlyArray<typeof IsolateUsage.Usage.Type>) => Effect.Effect<void>;
-  readonly flush: Effect.Effect<unknown, unknown>;
+  readonly flush: Effect.Effect<unknown, E>;
 };
 
 export type UsageSpan = {
@@ -54,12 +54,12 @@ export type UsageSpan = {
   readonly resource: { readonly attributes: Readonly<Record<string, unknown>> };
 };
 
-export type Rig = {
+export type Rig<E> = {
   readonly open: Effect.Effect<Store, never, Scope.Scope>;
   readonly deliver: Deliver;
-  readonly runner: (usage: Effect.Effect<void, unknown>) => Effect.Effect<World, unknown, Scope.Scope>;
-  readonly invoke: (process: string) => Effect.Effect<void, unknown>;
-  readonly telemetry: (sql: Sql, object: string) => Effect.Effect<Recording, never, Scope.Scope>;
+  readonly runner: (usage: Effect.Effect<void>) => Effect.Effect<World<E>, E, Scope.Scope>;
+  readonly invoke: (process: string) => Effect.Effect<void, E>;
+  readonly telemetry: (sql: Sql, object: string) => Effect.Effect<Recording<E>, never, Scope.Scope>;
   readonly rows: (sql: Sql) => ReadonlyArray<UsageSpan>;
   readonly health: (sql: Sql) => ReadonlyArray<unknown>;
 };
@@ -95,7 +95,7 @@ const sample = (process: string, cpuMs: number): typeof IsolateUsage.Usage.Type 
   outcome: "ok",
 });
 
-export const suite = (rig: Rig) =>
+export const suite = <E>(rig: Rig<E>) =>
   describe("next/ isolate usage on real SQLite", () => {
     // fast-check shrinks the decision tape; each replay picks only moves legal in its current state.
     it.effect("U1 names own their rows; replacements and late batches keep the process from the load", () =>
@@ -308,7 +308,7 @@ export const suite = (rig: Rig) =>
             Effect.gen(function* () {
               // Both runners see the same controlled clock, including inside fast-check replays.
               yield* TestClock.setTime(0);
-              const pendingUsage = yield* Ref.make<Effect.Effect<void, unknown>>(Effect.void);
+              const pendingUsage = yield* Ref.make<Effect.Effect<void>>(Effect.void);
               const control = yield* rig.runner(Effect.void);
               const measured = yield* rig.runner(Ref.get(pendingUsage).pipe(Effect.flatten));
 
@@ -342,7 +342,7 @@ export const suite = (rig: Rig) =>
                     return span;
                   },
                 });
-                const response: Effect.Effect<void, unknown> =
+                const response: Effect.Effect<void, DeliveryError> =
                   behavior === "hang"
                     ? Effect.never
                     : behavior === "fail"

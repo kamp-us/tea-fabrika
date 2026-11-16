@@ -23,7 +23,7 @@ const field = (value: Buffer | string) => {
   return Buffer.concat([size, body]);
 };
 
-const until = <A>(label: string, look: Effect.Effect<A, unknown>, done: (value: A) => boolean) =>
+const until = <A, E>(label: string, look: Effect.Effect<A, E>, done: (value: A) => boolean) =>
   Effect.gen(function* () {
     const end = (yield* Clock.currentTimeMillis) + WAIT;
     let last: A | undefined;

@@ -199,12 +199,13 @@ describe("P13 split execution", () => {
   });
 });
 
+// Every call of an execution fails with the program's own failure.
 type Execution = {
-  init: (saved: unknown) => Effect.Effect<Step, unknown>;
-  step: (model: unknown, msg: unknown) => Effect.Effect<Step, unknown>;
-  fold: (model: unknown, msg: unknown) => Effect.Effect<Step, unknown>;
-  upgrade: (saved: unknown) => Effect.Effect<unknown, unknown>;
-  reply: (cmd: unknown, outcome: unknown) => Effect.Effect<unknown, unknown>;
+  init: (saved: unknown) => Effect.Effect<Step, ProgramDown>;
+  step: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;
+  fold: (model: unknown, msg: unknown) => Effect.Effect<Step, ProgramDown>;
+  upgrade: (saved: unknown) => Effect.Effect<unknown, ProgramDown>;
+  reply: (cmd: unknown, outcome: unknown) => Effect.Effect<unknown, ProgramDown>;
 };
 
 describe("P12 Effect execution adapter", () => {

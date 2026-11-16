@@ -29,7 +29,7 @@ const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
 const RUNS = 100;
 
 /** A property over generated input, each run an Effect on the real code. */
-const law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown, never>) =>
+const law = <T, E>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, E, never>) =>
   it(name, () =>
     fc.assert(
       fc.asyncProperty(input, (value) => Effect.runPromise(check(value))),
@@ -107,8 +107,10 @@ describe("T695, the platform clients keep what the platform rejected with", () =
           expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
           // A real Request, so a client that hands `fetch` to a typed stub has one to read.
           const error = yield* Effect.flip(
-            (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
-              new Request("http://127.0.0.1:8787/client/a/b"),
+            Effect.asVoid(
+              (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
+                new Request("http://127.0.0.1:8787/client/a/b"),
+              ),
             ),
           );
           expect(error).toBeInstanceOf(LedgerError);

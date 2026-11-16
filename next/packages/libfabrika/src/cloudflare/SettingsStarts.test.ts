@@ -24,6 +24,12 @@ const exec =
     return base.exec(query, ...args);
   };
 
+/** The reply this driver loses on purpose, after the start was committed. */
+class Lost extends Schema.TaggedError<Lost>()("Lost", {}) {}
+
+/** What the driver fails with: the ledger's starts, or the reply it lost. */
+type Failure = StartsError | Lost;
+
 const open = Effect.gen(function* () {
   const database = yield* Effect.acquireRelease(
     Effect.sync(() => new DatabaseSync(":memory:")),
@@ -59,10 +65,9 @@ const open = Effect.gen(function* () {
     record,
     read: starts.read,
     entries: Effect.suspend(() => Effect.forEach([...known], starts.read, { concurrency: 1 })),
-    loseReply: (work: Effect.Effect<StartsTest.Saved, unknown>) =>
-      work.pipe(Effect.andThen(Effect.fail("reply lost after commit"))),
+    loseReply: (work: Effect.Effect<StartsTest.Saved, Failure>) => work.pipe(Effect.andThen(Effect.fail(new Lost()))),
     counts: () => ({ reads, appends, consumers: 0 }),
-  } satisfies StartsTest.Driver;
+  } satisfies StartsTest.Driver<Failure>;
 }).pipe(Effect.provide(Digest.layerWebCrypto));
 
 StartsTest.suite(open);

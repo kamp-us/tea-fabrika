@@ -32,10 +32,11 @@ class EntryFailure extends Schema.TaggedError<EntryFailure>()("EntryFailure", {
 }) {}
 
 const recordConstructor = vi.hoisted(() => {
+  // What Alchemy's `RecordPart.make` takes: a constructor that cannot fail, as its type says.
   const slot: {
     value?: Effect.Effect<
-      Effect.Effect<RecordShape, unknown, Scope.Scope>,
-      unknown,
+      Effect.Effect<RecordShape, never, Scope.Scope>,
+      never,
       ObjectState | WorkerEnvironment | Scope.Scope
     >;
   } = {};
@@ -80,6 +81,12 @@ vi.mock("./objects.ts", async (original) => {
     },
   };
 });
+
+/** What an entry fails with: the HTTP entry's, the record part's, or a Promise entry's own failure. */
+type Failure =
+  | EntryFailure
+  | Effect.Error<ReturnType<typeof fetch>>
+  | Effect.Error<ReturnType<RecordShape["write" | "read" | "content" | "deleteContent"]>>;
 
 // The suite owns the moves and assertions; this caller owns SQLite and the platform handles.
 SettingsTest.suite((recipe, secret) =>
@@ -203,7 +210,7 @@ SettingsTest.suite((recipe, secret) =>
           }
         }),
     );
-    const open: SettingsTest.Driver["open"] = Effect.fnUntraced(function* (path, corrupt) {
+    const open: SettingsTest.Driver<Failure>["open"] = Effect.fnUntraced(function* (path, corrupt) {
       const config = { ...input, ...input.founding, port: Number(input.settings.values["instance.port"]) };
       const db = path === "Project" ? local : yield* database;
       const sql = path === "Project" ? settingsSql : nodeSql(db);
@@ -333,7 +340,7 @@ SettingsTest.suite((recipe, secret) =>
         },
       } as unknown as Env;
       let close = Effect.void;
-      let enter: SettingsTest.Entry["enter"];
+      let enter: SettingsTest.Entry<Failure>["enter"];
 
       if (path === "HTTP") {
         enter = Effect.fnUntraced(function* (choice) {
@@ -473,6 +480,6 @@ SettingsTest.suite((recipe, secret) =>
 
         return output;
       }),
-    } satisfies SettingsTest.Driver;
+    } satisfies SettingsTest.Driver<Failure>;
   }).pipe(Effect.provide(Digest.layerWebCrypto)),
 );

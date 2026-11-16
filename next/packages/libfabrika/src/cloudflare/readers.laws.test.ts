@@ -34,10 +34,11 @@ import {
 } from "./runtime.ts";
 
 const recordConstructor = vi.hoisted(() => {
+  // What Alchemy's `RecordPart.make` takes: a constructor that cannot fail, as its type says.
   const slot: {
     value?: Effect.Effect<
-      Effect.Effect<RecordShape, unknown, Scope.Scope>,
-      unknown,
+      Effect.Effect<RecordShape, never, Scope.Scope>,
+      never,
       ObjectState | WorkerEnvironment | Scope.Scope
     >;
   } = {};
@@ -250,9 +251,12 @@ for (const corruption of ["snapshot", ...StartsTest.originKinds] as const) {
 
 // Keep parser checks independent of the bearer migration. The separate [secrets] type and
 // flow laws require Redacted; this fixture also reaches HEAD's parser using its old signature.
+// Either signature fails as `control` does.
+type ControlFailure = Effect.Error<ReturnType<typeof control>>;
+
 const parserControl = (request: Request, env: Env) =>
   Effect.gen(function* () {
-    const secure: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [
+    const secure: Effect.Effect<Response, ControlFailure> = Reflect.apply(control, undefined, [
       request.clone(),
       env,
       Redacted.make("test"),
@@ -264,7 +268,12 @@ const parserControl = (request: Request, env: Env) =>
       return response;
     }
 
-    const legacy: Effect.Effect<Response, unknown> = Reflect.apply(control, undefined, [request, env, "test", {}]);
+    const legacy: Effect.Effect<Response, ControlFailure> = Reflect.apply(control, undefined, [
+      request,
+      env,
+      "test",
+      {},
+    ]);
     return yield* legacy;
   });
 
@@ -421,7 +430,7 @@ it("Connection ready RPC decoding fails in the typed channel before the wait ref
         runtime = connectionRuntime(w.ctx, w.env, config);
       const original = Effect.result;
       const attempts: Array<Exit.Exit<unknown, unknown>> = [];
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
+      const inspect = vi.spyOn(Effect, "result").mockImplementation(<A, E, R>(work: Effect.Effect<A, E, R>) =>
         original(
           work.pipe(
             Effect.onExit((exit) =>
@@ -473,7 +482,7 @@ it("control bucket bytes fail as a typed parse error before its HTTP error respo
       const w = world(),
         attempts: Array<Exit.Exit<unknown, unknown>> = [];
       const original = Effect.result;
-      const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
+      const inspect = vi.spyOn(Effect, "result").mockImplementation(<A, E, R>(work: Effect.Effect<A, E, R>) =>
         original(
           work.pipe(
             Effect.onExit((exit) =>
@@ -521,7 +530,7 @@ for (const field of ["put key", "put checksum", "head key"] as const) {
         const w = world(),
           attempts: Array<Exit.Exit<unknown, unknown>> = [];
         const original = Effect.result;
-        const inspect = vi.spyOn(Effect, "result").mockImplementation((work) =>
+        const inspect = vi.spyOn(Effect, "result").mockImplementation(<A, E, R>(work: Effect.Effect<A, E, R>) =>
           original(
             work.pipe(
               Effect.onExit((exit) =>

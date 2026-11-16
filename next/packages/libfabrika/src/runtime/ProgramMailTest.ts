@@ -349,7 +349,7 @@ type World = {
   readonly wakeTimes: Map<string, number>;
   readonly fault: { mail: boolean; ack: boolean; wake: boolean };
   /** Requests started while their pair's wake hangs, run in the background. */
-  readonly background: Array<Fiber.Fiber<unknown, unknown>>;
+  readonly background: Array<Fiber.Fiber<unknown>>;
   /** Refs whose value was negative: the responder refuses them. */
   readonly negative: Set<string>;
   /** Responders some restart replaced, whose saved model starts again. */
@@ -1873,9 +1873,9 @@ const pipeWorld = Effect.fnUntraced(function* (open: Effect.Effect<Store, never,
 type PipeView = Effect.Success<ReturnType<typeof pipeWorld>>;
 
 /** Runs `law` on generated values, each in a fresh scope, from the shared seed. */
-const pipeProperty = <A>(
+const pipeProperty = <A, E>(
   arbitrary: fc.Arbitrary<A>,
-  law: (value: A) => Effect.Effect<void, unknown, Scope.Scope>,
+  law: (value: A) => Effect.Effect<void, E, Scope.Scope>,
   runs: Runs,
 ) =>
   Effect.gen(function* () {

@@ -112,6 +112,9 @@ const open = Effect.gen(function* () {
   } satisfies IsolateUsageTest.Store;
 }).pipe(Effect.provide(NodeServices.layer));
 
+// What the real runner and span sink fail with: the runner's failures hold the sink's.
+type Failure = Effect.Error<ReturnType<ProgramRunner["Service"]["msg"]>>;
+
 const deliver: IsolateUsageTest.Deliver = (props, events, receive) => {
   return Effect.acquireUseRelease(
     Effect.sync(() => new AbortController()),
@@ -289,10 +292,10 @@ const runner = (usage: Effect.Effect<void, unknown>) =>
         }),
       snapshot,
       executions: () => executions,
-    } satisfies IsolateUsageTest.World;
+    } satisfies IsolateUsageTest.World<Failure>;
   });
 
-const telemetry: IsolateUsageTest.Rig["telemetry"] = (sql, object) =>
+const telemetry: IsolateUsageTest.Rig<Failure>["telemetry"] = (sql, object) =>
   Effect.gen(function* () {
     const context = yield* Layer.build(
       Layer.mergeAll(SpanSink.layer(sql, { object }), RecordManager.memory(1_000_000_000), Archive.memory),
@@ -301,17 +304,17 @@ const telemetry: IsolateUsageTest.Rig["telemetry"] = (sql, object) =>
       record: (usage) =>
         SpanSink.use((sink) => sink.batch(IsolateUsage.record(usage))).pipe(Effect.provideContext(context)),
       flush: SpanSink.use((sink) => sink.flush).pipe(Effect.provideContext(context)),
-    } satisfies IsolateUsageTest.Recording;
+    } satisfies IsolateUsageTest.Recording<Failure>;
   });
 
-const rows: IsolateUsageTest.Rig["rows"] = (sql) =>
+const rows: IsolateUsageTest.Rig<Failure>["rows"] = (sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='unsent'").length === 0
     ? []
     : sql
         .exec("SELECT row FROM unsent ORDER BY rowid")
         .map((r) => Schema.decodeUnknownSync(Schema.fromJsonString(SpanRow))(r.row));
 
-const health: IsolateUsageTest.Rig["health"] = (sql) =>
+const health: IsolateUsageTest.Rig<Failure>["health"] = (sql) =>
   sql.exec("SELECT name FROM sqlite_master WHERE name='measurements'").length === 0
     ? []
     : sql.exec("SELECT * FROM measurements WHERE piece='isolate.cpu' ORDER BY rowid");

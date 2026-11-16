@@ -51,25 +51,25 @@ export interface Local {
   readonly fault: unknown;
 }
 
-export interface World {
-  readonly runner: (name: string) => Effect.Effect<ProgramRunner["Service"], unknown>;
-  readonly input: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
-  readonly msg: (name: string, id: string, m: unknown) => Effect.Effect<unknown, unknown>;
-  readonly watch: (source: string, target: string, ref: string) => Effect.Effect<void, unknown>;
+export interface World<E> {
+  readonly runner: (name: string) => Effect.Effect<ProgramRunner["Service"], E>;
+  readonly input: (name: string, id: string, m: unknown) => Effect.Effect<unknown, E>;
+  readonly msg: (name: string, id: string, m: unknown) => Effect.Effect<unknown, E>;
+  readonly watch: (source: string, target: string, ref: string) => Effect.Effect<void, E>;
   readonly alarm: (name: string) => Effect.Effect<number | null>;
-  readonly program: (name: string) => Effect.Effect<Use, unknown>;
-  readonly local: (name: string) => Effect.Effect<Local, unknown>;
-  readonly projectRecovery: (name: string) => Effect.Effect<Local["recovery"], unknown>;
-  readonly replace: (name: string, saved: Checkpoint) => Effect.Effect<void, unknown>;
-  readonly checkpoint: (name: string) => Effect.Effect<unknown, unknown>;
-  readonly journal: (name: string) => Effect.Effect<unknown, unknown>;
-  readonly entries: Effect.Effect<ReadonlyArray<Readonly<Record<string, unknown>>>, unknown>;
-  readonly snapshot: Effect.Effect<unknown, unknown>;
+  readonly program: (name: string) => Effect.Effect<Use, E>;
+  readonly local: (name: string) => Effect.Effect<Local, E>;
+  readonly projectRecovery: (name: string) => Effect.Effect<Local["recovery"], E>;
+  readonly replace: (name: string, saved: Checkpoint) => Effect.Effect<void, E>;
+  readonly checkpoint: (name: string) => Effect.Effect<unknown, E>;
+  readonly journal: (name: string) => Effect.Effect<unknown, E>;
+  readonly entries: Effect.Effect<ReadonlyArray<Readonly<Record<string, unknown>>>, E>;
+  readonly snapshot: Effect.Effect<unknown, E>;
   readonly reopen: Effect.Effect<void>;
   readonly cut: (boundary: number | null) => void;
   readonly limits: (next: Limits) => void;
-  readonly restart: (name: string, id: string, person: boolean) => Effect.Effect<unknown, unknown>;
-  readonly drain: (name: string) => Effect.Effect<void, unknown>;
+  readonly restart: (name: string, id: string, person: boolean) => Effect.Effect<unknown, E>;
+  readonly drain: (name: string) => Effect.Effect<void, E>;
 }
 
 export const supervision = Supervision;
@@ -90,15 +90,15 @@ const History = Schema.Array(
 const options = { timeout: 600_000, arbitrary: { seed: 119120, runs: 40, size: 100 } };
 const names = ["alpha:1", "alpha:2", "beta:1"];
 
-const call = Effect.fnUntraced(function* (
-  w: World,
+const call = Effect.fnUntraced(function* <E, A, F>(
+  w: World<E>,
   name: string,
-  use: (runner: ProgramRunner["Service"]) => Effect.Effect<unknown, unknown>,
+  use: (runner: ProgramRunner["Service"]) => Effect.Effect<A, F>,
 ) {
   return yield* use(yield* w.runner(name));
 });
 
-export const suite = (open: (limits: Limits) => Effect.Effect<World, unknown, Scope.Scope>) =>
+export const suite = <E>(open: (limits: Limits) => Effect.Effect<World<E>, E, Scope.Scope>) =>
   describe("P34c runner quota laws", () => {
     it.effect.prop(
       "Q5 replacements, deletion of replaceable content and unchanged saves charge exact byte deltas",

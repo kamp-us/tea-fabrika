@@ -54,10 +54,10 @@ export interface Harness {
 }
 
 /** The driver runs the generated Effect and checks coverage after all six walks. */
-export type Register = (
+export type Register = <E>(
   name: string,
   tape: fc.Arbitrary<Array<number>>,
-  check: (tape: ReadonlyArray<number>) => Effect.Effect<void, unknown, Scope.Scope>,
+  check: (tape: ReadonlyArray<number>) => Effect.Effect<void, E, Scope.Scope>,
   options: { readonly seed: number; readonly numRuns: number; readonly endOnFailure: boolean },
   reached: Set<string>,
   required: ReadonlyArray<string>,

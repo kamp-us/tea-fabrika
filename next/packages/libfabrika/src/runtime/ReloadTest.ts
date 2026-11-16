@@ -846,7 +846,7 @@ const agrees = Effect.fnUntraced(function* (w: World, a: Account, start: string,
 });
 
 /** Runs one generated walk in a fresh world, every resource given back with its scope. */
-const law = (body: (g: fc.GeneratorValue) => Effect.Effect<void, unknown, never>, runs = 100) =>
+const law = <E>(body: (g: fc.GeneratorValue) => Effect.Effect<void, E, never>, runs = 100) =>
   Effect.gen(function* () {
     // oxlint-disable-next-line fabrika/no-effect-run-outside-edge -- edge: fast-check requires a Promise callback
     const property = fc.asyncProperty(fc.gen(), (g) => Effect.runPromise(body(g)));

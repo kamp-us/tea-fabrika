@@ -54,7 +54,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 const reasons = fc.constantFrom("unreachable", "bad_row", "storage", "refused", "crypto");
 
 /** Runs one property: generated input, each case an Effect on the real code. The runner gives it. */
-export type Law = <T>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, unknown>) => void;
+export type Law = <T, E>(name: string, input: fc.Arbitrary<T>, check: (input: T) => Effect.Effect<void, E>) => void;
 
 /** The same `Sql`, but each query throws `failure` once armed. */
 const throwing = (sql: Sql, failure: unknown): { readonly sql: Sql; readonly arm: () => void } => {
@@ -175,7 +175,7 @@ type WriteLine = Parameters<typeof appendAdmitted>[1]["line"];
 type StoreError = Exclude<Effect.Error<ReturnType<typeof callStore>>, QuotasError>;
 
 /** What the module that owns the driver gives: fresh storage, and the ledger over it. */
-export type Harness = {
+export type Harness<E> = {
   /** A fresh, empty database. */
   readonly fresh: () => Sql;
   /** The ledger on `sql`, read as `process`, with a doorbell that rings nobody. */
@@ -185,12 +185,12 @@ export type Harness = {
   /** The ledger's line for `event`, written by `from`. */
   readonly lineFor: (from: Omit<WriteLine, "_tag" | "body">, event: MemberEvent) => WriteLine;
   /** Appends `line` to `stream` under `id`, unchecked, as a row no reader wrote. */
-  readonly append: (stream: string, id: string, line: WriteLine) => Effect.Effect<unknown, unknown, LedgerNeeds>;
+  readonly append: (stream: string, id: string, line: WriteLine) => Effect.Effect<unknown, E, LedgerNeeds>;
   /** The ledger's own error class, as a store two layers up meets it in a throw from below. */
   readonly LedgerError: new (fields: { readonly reason: StoreError["reason"]; readonly cause?: unknown }) => StoreError;
 };
 
-export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, LedgerError }: Harness) => {
+export const suite = <E>(law: Law, { fresh, ledger, transactions, lineFor, append, LedgerError }: Harness<E>) => {
   const ledgerOn = (sql: Sql) => ledger(sql, PROCESS);
 
   const processStore = (sql: Sql, storage?: Parameters<typeof ProcessStore.layer>[1]["storage"]) =>
@@ -428,15 +428,20 @@ export const suite = (law: Law, { fresh, ledger, transactions, lineFor, append, 
           const members = ledgerOn(sql);
           const body = { id: "person-1", name: "p", keys: [], window: null, [field]: bad };
           yield* Effect.provide(append("gateway/access", "founded", memberLine(body)), members);
-          const error = yield* Effect.flip<unknown, StoreError | NotGranted, never>(
+          // Either read must fail; what it would have answered is of no interest here.
+          const error = yield* Effect.flip<void, StoreError | NotGranted, never>(
             reader === "authorization"
-              ? Effect.provide(
-                  appendAdmitted("SHA256:anyone", { stream: "notes:1", id: "w-1", line: memberLine({ note: 1 }) }),
-                  transactions(sql),
+              ? Effect.asVoid(
+                  Effect.provide(
+                    appendAdmitted("SHA256:anyone", { stream: "notes:1", id: "w-1", line: memberLine({ note: 1 }) }),
+                    transactions(sql),
+                  ),
                 )
-              : Effect.provide(
-                  ClientManager.use((m) => m.members),
-                  ClientManagerLedger.layer(founder).pipe(Layer.provide(members)),
+              : Effect.asVoid(
+                  Effect.provide(
+                    ClientManager.use((m) => m.members),
+                    ClientManagerLedger.layer(founder).pipe(Layer.provide(members)),
+                  ),
                 ),
           );
           expect(error).toBeInstanceOf(LedgerError);

@@ -104,6 +104,11 @@ it("pinned: L20 windowMachineFor checks the registration's decoder and tile pres
 type ProjectCalls = (typeof ProjectService)["Service"];
 type ProcessCalls = (typeof ProcessService)["Service"];
 
+/** What any call of a service fails with: its methods' failures together. */
+type Failure<S> = {
+  [K in keyof S]: S[K] extends (...args: never) => Effect.Effect<unknown, infer E, unknown> ? E : never;
+}[keyof S];
+
 const field = (value: Buffer | string) => {
   const body = Buffer.from(value),
     size = Buffer.alloc(4);
@@ -183,7 +188,7 @@ const processObject = (ctx: DurableObjectState, env: Env) => {
     configure: (descriptor: Descriptor) => Effect.runPromise(configureProcess(ctx, descriptor, runtime)),
     descriptor: () => Effect.runPromise(processDescriptor(ctx)),
     call: (method: string, args: ReadonlyArray<unknown>) =>
-      run((p) => Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>),
+      run((p) => Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, Failure<ProcessCalls>>),
   };
 };
 
@@ -244,7 +249,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
         }
 
         return project.run((p) => {
-          const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, unknown>;
+          const work = Reflect.apply(Reflect.get(p, method), p, args) as Effect.Effect<unknown, Failure<ProjectCalls>>;
           return method === "sign"
             ? signingReply(work as never)
             : method === "commit"
@@ -409,7 +414,7 @@ const world = (options: { readonly lacks?: string } = {}) =>
 
 type World = Effect.Success<ReturnType<typeof world>>;
 
-const call = <A>(w: World, use: (p: ProjectCalls) => Effect.Effect<A, unknown>) =>
+const call = <A, E>(w: World, use: (p: ProjectCalls) => Effect.Effect<A, E>) =>
   Effect.promise(() => w.project.run(use));
 
 const Started = Schema.Struct({ _tag: Schema.Literal("started"), body: Schema.Struct({ process: Schema.String }) });

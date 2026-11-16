@@ -101,6 +101,9 @@ const program = (name: string) => ({
   wake: (s: typeof Model.Type) => s.wake,
 });
 
+// What the real runner fails with: every World call reaches the runner or the stores it fails through.
+type RunnerFailure = Effect.Error<ReturnType<ProgramRunner["Service"]["msg"]>>;
+
 const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
 
 const snapshot = (sql: Sql) =>
@@ -346,7 +349,7 @@ const open = Effect.fnUntraced(function* (initial: QuotaRunnerTest.Limits) {
 
       return yield* Effect.die("recovery did not finish within its saved alarms");
     }),
-  } satisfies QuotaRunnerTest.World;
+  } satisfies QuotaRunnerTest.World<RunnerFailure>;
 });
 
 QuotaRunnerTest.suite(open);

@@ -309,7 +309,9 @@ const world = async (scope: Scope.Scope, trace = TRACE, build = "counter-b", opt
   // The shared holder builds consumers on first entry, after the outer runtime starts.
   const startup = vi
     .spyOn(Layer, "buildWithMemoMap")
-    .mockImplementation((layer, memo, into) => buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, into));
+    .mockImplementation(<RIn, E, ROut>(layer: Layer.Layer<ROut, E, RIn>, memo: Layer.MemoMap, into: Scope.Scope) =>
+      buildLayer(layer.pipe(Layer.withParentSpan(span)), memo, into),
+    );
   let runtime = projectRuntime(ctx, env);
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => runtime.runPromise(work);
   // Added before the build, so a world whose build fails or hangs is closed by its scope too. A scope
@@ -958,14 +960,17 @@ describe("P12 Connection recording", () => {
       try {
         const gateway = await runtime.runPromise(ConnectionService),
           before = w.recorded.length;
-        const action: Effect.Effect<unknown, unknown> =
-          operation === "ring"
-            ? gateway.ring("events", rev)
-            : operation === "probe"
-              ? gateway.probe("session-test")
-              : operation === "close"
-                ? gateway.close(socket)
-                : gateway.notify(letter, { method: "view.patch", params: {} });
+        // Each of these four calls fails as the connection service says it does.
+        const action: Effect.Effect<
+          unknown,
+          Effect.Error<ReturnType<(typeof gateway)["ring" | "probe" | "close" | "notify"]>>
+        > = operation === "ring"
+          ? gateway.ring("events", rev)
+          : operation === "probe"
+            ? gateway.probe("session-test")
+            : operation === "close"
+              ? gateway.close(socket)
+              : gateway.notify(letter, { method: "view.patch", params: {} });
         await runtime.runPromise(Effect.exit(action));
         const rows = w.recorded.slice(before);
         expect(rows.some((row) => row.name === `connection.${operation}`)).toBe(true);

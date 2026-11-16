@@ -603,7 +603,7 @@ const Cell = fc.record({
   extra: fc.subarray(["requester", "owner", "process", "hash", "reason", "source"], { minLength: 1 }),
 });
 type Cell = typeof Cell extends fc.Arbitrary<infer A> ? A : never;
-type Walk = { readonly step: (cell: Cell) => Effect.Effect<void, unknown> };
+type Walk = { readonly step: (cell: Cell) => Effect.Effect<void, never> };
 
 const Tape = fc
   .commands(

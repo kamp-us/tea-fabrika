@@ -218,7 +218,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
           const fixture = yield* childProject();
           const runtime = yield* fixture.acquire();
           const project = yield* Effect.promise(() => runtime.runPromise(ProjectService));
-          const call = <A>(work: Effect.Effect<A, unknown, ProjectService>) =>
+          const call = <A, E>(work: Effect.Effect<A, E, ProjectService>) =>
             Effect.promise(() => runtime.runPromise(work));
           const person = fixture.from.for;
           const url = "http://127.0.0.1:18787";
