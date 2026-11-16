@@ -1,10 +1,12 @@
 // Today's lead tooling. Publish's laws (0134) on the test layers: nothing here pushes or asks GitHub.
 import { describe, expect, it } from "@effect/vitest";
+import { Recorder } from "@kampus/vitest";
 import { Effect, Layer, Schema } from "effect";
 import * as Publish from "./Publish.ts";
 import type { PullRequest } from "./PullRequests.ts";
 import * as PullRequestsGh from "./PullRequestsGh.ts";
 import * as PullRequestsTest from "./PullRequestsTest.ts";
+import { LeakGrepRefused, Pushes, PushRefused } from "./Pushes.ts";
 import * as PushesProcess from "./PushesProcess.ts";
 import * as PushesTest from "./PushesTest.ts";
 
@@ -40,15 +42,19 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   it.effect.prop(
     "property: the leak grep runs first, the head reaches its branch, and a draft opens only when none is open",
     { b: Branch, head: Sha, already: Already },
-    ({ b, head, already }) =>
-      Effect.gen(function* () {
-        const m = memory(already === null ? [] : [open(7, b, already)]);
-        yield* Publish.publish(ask(b, head)).pipe(Effect.provide(m.layer));
-        expect(m.remote.calls).toEqual([`leakgrep ${head}`, `push ${b} ${head}`]);
+    ({ b, head, already }) => {
+      const m = memory(already === null ? [] : [open(7, b, already)]);
+      return Effect.gen(function* () {
+        yield* Publish.publish(ask(b, head));
+        expect(yield* Recorder.calls(Pushes)).toEqual([
+          { method: "leakGrep", args: [".", head] },
+          { method: "push", args: [".", b, head] },
+        ]);
         expect(m.remote.branches.get(b)).toBe(head);
         expect(m.github.prs.filter((pr) => pr.head === b && pr.state === "OPEN")).toHaveLength(1);
         expect(m.github.calls).toEqual(already === null ? [{ _tag: "draft", branch: b, title: text.title }] : []);
-      }),
+      }).pipe(Effect.provide(m.layer));
+    },
   );
 
   it.effect.prop(
@@ -69,27 +75,34 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
   it.effect.prop(
     "property: a refused leak grep pushes nothing and asks GitHub nothing",
     { b: Branch, head: Sha },
-    ({ b, head }) =>
-      Effect.gen(function* () {
-        const m = memory([], { pushes: { leak: "private_word" } });
-        const e = yield* Effect.flip(Publish.publish(ask(b, head)).pipe(Effect.provide(m.layer)));
+    ({ b, head }) => {
+      const m = memory([], { pushes: { leakGrep: new LeakGrepRefused({ reason: "private_word" }) } });
+      return Effect.gen(function* () {
+        const e = yield* Effect.flip(Publish.publish(ask(b, head)));
         expect(e._tag).toBe("LeakGrepRefused");
-        expect(m.remote.calls).toEqual([`leakgrep ${head}`]);
+        expect(yield* Recorder.calls(Pushes)).toEqual([{ method: "leakGrep", args: [".", head] }]);
         expect(m.remote.branches.size).toBe(0);
         expect(m.github.calls).toEqual([]);
-      }),
+      }).pipe(Effect.provide(m.layer));
+    },
   );
 
   it.effect.prop(
     "property: a refused push fails the publish and opens no pull request",
     { b: Branch, head: Sha },
-    ({ b, head }) =>
-      Effect.gen(function* () {
-        const m = memory([], { pushes: { push: "rejected" } });
-        const e = yield* Effect.flip(Publish.publish(ask(b, head)).pipe(Effect.provide(m.layer)));
+    ({ b, head }) => {
+      const m = memory([], { pushes: { push: new PushRefused({ reason: "rejected" }) } });
+      return Effect.gen(function* () {
+        const e = yield* Effect.flip(Publish.publish(ask(b, head)));
         expect(e._tag).toBe("PushRefused");
+        expect(yield* Recorder.calls(Pushes)).toEqual([
+          { method: "leakGrep", args: [".", head] },
+          { method: "push", args: [".", b, head] },
+        ]);
+        expect(m.remote.branches.size).toBe(0);
         expect(m.github.prs).toEqual([]);
-      }),
+      }).pipe(Effect.provide(m.layer));
+    },
   );
 
   // scenario: drive's sign worktree is detached, and no commit step ever pushes main.
@@ -98,11 +111,10 @@ describe("publish: a commit is pushed when it is made, with a draft PR from the 
       ["", "HEAD", "main", "refs/heads/main"],
       (b) =>
         Effect.gen(function* () {
-          const m = memory();
-          const e = yield* Effect.flip(Publish.publish(ask(b, "a".repeat(40))).pipe(Effect.provide(m.layer)));
+          const e = yield* Effect.flip(Publish.publish(ask(b, "a".repeat(40))));
           expect(e._tag, b).toBe("NoBranch");
-          expect(m.remote.calls).toEqual([]);
-        }),
+          expect(yield* Recorder.calls(Pushes)).toEqual([]);
+        }).pipe(Effect.provide(memory().layer)),
       { concurrency: 1 },
     ),
   );

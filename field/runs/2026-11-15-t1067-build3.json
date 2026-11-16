@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-t1067-build3",
+  "ticket": null,
+  "pr": "kamp-us/tea-fabrika#1401",
+  "started": "2026-11-15T19:26:00-08:00",
+  "ended": "2026-11-15T19:40:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fix round two for ticket 1067 in next/ and our tooling, after the recheck row 2026-11-15-t1067-review2, under 0564: one agent wrote the law and the fix (0177). Law R18 in next/packages/vitest/src/Recorder.test.ts writes the inferred call on Shelf, impl inline with its symbol member: a fails entry impl leaves out under @ts-expect-error, the same call with a valid entry and no directive, and a misspelled impl key under @ts-expect-error. It was red on the reviewed Recorder.ts (the directive went unused). The cause: an inline impl widens [ShelfId]: ShelfId to symbol, so the inferred impl type no longer fits the service, TypeScript falls back to the constraint, and every key reads as given. The fix in next/packages/vitest/src/Recorder.ts infers only impl's keys (K extends keyof S), never its values, so fails is Fails<S, Method<S> & K>; the impl-keys guard Own and the type parameter P go, and the ordinary excess property check refuses a misspelled impl key again. R17 now names layer by impl's keys. The reviewer's call is refused on the fixed code, and so are its two-symbol and held-in-a-variable cases.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 14,
+  "note": "Exclude<keyof P, symbol> would not have helped: P had already fallen back to the whole constraint, so its keys were every key. The pr tooling call sites, checked with a throwaway config, show the same 20 older errors in Queue.test.ts (ticket 486) as on the reviewed module, and nothing new.",
+  "driver_caused": false,
+  "costUsd": null,
+  "billed": null,
+  "plants": [
+    {
+      "law": "R18",
+      "plant": "real module: fails typed Fails<S>, every method again; R18's directive goes unused in tsc, and R17 goes red too",
+      "result": "red"
+    }
+  ],
+  "step": "build"
+}
