@@ -258,50 +258,46 @@ export const suite = (testLayer: Layer.Layer<Ci | Control>) =>
         }));
       fc.assert(
         fc.property(fc.commands([command], { maxCommands: 45 }), run, (commands, first) => {
-          sync(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const context = yield* Layer.build(testLayer);
-                const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
-                expect(yield* real.ci.at("empty")).toEqual([]);
-                const reports: Array<Report> = [];
+          Effect.gen(function* () {
+            const context = yield* Layer.build(testLayer);
+            const real = { ci: Context.get(context, Ci), control: Context.get(context, Control) };
+            expect(yield* real.ci.at("empty")).toEqual([]);
+            const reports: Array<Report> = [];
 
-                for (const [index, [name, source]] of (
-                  [
-                    ["a\u0000b", "c"],
-                    ["a", "b\u0000c"],
-                  ] as const
-                ).entries()) {
-                  const report = {
-                    commit: "commit",
-                    order: 0,
-                    run: { ...first, id: String(index), name, source },
-                  };
-                  reports.push(report);
-                  yield* real.control.report(report);
-                }
+            for (const [index, [name, source]] of (
+              [
+                ["a\u0000b", "c"],
+                ["a", "b\u0000c"],
+              ] as const
+            ).entries()) {
+              const report = {
+                commit: "commit",
+                order: 0,
+                run: { ...first, id: String(index), name, source },
+              };
+              reports.push(report);
+              yield* real.control.report(report);
+            }
 
-                fc.modelRun(
-                  () => ({ model: { reports, commits: ["commit", "empty"], starts: new Set<string>() }, real }),
-                  commands,
-                );
-                expect(Schema.is(Checks)(yield* real.ci.at("commit"))).toBe(true);
-                const latest = reports.filter(
-                  (r, i) => !reports.slice(i + 1).some((p) => p.commit === r.commit && p.run.id === r.run.id),
-                );
-                const second = yield* Layer.build(testLayer);
-                const control = Context.get(second, Control);
+            fc.modelRun(
+              () => ({ model: { reports, commits: ["commit", "empty"], starts: new Set<string>() }, real }),
+              commands,
+            );
+            expect(Schema.is(Checks)(yield* real.ci.at("commit"))).toBe(true);
+            const latest = reports.filter(
+              (r, i) => !reports.slice(i + 1).some((p) => p.commit === r.commit && p.run.id === r.run.id),
+            );
+            const second = yield* Layer.build(testLayer);
+            const control = Context.get(second, Control);
 
-                for (const report of latest.toReversed()) {
-                  yield* control.report(report);
-                }
+            for (const report of latest.toReversed()) {
+              yield* control.report(report);
+            }
 
-                for (const commit of new Set(reports.map((r) => r.commit))) {
-                  expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
-                }
-              }),
-            ),
-          );
+            for (const commit of new Set(reports.map((r) => r.commit))) {
+              expect(sorted(yield* Context.get(second, Ci).at(commit))).toEqual(sorted(yield* real.ci.at(commit)));
+            }
+          }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 200 },
       );

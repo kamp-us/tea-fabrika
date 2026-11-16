@@ -68,7 +68,7 @@ it("T753 L7–L8 byte references distinguish file input from recorded values and
         });
         const report = Print.report(rows, { all: v.all });
         expect(report.includes(`${d.path} =`)).toBe(v.explicit || v.all);
-        const text = plain(Reference.markdown(group));
+        const text = group.pipe(Reference.markdown, plain);
         // The reference must show the declaration-derived file spelling separately from JSON digits.
         const fileDefault = Schema.encodeSync(Schema.toCodecStringTree(d.schema))(d.default);
         expect(text).toContain(String(fileDefault));
@@ -279,7 +279,7 @@ describe("L3, the reference keeps each declaration's words, default, scope and r
     fc.assert(
       fc.property(declared, (ds) => {
         const group = grouped(ds);
-        const text = plain(Reference.markdown(group));
+        const text = group.pipe(Reference.markdown, plain);
 
         for (const d of group.declarations) {
           for (const shown of [d.path, d.env, `--${d.path}`, d.since, d.reload, ...d.scope]) {

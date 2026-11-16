@@ -373,24 +373,20 @@ export const suite = (testLayer: Layer.Layer<CodeHost | Control>) =>
       const collisionWalk = [command(collision), command({ ...collision, move: 5 })];
       fc.assert(
         fc.property(fc.commands([commandArb], { maxCommands: 70, size: "max" }), (commands) => {
-          sync(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const context = yield* Layer.build(testLayer);
-                const real = { host: Context.get(context, CodeHost), control: Context.get(context, Control) };
-                expect(yield* real.host.change(1)).toEqual(Change.cases.missing.make({ change: 1 }));
-                const main = commit("0".repeat(size));
-                yield* real.control.main(main);
-                fc.modelRun(
-                  () => ({
-                    model: { changes: new Map(), updates: new Map(), merges: new Map(), main, size, serial: 0 },
-                    real,
-                  }),
-                  commands,
-                );
+          Effect.gen(function* () {
+            const context = yield* Layer.build(testLayer);
+            const real = { host: Context.get(context, CodeHost), control: Context.get(context, Control) };
+            expect(yield* real.host.change(1)).toEqual(Change.cases.missing.make({ change: 1 }));
+            const main = commit("0".repeat(size));
+            yield* real.control.main(main);
+            fc.modelRun(
+              () => ({
+                model: { changes: new Map(), updates: new Map(), merges: new Map(), main, size, serial: 0 },
+                real,
               }),
-            ),
-          );
+              commands,
+            );
+          }).pipe(Effect.scoped, sync);
         }),
         { seed: 119120, numRuns: 100, examples: [[collisionWalk]] },
       );
