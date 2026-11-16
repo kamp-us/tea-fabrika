@@ -152,7 +152,7 @@ const makeKey = Effect.gen(function* () {
   const pair = yield* Effect.tryPromise({ try: () => s.generateKey(ED, false, USES), catch: bad });
 
   if (!("privateKey" in pair)) {
-    return yield* Effect.fail(bad(new TypeError("not a key pair")));
+    return yield* bad(new TypeError("not a key pair"));
   }
 
   const pub = pair.publicKey;

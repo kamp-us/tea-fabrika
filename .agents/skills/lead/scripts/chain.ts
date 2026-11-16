@@ -1275,7 +1275,7 @@ const handlers = (s: Setup) => {
             if (check !== null) {
               note(`drive refused ${cmd.step} (${check}); trying again in ${minutes} minutes`);
               s.beats.enter("wait", null);
-              return yield* Effect.fail(new SlotRefused({ check, reason: prepared.reason }));
+              return yield* new SlotRefused({ check, reason: prepared.reason });
             }
 
             return {

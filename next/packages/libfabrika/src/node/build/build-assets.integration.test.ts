@@ -595,14 +595,12 @@ describe("P16 cleanup and recording", () => {
                   if (interrupt) {
                     yield* Deferred.await(release);
                   } else {
-                    return yield* Effect.fail(
-                      PlatformError.systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "rename",
-                        description: "planted publication failure",
-                      }),
-                    );
+                    return yield* PlatformError.systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      description: "planted publication failure",
+                    });
                   }
                 });
                 const rename: typeof fs.rename = (from, to) =>

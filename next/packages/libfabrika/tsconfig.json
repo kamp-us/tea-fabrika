@@ -110,6 +110,15 @@
               }
             }
           },
+          // These folders: unnecessaryFailYieldableError (E19).
+          {
+            "include": ["src/node/**/*.ts"],
+            "options": {
+              "diagnosticSeverity": {
+                "unnecessaryFailYieldableError": "error"
+              }
+            }
+          },
           // These folders: flatMapConditionalToFilterOrFail (E18).
           {
             "include": ["src/processes/**/*.ts", "src/telemetry/**/*.ts"],
