@@ -3459,7 +3459,12 @@ describe("P10 inputs, retries and signer", () => {
       missing: {},
       junk: { reason: Schema.Literals(["wrong", "missing"]) },
     });
-    type MessageState = { readonly schema: typeof schema; readonly m: Schema.JsonObject };
+    // A field may be present with the value undefined: Gateway.route reads these params in
+    // process, with no JSON step, and present-undefined is not the same input as missing.
+    type MessageState = {
+      readonly schema: typeof schema;
+      readonly m: Readonly<Record<string, Schema.Json | undefined>>;
+    };
     const editMessage = (state: MessageState, edit: typeof Broken.Type): Arbitrary.Arbitrary<MessageState> => {
       const missing = edit._tag === "missing" || (edit._tag === "junk" && edit.reason === "missing");
       const fields = Object.entries(state.schema.fields).filter(
@@ -3494,8 +3499,7 @@ describe("P10 inputs, retries and signer", () => {
             Arbitrary.map(({ value, junk }) => {
               const m = { ...state.m };
 
-              // A replacement is undefined only when the field goes missing.
-              if (missing || value === undefined) {
+              if (missing) {
                 delete m[key];
               } else {
                 m[key] = value;

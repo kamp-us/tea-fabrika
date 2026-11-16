@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-antislop-no-unsafe-dictionary-type-1-tests4",
+  "ticket": "1057",
+  "pr": null,
+  "started": "2026-11-16T00:58:02-08:00",
+  "ended": "2026-11-16T01:05:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fix round 4 of the tests step for slice AS-no-unsafe-dictionary-type-1 of the anti-slop judgment sweep (ticket 1057, decision 0563 and its amendment), on branch fabrikalfa/antislop-no-unsafe-dictionary-type-1 from 95944b10e, no pull request (owner ruling), after review1's one blocking fault. next/apps/fabrika/src/door.integration.test.ts, MalformedStampedWrite: MessageState.m is now typed Readonly<Record<string, Schema.Json | undefined>> (the honest reach of SpoofedWrite.value, Schema.Union([Schema.Json, Schema.Undefined])), and the wrong edit again sets m[key] = value, so law p67 spoof again generates a message whose field is present with the value undefined; only the missing edit deletes the key. One hand edit (Edit tool), no quick-fix tool. anti-slop/no-unsafe-dictionary-type, forced to error in a scratch config outside the repo, gives 0 hits on the file; a scratch probe shows the same config fires on Record<string, unknown> and not on Readonly<Record<string, number | undefined>>. The rest of the slice's diff from 797c3c8a8 was scanned for the same kind of change (added lines with `delete `, `=== undefined`, `!== undefined`, a filter or a constantFrom, and removed generator lines): .github/ci/workflow-lint/ci-speed.test.ts and triggers.test.ts change only the cast type on an existing delete; issues.test.ts, Files.test.ts and JsonSchema.test.ts change only a type parameter, with the same values; next/packages/libfabrika/src/transport/Connection.test.ts keeps its delete and swaps a non-null assertion for a default that no mutation with a change reaches; next/packages/libfabrika/src/runtime/Program.test.ts's built() lays r.extra on before the probe's fields with the same overwrite order as the old spread, and its Answer own fields keep the same values. None narrows a generator or deletes in place of a set, so nothing else changed. Left: the product hit next/packages/libfabrika/src/runtime/Entry.ts:133, unchanged, which waits for the rule's lock and its 0563 rule C ignore line. Waiting on 1366: none. Disable lines added: none.",
+  "plants": [
+    {
+      "law": "p67 spoof: malformed stamped process.send spends one budget place, is reserved without a request row and counts once (100 runs), next/apps/fabrika/src/door.integration.test.ts",
+      "plant": "generator reach, with a temporary print of whether write.m holds a present-undefined field: with the fix, 2 of the 10 fast runs at the shared seed held one; with review1's `if (missing || value === undefined) delete m[key]` put back, 0 of 10 did. The law passes in both, since the product refuses both inputs; the plant shows the generator's reach, not a red. File restored by copy and compared byte for byte",
+      "result": "green"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": null,
+  "note": "Ran at 95944b10e plus this round's edit (the commit's tree). tsc --noEmit -p next/apps/fabrika: clean. Vitest next/apps/fabrika/src/door.integration.test.ts: 153 passed; the 0178 guard allowed it and refused nothing; p67 spoof ran alone too (with its sibling under the same name filter, 2 passed). pnpm format ran; pnpm lint whole tree (NODE_OPTIONS=--max-old-space-size=6144) passes; ratchet.ts --base 797c3c8a8 exits 0. No pnpm typecheck. p67 has no coverage check that a present-undefined field is ever drawn, so a later narrowing of the generator would stay green; adding one is outside this round's one fault.",
+  "step": "tests"
+}
