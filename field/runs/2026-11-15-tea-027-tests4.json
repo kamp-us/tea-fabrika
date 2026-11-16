@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-15",
+  "run": "2026-11-15-tea-027-tests4",
+  "ticket": "1061",
+  "pr": "kamp-us/tea-fabrika#1391",
+  "started": "2026-11-15T18:59:00-08:00",
+  "ended": "2026-11-15T19:10:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Fourth tests round for slice 1, after CI run 43793021396 found next/apps/fabrika/src/exam/effect-checks.test.ts red as a whole suite: SchemaError: Missing key at compilerOptions.plugins[0].overrides[3].options.diagnosticSeverity. The law's own schema required diagnosticSeverity in every checker override, and the new .agents/** override carries only allowedDuplicatedPackages. @effect/tsgo 0.63.0's schema.json requires no field in an override (effectLanguageServicePluginOverrideDefinition and effectLanguageServicePluginOverrideOptionsDefinition have no required list), so the law's schema was wrong to require it. diagnosticSeverity is now optional in the law's schema, and the law reads each override's severities when they are present. This does not loosen the law: what it asserts is unchanged, each listed check set exactly once, at error, with its next/ include and exclude, and an override with no severities cannot set or lower a check. The override was not padded. Merged origin/main first. The law was seen red locally before the fix with the same SchemaError, and green after.",
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/exam/effect-checks.test.ts: T910 pinned: Effect's checks for next/ are set at error under the plugin's next/ overrides",
+      "plant": "globalDateInEffect downgraded from error to warning in its next/ override",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/exam/effect-checks.test.ts: T910 pinned",
+      "plant": "the .agents/** override given diagnosticSeverity globalFetchInEffect off beside its allowance",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 11,
+  "note": "Each plant ran once on a saved copy of tsconfig.base.json and was restored by copy, checked with cmp. pnpm format, pnpm lint and the list ratchet pass. One pnpm typecheck, started when pgrep -x tsgo found none: exit 0 in all 30 projects. The merge of origin/main (9bd0a4a05) is not a tests commit and carries no tests link; under docs/how-to/sign-a-step-commit.md a merge of main is the lead's to sign.",
+  "step": "tests"
+}
