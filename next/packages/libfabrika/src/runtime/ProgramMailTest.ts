@@ -1038,6 +1038,7 @@ const walk = (
               Match.when("forbidden", () => requesterName(other)),
               Match.orElse(() => GHOST),
             );
+
             world.current.set(k, { ref, value: cell.value, kind, to });
             world.history.get(k)?.push(ref);
 

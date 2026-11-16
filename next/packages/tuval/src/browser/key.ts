@@ -15,8 +15,8 @@ import * as Effect from "effect/Effect";
 import * as Base64 from "effect/encoding/Base64";
 import * as Base64Url from "effect/encoding/Base64Url";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { errorClass } from "./index.ts";
 
 const DB = "fabrika";

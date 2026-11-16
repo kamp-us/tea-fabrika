@@ -416,11 +416,13 @@ const corrupt = (b: Brain, c: ViewChoice): object | undefined => {
     Match.when("tags", () => [{ op: "add", path: "/-", value: 3 }]),
     Match.orElse(() => [{ op: "replace", path: "/n", value: "x" }]),
   );
+
   const pastEnd = Match.value(b.kind).pipe(
     Match.when("list", () => "/items/99"),
     Match.when("tags", () => "/99"),
     Match.orElse(() => "/rows/99"),
   );
+
   const other = KINDS.find((k) => k !== b.kind && !Schema.is(SHAPES[b.kind])(START[k]))!;
 
   return [

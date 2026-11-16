@@ -46,12 +46,12 @@ import { Cmd as TeaCmd, Machine } from "@demlik/tea/effect";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import type * as SchemaAST from "effect/SchemaAST";
-import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { ExitReason } from "../processes/ExitReason.ts";
 import { clientInbox, Down, inSignalSpace, NoProc, Recipient, signalId } from "../processes/Process.ts";
@@ -1077,6 +1077,7 @@ describe("L8: the window parent's connection", () => {
 
           const owner = refusedLetter === undefined ? undefined : world.from.get(refusedLetter.n);
           const made = next.client.pending.filter((p) => p.n >= prev.client.written);
+
           const aimed = Match.value(m).pipe(
             Match.discriminator("type")("press", (press) => press.tile),
             Match.discriminator("type")("tile", (tile) => tile.id),

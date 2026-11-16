@@ -7,9 +7,9 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { brainOutbox } from "./local-dev.ts";
 

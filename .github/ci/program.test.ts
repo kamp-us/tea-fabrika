@@ -301,11 +301,13 @@ it("property: a tool comment that was added, removed or changed is refused, in a
       ([head, list, before], [body, form], how, at, file) => {
         const place = at % list.length;
         const put = (text: string) => before.map((g, i) => (i === place ? `${text}${g}` : g));
+
         const old = Match.value(how).pipe(
           Match.when("added", () => before),
           Match.when("removed", () => put(write(form, body))),
           Match.orElse(() => put(write(form, body))),
         );
+
         const fresh = Match.value(how).pipe(
           Match.when("added", () => put(write(form, body))),
           Match.when("removed", () => before),

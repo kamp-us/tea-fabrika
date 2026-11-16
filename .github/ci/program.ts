@@ -79,6 +79,7 @@ const refusal = (name: string, before: string, after: string, parse: typeof pars
 
   if (Result.isFailure(parsed)) {
     const error = parsed.failure;
+
     return `the parser threw: ${error instanceof Error ? error.message : String(error)}`;
   }
 

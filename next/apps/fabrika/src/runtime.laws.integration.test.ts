@@ -19,7 +19,20 @@ import { Attached } from "@kampus/libfabrika/transport/Wire";
 import { ConnectionService, connectionRuntime } from "@kampus/libfabrika/workers/gateway";
 import { ProjectService, bucketCalls } from "@kampus/libfabrika/workers/runtime";
 import { runsFor } from "@kampus/vitest";
-import { Cause, Deferred, Effect, Exit, Layer, Match, Option, Predicate, Schedule, Schema, Scope, Tracer } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Match,
+  Option,
+  Predicate,
+  Schedule,
+  Schema,
+  Scope,
+  Tracer,
+} from "effect";
 import * as fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import * as RecordWireTest from "./record-wire.test-support.ts";

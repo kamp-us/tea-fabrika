@@ -4,11 +4,11 @@
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Path from "effect/Path";
-import * as Predicate from "effect/Predicate";
 import * as Match from "effect/Match";
 import effectPackage from "effect/package.json" with { type: "json" };
 import * as Path from "effect/Path";
+import * as Path from "effect/Path";
+import * as Predicate from "effect/Predicate";
 import {
   rolldown,
   VERSION,

@@ -3,9 +3,9 @@ import { expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import * as Status from "./LaunchdStatus.ts";
 

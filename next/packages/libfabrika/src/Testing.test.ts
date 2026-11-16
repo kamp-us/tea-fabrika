@@ -3,8 +3,8 @@
 // senderTest({inputs, expected, writes, owner, seed}) compares an independent expected-write table.
 import { Cmd, Machine } from "@demlik/tea/effect";
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
 import * as Match from "effect/Match";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 
 const SEED = 119120;

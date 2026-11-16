@@ -160,11 +160,13 @@ describe("P14 S1.3: the brain serves the built page at / and keeps P16's serving
             const path = choices[s.pick % choices.length]!;
             const method = METHODS[s.method % METHODS.length]!;
             const wrongHost = s.host % 5 === 0;
+
             const originHeader = Match.value(s.origin % 5).pipe(
               Match.when(0, () => "http://evil.example"),
               Match.when(1, () => origin),
               Match.orElse(() => null),
             );
+
             const target = path === "/" ? (current !== undefined && Object.hasOwn(current, PAGE) ? PAGE : null) : path;
 
             const asset =

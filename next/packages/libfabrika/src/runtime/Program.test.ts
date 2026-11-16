@@ -202,6 +202,7 @@ const policyCheck = (value: unknown, policy: Policy | undefined) => {
 const corruptPolicy = (policy: Policy, field: number, n: number): object => {
   if (field < 18) {
     const key = ["maxDeliveries", "intensity", "periodMs", "minMs", "maxMs", "resetAfterMs"][Math.floor(field / 3)]!;
+
     const value = Match.value(field % 3).pipe(
       Match.when(0, () => 0),
       Match.when(1, () => -n - 1),
@@ -1709,6 +1710,7 @@ describe("Program watch: a program that monitors declares DOWN, next/", () => {
     });
 
     const { DOWN, ...rest } = made.inputs;
+
     const inputs = Match.value(port).pipe(
       Match.when("both", () => made.inputs),
       Match.when("DOWN", () => ({ DOWN })),

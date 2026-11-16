@@ -1,6 +1,7 @@
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Path from "effect/Path";
 import type * as PlatformError from "effect/PlatformError";
 import * as Predicate from "effect/Predicate";
@@ -8,7 +9,6 @@ import type * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as Match from "effect/Match";
 
 type Format = "sha1" | "sha256";
 
@@ -1146,6 +1146,7 @@ export const make = Effect.fnUntraced(function* () {
       const [spelled = "", ...files] = rest;
       const id = revision(here, spelled);
       const object = id === null ? undefined : here.store.objects.get(id);
+
       const tree = Match.value(object).pipe(
         Match.when({ type: "commit" }, (object) => object.tree),
         Match.when({ type: "tree" }, () => id),

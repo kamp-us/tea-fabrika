@@ -33,10 +33,10 @@
 // commands land. Each step answers only what really waits: the calls in flight and the Cmds handed out.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
+import * as Match from "effect/Match";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import type { Binding } from "../runtime/Program.ts";
 import * as Layout from "../tezgah/Layout.ts";

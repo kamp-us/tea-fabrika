@@ -7,9 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
-import * as Match from "effect/Match";
 import type { Sql } from "../Sql.ts";
 import type * as RecordPartTest from "../telemetry/RecordPartTest.ts";
 import * as RecordPartSupport from "./RecordPart.test-support.ts";
@@ -43,8 +43,10 @@ const Move = Schema.Union([
 const watched = () => {
   const events: Array<RecordPartSupport.Event> = [];
   const opened = () => events.flatMap((e) => (e.step === "opened" ? [e.db] : []));
+
   const closes = (db: ReturnType<typeof opened>[number]) =>
     events.filter((e) => e.step === "closed" && e.db === db).length;
+
   const folders = () => events.flatMap((e) => (e.step === "folder" ? [e.path] : []));
 
   const released = Effect.gen(function* () {

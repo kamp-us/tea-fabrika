@@ -26,7 +26,20 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "@effect/vitest";
 import { runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Cause, Effect, Exit, Layer, Option, Predicate, Redacted, Schema, Scope, Stream, Tracer } from "effect";
+import {
+  Arbitrary,
+  Cause,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Redacted,
+  Schema,
+  Scope,
+  Stream,
+  Tracer,
+} from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
 import { processId, processIds } from "../Id.test-support.ts";

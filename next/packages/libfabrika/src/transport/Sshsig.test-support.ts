@@ -4,8 +4,8 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { checkSshsig, KeyLine, writeSshsig } from "./Sshsig.ts";
 
 export const SPACE = "fabrika-client";

@@ -228,6 +228,7 @@ const command = Command.make("dev", flags, (options) => {
                     Match.when("too_large", () => "the bundle is too large"),
                     Match.orElse(() => "the module failed to load"),
                   );
+
                   process.stdout.write(
                     `${answer.program} did not load: ${reason}${answer.path === undefined ? "" : ` at ${answer.path}${answer.line === undefined ? "" : `:${answer.line}`}`}\n`,
                   );
@@ -244,6 +245,7 @@ const command = Command.make("dev", flags, (options) => {
                         Match.when("newer", () => "its state has a newer version"),
                         Match.orElse(() => "the new code could not load"),
                       );
+
                       return `${name} stays on ${outcome.was.slice(0, 8)}: ${reason}`;
                     },
                     not_now: () => `${name} will try the new code at the next brain start`,

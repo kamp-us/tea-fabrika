@@ -308,6 +308,7 @@ const runsOf = (
 ): Run[] => {
   const done = list.map((r, i): Run => {
     const created = i * 30;
+
     const conclusion = Match.value(r.kind).pipe(
       Match.when("skipped", () => "success"),
       Match.when("gate failed", () => "failure"),

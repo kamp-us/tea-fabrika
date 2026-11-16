@@ -118,6 +118,7 @@ const run = (): { readonly unreached: readonly string[]; readonly total: number 
 };
 
 const ran = Result.try(run);
+
 const result = Result.isSuccess(ran) ? ran.success : fail(`could not read: ${String(ran.failure)}`);
 
 if (result.unreached.length > 0) {

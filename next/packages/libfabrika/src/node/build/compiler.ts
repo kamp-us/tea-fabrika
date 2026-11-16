@@ -1,3 +1,4 @@
+import * as Predicate from "effect/Predicate";
 /**
  * The React Compiler's one compile step, and the check on what it skipped
  * (docs/direction/react-compiler.md).
@@ -18,7 +19,6 @@
  * change of its own. The ledger starts empty and only shrinks. There is no setting to loosen it.
  */
 import * as Schema from "effect/Schema";
-import * as Predicate from "effect/Predicate";
 import { parseSync } from "oxc-parser";
 import { type OxcError, transformSync } from "oxc-transform-react";
 

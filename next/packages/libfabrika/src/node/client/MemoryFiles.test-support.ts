@@ -1,5 +1,8 @@
 import * as ByteSize from "effect/ByteSize";
+import * as ByteSize from "effect/ByteSize";
 import * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as FileSystem from "effect/FileSystem";
 // P39 slice 4b, next/: a file system in memory for the node client's merge-line laws (C1 to C3, K1,
 // K2), over Effect's own `FileSystem.layerNoop`. It keeps POSIX's facts the laws lean on: a mode
@@ -9,11 +12,8 @@ import * as FileSystem from "effect/FileSystem";
 import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
-import type * as Scope from "effect/Scope";
-import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Predicate from "effect/Predicate";
-import * as ByteSize from "effect/ByteSize";
+import type * as Scope from "effect/Scope";
 
 type FileNode = { readonly type: "File"; bytes: Uint8Array; mode: number; mtime: Date };
 

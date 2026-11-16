@@ -10,9 +10,9 @@ import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Schema from "effect/Schema";
 import * as TestClock from "effect/testing/TestClock";
-import * as Match from "effect/Match";
 import * as Outside from "../../desktop/BrainControl.test-support.ts";
 import { BrainControl } from "../../desktop/BrainControl.ts";
 import * as FilesTest from "../../desktop/BrainFilesTest.ts";
@@ -637,6 +637,7 @@ it.effect.prop(
         Match.when("leading", () => ` ${word}`),
         Match.orElse(() => `${word} `),
       );
+
       const input = Match.value(field).pipe(
         Match.when("args", () => ({ args: [value] })),
         Match.when("executable", () => ({

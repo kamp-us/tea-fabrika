@@ -1425,6 +1425,7 @@ const make = Effect.fnUntraced(function* <A, RNext, RDeliver, RNotify>(options: 
         : null;
 
     const message = decoded !== null && Result.isSuccess(decoded) ? decoded.success : null;
+
     const name =
       message === null
         ? undefined

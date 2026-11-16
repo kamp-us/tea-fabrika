@@ -24,9 +24,9 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Match from "effect/Match";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
-import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { property } from "../../Testing.test-support.ts";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
@@ -87,11 +87,13 @@ const openStep = (rejected: "none" | "stored" | "other"): Step => ({
 
     return Effect.gen(function* () {
       const before = MemoryFiles.read(r.disk, FILE);
+
       const fp = Match.value(rejected).pipe(
         Match.when("stored", () => m.fingerprint),
         Match.when("other", () => "SHA256:not-this-key"),
         Match.orElse(() => null),
       );
+
       const exit = yield* open(r, fp);
 
       if (m.file === null) {

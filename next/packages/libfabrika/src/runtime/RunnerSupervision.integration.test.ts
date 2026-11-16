@@ -781,6 +781,7 @@ describe("P34 runner supervision", () => {
                   Match.when("due early", () => time + delay),
                   Match.orElse(() => null),
                 );
+
                 const w = world(false, true, wakeAt);
                 const process = path === "restart" ? B : A;
                 const request = { id: `restart-${id}`, build: BUILD };

@@ -17,8 +17,8 @@
 // machine's own helpers.
 import { applyCell } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import * as Result from "effect/Result";
 import * as Match from "effect/Match";
+import * as Result from "effect/Result";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { type Access, access, admitted, type Folded, type MemberEvent, members, type Reason } from "./Access.ts";

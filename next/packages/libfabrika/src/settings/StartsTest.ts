@@ -456,11 +456,13 @@ export const suite = <E>(open: Effect.Effect<Driver, E, Scope.Scope>) =>
               }
 
               const after = driver.counts();
+
               const deliveries = Match.value(move).pipe(
                 Match.when("concurrent", () => 3),
                 Match.when("lost", () => 2),
                 Match.orElse(() => 1),
               );
+
               expect(after.reads - before.reads).toBe(deliveries + (absent ? 1 : 0));
               expect(after.appends - before.appends).toBe(absent ? 1 : 0);
             }

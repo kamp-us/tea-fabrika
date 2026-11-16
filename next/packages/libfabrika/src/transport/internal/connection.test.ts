@@ -5,8 +5,8 @@
 // the machine must now hold.
 import { applyCellChecked } from "@demlik/tea";
 import { describe, expect, it } from "@effect/vitest";
-import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { expectTypeOf } from "vitest";
 import { Attached, Wait } from "../Wire.ts";

@@ -322,6 +322,7 @@ const raw = (tag: string, fields: object = {}): object =>
 
 const body = (entry: Entry | undefined): Record<string, unknown> => {
   const value = entry?.body;
+
   return Predicate.isObject(value) ? value : {};
 };
 

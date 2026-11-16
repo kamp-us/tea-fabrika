@@ -21,7 +21,7 @@
 import { lengths, STRIP, shut } from "@kampus/libfabrika/tezgah/Fold";
 import { GAP, order } from "@kampus/libfabrika/tezgah/Layout";
 import type { Dir, Layout as Tree, Tile, TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
-import { Predicate } from "effect";
+import * as Predicate from "effect/Predicate";
 import type { ReactElement } from "react";
 
 /**

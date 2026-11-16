@@ -959,6 +959,7 @@ export const makeMachine = (limits: Limits) =>
         }
 
         const { outcome, head, reason } = m.value;
+
         // 0076: the host step's mark joins the window like any step's. A send to build is a send
         // back; a stuck is the tool's (git, the signer, the push), never counted against the quest.
         const mark = Match.value(outcome).pipe(
@@ -966,6 +967,7 @@ export const makeMachine = (limits: Limits) =>
           Match.when("stuck", (): Mark => "tool"),
           Match.orElse((): Mark => "pass"),
         );
+
         const quest: Quest = { ...s.quest, window: [...s.quest.window, mark].slice(-limits.intensity.within) };
         const intensity = intensityStop(quest, limits.intensity);
 

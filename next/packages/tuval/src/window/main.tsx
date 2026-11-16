@@ -28,8 +28,8 @@ import { CursorKey, type Tile as TezgahTile } from "@kampus/libfabrika/tezgah/Wo
 import { Button, useClipboard } from "@manti-ui/react";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { landing, question, Layout, tileName } from "./Layout.tsx";

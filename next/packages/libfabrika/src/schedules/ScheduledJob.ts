@@ -5,9 +5,9 @@ import type { AnyCmdDef, CmdOf, Reducer, Settled } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
 import * as Duration from "effect/Duration";
 import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Predicate from "effect/Predicate";
 
 /**
  * Schema for the job's state: `idle` with the next due time, or `running` with the time of the

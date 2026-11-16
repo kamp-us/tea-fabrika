@@ -10,7 +10,7 @@
  * container has when that is less. `fold` is the fixpoint on that geometry: a tile folds only when
  * it is drawn under 220x120 where it folds, and the focused tile never folds.
  */
-import { Predicate } from "effect";
+import * as Predicate from "effect/Predicate";
 import { GAP, order, type Rect } from "./Layout.ts";
 import type { Container, Layout, TileId, Workspace } from "./Workspace.ts";
 

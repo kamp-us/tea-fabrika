@@ -16,8 +16,8 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as Layout from "@kampus/libfabrika/tezgah/Layout";
 import { type Tile, type TileId, Workspace } from "@kampus/libfabrika/tezgah/Workspace";
-import * as Schema from "effect/Schema";
 import * as Predicate from "effect/Predicate";
+import * as Schema from "effect/Schema";
 import * as fc from "fast-check";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

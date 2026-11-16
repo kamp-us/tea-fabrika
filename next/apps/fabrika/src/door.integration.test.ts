@@ -50,7 +50,22 @@ import { checkSshsig } from "@kampus/libfabrika/transport/Sshsig";
 import { Attached, Hello } from "@kampus/libfabrika/transport/Wire";
 import { type Runs, runsFor } from "@kampus/vitest";
 import * as TestDatabase from "@kampus/vitest/TestDatabase";
-import { Arbitrary, Deferred, Effect, Exit, Fiber, Layer, Logger, Match, Option, Predicate, Result, Schema, Scope, Stream } from "effect";
+import {
+  Arbitrary,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Match,
+  Option,
+  Predicate,
+  Result,
+  Schema,
+  Scope,
+  Stream,
+} from "effect";
 import { RateLimiter } from "effect/persistence";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
@@ -965,11 +980,13 @@ describe("T843 sender budget, next/", () => {
             ];
 
             const move: string = moves[pick % moves.length]!;
+
             const method = Match.value(move).pipe(
               Match.when("read", () => "ledger.read"),
               Match.when("unknown", () => "missing.method"),
               Match.orElse(() => "process.send"),
             );
+
             const params = Match.value(move).pipe(
               Match.when("read", () => ({ stream: "empty", after: 0 })),
               Match.when("reserved", () => ({ ...request("same-letter"), by: "claimed-key" })),
@@ -1476,6 +1493,7 @@ describe("T843 sender budget, next/", () => {
             expect(now._tag).toBe("online");
             const moves = now._tag === "online" && !now.busy ? ["send", "read", "stamped", "unknown"] : ["send"];
             const move = moves[choices[n % choices.length]! % moves.length]!;
+
             const method = Match.value(move).pipe(
               Match.when("read", () => "ledger.wait"),
               Match.when("unknown", () => "missing.method"),

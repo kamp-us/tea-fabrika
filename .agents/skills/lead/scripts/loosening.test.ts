@@ -183,11 +183,11 @@ describe("loosening, today's tooling", () => {
       Match.when("namespace", () => "import * as checks from 'vitest';\n"),
       Match.orElse(() => ""),
     );
+
     const target = Match.value(shape.alias).pipe(
       Match.when("direct", () => base),
       Match.when("namespace", () => `checks.${base}`),
       Match.orElse(() => alias),
-
     );
 
     const options = option
@@ -787,6 +787,7 @@ describe("loosening, today's tooling", () => {
               Match.when("module", () => source(v, "state.check(value);")),
               Match.orElse(() => source(v, "shared.check(value);")),
             );
+
           const write = Match.value(kind).pipe(
             Match.when("options", () => "settings.numRuns = 1;"),
             Match.when("module", () => "state.check = () => {};"),
@@ -820,6 +821,7 @@ describe("loosening, today's tooling", () => {
             Match.when("regex", () => source(v, "const pattern = /[//]/; expect(value).toBe(value);")),
             Match.orElse(() => source(v, "return /* same line */ expect(value).toBe(value);")),
           );
+
           const after = Match.value(kind).pipe(
             Match.when("return-newline", () => before.replace("return expect", "return\nexpect")),
             Match.when("regex", () => before.replace("expect(value).toBe(value);", "")),

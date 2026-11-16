@@ -16,10 +16,10 @@ import { applyCell } from "@demlik/tea";
 import { arbMsgSequence } from "@demlik/tea/pbt";
 import { describe, expect, expectTypeOf, it } from "@effect/vitest";
 import * as Arbitrary from "effect/Arbitrary";
+import * as Match from "effect/Match";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import * as Match from "effect/Match";
 import * as fc from "fast-check";
 import { diff } from "../runtime/Patch.ts";
 import type { Binding } from "../runtime/Program.ts";
@@ -163,22 +163,24 @@ describe("Desk S2a L11: a tezgah view patch in the window", () => {
         const msg = Match.value(kind).pipe(
           Match.when("whole", (): TezgahMsg => ({ type: "server", rev: rev + skew, view: target })),
           Match.when("next", (): TezgahMsg => ({ type: "patch", base: rev, rev: rev + 1, patch: diff(shown, target) })),
-          Match.when(
-            "gap_base",
-            (): TezgahMsg => ({ type: "patch", base: rev - skew, rev: rev + 1, patch: diff(shown, target) }),
-          ),
-          Match.when(
-            "gap_rev",
-            (): TezgahMsg => ({ type: "patch", base: rev, rev: rev + 1 + skew, patch: diff(shown, target) }),
-          ),
-          Match.orElse(
-            (): TezgahMsg => ({
-              type: "patch",
-              base: rev - skew - 1,
-              rev: rev - skew + 1,
-              patch: diff(shown, target),
-            }),
-          ),
+          Match.when("gap_base", (): TezgahMsg => ({
+            type: "patch",
+            base: rev - skew,
+            rev: rev + 1,
+            patch: diff(shown, target),
+          })),
+          Match.when("gap_rev", (): TezgahMsg => ({
+            type: "patch",
+            base: rev,
+            rev: rev + 1 + skew,
+            patch: diff(shown, target),
+          })),
+          Match.orElse((): TezgahMsg => ({
+            type: "patch",
+            base: rev - skew - 1,
+            rev: rev - skew + 1,
+            patch: diff(shown, target),
+          })),
         );
 
         const [next, cmds] = both(m, msg);
