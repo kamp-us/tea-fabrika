@@ -39,3 +39,7 @@ says the same.
 ## Consequences
 
 - In `next/`, the lint rule `fabrika/no-hand-tag` fails a hand-written `_tag` key.
+
+## Amendments
+
+- 2026-11-15: [0573](0573-trusted-lint-rule-replaces-ours.md) replaces `fabrika/no-hand-tag`, the rule named here, with the anti-slop rules `no-manual-tagged-construction` and `no-manual-tagged-type`, in the cleanup of [0562](0562-nothing-teaches-the-wrong-shape.md). The rule that holds the ban changes; the ban does not.
