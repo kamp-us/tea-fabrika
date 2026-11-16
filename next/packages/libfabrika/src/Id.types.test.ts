@@ -3,7 +3,8 @@ import { expectTypeOf, it } from "@effect/vitest";
 import { Id } from "@kampus/libfabrika";
 import type { IdError, IdSchema, IdValue } from "@kampus/libfabrika";
 import type * as Public from "@kampus/libfabrika";
-import { type Context, Effect, Schema, type SchemaIssue } from "effect";
+import { type Context, Effect, type Layer, Schema, type SchemaIssue } from "effect";
+import type { SecureRandom } from "effect/crypto";
 import type * as Front from "./Id.ts";
 import type { ProcessIdGenerator } from "./processes/ProcessIdGenerator.ts";
 import type { ProcessId as TraceProcessId } from "./ProcessId.ts";
@@ -82,4 +83,19 @@ const checkTypes = (raw: string) => {
 
 it("type: the public Id module keeps its brands, schemas and generator types for generated client prefixes", () => {
   expectTypeOf(checkTypes).toBeFunction(); // CI's typecheck runs the uncalled function above.
+});
+
+// T1067 T5. Callers keep one layer that needs nothing (the 2026-11-16 ruling), and a caller that
+// picks its own random source builds the service from SecureRandom.
+// Plant: drop `Layer.provide(SecureRandom.layerWebCrypto)` from `Generator.layer`, and it needs SecureRandom.
+const checkLayers = () => {
+  expectTypeOf(Id.Generator.layer).toEqualTypeOf<Layer.Layer<Id.Generator>>();
+  expectTypeOf(Id.makeGenerator).toEqualTypeOf<
+    Effect.Effect<Context.Service.Shape<typeof Id.Generator>, never, SecureRandom.SecureRandom>
+  >();
+  expectTypeOf<typeof Front.makeGenerator>().toEqualTypeOf<typeof Id.makeGenerator>();
+};
+
+it("type: Generator.layer needs nothing, and makeGenerator needs only SecureRandom", () => {
+  expectTypeOf(checkLayers).toBeFunction(); // CI's typecheck runs the uncalled function above.
 });

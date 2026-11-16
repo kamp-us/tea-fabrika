@@ -24,7 +24,7 @@ import { dirname, join, relative } from "node:path";
 import { RuleTester } from "oxlint/plugins-dev";
 import { afterAll, describe, expect, it } from "vitest";
 import { plant as lintCopies } from "../next/apps/fabrika/src/exam/plant.ts";
-import { BUILTIN_PLANTS, type Plant, REFLECT } from "./builtin-plants.ts";
+import { BUILTIN_PLANTS, type Plant, REFLECT, VI_METHODS } from "./builtin-plants.ts";
 import fabrika from "./index.ts";
 
 const ROOT = join(import.meta.dirname, "..");
@@ -508,9 +508,17 @@ const isReflectGet = (entry: unknown): boolean =>
 
 /**
  * Where a law plants a file for one folder glob of the config, such as `next/programs/chaos/**`:
- * a file of that folder's own. A glob that names a file, not a folder, is answered unchanged.
+ * a file of that folder's own. A glob of one folder's files by extension, such as
+ * `next/packages/libfabrika/src/*.ts`, gets `planted` with that extension. A glob that names a
+ * file, not a folder, is answered unchanged.
  */
 const plantPath = (glob: string): string => {
+  const byExtension = /^(.*)\/\*(\.[a-z]+)$/.exec(glob);
+
+  if (byExtension !== null) {
+    return `${byExtension[1]}/planted${byExtension[2]}`;
+  }
+
   const folder = glob.replace(/(\/\*\*)?\/\*\*?$/, "");
   return folder === glob ? glob : `${folder}/planted.ts`;
 };
@@ -525,75 +533,131 @@ const banGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; read
       : [];
   });
 
+/** The globs of every override that sets the vi ban (0555), each with the rule's level there. */
+const viGlobs = (printed: Printed): ReadonlyArray<{ readonly glob: string; readonly level: unknown }> =>
+  printed.overrides.flatMap(({ files, rules }) => {
+    const setting = rules["vitest/no-restricted-vi-methods"];
+    return setting === undefined
+      ? []
+      : files.map((glob) => ({ glob, level: Array.isArray(setting) ? setting[0] : setting }));
+  });
+
+/**
+ * A copy of the repo's lint setup in a temp folder: `globsOf` picks the globs from oxlint's own
+ * `--print-config`, `check` sees them first, then `plant`'s lines are written in a file of each
+ * glob's folder and linted there with the copied config. Answers each file's refused lines under
+ * `plant.code`, beside the lines `plant` says must be refused.
+ */
+const refusedInEveryFolder = (
+  plant: Plant,
+  prefix: string,
+  globsOf: (printed: Printed) => ReadonlyArray<{ readonly glob: string; readonly level: unknown }>,
+  check: (globs: ReadonlyArray<{ readonly glob: string; readonly level: unknown }>) => void,
+): {
+  readonly want: readonly number[];
+  readonly refused: ReadonlyArray<readonly [string, readonly number[]]>;
+} => {
+  const at = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+
+  try {
+    copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
+    // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
+    mkdirSync(join(at, "oxlint-plugins"));
+
+    for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
+      if (entry.isFile()) {
+        copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
+      }
+    }
+
+    symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
+    symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
+    // The config loads the vendored anti-slop plugins from here (0563).
+    symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
+    const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
+      cwd: at,
+      encoding: "utf8",
+      maxBuffer: 2 ** 28,
+    });
+    expect(printed.status, printed.stderr).toBe(0);
+    const parsed: Printed = JSON.parse(printed.stdout);
+    const globs = globsOf(parsed);
+    check(globs);
+
+    const text = `${[...plant.prelude, ...plant.lines.map(([line]) => line)].join("\n")}\n`;
+    const want = plant.lines.flatMap(([, refused], i) => (refused ? [plant.prelude.length + i + 1] : []));
+    const files = globs.map(({ glob }) => plantPath(glob));
+    expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+
+    for (const file of files) {
+      mkdirSync(dirname(join(at, file)), { recursive: true });
+      writeFileSync(join(at, file), text);
+    }
+
+    const ran = spawnSync(
+      OXLINT,
+      [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
+      { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
+    );
+    const report: {
+      readonly diagnostics: ReadonlyArray<{
+        readonly code?: string;
+        readonly filename: string;
+        readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
+      }>;
+    } = JSON.parse(ran.stdout);
+
+    return {
+      want,
+      refused: files.map((file) => [
+        file,
+        report.diagnostics
+          .filter((d) => d.filename === file && d.code === plant.code)
+          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
+          .sort((a, b) => a - b),
+      ]),
+    };
+  } finally {
+    rmSync(at, { recursive: true, force: true });
+  }
+};
+
 describe("L1 of the Reflect ban: every folder a block lists refuses it", () => {
   // scenario: the repo's own config, read by oxlint's own --print-config, so every folder a ban block
   // lists today gets REFLECT's lines, a later slice's folder included.
   // Plant: delete one entry from one block of `.oxlintrc.json`, and that folder's line is not refused.
   it("scenario: REFLECT's lines are refused exactly, in every folder of every ban block", () => {
-    const at = realpathSync(mkdtempSync(join(tmpdir(), "reflect-ban-")));
-
-    try {
-      copyFileSync(join(ROOT, ".oxlintrc.json"), join(at, ".oxlintrc.json"));
-      // The rules are copied, not linked, so a plant under `oxlint-plugins/` stays in the temp repo.
-      mkdirSync(join(at, "oxlint-plugins"));
-
-      for (const entry of readdirSync(join(ROOT, "oxlint-plugins"), { withFileTypes: true })) {
-        if (entry.isFile()) {
-          copyFileSync(join(ROOT, "oxlint-plugins", entry.name), join(at, "oxlint-plugins", entry.name));
-        }
-      }
-
-      symlinkSync(join(ROOT, "oxlint-plugins", "node_modules"), join(at, "oxlint-plugins", "node_modules"));
-      symlinkSync(join(ROOT, "node_modules"), join(at, "node_modules"));
-      // The config loads the vendored anti-slop plugins from here (0563).
-      symlinkSync(join(ROOT, "vendor"), join(at, "vendor"));
-      const printed = spawnSync(OXLINT, [`--config=${join(at, ".oxlintrc.json")}`, "--print-config"], {
-        cwd: at,
-        encoding: "utf8",
-        maxBuffer: 2 ** 28,
-      });
-      expect(printed.status, printed.stderr).toBe(0);
-      const parsed: Printed = JSON.parse(printed.stdout);
-      const globs = banGlobs(parsed);
+    const { want, refused } = refusedInEveryFolder(REFLECT, "reflect-ban-", banGlobs, (globs) => {
       // Coverage: the tooling, a next/ folder where JSON.parse blocks and one where it still advises.
       expect(globs.map(({ glob }) => glob)).toEqual(
         expect.arrayContaining([".agents/**", ".github/**", "oxlint-plugins/**"]),
       );
       expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "deny")).toBe(true);
       expect(globs.some(({ glob, level }) => glob.startsWith("next/") && level === "warn")).toBe(true);
+    });
 
-      const text = `${[...REFLECT.prelude, ...REFLECT.lines.map(([line]) => line)].join("\n")}\n`;
-      const want = REFLECT.lines.flatMap(([, refused], i) => (refused ? [REFLECT.prelude.length + i + 1] : []));
-      const files = globs.map(({ glob }) => plantPath(glob));
-      expect(new Set(files).size, "each glob gets a file of its own").toBe(files.length);
+    for (const [file, lines] of refused) {
+      expect(lines, file).toEqual(want);
+    }
+  }, 120_000);
+});
 
-      for (const file of files) {
-        mkdirSync(dirname(join(at, file)), { recursive: true });
-        writeFileSync(join(at, file), text);
-      }
-
-      const ran = spawnSync(
-        OXLINT,
-        [`--config=${join(at, ".oxlintrc.json")}`, "--disable-nested-config", "--format=json", ...files],
-        { cwd: at, encoding: "utf8", maxBuffer: 2 ** 28 },
+describe("M1 of the mock sweep: every folder a vi ban block lists refuses vi's mocks", () => {
+  // scenario: T1067 L1 (lib-top) and M1 (node), the repo's own config, read by oxlint's own
+  // --print-config, so every folder a `vitest/no-restricted-vi-methods` block lists today gets
+  // VI_METHODS' lines, each later slice's folder included.
+  // Plant: delete `fn` (or `spyOn`) from the block in `.oxlintrc.json`, and that line is not refused.
+  it("scenario: VI_METHODS' lines are refused exactly, in every folder of every vi ban block", () => {
+    const { want, refused } = refusedInEveryFolder(VI_METHODS, "vi-ban-", viGlobs, (globs) => {
+      // Coverage: libfabrika's top files, both extensions, and the ban blocks in every folder it names.
+      expect(globs.map(({ glob }) => glob)).toEqual(
+        expect.arrayContaining(["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"]),
       );
-      const report: {
-        readonly diagnostics: ReadonlyArray<{
-          readonly code?: string;
-          readonly filename: string;
-          readonly labels: ReadonlyArray<{ readonly span: { readonly line: number } }>;
-        }>;
-      } = JSON.parse(ran.stdout);
+      expect(globs.every(({ level }) => level === "deny")).toBe(true);
+    });
 
-      for (const file of files) {
-        const refused = report.diagnostics
-          .filter((d) => d.filename === file && d.code === REFLECT.code)
-          .flatMap((d) => (d.labels[0] === undefined ? [] : [d.labels[0].span.line]))
-          .sort((a, b) => a - b);
-        expect(refused, file).toEqual(want);
-      }
-    } finally {
-      rmSync(at, { recursive: true, force: true });
+    for (const [file, lines] of refused) {
+      expect(lines, file).toEqual(want);
     }
   }, 120_000);
 });

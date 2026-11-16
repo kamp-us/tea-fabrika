@@ -54,6 +54,35 @@ export const REFLECT: Plant = {
   ],
 };
 
+/**
+ * M1 of the mock sweep (decisions 0555, 0579; ticket 1067): `vi.fn`, `vi.mock`, `vi.doMock`,
+ * `vi.spyOn` and `vi.stubEnv` are refused in every folder a `vitest/no-restricted-vi-methods` block
+ * lists, and the rest of `vi` passes. plants.test.ts runs these lines in a file of each such folder,
+ * as it runs REFLECT's. They are not in BUILTIN_PLANTS: no block lists `oxlint-plugins/`.
+ * Plant: delete one method from one block of `.oxlintrc.json`, and that folder's line is not refused.
+ */
+export const VI_METHODS: Plant = {
+  code: "vitest(no-restricted-vi-methods)",
+  prelude: [TEST, 'import {vi as renamed} from "vitest";', "declare const other: {fn: () => void};"],
+  lines: [
+    ["export const a = vi.fn();", true],
+    ['vi.mock("./a.ts");', true],
+    ['vi.doMock("./a.ts");', true],
+    ['export const b = vi.spyOn(console, "log");', true],
+    ['vi.stubEnv("A", "b");', true],
+    ['export const c = vi["spyOn"](console, "log");', true],
+    ["export const d = vi?.fn();", true],
+    // 0555 asked what a renamed import does: oxlint follows it to vitest's `vi` and refuses it.
+    ['export const e = renamed.spyOn(console, "log");', true],
+    // The rest of `vi` passes, as do a comment, a string and another object's `fn`.
+    ["await vi.waitFor(() => undefined);", false],
+    ['// vi.spyOn(console, "log") in a comment', false],
+    ['export const f = "vi.fn()";', false],
+    ["other.fn();", false],
+    ['describe("a", () => { it("b", () => { expect(1).toBe(1); }); });', false],
+  ],
+};
+
 const eslint: readonly Plant[] = [
   REFLECT,
   {

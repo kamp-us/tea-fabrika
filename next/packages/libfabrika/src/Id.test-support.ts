@@ -1,4 +1,5 @@
-import { Arbitrary, Effect, Schema } from "effect";
+import { Arbitrary, Effect, Layer, Schema } from "effect";
+import { SecureRandom } from "effect/crypto";
 import * as fc from "fast-check";
 import * as Id from "./Id.ts";
 
@@ -49,3 +50,24 @@ export const processId: Effect.Effect<string> = Id.Generator.use((ids) => ids.ne
   Effect.orDie,
   Effect.provide(Id.Generator.layer),
 );
+
+/**
+ * Id.Generator over random bytes the law writes, through `Id.makeGenerator` (0555: the bytes come
+ * from a SecureRandom service, never a spy on the global). A throw in `fill` is a defect of
+ * SecureRandom, as WebCrypto's is.
+ */
+export const generatorWith = (fill: (size: number) => Uint8Array): Layer.Layer<Id.Generator> =>
+  Layer.effect(Id.Generator, Id.makeGenerator).pipe(
+    Layer.provide(Layer.succeed(SecureRandom.SecureRandom, SecureRandom.make(fill))),
+  );
+
+/** A random source whose every byte is `byte`. */
+export const bytes =
+  (byte: number) =>
+  (size: number): Uint8Array =>
+    new Uint8Array(size).fill(byte);
+
+/** A random source that throws `failure`, as a platform with no entropy left does. */
+export const throws = (failure: unknown) => (): never => {
+  throw failure;
+};

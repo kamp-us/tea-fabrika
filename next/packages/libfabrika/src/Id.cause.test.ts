@@ -1,10 +1,13 @@
 // T695, next/. The ID generator keeps the failure behind an `entropy` IdError (decision 0043 rule
-// 12). Audit site: `Id.ts:198`, a throw while drawing random bits. `Id.ts:183` decodes an ID the
-// generator built from its own registered prefix, which no generated input can make fail.
-import { describe, expect, it, vi } from "@effect/vitest";
+// 12). Audit site: the generator's draw from SecureRandom, where a throw from the random source is
+// a defect the generator translates. Decoding an ID the generator built from its own registered
+// prefix is the other site, and no generated input can make it fail.
+// T1067: the random source is a SecureRandom the law builds (`generatorWith`), never a spy (0555).
+import { describe, expect, it } from "@effect/vitest";
 import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
+import { bytes, generatorWith, throws } from "./Id.test-support.ts";
 import * as Id from "./Id.ts";
 
 const SEED = 119120; // the shared seed (AGENTS.md), so a red run repeats
@@ -17,20 +20,18 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 
 const prefixes = fc.constantFrom("process", "input", "letter", "chaos");
 
-/** The random source throws `failure`, as a platform with no entropy left does. */
-const randomThrows = (failure: unknown) =>
-  vi.spyOn(crypto, "getRandomValues").mockImplementation(() => {
-    throw failure;
-  });
-
 describe("T695, Id.Generator keeps why it could not draw an ID", () => {
-  // C1, Id.ts:198. Plant: `catch: (error) => error instanceof IdError ? error : new IdError({ reason: "entropy" })`.
+  // C1 (T1067 T2). Plant: drop the generator's `catchDefect` on its draw, so a throw from the random
+  // source dies; earlier, `catch: (error) => error instanceof IdError ? error : new IdError({ reason: "entropy" })`.
   it("C1: a generated throw from the random source is `entropy` with the thrown value as its cause", async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({ failure: failures, prefix: prefixes, before: fc.nat({ max: 3 }) }),
-        ({ failure, prefix, before }) =>
-          Effect.runPromise(
+        ({ failure, prefix, before }) => {
+          // The source gives zero bytes for the good IDs, then throws `failure` once it is failing.
+          let failing = false;
+          const fill = (size: number): Uint8Array => (failing ? throws(failure)() : bytes(0)(size));
+          return Effect.runPromise(
             Effect.gen(function* () {
               const schema = Id.make(prefix);
               const ids = yield* Id.Generator;
@@ -44,16 +45,22 @@ describe("T695, Id.Generator keeps why it could not draw an ID", () => {
               yield* TestClock.adjust(Duration.millis(1));
               const error = yield* Effect.flip(
                 Effect.acquireUseRelease(
-                  Effect.sync(() => randomThrows(failure)),
+                  Effect.sync(() => {
+                    failing = true;
+                  }),
                   () => ids.next(schema),
-                  (spy) => Effect.sync(() => spy.mockRestore()),
+                  () =>
+                    Effect.sync(() => {
+                      failing = false;
+                    }),
                 ),
               );
               expect(error).toBeInstanceOf(Id.IdError);
               expect(error.reason).toBe("entropy");
               expect(error.cause).toBe(failure);
-            }).pipe(Effect.provide(Layer.merge(Id.Generator.layer, TestClock.layer()))),
-          ),
+            }).pipe(Effect.provide(Layer.merge(generatorWith(fill), TestClock.layer()))),
+          );
+        },
       ),
       { seed: SEED, numRuns: 100 },
     );

@@ -2811,6 +2811,24 @@
         "next/programs/tezgah/**"
       ],
       "rules": { "anti-slop-effect/prefer-effect-match": "error" }
+    },
+    {
+      // 0555: no test framework mock in next/. Each folder joins when its sweep slice reaches zero.
+      // One block for every folder, so a later slice adds its globs here: oxlint takes the last
+      // matching block's options, so a second block would have to list all five again.
+      "files": ["next/packages/libfabrika/src/*.ts", "next/packages/libfabrika/src/*.tsx"],
+      "rules": {
+        "vitest/no-restricted-vi-methods": [
+          "error",
+          {
+            "fn": "A stand-in for a platform object is Stub.make; a watched call is a Recorder (0557, 0579).",
+            "mock": "Give the code a service and provide a test layer (0555).",
+            "doMock": "Give the code a service and provide a test layer (0555).",
+            "spyOn": "Put the call behind a service and record it with a Recorder (0555, 0579).",
+            "stubEnv": "Read through Config and provide a ConfigProvider layer (0555)."
+          }
+        ]
+      }
     }
   ]
 }
