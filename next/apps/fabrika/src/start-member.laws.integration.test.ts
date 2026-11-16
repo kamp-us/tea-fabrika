@@ -173,7 +173,7 @@ describe("T953: a start is checked against the member who caused it, end to end"
               },
               home.from,
             ),
-            );
+          );
           const starter = (yield* Schema.decodeUnknownEffect(Schema.Struct({ process: Schema.String }))(started))
             .process;
           yield* Effect.promise(async () => {

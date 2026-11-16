@@ -1371,7 +1371,8 @@ const targetWalk = (open: Effect.Effect<Store, never, Scope.Scope>, focus: Targe
     const list = Effect.fnUntraced(function* (c: Client) {
       const listed = yield* Schema.decodeUnknownEffect(Listed)(accepted(yield* w.door(c, "tasks.list", {})));
       const wanted = Arr.map(mine(c), (a) => ({ id: a.request.id, process: a.request.process }));
-      const order = (all: ReadonlyArray<{ readonly id: string }>) => [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
+      const order = (all: ReadonlyArray<{ readonly id: string }>) =>
+        [...all].sort((a, b) => Str.localeCompare(b.id)(a.id));
       expect(order(listed.tasks), "G1: tasks.list answers exactly the caller's open tasks, as pointers").toEqual(
         order(wanted),
       );

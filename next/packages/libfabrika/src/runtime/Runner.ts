@@ -993,12 +993,12 @@ export class ProgramRunner extends Context.Service<
 
             if (supervision === null) {
               const loaded = yield* loader.load(status.state.code.program, status.state.code.hash);
-                  const wiring = options.policy ?? defaultPolicy;
+              const wiring = options.policy ?? defaultPolicy;
               const policy = yield* Schema.decodeUnknownEffect(Policy)(
-                    loaded.declaration.policy ?? {
-                      ...wiring,
-                      maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
-                    },
+                loaded.declaration.policy ?? {
+                  ...wiring,
+                  maxDeliveries: wiring.maxDeliveries ?? defaultPolicy.maxDeliveries,
+                },
               ).pipe(Effect.mapError((cause) => new LedgerError({ reason: "bad_row", cause })));
               const started = supervisor.init(null, {
                 policy,

@@ -396,8 +396,8 @@ it.effect.prop(
           yield* send(i + 2, { by: `t844-forged-${i}`, m: { _tag: "comment" } });
           expect(yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(w.frames.at(-1)!)).toMatchObject(
             {
-            id: i + 2,
-            error: { data: { reason: "reserved" } },
+              id: i + 2,
+              error: { data: { reason: "reserved" } },
             },
           );
           const rows = tableCounts(db);
