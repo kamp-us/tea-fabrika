@@ -2929,6 +2929,7 @@
         "next/packages/libfabrika/src/packs/**",
         "next/packages/libfabrika/src/permissions/**",
         "next/packages/libfabrika/src/presence/**",
+        "next/packages/libfabrika/src/processes/**",
         "next/packages/libfabrika/src/repositories/**",
         "next/packages/libfabrika/src/schedules/**",
         "next/packages/libfabrika/src/tasks/**",
