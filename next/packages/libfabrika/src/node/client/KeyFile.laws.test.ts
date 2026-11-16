@@ -16,13 +16,10 @@
 // Each open builds the layer again over the same disk, as a new hands process would. The walk is
 // fast-check's `fc.commands`: each step is picked from the steps the state it reached allows (0093),
 // and the model is the oracle.
-//
-// Plants, each run once and undone (recorded in the tests step's field row): K1, make a new key when
-// the file does not decode. K2, compute the fingerprint over the key line instead of the raw bytes.
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@kampus/vitest";
 import { Cause, Effect, Exit, Layer, Option, Path } from "effect";
 import * as fc from "fast-check";
-import { property } from "../../Testing.test-support.ts";
+import type { TestContext } from "vitest";
 import { ClientKey, ClientKeyError, type Identity } from "../../transport/ClientKey.ts";
 import { checkHello, helloText } from "../../transport/Hello.ts";
 import { writeSshsig } from "../../transport/Sshsig.ts";
@@ -192,6 +189,26 @@ const removeStep = (): Step => ({
     }),
 });
 
+/** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */
+const reaches = new WeakMap<object, Set<string>>();
+
+/**
+ * The set one law's cases add what they reach to. The first case registers `covers`, which runs once
+ * when the law ends, so a walk that reached too little fails loudly however its cases went.
+ */
+const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void): Set<string> => {
+  const known = reaches.get(ctx.task);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set<string>();
+  reaches.set(ctx.task, seen);
+  ctx.onTestFinished(() => covers([...seen]));
+  return seen;
+};
+
 const Steps = fc.commands(
   [
     fc.constantFrom("none", "stored", "other").map(openStep),
@@ -210,35 +227,14 @@ const Steps = fc.commands(
 );
 
 describe("P39 slice 4b: the hands key file", () => {
-  it.live(
+  it.live.prop(
     "K1: on an empty folder the first current(null) answers created, every later one reused with the same fingerprint; current(stored) answers replaced with a new one; a damaged file is a read error and is left as it was; a file with group or other bits is a read error and is never used",
-    () =>
-      Effect.gen(function* () {
-        const reached = new Set<string>();
-        yield* property(
-          Steps,
-          (steps) =>
-            Effect.gen(function* () {
-              const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
-              const m: Model = { file: null, fingerprint: null };
-
-              // fast-check's own model walk: a step runs only when the state it reached allows it.
-              for (const s of steps) {
-                if (s.check(m)) {
-                  s.run(m, r);
-                  const next = r.next;
-                  r.next = null;
-
-                  if (next !== null) {
-                    reached.add(yield* next);
-                  }
-                }
-              }
-            }),
-          { numRuns: 100 },
-        );
-        // An empty walk cannot pass: each answer the law names was really reached.
-        expect([...reached]).toEqual(
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { steps: Steps },
+    ({ steps }, ctx) => {
+      // An empty walk cannot pass: each answer the law names was really reached.
+      const reached = reach(ctx, (seen) =>
+        expect(seen).toEqual(
           expect.arrayContaining([
             "created",
             "reused:none",
@@ -250,67 +246,92 @@ describe("P39 slice 4b: the hands key file", () => {
             "widen",
             "remove",
           ]),
-        );
-      }),
-    300_000,
+        ),
+      );
+      return Effect.gen(function* () {
+        const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
+        const m: Model = { file: null, fingerprint: null };
+
+        // fast-check's own model walk: a step runs only when the state it reached allows it.
+        for (const s of steps) {
+          if (s.check(m)) {
+            s.run(m, r);
+            const next = r.next;
+            r.next = null;
+
+            if (next !== null) {
+              reached.add(yield* next);
+            }
+          }
+        }
+      });
+    },
+    {
+      plant: "a key file with group or other bits is used, not refused",
+      timeout: 300_000,
+      fastCheck: { numRuns: 100 },
+    },
   );
 
-  it.live(
+  it.live.prop(
     "K2: the key file's identity passes the door's own hello check: its raw, fingerprint and line agree, and a hello signed with its sign is admitted",
-    () =>
-      property(
-        fc.record({
-          nonce: fc.string({ minLength: 1, maxLength: 40 }),
-          tab: fc.string({ minLength: 1, maxLength: 40 }),
-        }),
-        ({ nonce, tab }) =>
-          Effect.gen(function* () {
-            const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
-            const exit = yield* open(r, null);
-            expect(Exit.isSuccess(exit), `K2: a new key opens, ${String(exit)}`).toBe(true);
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    {
+      hello: fc.record({
+        nonce: fc.string({ minLength: 1, maxLength: 40 }),
+        tab: fc.string({ minLength: 1, maxLength: 40 }),
+      }),
+    },
+    ({ hello: { nonce, tab } }) =>
+      Effect.gen(function* () {
+        const r: Real = { disk: MemoryFiles.disk([FOLDER]), next: null };
+        const exit = yield* open(r, null);
+        expect(Exit.isSuccess(exit), `K2: a new key opens, ${String(exit)}`).toBe(true);
 
-            if (!Exit.isSuccess(exit)) {
-              return;
-            }
+        if (!Exit.isSuccess(exit)) {
+          return;
+        }
 
-            const key = exit.value;
-            const signed = yield* writeSshsig({
-              text: helloText({ url: ORIGIN, tab, nonce }),
-              space: "fabrika-client",
-              line: key.line,
-              sign: key.sign,
-            });
-            const hello = {
-              versions: [1],
-              has: ["git"],
-              ping: "5s",
-              key: key.raw,
-              tab,
-              nonce,
-              platform: "headless",
-              os: "macos",
-              build: "k2-build",
-              sentAt: "2026-11-15T10:00:00.000Z",
-              signed,
-            };
-            const checked = yield* checkHello({
-              hello,
-              url: ORIGIN,
-              tab,
-              nonce,
-              name: key.fingerprint,
-              versions: [1],
-              ping: { min: 1000, max: 60_000 },
-              consume: () => true,
-              admit: (fingerprint) =>
-                Effect.succeed(
-                  Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
-                ),
-            });
-            expect(checked._tag, `K2: the door admits the key file's hello: ${JSON.stringify(checked)}`).toBe("online");
-          }),
-        { numRuns: 60 },
-      ),
-    120_000,
+        const key = exit.value;
+        const signed = yield* writeSshsig({
+          text: helloText({ url: ORIGIN, tab, nonce }),
+          space: "fabrika-client",
+          line: key.line,
+          sign: key.sign,
+        });
+        const hello = {
+          versions: [1],
+          has: ["git"],
+          ping: "5s",
+          key: key.raw,
+          tab,
+          nonce,
+          platform: "headless",
+          os: "macos",
+          build: "k2-build",
+          sentAt: "2026-11-15T10:00:00.000Z",
+          signed,
+        };
+        const checked = yield* checkHello({
+          hello,
+          url: ORIGIN,
+          tab,
+          nonce,
+          name: key.fingerprint,
+          versions: [1],
+          ping: { min: 1000, max: 60_000 },
+          consume: () => true,
+          admit: (fingerprint) =>
+            Effect.succeed(
+              Admission.cases.admitted.make({ identity: { key: fingerprint, person: "person_k2", as: "hands" } }),
+            ),
+        });
+        expect(checked._tag, `K2: the door admits the key file's hello: ${JSON.stringify(checked)}`).toBe("online");
+      }),
+    {
+      plant: "the fingerprint is computed over the key line instead of the raw public bytes",
+      timeout: 120_000,
+      fastCheck: { numRuns: 60 },
+    },
   );
 });

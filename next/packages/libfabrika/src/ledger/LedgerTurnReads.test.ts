@@ -4,12 +4,11 @@
 // L3: `get(stream, id)` and `head(stream)` answer what `read(stream, 0)` holds, inside the turn that
 // appended and in a later turn. L4: SQLite answers both through an index of `entries`, never a scan.
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
+import { describe, expect, it, runsFor } from "@kampus/vitest";
 import { Effect, Exit, Layer, Option } from "effect";
 import * as fc from "fast-check";
+import type { TestContext } from "vitest";
 import type { Sql, SqlValue } from "../Sql.ts";
-import { property } from "../Testing.test-support.ts";
 import { Doorbell } from "./Ledger.ts";
 import { LedgerTransaction, type LedgerTurn } from "./LedgerTransaction.ts";
 import * as LedgerTransactionSql from "./LedgerTransactionSql.ts";
@@ -103,47 +102,69 @@ const choose = <A>(items: ReadonlyArray<A>, pick: number): A => {
   return item;
 };
 
+/** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */
+const reaches = new WeakMap<object, Set<string>>();
+
+/**
+ * The set one law's cases add what they reach to. The first case registers `covers`, which runs once
+ * when the law ends, so a walk that reached too little fails loudly however its cases went.
+ */
+const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void): Set<string> => {
+  const known = reaches.get(ctx.task);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set<string>();
+  reaches.set(ctx.task, seen);
+  ctx.onTestFinished(() => covers([...seen]));
+  return seen;
+};
+
 describe("T936 slice 1: the ledger turn's indexed reads", () => {
-  it.effect(
+  it.effect.prop(
     "L3: in any log over three streams with reused ids, get equals read's first entry under the id, and head equals read's last rev or 0",
-    () =>
-      Effect.gen(function* () {
-        const outcomes = new Set<string>();
-        const law = (log: ReadonlyArray<Append>) =>
-          Effect.flatMap(memory, (db) => {
-            const store = recorded(db);
-            return Effect.gen(function* () {
-              const tx = yield* LedgerTransaction;
-              agrees(yield* tx.transact(view), "an empty log");
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { log: Log },
+    ({ log }, ctx) => {
+      // An empty walk cannot pass: appends landed, and reused ids were refused.
+      const outcomes = reach(ctx, (seen) => expect([...seen].sort()).toEqual(["appended", "refused"]));
+      return Effect.flatMap(memory, (db) => {
+        const store = recorded(db);
+        return Effect.gen(function* () {
+          const tx = yield* LedgerTransaction;
+          agrees(yield* tx.transact(view), "an empty log");
 
-              for (const append of log) {
-                const stream = choose(STREAMS, append.stream);
-                const id = choose(IDS, append.id);
-                // The turn that appends answers its own reads: they see the append before it commits.
-                const inside = yield* Effect.exit(
-                  tx.transact((turn) => {
-                    turn.append(stream, id, line(append.body));
-                    return view(turn);
-                  }),
-                );
+          for (const append of log) {
+            const stream = choose(STREAMS, append.stream);
+            const id = choose(IDS, append.id);
+            // The turn that appends answers its own reads: they see the append before it commits.
+            const inside = yield* Effect.exit(
+              tx.transact((turn) => {
+                turn.append(stream, id, line(append.body));
+                return view(turn);
+              }),
+            );
 
-                if (Exit.isSuccess(inside)) {
-                  agrees(inside.value, `inside the turn that appended ${stream}/${id}`);
-                  outcomes.add("appended");
-                } else {
-                  // A reused id with another body is refused, and the turn rolls back.
-                  outcomes.add("refused");
-                }
+            if (Exit.isSuccess(inside)) {
+              agrees(inside.value, `inside the turn that appended ${stream}/${id}`);
+              outcomes.add("appended");
+            } else {
+              // A reused id with another body is refused, and the turn rolls back.
+              outcomes.add("refused");
+            }
 
-                agrees(yield* tx.transact(view), `after ${stream}/${id}`);
-              }
-            }).pipe(Effect.provide(store.layer));
-          });
-        yield* property(Log, law, { numRuns: runsFor({ fast: 5, full: 50 }) });
-        // An empty walk cannot pass: appends landed, and reused ids were refused.
-        expect([...outcomes].sort()).toEqual(["appended", "refused"]);
-      }),
-    120_000,
+            agrees(yield* tx.transact(view), `after ${stream}/${id}`);
+          }
+        }).pipe(Effect.provide(store.layer));
+      });
+    },
+    {
+      plant: "head(stream) answers the largest rev over every stream: its query reads WHERE stream = ? OR 1",
+      timeout: 120_000,
+      fastCheck: { numRuns: runsFor({ fast: 5, full: 50 }) },
+    },
   );
 
   // SQLite 3.54.0 under Node 26.13.0 (the lockfile's Node), read once by the tests step for the
@@ -155,7 +176,7 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
   // and a query by `id = ?` alone -> SCAN entries. The law reads the plan of whatever queries the
   // store really sends, so it holds whichever index the build picks, as long as it leads with stream.
   it.effect(
-    "L4 pinned: get's and head's queries search an index of entries that leads with stream, never SCAN entries (experiment 258's whole-stream scan)",
+    "L4 get's and head's queries search an index of entries that leads with stream, never SCAN entries (experiment 258's whole-stream scan)",
     () =>
       Effect.flatMap(memory, (db) => {
         const store = recorded(db);
@@ -209,6 +230,8 @@ describe("T936 slice 1: the ledger turn's indexed reads", () => {
           }
         }).pipe(Effect.provide(store.layer));
       }),
+    // Experiment 258's whole-stream scan, fixed by ticket 936.
+    { pinned: 936 },
   );
 });
 

@@ -19,17 +19,14 @@
 // to make, a crash and restart over the same journal and brain, a socket drop while local work is in
 // flight, or time passing. The oracle is the timeline: what really ran, what was really saved, and
 // where each crash fell (`expectedResults`).
-//
-// Plants (after build): H2, read `executing` without a result as nothing, so the command runs
-// again. H5, move every work state to `offline` on a drop, losing the result.
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@kampus/vitest";
 import { Deferred, Effect, Exit, Layer, Schema, Scope } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
+import type { TestContext } from "vitest";
 import * as Id from "../Id.ts";
 import { fcTypeId } from "../tasks/TasksTest.ts";
-import { property } from "../Testing.test-support.ts";
 import { ClientKey } from "../transport/ClientKey.ts";
 import { KeyLine } from "../transport/Sshsig.ts";
 import { Hello } from "../transport/Wire.ts";
@@ -239,80 +236,94 @@ const walk = (tape: Tape, focus: Focus, done: Set<string>) =>
     yield* Scope.close(live.scope, Exit.void);
   });
 
-const law = (name: string, focus: Focus, required: ReadonlyArray<string>, runs: number) =>
-  it.effect(
-    name,
-    () =>
-      Effect.gen(function* () {
-        const done = new Set<string>();
-        // The shared runner: each walk in a scope of its own, from the shared seed 119120.
-        yield* property(Tape, (tape) => walk(tape, focus, done).pipe(Effect.provide(TestClock.layer())), {
-          numRuns: runs,
-        });
-        // An empty walk cannot pass: every transition the law is about ran at least once.
-        expect([...done]).toEqual(expect.arrayContaining([...required]));
-      }),
-    300_000,
-  );
+/** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */
+const reaches = new WeakMap<object, Set<string>>();
+
+/**
+ * The set one law's cases add what they reach to. The first case registers `covers`, which runs once
+ * when the law ends, so a walk that reached too little fails loudly however its cases went.
+ */
+const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void): Set<string> => {
+  const known = reaches.get(ctx.task);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set<string>();
+  reaches.set(ctx.task, seen);
+  ctx.onTestFinished(() => covers([...seen]));
+  return seen;
+};
+
+/**
+ * One case of H2 or H5: a walk on its own clock. An empty walk cannot pass: every transition the law
+ * is about ran at least once across its cases.
+ */
+const walks =
+  (focus: Focus, required: ReadonlyArray<string>) =>
+  ({ tape }: { readonly tape: Tape }, ctx: TestContext) =>
+    walk(
+      tape,
+      focus,
+      reach(ctx, (seen) => expect(seen).toEqual(expect.arrayContaining([...required]))),
+    ).pipe(Effect.provide(TestClock.layer()));
 
 /** Every `os` the hello's wire schema accepts. */
 const OSES: ReadonlyArray<(typeof Hello.Type)["os"]> = ["macos", "windows", "linux", "android", "ios", "unknown"];
 
 describe("P39 slice 4b: the host's os in the hello", () => {
   // O1, from the approved plan (docs/plan/quests/p39-s5-PLAN.md): `start` takes the host's `os` and its
-  // hello sends it, in place of `unknown`. Plant, run once and undone (recorded in the tests step's
-  // field row): keep `os: "unknown"`.
-  it.effect(
+  // hello sends it, in place of `unknown`.
+  it.effect.prop(
     "O1: the hello carries the os the start was given, for every value the wire accepts",
-    () =>
-      Effect.gen(function* () {
-        const reached = new Set<string>();
-        yield* property(
-          fc.constantFrom(...OSES),
-          (os) =>
-            Effect.gen(function* () {
-              const d = door(brain(), KEY);
-              const s: Seen = seen();
-              const store = yield* Layer.build(KeyValueStore.layerMemory);
-              const layers = Layer.mergeAll(
-                d.socket,
-                keys,
-                fakeCommands(s),
-                JournalStore.layer.pipe(Layer.provide(Layer.succeedContext(store))),
-                Id.Generator.layer,
-              );
-              const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands", os }).pipe(
-                Effect.provide(layers),
-              );
-              yield* booting.ready;
-
-              for (let i = 0; i < 50 && d.state.hellos.length === 0; i++) {
-                yield* pass(100);
-              }
-
-              expect(d.state.hellos.length, "O1: the start says hello").toBeGreaterThan(0);
-
-              for (const hello of d.state.hellos) {
-                expect(Schema.decodeUnknownSync(Hello)(hello).os, "O1: every hello carries the os it was given").toBe(
-                  os,
-                );
-              }
-
-              reached.add(os);
-            }).pipe(Effect.provide(TestClock.layer())),
-          { numRuns: 30 },
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { os: fc.constantFrom(...OSES) },
+    ({ os }, ctx) => {
+      const reached = reach(ctx, (seen) => expect(seen).toEqual(expect.arrayContaining([...OSES])));
+      return Effect.gen(function* () {
+        const d = door(brain(), KEY);
+        const s: Seen = seen();
+        const store = yield* Layer.build(KeyValueStore.layerMemory);
+        const layers = Layer.mergeAll(
+          d.socket,
+          keys,
+          fakeCommands(s),
+          JournalStore.layer.pipe(Layer.provide(Layer.succeedContext(store))),
+          Id.Generator.layer,
         );
-        expect([...reached]).toEqual(expect.arrayContaining([...OSES]));
-      }),
-    120_000,
+        const booting = yield* start({ origin: ORIGIN, build: "hands-build", label: "hands", os }).pipe(
+          Effect.provide(layers),
+        );
+        yield* booting.ready;
+
+        for (let i = 0; i < 50 && d.state.hellos.length === 0; i++) {
+          yield* pass(100);
+        }
+
+        expect(d.state.hellos.length, "O1: the start says hello").toBeGreaterThan(0);
+
+        for (const hello of d.state.hellos) {
+          expect(Schema.decodeUnknownSync(Hello)(hello).os, "O1: every hello carries the os it was given").toBe(os);
+        }
+
+        reached.add(os);
+      }).pipe(Effect.provide(TestClock.layer()));
+    },
+    {
+      plant: 'the hello sends os: "unknown" whatever the start was given',
+      timeout: 120_000,
+      fastCheck: { numRuns: 30 },
+    },
   );
 });
 
 describe("P39 slice 4a: the hands start", () => {
-  law(
+  it.effect.prop(
     "H2: after a cut at any journal or call boundary and a restart, the task ends finished with the fake's result when the journal held one, and with unknown interrupted when it held executing and no result",
-    "H2",
-    [
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { tape: Tape },
+    walks("H2", [
       "request",
       "restart",
       // The closing reach check: each state the plan cuts in was really cut, at each boundary.
@@ -326,13 +337,18 @@ describe("P39 slice 4a: the hands start", () => {
       "cut:call:after",
       "ended:unknown",
       "ended:result",
-    ],
-    100,
+    ]),
+    {
+      plant: "journal_write answers saved and writes nothing, so a restart finds no entry",
+      timeout: 300_000,
+      fastCheck: { numRuns: 100 },
+    },
   );
-  law(
+  it.effect.prop(
     "H5: a dropped link during executing or saving lets the local work finish; on reconnect the client lists, takes and reports it, and runs nothing again",
-    "H5",
-    ["request", "drop@executing", "drop@saving", "resume", "ended:result"],
-    60,
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { tape: Tape },
+    walks("H5", ["request", "drop@executing", "drop@saving", "resume", "ended:result"]),
+    { plant: "execute runs its command twice", timeout: 300_000, fastCheck: { numRuns: 60 } },
   );
 });

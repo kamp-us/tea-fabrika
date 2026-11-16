@@ -15,16 +15,12 @@
 //
 // The oracle keeps its own count of spawns and closes and computes each answer from the generated
 // child alone; it never calls the product to decide what is right.
-//
-// Plants, each run once and undone (recorded in the tests step's field row): C1, count only stdout
-// toward the cap. C2, spawn with `extendEnv: true`. C3, report `git` when the file exists without
-// an execute bit.
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@kampus/vitest";
 import { ConfigProvider, Effect, Exit, Layer, Path } from "effect";
 import * as fc from "fast-check";
+import type { TestContext } from "vitest";
 import { Commands } from "../../client/Commands.ts";
 import { Command, type Result } from "../../tasks/Task.ts";
-import { property } from "../../Testing.test-support.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import * as MemoryFiles from "./MemoryFiles.test-support.ts";
 import { type Child, fresh, gitVectors, type Seen, spawner } from "./Spawner.test-support.ts";
@@ -176,182 +172,210 @@ const execute = (child: Child, seen: Seen, env: Record<string, string>, d: Memor
 /** A word that may name or fill an environment variable. */
 const Word = fc.stringMatching(/^[A-Za-z_][A-Za-z0-9_]{0,15}$/);
 
+/** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */
+const reaches = new WeakMap<object, Set<string>>();
+
+/**
+ * The set one law's cases add what they reach to. The first case registers `covers`, which runs once
+ * when the law ends, so a walk that reached too little fails loudly however its cases went.
+ */
+const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void): Set<string> => {
+  const known = reaches.get(ctx.task);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set<string>();
+  reaches.set(ctx.task, seen);
+  ctx.onTestFinished(() => covers([...seen]));
+  return seen;
+};
+
 describe("P39 slice 4b: the real command layer", () => {
-  it.live(
+  it.live.prop(
     "C1: execute answers exited { code, version } for a child that exits, failed spawn_failed when the spawn fails, failed output_limit with the child's scope closed once stdout and stderr together pass the cap, and never an error or a defect",
-    () =>
-      Effect.gen(function* () {
-        const reached = new Set<string>();
-        yield* property(
-          ChildArb,
-          (child) =>
-            Effect.gen(function* () {
-              const seen = fresh();
-              const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
-              expect(Exit.isSuccess(exit), `C1: execute never fails or dies: ${String(exit)}`).toBe(true);
-
-              if (!Exit.isSuccess(exit)) {
-                return;
-              }
-
-              expect(exit.value._tag, "C1: a child past its cap is stopped, never waited on forever").toBe("Some");
-
-              if (exit.value._tag !== "Some") {
-                return;
-              }
-
-              const answer = exit.value.value;
-              const want = expected(child);
-              expect(answer, "C1: the answer is the oracle's, from the child's bytes alone").toEqual(want);
-              expect(seen.commands.length, "C1: one execute spawns one child").toBe(1);
-              expect(seen.closes, "C1: every child that started has its scope closed by the time execute answers").toBe(
-                seen.spawns,
-              );
-              reached.add(
-                want._tag === "failed"
-                  ? want.reason
-                  : want._tag === "exited" && want.version === ""
-                    ? "exited:empty"
-                    : "exited",
-              );
-
-              if (child.endless) {
-                reached.add("endless");
-              }
-            }),
-          { numRuns: 100 },
-        );
-        // The walk is no law unless it reached each answer at least once.
-        expect([...reached]).toEqual(
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { child: ChildArb },
+    ({ child }, ctx) => {
+      // The walk is no law unless it reached each answer at least once.
+      const reached = reach(ctx, (seen) =>
+        expect(seen).toEqual(
           expect.arrayContaining(["spawn_failed", "output_limit", "exited", "exited:empty", "endless"]),
-        );
-      }),
-    120_000,
-  );
-
-  it.live("C1 vector: real git's own stdout, saved by C4's run, answers exited with its line less the newline", () =>
-    Effect.gen(function* () {
-      expect(gitVectors.length).toBeGreaterThan(0);
-
-      for (const vector of gitVectors) {
+        ),
+      );
+      return Effect.gen(function* () {
         const seen = fresh();
-        const child: Child = {
-          spawn: "ok",
-          chunks: [{ to: "out", bytes: encoder.encode(vector.stdout) }],
-          code: 0,
-          endless: false,
-        };
         const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
-        const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
-        expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
-      }
-    }),
+        expect(Exit.isSuccess(exit), `C1: execute never fails or dies: ${String(exit)}`).toBe(true);
+
+        if (!Exit.isSuccess(exit)) {
+          return;
+        }
+
+        expect(exit.value._tag, "C1: a child past its cap is stopped, never waited on forever").toBe("Some");
+
+        if (exit.value._tag !== "Some") {
+          return;
+        }
+
+        const answer = exit.value.value;
+        const want = expected(child);
+        expect(answer, "C1: the answer is the oracle's, from the child's bytes alone").toEqual(want);
+        expect(seen.commands.length, "C1: one execute spawns one child").toBe(1);
+        expect(seen.closes, "C1: every child that started has its scope closed by the time execute answers").toBe(
+          seen.spawns,
+        );
+        reached.add(
+          want._tag === "failed"
+            ? want.reason
+            : want._tag === "exited" && want.version === ""
+              ? "exited:empty"
+              : "exited",
+        );
+
+        if (child.endless) {
+          reached.add("endless");
+        }
+      });
+    },
+    {
+      plant: "only stdout counts toward the output cap",
+      timeout: 120_000,
+      fastCheck: { numRuns: 100 },
+    },
   );
 
   it.live(
-    "C2: [secrets] the spawned command is git with argv [--version], extendEnv false and env holding only PATH; a planted secret in the hands' environment never reaches the child",
-    () =>
-      property(
-        fc.record({
-          env: fc.dictionary(Word, fc.string({ maxLength: 40 }), { maxKeys: 12 }),
-          name: Word.filter((w) => w !== "PATH"),
-          secret: fc.stringMatching(/^[A-Za-z0-9+/=_-]{12,40}$/),
-          path: fc.array(fc.stringMatching(/^\/[a-z]{1,8}(\/[a-z]{1,8})?$/), { minLength: 1, maxLength: 4 }),
-        }),
-        ({ env, name, secret, path }) =>
-          Effect.gen(function* () {
-            const planted = `planted-${secret}`;
-            const PATH = path.join(":");
-            const seen = fresh();
-            const child: Child = { spawn: "ok", chunks: [], code: 0, endless: false };
-            yield* execute(child, seen, { ...env, [name]: planted, PATH }, withGit());
-            expect(seen.commands.length, "C2: one execute spawns one command").toBe(1);
-            const command = seen.commands[0];
-
-            if (command === undefined) {
-              return;
-            }
-
-            expect(command.command, "C2: the executable is git, found on PATH").toBe("git");
-            expect(command.args.map(String), "C2: the argv is exactly --version").toEqual(["--version"]);
-            expect(command.options.extendEnv, "C2: the child is not given the hands' environment").toBe(false);
-            const childEnv = command.options.env ?? {};
-            expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
-            expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
-            // Every named output of the spawn: the executable, the argv and every option, in each form a
-            // value could be written.
-            const text = JSON.stringify(
-              { c: command.command, a: command.args.map(String), o: command.options },
-              (_k, v) => (typeof v === "object" && v !== null && "value" in v ? String(v.value) : v),
-            );
-            const forms = [
-              planted,
-              encodeURIComponent(planted),
-              Buffer.from(planted).toString("base64"),
-              Buffer.from(planted).toString("base64url"),
-            ];
-
-            for (const form of forms) {
-              expect(text.includes(form), "C2: [secrets] the planted value reaches the child in no form").toBe(false);
-            }
-          }),
-        { numRuns: 100 },
-      ),
-    120_000,
-  );
-
-  it.live(
-    "C3: has is [git] exactly when a PATH folder holds a file named git with an execute bit, and [] otherwise",
+    "C1 real git's own stdout, saved by C4's run, answers exited with its line less the newline",
     () =>
       Effect.gen(function* () {
-        const reached = new Set<string>();
-        yield* property(
-          fc.array(
-            fc.record({
-              kind: fc.constantFrom("none", "folder", "file", "file"),
-              // Any permission bits: an execute bit is any of owner, group or other's.
-              mode: fc.integer({ min: 0, max: 0o777 }),
-            }),
-            // At least one folder: an empty PATH is no PATH, and the layer reads PATH as a required value.
-            { minLength: 1, maxLength: 6 },
-          ),
-          (folders) =>
-            Effect.gen(function* () {
-              const names = folders.map((_, i) => `/opt/p${i}/bin`);
-              const d = MemoryFiles.disk(names);
-              folders.forEach((f, i) => {
-                const git = `${names[i]}/git`;
+        expect(gitVectors.length).toBeGreaterThan(0);
 
-                if (f.kind === "file") {
-                  MemoryFiles.put(d, git, new Uint8Array([0x23, 0x21]), f.mode);
-                } else if (f.kind === "folder") {
-                  d.entries.set(git, { type: "Directory", mode: 0o755, mtime: new Date(0) });
-                }
-              });
-              const runnable = folders.some((f) => f.kind === "file" && (f.mode & 0o111) !== 0);
-              const has = yield* Commands.use((commands) => Effect.succeed(commands.has)).pipe(
-                Effect.provide(
-                  layers({ spawn: "ok", chunks: [], code: 0, endless: false }, fresh(), { PATH: names.join(":") }, d),
-                ),
-              );
-              expect(
-                has,
-                "C3: has reads an executable git on PATH, never a folder or a file without an execute bit",
-              ).toEqual(runnable ? ["git"] : []);
-              reached.add(runnable ? "git" : "none");
-
-              if (!runnable && folders.some((f) => f.kind === "file")) {
-                reached.add("file-without-x");
-              }
-
-              if (!runnable && folders.some((f) => f.kind === "folder")) {
-                reached.add("folder");
-              }
-            }),
-          { numRuns: 100 },
-        );
-        expect([...reached]).toEqual(expect.arrayContaining(["git", "none", "file-without-x", "folder"]));
+        for (const vector of gitVectors) {
+          const seen = fresh();
+          const child: Child = {
+            spawn: "ok",
+            chunks: [{ to: "out", bytes: encoder.encode(vector.stdout) }],
+            code: 0,
+            endless: false,
+          };
+          const exit = yield* execute(child, seen, { PATH: "/usr/bin" }, withGit());
+          const answer = Exit.isSuccess(exit) && exit.value._tag === "Some" ? exit.value.value : null;
+          expect(answer).toEqual({ _tag: "exited", code: 0, version: vector.version });
+        }
       }),
-    120_000,
+    { vector: "real git's own stdout, saved by C4's run (Spawner.test-support.ts's gitVectors)" },
+  );
+
+  it.live.prop(
+    "C2: [secrets] the spawned command is git with argv [--version], extendEnv false and env holding only PATH; a planted secret in the hands' environment never reaches the child",
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    {
+      spawn: fc.record({
+        env: fc.dictionary(Word, fc.string({ maxLength: 40 }), { maxKeys: 12 }),
+        name: Word.filter((w) => w !== "PATH"),
+        secret: fc.stringMatching(/^[A-Za-z0-9+/=_-]{12,40}$/),
+        path: fc.array(fc.stringMatching(/^\/[a-z]{1,8}(\/[a-z]{1,8})?$/), { minLength: 1, maxLength: 4 }),
+      }),
+    },
+    ({ spawn: { env, name, secret, path } }) =>
+      Effect.gen(function* () {
+        const planted = `planted-${secret}`;
+        const PATH = path.join(":");
+        const seen = fresh();
+        const child: Child = { spawn: "ok", chunks: [], code: 0, endless: false };
+        yield* execute(child, seen, { ...env, [name]: planted, PATH }, withGit());
+        expect(seen.commands.length, "C2: one execute spawns one command").toBe(1);
+        const command = seen.commands[0];
+
+        if (command === undefined) {
+          return;
+        }
+
+        expect(command.command, "C2: the executable is git, found on PATH").toBe("git");
+        expect(command.args.map(String), "C2: the argv is exactly --version").toEqual(["--version"]);
+        expect(command.options.extendEnv, "C2: the child is not given the hands' environment").toBe(false);
+        const childEnv = command.options.env ?? {};
+        expect(Object.keys(childEnv), "C2: the child's environment holds PATH and nothing else").toEqual(["PATH"]);
+        expect(String(childEnv["PATH"]), "C2: PATH is the hands' own PATH").toBe(PATH);
+        // Every named output of the spawn: the executable, the argv and every option, in each form a
+        // value could be written.
+        const text = JSON.stringify({ c: command.command, a: command.args.map(String), o: command.options }, (_k, v) =>
+          typeof v === "object" && v !== null && "value" in v ? String(v.value) : v,
+        );
+        const forms = [
+          planted,
+          encodeURIComponent(planted),
+          Buffer.from(planted).toString("base64"),
+          Buffer.from(planted).toString("base64url"),
+        ];
+
+        for (const form of forms) {
+          expect(text.includes(form), "C2: [secrets] the planted value reaches the child in no form").toBe(false);
+        }
+      }),
+    {
+      plant: "the child is spawned with extendEnv: true",
+      timeout: 120_000,
+      fastCheck: { numRuns: 100 },
+    },
+  );
+
+  it.live.prop(
+    "C3: has is [git] exactly when a PATH folder holds a file named git with an execute bit, and [] otherwise",
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    {
+      folders: fc.array(
+        fc.record({
+          kind: fc.constantFrom("none", "folder", "file", "file"),
+          // Any permission bits: an execute bit is any of owner, group or other's.
+          mode: fc.integer({ min: 0, max: 0o777 }),
+        }),
+        // At least one folder: an empty PATH is no PATH, and the layer reads PATH as a required value.
+        { minLength: 1, maxLength: 6 },
+      ),
+    },
+    ({ folders }, ctx) => {
+      const reached = reach(ctx, (seen) =>
+        expect(seen).toEqual(expect.arrayContaining(["git", "none", "file-without-x", "folder"])),
+      );
+      return Effect.gen(function* () {
+        const names = folders.map((_, i) => `/opt/p${i}/bin`);
+        const d = MemoryFiles.disk(names);
+        folders.forEach((f, i) => {
+          const git = `${names[i]}/git`;
+
+          if (f.kind === "file") {
+            MemoryFiles.put(d, git, new Uint8Array([0x23, 0x21]), f.mode);
+          } else if (f.kind === "folder") {
+            d.entries.set(git, { type: "Directory", mode: 0o755, mtime: new Date(0) });
+          }
+        });
+        const runnable = folders.some((f) => f.kind === "file" && (f.mode & 0o111) !== 0);
+        const has = yield* Commands.use((commands) => Effect.succeed(commands.has)).pipe(
+          Effect.provide(
+            layers({ spawn: "ok", chunks: [], code: 0, endless: false }, fresh(), { PATH: names.join(":") }, d),
+          ),
+        );
+        expect(has, "C3: has reads an executable git on PATH, never a folder or a file without an execute bit").toEqual(
+          runnable ? ["git"] : [],
+        );
+        reached.add(runnable ? "git" : "none");
+
+        if (!runnable && folders.some((f) => f.kind === "file")) {
+          reached.add("file-without-x");
+        }
+
+        if (!runnable && folders.some((f) => f.kind === "folder")) {
+          reached.add("folder");
+        }
+      });
+    },
+    {
+      plant: "has reports git for a file on PATH without an execute bit",
+      timeout: 120_000,
+      fastCheck: { numRuns: 100 },
+    },
   );
 });

@@ -10,7 +10,7 @@
 //   Relation.ts: `STREAM`, `Row` and `Change` (`{ id, row }`).
 // The two layers are compared through the check, the only way to read `Tuples`: a test right per
 // relation makes every tuple visible.
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@kampus/vitest";
 import { Context, Effect, Layer, Result, type Scope } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
@@ -18,7 +18,6 @@ import { LedgerTransaction } from "../ledger/LedgerTransaction.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import { lineFor } from "../ledger/Log.ts";
 import type { Sql } from "../Sql.ts";
-import { property } from "../Testing.test-support.ts";
 import * as Rebac from "./Rebac.ts";
 import * as Relation from "./Relation.ts";
 import { Relations } from "./Relations.ts";
@@ -220,8 +219,14 @@ const agree = (open: Effect.Effect<Store, never, Scope.Scope>) =>
 /** Runs L8 on the store `open` gives. */
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("T953 the relation store's two layers", () => {
-    // Plant: the memory layer ignores `unrelated` (RelationsMemory.ts).
-    it.effect("L8: the memory and ledger layers agree on every tuple, with resent ids and another writer's rows", () =>
-      property(fc.array(Cell, { minLength: 0, maxLength: 20 }), agree(open), { numRuns: 100, endOnFailure: true }),
+    it.effect.prop(
+      "L8: the memory and ledger layers agree on every tuple, with resent ids and another writer's rows",
+      // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+      { cells: fc.array(Cell, { minLength: 0, maxLength: 20 }) },
+      ({ cells }) => agree(open)(cells),
+      {
+        plant: "the memory layer ignores unrelated rows when it folds (RelationsMemory.ts)",
+        fastCheck: { numRuns: 100, endOnFailure: true },
+      },
     );
   });

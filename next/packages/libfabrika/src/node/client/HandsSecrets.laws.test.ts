@@ -19,10 +19,7 @@
 // key file (replace the removed key, damage it, widen its mode, make it unreadable, delete it).
 // Every private half the key file ever held is scanned for, as base64url, base64 with and without
 // padding, and hex.
-//
-// Plants, each run once and undone (recorded in this round's field row): the hello carries `d` as
-// an extra field; a span attribute holds the JWK; an error message includes the JWK text.
-import { describe, expect, it, vi } from "@effect/vitest";
+import { describe, expect, it } from "@kampus/vitest";
 import {
   Cause,
   ConfigProvider,
@@ -42,12 +39,12 @@ import { Base64, Base64Url, Hex } from "effect/encoding";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import { TestClock } from "effect/testing";
 import * as fc from "fast-check";
+import { type TestContext, vi } from "vitest";
 import { brain, door, type Gate, HelloAnswer } from "../../client/HandsDoor.test-support.ts";
 import { start } from "../../client/HandsStart.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
 import * as Id from "../../Id.ts";
 import { fcTypeId } from "../../tasks/TasksTest.ts";
-import { property } from "../../Testing.test-support.ts";
 import { ClientKey } from "../../transport/ClientKey.ts";
 import * as CommandsNode from "./CommandsNode.ts";
 import * as JournalSqlite from "./JournalSqlite.ts";
@@ -368,103 +365,122 @@ const walk = (f: Flow, out: Outputs, secrets: Set<string>, done: Set<string>) =>
     }
   });
 
+/** Every flow S2 names: an empty walk cannot pass. */
+const FLOWS = [
+  "key:created",
+  "key:reused",
+  "key:replaced",
+  "knock:code",
+  "knock:refused",
+  "hello:refused",
+  "remove",
+  "link:removed",
+  "grant",
+  "link:online",
+  "link:waiting_grant",
+  "start:failed",
+  "file:damaged",
+  "file:wide",
+  "file:unreadable",
+  "result:exited",
+  "result:spawn_failed",
+  "result:output_limit",
+  "journal:rows",
+  "span:execute",
+  "span:hello",
+];
+
+/** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */
+const reaches = new WeakMap<object, Set<string>>();
+
+/**
+ * The set one law's cases add what they reach to. The first case registers `covers`, which runs once
+ * when the law ends, so a walk that reached too little fails loudly however its cases went.
+ */
+const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void): Set<string> => {
+  const known = reaches.get(ctx.task);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set<string>();
+  reaches.set(ctx.task, seen);
+  ctx.onTestFinished(() => covers([...seen]));
+  return seen;
+};
+
 describe("P39 slice 4b: the hands key's private half stays in its file", () => {
-  it.live(
+  it.live.prop(
     "S2 property: [secrets] over generated flows (keys created, reused and replaced, knocks and hellos refused, a key removed with 4003, key files that fail to read, commands that fail), the private half in base64url, base64 or hex is in no frame the client wrote, no span, no log line, no error, no journal row and no state the run held",
-    () =>
-      Effect.gen(function* () {
-        const done = new Set<string>();
-        yield* property(
-          Flow,
-          (f) =>
-            Effect.gen(function* () {
-              const out: Outputs = { frames: [], spans: [], logs: [], errors: [], states: [], rows: [] };
-              const secrets = new Set<string>();
-              const tracer = Tracer.make({
-                span: (init) => {
-                  const span = new Tracer.NativeSpan(init);
-                  out.spans.push(span);
-                  return span;
-                },
-              });
-              const logger = Logger.layer([Logger.map(Logger.formatStructured, (entry) => void out.logs.push(entry))]);
-              // What reaches the console or the process's own output outside Effect's logger, tea's
-              // own error sink included, is a log line too.
-              yield* Effect.acquireRelease(
-                Effect.sync(() => [
-                  ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
-                    vi.spyOn(console, method).mockImplementation((...args) => void out.logs.push(args)),
-                  ),
-                  vi.spyOn(process.stdout, "write").mockImplementation((chunk) => out.logs.push(String(chunk)) > 0),
-                  vi.spyOn(process.stderr, "write").mockImplementation((chunk) => out.logs.push(String(chunk)) > 0),
-                ]),
-                (spies) =>
-                  Effect.sync(() => {
-                    for (const spy of spies) {
-                      spy.mockRestore();
-                    }
-                  }),
-              );
-              yield* walk(f, out, secrets, done).pipe(
-                Effect.withTracer(tracer),
-                Effect.provide(logger),
-                Effect.provideService(References.MinimumLogLevel, "All"),
-                Effect.provide(TestClock.layer()),
-              );
-              const outputs: Record<string, ReadonlyArray<string>> = {
-                frames: out.frames,
-                spans: out.spans.map(spanText),
-                logs: out.logs.map(text),
-                errors: out.errors,
-                journal: out.rows.map(text),
-                states: out.states.map(text),
-              };
-              expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
-
-              for (const [name, texts] of Object.entries(outputs)) {
-                for (const secret of secrets) {
-                  for (const form of forms(secret)) {
-                    const at = texts.findIndex((t) => t.includes(form));
-                    expect(
-                      at,
-                      `S2: [secrets] the private half is in no ${name}: ${at < 0 ? "" : (texts[at] ?? "").slice(0, 400)}`,
-                    ).toBe(-1);
-                  }
-                }
-              }
-
-              done.add(out.spans.some((s) => s.name === "Commands.execute") ? "span:execute" : "span:none");
-              done.add(out.spans.some((s) => s.name === "Hands.hello") ? "span:hello" : "span:no-hello");
-            }),
-          { numRuns: 100 },
-        );
-        // An empty walk cannot pass: every flow the law names was really walked.
-        expect([...done]).toEqual(
-          expect.arrayContaining([
-            "key:created",
-            "key:reused",
-            "key:replaced",
-            "knock:code",
-            "knock:refused",
-            "hello:refused",
-            "remove",
-            "link:removed",
-            "grant",
-            "link:online",
-            "link:waiting_grant",
-            "start:failed",
-            "file:damaged",
-            "file:wide",
-            "file:unreadable",
-            "result:exited",
-            "result:spawn_failed",
-            "result:output_limit",
-            "journal:rows",
-            "span:execute",
-            "span:hello",
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { flow: Flow },
+    ({ flow: f }, ctx) => {
+      const done = reach(ctx, (seen) => expect(seen).toEqual(expect.arrayContaining(FLOWS)));
+      return Effect.gen(function* () {
+        const out: Outputs = { frames: [], spans: [], logs: [], errors: [], states: [], rows: [] };
+        const secrets = new Set<string>();
+        const tracer = Tracer.make({
+          span: (init) => {
+            const span = new Tracer.NativeSpan(init);
+            out.spans.push(span);
+            return span;
+          },
+        });
+        const logger = Logger.layer([Logger.map(Logger.formatStructured, (entry) => void out.logs.push(entry))]);
+        // What reaches the console or the process's own output outside Effect's logger, tea's
+        // own error sink included, is a log line too.
+        yield* Effect.acquireRelease(
+          Effect.sync(() => [
+            ...(["log", "info", "warn", "error", "debug"] as const).map((method) =>
+              vi.spyOn(console, method).mockImplementation((...args) => void out.logs.push(args)),
+            ),
+            vi.spyOn(process.stdout, "write").mockImplementation((chunk) => out.logs.push(String(chunk)) > 0),
+            vi.spyOn(process.stderr, "write").mockImplementation((chunk) => out.logs.push(String(chunk)) > 0),
           ]),
+          (spies) =>
+            Effect.sync(() => {
+              for (const spy of spies) {
+                spy.mockRestore();
+              }
+            }),
         );
-      }),
-    300_000,
+        yield* walk(f, out, secrets, done).pipe(
+          Effect.withTracer(tracer),
+          Effect.provide(logger),
+          Effect.provideService(References.MinimumLogLevel, "All"),
+          Effect.provide(TestClock.layer()),
+        );
+        const outputs: Record<string, ReadonlyArray<string>> = {
+          frames: out.frames,
+          spans: out.spans.map(spanText),
+          logs: out.logs.map(text),
+          errors: out.errors,
+          journal: out.rows.map(text),
+          states: out.states.map(text),
+        };
+        expect(secrets.size, "S2: the flow stored at least one key to look for").toBeGreaterThan(0);
+
+        for (const [name, texts] of Object.entries(outputs)) {
+          for (const secret of secrets) {
+            for (const form of forms(secret)) {
+              const at = texts.findIndex((t) => t.includes(form));
+              expect(
+                at,
+                `S2: [secrets] the private half is in no ${name}: ${at < 0 ? "" : (texts[at] ?? "").slice(0, 400)}`,
+              ).toBe(-1);
+            }
+          }
+        }
+
+        done.add(out.spans.some((s) => s.name === "Commands.execute") ? "span:execute" : "span:none");
+        done.add(out.spans.some((s) => s.name === "Hands.hello") ? "span:hello" : "span:no-hello");
+      });
+    },
+    {
+      plant: "the key file's loaded identity answers the private half as raw, so the hello sends it",
+      timeout: 300_000,
+      fastCheck: { numRuns: 100 },
+    },
   );
 });

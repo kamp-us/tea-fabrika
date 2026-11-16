@@ -6,15 +6,13 @@
 // owns, never wall time. A walk sends letters from the requester to the responder, one at a time, and
 // counts at each history size it reaches: the generated ones, and the domain's two ends (0 and TOP),
 // so a failure always prints the count at the largest history the law uses.
-import { describe, expect, it } from "@effect/vitest";
-import { runsFor } from "@kampus/vitest";
+import { describe, expect, it, runsFor } from "@kampus/vitest";
 import { Effect, Layer, Result, Schema, type Scope } from "effect";
 import * as fc from "fast-check";
 import { Doorbell } from "../ledger/Ledger.ts";
 import * as LedgerSql from "../ledger/LedgerSql.ts";
 import * as LedgerTransactionSql from "../ledger/LedgerTransactionSql.ts";
 import type { Sql } from "../Sql.ts";
-import { property } from "../Testing.test-support.ts";
 import { type From, Mailbox } from "./Mailbox.ts";
 import { Owner, Recipient, Start } from "./Process.ts";
 import { ProcessManager } from "./ProcessManager.ts";
@@ -177,191 +175,199 @@ const accepted = (answer: Result.Result<Receipt, unknown>, message: string): Rec
 
 export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) =>
   describe("T936 slice 1: a delivery reads the same rows whatever the history", () => {
-    it.effect(
+    it.effect.prop(
       "L1: a new delivery returns as many rows after h earlier letters to the same target as after none",
-      () =>
-        property(
-          fc.record({ sizes: fc.tuple(History, History), bodies: Bodies }),
-          ({ sizes, bodies }) =>
-            Effect.gen(function* () {
-              const { fresh } = yield* mail(open);
-              const body = (n: number) => bodies[n % bodies.length];
-              const counts: Array<{ readonly h: number; readonly rows: number }> = [];
-              let h = 0;
+      // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+      { history: fc.record({ sizes: fc.tuple(History, History), bodies: Bodies }) },
+      ({ history: { sizes, bodies } }) =>
+        Effect.gen(function* () {
+          const { fresh } = yield* mail(open);
+          const body = (n: number) => bodies[n % bodies.length];
+          const counts: Array<{ readonly h: number; readonly rows: number }> = [];
+          let h = 0;
 
-              for (const point of points(0, sizes)) {
-                for (; h < point; h++) {
-                  accepted((yield* fresh(body(h))).answer, `history letter ${h} is accepted`);
-                }
+          for (const point of points(0, sizes)) {
+            for (; h < point; h++) {
+              accepted((yield* fresh(body(h))).answer, `history letter ${h} is accepted`);
+            }
 
-                const { answer, rows } = yield* fresh(body(h));
-                accepted(answer, `the counted delivery after ${h} letters is accepted`);
-                counts.push({ h, rows });
-                h++;
-              }
+            const { answer, rows } = yield* fresh(body(h));
+            accepted(answer, `the counted delivery after ${h} letters is accepted`);
+            counts.push({ h, rows });
+            h++;
+          }
 
-              const first = counts[0]?.rows;
-              expect(
-                counts.map(({ rows }) => rows),
-                `L1: rows SQL returned during one new delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
-              ).toEqual(counts.map(() => first));
-            }),
-          { numRuns: RUNS },
-        ),
-      600_000,
+          const first = counts[0]?.rows;
+          expect(
+            counts.map(({ rows }) => rows),
+            `L1: rows SQL returned during one new delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
+          ).toEqual(counts.map(() => first));
+        }),
+      {
+        plant: "a delivery finds its saved receipt by reading the whole outbox, not by its id",
+        timeout: 600_000,
+        fastCheck: { numRuns: RUNS },
+      },
     );
 
-    it.effect(
+    it.effect.prop(
       "L2: a repeat delivery of an accepted command returns the same rows whatever the history, and answers the first receipt",
-      () =>
-        property(
-          fc.record({ size: fc.integer({ min: 1, max: TOP }), pick: fc.nat(), bodies: Bodies }),
-          ({ size, pick, bodies }) =>
-            Effect.gen(function* () {
-              const { deliver, fresh } = yield* mail(open);
-              const body = (n: number) => bodies[n % bodies.length];
-              const first: Array<{ readonly delivery: Delivery; readonly receipt: Receipt }> = [];
-              const counts: Array<{ readonly h: number; readonly rows: number }> = [];
+      // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+      { repeat: fc.record({ size: fc.integer({ min: 1, max: TOP }), pick: fc.nat(), bodies: Bodies }) },
+      ({ repeat: { size, pick, bodies } }) =>
+        Effect.gen(function* () {
+          const { deliver, fresh } = yield* mail(open);
+          const body = (n: number) => bodies[n % bodies.length];
+          const first: Array<{ readonly delivery: Delivery; readonly receipt: Receipt }> = [];
+          const counts: Array<{ readonly h: number; readonly rows: number }> = [];
 
-              for (const point of points(1, [size])) {
-                while (first.length < point) {
-                  const m = body(first.length);
-                  const { answer } = yield* fresh(m);
-                  const receipt = accepted(answer, `history letter ${first.length} is accepted`);
-                  first.push({
-                    delivery: {
-                      command: receipt.command,
-                      source: receipt.source,
-                      to: RESPONDER,
-                      m,
-                      from: from(),
-                    },
-                    receipt,
-                  });
-                }
+          for (const point of points(1, [size])) {
+            while (first.length < point) {
+              const m = body(first.length);
+              const { answer } = yield* fresh(m);
+              const receipt = accepted(answer, `history letter ${first.length} is accepted`);
+              first.push({
+                delivery: {
+                  command: receipt.command,
+                  source: receipt.source,
+                  to: RESPONDER,
+                  m,
+                  from: from(),
+                },
+                receipt,
+              });
+            }
 
-                const earlier = first[pick % first.length];
+            const earlier = first[pick % first.length];
 
-                if (earlier === undefined) {
-                  return yield* Effect.die(new Error("a repeat chose from an empty history"));
-                }
+            if (earlier === undefined) {
+              return yield* Effect.die(new Error("a repeat chose from an empty history"));
+            }
 
-                const { answer, rows } = yield* deliver(earlier.delivery);
-                expect(
-                  accepted(answer, `the repeat of ${earlier.delivery.command} is accepted`),
-                  "L2: a repeat answers the first receipt, field for field",
-                ).toEqual(earlier.receipt);
-                counts.push({ h: point, rows });
-              }
+            const { answer, rows } = yield* deliver(earlier.delivery);
+            expect(
+              accepted(answer, `the repeat of ${earlier.delivery.command} is accepted`),
+              "L2: a repeat answers the first receipt, field for field",
+            ).toEqual(earlier.receipt);
+            counts.push({ h: point, rows });
+          }
 
-              const once = counts[0]?.rows;
-              expect(
-                counts.map(({ rows }) => rows),
-                `L2: rows SQL returned during one repeat delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
-              ).toEqual(counts.map(() => once));
-            }),
-          { numRuns: RUNS },
-        ),
-      600_000,
+          const once = counts[0]?.rows;
+          expect(
+            counts.map(({ rows }) => rows),
+            `L2: rows SQL returned during one repeat delivery, by earlier letters: ${counts.map(({ h, rows }) => `h=${h}: ${rows}`).join(", ")}`,
+          ).toEqual(counts.map(() => once));
+        }),
+      {
+        plant: "a repeat delivery finds its first letter by reading the whole inbox, not by its id",
+        timeout: 600_000,
+        fastCheck: { numRuns: RUNS },
+      },
     );
 
     // T1041 (pipe plumbing), written before the build: the cap's two reads, the inbox's newest
     // place and the reader's newest ack, each by an index, so they stay flat as both streams grow.
-    it.effect(
+    it.effect.prop(
       "T1041 L7: a new delivery returns as many rows whatever the inbox and the acked stream hold, the cap's reads included",
-      () =>
-        property(
-          fc.record({
-            sizes: fc.tuple(fc.integer({ min: 1, max: DEEP }), fc.integer({ min: 1, max: DEEP })),
-            share: fc.tuple(fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true })),
-            bodies: Bodies,
-          }),
-          ({ sizes, share, bodies }) =>
-            Effect.gen(function* () {
-              const { fresh, fill, ack } = yield* mail(open);
-              const counts: Array<{ readonly inbox: number; readonly acked: number; readonly rows: number }> = [];
-              // Each stream starts with one entry: an empty stream may answer its newest entry with no
-              // row at all, a constant difference, never growth. The law is about growth.
+      // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+      {
+        streams: fc.record({
+          sizes: fc.tuple(fc.integer({ min: 1, max: DEEP }), fc.integer({ min: 1, max: DEEP })),
+          share: fc.tuple(fc.double({ min: 0, max: 1, noNaN: true }), fc.double({ min: 0, max: 1, noNaN: true })),
+          bodies: Bodies,
+        }),
+      },
+      ({ streams: { sizes, share, bodies } }) =>
+        Effect.gen(function* () {
+          const { fresh, fill, ack } = yield* mail(open);
+          const counts: Array<{ readonly inbox: number; readonly acked: number; readonly rows: number }> = [];
+          // Each stream starts with one entry: an empty stream may answer its newest entry with no
+          // row at all, a constant difference, never growth. The law is about growth.
+          yield* fill(16);
+          yield* ack(1);
+          // The fold: letters in the responder's inbox, and the newest pos acked.
+          let pos = 1;
+          let acked = 1;
+          // Both ends of the domain, and the generated sizes between, each with its share acked.
+          const points = [
+            { size: 1, share: 1 },
+            { size: sizes[0], share: share[0] },
+            { size: sizes[1], share: share[1] },
+            { size: DEEP, share: 1 },
+          ].sort((a, b) => a.size - b.size);
+
+          for (const point of points) {
+            for (; pos < point.size; pos++) {
               yield* fill(16);
-              yield* ack(1);
-              // The fold: letters in the responder's inbox, and the newest pos acked.
-              let pos = 1;
-              let acked = 1;
-              // Both ends of the domain, and the generated sizes between, each with its share acked.
-              const points = [
-                { size: 1, share: 1 },
-                { size: sizes[0], share: share[0] },
-                { size: sizes[1], share: share[1] },
-                { size: DEEP, share: 1 },
-              ].sort((a, b) => a.size - b.size);
+            }
 
-              for (const point of points) {
-                for (; pos < point.size; pos++) {
-                  yield* fill(16);
-                }
+            // Acks only move forward: each acked pos up to this point's share is one entry.
+            for (const top = Math.max(acked, Math.floor(point.share * pos)); acked < top;) {
+              yield* ack(++acked);
+            }
 
-                // Acks only move forward: each acked pos up to this point's share is one entry.
-                for (const top = Math.max(acked, Math.floor(point.share * pos)); acked < top;) {
-                  yield* ack(++acked);
-                }
+            const { answer, rows } = yield* fresh(bodies[counts.length % bodies.length]);
+            accepted(answer, `the counted delivery at ${pos} letters, ${acked} acked, is accepted`);
+            pos++;
+            counts.push({ inbox: pos - 1, acked, rows });
+          }
 
-                const { answer, rows } = yield* fresh(bodies[counts.length % bodies.length]);
-                accepted(answer, `the counted delivery at ${pos} letters, ${acked} acked, is accepted`);
-                pos++;
-                counts.push({ inbox: pos - 1, acked, rows });
-              }
-
-              expect(
-                counts.map(({ rows }) => rows),
-                `L7: rows SQL returned during one new delivery, by inbox and acked stream: ${counts.map(({ inbox, acked, rows }) => `${inbox}/${acked}: ${rows}`).join(", ")}`,
-              ).toEqual(counts.map(() => counts[0]?.rows));
-            }),
-          { numRuns: runsFor({ fast: 3, full: 20 }) },
-        ),
-      600_000,
+          expect(
+            counts.map(({ rows }) => rows),
+            `L7: rows SQL returned during one new delivery, by inbox and acked stream: ${counts.map(({ inbox, acked, rows }) => `${inbox}/${acked}: ${rows}`).join(", ")}`,
+          ).toEqual(counts.map(() => counts[0]?.rows));
+        }),
+      {
+        plant: "the cap learns where the inbox ends by reading the whole inbox, not by its end",
+        timeout: 600_000,
+        fastCheck: { numRuns: runsFor({ fast: 3, full: 20 }) },
+      },
     );
 
     // The lead's call after experiment 295: learning the inbox's newest place must not read the
     // newest letter whole, which at 1 MiB letters was 28% of a turn.
-    it.effect(
+    it.effect.prop(
       "T1041 L7: a new delivery returns the same bytes whatever the size of the inbox's newest letter, up to a 1 MiB chunk",
-      () =>
-        property(
-          fc.record({
-            sizes: fc.array(fc.integer({ min: 4 * 1_024, max: 1_024 * 1_024 }), { minLength: 1, maxLength: 3 }),
-            history: fc.integer({ min: 0, max: 8 }),
-          }),
-          ({ sizes, history }) =>
-            Effect.gen(function* () {
-              const { fresh, fill } = yield* mail(open);
-              const body = { type: "request", body: "same" };
+      // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+      {
+        letters: fc.record({
+          sizes: fc.array(fc.integer({ min: 4 * 1_024, max: 1_024 * 1_024 }), { minLength: 1, maxLength: 3 }),
+          history: fc.integer({ min: 0, max: 8 }),
+        }),
+      },
+      ({ letters: { sizes, history } }) =>
+        Effect.gen(function* () {
+          const { fresh, fill } = yield* mail(open);
+          const body = { type: "request", body: "same" };
 
-              for (let n = 0; n < history; n++) {
-                yield* fill(16);
-              }
+          for (let n = 0; n < history; n++) {
+            yield* fill(16);
+          }
 
-              // A small newest letter first, then each generated large one, the counted delivery after each.
-              const counts: Array<{ readonly newest: number; readonly bytes: number }> = [];
+          // A small newest letter first, then each generated large one, the counted delivery after each.
+          const counts: Array<{ readonly newest: number; readonly bytes: number }> = [];
 
-              for (const size of [16, ...sizes, 1_024 * 1_024]) {
-                yield* fill(size);
-                const { answer, bytes } = yield* fresh(body);
-                accepted(answer, `the counted delivery after a ${size}-byte letter is accepted`);
-                counts.push({ newest: size, bytes });
-              }
+          for (const size of [16, ...sizes, 1_024 * 1_024]) {
+            yield* fill(size);
+            const { answer, bytes } = yield* fresh(body);
+            accepted(answer, `the counted delivery after a ${size}-byte letter is accepted`);
+            counts.push({ newest: size, bytes });
+          }
 
-              const least = Math.min(...counts.map((c) => c.bytes));
+          const least = Math.min(...counts.map((c) => c.bytes));
 
-              for (const { newest, bytes } of counts) {
-                // Ids grow by a digit now and then; a read of the newest letter grows by its size.
-                expect(
-                  bytes - least,
-                  `L7: bytes SQL returned during one new delivery after a ${newest}-byte newest letter: ${counts.map((c) => `${c.newest}: ${c.bytes}`).join(", ")}`,
-                ).toBeLessThan(1_024);
-              }
-            }),
-          { numRuns: runsFor({ fast: 3, full: 20 }) },
-        ),
-      600_000,
+          for (const { newest, bytes } of counts) {
+            // Ids grow by a digit now and then; a read of the newest letter grows by its size.
+            expect(
+              bytes - least,
+              `L7: bytes SQL returned during one new delivery after a ${newest}-byte newest letter: ${counts.map((c) => `${c.newest}: ${c.bytes}`).join(", ")}`,
+            ).toBeLessThan(1_024);
+          }
+        }),
+      {
+        plant: "the cap learns where the inbox ends by reading its newest letter whole",
+        timeout: 600_000,
+        fastCheck: { numRuns: runsFor({ fast: 3, full: 20 }) },
+      },
     );
   });

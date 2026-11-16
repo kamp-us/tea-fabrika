@@ -12,18 +12,35 @@
 // The walk is fast-check's `fc.commands`: write a new task, read a task written, overwrite a task
 // written, read a task never written, and save a value that is no entry, each picked only where the
 // model allows it (0093). The memory store is the oracle, and the model checks it too.
-//
-// Plant, run once and undone (recorded in the tests step's field row): leave out the `PRIMARY KEY`,
-// so an overwrite adds a second row.
-import { describe, expect, it } from "@effect/vitest";
+import { describe, expect, it } from "@kampus/vitest";
 import { Context, Effect, Exit, Layer } from "effect";
 import * as KeyValueStore from "effect/persistence/KeyValueStore";
 import * as fc from "fast-check";
+import type { TestContext } from "vitest";
 import { Journal, type Entry, Entry as EntrySchema } from "../../client/Journal.ts";
 import * as JournalStore from "../../client/JournalStore.ts";
 import { Result } from "../../tasks/Task.ts";
-import { property } from "../../Testing.test-support.ts";
 import * as JournalSqlite from "./JournalSqlite.ts";
+
+/** What each law's cases reached so far, by the law's own task, so each run of a law starts empty. */
+const reaches = new WeakMap<object, Set<string>>();
+
+/**
+ * The set one law's cases add what they reach to. The first case registers `covers`, which runs once
+ * when the law ends, so a walk that reached too little fails loudly however its cases went.
+ */
+const reach = (ctx: TestContext, covers: (seen: ReadonlyArray<string>) => void): Set<string> => {
+  const known = reaches.get(ctx.task);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const seen = new Set<string>();
+  reaches.set(ctx.task, seen);
+  ctx.onTestFinished(() => covers([...seen]));
+  return seen;
+};
 
 /** What one store answers a read: the entry, nothing, or the journal error's reason. */
 type Read =
@@ -203,42 +220,43 @@ const Walk = fc.record({
 });
 
 describe("P39 slice 4b: the journal file", () => {
-  it.live(
+  it.live.prop(
     "J1: the 4a journal over JournalSqlite on :memory: reads exactly what the same writes give over KeyValueStore.layerMemory, and a value that is no entry is bad_entry on both",
-    () =>
-      Effect.gen(function* () {
-        const reached = new Set<string>();
-        yield* property(
-          Walk,
-          ({ pool, steps }) =>
-            Effect.gen(function* () {
-              const r: Real = {
-                pool,
-                sql: yield* side(JournalSqlite.layer({ file: ":memory:" })),
-                memory: yield* side(KeyValueStore.layerMemory),
-                next: null,
-              };
-              const m: Model = { saved: new Map() };
-
-              // fast-check's own model walk: a step runs only when the state it reached allows it.
-              for (const s of steps) {
-                if (s.check(m)) {
-                  s.run(m, r);
-                  const next = r.next;
-                  r.next = null;
-
-                  if (next !== null) {
-                    reached.add(yield* next);
-                  }
-                }
-              }
-            }),
-          { numRuns: 100 },
-        );
-        expect([...reached]).toEqual(
+    // fast-check kept: moved unchanged from the property runner; the Schema rewrite comes later in 0579's sweep
+    { walk: Walk },
+    ({ walk: { pool, steps } }, ctx) => {
+      const reached = reach(ctx, (seen) =>
+        expect(seen).toEqual(
           expect.arrayContaining(["write", "overwrite", "read:entry", "read:bad_entry", "read:missing", "garbage"]),
-        );
-      }),
-    120_000,
+        ),
+      );
+      return Effect.gen(function* () {
+        const r: Real = {
+          pool,
+          sql: yield* side(JournalSqlite.layer({ file: ":memory:" })),
+          memory: yield* side(KeyValueStore.layerMemory),
+          next: null,
+        };
+        const m: Model = { saved: new Map() };
+
+        // fast-check's own model walk: a step runs only when the state it reached allows it.
+        for (const s of steps) {
+          if (s.check(m)) {
+            s.run(m, r);
+            const next = r.next;
+            r.next = null;
+
+            if (next !== null) {
+              reached.add(yield* next);
+            }
+          }
+        }
+      });
+    },
+    {
+      plant: "the journal table has no PRIMARY KEY, so an overwrite adds a second row",
+      timeout: 120_000,
+      fastCheck: { numRuns: 100 },
+    },
   );
 });
