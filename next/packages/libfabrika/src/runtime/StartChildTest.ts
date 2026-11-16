@@ -1892,6 +1892,8 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
     Effect.gen(function* () {
       let probe: Store["probe"] | undefined;
       let opened = 0;
+      // Set once the walk holds its store and runner. A count of yields is no wait for real IO.
+      const ready = yield* Deferred.make<void>();
       const held = Effect.scoped(
         Effect.gen(function* () {
           const store = yield* open;
@@ -1930,15 +1932,13 @@ const lifetimeLaw = (open: Effect.Effect<Store, never, Scope.Scope>) =>
             .pipe(Effect.result);
           opened = store.probe.open();
           probe = store.probe;
+          yield* Deferred.succeed(ready, undefined);
           return yield* Effect.never;
         }),
       );
       const fiber = yield* Effect.forkChild(held);
-
-      for (let turn = 0; turn < 1000 && probe === undefined; turn++) {
-        yield* Effect.yieldNow;
-      }
-
+      // The walk never ends on its own, so its join wins only when the walk fails before it is ready.
+      yield* Effect.raceFirst(Deferred.await(ready), Fiber.join(fiber));
       yield* Fiber.interrupt(fiber);
       expect(probe, "the walk acquired its store and a runner").toBeDefined();
       expect(opened, "the walk had databases open when it was interrupted").toBeGreaterThan(0);
