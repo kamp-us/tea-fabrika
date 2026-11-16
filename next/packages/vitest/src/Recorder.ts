@@ -10,6 +10,12 @@
  * The record keeps no answer, as Effect's `TestConsole` keeps none: the law wrote the
  * implementation, so it knows what it answers.
  *
+ * Its types hold what it records: a method's args are its own parameter list, an optional member
+ * counts as if it were there, and `fails` names only a method `impl` gives, since a left-out one
+ * dies before it is recorded. A service with an overloaded method does not compile as a Recorder
+ * layer: TypeScript's `infer` reads only an overload's last signature, so no one argument list is
+ * true of every call, and the layer refuses it rather than type its records wrong.
+ *
  * @stability unstable
  */
 import * as Context from "effect/Context";
@@ -28,21 +34,36 @@ type Watched =
 
 /**
  * A method's name: a string key of the service whose member the Recorder watches. Plain data, a
- * `Sink` and a symbol key are not methods.
+ * `Sink` and a symbol key are not methods. An optional member is read without its `undefined`, so
+ * an optional method is a method too, as `watch` records it.
  *
  * @stability unstable
  * @category models
  */
-export type Method<S> = { [K in keyof S]-?: S[K] extends Watched ? K : never }[keyof S] & string;
+export type Method<S> = { [K in keyof S]-?: NonNullable<S[K]> extends Watched ? K : never }[keyof S] & string;
 
 /**
  * What one call of a method was handed: its own parameter list, made readonly, and `[]` for an
- * Effect member.
+ * Effect member. For a union of names, it is each name's own list.
  *
  * @stability unstable
  * @category models
  */
-export type Args<S, M extends Method<S>> = S[M] extends (...args: infer A) => unknown ? Readonly<A> : readonly [];
+export type Args<S, M extends Method<S>> = M extends unknown
+  ? NonNullable<S[M]> extends (...args: infer A) => unknown
+    ? Readonly<A>
+    : readonly []
+  : never;
+
+/** The error a member fails with: `never` for one that cannot fail. */
+type Raised<F> =
+  F extends Effect.Effect<unknown, infer E, unknown>
+    ? E
+    : F extends (...args: never) => Effect.Effect<unknown, infer E, unknown>
+      ? E
+      : F extends (...args: never) => Stream.Stream<unknown, infer E, unknown>
+        ? E
+        : never;
 
 /**
  * The error a method fails with, read from its own type: `never` for a method that cannot fail.
@@ -50,14 +71,7 @@ export type Args<S, M extends Method<S>> = S[M] extends (...args: infer A) => un
  * @stability unstable
  * @category models
  */
-export type Failure<S, M extends Method<S>> =
-  S[M] extends Effect.Effect<unknown, infer E, unknown>
-    ? E
-    : S[M] extends (...args: never) => Effect.Effect<unknown, infer E, unknown>
-      ? E
-      : S[M] extends (...args: never) => Stream.Stream<unknown, infer E, unknown>
-        ? E
-        : never;
+export type Failure<S, M extends Method<S>> = M extends unknown ? Raised<NonNullable<S[M]>> : never;
 
 /**
  * One recorded call. It is a union over the methods, so a check on `method` narrows `args` to that
@@ -70,12 +84,43 @@ export type Call<S> = { [M in Method<S>]: { readonly method: M; readonly args: A
 
 /**
  * The methods that fail, each with an error value of its own error type. A method that cannot fail
- * has `Failure` of `never`, so it cannot be named.
+ * has `Failure` of `never`, so it cannot be named, and nor can a method outside `Given`: the methods
+ * `impl` gives, when `layer` reads it.
  *
  * @stability unstable
  * @category models
  */
-export type Fails<S> = { readonly [M in Method<S>]?: Failure<S, M> };
+export type Fails<S, Given extends Method<S> = Method<S>> = {
+  readonly [M in Method<S>]?: M extends Given ? Failure<S, M> : never;
+};
+
+/** A function's last two call signatures, which are the same one when it has only one. */
+type LastTwo<F> = F extends { (...args: infer A1): infer R1; (...args: infer A2): infer R2 }
+  ? readonly [readonly [A1, R1], readonly [A2, R2]]
+  : never;
+
+/** Whether two types are each assignable to the other. */
+type Same<X, Y> = [X] extends [Y] ? ([Y] extends [X] ? true : false) : false;
+
+/** The methods of `S` with more than one call signature. */
+type Overloaded<S> = {
+  [M in Method<S>]: LastTwo<NonNullable<S[M]>> extends readonly [infer P, infer Q]
+    ? Same<P, Q> extends true
+      ? never
+      : M
+    : never;
+}[Method<S>];
+
+/**
+ * Nothing for a service with no overloaded method. For one with one, a member no `impl` has, so the
+ * layer does not compile and its error names the method.
+ */
+type Single<S> = [Overloaded<S>] extends [never]
+  ? unknown
+  : { readonly "an overloaded method, which the Recorder cannot type": Overloaded<S> };
+
+/** A member of `impl` that the service lacks may only be `never`, so a misspelled one does not compile. */
+type Own<P, S> = { readonly [K in Exclude<keyof P, keyof S>]: never };
 
 declare const RecordedId: unique symbol;
 
@@ -151,7 +196,8 @@ const watch = <S extends object>(
 
 /**
  * Provides `service` from `impl`, records each run of its effectful members as `{ method, args }`,
- * and fails each method named in `fails` with the value given there. A call is a run: an Effect
+ * and fails each method named in `fails` with the value given there, which may name only a method
+ * `impl` gives. A service with an overloaded method does not compile here. A call is a run: an Effect
  * built and never run is not recorded, one run twice is recorded twice, and one that never ends is
  * recorded at its start. A Stream method is recorded when its stream starts. Each build of the layer
  * starts with no calls.
@@ -159,14 +205,18 @@ const watch = <S extends object>(
  * @stability unstable
  * @category constructors
  */
-export const layer = <I, S extends object>(
+export const layer = <
+  I,
+  S extends object,
+  P extends Layer.PartialEffectful<S> & object = Layer.PartialEffectful<S> & object,
+>(
   service: Context.Key<I, S>,
-  impl: Layer.PartialEffectful<S> & object,
-  options?: { readonly fails?: Fails<S> },
+  impl: P & Single<S> & NoInfer<Own<P, S>>,
+  options?: { readonly fails?: Fails<S, Method<S> & keyof P> },
 ): Layer.Layer<I | Recorded<I>> =>
   Layer.unwrap(
     Effect.map(Ref.make<ReadonlyArray<Entry>>([]), (kept) =>
-      Layer.merge(Layer.mock(service, watch(impl, kept, options?.fails ?? {})), Layer.succeed(store(service), kept)),
+      Layer.merge(Layer.mock(service, watch<S>(impl, kept, options?.fails ?? {})), Layer.succeed(store(service), kept)),
     ),
   );
 

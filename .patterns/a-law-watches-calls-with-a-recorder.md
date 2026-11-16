@@ -54,23 +54,25 @@ return Effect.gen(function* () {
 }).pipe(Effect.provide(m.layer));
 ```
 
-`Recorder.layer(Service, impl, { fails })` (`next/packages/vitest/src/Recorder.ts:162`) provides
+`Recorder.layer(Service, impl, { fails })` (`next/packages/vitest/src/Recorder.ts:208`) provides
 the service and records each run of its effectful members as `{ method, args }`. `impl` has the type
 Effect's `Layer.mock` takes, `Layer.PartialEffectful<S>`, and the Recorder hands it to `Layer.mock`
-(`Recorder.ts:169`), so a member the law leaves out dies with `UnimplementedError` when used, and
-is not recorded (law R10, `next/packages/vitest/src/Recorder.test.ts:276`).
+(`Recorder.ts:219`), so a member the law leaves out dies with `UnimplementedError` when used, and
+is not recorded (law R10, `next/packages/vitest/src/Recorder.test.ts:276`). So `fails` may name
+only a method `impl` gives, and a member `impl` names that the service lacks does not compile (law
+R17, `next/packages/vitest/src/Recorder.types.test.ts:126`).
 
 - **A call is a run.** The record is written when the Effect runs, not when the method is called
-  (`Recorder.ts:125`). An Effect built and dropped leaves no record, one retried leaves two, and one
+  (`Recorder.ts:170`). An Effect built and dropped leaves no record, one retried leaves two, and one
   that never ends is recorded at its start (law R8, `Recorder.test.ts:210`). A Stream method is
-  recorded when its stream starts (`Recorder.ts:146`).
+  recorded when its stream starts (`Recorder.ts:191`).
 - **`fails` is a record of error values,** one per method, each of that method's own error type
-  (`Recorder.Fails`, `Recorder.ts:78`). A named method is recorded, then fails with that very value,
+  (`Recorder.Fails`, `Recorder.ts:93`). A named method is recorded, then fails with that very value,
   and the implementation's Effect or Stream is not run. A method that cannot fail cannot be named
-  (law R3, `next/packages/vitest/src/Recorder.types.test.ts:49`). A test layer that switched
+  (law R3, `next/packages/vitest/src/Recorder.types.test.ts:71`). A test layer that switched
   failures by hand takes `Recorder.Fails<S>` as its `Failing` type, as `PushesTest.ts:17` does.
 - **Read inside the provide.** `yield* Recorder.calls(Service)` needs `Recorded<I>` in its
-  environment (law R4, `Recorder.types.test.ts:61`), and each build of the layer starts with no
+  environment (law R4, `Recorder.types.test.ts:83`), and each build of the layer starts with no
   calls. So the read goes in the same Effect the layer is provided to, never after it.
 - **One method's args:** `Recorder.calls(Service, "readFileString")` answers that method's argument
   lists, typed to its own parameters, so a law does not filter on `method` by hand
@@ -94,8 +96,13 @@ change to a service first (0555, 0579).
 The plain ways are worse. `vi.fn` and `vi.spyOn` record `any` args, so a wrong arg still compiles,
 and 0555 bans them in our code. A hand-written log in each test layer, as `PushesTest` kept before (one
 string per call, such as `leakgrep <head>`), drops args it did not think of, `dir` there, and
-repeats a failure switch per method. The Recorder is typed against the service's own interface: a method the
-service lacks, a wrong arg type, or a wrong error in `fails` does not compile (laws R1 to R3).
+repeats a failure switch per method. The Recorder is typed against the service's own interface: a
+method the service lacks, a wrong arg type, a wrong error in `fails`, or a `fails` entry for a
+method `impl` leaves out does not compile (laws R1 to R3 and R17). That holds for a union of names
+and for an optional method too (laws R14 and R15). It has one limit: TypeScript's `infer` reads
+only an overloaded method's last signature, so no one argument list types every call, and a service
+with an overloaded method does not compile as a Recorder layer (law R16). Neither `Pushes` nor
+Effect's `FileSystem` has one.
 
 ## Decision
 
