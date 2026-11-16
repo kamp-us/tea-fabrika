@@ -17,7 +17,7 @@ import { chaosMachine, fire, inspect, Model, now } from "./ChaosMachine.ts";
 const SEED = 119120;
 const options = { seed: SEED, numRuns: 100 };
 
-type Msg = Parameters<typeof chaosMachine.update>[1];
+const isFire = Schema.is(Chaos.Fire);
 type Phase = (typeof Model.Type)["phase"];
 
 const id = (n: number) =>
@@ -106,13 +106,11 @@ describe("the chaos machine", () => {
           reached.add(`${msg.type}:${next.phase._tag}`);
           const kept = history(next.phase);
 
-          for (const cmd of cmds) {
-            if (cmd.type === "fire") {
-              expect(
-                kept?.asked.some((a) => a.ordinal === cmd.ordinal && canon(a.fault) === canon(cmd.fault)),
-                "a fault request leaves only once it is saved",
-              ).toBe(true);
-            }
+          for (const cmd of cmds.filter((c) => c.type === "fire")) {
+            expect(
+              isFire(cmd) && kept?.asked.some((a) => a.ordinal === cmd.ordinal && canon(a.fault) === canon(cmd.fault)),
+              "a fault request leaves only once it is saved",
+            ).toBe(true);
           }
 
           const answered = kept?.answers.map((a) => a.ordinal) ?? [];
@@ -135,7 +133,7 @@ describe("the chaos machine", () => {
   it("S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds", () => {
     const Saved = Schema.fromJsonString(Model);
     fc.assert(
-      fc.property(walks, (msgs: ReadonlyArray<Msg>) => {
+      fc.property(walks, (msgs) => {
         syncTest(
           chaosMachine,
           {},

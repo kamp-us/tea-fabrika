@@ -816,7 +816,7 @@ describe("S2: the access fold passes the sync test", () => {
   // codec, which writes the key map and the id set as JSON, and a load at any cut goes on as the
   // run that never stopped. Plant, run once (0093): `init` ignores the loaded Model: red.
   it("S2: every save and load of a membership walk resumes to the same Models and replies", () => {
-    const Saved = Schema.fromJsonString(Schema.toCodecJson(access.model));
+    const Saved = Schema.fromJsonString(Schema.toCodecJson(Schema.toType(access.model)));
     walks((steps) => {
       syncTest(
         access,

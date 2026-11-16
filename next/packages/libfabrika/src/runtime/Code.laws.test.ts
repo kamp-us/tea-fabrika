@@ -287,9 +287,10 @@ describe("P15 slice 1: the brain's code per program", () => {
   it("S2: every save and load of a code walk resumes to the same selections, appends and swaps", () => {
     fc.assert(
       fc.property(tapes, ([programs, tape]) => {
-        const msgs: Array<Msg> = [];
+        const msgs: Array<typeof Code.code.msg.Type> = [];
+        // Each walked Msg decoded as the machine's own, so a Msg it would not take fails here.
         walk(programs, tape, (_before, move) => {
-          msgs.push(move.msg);
+          msgs.push(Schema.decodeUnknownSync(Schema.toType(Code.code.msg))(move.msg));
         });
         syncTest(
           Code.code,

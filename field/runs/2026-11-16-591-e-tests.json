@@ -1,0 +1,152 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-591-e-tests",
+  "ticket": "591",
+  "pr": null,
+  "started": "2026-11-15T22:24:53-08:00",
+  "ended": "2026-11-15T23:44:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "pass",
+  "why": "Slice E of the exam-to-lint plan (0591), next/ and oxlint-plugins/, on fabrikalfa/exam-to-lint-e. M6: fabrika/machine-has-laws written with its planted folders a to l (oxlint-plugins/machine-has-laws.ts and .test.ts, registered in index.ts) and left off; its own run on next/ found exactly 30 hits, the plan's count, 14 with no laws file and 16 with no sync test or reason, the same files as the plan's two lists. The 30 were fixed in laws files only, no product line: 11 machines' existing <name>.test.ts files held their property laws and were moved with git mv to <name>.laws.test.ts (the plan thought them absent), AccessMachine.laws.test.ts moved to Access.laws.test.ts, and relationsTable and ChaosMachine got new laws files. 23 machines now run syncTest on walks read from the state they reach; 7 carry a sync test left out line with the reason read from the machine (sink, open, relationsTable, processTable, DevLife, Menu, the checklist tile: never saved, or rebuilt from the log, by their own code). No sync test found a machine fault. Two changes outside the plan's Files table: layer-rules.json moves Testing.ts from next-runtime to next-shared (it imports only tea and effect), since access, tasks and transport laws may not import upward (0062), and vitest.shards.json and vitest.shards.full.json rename the moved files' rows. With 0 hits the rule was turned on in its own commit, in its own override for next/apps, next/packages and next/programs, so the next/** block stays the .agents/ mirror; .agents/ has one hit (flow/machine.ts), left as a finding. The deletion of laws-scan.integration.test.ts did not happen: step 3, the old exam test green on the same head, cannot run here, the 0178 guard refuses it.",
+  "plants": [
+    {
+      "law": "oxlint-plugins/machine-has-laws.test.ts: M6: fires on each planted machine with no property law, or no sync test and no reason, in any laws-file form",
+      "plant": "oxlint-plugins/machine-has-laws.ts: accept a laws file with no sync test and no reason (held.some((h) => h.sync || true)), run at 80915e8 and again at 7ccbc5c",
+      "result": "red"
+    },
+    {
+      "law": "M5: fabrika/machine-has-laws at zero on the tree blocks a new break",
+      "plant": "next/packages/libfabrika/src/telemetry/internal/sink.laws.test.ts: its sync test left out line reworded, then oxlint with the real .oxlintrc.json on sink.ts",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/Prefix.laws.test.ts: S2: every save and load of a prefix walk resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/client/Prefix.ts: init ignores the loaded prefix",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/node/dev/internal/watcher.laws.test.ts: A-Watcher (sync test added)",
+      "plant": "next/packages/libfabrika/src/node/dev/internal/watcher.ts: init ignores the loaded model",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/gateway/internal/rateLimit.laws.test.ts: S2: every save and load of a take walk resumes to the same budgets and reports",
+      "plant": "next/packages/libfabrika/src/gateway/internal/rateLimit.ts: init ignores the loaded budget",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/internal/handsDelivery.laws.test.ts: S2: every save and load of a reply walk resumes to the same states",
+      "plant": "next/packages/libfabrika/src/runtime/internal/handsDelivery.ts: init ignores the loaded state",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/schedules/ScheduledJob.laws.test.ts: S2: every save and load of a job walk resumes to the same states and work",
+      "plant": "next/packages/libfabrika/src/schedules/ScheduledJob.ts: init ignores the loaded state",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/gateway/internal/waiting.laws.test.ts: S2: every save and load of a walk, through the stored shape, resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/gateway/internal/waiting.ts: init ignores the loaded rows",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/tasks/internal/task.laws.test.ts: S2: every save and load of a task walk, collect included, resumes to the same tasks and answers",
+      "plant": "next/packages/libfabrika/src/tasks/internal/task.ts: init ignores the loaded task",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/internal/connection.laws.test.ts: S2: every save and load of a walk, through the Model's schema, resumes to the same states",
+      "plant": "next/packages/libfabrika/src/transport/internal/connection.ts: init ignores the saved model",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/access/Access.laws.test.ts: S2: every save and load of a membership walk resumes to the same Models and replies",
+      "plant": "next/packages/libfabrika/src/access/Access.ts: init ignores the loaded Model",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/permissions/internal/relationsTable.laws.test.ts: a related row holds its tuple until an unrelated row of the same tuple",
+      "plant": "next/packages/libfabrika/src/permissions/internal/relationsTable.ts: the tuples.delete(key) line dropped",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts: a fault request leaves only once it is saved, and each answer is kept once",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts: the timer sends its fire without adding it to asked",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/ChaosMachine.laws.test.ts: S2: every save and load of a walk, through the saved Model, resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/runtime/ChaosMachine.ts: init ignores the saved model",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Code.laws.test.ts: S2: every save and load of a code walk resumes to the same selections, appends and swaps",
+      "plant": "next/packages/libfabrika/src/runtime/Code.ts: init ignores the saved selection",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Handshake.laws.test.ts: S2: every save and load of a handshake walk resumes to the same states and Cmds",
+      "plant": "next/packages/libfabrika/src/transport/Handshake.ts: init ignores the loaded handshake",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/transport/Link.laws.test.ts: S2: every save and load of a link walk resumes to the same states and Cmds",
+      "plant": "next/packages/libfabrika/src/transport/Link.ts: init ignores the loaded link",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/runtime/Client.laws.test.ts: S2: every save and load of a letter walk resumes to the same client and Cmds",
+      "plant": "next/packages/libfabrika/src/runtime/Client.ts: init ignores the loaded client",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/HandsMachine.laws.test.ts: S2: every save and load of a hands walk resumes to the same models and Cmds",
+      "plant": "next/packages/libfabrika/src/client/HandsMachine.ts: init ignores the loaded model",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/Tezgah.laws.test.ts: S2: every save and load of a view, patch and focus-move walk resumes to the same child and Cmds",
+      "plant": "next/packages/libfabrika/src/client/Tezgah.ts: init ignores the loaded child",
+      "result": "red"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a window walk resumes to the same window and Cmds",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts: a load resets presses to 0 (the walk sends no key, so presses stays 0: not caught)",
+      "result": "green"
+    },
+    {
+      "law": "next/packages/libfabrika/src/client/WindowMachine.laws.test.ts: S2: every save and load of a window walk resumes to the same window and Cmds",
+      "plant": "next/packages/libfabrika/src/client/WindowMachine.ts: init ignores the loaded window",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/inbox/src/program.laws.test.ts: S2: every save and load of a letter walk, repeats included, resumes to the same rows",
+      "plant": "next/programs/inbox/src/program.ts: init ignores the loaded rows",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/pipeline/src/Merger.laws.test.ts: S2: every save and load of a merger walk resumes to the same jobs and Cmds",
+      "plant": "next/programs/pipeline/src/Merger.ts: init ignores the loaded job",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/pipeline/src/Queue.laws.test.ts: S2: every save and load of a queue walk resumes to the same lines and Cmds",
+      "plant": "next/programs/pipeline/src/Queue.ts: init ignores the loaded line",
+      "result": "red"
+    },
+    {
+      "law": "next/programs/tezgah/src/program.laws.test.ts: S2: every save and load of a desk walk resumes to the same desk and Cmds",
+      "plant": "next/programs/tezgah/src/program.ts: init ignores the loaded desk",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 79,
+  "note": "Each plant ran once on a saved copy of the product file and was restored by copy; git status showed no product file before each commit. The window's first sync run failed at cut 92: init(loaded) is not the saved window, because loadedInto hushes the status burst on purpose (WindowMachine.ts, hushed); the law leaves only said.messages out of its comparison and names why, and the lead may rule that a fault instead. The window and hands walks were cut to 80 messages and 30 runs, and 100 runs, to keep the suite fast. Not run here: next/apps/fabrika/src/exam/laws-scan.integration.test.ts and next/apps/fabrika/src/exam/edge-comment.integration.test.ts, the 0178 guard refuses them (pull request 1508 is not on this branch). One pnpm typecheck: it failed on 10 test-side type errors in four of these laws files and stopped before next/programs; those were fixed and each touched package was checked with its own typecheck. pnpm lint's steps pass, each run alone after the box killed a full run for memory: oxlint 0 blocking, lint:layers, lint:dead. The list ratchet exits 0.",
+  "step": "tests"
+}

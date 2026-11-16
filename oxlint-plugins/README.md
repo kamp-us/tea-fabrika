@@ -717,6 +717,19 @@ The laws are in `no-question-word-key.test.ts`, the last describe of `modules.te
 `no-wall-clock.test.ts` and `after-hooks.test.ts`, each through the real config at generated paths.
 
 
+## Every machine has laws, decision 0591
+
+`fabrika/machine-has-laws` blocks in `next/apps`, `next/packages` and `next/programs`, in its own
+override so the `next/**` block stays the `.agents/` mirror. It is the exam's old text scan
+`laws-scan`, made a rule on today's constructor. A file that calls `Machine.make(` has a laws file
+beside it, `<name>.laws.test.ts`, `<name>.<more>.laws.test.ts` or their `.integration.` and
+`.visual.` forms, holding a property law (`it.prop`, `it.effect.prop`, `it.live.prop`, `fc.assert`,
+or a `property*` or `law*` runner from `@demlik/tea/pbt`). One of its laws files calls `syncTest(`
+or says `// sync test left out: <why>` (saved-state S2). Test files and `*Test.ts` kits pass. The
+rule reads the laws files from disk beside the linted file. Its law is `machine-has-laws.test.ts`:
+the exam's twelve planted folders, in each laws-file form, through oxlint's RuleTester. At its turn
+on it had 0 hits in `next/`; its first run found the 30 the plan counted.
+
 ## One machine per file, decision 0046
 
 `fabrika/one-machine-per-file` blocks in `next/` and `.agents/`. Tests and shared law suites

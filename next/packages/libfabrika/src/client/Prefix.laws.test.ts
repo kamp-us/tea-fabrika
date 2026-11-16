@@ -806,7 +806,7 @@ const canon = (value: unknown): string =>
 // S2 (docs/direction/saved-state.md): the prefix's Model saves as JSON text through its own schema.
 const SavedPrefix = Schema.fromJsonString(Schema.toType(prefixMachine.model));
 
-type PrefixMsg = Parameters<typeof prefixMachine.update>[1];
+type PrefixMsg = typeof prefixMachine.msg.Type;
 
 describe("S2: the prefix machine passes the sync test", () => {
   // Plant, run once (0093): `init` ignores the loaded prefix and starts idle: red, "init(loaded) is
