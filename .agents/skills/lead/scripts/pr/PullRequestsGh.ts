@@ -54,6 +54,16 @@ export const mergeArgs = (repo: string, number: number, oid: string): ReadonlyAr
   oid,
 ];
 
+/**
+ * Merge when ready, as the lead turns it on (0530): a squash, and `expectedHeadOid` pins it to the
+ * head that was checked, so a push after the check leaves it off.
+ */
+export const ARM = `mutation($id: ID!, $oid: GitObjectID!) {
+  enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: SQUASH, expectedHeadOid: $oid}) {
+    clientMutationId
+  }
+}`;
+
 /** `owner/name` from an origin URL GitHub serves, https or ssh; `null` for any other. */
 export const repoFromUrl = (url: string): string | null =>
   /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([^/\s]+\/[^/\s]+?)(?:\.git)?\/?$/.exec(
@@ -162,6 +172,22 @@ export const layer = (
 
       const enqueue = (number: number, oid: string) => Effect.asVoid(gh(mergeArgs(repo, number, oid)));
 
-      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue });
+      // REST, paged: `gh pr view --json files` stops at 100 files.
+      const files = Effect.fn("PullRequestsGh.files")(function* (number: number) {
+        const out = yield* gh(["api", "--paginate", `repos/${repo}/pulls/${number}/files`, "--jq", ".[].filename"]);
+        return out.split("\n").filter((path) => path !== "");
+      });
+
+      const arm = Effect.fn("PullRequestsGh.arm")(function* (number: number, oid: string) {
+        const id = (yield* gh(["pr", "view", String(number), "-R", repo, "--json", "id", "--jq", ".id"])).trim();
+
+        if (id === "") {
+          return yield* new PullRequestsError({ reason: `gh pr view named no node id for pull request ${number}` });
+        }
+
+        yield* gh(["api", "graphql", "-f", `query=${ARM}`, "-f", `id=${id}`, "-f", `oid=${oid}`]);
+      });
+
+      return PullRequests.of({ openOn, all, draft, edit, ready, view, enqueue, files, arm });
     }),
   );
