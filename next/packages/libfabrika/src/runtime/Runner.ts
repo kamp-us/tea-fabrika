@@ -313,14 +313,18 @@ const encodeResult = Schema.encodeSync(TaskResult);
 const isName = Schema.is(ProcessName);
 const encoder = new TextEncoder();
 
+/** A JSON value that is an object, not an array or a scalar. */
+const isJsonObject = (json: Schema.Json): json is Schema.JsonObject =>
+  typeof json === "object" && json !== null && !Array.isArray(json);
+
 /** A start_child's operands without its input: what every `ok` answer echoes, so no row holds the
  *  first letter twice. */
-const withoutInput = (cmd: unknown): unknown => {
-  if (typeof cmd !== "object" || cmd === null || Array.isArray(cmd) || !Object.hasOwn(cmd, "input")) {
+const withoutInput = (cmd: Schema.Json): Schema.Json => {
+  if (!isJsonObject(cmd) || !Object.hasOwn(cmd, "input")) {
     return cmd;
   }
 
-  const { input: _input, ...rest } = cmd as Record<string, unknown>;
+  const { input: _input, ...rest } = cmd;
   return rest;
 };
 
@@ -1617,7 +1621,7 @@ export class ProgramRunner extends Context.Service<
          *  put there. A send_chunks keeps `{type, to, as}` and never its items, on `ok` and on `err`:
          *  operands just under the input cap plus the answer's own fields would pass the row cap, and
          *  the answer would never be saved. */
-        const echo = (job: Dispatched, outcome: "ok" | "err"): unknown => {
+        const echo = (job: Dispatched, outcome: "ok" | "err"): Schema.Json => {
           const type = cmdType(job);
 
           if (type === SEND_CHUNKS) {
@@ -2921,7 +2925,7 @@ const cmdType = (job: Dispatched): string =>
 
 const hasParent = (m: unknown): boolean => typeof m === "object" && m !== null && "parent" in m;
 
-const stamp = (m: unknown, parent: string): unknown => (typeof m === "object" && m !== null ? { ...m, parent } : m);
+const stamp = <M>(m: M, parent: string): M => (typeof m === "object" && m !== null ? { ...m, parent } : m);
 
 const inputPort = (state: Live, m: unknown) =>
   Option.match(decodeTyped(m), {
