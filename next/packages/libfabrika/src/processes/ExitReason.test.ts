@@ -61,6 +61,7 @@ describe("P34c slice 1: the exit reason schema", () => {
             phase,
           });
           expect(Result.isFailure(decode({ _tag: "crashed", error: "Error" })), "the phase is required").toBe(true);
+          // SAFETY: PHASES is a tuple of strings; widening it only lets `includes` test any generated word.
           const unknown = (PHASES as ReadonlyArray<string>).includes(word) ? `${word}_` : word;
           expect(Result.isFailure(decode({ _tag: "crashed", phase: unknown })), "an unknown phase").toBe(true);
           expect(Result.isFailure(decode({ _tag: "noproc" })), "noproc is a monitor result, never an exit").toBe(true);

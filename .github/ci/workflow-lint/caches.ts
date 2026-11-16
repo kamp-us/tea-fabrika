@@ -67,9 +67,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
     );
   });
   const everyStep: [string, Record<string, unknown>][] = [
+    // SAFETY: the arrow builds a two-item array of a path and a step, and the cast names it as that tuple.
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...perRef.flatMap(([path, workflow]) =>
       Object.values(map(workflow["jobs"])).flatMap((job) =>
+        // SAFETY: `steps` returns each step as a map, so the pair here is a path and a step map, as the tuple says.
         steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),
@@ -84,9 +86,11 @@ export const lintCaches = (files: CacheFiles): string[] => {
   // so no workflow keeps one: not setup-node's own cache, not pnpm/action-setup's, and no cache
   // step whose path is the store.
   const allSteps: [string, Record<string, unknown>][] = [
+    // SAFETY: the setup action's own steps, paired with action.yml's path: a literal two-item path-and-step tuple.
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...workflows.flatMap(([path, workflow]) =>
       Object.values(map(workflow["jobs"])).flatMap((job) =>
+        // SAFETY: each workflow step comes from `steps`, which answers maps, so this pair is the tuple it is cast to.
         steps(map(job)).map((step) => [path, step] as [string, Record<string, unknown>]),
       ),
     ),

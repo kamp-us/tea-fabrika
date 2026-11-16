@@ -45,6 +45,7 @@ const failures: fc.Arbitrary<object> = fc.oneof(
 
 /** A platform object whose every method rejects with `failure`, whatever its name. */
 const rejecting = <A>(failure: unknown): A =>
+  // SAFETY: the Proxy answers every property with a rejecting method, which is all a client built on it calls.
   new Proxy(
     {},
     {
@@ -53,6 +54,7 @@ const rejecting = <A>(failure: unknown): A =>
   ) as A;
 
 /** A platform value built from plain parts: the adapter reads only the parts each law gives. */
+// SAFETY: each law hands `fake` the parts the adapter reads for it, and the adapter reads nothing else.
 const fake = <A>(value: object): A => value as A;
 
 /** Every client the shared callback serves, built on a rejecting platform object. */
@@ -107,6 +109,7 @@ describe("T695, the platform clients keep what the platform rejected with", () =
           expect(method, `${call.client}.${call.method}`).toBeTypeOf("function");
           // A real Request, so a client that hands `fetch` to a typed stub has one to read.
           const error = yield* Effect.flip(
+            // SAFETY: `clients` maps each name to a client method, and the `toBeTypeOf("function")` above proved it is one.
             (method as (request: Request) => Effect.Effect<unknown, LedgerError>)(
               new Request("http://127.0.0.1:8787/client/a/b"),
             ),
@@ -176,12 +179,16 @@ describe("T695, the worker loader keeps why a program did not load", () => {
     ({ name, build }) =>
       Effect.gen(function* () {
         const Box = programBox({ name }, build);
+        // SAFETY: `describe` fails on the damaged declaration and never reads the object's state or env.
         const box = new Box(undefined as never, undefined as never);
         const error = yield* Effect.flip(
+          // SAFETY: the box's `describe` rejects only with the ProgramDown that `programBox` maps a bad declaration to.
           Effect.tryPromise({ try: () => box.describe(), catch: (cause) => cause as ProgramDown }),
         );
         expect(error).toBeInstanceOf(ProgramDown);
+        // SAFETY: the `toBeInstanceOf(ProgramDown)` check just above holds for `error`.
         expect((error as ProgramDown).reason).toBe("load");
+        // SAFETY: `error` was checked to be a ProgramDown two lines up.
         expect(Schema.isSchemaError((error as ProgramDown).cause), "the cause is the stepper's failure").toBe(true);
       }),
   );
@@ -314,6 +321,7 @@ describe("T695, the object adapters keep what failed", () => {
                 (runtime) =>
                   Effect.tryPromise({
                     try: () => runtime.runPromise(Effect.void),
+                    // SAFETY: a failed boot of the process runtime rejects with the LedgerError its storage read raised.
                     catch: (cause) => cause as LedgerError,
                   }),
                 (runtime) => Effect.promise(() => runtime.dispose()),
@@ -340,7 +348,9 @@ describe("T695, the public route keeps what failed", () => {
         });
         const error = yield* Effect.flip(fetch(request, env, config));
         expect(error).toBeInstanceOf(LedgerError);
+        // SAFETY: the `toBeInstanceOf(LedgerError)` above holds for `error`.
         expect((error as LedgerError).reason).toBe("bad_row");
+        // SAFETY: `error` was checked to be a LedgerError two lines up, before its cause is read.
         expect((error as LedgerError).cause).toBeInstanceOf(URIError);
       }),
   );

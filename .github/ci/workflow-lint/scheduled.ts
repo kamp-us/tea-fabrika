@@ -231,6 +231,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   const env = {
     ...REPORT_ENV,
     ...Object.fromEntries(
+      // SAFETY: `Object.keys` of the `as const` SUITES object answers exactly its keys, as strings.
       (Object.keys(SUITES) as (keyof typeof SUITES)[]).map((suite) => [
         `LIMIT_${suite.toUpperCase()}`,
         limitOf(jobs, suite),
@@ -287,6 +288,7 @@ export const lintScheduled = (text: string, check: string): string[] => {
   require(gateLimits.length > 0 &&
     gateLimits.every((limit) => typeof limit === "number" && Number.isInteger(limit) && limit > 0) &&
     typeof gateLimit === "number" &&
+    // SAFETY: the `every` two lines up proved each gate limit is a whole number above zero.
     (gateLimits as number[]).reduce((sum, limit) => sum + limit, 0) < gateLimit &&
     !("continue-on-error" in gateJob) &&
     steps(gateJob).every(

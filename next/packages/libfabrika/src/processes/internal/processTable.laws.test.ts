@@ -416,6 +416,7 @@ const deliveries = (w: Watch) =>
             receiver,
             target: process,
             m: Down.make({ ref: w.ref, process, reason: CRASHED, to: w.to }),
+            // SAFETY: the spread line gives every Entry field but the five set here, so the object is a whole Entry.
             entry: {
               ...lineFor(from({ by }), Down.make({ ref: w.ref, process, reason: CRASHED, to: w.to })),
               id: signalId(w.to, w.ref, n),

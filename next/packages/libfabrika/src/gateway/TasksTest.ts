@@ -1502,6 +1502,7 @@ export const suite = (open: Effect.Effect<Store, never, Scope.Scope>) => {
     );
   }
 
+  // SAFETY: `Object.keys` of the `moves` table answers its own keys, which `Focus` names.
   for (const focus of Object.keys(moves) as Array<Focus>) {
     it.effect(
       focus === "W1"

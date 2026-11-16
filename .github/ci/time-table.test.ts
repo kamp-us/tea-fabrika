@@ -259,7 +259,9 @@ it("TT4: any input that is not a job or not a report gives an unavailable sectio
   // Plant: let readFiles skip a broken entry and call the rest read, as shard-times.ts does.
   fc.assert(
     fc.property(broken, broken, (steps, files) => {
+      // SAFETY: `broken` may be anything; the optional `steps` key is only probed, and read through `Array.isArray`.
       const isJob = Array.isArray((steps as { steps?: unknown } | null)?.steps);
+      // SAFETY: `broken` may be anything; the optional `testResults` key is only probed, and read through `Array.isArray`.
       const isReport = Array.isArray((files as { testResults?: unknown } | null)?.testResults);
       fc.pre(!isJob || readSteps(steps)._tag === "unavailable");
       fc.pre(!isReport || readFiles(files, root)._tag === "unavailable");

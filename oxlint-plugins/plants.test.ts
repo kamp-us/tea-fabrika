@@ -49,6 +49,7 @@ const firesIn = (paths: readonly string[]): ReadonlyMap<string, readonly Fire[]>
     cwd: ROOT,
     encoding: "utf8",
   });
+  // SAFETY: oxlint's JSON report has a `diagnostics` list in the shape written below.
   const report = JSON.parse(out.stdout) as {
     readonly diagnostics: readonly {
       readonly code: string;

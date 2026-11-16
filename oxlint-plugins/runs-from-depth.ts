@@ -62,6 +62,7 @@ const MESSAGE = `A law over real IO reads its case count from the test depth (de
 
 type Parented = Node & { readonly parent?: Node | null };
 
+// SAFETY: oxlint sets `parent` on each node it visits, and on the Program it is null, which `?? null` keeps.
 const parentOf = (node: Node): Node | null => (node as Parented).parent ?? null;
 
 const numberIn = (node: Node | null | undefined): number | null =>
@@ -130,6 +131,7 @@ const overridden = (node: Node): boolean => {
     return false;
   }
 
+  // SAFETY: the check above found `spread`'s type is SpreadElement, which TypeScript does not narrow from `parentOf`.
   const after = object.properties.slice(object.properties.indexOf(spread as ESTree.SpreadElement) + 1);
   return after.some((property) => property.type === "Property" && keyName(property) === "numRuns");
 };
@@ -313,6 +315,7 @@ export const runsFromDepth: CreateRule = {
 
         for (const node of nodes) {
           if (node.type === "VariableDeclarator" && node.id.type === "Identifier") {
+            // SAFETY: a VariableDeclarator's `parent` is always its VariableDeclaration, which holds `kind`.
             const constant = (node as Node & { readonly parent: ESTree.VariableDeclaration }).parent.kind === "const";
             const value = numberIn(node.init);
 

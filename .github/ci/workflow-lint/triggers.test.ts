@@ -157,6 +157,7 @@ const plants: Plant[] = [
   [
     "the merge queue's group stops running the checks",
     (w) => {
+      // SAFETY: `valid` writes `on` as a map of events, merge_group among them.
       delete (w.on as Record<string, unknown>)["merge_group"];
     },
   ],

@@ -25,6 +25,7 @@ const faults = [
 /** A platform stub whose every method rejects with `fault`, standing in for a binding, storage or
  *  bucket; a method `own` holds answers as `own` says. */
 const rejecting = <A>(fault: unknown, own: object = {}) =>
+  // SAFETY: the Proxy gives a rejecting method for each name a client calls, and `own` answers the rest.
   new Proxy(own, {
     get: (target, key) =>
       Reflect.has(target, key)
@@ -79,6 +80,7 @@ it.effect.prop(
 const processMethods = Object.keys(ProcessClient.make(rejecting(new Error("probe"))));
 
 /** A Process stub whose every method resolves with `answer`, as the object's bridge does. */
+// SAFETY: the Proxy answers every method a Process client calls with `answer`, as the object's bridge does.
 const answeringProcess = <A>(answer: unknown) => new Proxy({}, { get: () => async () => answer }) as A;
 
 it.effect.prop(
@@ -136,6 +138,7 @@ const calls = Object.keys(GatewayClient.make(rejecting(new Error("probe")))).fil
 
 /** A Connection stub whose every call resolves with `answer`, as the object's bridge answers. */
 const answering = <A>(answer: unknown) =>
+  // SAFETY: the Proxy answers every call a Connection client makes, which is all it reads of the stub.
   new Proxy(
     {},
     {

@@ -71,6 +71,7 @@ const downs = (letters: ReadonlyArray<{ readonly m: unknown }>) =>
   });
 
 /** A request as a client sends it: raw, never passed through a schema's `make`. */
+// SAFETY: the law builds raw requests on purpose, with fields past the schema's caps, as a client may send them.
 const raw = (request: object) => request as Start;
 
 /** The call fails with a ProcessError and the ledger holds exactly what it held before. */
@@ -286,6 +287,7 @@ describe("P33 rule 1, an over-cap text is refused as a typed error and writes no
         yield* seed(store);
         const client = {
           owner: Owner.cases.brain.make({}),
+          // SAFETY: the client name `over` is past the cap on purpose, so this recipient skips `make` to reach the refusal.
           recipient: { _tag: "client", client: over, session: X } as typeof Recipient.Type,
         };
         yield* refusedWritingNothing(

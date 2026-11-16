@@ -64,6 +64,7 @@ it.effect(
       const reached = new Set<string>();
       const check = Effect.fnUntraced(function* (choice: Case) {
         const sent: Array<unknown> = [];
+        // SAFETY: the hands layer calls only PROJECT's `hands` method, which this double records.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: fake RPC handles supply only the methods this layer calls
         const env = {
           PROJECT: {

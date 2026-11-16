@@ -359,6 +359,7 @@ it("the library's and a program's code may not import the test primitives, and t
         ),
       ),
       ([place, path, form]) => {
+        // SAFETY: the code places are a tuple of strings; the cast widens it only so `includes` can test any place.
         const refused = (CODE_PLACES as ReadonlyArray<string>).includes(place);
         const one: Case = { text: `${FORMS[form]!(VITEST, 0)}\n`, lines: refused ? [1] : [] };
         check(path, one);

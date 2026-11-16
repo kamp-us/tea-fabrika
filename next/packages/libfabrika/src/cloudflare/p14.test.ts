@@ -57,6 +57,7 @@ const world = (port: number) => {
           },
       },
     );
+  // SAFETY: each namespace answers with a stub that fails on any call, and these routes reach only these four.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node doubles implement only the RPC members these routes call
   const env = {
     INSTANCE: JSON.stringify(input),

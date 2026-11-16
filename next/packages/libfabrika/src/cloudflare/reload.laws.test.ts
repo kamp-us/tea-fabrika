@@ -160,6 +160,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
       values.set(key, value);
     },
   };
+  // SAFETY: the reload path reads the Project's name, its storage and the tail export, which this fixture gives.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node fixture implements the platform members Project reads; only workerd can construct a full DurableObjectState
   const ctx = {
     id: { name: "project-test" },
@@ -201,6 +202,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
   let scope: Scope.Closeable;
   let doorPolicy: ProjectDoorOptions["policy"];
   const run = <A, E>(work: Effect.Effect<A, E, ProjectService>) => Effect.suspend(() => Effect.provide(work, context));
+  // SAFETY: the composition calls PROJECT's code install, failure and object calls and PROCESS's lifecycle calls, doubled below.
   // oxlint-disable-next-line fabrika/no-type-assertions -- Node binding doubles implement only the RPC methods this composition calls, without workerd's nominal brands
   const env = {
     INSTANCE: JSON.stringify(START),
@@ -348,6 +350,7 @@ const instance = Effect.fnUntraced(function* (builtIn: Fixture, others: Readonly
         bootstrap: [{ name: "counter:1", id: "counter:1", program: PROGRAM }],
         door: (options) => {
           doorPolicy = options.policy;
+          // SAFETY: `door` holds each door method the Project calls, built from a list of names, which drops its type.
           return Effect.succeed(door as never);
         },
       }),
@@ -417,6 +420,7 @@ const install = Effect.fnUntraced(function* (i: Instance, id: string, f: Fixture
   const source = sourceFor(f, pad);
   const digest = yield* hash(source);
   i.sources.set(digest, source);
+  // SAFETY: no caller passes `from`, so it is always "watch", one of the origins the From schema takes.
   const answer = yield* i.run(i.p.codeInstall({ id, program: PROGRAM, hash: digest, source, from: from as never }));
   return { digest, answer };
 });
@@ -1239,6 +1243,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
             expect(loaded[0]?.body).toMatchObject({ program: PROGRAM, hash: i.builtHash, was: null, from: "boot" });
 
             for (const e of entries) {
+              // SAFETY: a start entry's body may carry the `code` it starts on, an object with its `hash`, or none; `typeof` below checks it.
               const start = e.body.code as { readonly hash?: string } | undefined;
 
               if (e.stream.startsWith("processes/") && typeof start?.hash === "string") {
@@ -1303,6 +1308,7 @@ describe("P15 slice 1: the brain installs and selects code", () => {
                 if (move === "control") {
                   const response = yield* ask("project", "codeInstall", TOKEN);
                   expect(response.status).toBe(200);
+                  // SAFETY: a 200 from codeInstall carries the installed answer under `value`, tagged loaded or same.
                   const answer = ((yield* json(response)) as { value: { _tag: string } }).value;
                   expect(["loaded", "same"]).toContain(answer._tag);
                 } else if (move === "wrong_target") {

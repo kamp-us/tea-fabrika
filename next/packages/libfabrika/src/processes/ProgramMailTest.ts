@@ -61,6 +61,7 @@ const BRAIN = "SHA256:brain";
 
 const brain = () => ({
   owner: Owner.cases.brain.make({}),
+  // SAFETY: PIDS holds 40 ids (Process.test-support.ts), so index 3 is present.
   recipient: Recipient.cases.client.make({ client: "window-a", session: PIDS[3] as string }),
   by: BRAIN,
 });
@@ -175,6 +176,7 @@ const said = (cell: Cell, over: Partial<From> = {}): From =>
 
 /** The store's Sql, with a cut that throws on the `after`-th INSERT of the next call. */
 const cutting = (sql: Sql) => {
+  // SAFETY: `after` starts empty and the cut only ever sets a count there.
   const fault = { after: null as number | null, hit: false };
   const wrapped: Sql = {
     exec: (query, ...params) => {
@@ -258,6 +260,7 @@ const possible = (world: World, moves: ReadonlyArray<Move>): ReadonlyArray<Move>
     retry_other: world.sent.size > 0,
     stop: stoppable(world).length > 0,
     restart: ended(world).length > 0 && world.pids < PIDS.length - 1,
+    // SAFETY: SOURCES is a tuple of names; widened only so `includes` can test any stale name.
     stale_send: world.stale.some((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
     register: !world.lives.has(HELPER) && world.pids < PIDS.length - 1,
     cut: sources.some((s) => reachable(world, s.name).length > 0),
@@ -466,6 +469,7 @@ const walk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: ReadonlyArr
         }
         case "stale_send": {
           const old = choose(
+            // SAFETY: SOURCES is widened to a string list only so `includes` can test each stale entry's name.
             world.stale.filter((s) => (SOURCES as ReadonlyArray<string>).includes(s.name)),
             cell.pick,
           );
@@ -767,6 +771,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
       switch (move) {
         case "start_child": {
           const starter = choose(starters(), cell.pick);
+          // SAFETY: `starter` comes from `starters()`, which lists only names the world holds.
           const self = world.names.get(starter) as { program: string; process: string };
           const program = choose(startsTo(self.program), cell.alt);
           const name = `${program}:${100 + ++world.n}`;
@@ -801,6 +806,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
             ),
             cell.pick,
           );
+          // SAFETY: the starter picked above is one of `starters()`, each a name `world.names` holds.
           const self = world.names.get(starter) as { program: string; process: string };
           const [name, held] = choose(
             [...world.names.entries()].filter(([n, h]) => n !== starter && startsTo(self.program).includes(h.program)),
@@ -830,6 +836,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
           break;
         }
         case "start_forbidden": {
+          // SAFETY: rogue:1 is started at boot and never stopped, so `world.names` always holds it.
           const self = world.names.get("rogue:1") as { program: string; process: string };
           const name = choose(
             [...world.names.keys()].filter((n) => n !== "rogue:1"),
@@ -858,6 +865,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
         }
         case "exit": {
           const name = choose(live(), cell.pick);
+          // SAFETY: `name` is picked from `live()`, which lists only names in `world.names`.
           const held = world.names.get(name) as { process: string; live: boolean };
           yield* must(
             ProcessManager.use((p) => p.exit(held.process, SHUTDOWN, from())),
@@ -897,6 +905,7 @@ const family = (open: Effect.Effect<Store, never, Scope.Scope>, seen: Set<string
             [...world.names.keys()].filter((n) => n !== source),
             cell.alt,
           );
+          // SAFETY: `source` is a name the world holds, as this move is only offered for one.
           const self = world.names.get(source) as { process: string };
           const answer = yield* run(
             ProgramMail.use((mail) =>
@@ -1039,6 +1048,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
       const move = choose(options, cell.move);
       const before = snapshot(store.sql);
       const unchanged = (message: string) => expect(snapshot(store.sql), message).toEqual(before);
+      // SAFETY: the writer is started before the walk and kept live, so `lives` has its process.
       const writer = { name: WRITER, process: lives.get(WRITER) as string };
 
       switch (move) {
@@ -1058,6 +1068,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
             done.add("full");
           } else {
             expect(Result.isSuccess(answer), `L6: ${unread} unread under cap ${cap} is saved`).toBe(true);
+            // SAFETY: the `isSuccess` check above proved the send saved, and a saved send answers a receipt.
             sent.push({ delivery, receipt: Result.getOrThrow(answer) as Receipt });
             world.newest++;
             done.add(unread === cap - 1 ? "fills" : "send");
@@ -1080,6 +1091,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
             move === "ack"
               ? world.acked + 1 + (cell.pick % (world.newest - world.acked))
               : 1 + (cell.pick % world.acked);
+          // SAFETY: the reader is started before the walk, so `lives` holds its process.
           const answer = yield* run(ProcessManager.use((p) => p.ack(lives.get(READER) as string, pos, from())));
           expect(Result.isSuccess(answer), `L8: the live reader acks pos ${pos}`).toBe(true);
 
@@ -1100,6 +1112,7 @@ const capWalk = (open: Effect.Effect<Store, never, Scope.Scope>, moves: Readonly
           break;
         }
         case "restart": {
+          // SAFETY: the reader's live process is always in `lives` while the walk runs.
           const process = lives.get(READER) as string;
           const exited = yield* run(ProcessManager.use((p) => p.exit(process, SHUTDOWN, from())));
           expect(Result.isSuccess(exited), "the reader stops").toBe(true);

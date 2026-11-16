@@ -76,6 +76,7 @@ const plants: Plant[] = [
   ],
   // F1 to F3, the field row check inside check (ticket 985). Source plants, each run once on
   // workflow-lint.ts and restored: the rows anywhere in check (red: before lint); F3 dropped (red: a legs job, a field job comes back).
+  // SAFETY: each row below is a plant's name and the function that applies it, written out by hand.
   ...(
     [
       [
@@ -96,6 +97,7 @@ const plants: Plant[] = [
       ["the row check runs on the check flag", (w) => (step(w, "check", "field rows")["if"] = checkFlag)],
       [
         "the row check without its base",
+        // SAFETY: `valid` gives check's field rows step an `env` map with BASE in it.
         (w) => Reflect.deleteProperty(step(w, "check", "field rows")["env"] as Record<string, string>, "BASE"),
       ],
       ["the row check bypassed", (w) => (step(w, "check", "field rows")["run"] = "echo passed")],

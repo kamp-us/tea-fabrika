@@ -483,7 +483,10 @@ const demonitored = (store: Storage) =>
   store
     .rows()
     .filter((row) => row._tag === "demonitored")
-    .map((row) => row.body as { readonly ref: string; readonly reason?: unknown });
+    .map(
+      // SAFETY: a `demonitored` row's body is written with its `ref` and, when given, its reason.
+      (row) => row.body as { readonly ref: string; readonly reason?: unknown },
+    );
 
 describe("P33, a DOWN is a signal only under its signal id and a matching watch", () => {
   it.effect("a DOWN-tagged letter under any other id is plain mail: cancel never drops it", () => {
@@ -778,6 +781,7 @@ describe("P18 P1, a client session's leave ends its watches", () => {
             expect(
               added
                 .map((row) => {
+                  // SAFETY: each row added here is a `demonitored` row, whose body holds its `ref`.
                   const body = row.body as {
                     readonly ref: string;
                     readonly to: typeof Recipient.Type;

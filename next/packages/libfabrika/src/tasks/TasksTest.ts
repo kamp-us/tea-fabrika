@@ -110,6 +110,7 @@ export const fcRecorded = fc.record({
 export type Said = Omit<Recorded, "seen">;
 
 /** A value as it comes back from JSON: equal in every field, never the same object. */
+// SAFETY: `value` round-trips through JSON, and every value this suite copies is plain data, so it comes back the same type.
 export const copied = <A>(value: A): A => JSON.parse(JSON.stringify(value)) as A;
 
 /** The item a tape number picks; never called on an empty list. */
@@ -169,6 +170,7 @@ export const broken = (value: object, pick: number, bad: ReadonlyArray<readonly 
   const [key, replacement] = choose(bad, pick);
 
   if (replacement === MISSING) {
+    // SAFETY: every value `broken` is given is one of the task records, which are plain objects keyed by string.
     const { [key]: _gone, ...rest } = value as Record<string, unknown>;
     return rest;
   }
@@ -319,6 +321,7 @@ const INSERT = /^\s*INSERT\s+(?:OR\s+\w+\s+)?INTO\s+entries\b/i;
 
 /** The store's Sql with one planted fault: refuse the next entry insert, or the statement after it. */
 const cutting = (sql: Sql) => {
+  // SAFETY: `at` starts empty and is only ever set to "before" or "after" when the fault is armed.
   const fault = { at: null as "before" | "after" | null, armed: false };
   const wrapped: Sql = {
     exec: (query, ...params) => {
@@ -402,6 +405,7 @@ const expected = (saved: Saved): Task => {
             : assignment !== undefined && result !== undefined && saved.collection !== undefined
               ? State.cases.collected.make({ request, assignment, result, collection: saved.collection })
               : expect.fail("the fold reached a phase without its facts");
+  // SAFETY: the branches above built `state` from the saved facts, and `events` are the saved events, which is a Task.
   return { state, events: saved.events } as Task;
 };
 
@@ -850,10 +854,12 @@ const legalCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tas
 const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks: Call) => {
   const saved = [...world.tasks.values()];
   const which = cell.variant % 4;
+  // SAFETY: the record is broken on purpose, so the call below can show that the store refuses it.
   const badRecord = broken(recorded, cell.pick, BAD_RECORDED) as Recorded;
 
   if (which === 0 || saved.length === 0) {
     const request = choose(tape.requests, world.next < tape.requests.length ? world.next : cell.pick);
+    // SAFETY: the request is broken on purpose, so the store's refusal of a bad request can be seen.
     return cell.pick % 3 === 0
       ? tasks((j) => j.request(request, badRecord))
       : tasks((j) => j.request(broken(request, cell.pick, BAD_REQUEST) as Request, recorded));
@@ -863,6 +869,7 @@ const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks
   const execution = task.execution ?? "any-execution";
 
   if (which === 1) {
+    // SAFETY: the executor handed to `take` is broken on purpose, so the law sees the store refuse it.
     return cell.pick % 3 === 0
       ? tasks((j) => j.take(task.request.id, able(task, cell), badRecord))
       : tasks((j) => j.take(task.request.id, broken(able(task, cell), cell.pick, BAD_EXECUTOR) as Executor, recorded));
@@ -872,6 +879,7 @@ const badCall = (world: World, tape: Tape, cell: Cell, recorded: Recorded, tasks
     return tasks((j) => j.started(task.request.id, execution, badRecord));
   }
 
+  // SAFETY: the result handed to `finish` is broken on purpose, to see the store refuse it.
   return cell.pick % 3 === 0
     ? tasks((j) => j.finish(task.request.id, execution, cell.result, badRecord))
     : tasks((j) => j.finish(task.request.id, execution, brokenResult(cell.result, cell.pick) as Result, recorded));

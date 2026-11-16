@@ -33,6 +33,7 @@ const cli = (cases: ReadonlyMap<string, readonly number[]>) => {
     ["--format=json", ...[...cases.keys()].map((file) => relative(root, file))],
     { cwd: root, encoding: "utf8" },
   );
+  // SAFETY: oxlint's `--format=json` output is a report with a `diagnostics` list in this shape.
   const report = JSON.parse(out.stdout) as {
     diagnostics: Array<{
       code: string;

@@ -57,6 +57,7 @@ it.effect.prop(
             ? Promise.resolve({ _tag: ErrorTag, error: encodeRpcError(new SinkError({ reason, held })) })
             : Promise.reject(thrown);
         };
+        // SAFETY: `recordStub` reaches only RECORD's `getByName`, whose four methods are doubled below.
         // oxlint-disable-next-line fabrika/no-type-assertions -- edge: only RECORD.getByName is consumed by recordStub; other platform handles are unused
         const env = {
           RECORD: {

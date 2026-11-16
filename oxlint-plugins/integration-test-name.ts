@@ -106,6 +106,7 @@ export const integrationTestName: CreateRule = {
       },
       NewExpression(node) {
         if (node.callee.type === "Identifier" && sqlite.has(node.callee.name)) {
+          // SAFETY: a `new` call's first argument is a node, or missing when the call has none, and `literal` takes either.
           const path = literal(node.arguments[0] as Node | undefined);
 
           if (path !== ":memory:") {
@@ -114,6 +115,7 @@ export const integrationTestName: CreateRule = {
         }
       },
       CallExpression(node) {
+        // SAFETY: a call's callee is an expression node, which `Node` covers; `Super` only shows in a constructor's `super()`, read as no match.
         const callee = node.callee as Node;
 
         if (callee.type === "Identifier") {
@@ -131,6 +133,7 @@ export const integrationTestName: CreateRule = {
         }
 
         const method = callee.property.name;
+        // SAFETY: the member's object is an expression node here, since `super.x` is not a dotted name `dotted` matches.
         const object = dotted(callee.object as Node);
         const space = object === null ? undefined : spaces.get(object);
 

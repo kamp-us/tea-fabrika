@@ -137,7 +137,10 @@ export const fcBadReason = (reason: ExitReason): fc.Arbitrary<unknown> =>
     fc.constant(raw("crashed", { error: "Error" })),
     fc
       .string({ minLength: 1, maxLength: 20 })
-      .filter((phase) => !(PHASES as ReadonlyArray<string>).includes(phase))
+      .filter(
+        // SAFETY: PHASES is a string tuple; widened here only so `includes` can test any generated phase.
+        (phase) => !(PHASES as ReadonlyArray<string>).includes(phase),
+      )
       .map((phase) => raw("crashed", { phase })),
     fc.constantFrom(...PHASES).map((phase) => raw("crashed", { phase, error: "" })),
     fc

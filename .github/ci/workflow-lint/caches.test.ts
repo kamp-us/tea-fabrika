@@ -65,6 +65,7 @@ for (const [name, plant, error] of [
     "C1b: setup-node's own cache in a workflow that runs on main only",
     (f: Files) => {
       const jobs = Object.values(
+        // SAFETY: mutation.yaml's `jobs` key is a map of jobs, each with a `steps` list; the YAML parse leaves it untyped.
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
       jobs[0]!.steps.push({ uses: "actions/setup-node@v7", with: { "node-version": "26.13.0", cache: "pnpm" } });
@@ -82,6 +83,7 @@ for (const [name, plant, error] of [
     "C1b: pnpm/action-setup's own cache in a workflow that runs on main only",
     (f: Files) => {
       const jobs = Object.values(
+        // SAFETY: the same mutation.yaml `jobs` map as in the plant above, each job holding its `steps` list.
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
       jobs[0]!.steps.push({ uses: "pnpm/action-setup@v6", with: { run_install: false, cache: true } });
@@ -92,6 +94,7 @@ for (const [name, plant, error] of [
     "C1b: a main-only save of the pnpm store",
     (f: Files) => {
       const jobs = Object.values(
+        // SAFETY: mutation.yaml's parsed `jobs` is a map of jobs with steps, as the two plants above also read it.
         f.workflows[".github/workflows/mutation.yaml"]!["jobs"] as Record<string, { steps: unknown[] }>,
       );
       jobs[0]!.steps.push({
@@ -156,6 +159,7 @@ for (const [name, plant, error] of [
   [
     "C4: a workspace package glob the cache does not hold",
     (f: Files) => {
+      // SAFETY: pnpm-workspace.yaml's `packages` key is a list of glob strings; the YAML parse types it unknown.
       (f.workspace["packages"] as string[]).push("tools/*");
     },
     "check.yaml: the tsc cache restores and saves node_modules/.cache/tsc in each pnpm-workspace.yaml package glob, in its order",

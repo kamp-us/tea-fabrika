@@ -534,6 +534,7 @@ function parseSection(
     if (
       !inFence &&
       isBoldOnlyLine(trimmed) &&
+      // SAFETY: `includes` only compares; any string may be asked, and only the three headings answer true.
       !standardHeadings.includes(trimmed as StandardHeading) &&
       !trimmed.startsWith("**Example**")
     ) {
@@ -734,6 +735,7 @@ function isHeadingLine(line: string | undefined): boolean {
 
   const trimmed = line.trim();
   return (
+    // SAFETY: `includes` on the heading tuple only tests the trimmed line for equality, so widening the line is safe.
     standardHeadings.includes(trimmed as StandardHeading) ||
     trimmed.startsWith("**Example**") ||
     isNearMissHeading(trimmed) ||
@@ -745,6 +747,7 @@ function isHeadingLine(line: string | undefined): boolean {
 function isNearMissHeading(line: string): boolean {
   return (
     /^\*\*(When to use|When To Use|Details|Gotchas).*\*\*/.test(line) &&
+    // SAFETY: a near-miss line is any string; the cast lets `includes` test it against the three exact headings.
     !standardHeadings.includes(line as StandardHeading)
   );
 }

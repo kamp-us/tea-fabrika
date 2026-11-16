@@ -46,6 +46,7 @@ const sendable = (code: number) => code === 1000 || (code >= 3000 && code <= 499
 
 const HOUR = 3_600_000;
 const H = 1_790_002_800_000;
+// SAFETY: each law gives `fake` the platform members the connection code reads in it, and the code reads no others.
 const fake = <A>(value: object): A => value as A;
 
 const database = Effect.acquireRelease(

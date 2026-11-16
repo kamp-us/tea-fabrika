@@ -88,9 +88,11 @@ const lint = (files: Record<string, string>, runner = false, args: string[] = []
     expect(ran.signal).toBeNull();
 
     if (runner) {
+      // SAFETY: an empty hit list, given its element type: the runner's own run reports nothing.
       return { ran, hits: [] as Diagnostic[] };
     }
 
+    // SAFETY: the run's stdout is oxlint's JSON report, whose `diagnostics` hold the fields `Diagnostic` names.
     const report = JSON.parse(ran.stdout) as { diagnostics: Diagnostic[] };
     expect(
       report.diagnostics.filter((d) => d.code.includes("parse")),

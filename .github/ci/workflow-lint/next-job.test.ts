@@ -189,6 +189,7 @@ const plants: Plant[] = [
     (w) => {
       const found = step(w, "next", "vitest");
       found.run = String(found.run).replace("--project next ", "$PROJECTS ");
+      // SAFETY: `valid` writes the next job's vitest step with an `env` map of strings.
       (found["env"] as Record<string, string>)["PROJECTS"] =
         `\${{ github.event_name == 'push' && '--project next --project next-integration' || '--project next' }}`;
     },
@@ -556,6 +557,7 @@ const plants: Plant[] = [
   [
     "next has no filter",
     (w) => {
+      // SAFETY: the vitest step from `valid` has an `env` map that holds FILTER.
       delete (step(w, "next", "vitest").env as Record<string, string>)["FILTER"];
     },
   ],
@@ -564,6 +566,7 @@ const plants: Plant[] = [
   [
     "next narrows the reader tests with --changed",
     (w) => {
+      // SAFETY: this plant sets CHANGED in the vitest step's `env`, which `valid` writes as a string map.
       (step(w, "next", "vitest").env as Record<string, string>)["CHANGED"] = changedOnPullRequests;
     },
   ],
@@ -588,12 +591,14 @@ const plants: Plant[] = [
     (w) => {
       const step = w.jobs.next.steps[0]!;
       step.run = step.run.replace("$FILTER ", "$FILTER $CHANGED ");
+      // SAFETY: the first next step in `valid` is vitest, whose `env` holds SHARD and FILTER as strings.
       (step.env as Record<string, string>)["CHANGED"] = changedUnlessReaders;
     },
   ],
   [
     "next's vitest step takes another env key",
     (w) => {
+      // SAFETY: next's first step is the vitest step, and `valid` gives it an `env` map of strings.
       (w.jobs.next.steps[0]!.env as Record<string, string>)["READERS"] = `\${{ needs.changes.outputs.readers }}`;
     },
   ],
