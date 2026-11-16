@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { Answer, listUsd, NO_SPENT, runTurn, type Spent, stepRow } from "./agents.ts";
 import {
   backstopFrom,
-  briefOf,
+  renderBrief,
   type Budget,
   ChainRecord,
   estimateIn,
@@ -20,14 +20,14 @@ import {
   exitOf,
   judgedOf,
   type Line,
-  lineOf,
+  parseLine,
   looseningEnd,
   makeMachine,
   judgedMove,
   lacks,
   QUEST_STEPS,
   moveFrom,
-  moveOf,
+  nextMove,
   providers,
   RetriesExhausted,
   sectionsOf,
@@ -107,7 +107,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
     };
     fc.assert(
       fc.property(step, fc.constantFrom("done", "skip:step_said"), word, (s, o, reason) => {
-        const m = moveOf(s, line(o, "h", reason), 0, 3);
+        const m = nextMove(s, line(o, "h", reason), 0, 3);
         expect(m._tag === "step" ? m.step : m._tag).toBe(walk[s]);
 
         if (m._tag === "step") {
@@ -123,15 +123,15 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
     fc.assert(
       fc.property(step, questStep, word, (from, to, reason) => {
         fc.pre(from !== to);
-        const m = moveOf(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
+        const m = nextMove(from, line(`send:${to}:step_said`, "h", reason), 0, 3);
         expect(m).toMatchObject({ _tag: "step", step: to });
 
         if (m._tag === "step") {
           expect(m.note).toContain(reason);
         }
 
-        expect(moveOf(from, line("send:plan:plancheck", "h", reason), 0, 3)._tag).toBe("park");
-        const toMutation = moveOf(from, line("send:mutation:step_said", "h", reason), 0, 3);
+        expect(nextMove(from, line("send:plan:plancheck", "h", reason), 0, 3)._tag).toBe("park");
+        const toMutation = nextMove(from, line("send:mutation:step_said", "h", reason), 0, 3);
         expect(toMutation._tag).toBe("park");
 
         if (toMutation._tag === "park") {
@@ -143,11 +143,11 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   });
 
   // 2026-11-11: a tests step on Codex answered send tests round after round. Plant: drop the
-  // `to === step` check in moveOf, and every case here runs the same step again.
+  // `to === step` check in nextMove, and every case here runs the same step again.
   it("property: a send to the step that sent it is never another round of that step: it goes to judgment", () => {
     fc.assert(
       fc.property(questStep, fc.nat({ max: 4 }), word, (s, stucks, reason) => {
-        const m = moveOf(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
+        const m = nextMove(s, line(`send:${s}:step_said`, "h", reason), stucks, 3);
         expect(m).toEqual({ _tag: "judge" });
       }),
       options,
@@ -157,8 +157,8 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   it("a question goes to judgment, a lockfile ask parks with drive's own words", () => {
     fc.assert(
       fc.property(step, word, (s, reason) => {
-        expect(moveOf(s, line("ask:lead:question", "h", reason), 0, 3)._tag).toBe("judge");
-        const m = moveOf(s, line("ask:lead:lockfile", "h", reason), 0, 3);
+        expect(nextMove(s, line("ask:lead:question", "h", reason), 0, 3)._tag).toBe("judge");
+        const m = nextMove(s, line("ask:lead:lockfile", "h", reason), 0, 3);
         expect(m).toEqual({ _tag: "park", reason });
       }),
       options,
@@ -173,7 +173,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
         expect(slotRefusal(o)).toBe(slot ? check : null);
 
         if (verb === "refused") {
-          expect(moveOf(s, line(o, "h"), 0, 3)._tag).toBe("park");
+          expect(nextMove(s, line(o, "h"), 0, 3)._tag).toBe("park");
         }
       }),
       options,
@@ -199,7 +199,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   it("a stuck goes to judgment until MaxStucks in a row on one step, then parks", () => {
     fc.assert(
       fc.property(step, fc.nat({ max: 6 }), fc.integer({ min: 1, max: 5 }), word, (s, stucks, max, reason) => {
-        const m = moveOf(s, line(`stuck:${reason.replaceAll(" ", "_")}`, "h", reason), stucks, max);
+        const m = nextMove(s, line(`stuck:${reason.replaceAll(" ", "_")}`, "h", reason), stucks, max);
         expect(m._tag).toBe(stucks >= max ? "park" : "judge");
       }),
       options,
@@ -209,7 +209,7 @@ describe("T341 the chain's moves follow the five verbs, today's tooling", () => 
   it("every outcome has exactly one move, never a throw", () => {
     fc.assert(
       fc.property(step, outcome, fc.nat({ max: 4 }), fc.integer({ min: 1, max: 8 }), (s, o, stucks, max) => {
-        const m = moveOf(s, line(o, "h"), stucks, max);
+        const m = nextMove(s, line(o, "h"), stucks, max);
         expect(["step", "judge", "open", "park"]).toContain(m._tag);
       }),
       options,
@@ -266,7 +266,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
     fc.assert(
       fc.property(step, sha, sha, fc.nat({ max: 20 }), word, (s, head, root, round, note) => {
         const cut = sectionsOf(questBrief);
-        const text = briefOf(cut, s, {
+        const text = renderBrief(cut, s, {
           ticket: "7",
           branch: "fabrikalfa/x",
           plan: "p.md",
@@ -317,7 +317,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
     const commit = fc.record({ step: fc.constantFrom("tests", "build", "lead", "unsigned"), sha });
     fc.assert(
       fc.property(step, fc.array(commit, { maxLength: 8 }), (s, commits) => {
-        const text = briefOf(sectionsOf(questBrief), s, {
+        const text = renderBrief(sectionsOf(questBrief), s, {
           ticket: "7",
           branch: "fabrikalfa/x",
           plan: "p.md",
@@ -340,7 +340,7 @@ describe("T341 the quest brief is cut into one brief per step, today's tooling",
       }),
       options,
     );
-    const unread = briefOf(sectionsOf(questBrief), "tests", {
+    const unread = renderBrief(sectionsOf(questBrief), "tests", {
       ticket: "7",
       branch: "fabrikalfa/x",
       plan: "p.md",
@@ -392,7 +392,7 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
     fc.assert(
       fc.property(outcome, sha, word, fc.integer({ min: 0, max: 40 }), (o, head, reason, exit) => {
         const out = `keep box x: busy\n${JSON.stringify({ outcome: "plan-only" })}\n${JSON.stringify({ outcome: o, head, reason, report: null, box: "b", exit })}\n`;
-        expect(lineOf(out, 1)).toEqual({
+        expect(parseLine(out, 1)).toEqual({
           outcome: o,
           head,
           reason,
@@ -402,7 +402,7 @@ describe("T341 drive's last line is what the chain reads, today's tooling", () =
           exit,
           listUsd: null,
         });
-        expect(lineOf("nothing here\n", 30)).toBeNull();
+        expect(parseLine("nothing here\n", 30)).toBeNull();
       }),
       options,
     );
@@ -1613,9 +1613,9 @@ describe("T675 a quest stops at its budget (0076), today's tooling", () => {
     fc.assert(
       fc.property(outcome, word, fc.option(fc.integer({ min: 0, max: 9_999 })), (o, reason, usd) => {
         const fault = faultFrom(o, reason);
-        const sent = lineOf(JSON.stringify({ outcome: o, reason, fault, listUsd: usd }), 0);
+        const sent = parseLine(JSON.stringify({ outcome: o, reason, fault, listUsd: usd }), 0);
         expect(sent).toMatchObject({ fault, listUsd: usd });
-        expect(lineOf(JSON.stringify({ outcome: o, reason }), 0)).toMatchObject({ fault, listUsd: null });
+        expect(parseLine(JSON.stringify({ outcome: o, reason }), 0)).toMatchObject({ fault, listUsd: null });
       }),
       options,
     );

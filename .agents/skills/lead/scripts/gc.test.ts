@@ -5,7 +5,7 @@ import { join } from "node:path";
 import fc from "fast-check";
 import { afterAll, describe, expect, it } from "vitest";
 import {
-  backupsOf,
+  backups,
   deadFacts,
   decide,
   decidePin,
@@ -134,7 +134,7 @@ describe("box gc, today's tooling", () => {
   it("backups go to a fabrikalfa/ -wip branch, the box's own branch first", () => {
     fc.assert(
       fc.property(seen, ({ name, git }) => {
-        const to = backupsOf(name, git?.branch ?? null);
+        const to = backups(name, git?.branch ?? null);
 
         for (const b of to) {
           expect(b).toMatch(/^fabrikalfa\/.+(?<!-wip)-wip$/);

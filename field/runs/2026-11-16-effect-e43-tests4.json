@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-effect-e43-tests4",
+  "ticket": "1075",
+  "pr": null,
+  "started": "2026-11-15T23:52:55-08:00",
+  "ended": "2026-11-16T00:01:30-08:00",
+  "parent": null,
+  "active": null,
+  "role": "step",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "done",
+  "why": "Fourth tests round for judgment slice E43 of the Effect-check sweep (missingPipeableSignature), lead tooling: clear the exam-path blockers build2 (998d6e5) left on 7 product hits under .agents, so the next build can give them Function.dual with data-first callers unchanged. (a) Six functions were held word for word in agents-ledger.json for fabrika(no-of), so a dual rewrite of their line would have pruned the entry and failed lint on the old name. Each is renamed to a plain name per docs/direction/schema-classes-not-of-helpers.md (a name with no data type to own it is a plain named function, no Of): chain.ts lineOf to parseLine, moveOf to nextMove, briefOf to renderBrief; drive.ts reportOf to freshReport (writtenReport was taken by its caller), startedOf to parseStarted; gc.ts backupsOf to backups. The six ledger entries are removed, none added. The rename follows each declaration's callers in the same product file (chain.ts 2, drive.ts 2, gc.ts 1), chain.ts's header comment naming moveOf, and the comment above briefOf that said the ledger held its line (no longer true), and the importing tests chain.test.ts, drive.test.ts and gc.test.ts. No function body changed and no Function.dual was added. (b) Level.test.ts:47's const next now has the type Result.Result<Level.Sev0, string>, so a dual Level.step typechecks there; the law asserts the same as before.",
+  "tokens": null,
+  "tools": null,
+  "minutes": 9,
+  "note": "Checked with a temporary Function.dual(3) on Level.step (restored by copy before commit): the .agents project's tsc --noEmit then fails at Level.test.ts:47 with TS7022 without the annotation and passes there with it. The same TS7022 then shows at Level.ts:128, the const next inside fold, which is product code: the build gives it the same type when it duals step. No other caller of the six old names exists in the repo (rg); same-named functions in apps/, packages/, programs/ and next/ are other functions. Tests ran at e7c2d27 plus this change, one file at a time on Node 26.13.0: chain.test.ts 63, drive.test.ts 65, gc.test.ts 15, sev Level.test.ts 6 and oxlint-plugins ledger.test.ts 7, all green. pnpm format, pnpm lint (NODE_OPTIONS=--max-old-space-size=6144), the list ratchet and one pnpm typecheck pass. No lock line, no tsconfig change, no disable or @effect-diagnostics comment, no ledger entry added. Left for the build: the 7 product hits themselves (chain.ts parseLine, nextMove, renderBrief; drive.ts freshReport, parseStarted; gc.ts backups; Level.ts step, with fold's const next typed).",
+  "plants": [
+    {
+      "law": ".agents/skills/sev/scripts/Level.test.ts: property: whatever commands are tried, the lines written fold, and every opened comes after a close or first, so two sev0s are never open at once",
+      "plant": "Level.step wrapped in Function.dual(3) with data-first and data-last overloads, and the test's const next left without a type",
+      "result": "red"
+    },
+    {
+      "law": ".agents/skills/sev/scripts/Level.test.ts: property: whatever commands are tried, the lines written fold, and every opened comes after a close or first, so two sev0s are never open at once",
+      "plant": "Level.step wrapped in Function.dual(3), with the test's const next typed Result.Result<Level.Sev0, string>",
+      "result": "green"
+    }
+  ],
+  "step": "tests"
+}

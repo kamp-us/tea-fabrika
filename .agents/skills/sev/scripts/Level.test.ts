@@ -44,7 +44,7 @@ describe("fold", () => {
 
       for (const move of moves) {
         const entry = lineFor(move);
-        const next = Level.step(sev0, entry, written.length);
+        const next: Result.Result<Level.Sev0, string> = Level.step(sev0, entry, written.length);
 
         // An open while one is open is always refused, and so is a move of a sev0 when none is.
         const fits =

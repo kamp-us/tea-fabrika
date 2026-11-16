@@ -81,7 +81,7 @@ export const PinVerdict = Schema.TaggedUnion({
 export type PinVerdict = typeof PinVerdict.Type;
 
 /** The branch a box's commits are backed up to, best first. */
-export const backupsOf = (name: string, branch: string | null): string[] => {
+export const backups = (name: string, branch: string | null): string[] => {
   const own = `fabrikalfa/${name}-wip`;
   const wip = branch === null ? null : wipOf(branch);
   return wip?.startsWith("fabrikalfa/") && wip !== own ? [wip, own] : [own];
@@ -156,7 +156,7 @@ export const decide = (s: Seen): Verdict => {
     return remove("on_remote");
   }
 
-  return Verdict.cases.backup.make({ to: backupsOf(s.name, s.git.branch) });
+  return Verdict.cases.backup.make({ to: backups(s.name, s.git.branch) });
 };
 
 /** What gc saw of one linked worktree of the main checkout, outside the boxes folder. */

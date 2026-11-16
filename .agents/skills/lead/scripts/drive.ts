@@ -684,7 +684,7 @@ export const decide: {
  * older than the run's start, read to the whole second for file systems that keep only seconds. A
  * run that wrote none, such as one box.sh refused before the agent started, gives no report.
  */
-export const reportOf = (path: string, started: number, mtime: number | null): string | null =>
+export const freshReport = (path: string, started: number, mtime: number | null): string | null =>
   mtime !== null && mtime >= Math.floor(started / 1000) * 1000 ? path : null;
 
 // ---------------------------------------------------------------- the machine
@@ -883,7 +883,7 @@ const tail = (text: string, n = 3) => text.trim().split("\n").slice(-n).join(" |
 /** This run's report, or `null` when it wrote none. */
 const writtenReport = (ask: Ask) => {
   const mtime = existsSync(ask.report) ? statSync(ask.report).mtimeMs : null;
-  return reportOf(ask.report, ask.started, mtime);
+  return freshReport(ask.report, ask.started, mtime);
 };
 
 /** The paths env.sh gives every lead script. */
@@ -1232,7 +1232,7 @@ export const heldBy: {
  * What box.sh new's exit and stderr say: exit 3 with a `refused <check>: <why>` line is a start
  * check's no; any other failure, or a line naming no known check, is the box failing.
  */
-export const startedOf = (code: number, err: string): typeof Started.Type => {
+export const parseStarted = (code: number, err: string): typeof Started.Type => {
   if (code === 0) {
     return Started.cases.made.make({});
   }
@@ -1278,7 +1278,7 @@ const handlers = (env: Env, started: readonly Phase[] = []) => {
         writeFileSync(join(env.BOXES, `${cmd.box}.log`), r.out + r.err);
         phases = [...phases, ...phasesIn(r.err)];
         ready = Date.now();
-        const started = startedOf(r.code, r.err);
+        const started = parseStarted(r.code, r.err);
 
         if (started._tag !== "made") {
           return started;

@@ -47,10 +47,10 @@ import {
   machine,
   NO_ESCALATION,
   phasesIn,
-  reportOf,
+  freshReport,
   rowOf,
   runNames,
-  startedOf,
+  parseStarted,
   STEPS,
   tailFor,
 } from "./drive.ts";
@@ -523,7 +523,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
   const check = fc.constantFrom(...checks);
   const detail = fc.stringMatching(/^[a-z0-9](?:[a-z0-9 /|.-]{0,40}[a-z0-9])?$/);
   const noise = fc.array(fc.stringMatching(/^[a-z ]{0,20}$/), { maxLength: 3 });
-  const boxNewOk = (value: ReturnType<typeof startedOf>) =>
+  const boxNewOk = (value: ReturnType<typeof parseStarted>) =>
     machine.update.box_new_ok({ phase: "starting", ask: { ...ask, step: "tests" } }, {
       type: "box_new_ok",
       value,
@@ -535,7 +535,7 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
     fc.assert(
       fc.property(check, detail, noise, fc.constantFrom(0, 1, 2, 3, 127), (c, d, before, code) => {
         const err = [...before, `refused ${c}: ${d}`, ""].join("\n");
-        const got = startedOf(code, err);
+        const got = parseStarted(code, err);
 
         if (code === 0) {
           expect(got).toEqual({ _tag: "made" });
@@ -546,8 +546,8 @@ describe("T428 a start check's no is a refusal, not a stuck step, today's toolin
         }
 
         // A stuck line, or an unknown check, is never a refusal.
-        expect(startedOf(3, `stuck ${c}: ${d}\n`)._tag).toBe("failed");
-        expect(startedOf(3, `refused not_a_check_${c}: ${d}\n`)._tag).toBe("failed");
+        expect(parseStarted(3, `stuck ${c}: ${d}\n`)._tag).toBe("failed");
+        expect(parseStarted(3, `refused not_a_check_${c}: ${d}\n`)._tag).toBe("failed");
       }),
       options,
     );
@@ -1280,7 +1280,7 @@ describe("T383 drive never passes off an older run's report, today's tooling", (
     fc.assert(
       fc.property(started, mtime, (at, offset) => {
         const written = offset === null ? null : at + offset;
-        const got = reportOf("r.md", at, written);
+        const got = freshReport("r.md", at, written);
         const second = Math.floor(at / 1000) * 1000;
         expect(got).toBe(written !== null && written >= second ? "r.md" : null);
 

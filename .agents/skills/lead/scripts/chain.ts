@@ -43,7 +43,7 @@
 //                      merges it later; the chain never merges main in and never waits for the merge
 //   over               done (queued), ask (parked for the lead, the why in `reason`) or stuck
 //
-// The moves, pure (`moveOf`): tests done -> build -> (host) -> review -> open -> (CI's typecheck)
+// The moves, pure (`nextMove`): tests done -> build -> (host) -> review -> open -> (CI's typecheck)
 // -> loosen -> queue. Every
 // review runs at a head the host step ran at: a review whose head it has not seen runs it first,
 // and that round counts against `MaxSteps`. A quest runs no
@@ -239,7 +239,7 @@ const FaultS = Schema.Literals(FAULTS);
 const isFault = Schema.is(FaultS);
 
 /** The last JSON line of drive's output, read loosely; `null` when there is none. */
-export const lineOf = (out: string, exit: number): Line | null => {
+export const parseLine = (out: string, exit: number): Line | null => {
   for (const raw of out.trim().split("\n").toReversed()) {
     const parsed = Result.try((): unknown => JSON.parse(raw));
 
@@ -302,7 +302,7 @@ const after: Record<StepName, QuestStep | null> = {
  * this step, against the `MaxStucks` limit. A slot refusal never reaches here: the step's Cmd
  * retries it on `slotSchedule`, and running out is a `RetriesExhausted` on the err channel.
  */
-export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
+export const nextMove = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {
   const [verb, to = "", reason = ""] = line.outcome.split(":");
 
   switch (verb) {
@@ -477,8 +477,7 @@ export const committedLine = (commits: ReadonlyArray<StepCommit> | null): string
   return `Step commits since the quest left main, oldest first: ${by.join("; ")}.`;
 };
 
-// The parameter keeps the name `lane`: agents-ledger.json holds this line word for word.
-export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
+export const renderBrief = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {
   const short = (s: string) => s.slice(0, 8);
   const heads = STEPS.filter((s) => f.heads[s]).map((s) => `${s} ${short(f.heads[s] ?? "")}`);
   const lines = [
@@ -952,7 +951,7 @@ export const makeMachine = (limits: Limits) =>
           return stopped(quest, intensity);
         }
 
-        return take(quest, s.step, line, moveOf(s.step, line, quest.stucks, limits.maxStucks), limits);
+        return take(quest, s.step, line, nextMove(s.step, line, quest.stucks, limits.maxStucks), limits);
       },
       // A typed RetriesExhausted (the slot schedule ran out) or any other failure: stuck, with why.
       step_run_err: (s, m): Step =>
@@ -1243,7 +1242,7 @@ const handlers = (s: Setup) => {
             cmd.step === "review" ? Plants.section(Plants.records(quest.steps, readReport), heads.build ?? null) : null,
         };
         const brief = join(env.BOXES, `${s.quest}-chain${round}-${cmd.step}-brief.md`);
-        writeFileSync(brief, briefOf(s.brief, cmd.step, facts));
+        writeFileSync(brief, renderBrief(s.brief, cmd.step, facts));
         // MUTATION WIRING (ticket 483): mutation's agent is drive.ts's `MUTATION_AGENT`; how its
         // draft runs is `mutationDraft` there. The chain names no other fact about that step, and
         // runs it only for a quest started at mutation (0066).

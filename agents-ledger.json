@@ -63,27 +63,12 @@
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-of)",
-			"code": "export const lineOf = (out: string, exit: number): Line | null => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-of)",
-			"code": "export const moveOf = (step: StepName, line: Line, stucks: number, maxStucks: number): Move => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-of)",
 			"code": "export const judgedOf = (text: string): Judged => {"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
 			"rule": "fabrika(no-of)",
 			"code": "export const sectionsOf = (text: string): { head: string; sections: Record<string, string> } => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/chain.ts",
-			"rule": "fabrika(no-of)",
-			"code": "export const briefOf = (lane: ReturnType<typeof sectionsOf>, step: StepName, f: Facts): string => {"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/chain.ts",
@@ -143,16 +128,6 @@
 		{
 			"file": ".agents/skills/lead/scripts/drive.ts",
 			"rule": "fabrika(no-of)",
-			"code": "export const reportOf = (path: string, started: number, mtime: number | null): string | null =>"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-of)",
-			"code": "export const startedOf = (code: number, err: string): typeof Started.Type => {"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/drive.ts",
-			"rule": "fabrika(no-of)",
 			"code": "const holderOf = (porcelain: string, branch: string): string | null => {"
 		},
 		{
@@ -184,11 +159,6 @@
 			"file": ".agents/skills/lead/scripts/gc.ts",
 			"rule": "fabrika(no-node-imports)",
 			"code": "import { isAbsolute, join, resolve } from \"node:path\";"
-		},
-		{
-			"file": ".agents/skills/lead/scripts/gc.ts",
-			"rule": "fabrika(no-of)",
-			"code": "export const backupsOf = (name: string, branch: string | null): string[] => {"
 		},
 		{
 			"file": ".agents/skills/lead/scripts/gc.ts",
