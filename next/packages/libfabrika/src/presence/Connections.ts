@@ -1,9 +1,10 @@
 /**
  * Which clients of a key are connected now, kept in the project's Sql.
- *
- * @stability unstable
  */
-import { Context, Effect, Layer, Schema } from "effect";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
 import { LedgerError } from "../ledger/Ledger.ts";
 import { ProcessId } from "../ProcessId.ts";
 import type { Sql } from "../Sql.ts";
@@ -45,7 +46,6 @@ const AWAY = 75_000;
  * adapter and marks it `online`, `away` (the last reply is at least 75 seconds old) or `unknown`
  * (the probe failed). A connection with no reply time counts from its join time.
  *
- * @stability unstable
  * @category services
  */
 export class Connections extends Context.Service<
@@ -72,7 +72,7 @@ export class Connections extends Context.Service<
                 return step();
               }),
             catch: (error) =>
-              new LedgerError({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
+              LedgerError.make({ reason: Schema.isSchemaError(error) ? "bad_row" : "storage", cause: error }),
           });
         });
         const probe = Effect.fn("connections.probe")(function* (connection: Connection) {

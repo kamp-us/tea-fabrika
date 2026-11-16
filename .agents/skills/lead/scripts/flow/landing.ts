@@ -42,13 +42,13 @@ const run = Effect.fn("landing.run")(
   },
   Effect.scoped,
   (effect, dir, command) =>
-    Effect.mapError(effect, () => new StepFailed({ reason: `${command} could not start in ${dir}` })),
+    Effect.mapError(effect, () => StepFailed.make({ reason: `${command} could not start in ${dir}` })),
 );
 
 /** A step's args, read by the runner's own schema. */
 const readArgs = <A>(schema: Schema.Codec<A>, step: Step) =>
   Schema.decodeUnknownEffect(schema)(step.args).pipe(
-    Effect.mapError((e) => new StepFailed({ reason: `${step.name}'s args do not parse: ${e.message}` })),
+    Effect.mapError((e) => StepFailed.make({ reason: `${step.name}'s args do not parse: ${e.message}` })),
   );
 
 const Dir = Schema.Struct({ dir: Schema.String });
@@ -126,7 +126,7 @@ const openPr = Effect.fn("landing.openPr")(function* (dir: string, branch: strin
   const pr = listedPr(yield* listPr(dir, branch));
 
   if (pr === null) {
-    return yield* new StepFailed({ reason: `${branch} has no open pull request` });
+    return yield* StepFailed.make({ reason: `${branch} has no open pull request` });
   }
 
   return pr;
@@ -198,7 +198,7 @@ export const runners: Readonly<Record<string, Runner<Spawns>>> = {
     const repo = PullRequestsGh.repoFromUrl((yield* run(dir, "git", ["remote", "get-url", "origin"])).output);
 
     if (repo === null) {
-      return yield* new StepFailed({ reason: `${dir}'s origin is not a GitHub repo` });
+      return yield* StepFailed.make({ reason: `${dir}'s origin is not a GitHub repo` });
     }
 
     const services = Layer.mergeAll(

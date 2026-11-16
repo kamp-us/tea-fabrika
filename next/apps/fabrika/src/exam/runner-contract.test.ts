@@ -337,10 +337,10 @@ it.prop(
   "p25: a ProgramDown names its saved error class, else the thrown class",
   { name: Arbitrary.schema(Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(96))) },
   ({ name }) => {
-    expect(new ProgramDown({ reason: "step", error: name, cause: new RangeError("x") }).errorClass).toBe(name);
-    expect(new ProgramDown({ reason: "step", cause: new RangeError("x") }).errorClass).toBe("RangeError");
-    expect(new ProgramDown({ reason: "step", cause: null }).errorClass).toBe("null");
-    expect(new ProgramDown({ reason: "step" }).errorClass).toBe("ProgramDown");
+    expect(ProgramDown.make({ reason: "step", error: name, cause: new RangeError("x") }).errorClass).toBe(name);
+    expect(ProgramDown.make({ reason: "step", cause: new RangeError("x") }).errorClass).toBe("RangeError");
+    expect(ProgramDown.make({ reason: "step", cause: null }).errorClass).toBe("null");
+    expect(ProgramDown.make({ reason: "step" }).errorClass).toBe("ProgramDown");
   },
   opts,
 );

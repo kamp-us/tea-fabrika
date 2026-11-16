@@ -10,14 +10,15 @@
 // `Args` without splitting it over each name (R14); read a member as `S[K]`, `undefined` and all
 // (R15); drop the refusal of an overloaded method (R16); let `fails` name every method again (R17).
 import { assertType, describe, expectTypeOf, it } from "@effect/vitest";
-import type { Effect, Layer } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import type * as Recorder from "./Recorder.ts";
 import { Full, type Shelf, type ShelfId } from "./Shelf.test-support.ts";
 
 type Service = Shelf["Service"];
 
 /** A value of each method's own error type, and one of no service's. Made outside the laws. */
-const full = new Full({ item: "the shelf is full" });
+const full = Full.make({ item: "the shelf is full" });
 const plain = new Error("no Full");
 
 /** A service with an optional effectful member, which a Recorder records when it runs. */

@@ -68,7 +68,7 @@ export const layer = (options: { readonly token?: Redacted.Redacted<string> } = 
           const cause = new Error(options.token === undefined ? "scripted CI failure" : Redacted.value(options.token));
 
           if (fault?.kind === "fault") {
-            return Effect.fail(new CiError({ reason: new reasons[fault.reason]({ cause }) }));
+            return Effect.fail(CiError.make({ reason: reasons[fault.reason].make({ cause }) }));
           }
 
           if (fault?.kind === "defect") {

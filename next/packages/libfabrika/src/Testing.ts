@@ -4,7 +4,7 @@
 // the parents the program returned. Both throw a diagnostic on a difference. Remove `syncTest`
 // when tea ships the matching helper.
 import { applyCell, type Cmd, type Machine, type Sub } from "@demlik/tea";
-import { Result } from "effect";
+import * as Result from "effect/Result";
 
 type Options<S, M> = {
   readonly msgs: ReadonlyArray<M>;
