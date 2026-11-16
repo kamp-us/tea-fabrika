@@ -40,12 +40,13 @@
 //
 //   land.ts arm <pr>
 //     the lead session, the one way merge when ready is turned on (0530, 0544; pr/Arm.ts): refuses
-//     one that is not open, not into main, or titled `Plan:`; reads the full run (scheduled.yaml) on
-//     its branch at its head, and refuses one that is red or not ended, printing each job that is
-//     not green, its failed steps and its failing test lines. With no full run at the head it arms,
-//     as 0544 allows, and says so in one line, unless the branch's newest run at an older head is
-//     not green. Then marks a draft ready and turns on merge when ready, a squash pinned to the head
-//     that was read.
+//     one that is not open, not into main, or titled `Plan:`; reads the proof run (scheduled.yaml)
+//     on its branch at its head, the full set or, since 0590, the changed set, and refuses one that
+//     is red or not ended, printing each job that is not green, its failed steps and its failing
+//     test lines. With no run at the head it arms, as 0544 allows, and says so in one line, unless
+//     the branch's newest run at an older head is not green or is a changed-set run, which proves
+//     only that head's change. Then marks a draft ready and turns on merge when ready, a squash
+//     pinned to the head that was read.
 //
 //   land.ts merged <pr>...
 //     the lead session, later: one read of each pull request, no wait. Merged into main: closes
