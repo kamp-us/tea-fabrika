@@ -27,6 +27,9 @@ export interface CacheFiles {
 // on gh-readonly-queue/main/..., so only a push to main has this ref here. Any ref can restore
 // main's, and a copy per pull request or group filled the repository's 10 GB
 // (.github/actions/pnpm/action.yml says when).
+/** A path that names pnpm's store: its default folders, a `.pnpm-store`, or `pnpm store path`'s answer. */
+const PNPM_STORE = /pnpm[\s\S]*store|store[\s\S]*pnpm/i;
+
 const ON_MAIN = "github.ref=='refs/heads/main'";
 // scripts/typecheck.sh's buildinfo path, relative to each package.
 const BUILDINFO = /"--tsBuildInfoFile",\s*"([^"]+)"/;
@@ -72,13 +75,14 @@ export const lintCaches = (files: CacheFiles): string[] => {
     ),
   ];
 
-  // C1. Neither of these can be told to restore only: each saves from whatever ref it runs on.
+  // C1. actions/cache cannot be told to restore only: it saves from whatever ref it runs on.
   for (const [path, step] of everyStep) {
     require(!uses(step, "actions/cache"), `${path}: use actions/cache/restore, and actions/cache/save on main only`);
   }
 
-  // C1b. setup-node's own cache is a pnpm store cache, which did not pay on any ref, main included
-  // (action.yml gives the seconds), so no workflow keeps it.
+  // C1b. A pnpm store cache did not pay on any ref, main included (action.yml gives the seconds),
+  // so no workflow keeps one: not setup-node's own cache, not pnpm/action-setup's, and no cache
+  // step whose path is the store.
   const allSteps: [string, Record<string, unknown>][] = [
     ...actionSteps.map((step) => [".github/actions/pnpm/action.yml", step] as [string, Record<string, unknown>]),
     ...workflows.flatMap(([path, workflow]) =>
@@ -92,6 +96,17 @@ export const lintCaches = (files: CacheFiles): string[] => {
     require(!(
       uses(step, "actions/setup-node") && "cache" in map(step["with"])
     ), `${path}: setup-node's cache is a pnpm store cache; use .github/actions/pnpm`);
+    require(!(
+      uses(step, "pnpm/action-setup") && "cache" in map(step["with"])
+    ), `${path}: pnpm/action-setup's cache is a pnpm store cache; use .github/actions/pnpm`);
+  }
+
+  // The shared setup's own cache steps are C2's: it caches nothing at all.
+  for (const [path, step] of allSteps.filter(([at]) => at !== ".github/actions/pnpm/action.yml")) {
+    const cache = ["actions/cache", "actions/cache/save", "actions/cache/restore"].some((name) => uses(step, name));
+    require(!(
+      cache && PNPM_STORE.test(String(map(step["with"])["path"] ?? ""))
+    ), `${path}: a cache of the pnpm store did not pay; use .github/actions/pnpm`);
   }
 
   // C2. The shared setup caches nothing: a restored pnpm store cost more than its download
