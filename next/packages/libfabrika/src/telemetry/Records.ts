@@ -35,8 +35,13 @@ export const Written = Schema.TaggedUnion({
  */
 export type Written = typeof Written.Type;
 
-/** One span as the sink sends it, with its failure's message when it failed. */
-const Sent = Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) });
+/**
+ * Schema for one span as the sink sends it, with its failure's message when it failed.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Sent = Schema.Struct({ span: SpanRow, content: Schema.NullOr(Schema.String) });
 type Sent = typeof Sent.Type;
 
 /** One page of a part's spans, oldest first; `after` is where the next page starts. */
@@ -54,8 +59,13 @@ const Lookup = Schema.TaggedUnion({
 });
 type Lookup = typeof Lookup.Type;
 
-/** Who deleted a content row, when on the caller's clock, and why. */
-const Deletion = Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String });
+/**
+ * Schema for who deleted a content row, when on the caller's clock, and why.
+ *
+ * @stability unstable
+ * @category schemas
+ */
+export const Deletion = Schema.Struct({ by: Schema.String, at: Schema.Int, reason: Schema.String });
 type Deletion = typeof Deletion.Type;
 
 /** How many spans one page holds. */
