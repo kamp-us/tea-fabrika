@@ -4,6 +4,17 @@
   // workspace package: its imports resolve from the root's own dependencies. The other skill
   // scripts (the plan and mutation scripts) still hold type errors and join with ticket 486.
   "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    // Tooling scripts are programs, so they import Effect from the barrel, as 0577 has programs do
+    // (call 2 of docs/plan/quests/effect-sweep-PLAN.md).
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "barrelImportPackages": ["effect"],
+        "diagnosticSeverity": { "preferBarrelImport": "error" }
+      }
+    ]
+  },
   "include": [
     "raw.d.ts",
     "skills/lead/scripts/agents.ts",
@@ -18,6 +29,9 @@
     "skills/lead/scripts/drive.test.ts",
     "skills/lead/scripts/gc.ts",
     "skills/lead/scripts/gc.test.ts",
+    "skills/lead/scripts/git/*.ts",
+    "skills/lead/scripts/governance.ts",
+    "skills/lead/scripts/governance.test.ts",
     "skills/lead/scripts/quests.ts",
     "skills/lead/scripts/quests.test.ts",
     "skills/lead/scripts/mutbox.ts",

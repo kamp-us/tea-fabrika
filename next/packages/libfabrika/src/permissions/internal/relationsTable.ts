@@ -3,7 +3,7 @@
 // `RelationsLedger.ts` trusts only its own writer, and `RelationsMemory.ts` trusts what it was given.
 import { applyCell } from "@demlik/tea";
 import { Machine } from "@demlik/tea/effect";
-import { Schema } from "effect";
+import * as Schema from "effect/Schema";
 import { Row } from "../Relation.ts";
 
 const Model = Schema.Struct({ tuples: Schema.ReadonlySet(Schema.String) });

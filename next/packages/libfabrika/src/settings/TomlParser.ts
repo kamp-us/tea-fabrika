@@ -1,7 +1,5 @@
 /**
  * The only adapter that knows the TOML parser and serializer. Edit receives source positions and text.
- *
- * @stability unstable
  */
 import { stringify } from "@decimalturn/toml-patch";
 import { Effect, Layer, Predicate, Result, Schema } from "effect";
@@ -32,7 +30,16 @@ const put = (table: object, path: Edit.Path, value: unknown): void => {
         });
       }
 
-      parent = Reflect.get(parent, segment);
+      const next =
+        Predicate.hasProperty(parent, segment) && Object.hasOwn(parent, segment) ? parent[segment] : undefined;
+
+      // An array of tables is a step too. The parser refuses a document that writes through a
+      // scalar, so a scalar here is a bug in this walk, and it fails as main's defineProperty did.
+      if (!Predicate.isObjectOrArray(next)) {
+        throw new TypeError("A TOML path steps through a value that is not a table or an array.");
+      }
+
+      parent = next;
     }
   }
 };
@@ -263,7 +270,6 @@ const remove = Effect.fnUntraced(function* (text: string, path: ReadonlyArray<st
  *
  * `parse` reads a document with the parser. `set` and `remove` first parse the text, then edit it by source position, and parse the edited text again before returning it. `set` also checks that the value can be written as TOML.
  *
- * @stability unstable
  * @category layers
  */
 export const layer = Layer.succeed(Toml, Toml.of({ parse, set, remove }));

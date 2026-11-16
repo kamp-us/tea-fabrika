@@ -57,12 +57,12 @@ const text = (cause: unknown) => (cause instanceof Error ? cause.message : Strin
 const playwright = <A>(op: string, run: () => Promise<A>) =>
   Effect.tryPromise({
     try: run,
-    catch: (cause) => new PlaywrightError({ op, message: `${op}: ${text(cause)}`, cause }),
+    catch: (cause) => PlaywrightError.make({ op, message: `${op}: ${text(cause)}`, cause }),
   });
 
 /** Runs a fast-check property, its failure kept as fast-check reports it. */
 const property = (run: () => Promise<void>) =>
-  Effect.tryPromise({ try: run, catch: (cause) => new PropertyFailed({ message: text(cause), cause }) });
+  Effect.tryPromise({ try: run, catch: (cause) => PropertyFailed.make({ message: text(cause), cause }) });
 
 type Assets = { readonly page: string; readonly script: string };
 let assets: Assets;

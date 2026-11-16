@@ -292,6 +292,17 @@ jobs:
       - name: install the row check
         if: ${{ needs.changes.outputs.check == 'false' }}
         run: pnpm install --frozen-lockfile --filter @tea-fabrika/ci --ignore-scripts
+      # The clones this change adds, as advice only (0587): jscpd with .jscpd.json, its baseline
+      # built from the pull request's base. It prints warnings and never fails the job; with no base
+      # (the merge queue, a push) it checks nothing. Before lint, so a red lint still shows it.
+      - name: copies (advice)
+        if: ${{ needs.changes.outputs.check != 'false' }}
+        continue-on-error: true
+        # About 2 s on a laptop for the whole tree; the base's blobs come over the blobless clone.
+        timeout-minutes: 3
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: node .github/ci/copies.ts --base "$BASE"
       - name: lint
         if: ${{ needs.changes.outputs.check != 'false' }}
         run: pnpm lint

@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-16",
+  "run": "2026-11-16-refusal-hour-charge-tests",
+  "ticket": "404",
+  "pr": null,
+  "started": "2026-11-15T23:15:06-08:00",
+  "ended": "2026-11-15T23:31:00-08:00",
+  "parent": null,
+  "active": null,
+  "role": "tests",
+  "model": "claude-opus-5-5",
+  "effort": null,
+  "outcome": "fail",
+  "why": "Tests step for the refusal-hour-charge slice, in next/. The new law, 'Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte' in next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts, is written and is green on the current product, so it was never red for the planned reason: the product already holds the ruling. The finding's 15 to 16 write is not the refusal's and not the hour's. A refused send reaches only the Project's route (the door's room check in Gateway.ts refuses it before any Process call), so no refusal can charge the Process-local account. The write is the supervisor's healthy mark (runtime/internal/supervisor.ts, the healthy handler): on the process's first idle turn once resetAfterMs (5000 ms in the default policy) has passed since healthyAt, the journal is saved again with a new healthyAt of the same length, which RecoveryStore.ts charges as one write of zero bytes to the program. The finding's run moved the clock about an hour, so the audit open after refusal 0 took that turn and the check at refusal 1 saw it. Measured here with a frozen clock and no hour turn: a 4 s jump before refusal 0 leaves writes at 15, a 5.1 s jump makes the next open write 16 with bytes 934 unchanged. The law turns the hour inside the refused send deterministically (frozen Date in the test's own scope, a hook on the stand-in Project transport, each side of the turn over one second so Effect's span clock anchors on the right side), and keeps the whole clock move under the read resetAfterMs. Sent back to the lead: build has nothing to fix for this ruling; whether the healthy mark should be charged to the program is a separate question.",
+  "laws": [
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte",
+      "red": "not red on the current product: 14 passed of 14 in the whole file; the product already charges no write or byte for a refused send that crosses the hour"
+    }
+  ],
+  "plants": [
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte",
+      "plant": "supervisor.ts healthy handler also saves the healthy mark on the first idle turn in a new hour",
+      "result": "red"
+    },
+    {
+      "law": "next/apps/fabrika/src/runtime-recovery.laws.integration.test.ts: Q9/Q12 a refused send whose span crosses the hour charges the program's local account no write and no byte",
+      "plant": "Gateway.ts room check never refuses a process.send",
+      "result": "red"
+    }
+  ],
+  "tokens": null,
+  "tools": null,
+  "minutes": 16,
+  "note": "Plant 1 failed with: AssertionError: the read after refusal 0 changed the program's local account: expected { program: { writes: 16, …(1) }, …(2) } to deeply equal { program: { writes: 15, …(1) }, …(2) }. Plant 2 failed with: AssertionError: expected { _tag: 'ok', result: { …(2) } } to match object { _tag: 'refused', reason: 'quota' }. Each plant ran once on a saved copy and was restored by copy. Ran with no override in the box: the law alone at fast and at FABRIKA_TEST_DEPTH=full (40 runs), both green, and the whole law file, 14 passed. pnpm format, pnpm lint and the list ratchet pass. No typecheck in this step. The test world gains onProjectCall, a hook on the stand-in Project transport.",
+  "step": "tests"
+}
