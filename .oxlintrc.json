@@ -2412,6 +2412,39 @@
       }
     },
     {
+      // The Reflect ban in client/, which has its own entries for the rule: JSON.parse and the two P18
+      // retry entries are written out again, since an override replaces a rule's options.
+      "files": ["next/packages/libfabrika/src/client/**"],
+      "rules": {
+        "eslint/no-restricted-properties": [
+          "error",
+          {
+            "object": "JSON",
+            "property": "parse",
+            "message": "Decode with Effect Schema (Schema.fromJsonString or Schema.UnknownFromJsonString), not a bare JSON.parse (decision 0023)."
+          },
+          {
+            "object": "Effect",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          {
+            "object": "Stream",
+            "property": "retry",
+            "message": "P18: a client never retries a dial itself. The Link machine's retrying state and backoff own reconnects; the start dials once per dialing."
+          },
+          { "object": "Reflect", "property": "get", "message": "Decode with Schema, or narrow first (0554)." },
+          { "object": "Reflect", "property": "set", "message": "Assign through the type (0554)." },
+          { "object": "Reflect", "property": "has", "message": "Narrow with Predicate.hasProperty (0554)." },
+          {
+            "object": "globalThis",
+            "property": "Reflect",
+            "message": "Name Reflect directly, so lint can read the call (0554)."
+          }
+        ]
+      }
+    },
+    {
       // Each glob keeps the rule's own file kinds, so a warn line never turns it on for other files.
       "files": [
         ".agents/skills/lead/scripts/*.test.ts",
