@@ -39,6 +39,8 @@ export interface Deferred<in out A, in out E = never> extends Deferred.Variance<
 
 *[0029](0029-format-and-names-follow-effect.md) settles indent, line width, semicolons, trailing commas, spaces in braces, the generator star, bare `of` and plural service names; the rest of this file still holds. [0039](0039-keep-semicolons-and-es5-commas.md) then keeps semicolons and trailing commas.*
 
+*[0560](0560-an-order-for-effect-code.md) says whose way wins when the Effect team, a trusted repo and a decision of ours disagree; every rule in this file still holds.*
+
 ## Context
 
 `libfabrika` and the other libraries in `next/` are open source. A stranger who reads them knows

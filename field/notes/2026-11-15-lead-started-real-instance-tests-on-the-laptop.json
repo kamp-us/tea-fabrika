@@ -1,0 +1,25 @@
+{
+  "id": "2026-11-15-lead-started-real-instance-tests-on-the-laptop",
+  "date": "2026-11-15",
+  "lanes": [
+    "kamp-us/tea-fabrika#1092"
+  ],
+  "stage": "harness",
+  "kind": "friction",
+  "what": "Before arming the quotas pull request, the lead session wanted to see its three `.integration.` test files green, since the review had not run them. It started them on the laptop with one worker and low priority, without first reading what the files start. Two of the three start workerd. The first try was refused by the test config for the wrong Node version and ran nothing. The second try ran for about a minute before another session pointed out that a test which starts a real instance may run only in CI's full run (decisions 0178 and 0536). The lead stopped it, checked that no process was left, and started a full run on the branch instead.",
+  "cause": "The lead read \"a run that needs what CI lacks still runs here\" in AGENTS.md as covering these files, and did not grep them for workerd, a spawn or a signal before starting. Nothing in the test config refuses a local run of an `.integration.` file.",
+  "person": false,
+  "primitive": "Check",
+  "fix": "The run was stopped and replaced by full run 43770060999 on the branch. No code changed.",
+  "test": "None. A check that could have caught it: the local test config refuses a file named `.integration.` unless a setting says the run is CI's, as it already refuses the full suite and the wrong Node version (0410).",
+  "learned": [
+    "Before any local run of a test file the lead did not write, read what it starts: workerd, a spawned process, a socket or a signal means CI's full run, never the laptop.",
+    "Decision 0544 arms a reviewed pull request with no full run first. A full run on the branch is still the only place a new real-resource law can be seen green before the merge, and it costs a place in a group that holds one running and one pending run."
+  ],
+  "unknown": "Whether the minute it ran started workerd before it was stopped. No process was left afterwards.",
+  "links": [
+    "https://github.com/kamp-us/tea-fabrika/pull/1092",
+    "https://github.com/kamp-us/tea-fabrika/actions/runs/43770060999",
+    "https://github.com/kamp-us/tea-fabrika/blob/main/.decisions/0536-real-resource-tests-run-only-on-the-schedule.md"
+  ]
+}
