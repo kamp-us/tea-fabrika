@@ -4,7 +4,7 @@
   "ticket": "1075",
   "pr": null,
   "started": "2026-11-16T00:47:29-08:00",
-  "ended": "2026-11-16T01:16:00-08:00",
+  "ended": "2026-11-16T01:20:16-08:00",
   "parent": null,
   "active": null,
   "role": "step",
@@ -15,7 +15,7 @@
   "tokens": null,
   "tools": null,
   "minutes": null,
-  "note": "Files: next/apps/fabrika/src/{brain-life,hands-launcher,instance-one-file,instance-wire,local-instance,sibling.laws,tasks-wire}.integration.test.ts. Laws keep every assertion: .ok became a 2xx status check, header reads moved from Headers.get to the client's lowercase header record, and one probe check became the exact 200 the probe server answers. Tests run in the box, one file at a time, before the commit: local-instance 3 passed, tasks-wire 1 passed, sibling.laws 1 passed (its own bare-lookup plant runs inside the law and stays red as it should), hands-launcher 2 passed, instance-one-file 7 passed, instance-wire 15 passed, brain-life 5 passed. pnpm lint passed, with lint:kind run again alone after it died with EPIPE when the kernel killed a process for memory. The ratchet exited 0. pnpm typecheck: next/apps/fabrika Done with no error; today's apps/fabrika was killed for memory (exit 137), a package this change does not reach. brain-life has no separate plant: its readiness wait only passes when the new helper reads a 2xx status, and a plant that keeps a listener alive needs the real process tree.",
+  "note": "Files: next/apps/fabrika/src/{brain-life,hands-launcher,instance-one-file,instance-wire,local-instance,sibling.laws,tasks-wire}.integration.test.ts. Laws keep every assertion: .ok became a 2xx status check, header reads moved from Headers.get to the client's lowercase header record, and one probe check became the exact 200 the probe server answers. Tests run in the box, one file at a time, before the commit: local-instance 3 passed, tasks-wire 1 passed, sibling.laws 1 passed (its own bare-lookup plant runs inside the law and stays red as it should), hands-launcher 2 passed, instance-one-file 7 passed, instance-wire 15 passed, brain-life 5 passed. pnpm lint passed, with lint:kind and lint:promise-types run again alone (both passed) after they died with EPIPE when the kernel killed a process for memory while another agent's type check ran. The ratchet exited 0. pnpm typecheck: next/apps/fabrika Done with no error; today's apps/fabrika was killed for memory (exit 137), a package this change does not reach. brain-life has no separate plant: its readiness wait only passes when the new helper reads a 2xx status, and a plant that keeps a listener alive needs the real process tree.",
   "plants": [
     {
       "law": "local-instance: a later dev command links its first start to the last runtime in that home; instance readiness waits for the started event to reach the ledger",
