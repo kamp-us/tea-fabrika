@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579; body 961c58abc6a0
+Approved by the lead agent, builds 0555, 0579, 0573; body 1b1199d7b9ea
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/apps/fabrika/e2e`: the build prints Rolldown's warnings through Effect's `Console`, law L17 reads them with `TestConsole`, and lint refuses `vi` mocks in the folder (ticket 1067)

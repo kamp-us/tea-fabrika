@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579, 0054; body c95032b68397
+Approved by the lead agent, builds 0555, 0579, 0054, 0573; body 18b2fc508c10
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `next/programs/pipeline` (ticket 1067, a later slice of the Recorder plan)

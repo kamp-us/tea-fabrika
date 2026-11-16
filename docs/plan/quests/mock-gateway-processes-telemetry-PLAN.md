@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579; body 9d803f47157c
+Approved by the lead agent, builds 0555, 0579, 0573; body 326f86cf216b
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `gateway`, `processes` and `telemetry`, in next/ (ticket 1067's sweep)

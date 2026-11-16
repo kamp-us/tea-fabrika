@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0579; body 33302a30c62c
+Approved by the lead agent, builds 0555, 0579, 0573; body 22ecb90e2078
 Plancheck-Version: 3
 
 # Plan: the mock sweep in libfabrika's top `src/` files (`Id`, `Id.cause`, `check`), in next/

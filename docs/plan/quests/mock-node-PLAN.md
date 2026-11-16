@@ -1,4 +1,4 @@
-Approved by the lead agent, builds 0555, 0557, 0579, 0554; body d7195256b9ea
+Approved by the lead agent, builds 0555, 0557, 0579, 0554, 0573; body c84cb74f9d8a
 Plancheck-Version: 3
 
 # Plan: the mock sweep in `libfabrika/src/node`, the `RunnerAdmission` law, in next/ (ticket 1067)
